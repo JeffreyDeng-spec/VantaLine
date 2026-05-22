@@ -53,14 +53,16 @@ function setBusy(button, busy) {
 function setProgress(value, title, detail) {
   state.progressValue = Math.max(0, Math.min(100, value));
   $("progressBar").style.width = `${state.progressValue}%`;
+  $("nativeProgress").value = state.progressValue;
+  $("nativeProgress").textContent = `${Math.round(state.progressValue)}%`;
   $("progressPercent").textContent = `${Math.round(state.progressValue)}%`;
   if (title) $("progressTitle").textContent = title;
   if (detail) $("progressDetail").textContent = detail;
-  $("progressPanel").classList.toggle("active", state.progressValue > 0 && state.progressValue < 100);
+  $("progressPanel").classList.toggle("active", state.progressValue > 0);
 }
 
 function startProgress(kind) {
-  clearInterval(state.progressTimer);
+  if (state.progressTimer) cancelAnimationFrame(state.progressTimer);
   const isVideo = kind === "video";
   const phases = isVideo
     ? [
@@ -75,21 +77,28 @@ function startProgress(kind) {
         [76, "OCR 识别中", "正在判断四张说明书分别属于哪一类。"],
         [90, "规则判断中", "正在检查五个配件是否齐全。"],
       ];
-  let phaseIndex = 0;
-  setProgress(6, phases[0][1], phases[0][2]);
-  state.progressTimer = setInterval(() => {
-    const [target, title, detail] = phases[phaseIndex];
-    if (state.progressValue >= target - 1 && phaseIndex < phases.length - 1) {
-      phaseIndex += 1;
+  const startTime = performance.now();
+  const expectedMs = isVideo ? 36000 : 18000;
+  setProgress(3, phases[0][1], phases[0][2]);
+
+  const tick = (now) => {
+    const elapsed = now - startTime;
+    const ratio = Math.min(elapsed / expectedMs, 1);
+    const eased = 1 - Math.pow(1 - ratio, 2.4);
+    const value = Math.min(95, 3 + eased * 92);
+    let phase = phases[0];
+    for (const item of phases) {
+      if (value >= item[0] - 6) phase = item;
     }
-    const nextTarget = phases[phaseIndex][0];
-    const increment = isVideo ? 1.4 : 2.2;
-    setProgress(Math.min(nextTarget, state.progressValue + increment), title, detail);
-  }, 500);
+    setProgress(value, phase[1], phase[2]);
+    state.progressTimer = requestAnimationFrame(tick);
+  };
+  state.progressTimer = requestAnimationFrame(tick);
 }
 
 function finishProgress(success = true) {
-  clearInterval(state.progressTimer);
+  if (state.progressTimer) cancelAnimationFrame(state.progressTimer);
+  state.progressTimer = null;
   setProgress(100, success ? "检测完成" : "检测失败", success ? "检测结果已生成。" : "请检查文件或服务状态。");
   setTimeout(() => $("progressPanel").classList.remove("active"), 1400);
 }

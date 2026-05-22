@@ -302,6 +302,31 @@ h2 {
   font-weight: 700;
 }
 
+.native-progress {
+  width: 100%;
+  height: 13px;
+  display: block;
+  margin-bottom: 8px;
+  appearance: none;
+  border: 1px solid #b9c1bd;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #dfe4e1;
+}
+
+.native-progress::-webkit-progress-bar {
+  background: #dfe4e1;
+}
+
+.native-progress::-webkit-progress-value {
+  background: var(--accent);
+  transition: width 180ms linear;
+}
+
+.native-progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
 .progress-track {
   height: 9px;
   overflow: hidden;
