@@ -321,7 +321,7 @@ button {
 .progress-panel {
   display: none;
   margin: 0 0 14px;
-  padding: 12px;
+  padding: 14px 16px;
   background: #fbfcfd;
   border: 1px solid var(--line);
 }
@@ -335,26 +335,26 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .progress-copy strong {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .progress-copy span {
   color: var(--black);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
 }
 
 .native-progress {
   width: 100%;
-  height: 13px;
+  height: 16px;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   appearance: none;
-  border: 1px solid #aeb5bc;
+  border: 1px solid #9ca3aa;
   border-radius: 999px;
   overflow: hidden;
   background: #dfe2e5;
@@ -373,22 +373,8 @@ button {
   background: var(--black);
 }
 
-.progress-track {
-  height: 8px;
-  overflow: hidden;
-  background: #dfe2e5;
-  border-radius: 999px;
-}
-
-.progress-bar {
-  width: 0%;
-  height: 100%;
-  background: var(--black);
-  transition: width 180ms linear;
-}
-
 .progress-panel p {
-  margin: 8px 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: 13px;
 }

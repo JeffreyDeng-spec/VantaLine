@@ -52,7 +52,6 @@ function setBusy(button, busy) {
 
 function setProgress(value, title, detail) {
   state.progressValue = Math.max(0, Math.min(100, value));
-  $("progressBar").style.width = `${state.progressValue}%`;
   $("nativeProgress").value = state.progressValue;
   $("nativeProgress").textContent = `${Math.round(state.progressValue)}%`;
   $("progressPercent").textContent = `${Math.round(state.progressValue)}%`;
