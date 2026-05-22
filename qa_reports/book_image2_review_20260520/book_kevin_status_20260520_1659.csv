@@ -1,0 +1,37 @@
+task_id,status,note
+img2-0114,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0115,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0116,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0117,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0176,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0178,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0181,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0180,RETRY_SENT,Visible repair patch/artifact remains; canonical JSON retry sent
+img2-0118,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0119,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0120,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0121,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0122,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0123,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0182,RETRY_SENT,Kevin repair localized scene but visible gray/noisy repair patch remains around cap; focused cleanup retry sent
+img2-0183,PASS,Kevin repair accepted by Book visual/deterministic recheck
+img2-0184,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0185,FAIL_SENT_TO_KEVIN,Hard fail source-scene/manual drift; canonical JSON repair sent
+img2-0120,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0123,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0118,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0119,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0121,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0122,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0180,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0184,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0185,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0124,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0126,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0186,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0188,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0189,PASS,Correction/latest status: accepted by Book after Kevin repair and recheck
+img2-0125,RETRY_SENT_PENDING_RECEIPT,Correction/latest status: focused retry sent after visual recheck; awaiting Kevin receipt
+img2-0182,RETRY_SENT_PENDING_RECEIPT,Correction/latest status: focused retry sent after visual recheck; awaiting Kevin receipt
+img2-0187,RETRY_SENT_PENDING_RECEIPT,Correction/latest status: focused retry sent after visual recheck; awaiting Kevin receipt
+img2-0190,SENT_TO_KEVIN_PENDING_RECEIPT,Correction/latest status: initial JSON repair sent; awaiting Kevin receipt

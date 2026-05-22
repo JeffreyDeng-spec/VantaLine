@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+opencv-python
+numpy
+pydantic
+ultralytics
+paddleocr
+paddlepaddle==3.2.2
+requests

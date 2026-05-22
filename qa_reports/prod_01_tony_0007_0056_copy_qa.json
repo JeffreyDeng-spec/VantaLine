@@ -1,0 +1,655 @@
+{
+  "completed": [
+    {
+      "task_id": "img2-0007",
+      "file": "0007__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_007.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[536, 990, 575, 1029]",
+      "black_count_in_bbox": 0,
+      "sha256": "eda9a907c8701d9f25e0336a25e9f6af1358d9c4cbbfefa4c63f6a03426c7070"
+    },
+    {
+      "task_id": "img2-0008",
+      "file": "0008__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_008.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[414, 382, 601, 649]",
+      "black_count_in_bbox": 48,
+      "sha256": "88d6c04d01d4983b682cbfce6296d7df893861a05a4641728f900427abcb8845"
+    },
+    {
+      "task_id": "img2-0009",
+      "file": "0009__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_009.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[996, 272, 1314, 321]",
+      "black_count_in_bbox": 8,
+      "sha256": "19981a357d05b364ee5028b9d7e6c842874d727f30d3792ab59bec72c9dc4300"
+    },
+    {
+      "task_id": "img2-0010",
+      "file": "0010__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_010.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[798, 536, 1070, 715]",
+      "black_count_in_bbox": 44,
+      "sha256": "df21591f996dd3c38374089f63294d7a88f7be63691687d8f2d6c6b7a859dad3"
+    },
+    {
+      "task_id": "img2-0011",
+      "file": "0011__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_011.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1038, 242, 1264, 477]",
+      "black_count_in_bbox": 45,
+      "sha256": "2d4064da8aaf6b4f182235880d00d495ff34900ea1225dc197096883ef7a8349"
+    },
+    {
+      "task_id": "img2-0012",
+      "file": "0012__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_012.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[888, 354, 1145, 555]",
+      "black_count_in_bbox": 48,
+      "sha256": "4cb20b3d33a5d758a454d76bcfbf60344196300427379fa0e998f660a0289651"
+    },
+    {
+      "task_id": "img2-0013",
+      "file": "0013__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_013.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[202, 297, 451, 507]",
+      "black_count_in_bbox": 52,
+      "sha256": "f87363fdcf32ec1a7453c1f8cdcc40ecc9ce195b9b5dd4498fa55a7ff4716c53"
+    },
+    {
+      "task_id": "img2-0014",
+      "file": "0014__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_014.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[272, 622, 443, 900]",
+      "black_count_in_bbox": 46,
+      "sha256": "d0387ffad5d2f532f74b7ec373b88493cf81ba2eb8bc2d04eb8f4c24eddf30e1"
+    },
+    {
+      "task_id": "img2-0015",
+      "file": "0015__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_015.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[979, 865, 1289, 957]",
+      "black_count_in_bbox": 668,
+      "sha256": "421f0de6a2b8a560504e9b14871570d70761ad2861a7a3098d1b3b57af71a43b"
+    },
+    {
+      "task_id": "img2-0016",
+      "file": "0016__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_016.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1086, 280, 1299, 527]",
+      "black_count_in_bbox": 45,
+      "sha256": "74e59017126ad042a60ac793426c779a1ac014cf473da80c6094db2e58f5f12c"
+    },
+    {
+      "task_id": "img2-0017",
+      "file": "0017__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_017.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[1378, 986, 1417, 1025]",
+      "black_count_in_bbox": 0,
+      "sha256": "b5b4d93b475316d4786958543bd4354c9eb5337250cee5236111d6ebfb79cae6"
+    },
+    {
+      "task_id": "img2-0018",
+      "file": "0018__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_018.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[838, 757, 1152, 827]",
+      "black_count_in_bbox": 11,
+      "sha256": "b5fb7fe70458dcc77117a3f75a50259dfdc4169362764cfd928c54cc8e12c364"
+    },
+    {
+      "task_id": "img2-0019",
+      "file": "0019__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_019.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[434, 271, 650, 515]",
+      "black_count_in_bbox": 46,
+      "sha256": "ccbb80ff4fcb803b4b3ebf12d8cdb4dfb359124f24aad270dd55797d23075483"
+    },
+    {
+      "task_id": "img2-0020",
+      "file": "0020__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_020.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[516, 310, 834, 345]",
+      "black_count_in_bbox": 48,
+      "sha256": "04f2a87a10885efc92bd36ea7730496984aae5dc6606be40afbb0b6daefad01c"
+    },
+    {
+      "task_id": "img2-0021",
+      "file": "0021__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_021.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[719, 752, 975, 955]",
+      "black_count_in_bbox": 39,
+      "sha256": "c29a0b6615071d7407ccb2d384cc2415b3f9e6efb1bf5dba93660246c4346c58"
+    },
+    {
+      "task_id": "img2-0022",
+      "file": "0022__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_022.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[894, 429, 1181, 583]",
+      "black_count_in_bbox": 44,
+      "sha256": "bc9434218bdfab38cad18d4c93356a93738be9ec98a92ff74bde8560c7ccefb9"
+    },
+    {
+      "task_id": "img2-0023",
+      "file": "0023__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_023.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[937, 868, 1233, 1005]",
+      "black_count_in_bbox": 1832,
+      "sha256": "0062f85b83edf43b4a328316a8e8b1500bc3ec70d3e04c267c718cef5ae4c725"
+    },
+    {
+      "task_id": "img2-0024",
+      "file": "0024__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_024.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[860, 751, 1139, 919]",
+      "black_count_in_bbox": 47,
+      "sha256": "ddf9366d271c3a01ef14db49e03d4f70486e3d02366236d8390ae264ad0a800f"
+    },
+    {
+      "task_id": "img2-0025",
+      "file": "0025__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_025.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[810, 246, 849, 285]",
+      "black_count_in_bbox": 0,
+      "sha256": "3a21e4e5f9863f87d154242b7d923ad225efb4548c799cd29c95392a81643797"
+    },
+    {
+      "task_id": "img2-0026",
+      "file": "0026__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_026.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[76, 687, 295, 929]",
+      "black_count_in_bbox": 41,
+      "sha256": "fa5506e9bf442dc2bd1ee3906cc2cf2e541bd19f64593ffe12839abfa33a270e"
+    },
+    {
+      "task_id": "img2-0027",
+      "file": "0027__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_027.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[306, 800, 618, 885]",
+      "black_count_in_bbox": 21,
+      "sha256": "d01570008dc05774c0ea1eeadfe5d5012b4b8e22b958bb0499dcf316aa9e2a8d"
+    },
+    {
+      "task_id": "img2-0028",
+      "file": "0028__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_028.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[840, 654, 885, 972]",
+      "black_count_in_bbox": 7,
+      "sha256": "f498f967df83d1d34bc2b09964e2dba85c4f9a6d4a66cbea01e6dce339145ac4"
+    },
+    {
+      "task_id": "img2-0029",
+      "file": "0029__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_029.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[84, 140, 275, 404]",
+      "black_count_in_bbox": 45,
+      "sha256": "2d090b737cf62c9ca3aa78085d9d85765e1c58d44985035b78a3eb9a7629996b"
+    },
+    {
+      "task_id": "img2-0030",
+      "file": "0030__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_030.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1120, 586, 1423, 699]",
+      "black_count_in_bbox": 28,
+      "sha256": "353939fc505db2486978a5f83ba1eaf83ca87b8d11be207854aa66e3a5c35498"
+    },
+    {
+      "task_id": "img2-0031",
+      "file": "0031__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_031.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[57, 623, 109, 941]",
+      "black_count_in_bbox": 11,
+      "sha256": "7bdcc89d55f69bc6c966c8273262766abb80fa1036ddd476d1228285926da1b5"
+    },
+    {
+      "task_id": "img2-0032",
+      "file": "0032__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_032.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[228, 674, 267, 713]",
+      "black_count_in_bbox": 0,
+      "sha256": "a8c7eeaa8d01de46b0b1ed39192af9e77c32a47ee1c8b4bf9edc9c5bff75ec20"
+    },
+    {
+      "task_id": "img2-0033",
+      "file": "0033__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_033.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[576, 332, 823, 545]",
+      "black_count_in_bbox": 49,
+      "sha256": "4fd3cea06c81c21b8abcaaaa98643b05bc794b32cb93e040113561b872175396"
+    },
+    {
+      "task_id": "img2-0034",
+      "file": "0034__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_034.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1148, 600, 1382, 827]",
+      "black_count_in_bbox": 44,
+      "sha256": "47655edbb9dcd4ded05801a484db0efb23d4a502678b24a61f8fee885930325e"
+    },
+    {
+      "task_id": "img2-0035",
+      "file": "0035__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_035.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1056, 331, 1346, 477]",
+      "black_count_in_bbox": 44,
+      "sha256": "c4dee4d73433c2377dee8873050e1dcd37cfecbfa62f2963f7c3429086ec4600"
+    },
+    {
+      "task_id": "img2-0036",
+      "file": "0036__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_036.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[820, 666, 879, 981]",
+      "black_count_in_bbox": 116,
+      "sha256": "3e1ef9cfe75f89745c57d616604dbaf2cddafa4c0255347755d2616386a6dc6d"
+    },
+    {
+      "task_id": "img2-0037",
+      "file": "0037__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_037.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[838, 594, 1146, 697]",
+      "black_count_in_bbox": 30,
+      "sha256": "40e28604e9e599f6a4eda68698e431274810171eb35f1ae4d5b1c8914f75ef99"
+    },
+    {
+      "task_id": "img2-0038",
+      "file": "0038__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_038.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[110, 670, 149, 709]",
+      "black_count_in_bbox": 0,
+      "sha256": "da582676dc909b4c97d9909679f5c6c2bd59d27f7ce4d47da29c88fea038779d"
+    },
+    {
+      "task_id": "img2-0039",
+      "file": "0039__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_039.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[934, 374, 1211, 546]",
+      "black_count_in_bbox": 43,
+      "sha256": "b1605b43538e7dc5781514265072b03b3749fb3ff9676f6d04cb2817ef2af983"
+    },
+    {
+      "task_id": "img2-0040",
+      "file": "0040__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_040.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[1024, 804, 1063, 843]",
+      "black_count_in_bbox": 0,
+      "sha256": "eaa5e2d074809fd0c0d6ad9fa4de363ad9d66b35f66ac3015fd85369a1b05168"
+    },
+    {
+      "task_id": "img2-0041",
+      "file": "0041__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_041.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[839, 514, 1061, 752]",
+      "black_count_in_bbox": 52,
+      "sha256": "6113f76abf21446e4fba3b3e7b663c143a887151d104b4025d140299626f5916"
+    },
+    {
+      "task_id": "img2-0042",
+      "file": "0042__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_042.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[440, 707, 463, 1025]",
+      "black_count_in_bbox": 13,
+      "sha256": "075b72672c425ab9c71b38285aca9aec8f7cfef8a2a8a1312178ed0e0e8e3202"
+    },
+    {
+      "task_id": "img2-0043",
+      "file": "0043__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_043.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[383, 244, 701, 287]",
+      "black_count_in_bbox": 14,
+      "sha256": "8138b9fa7dbb1daa6234223da0d9e11ac4d2ca42f38f4f0e0ac8f19e6bc1870d"
+    },
+    {
+      "task_id": "img2-0044",
+      "file": "0044__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_044.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[80, 408, 378, 537]",
+      "black_count_in_bbox": 41,
+      "sha256": "922685fb9252834c42d5f981abf9337c4ba765e00db0fe3b7bb6380677309091"
+    },
+    {
+      "task_id": "img2-0045",
+      "file": "0045__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_045.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[250, 954, 289, 993]",
+      "black_count_in_bbox": 0,
+      "sha256": "4421165c87db9dffe823eb80e354f3e363f931bc41396059947885831c4e4339"
+    },
+    {
+      "task_id": "img2-0046",
+      "file": "0046__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_046.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[194, 670, 233, 709]",
+      "black_count_in_bbox": 0,
+      "sha256": "320339654c3e9b1463a187f1895cfe481d41475d386c0af50ef429f2c7a8d758"
+    },
+    {
+      "task_id": "img2-0047",
+      "file": "0047__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_047.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[980, 58, 1019, 97]",
+      "black_count_in_bbox": 0,
+      "sha256": "96651e620da1de308100998dd138a30b1573152877af90ee2ef60cd88efb32b6"
+    },
+    {
+      "task_id": "img2-0048",
+      "file": "0048__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_048.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[813, 711, 1043, 941]",
+      "black_count_in_bbox": 45,
+      "sha256": "c7002a5e8d2b27aee7c5e77fd2001ffd40251ddcb282466b999dc8827898c6cd"
+    },
+    {
+      "task_id": "img2-0049",
+      "file": "0049__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_049.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[722, 474, 1016, 613]",
+      "black_count_in_bbox": 41,
+      "sha256": "650fc749bd1a95416080da9c9468339cde8b5936d668a2f00edff397a7f8074b"
+    },
+    {
+      "task_id": "img2-0050",
+      "file": "0050__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_050.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[413, 828, 689, 1001]",
+      "black_count_in_bbox": 771,
+      "sha256": "4a3f08934accac6158e7f09f1e36db213b0de7770123e452057e9faa894f53cf"
+    },
+    {
+      "task_id": "img2-0051",
+      "file": "0051__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_051.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1252, 198, 1394, 490]",
+      "black_count_in_bbox": 43,
+      "sha256": "49f99cee30b9428b88bd134e6a5b05d7623cb5c2d48391b6bb5ba2a1a33087e1"
+    },
+    {
+      "task_id": "img2-0052",
+      "file": "0052__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_052.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[186, 41, 313, 341]",
+      "black_count_in_bbox": 245,
+      "sha256": "f36c7809f08c89fbb9ba3d2c1c9f312a30873beb3611abe2fb47091cd73cb143"
+    },
+    {
+      "task_id": "img2-0053",
+      "file": "0053__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_053.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[472, 489, 530, 803]",
+      "black_count_in_bbox": 47,
+      "sha256": "27232447696a00f5a00f761139e1f5b55bbbe6cd842c629473f4f1aa430b9083"
+    },
+    {
+      "task_id": "img2-0054",
+      "file": "0054__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_054.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1028, 559, 1201, 835]",
+      "black_count_in_bbox": 46,
+      "sha256": "d76e8f5285d2575f9079b0717cada931e19946534d46d842ef21563988945bc3"
+    },
+    {
+      "task_id": "img2-0055",
+      "file": "0055__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_055.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "lying_bar",
+      "bbox": "[1015, 627, 1271, 829]",
+      "black_count_in_bbox": 45,
+      "sha256": "08954d4e6fa77e794cf0fe65a84055d69966dc715419eb432629c6914e9d2887"
+    },
+    {
+      "task_id": "img2-0056",
+      "file": "0056__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_056.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "ok_size": true,
+      "proxy_state": "upright_dot",
+      "bbox": "[646, 90, 685, 129]",
+      "black_count_in_bbox": 0,
+      "sha256": "f059593e44d53b4cefbd9d95d40ac9476ceb9c70ae3cac62b94ce674923b9979"
+    }
+  ],
+  "failures": []
+}

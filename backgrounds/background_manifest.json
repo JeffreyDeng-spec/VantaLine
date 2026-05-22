@@ -1,0 +1,19 @@
+{
+  "asset": "conveyor_surface_topdown_ai_reference5.png",
+  "created_date": "2026-05-18",
+  "method": "built-in OpenAI image generation",
+  "reference_photo": "Jeffrey/assambly_line_optimize/data/5.jpg",
+  "workspace_path": "F:\\CodexWorkspace\\assembly_line_optimize\\backgrounds\\conveyor_surface_topdown_ai_reference5.png",
+  "dimensions": {
+    "width": 1448,
+    "height": 1086,
+    "aspect_ratio": "4:3"
+  },
+  "intent": "Empty top-down conveyor/table background for later rendering of standardized manuals and bottle parts.",
+  "constraints": [
+    "Match the overhead camera geometry and scale cues of data/5.jpg.",
+    "Use a dark green glossy industrial conveyor surface with scratches, scuffs, dust, and realistic overhead reflections.",
+    "Include white rail and black edge bands similar to data/5.jpg.",
+    "No manuals, bottle, paper, parts, people, labels, text, or watermark."
+  ]
+}

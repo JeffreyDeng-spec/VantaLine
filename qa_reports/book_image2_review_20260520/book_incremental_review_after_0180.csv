@@ -1,0 +1,2 @@
+task_id,filename,bottle_proxy_state,bbox,readable,size,resolution_ok,outside_proxy_pct_gt25,outside_proxy_mean_absdiff,sha256,review_decision,reason
+img2-0181,0181__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_181.png,lying_bar,"[732, 632, 751, 950]",True,1448x1086,True,0.2797,33.898,80e6f4873e3bcf821a6983f582481e41a4129a8f6c5472e3aef3e060c52823b1,FAIL,major source-scene/manual drift

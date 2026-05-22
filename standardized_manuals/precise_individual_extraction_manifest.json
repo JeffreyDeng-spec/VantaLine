@@ -1,0 +1,110 @@
+{
+  "output_dir": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise",
+  "output_size_px": [
+    1240,
+    1754
+  ],
+  "method": "manual precise four-corner annotation from individual source photos plus perspective transform",
+  "manuals": [
+    {
+      "id": "manual_from_2_warranty_service",
+      "source": "/mnt/c/Users/Administrator/iCloudDrive/iCloud~md~obsidian/Jeffrey/assambly_line_optimize/data/2.jpg",
+      "output": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_2_warranty_service_precise_1240x1754.png",
+      "corner_annotation": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_2_warranty_service_corner_annotation.jpg",
+      "corners_source_px": {
+        "top_left": [
+          540,
+          812
+        ],
+        "top_right": [
+          2582,
+          918
+        ],
+        "bottom_right": [
+          2528,
+          3838
+        ],
+        "bottom_left": [
+          522,
+          3862
+        ]
+      },
+      "rotate_180_after_warp": false
+    },
+    {
+      "id": "manual_from_3_battery_instruction",
+      "source": "/mnt/c/Users/Administrator/iCloudDrive/iCloud~md~obsidian/Jeffrey/assambly_line_optimize/data/3.jpg",
+      "output": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_3_battery_instruction_precise_1240x1754.png",
+      "corner_annotation": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_3_battery_instruction_corner_annotation.jpg",
+      "corners_source_px": {
+        "top_left": [
+          600,
+          738
+        ],
+        "top_right": [
+          2568,
+          798
+        ],
+        "bottom_right": [
+          2570,
+          3626
+        ],
+        "bottom_left": [
+          650,
+          3656
+        ]
+      },
+      "rotate_180_after_warp": true
+    },
+    {
+      "id": "manual_from_4_download_service",
+      "source": "/mnt/c/Users/Administrator/iCloudDrive/iCloud~md~obsidian/Jeffrey/assambly_line_optimize/data/4.jpg",
+      "output": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_4_download_service_precise_1240x1754.png",
+      "corner_annotation": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_4_download_service_corner_annotation.jpg",
+      "corners_source_px": {
+        "top_left": [
+          716,
+          678
+        ],
+        "top_right": [
+          2612,
+          672
+        ],
+        "bottom_right": [
+          2630,
+          3364
+        ],
+        "bottom_left": [
+          832,
+          3504
+        ]
+      },
+      "rotate_180_after_warp": true
+    },
+    {
+      "id": "manual_from_6_service_qr",
+      "source": "/mnt/c/Users/Administrator/iCloudDrive/iCloud~md~obsidian/Jeffrey/assambly_line_optimize/data/6.jpg",
+      "output": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_6_service_qr_precise_1240x1754.png",
+      "corner_annotation": "/mnt/f/CodexWorkspace/assembly_line_optimize/manuals_from_individual_sources_precise/manual_from_6_service_qr_corner_annotation.jpg",
+      "corners_source_px": {
+        "top_left": [
+          594,
+          642
+        ],
+        "top_right": [
+          2570,
+          790
+        ],
+        "bottom_right": [
+          2560,
+          3538
+        ],
+        "bottom_left": [
+          604,
+          3658
+        ]
+      },
+      "rotate_180_after_warp": false
+    }
+  ]
+}

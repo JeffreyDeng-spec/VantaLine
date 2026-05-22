@@ -1,0 +1,2924 @@
+{
+  "checked_with_bottle": 891,
+  "missing_outputs": [],
+  "problem_count": 243,
+  "threshold_green_inside_ratio": 0.965,
+  "problems": [
+    {
+      "file": "0007__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_007.png",
+      "sample_index": 7,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        500,
+        954,
+        611,
+        1065
+      ],
+      "green_inside_ratio": 0.3242
+    },
+    {
+      "file": "0015__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_015.png",
+      "sample_index": 15,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        937,
+        823,
+        1331,
+        999
+      ],
+      "green_inside_ratio": 0.6742
+    },
+    {
+      "file": "0017__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_017.png",
+      "sample_index": 17,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1342,
+        950,
+        1448,
+        1061
+      ],
+      "green_inside_ratio": 0.0018
+    },
+    {
+      "file": "0018__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_018.png",
+      "sample_index": 18,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        796,
+        715,
+        1194,
+        869
+      ],
+      "green_inside_ratio": 0.9515
+    },
+    {
+      "file": "0021__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_021.png",
+      "sample_index": 21,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        677,
+        710,
+        1017,
+        997
+      ],
+      "green_inside_ratio": 0.7947
+    },
+    {
+      "file": "0023__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_023.png",
+      "sample_index": 23,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        895,
+        826,
+        1275,
+        1047
+      ],
+      "green_inside_ratio": 0.4972
+    },
+    {
+      "file": "0024__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_024.png",
+      "sample_index": 24,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        818,
+        709,
+        1181,
+        961
+      ],
+      "green_inside_ratio": 0.8609
+    },
+    {
+      "file": "0028__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_028.png",
+      "sample_index": 28,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        798,
+        612,
+        927,
+        1014
+      ],
+      "green_inside_ratio": 0.7096
+    },
+    {
+      "file": "0036__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_036.png",
+      "sample_index": 36,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        778,
+        624,
+        921,
+        1023
+      ],
+      "green_inside_ratio": 0.7101
+    },
+    {
+      "file": "0042__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_042.png",
+      "sample_index": 42,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        398,
+        665,
+        505,
+        1067
+      ],
+      "green_inside_ratio": 0.8325
+    },
+    {
+      "file": "0045__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_045.png",
+      "sample_index": 45,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        214,
+        918,
+        325,
+        1029
+      ],
+      "green_inside_ratio": 0.8894
+    },
+    {
+      "file": "0047__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_047.png",
+      "sample_index": 47,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        944,
+        22,
+        1055,
+        133
+      ],
+      "green_inside_ratio": 0.525
+    },
+    {
+      "file": "0048__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_048.png",
+      "sample_index": 48,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        771,
+        669,
+        1085,
+        983
+      ],
+      "green_inside_ratio": 0.8271
+    },
+    {
+      "file": "0050__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_050.png",
+      "sample_index": 50,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        371,
+        786,
+        731,
+        1043
+      ],
+      "green_inside_ratio": 0.7964
+    },
+    {
+      "file": "0052__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_052.png",
+      "sample_index": 52,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        144,
+        0,
+        355,
+        383
+      ],
+      "green_inside_ratio": 0.7979
+    },
+    {
+      "file": "0056__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_056.png",
+      "sample_index": 56,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        610,
+        54,
+        721,
+        165
+      ],
+      "green_inside_ratio": 0.8127
+    },
+    {
+      "file": "0063__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_063.png",
+      "sample_index": 63,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1096,
+        986,
+        1207,
+        1086
+      ],
+      "green_inside_ratio": 0.0
+    },
+    {
+      "file": "0068__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_068.png",
+      "sample_index": 68,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1166,
+        62,
+        1431,
+        418
+      ],
+      "green_inside_ratio": 0.9521
+    },
+    {
+      "file": "0072__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_072.png",
+      "sample_index": 72,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1094,
+        2,
+        1205,
+        113
+      ],
+      "green_inside_ratio": 0.3161
+    },
+    {
+      "file": "0073__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_073.png",
+      "sample_index": 73,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        911,
+        70,
+        1303,
+        251
+      ],
+      "green_inside_ratio": 0.9636
+    },
+    {
+      "file": "0074__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_074.png",
+      "sample_index": 74,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        624,
+        732,
+        1024,
+        877
+      ],
+      "green_inside_ratio": 0.9421
+    },
+    {
+      "file": "0076__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_076.png",
+      "sample_index": 76,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        536,
+        52,
+        647,
+        163
+      ],
+      "green_inside_ratio": 0.7898
+    },
+    {
+      "file": "0077__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_077.png",
+      "sample_index": 77,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        547,
+        770,
+        943,
+        939
+      ],
+      "green_inside_ratio": 0.8908
+    },
+    {
+      "file": "0082__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_082.png",
+      "sample_index": 82,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        0,
+        694,
+        251,
+        1049
+      ],
+      "green_inside_ratio": 0.9479
+    },
+    {
+      "file": "0083__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_083.png",
+      "sample_index": 83,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        986,
+        0,
+        1226,
+        348
+      ],
+      "green_inside_ratio": 0.7797
+    },
+    {
+      "file": "0084__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_084.png",
+      "sample_index": 84,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        614,
+        980,
+        725,
+        1086
+      ],
+      "green_inside_ratio": 0.022
+    },
+    {
+      "file": "0089__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_089.png",
+      "sample_index": 89,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        428,
+        46,
+        789,
+        302
+      ],
+      "green_inside_ratio": 0.8872
+    },
+    {
+      "file": "0092__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_092.png",
+      "sample_index": 92,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        84,
+        672,
+        287,
+        1057
+      ],
+      "green_inside_ratio": 0.9176
+    },
+    {
+      "file": "0100__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_100.png",
+      "sample_index": 100,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        456,
+        765,
+        818,
+        1019
+      ],
+      "green_inside_ratio": 0.8608
+    },
+    {
+      "file": "0105__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_105.png",
+      "sample_index": 105,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1017,
+        574,
+        1215,
+        962
+      ],
+      "green_inside_ratio": 0.9538
+    },
+    {
+      "file": "0108__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_108.png",
+      "sample_index": 108,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        972,
+        914,
+        1083,
+        1025
+      ],
+      "green_inside_ratio": 0.3292
+    },
+    {
+      "file": "0111__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_111.png",
+      "sample_index": 111,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        758,
+        852,
+        1153,
+        1021
+      ],
+      "green_inside_ratio": 0.5126
+    },
+    {
+      "file": "0113__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_113.png",
+      "sample_index": 113,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        290,
+        952,
+        401,
+        1063
+      ],
+      "green_inside_ratio": 0.5168
+    },
+    {
+      "file": "0116__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_116.png",
+      "sample_index": 116,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1147,
+        27,
+        1379,
+        401
+      ],
+      "green_inside_ratio": 0.862
+    },
+    {
+      "file": "0121__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_121.png",
+      "sample_index": 121,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        412,
+        0,
+        700,
+        328
+      ],
+      "green_inside_ratio": 0.7701
+    },
+    {
+      "file": "0122__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_122.png",
+      "sample_index": 122,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        445,
+        28,
+        847,
+        135
+      ],
+      "green_inside_ratio": 0.565
+    },
+    {
+      "file": "0123__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_123.png",
+      "sample_index": 123,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1256,
+        858,
+        1367,
+        969
+      ],
+      "green_inside_ratio": 0.6188
+    },
+    {
+      "file": "0125__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_125.png",
+      "sample_index": 125,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1352,
+        854,
+        1448,
+        965
+      ],
+      "green_inside_ratio": 0.5769
+    },
+    {
+      "file": "0126__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_126.png",
+      "sample_index": 126,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        578,
+        732,
+        877,
+        1062
+      ],
+      "green_inside_ratio": 0.7172
+    },
+    {
+      "file": "0127__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_127.png",
+      "sample_index": 127,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        706,
+        672,
+        1063,
+        934
+      ],
+      "green_inside_ratio": 0.9244
+    },
+    {
+      "file": "0129__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_129.png",
+      "sample_index": 129,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        664,
+        878,
+        1057,
+        1059
+      ],
+      "green_inside_ratio": 0.3972
+    },
+    {
+      "file": "0130__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_130.png",
+      "sample_index": 130,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        862,
+        34,
+        1255,
+        209
+      ],
+      "green_inside_ratio": 0.7611
+    },
+    {
+      "file": "0132__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_132.png",
+      "sample_index": 132,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        314,
+        643,
+        415,
+        1045
+      ],
+      "green_inside_ratio": 0.9063
+    },
+    {
+      "file": "0134__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_134.png",
+      "sample_index": 134,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        0,
+        776,
+        341,
+        1061
+      ],
+      "green_inside_ratio": 0.8796
+    },
+    {
+      "file": "0137__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_137.png",
+      "sample_index": 137,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        720,
+        774,
+        1062,
+        1057
+      ],
+      "green_inside_ratio": 0.5702
+    },
+    {
+      "file": "0143__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_143.png",
+      "sample_index": 143,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        142,
+        894,
+        527,
+        1086
+      ],
+      "green_inside_ratio": 0.6083
+    },
+    {
+      "file": "0145__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_145.png",
+      "sample_index": 145,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        172,
+        653,
+        281,
+        1055
+      ],
+      "green_inside_ratio": 0.9183
+    },
+    {
+      "file": "0148__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_148.png",
+      "sample_index": 148,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        760,
+        510,
+        945,
+        901
+      ],
+      "green_inside_ratio": 0.9348
+    },
+    {
+      "file": "0151__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_151.png",
+      "sample_index": 151,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        362,
+        750,
+        678,
+        1061
+      ],
+      "green_inside_ratio": 0.7831
+    },
+    {
+      "file": "0157__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_157.png",
+      "sample_index": 157,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        292,
+        6,
+        403,
+        117
+      ],
+      "green_inside_ratio": 0.3614
+    },
+    {
+      "file": "0158__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_158.png",
+      "sample_index": 158,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        212,
+        877,
+        603,
+        1063
+      ],
+      "green_inside_ratio": 0.6828
+    },
+    {
+      "file": "0162__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_162.png",
+      "sample_index": 162,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        812,
+        487,
+        917,
+        889
+      ],
+      "green_inside_ratio": 0.9077
+    },
+    {
+      "file": "0163__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_163.png",
+      "sample_index": 163,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        4,
+        38,
+        107,
+        440
+      ],
+      "green_inside_ratio": 0.8935
+    },
+    {
+      "file": "0174__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_174.png",
+      "sample_index": 174,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1049,
+        968,
+        1448,
+        1075
+      ],
+      "green_inside_ratio": 0.0015
+    },
+    {
+      "file": "0181__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_181.png",
+      "sample_index": 181,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        690,
+        590,
+        793,
+        992
+      ],
+      "green_inside_ratio": 0.9603
+    },
+    {
+      "file": "0187__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_187.png",
+      "sample_index": 187,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        0,
+        4,
+        97,
+        115
+      ],
+      "green_inside_ratio": 0.3049
+    },
+    {
+      "file": "0189__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_189.png",
+      "sample_index": 189,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        164,
+        14,
+        565,
+        133
+      ],
+      "green_inside_ratio": 0.4744
+    },
+    {
+      "file": "0190__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_190.png",
+      "sample_index": 190,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        695,
+        0,
+        1093,
+        141
+      ],
+      "green_inside_ratio": 0.4765
+    },
+    {
+      "file": "0194__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_194.png",
+      "sample_index": 194,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        494,
+        744,
+        747,
+        1086
+      ],
+      "green_inside_ratio": 0.7037
+    },
+    {
+      "file": "0195__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_195.png",
+      "sample_index": 195,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        864,
+        0,
+        1027,
+        386
+      ],
+      "green_inside_ratio": 0.809
+    },
+    {
+      "file": "0198__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_198.png",
+      "sample_index": 198,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        853,
+        673,
+        1051,
+        1061
+      ],
+      "green_inside_ratio": 0.6118
+    },
+    {
+      "file": "0205__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_205.png",
+      "sample_index": 205,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1072,
+        36,
+        1183,
+        147
+      ],
+      "green_inside_ratio": 0.6245
+    },
+    {
+      "file": "0206__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_206.png",
+      "sample_index": 206,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        468,
+        36,
+        613,
+        436
+      ],
+      "green_inside_ratio": 0.9015
+    },
+    {
+      "file": "0216__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_216.png",
+      "sample_index": 216,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        631,
+        732,
+        1033,
+        861
+      ],
+      "green_inside_ratio": 0.9504
+    },
+    {
+      "file": "0221__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_221.png",
+      "sample_index": 221,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        950,
+        883,
+        1335,
+        1086
+      ],
+      "green_inside_ratio": 0.2907
+    },
+    {
+      "file": "0222__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_222.png",
+      "sample_index": 222,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1,
+        60,
+        175,
+        454
+      ],
+      "green_inside_ratio": 0.9506
+    },
+    {
+      "file": "0228__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_228.png",
+      "sample_index": 228,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        945,
+        774,
+        1329,
+        981
+      ],
+      "green_inside_ratio": 0.8113
+    },
+    {
+      "file": "0236__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_236.png",
+      "sample_index": 236,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        544,
+        673,
+        689,
+        1073
+      ],
+      "green_inside_ratio": 0.7782
+    },
+    {
+      "file": "0238__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_238.png",
+      "sample_index": 238,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        236,
+        16,
+        476,
+        386
+      ],
+      "green_inside_ratio": 0.8355
+    },
+    {
+      "file": "0240__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_240.png",
+      "sample_index": 240,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1298,
+        550,
+        1413,
+        951
+      ],
+      "green_inside_ratio": 0.932
+    },
+    {
+      "file": "0242__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_242.png",
+      "sample_index": 242,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        483,
+        0,
+        871,
+        195
+      ],
+      "green_inside_ratio": 0.6192
+    },
+    {
+      "file": "0244__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_244.png",
+      "sample_index": 244,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1088,
+        702,
+        1432,
+        983
+      ],
+      "green_inside_ratio": 0.8194
+    },
+    {
+      "file": "0247__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_247.png",
+      "sample_index": 247,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        905,
+        764,
+        1287,
+        978
+      ],
+      "green_inside_ratio": 0.8148
+    },
+    {
+      "file": "0248__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_248.png",
+      "sample_index": 248,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1007,
+        654,
+        1313,
+        976
+      ],
+      "green_inside_ratio": 0.8894
+    },
+    {
+      "file": "0255__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_255.png",
+      "sample_index": 255,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1272,
+        980,
+        1383,
+        1086
+      ],
+      "green_inside_ratio": 0.0
+    },
+    {
+      "file": "0260__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_260.png",
+      "sample_index": 260,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        936,
+        30,
+        1298,
+        285
+      ],
+      "green_inside_ratio": 0.8164
+    },
+    {
+      "file": "0263__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_263.png",
+      "sample_index": 263,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1184,
+        902,
+        1295,
+        1013
+      ],
+      "green_inside_ratio": 0.2947
+    },
+    {
+      "file": "0266__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_266.png",
+      "sample_index": 266,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        676,
+        932,
+        787,
+        1043
+      ],
+      "green_inside_ratio": 0.4022
+    },
+    {
+      "file": "0267__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_267.png",
+      "sample_index": 267,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        653,
+        0,
+        807,
+        383
+      ],
+      "green_inside_ratio": 0.8074
+    },
+    {
+      "file": "0270__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_270.png",
+      "sample_index": 270,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1064,
+        0,
+        1175,
+        95
+      ],
+      "green_inside_ratio": 0.1832
+    },
+    {
+      "file": "0283__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_283.png",
+      "sample_index": 283,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        82,
+        0,
+        193,
+        382
+      ],
+      "green_inside_ratio": 0.7972
+    },
+    {
+      "file": "0284__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_284.png",
+      "sample_index": 284,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        80,
+        28,
+        191,
+        139
+      ],
+      "green_inside_ratio": 0.5536
+    },
+    {
+      "file": "0287__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_287.png",
+      "sample_index": 287,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        264,
+        4,
+        664,
+        109
+      ],
+      "green_inside_ratio": 0.3133
+    },
+    {
+      "file": "0291__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_291.png",
+      "sample_index": 291,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        386,
+        948,
+        497,
+        1059
+      ],
+      "green_inside_ratio": 0.4723
+    },
+    {
+      "file": "0297__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_297.png",
+      "sample_index": 297,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        646,
+        52,
+        857,
+        435
+      ],
+      "green_inside_ratio": 0.9437
+    },
+    {
+      "file": "0298__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_298.png",
+      "sample_index": 298,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1048,
+        0,
+        1205,
+        384
+      ],
+      "green_inside_ratio": 0.7982
+    },
+    {
+      "file": "0300__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_300.png",
+      "sample_index": 300,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        459,
+        0,
+        855,
+        165
+      ],
+      "green_inside_ratio": 0.5489
+    },
+    {
+      "file": "0304__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_304.png",
+      "sample_index": 304,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        354,
+        811,
+        712,
+        1071
+      ],
+      "green_inside_ratio": 0.6973
+    },
+    {
+      "file": "0308__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_308.png",
+      "sample_index": 308,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        825,
+        689,
+        955,
+        1086
+      ],
+      "green_inside_ratio": 0.5019
+    },
+    {
+      "file": "0310__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_310.png",
+      "sample_index": 310,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        661,
+        23,
+        993,
+        319
+      ],
+      "green_inside_ratio": 0.8296
+    },
+    {
+      "file": "0312__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_312.png",
+      "sample_index": 312,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        872,
+        20,
+        1047,
+        414
+      ],
+      "green_inside_ratio": 0.8633
+    },
+    {
+      "file": "0314__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_314.png",
+      "sample_index": 314,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        605,
+        914,
+        1007,
+        1019
+      ],
+      "green_inside_ratio": 0.4354
+    },
+    {
+      "file": "0320__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_320.png",
+      "sample_index": 320,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        692,
+        942,
+        803,
+        1053
+      ],
+      "green_inside_ratio": 0.3072
+    },
+    {
+      "file": "0321__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_321.png",
+      "sample_index": 321,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        928,
+        48,
+        1157,
+        423
+      ],
+      "green_inside_ratio": 0.9259
+    },
+    {
+      "file": "0332__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_332.png",
+      "sample_index": 332,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        514,
+        18,
+        860,
+        295
+      ],
+      "green_inside_ratio": 0.7971
+    },
+    {
+      "file": "0338__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_338.png",
+      "sample_index": 338,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        858,
+        662,
+        1194,
+        953
+      ],
+      "green_inside_ratio": 0.8962
+    },
+    {
+      "file": "0342__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_342.png",
+      "sample_index": 342,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        896,
+        586,
+        1089,
+        974
+      ],
+      "green_inside_ratio": 0.8911
+    },
+    {
+      "file": "0345__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_345.png",
+      "sample_index": 345,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1032,
+        668,
+        1195,
+        1065
+      ],
+      "green_inside_ratio": 0.6954
+    },
+    {
+      "file": "0348__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_348.png",
+      "sample_index": 348,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        708,
+        658,
+        815,
+        1058
+      ],
+      "green_inside_ratio": 0.793
+    },
+    {
+      "file": "0349__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_349.png",
+      "sample_index": 349,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        48,
+        62,
+        251,
+        447
+      ],
+      "green_inside_ratio": 0.9584
+    },
+    {
+      "file": "0351__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_351.png",
+      "sample_index": 351,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        226,
+        833,
+        578,
+        1086
+      ],
+      "green_inside_ratio": 0.6786
+    },
+    {
+      "file": "0355__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_355.png",
+      "sample_index": 355,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1096,
+        48,
+        1195,
+        450
+      ],
+      "green_inside_ratio": 0.9257
+    },
+    {
+      "file": "0356__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_356.png",
+      "sample_index": 356,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        66,
+        0,
+        177,
+        101
+      ],
+      "green_inside_ratio": 0.2274
+    },
+    {
+      "file": "0359__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_359.png",
+      "sample_index": 359,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        626,
+        667,
+        877,
+        1031
+      ],
+      "green_inside_ratio": 0.8205
+    },
+    {
+      "file": "0365__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_365.png",
+      "sample_index": 365,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1083,
+        8,
+        1407,
+        313
+      ],
+      "green_inside_ratio": 0.7687
+    },
+    {
+      "file": "0369__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_369.png",
+      "sample_index": 369,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1196,
+        982,
+        1307,
+        1086
+      ],
+      "green_inside_ratio": 0.0
+    },
+    {
+      "file": "0377__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_377.png",
+      "sample_index": 377,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        934,
+        60,
+        1116,
+        452
+      ],
+      "green_inside_ratio": 0.9608
+    },
+    {
+      "file": "0380__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_380.png",
+      "sample_index": 380,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        46,
+        660,
+        184,
+        1060
+      ],
+      "green_inside_ratio": 0.9311
+    },
+    {
+      "file": "0382__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_382.png",
+      "sample_index": 382,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        684,
+        0,
+        819,
+        379
+      ],
+      "green_inside_ratio": 0.8063
+    },
+    {
+      "file": "0384__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_384.png",
+      "sample_index": 384,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        436,
+        60,
+        615,
+        453
+      ],
+      "green_inside_ratio": 0.9606
+    },
+    {
+      "file": "0390__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_390.png",
+      "sample_index": 390,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1250,
+        0,
+        1407,
+        389
+      ],
+      "green_inside_ratio": 0.7962
+    },
+    {
+      "file": "0394__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_394.png",
+      "sample_index": 394,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        916,
+        18,
+        1265,
+        292
+      ],
+      "green_inside_ratio": 0.787
+    },
+    {
+      "file": "0395__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_395.png",
+      "sample_index": 395,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        452,
+        68,
+        563,
+        179
+      ],
+      "green_inside_ratio": 0.9331
+    },
+    {
+      "file": "0397__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_397.png",
+      "sample_index": 397,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1194,
+        946,
+        1305,
+        1057
+      ],
+      "green_inside_ratio": 0.0134
+    },
+    {
+      "file": "0402__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_402.png",
+      "sample_index": 402,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        256,
+        652,
+        369,
+        1054
+      ],
+      "green_inside_ratio": 0.8981
+    },
+    {
+      "file": "0404__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_404.png",
+      "sample_index": 404,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        238,
+        52,
+        349,
+        163
+      ],
+      "green_inside_ratio": 0.7677
+    },
+    {
+      "file": "0412__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_412.png",
+      "sample_index": 412,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        822,
+        0,
+        1087,
+        351
+      ],
+      "green_inside_ratio": 0.7893
+    },
+    {
+      "file": "0413__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_413.png",
+      "sample_index": 413,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        243,
+        26,
+        591,
+        302
+      ],
+      "green_inside_ratio": 0.8176
+    },
+    {
+      "file": "0416__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_416.png",
+      "sample_index": 416,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1158,
+        688,
+        1273,
+        1086
+      ],
+      "green_inside_ratio": 0.6256
+    },
+    {
+      "file": "0425__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_425.png",
+      "sample_index": 425,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        904,
+        71,
+        1306,
+        195
+      ],
+      "green_inside_ratio": 0.9553
+    },
+    {
+      "file": "0426__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_426.png",
+      "sample_index": 426,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        458,
+        831,
+        819,
+        1086
+      ],
+      "green_inside_ratio": 0.5993
+    },
+    {
+      "file": "0429__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_429.png",
+      "sample_index": 429,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        280,
+        64,
+        682,
+        179
+      ],
+      "green_inside_ratio": 0.896
+    },
+    {
+      "file": "0430__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_430.png",
+      "sample_index": 430,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        958,
+        702,
+        1169,
+        1085
+      ],
+      "green_inside_ratio": 0.6431
+    },
+    {
+      "file": "0437__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_437.png",
+      "sample_index": 437,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1216,
+        870,
+        1327,
+        981
+      ],
+      "green_inside_ratio": 0.5495
+    },
+    {
+      "file": "0441__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_441.png",
+      "sample_index": 441,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        636,
+        5,
+        933,
+        335
+      ],
+      "green_inside_ratio": 0.7928
+    },
+    {
+      "file": "0442__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_442.png",
+      "sample_index": 442,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        556,
+        721,
+        909,
+        989
+      ],
+      "green_inside_ratio": 0.8733
+    },
+    {
+      "file": "0447__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_447.png",
+      "sample_index": 447,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        552,
+        0,
+        745,
+        378
+      ],
+      "green_inside_ratio": 0.8019
+    },
+    {
+      "file": "0451__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_451.png",
+      "sample_index": 451,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        594,
+        652,
+        739,
+        1051
+      ],
+      "green_inside_ratio": 0.824
+    },
+    {
+      "file": "0463__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_463.png",
+      "sample_index": 463,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        996,
+        930,
+        1107,
+        1041
+      ],
+      "green_inside_ratio": 0.1689
+    },
+    {
+      "file": "0464__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_464.png",
+      "sample_index": 464,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1046,
+        24,
+        1187,
+        422
+      ],
+      "green_inside_ratio": 0.8659
+    },
+    {
+      "file": "0465__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_465.png",
+      "sample_index": 465,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        618,
+        860,
+        1014,
+        1025
+      ],
+      "green_inside_ratio": 0.5536
+    },
+    {
+      "file": "0472__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_472.png",
+      "sample_index": 472,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        744,
+        536,
+        975,
+        909
+      ],
+      "green_inside_ratio": 0.9396
+    },
+    {
+      "file": "0473__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_473.png",
+      "sample_index": 473,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        420,
+        652,
+        657,
+        1024
+      ],
+      "green_inside_ratio": 0.9116
+    },
+    {
+      "file": "0474__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_474.png",
+      "sample_index": 474,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1042,
+        854,
+        1153,
+        965
+      ],
+      "green_inside_ratio": 0.8224
+    },
+    {
+      "file": "0477__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_477.png",
+      "sample_index": 477,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        944,
+        716,
+        1243,
+        1045
+      ],
+      "green_inside_ratio": 0.6989
+    },
+    {
+      "file": "0479__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_479.png",
+      "sample_index": 479,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        192,
+        50,
+        536,
+        332
+      ],
+      "green_inside_ratio": 0.9053
+    },
+    {
+      "file": "0482__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_482.png",
+      "sample_index": 482,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        416,
+        27,
+        807,
+        213
+      ],
+      "green_inside_ratio": 0.7429
+    },
+    {
+      "file": "0484__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_484.png",
+      "sample_index": 484,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        794,
+        3,
+        956,
+        401
+      ],
+      "green_inside_ratio": 0.8245
+    },
+    {
+      "file": "0489__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_489.png",
+      "sample_index": 489,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        198,
+        53,
+        540,
+        337
+      ],
+      "green_inside_ratio": 0.9166
+    },
+    {
+      "file": "0492__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_492.png",
+      "sample_index": 492,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        708,
+        988,
+        819,
+        1086
+      ],
+      "green_inside_ratio": 0.0053
+    },
+    {
+      "file": "0493__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_493.png",
+      "sample_index": 493,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        98,
+        0,
+        246,
+        385
+      ],
+      "green_inside_ratio": 0.7992
+    },
+    {
+      "file": "0495__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_495.png",
+      "sample_index": 495,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        168,
+        0,
+        456,
+        317
+      ],
+      "green_inside_ratio": 0.7572
+    },
+    {
+      "file": "0496__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_496.png",
+      "sample_index": 496,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1160,
+        42,
+        1373,
+        424
+      ],
+      "green_inside_ratio": 0.9041
+    },
+    {
+      "file": "0498__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_498.png",
+      "sample_index": 498,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        286,
+        782,
+        591,
+        1086
+      ],
+      "green_inside_ratio": 0.7205
+    },
+    {
+      "file": "0506__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_006.png",
+      "sample_index": 506,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        376,
+        32,
+        773,
+        191
+      ],
+      "green_inside_ratio": 0.7291
+    },
+    {
+      "file": "0508__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_008.png",
+      "sample_index": 508,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        406,
+        54,
+        805,
+        194
+      ],
+      "green_inside_ratio": 0.8509
+    },
+    {
+      "file": "0519__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_019.png",
+      "sample_index": 519,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        82,
+        10,
+        363,
+        354
+      ],
+      "green_inside_ratio": 0.8035
+    },
+    {
+      "file": "0521__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_021.png",
+      "sample_index": 521,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        764,
+        50,
+        967,
+        435
+      ],
+      "green_inside_ratio": 0.9405
+    },
+    {
+      "file": "0523__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_023.png",
+      "sample_index": 523,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        558,
+        762,
+        958,
+        901
+      ],
+      "green_inside_ratio": 0.9174
+    },
+    {
+      "file": "0524__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_024.png",
+      "sample_index": 524,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1020,
+        789,
+        1337,
+        1086
+      ],
+      "green_inside_ratio": 0.5065
+    },
+    {
+      "file": "0529__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_029.png",
+      "sample_index": 529,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        675,
+        678,
+        987,
+        993
+      ],
+      "green_inside_ratio": 0.8215
+    },
+    {
+      "file": "0540__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_040.png",
+      "sample_index": 540,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        872,
+        758,
+        983,
+        869
+      ],
+      "green_inside_ratio": 0.8119
+    },
+    {
+      "file": "0543__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_043.png",
+      "sample_index": 543,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        824,
+        814,
+        1205,
+        1031
+      ],
+      "green_inside_ratio": 0.5308
+    },
+    {
+      "file": "0552__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_052.png",
+      "sample_index": 552,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        96,
+        0,
+        399,
+        309
+      ],
+      "green_inside_ratio": 0.7499
+    },
+    {
+      "file": "0566__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_066.png",
+      "sample_index": 566,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        465,
+        0,
+        867,
+        107
+      ],
+      "green_inside_ratio": 0.3051
+    },
+    {
+      "file": "0568__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_068.png",
+      "sample_index": 568,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1052,
+        38,
+        1448,
+        180
+      ],
+      "green_inside_ratio": 0.7131
+    },
+    {
+      "file": "0572__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_072.png",
+      "sample_index": 572,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        224,
+        642,
+        417,
+        1032
+      ],
+      "green_inside_ratio": 0.9462
+    },
+    {
+      "file": "0573__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_073.png",
+      "sample_index": 573,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1070,
+        880,
+        1181,
+        991
+      ],
+      "green_inside_ratio": 0.5716
+    },
+    {
+      "file": "0576__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_076.png",
+      "sample_index": 576,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        828,
+        574,
+        1093,
+        929
+      ],
+      "green_inside_ratio": 0.9291
+    },
+    {
+      "file": "0581__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_081.png",
+      "sample_index": 581,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        171,
+        0,
+        425,
+        356
+      ],
+      "green_inside_ratio": 0.7834
+    },
+    {
+      "file": "0589__false__missing_1__combo_bottle_proxy__manual_battery_instruction__manual_download_service__manual_service_qr__copy_089.png",
+      "sample_index": 589,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        788,
+        906,
+        899,
+        1017
+      ],
+      "green_inside_ratio": 0.3601
+    },
+    {
+      "file": "0591__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_001.png",
+      "sample_index": 591,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        924,
+        615,
+        1029,
+        1017
+      ],
+      "green_inside_ratio": 0.8212
+    },
+    {
+      "file": "0593__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_003.png",
+      "sample_index": 593,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        514,
+        30,
+        625,
+        431
+      ],
+      "green_inside_ratio": 0.8872
+    },
+    {
+      "file": "0596__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_006.png",
+      "sample_index": 596,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        796,
+        740,
+        1194,
+        881
+      ],
+      "green_inside_ratio": 0.9368
+    },
+    {
+      "file": "0604__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_014.png",
+      "sample_index": 604,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        371,
+        816,
+        763,
+        997
+      ],
+      "green_inside_ratio": 0.9477
+    },
+    {
+      "file": "0607__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_017.png",
+      "sample_index": 607,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        192,
+        52,
+        303,
+        163
+      ],
+      "green_inside_ratio": 0.7669
+    },
+    {
+      "file": "0609__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_019.png",
+      "sample_index": 609,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        821,
+        593,
+        985,
+        987
+      ],
+      "green_inside_ratio": 0.7847
+    },
+    {
+      "file": "0610__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_020.png",
+      "sample_index": 610,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1084,
+        0,
+        1287,
+        383
+      ],
+      "green_inside_ratio": 0.7963
+    },
+    {
+      "file": "0611__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_021.png",
+      "sample_index": 611,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        456,
+        701,
+        669,
+        1083
+      ],
+      "green_inside_ratio": 0.7555
+    },
+    {
+      "file": "0617__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_027.png",
+      "sample_index": 617,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1080,
+        813,
+        1415,
+        1086
+      ],
+      "green_inside_ratio": 0.4414
+    },
+    {
+      "file": "0622__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_032.png",
+      "sample_index": 622,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        352,
+        848,
+        744,
+        1029
+      ],
+      "green_inside_ratio": 0.7886
+    },
+    {
+      "file": "0627__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_037.png",
+      "sample_index": 627,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        292,
+        0,
+        403,
+        105
+      ],
+      "green_inside_ratio": 0.2678
+    },
+    {
+      "file": "0631__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_041.png",
+      "sample_index": 631,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1108,
+        52,
+        1383,
+        400
+      ],
+      "green_inside_ratio": 0.9237
+    },
+    {
+      "file": "0633__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_043.png",
+      "sample_index": 633,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        904,
+        694,
+        1065,
+        1086
+      ],
+      "green_inside_ratio": 0.6171
+    },
+    {
+      "file": "0639__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_049.png",
+      "sample_index": 639,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        937,
+        951,
+        1335,
+        1086
+      ],
+      "green_inside_ratio": 0.009
+    },
+    {
+      "file": "0643__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_053.png",
+      "sample_index": 643,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        505,
+        866,
+        903,
+        1027
+      ],
+      "green_inside_ratio": 0.6339
+    },
+    {
+      "file": "0644__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_054.png",
+      "sample_index": 644,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1082,
+        16,
+        1448,
+        241
+      ],
+      "green_inside_ratio": 0.7203
+    },
+    {
+      "file": "0645__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_055.png",
+      "sample_index": 645,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        970,
+        767,
+        1336,
+        1015
+      ],
+      "green_inside_ratio": 0.7031
+    },
+    {
+      "file": "0648__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_058.png",
+      "sample_index": 648,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1098,
+        58,
+        1309,
+        442
+      ],
+      "green_inside_ratio": 0.9474
+    },
+    {
+      "file": "0651__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_061.png",
+      "sample_index": 651,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        579,
+        26,
+        933,
+        292
+      ],
+      "green_inside_ratio": 0.8206
+    },
+    {
+      "file": "0655__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_065.png",
+      "sample_index": 655,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        466,
+        0,
+        699,
+        361
+      ],
+      "green_inside_ratio": 0.7915
+    },
+    {
+      "file": "0659__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_069.png",
+      "sample_index": 659,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        97,
+        70,
+        495,
+        230
+      ],
+      "green_inside_ratio": 0.9564
+    },
+    {
+      "file": "0660__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_070.png",
+      "sample_index": 660,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        960,
+        846,
+        1320,
+        1086
+      ],
+      "green_inside_ratio": 0.3998
+    },
+    {
+      "file": "0661__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_071.png",
+      "sample_index": 661,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        76,
+        0,
+        187,
+        101
+      ],
+      "green_inside_ratio": 0.231
+    },
+    {
+      "file": "0668__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_078.png",
+      "sample_index": 668,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        694,
+        655,
+        940,
+        1023
+      ],
+      "green_inside_ratio": 0.7515
+    },
+    {
+      "file": "0673__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_083.png",
+      "sample_index": 673,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        154,
+        942,
+        265,
+        1053
+      ],
+      "green_inside_ratio": 0.7284
+    },
+    {
+      "file": "0678__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__copy_088.png",
+      "sample_index": 678,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        261,
+        687,
+        423,
+        1085
+      ],
+      "green_inside_ratio": 0.812
+    },
+    {
+      "file": "0681__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_001.png",
+      "sample_index": 681,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1188,
+        976,
+        1299,
+        1086
+      ],
+      "green_inside_ratio": 0.0012
+    },
+    {
+      "file": "0682__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_002.png",
+      "sample_index": 682,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        206,
+        4,
+        317,
+        115
+      ],
+      "green_inside_ratio": 0.3337
+    },
+    {
+      "file": "0690__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_010.png",
+      "sample_index": 690,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        394,
+        4,
+        722,
+        305
+      ],
+      "green_inside_ratio": 0.763
+    },
+    {
+      "file": "0691__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_011.png",
+      "sample_index": 691,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1062,
+        36,
+        1173,
+        147
+      ],
+      "green_inside_ratio": 0.6256
+    },
+    {
+      "file": "0692__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_012.png",
+      "sample_index": 692,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        81,
+        0,
+        393,
+        317
+      ],
+      "green_inside_ratio": 0.7557
+    },
+    {
+      "file": "0693__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_013.png",
+      "sample_index": 693,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        633,
+        616,
+        945,
+        931
+      ],
+      "green_inside_ratio": 0.9306
+    },
+    {
+      "file": "0696__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_016.png",
+      "sample_index": 696,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        991,
+        812,
+        1365,
+        1044
+      ],
+      "green_inside_ratio": 0.5481
+    },
+    {
+      "file": "0697__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_017.png",
+      "sample_index": 697,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        586,
+        656,
+        848,
+        1013
+      ],
+      "green_inside_ratio": 0.8987
+    },
+    {
+      "file": "0700__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_020.png",
+      "sample_index": 700,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        338,
+        4,
+        520,
+        395
+      ],
+      "green_inside_ratio": 0.8158
+    },
+    {
+      "file": "0702__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_022.png",
+      "sample_index": 702,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        720,
+        960,
+        1122,
+        1067
+      ],
+      "green_inside_ratio": 0.0425
+    },
+    {
+      "file": "0703__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_023.png",
+      "sample_index": 703,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        840,
+        49,
+        967,
+        451
+      ],
+      "green_inside_ratio": 0.9405
+    },
+    {
+      "file": "0707__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_027.png",
+      "sample_index": 707,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        351,
+        742,
+        699,
+        1017
+      ],
+      "green_inside_ratio": 0.9107
+    },
+    {
+      "file": "0708__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_028.png",
+      "sample_index": 708,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        12,
+        22,
+        296,
+        364
+      ],
+      "green_inside_ratio": 0.8347
+    },
+    {
+      "file": "0721__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_041.png",
+      "sample_index": 721,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        436,
+        889,
+        817,
+        1086
+      ],
+      "green_inside_ratio": 0.4879
+    },
+    {
+      "file": "0726__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_046.png",
+      "sample_index": 726,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1184,
+        17,
+        1335,
+        417
+      ],
+      "green_inside_ratio": 0.8462
+    },
+    {
+      "file": "0737__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_057.png",
+      "sample_index": 737,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        680,
+        0,
+        791,
+        109
+      ],
+      "green_inside_ratio": 0.3255
+    },
+    {
+      "file": "0740__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_060.png",
+      "sample_index": 740,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        502,
+        946,
+        613,
+        1057
+      ],
+      "green_inside_ratio": 0.3945
+    },
+    {
+      "file": "0742__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_062.png",
+      "sample_index": 742,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        744,
+        912,
+        855,
+        1023
+      ],
+      "green_inside_ratio": 0.5149
+    },
+    {
+      "file": "0743__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_063.png",
+      "sample_index": 743,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        498,
+        809,
+        869,
+        1047
+      ],
+      "green_inside_ratio": 0.7083
+    },
+    {
+      "file": "0746__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_066.png",
+      "sample_index": 746,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        510,
+        659,
+        723,
+        1041
+      ],
+      "green_inside_ratio": 0.8536
+    },
+    {
+      "file": "0750__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_070.png",
+      "sample_index": 750,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        768,
+        744,
+        1168,
+        889
+      ],
+      "green_inside_ratio": 0.9317
+    },
+    {
+      "file": "0751__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_071.png",
+      "sample_index": 751,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        626,
+        880,
+        737,
+        991
+      ],
+      "green_inside_ratio": 0.894
+    },
+    {
+      "file": "0759__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_079.png",
+      "sample_index": 759,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        618,
+        680,
+        951,
+        974
+      ],
+      "green_inside_ratio": 0.886
+    },
+    {
+      "file": "0765__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_085.png",
+      "sample_index": 765,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        588,
+        660,
+        892,
+        985
+      ],
+      "green_inside_ratio": 0.9202
+    },
+    {
+      "file": "0766__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_086.png",
+      "sample_index": 766,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        598,
+        24,
+        972,
+        256
+      ],
+      "green_inside_ratio": 0.7859
+    },
+    {
+      "file": "0768__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_088.png",
+      "sample_index": 768,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        136,
+        924,
+        538,
+        1055
+      ],
+      "green_inside_ratio": 0.6631
+    },
+    {
+      "file": "0770__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_service_qr__copy_090.png",
+      "sample_index": 770,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1083,
+        761,
+        1443,
+        1019
+      ],
+      "green_inside_ratio": 0.662
+    },
+    {
+      "file": "0772__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_002.png",
+      "sample_index": 772,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        652,
+        620,
+        965,
+        936
+      ],
+      "green_inside_ratio": 0.9268
+    },
+    {
+      "file": "0775__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_005.png",
+      "sample_index": 775,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        322,
+        664,
+        435,
+        1065
+      ],
+      "green_inside_ratio": 0.849
+    },
+    {
+      "file": "0776__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_006.png",
+      "sample_index": 776,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        463,
+        0,
+        817,
+        248
+      ],
+      "green_inside_ratio": 0.6991
+    },
+    {
+      "file": "0786__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_016.png",
+      "sample_index": 786,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        864,
+        530,
+        1013,
+        930
+      ],
+      "green_inside_ratio": 0.8909
+    },
+    {
+      "file": "0788__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_018.png",
+      "sample_index": 788,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        811,
+        27,
+        1155,
+        309
+      ],
+      "green_inside_ratio": 0.8309
+    },
+    {
+      "file": "0790__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_020.png",
+      "sample_index": 790,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        156,
+        911,
+        554,
+        1065
+      ],
+      "green_inside_ratio": 0.6374
+    },
+    {
+      "file": "0799__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_029.png",
+      "sample_index": 799,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        976,
+        4,
+        1087,
+        115
+      ],
+      "green_inside_ratio": 0.3585
+    },
+    {
+      "file": "0801__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_031.png",
+      "sample_index": 801,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        0,
+        65,
+        343,
+        335
+      ],
+      "green_inside_ratio": 0.9498
+    },
+    {
+      "file": "0802__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_032.png",
+      "sample_index": 802,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        756,
+        706,
+        920,
+        1086
+      ],
+      "green_inside_ratio": 0.5537
+    },
+    {
+      "file": "0808__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_038.png",
+      "sample_index": 808,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        842,
+        962,
+        953,
+        1073
+      ],
+      "green_inside_ratio": 0.0085
+    },
+    {
+      "file": "0811__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_041.png",
+      "sample_index": 811,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        742,
+        44,
+        853,
+        155
+      ],
+      "green_inside_ratio": 0.7405
+    },
+    {
+      "file": "0815__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_045.png",
+      "sample_index": 815,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        675,
+        626,
+        905,
+        1000
+      ],
+      "green_inside_ratio": 0.8446
+    },
+    {
+      "file": "0820__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_050.png",
+      "sample_index": 820,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1274,
+        594,
+        1391,
+        996
+      ],
+      "green_inside_ratio": 0.8233
+    },
+    {
+      "file": "0823__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_053.png",
+      "sample_index": 823,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        540,
+        764,
+        821,
+        1086
+      ],
+      "green_inside_ratio": 0.6714
+    },
+    {
+      "file": "0824__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_054.png",
+      "sample_index": 824,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        1228,
+        10,
+        1343,
+        411
+      ],
+      "green_inside_ratio": 0.8281
+    },
+    {
+      "file": "0831__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_061.png",
+      "sample_index": 831,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        22,
+        900,
+        413,
+        1086
+      ],
+      "green_inside_ratio": 0.6566
+    },
+    {
+      "file": "0832__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_062.png",
+      "sample_index": 832,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        718,
+        2,
+        829,
+        113
+      ],
+      "green_inside_ratio": 0.3583
+    },
+    {
+      "file": "0838__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_068.png",
+      "sample_index": 838,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        1022,
+        14,
+        1133,
+        125
+      ],
+      "green_inside_ratio": 0.4372
+    },
+    {
+      "file": "0842__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_072.png",
+      "sample_index": 842,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        246,
+        0,
+        641,
+        151
+      ],
+      "green_inside_ratio": 0.4952
+    },
+    {
+      "file": "0846__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_076.png",
+      "sample_index": 846,
+      "state": "upright_dot",
+      "bbox_expanded": [
+        986,
+        6,
+        1097,
+        117
+      ],
+      "green_inside_ratio": 0.3754
+    },
+    {
+      "file": "0847__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_077.png",
+      "sample_index": 847,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        746,
+        43,
+        1036,
+        381
+      ],
+      "green_inside_ratio": 0.9103
+    },
+    {
+      "file": "0855__false__missing_1__combo_bottle_proxy__manual_warranty_service__manual_download_service__manual_service_qr__copy_085.png",
+      "sample_index": 855,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        103,
+        16,
+        345,
+        385
+      ],
+      "green_inside_ratio": 0.8333
+    },
+    {
+      "file": "0951__false__missing_2__combo_bottle_proxy__manual_battery_instruction__manual_download_service__copy_001.png",
+      "sample_index": 951,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        247,
+        14,
+        639,
+        195
+      ],
+      "green_inside_ratio": 0.6562
+    },
+    {
+      "file": "0960__false__missing_2__combo_bottle_proxy__manual_download_service__manual_service_qr__copy_002.png",
+      "sample_index": 960,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        868,
+        688,
+        1081,
+        1070
+      ],
+      "green_inside_ratio": 0.5932
+    },
+    {
+      "file": "0961__false__missing_2__combo_bottle_proxy__manual_download_service__manual_service_qr__copy_003.png",
+      "sample_index": 961,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        0,
+        906,
+        368,
+        1086
+      ],
+      "green_inside_ratio": 0.6634
+    },
+    {
+      "file": "0971__false__missing_2__combo_bottle_proxy__manual_warranty_service__manual_service_qr__copy_001.png",
+      "sample_index": 971,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        390,
+        60,
+        674,
+        402
+      ],
+      "green_inside_ratio": 0.9547
+    },
+    {
+      "file": "0972__false__missing_2__combo_bottle_proxy__manual_warranty_service__manual_service_qr__copy_002.png",
+      "sample_index": 972,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        742,
+        10,
+        1074,
+        306
+      ],
+      "green_inside_ratio": 0.7851
+    },
+    {
+      "file": "0989__false__missing_3__combo_bottle_proxy__manual_download_service__copy_002.png",
+      "sample_index": 989,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        216,
+        0,
+        450,
+        368
+      ],
+      "green_inside_ratio": 0.7906
+    },
+    {
+      "file": "0991__false__missing_3__combo_bottle_proxy__manual_service_qr__copy_002.png",
+      "sample_index": 991,
+      "state": "lying_bar",
+      "bbox_expanded": [
+        603,
+        888,
+        997,
+        1061
+      ],
+      "green_inside_ratio": 0.3935
+    }
+  ]
+}

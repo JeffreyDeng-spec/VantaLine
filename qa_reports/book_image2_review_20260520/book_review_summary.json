@@ -1,0 +1,357 @@
+{
+  "reviewed_pngs": 155,
+  "new_since_previous_review": 13,
+  "deterministic_failures": 0,
+  "visual_failures": 48,
+  "warnings": 28,
+  "passes_or_low_drift": 79,
+  "failure_by_state": {
+    "upright_dot": 27,
+    "lying_bar": 17,
+    "no_bottle": 4
+  },
+  "warning_by_state": {
+    "lying_bar": 16,
+    "upright_dot": 12
+  },
+  "new_failures": [
+    {
+      "task_id": "img2-0114",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.1745",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.1745); manual layout/text not reliably preserved"
+    },
+    {
+      "task_id": "img2-0115",
+      "bottle_proxy_state": "upright_dot",
+      "outside_proxy_pct_gt25": "0.1991",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.1991); manual layout/text not reliably preserved"
+    },
+    {
+      "task_id": "img2-0116",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.2109",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.2109); manual layout/text not reliably preserved"
+    },
+    {
+      "task_id": "img2-0117",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.1855",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.1855); manual layout/text not reliably preserved"
+    },
+    {
+      "task_id": "img2-0176",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.1533",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.1533); manual layout/text not reliably preserved"
+    },
+    {
+      "task_id": "img2-0178",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.1576",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.1576); manual layout/text not reliably preserved"
+    },
+    {
+      "task_id": "img2-0180",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.1673",
+      "failure_reasons": "major source-scene drift outside proxy region (pct_gt25=0.1673); manual layout/text not reliably preserved"
+    }
+  ],
+  "new_warnings": [
+    {
+      "task_id": "img2-0111",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.0619"
+    },
+    {
+      "task_id": "img2-0112",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.0753"
+    },
+    {
+      "task_id": "img2-0113",
+      "bottle_proxy_state": "upright_dot",
+      "outside_proxy_pct_gt25": "0.0768"
+    },
+    {
+      "task_id": "img2-0175",
+      "bottle_proxy_state": "lying_bar",
+      "outside_proxy_pct_gt25": "0.0693"
+    },
+    {
+      "task_id": "img2-0177",
+      "bottle_proxy_state": "upright_dot",
+      "outside_proxy_pct_gt25": "0.067"
+    },
+    {
+      "task_id": "img2-0179",
+      "bottle_proxy_state": "upright_dot",
+      "outside_proxy_pct_gt25": "0.1241"
+    }
+  ],
+  "new_failure_ratio": "7/13",
+  "recommended_prompt_change": "Producer prompt must explicitly instruct Image2 to preserve every pixel outside the black proxy bbox/anchor area and reject full-scene regeneration; use proxy-local edit/mask if Image2 supports it.",
+  "production_recommendation": "Continue only if Mandy accepts Book repairing drift rows later; otherwise pause broad production because >50% of the latest increment hard-failed source-scene preservation.",
+  "qa_dir": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520",
+  "unresolved_repair_blockers": [
+    {
+      "task_id": "img2-0114",
+      "output_filename": "0114__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_114.png",
+      "bottle_proxy_state": "lying_bar",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.1745)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    },
+    {
+      "task_id": "img2-0115",
+      "output_filename": "0115__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_115.png",
+      "bottle_proxy_state": "upright_dot",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.1991)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    },
+    {
+      "task_id": "img2-0116",
+      "output_filename": "0116__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_116.png",
+      "bottle_proxy_state": "lying_bar",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.2109)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    },
+    {
+      "task_id": "img2-0117",
+      "output_filename": "0117__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_117.png",
+      "bottle_proxy_state": "lying_bar",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.1855)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    },
+    {
+      "task_id": "img2-0176",
+      "output_filename": "0176__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_176.png",
+      "bottle_proxy_state": "lying_bar",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.1533)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    },
+    {
+      "task_id": "img2-0178",
+      "output_filename": "0178__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_178.png",
+      "bottle_proxy_state": "lying_bar",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.1576)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    },
+    {
+      "task_id": "img2-0180",
+      "output_filename": "0180__true__missing_0__combo_bottle_proxy__manual_warranty_service__manual_battery_instruction__manual_download_service__manual_service_qr__copy_180.png",
+      "bottle_proxy_state": "lying_bar",
+      "failure_reason": "major source-scene/manual drift outside proxy region (outside_proxy_pct_gt25=0.1673)",
+      "repair_attempt": "Attempted Photoshop/Image2-style generative edit on img2-0114 with strict proxy-local prompt; endpoint returned FORBIDDEN. No compliant Image2/AI-edit runtime is available in this session.",
+      "repair_status": "unresolved_repair_blocker",
+      "overwrite_performed": "no",
+      "recheck_result": "not_repaired; existing output remains failed",
+      "timestamp": "2026-05-20T16:24+08:00"
+    }
+  ],
+  "repair_runtime_status": "Photoshop/Image2 generative edit endpoint returned FORBIDDEN; no final PNGs overwritten.",
+  "continued_review_after_img2_0180": {
+    "img2-0181": "FAIL major source-scene/manual drift outside proxy region; outside_proxy_pct_gt25=0.2797"
+  },
+  "kevin_recheck_20260520_1659": {
+    "pass_after_kevin": [
+      "img2-0114",
+      "img2-0115",
+      "img2-0116",
+      "img2-0117",
+      "img2-0176",
+      "img2-0178",
+      "img2-0181"
+    ],
+    "retry_after_kevin": [
+      "img2-0180"
+    ],
+    "new_hard_failures": [
+      "img2-0118",
+      "img2-0119",
+      "img2-0120",
+      "img2-0121",
+      "img2-0122",
+      "img2-0123",
+      "img2-0182",
+      "img2-0183",
+      "img2-0184",
+      "img2-0185"
+    ],
+    "json_repair_tickets_sent_to_kevin": [
+      "img2-0118",
+      "img2-0119",
+      "img2-0120",
+      "img2-0121",
+      "img2-0122",
+      "img2-0123",
+      "img2-0180",
+      "img2-0182",
+      "img2-0183",
+      "img2-0184",
+      "img2-0185"
+    ],
+    "dispatch_format": "canonical one JSON object per image per Mandy 16:52 instruction",
+    "dispatch_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_to_kevin_json_dispatch_20260520_1659.csv",
+    "recheck_csvs": [
+      "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_and_new_review_20260520_1652.csv",
+      "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_and_new_review_20260520_1656.csv",
+      "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_kevin_0178_0180.csv"
+    ]
+  },
+  "kevin_recheck_deltas": [
+    {
+      "timestamp_local": "2026-05-20T17:12+08:00",
+      "pass_delta": [
+        "img2-0120",
+        "img2-0123"
+      ],
+      "retry_delta": [],
+      "new_hard_fail_delta": [],
+      "source_receipts": [
+        "Re: Image Worker repair: img2-0120",
+        "Re: Image Worker repair: img2-0123"
+      ],
+      "recheck_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_kevin_0120_0123.csv",
+      "recheck_sheet": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/recheck_kevin_0120_0123.jpg"
+    },
+    {
+      "timestamp_local": "2026-05-20T17:40+08:00",
+      "pass_delta": [
+        "img2-0118",
+        "img2-0119",
+        "img2-0121",
+        "img2-0122",
+        "img2-0180",
+        "img2-0185"
+      ],
+      "retry_delta": [],
+      "new_hard_fail_delta": [
+        "img2-0124",
+        "img2-0125",
+        "img2-0126",
+        "img2-0186",
+        "img2-0187",
+        "img2-0188",
+        "img2-0189",
+        "img2-0190"
+      ],
+      "sent_to_kevin_delta": [
+        "img2-0124",
+        "img2-0125",
+        "img2-0126",
+        "img2-0186",
+        "img2-0187",
+        "img2-0188",
+        "img2-0189",
+        "img2-0190"
+      ],
+      "open_awaiting_receipt": [
+        "img2-0182",
+        "img2-0183",
+        "img2-0184",
+        "img2-0124",
+        "img2-0125",
+        "img2-0126",
+        "img2-0186",
+        "img2-0187",
+        "img2-0188",
+        "img2-0189",
+        "img2-0190"
+      ],
+      "aggregate_status_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_kevin_status_aggregate_20260520.csv",
+      "dispatch_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_to_kevin_json_dispatch_20260520_1740.csv",
+      "recheck_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_and_new_review_20260520_1740.csv"
+    }
+  ],
+  "kevin_recheck_20260520_1818": {
+    "pass_after_kevin_latest": [
+      "img2-0124",
+      "img2-0126",
+      "img2-0186",
+      "img2-0188",
+      "img2-0189"
+    ],
+    "retry_sent_pending_receipt": [
+      "img2-0125",
+      "img2-0182",
+      "img2-0187"
+    ],
+    "awaiting_first_receipt": [
+      "img2-0190"
+    ],
+    "already_accepted_carried_forward": [
+      "img2-0114",
+      "img2-0115",
+      "img2-0116",
+      "img2-0117",
+      "img2-0118",
+      "img2-0119",
+      "img2-0120",
+      "img2-0121",
+      "img2-0122",
+      "img2-0123",
+      "img2-0176",
+      "img2-0178",
+      "img2-0180",
+      "img2-0181",
+      "img2-0183",
+      "img2-0184",
+      "img2-0185"
+    ],
+    "current_status_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_kevin_status_current.csv",
+    "delta_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_mandy_delta_status_20260520_1818.csv",
+    "recheck_csvs": [
+      "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_kevin_receipts_20260520_1808.csv",
+      "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_recheck_kevin_receipts_20260520_1815.csv"
+    ],
+    "note": "Latest clean status supersedes earlier stale aggregate rows."
+  },
+  "repair_workflow_stop_20260520_1826": {
+    "status": "stopped_not_final",
+    "source": "Mandy urgent email; T J. canceled current Book/Kevin repair workflow",
+    "instructions": [
+      "do not send any more repair tickets",
+      "do not review/accept Kevin repaired outputs as final",
+      "do not ask Kevin to continue repair work",
+      "continue review only if explicitly reassigned later"
+    ],
+    "last_ticket_before_stop": "img2-0190 at 2026-05-20T10:25:41Z",
+    "nonfinal_receipts_after_latest_status": [
+      "img2-0125",
+      "img2-0187",
+      "img2-0190"
+    ],
+    "stop_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_repair_workflow_stopped_20260520_1826.csv",
+    "current_status_csv": "/mnt/f/CodexWorkspace/assembly_line_optimize/qa_reports/book_image2_review_20260520/book_kevin_status_current.csv",
+    "post_stop_receipts_nonfinal": [
+      "img2-0182 2026-05-20T10:39:40Z",
+      "img2-0188 2026-05-20T10:41:22Z",
+      "img2-0190 2026-05-20T10:31:59Z"
+    ]
+  }
+}

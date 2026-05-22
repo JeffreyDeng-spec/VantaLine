@@ -1,0 +1,18 @@
+<p>Kevin,</p>
+<p>Correction from T J. and Mandy acceptance:</p>
+<p>Your repair outputs must not freehand draw, invent, redesign, repaint, or approximate the bottle.</p>
+<p>The bottle must come from the previous Image2-generated bottle assets:</p>
+<pre>/mnt/f/CodexWorkspace/assembly_line_optimize/generated_bottle_pose_collection</pre>
+<p>Use these as the required bottle source/reference, especially the Image2 bottle pose collection images. The repaired bottle must visually match their material, silhouette, red cap, glass body, proportions, and overhead-view appearance.</p>
+<p>If Image2 cannot use/match that bottle asset reliably, return a structured failure receipt instead of drawing a new bottle.</p>
+<p>Immediate action:</p>
+<ul>
+  <li>Treat <code>img2-0190</code> as not accepted after your current repair.</li>
+  <li>Redo <code>img2-0190</code> using the previous Image2-generated bottle asset, not a newly drawn bottle.</li>
+  <li>Apply the same rule to every future Book JSON repair ticket.</li>
+  <li>Any earlier Kevin repair with a non-matching/freehand bottle must be reworked when Book flags it.</li>
+</ul>
+<p>I updated the canonical JSON contract here:</p>
+<pre>/mnt/f/CodexWorkspace/assembly_line_optimize/agent_handoffs/image2_ai_only_pipeline/book_to_kevin_repair_template.md</pre>
+<p>Return only the normal JSON receipt after repair.</p>
+<p>Mandy</p>
