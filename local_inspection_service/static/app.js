@@ -219,12 +219,23 @@ async function loadInitial() {
 }
 
 function bindTabs() {
-  document.querySelectorAll(".tab").forEach((tab) => {
+  document.querySelectorAll(".mode-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+      document.querySelectorAll(".mode-tab").forEach((x) => x.classList.remove("active"));
       document.querySelectorAll(".tabpane").forEach((x) => x.classList.remove("active"));
       tab.classList.add("active");
       $(`${tab.dataset.tab}Tab`).classList.add("active");
+    });
+  });
+}
+
+function bindViews() {
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      document.querySelectorAll(".nav-item").forEach((x) => x.classList.remove("active"));
+      document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
+      item.classList.add("active");
+      $(`${item.dataset.view}View`).classList.add("active");
     });
   });
 }
@@ -335,6 +346,7 @@ function bindActions() {
   });
 }
 
+bindViews();
 bindTabs();
 bindActions();
 loadInitial().catch((error) => toast(`启动失败：${error.message}`));

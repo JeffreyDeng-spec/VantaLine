@@ -7,164 +7,240 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">本地视觉检测服务</p>
-        <h1>流水线配件检测</h1>
-      </div>
-      <div class="status-strip">
-        <span id="serviceState" class="pill neutral">检查中</span>
-        <span id="modelState" class="pill neutral">模型</span>
-      </div>
-    </header>
-
-    <main class="shell">
-      <section class="panel intake">
-        <div class="section-title">
-          <span>01</span>
-          <h2>输入</h2>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p>LOCAL VISION QA</p>
+          <h1>流水线配件检测</h1>
         </div>
 
-        <div class="tabbar" role="tablist">
-          <button class="tab active" data-tab="image">图片</button>
-          <button class="tab" data-tab="video">视频</button>
-          <button class="tab" data-tab="stream">实时流</button>
-        </div>
+        <nav class="side-nav" aria-label="主导航">
+          <button class="nav-item active" data-view="inspect">检测工作台</button>
+          <button class="nav-item" data-view="rules">规则设置</button>
+          <button class="nav-item" data-view="accessories">配件管理</button>
+          <button class="nav-item" data-view="training">模型训练</button>
+          <button class="nav-item" data-view="stream">实时流接口</button>
+        </nav>
 
-        <div id="imageTab" class="tabpane active">
-          <label class="dropzone">
-            <input id="imageFile" type="file" accept="image/*" />
-            <strong>上传检测图片</strong>
-            <span>PNG, JPG, JPEG</span>
-          </label>
-          <button id="runImage" class="primary">开始检测</button>
+        <div class="system-card">
+          <span>服务</span>
+          <strong id="serviceState" class="pill neutral">检查中</strong>
+          <span>模型</span>
+          <strong id="modelState" class="pill neutral">模型</strong>
         </div>
-
-        <div id="videoTab" class="tabpane">
-          <label class="dropzone">
-            <input id="videoFile" type="file" accept="video/*" />
-            <strong>上传检测视频</strong>
-            <span>抽帧检测，并应用同一套通过规则</span>
-          </label>
-          <button id="runVideo" class="primary">分析视频</button>
-        </div>
-
-        <div id="streamTab" class="tabpane">
-          <div class="field">
-            <label>视频流来源</label>
-            <select id="streamSource">
-              <option value="camera">本地摄像头</option>
-              <option value="rtsp">RTSP 地址</option>
-              <option value="folder_watch">文件夹监听</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>地址或设备名称</label>
-            <input id="streamUrl" type="text" placeholder="预留：rtsp://... 或摄像头编号" />
-          </div>
-          <button id="saveStream" class="secondary">保存实时流接口</button>
-          <p class="hint">实时流接口已预留；当前原型支持图片和视频检测。</p>
-        </div>
-      </section>
-
-      <section class="panel viewport">
-        <div class="section-title">
-          <span>02</span>
-          <h2>检测结果</h2>
-        </div>
-        <div id="resultBadge" class="result-badge waiting">等待输入</div>
-        <div id="progressPanel" class="progress-panel" aria-live="polite">
-          <div class="progress-copy">
-            <strong id="progressTitle">准备检测</strong>
-            <span id="progressPercent">0%</span>
-          </div>
-          <progress id="nativeProgress" class="native-progress" value="0" max="100">0%</progress>
-          <div class="progress-track">
-            <div id="progressBar" class="progress-bar"></div>
-          </div>
-          <p id="progressDetail">上传图片或视频后开始检测。</p>
-        </div>
-        <div class="preview-frame">
-          <img id="previewImage" alt="带标注的检测结果" />
-          <div id="emptyPreview" class="empty-state">检测标注图会显示在这里</div>
-        </div>
-        <div class="metric-grid">
-          <div>
-            <label>结论</label>
-            <strong id="decisionText">-</strong>
-          </div>
-          <div>
-            <label>检测数量</label>
-            <strong id="detectionCount">-</strong>
-          </div>
-          <div>
-            <label>通过率</label>
-            <strong id="passRate">-</strong>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>配件</th>
-                <th>检测到</th>
-                <th>要求</th>
-                <th>置信度</th>
-              </tr>
-            </thead>
-            <tbody id="partsTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <aside class="side-stack">
-        <section class="panel rules">
-          <div class="section-title">
-            <span>03</span>
-            <h2>规则</h2>
-          </div>
-          <div class="field">
-            <label>置信度阈值</label>
-            <input id="threshold" type="range" min="0.05" max="0.95" value="0.25" step="0.05" />
-            <output id="thresholdValue">0.25</output>
-          </div>
-          <div id="classRules" class="check-list"></div>
-          <button id="saveRules" class="secondary">保存规则</button>
-        </section>
-
-        <section class="panel accessories">
-          <div class="section-title">
-            <span>04</span>
-            <h2>配件管理</h2>
-          </div>
-          <div id="accessoryList" class="accessory-list"></div>
-          <div class="field">
-            <label>新参考素材名称</label>
-            <input id="accessoryName" type="text" placeholder="例如：新的说明书卡片" />
-          </div>
-          <div class="field">
-            <label>映射到当前类别</label>
-            <select id="accessoryClass"></select>
-          </div>
-          <label class="compact-upload">
-            <input id="accessoryFiles" type="file" multiple accept="image/*,video/*" />
-            上传照片或 360 度视图
-          </label>
-          <button id="addAccessory" class="secondary">添加参考素材</button>
-        </section>
-
-        <section class="panel training">
-          <div class="section-title">
-            <span>05</span>
-            <h2>模型训练</h2>
-          </div>
-          <p id="trainingStatus" class="hint">空闲</p>
-          <button id="startTraining" class="secondary">请求训练</button>
-        </section>
       </aside>
-    </main>
+
+      <main class="workspace">
+        <section id="inspectView" class="view active">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Inspection Console</p>
+              <h2>检测工作台</h2>
+            </div>
+            <div id="resultBadge" class="result-badge waiting">等待输入</div>
+          </header>
+
+          <div class="inspect-grid">
+            <section class="panel input-panel">
+              <div class="section-title">
+                <span>01</span>
+                <h3>输入源</h3>
+              </div>
+
+              <div class="tabbar" role="tablist">
+                <button class="mode-tab active" data-tab="image">图片</button>
+                <button class="mode-tab" data-tab="video">视频</button>
+              </div>
+
+              <div id="imageTab" class="tabpane active">
+                <label class="dropzone">
+                  <input id="imageFile" type="file" accept="image/*" />
+                  <strong>上传检测图片</strong>
+                  <span>PNG, JPG, JPEG</span>
+                </label>
+                <button id="runImage" class="primary">开始检测</button>
+              </div>
+
+              <div id="videoTab" class="tabpane">
+                <label class="dropzone">
+                  <input id="videoFile" type="file" accept="video/*" />
+                  <strong>上传检测视频</strong>
+                  <span>抽帧检测，并应用同一套通过规则</span>
+                </label>
+                <button id="runVideo" class="primary">分析视频</button>
+              </div>
+            </section>
+
+            <section class="panel result-panel">
+              <div class="section-title">
+                <span>02</span>
+                <h3>结果预览</h3>
+              </div>
+
+              <div id="progressPanel" class="progress-panel" aria-live="polite">
+                <div class="progress-copy">
+                  <strong id="progressTitle">准备检测</strong>
+                  <span id="progressPercent">0%</span>
+                </div>
+                <progress id="nativeProgress" class="native-progress" value="0" max="100">0%</progress>
+                <div class="progress-track">
+                  <div id="progressBar" class="progress-bar"></div>
+                </div>
+                <p id="progressDetail">上传图片或视频后开始检测。</p>
+              </div>
+
+              <div class="preview-frame">
+                <img id="previewImage" alt="带标注的检测结果" />
+                <div id="emptyPreview" class="empty-state">检测标注图会显示在这里</div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel metrics-panel">
+            <div class="metric-grid">
+              <div>
+                <label>结论</label>
+                <strong id="decisionText">-</strong>
+              </div>
+              <div>
+                <label>检测数量</label>
+                <strong id="detectionCount">-</strong>
+              </div>
+              <div>
+                <label>通过率</label>
+                <strong id="passRate">-</strong>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>配件</th>
+                    <th>检测到</th>
+                    <th>要求</th>
+                    <th>置信度</th>
+                  </tr>
+                </thead>
+                <tbody id="partsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="rulesView" class="view">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Rules</p>
+              <h2>规则设置</h2>
+            </div>
+          </header>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <span>01</span>
+              <h3>通过条件</h3>
+            </div>
+            <div class="field range-field">
+              <label>置信度阈值</label>
+              <input id="threshold" type="range" min="0.05" max="0.95" value="0.25" step="0.05" />
+              <output id="thresholdValue">0.25</output>
+            </div>
+            <div id="classRules" class="check-list"></div>
+            <button id="saveRules" class="secondary">保存规则</button>
+          </section>
+        </section>
+
+        <section id="accessoriesView" class="view">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Parts Library</p>
+              <h2>配件管理</h2>
+            </div>
+          </header>
+
+          <section class="panel page-panel split-panel">
+            <div>
+              <div class="section-title">
+                <span>01</span>
+                <h3>当前配件</h3>
+              </div>
+              <div id="accessoryList" class="accessory-list"></div>
+            </div>
+
+            <div>
+              <div class="section-title">
+                <span>02</span>
+                <h3>增加参考素材</h3>
+              </div>
+              <div class="field">
+                <label>新参考素材名称</label>
+                <input id="accessoryName" type="text" placeholder="例如：新的说明书卡片" />
+              </div>
+              <div class="field">
+                <label>映射到当前类别</label>
+                <select id="accessoryClass"></select>
+              </div>
+              <label class="compact-upload">
+                <input id="accessoryFiles" type="file" multiple accept="image/*,video/*" />
+                上传照片或 360 度视图
+              </label>
+              <button id="addAccessory" class="secondary">添加参考素材</button>
+            </div>
+          </section>
+        </section>
+
+        <section id="trainingView" class="view">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Training</p>
+              <h2>模型训练</h2>
+            </div>
+          </header>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <span>01</span>
+              <h3>训练任务</h3>
+            </div>
+            <p id="trainingStatus" class="hint">空闲</p>
+            <button id="startTraining" class="secondary">请求训练</button>
+          </section>
+        </section>
+
+        <section id="streamView" class="view">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Live Interface</p>
+              <h2>实时流接口</h2>
+            </div>
+          </header>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <span>01</span>
+              <h3>预留接口</h3>
+            </div>
+            <div class="field">
+              <label>视频流来源</label>
+              <select id="streamSource">
+                <option value="camera">本地摄像头</option>
+                <option value="rtsp">RTSP 地址</option>
+                <option value="folder_watch">文件夹监听</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>地址或设备名称</label>
+              <input id="streamUrl" type="text" placeholder="预留：rtsp://... 或摄像头编号" />
+            </div>
+            <button id="saveStream" class="secondary">保存实时流接口</button>
+            <p class="hint">实时流接口已预留；当前原型支持图片和视频检测。</p>
+          </section>
+        </section>
+      </main>
+    </div>
 
     <div id="toast" class="toast"></div>
-    <script src="/static/app.js?v=20260522-progress2"></script>
+    <script src="/static/app.js?v=20260522-industrial1"></script>
   </body>
 </html>
