@@ -1,5 +1,5 @@
 {
-    "model_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/models/current_2class_yolo26s_seg_best.pt",
+  "model_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/models/current_2class_yolo26s_seg_best.pt",
   "image_size": 640,
   "confidence_threshold": 0.25,
   "required_classes": [
@@ -72,9 +72,8 @@
     }
   ],
   "training": {
-    "status": "requested",
-    "last_requested_at": 1779446904,
-    "note": "Prototype only: wire this hook to synthetic data generation and YOLO training when the new accessory pipeline is finalized.",
-    "command_preview": "python scripts/build_yolo26_obb_dataset.py && yolo obb train ..."
+    "status": "idle",
+    "last_requested_at": null,
+    "note": "Prototype hook. Dataset generation and training can be wired to the existing synthetic pipeline."
   }
 }
