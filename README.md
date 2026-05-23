@@ -21,6 +21,9 @@ This repository captures the current working prototype:
 - Reserved camera/RTSP/folder-watch interface for future live stream input.
 - Five-class business output.
 - Current deployed model path: `models/current_2class_yolo26s_seg_best.pt`.
+- Detection-time model selector:
+  - `yolo26_2class_ocr`: old YOLO26 2-class localization plus PaddleOCR manual classification.
+  - `yolo26_5class_direct`: Jesse-trained YOLO26 5-class direct detector.
 - PaddleOCR-based manual-type identification.
 - Rule editor for required classes, minimum counts, and confidence threshold.
 - Scripts used to generate synthetic datasets and YOLO training datasets.
@@ -266,10 +269,16 @@ Recorded metrics for the two-class model:
 
 ### Five-class YOLO model
 
-A five-class segmentation training line is in progress:
+The Jesse-trained five-class segmentation model is available as a selectable local-service model:
 
 ```text
-yolo26_seg_5class_visible_polygon_4000_full_rotation_trial/
+models/current_5class_yolo26s_seg_best.pt
+```
+
+Original local training output:
+
+```text
+yolo26_seg_5class_visible_polygon_4000_full_rotation_trial/runs/yolo26s_seg_5class_visible_polygon_full_rotation_100e_img640_workers0/weights/best.pt
 ```
 
 Goal:
@@ -278,7 +287,7 @@ Goal:
 - Detect each of the four manual types directly.
 - Reduce or remove OCR dependency if class performance is reliable enough.
 
-This is not yet the deployed default in this repository snapshot.
+This is selectable in the UI, but the old YOLO+OCR path remains the default because real-photo validation is still needed.
 
 ## Why OCR Was Added
 
@@ -296,17 +305,14 @@ The current plan is to keep both methods:
 1. YOLO+OCR mode: more explainable, slower, better when text needs verification.
 2. Pure five-class YOLO mode: faster, simpler, but must prove reliable on real photos.
 
-The local service can later expose a user-selectable inference mode.
+The local service now exposes both modes through the detection tool model selector.
 
 ## Future Directions
 
 Planned improvements:
 
-1. Add inference-mode selector in the UI:
-   - YOLO+OCR
-   - pure five-class YOLO
-   - hybrid mode with OCR fallback only on low-confidence YOLO classes
-2. Finish and validate the five-class YOLO training run.
+1. Add a hybrid inference mode with OCR fallback only on low-confidence five-class YOLO predictions.
+2. Validate the five-class YOLO model against real production photos.
 3. Add real-photo validation set from the actual production camera.
 4. Add camera/live-stream input:
    - local camera index

@@ -9,6 +9,11 @@ Tracked:
   `bottle` and generic `manual`. The local service then uses OCR to map generic
   manual detections into four business manual classes.
 
+- `current_5class_yolo26s_seg_best.pt`
+  Jesse-trained YOLO26 segmentation model. It detects the five business classes
+  directly: Bottle, Warranty Service Manual, Battery Instruction Manual,
+  Download Service Manual, and Service QR Manual.
+
 Not tracked:
 
 - Full training datasets.

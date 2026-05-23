@@ -35,6 +35,7 @@ LEGACY_MODEL_PATH = (
 )
 REPO_MODEL_PATH = ROOT / "models" / "current_2class_yolo26s_seg_best.pt"
 MODEL_PATH = Path(os.environ.get("INSPECTION_MODEL_PATH", REPO_MODEL_PATH if REPO_MODEL_PATH.exists() else LEGACY_MODEL_PATH))
+FIVE_CLASS_MODEL_PATH = ROOT / "models" / "current_5class_yolo26s_seg_best.pt"
 
 MODEL_CLASS_NAMES = {
     0: "bottle",
@@ -74,8 +75,31 @@ GENERIC_DETECTION_LABELS = {
     99: "Unknown Manual",
 }
 
+DEFAULT_MODEL_ID = "yolo26_2class_ocr"
+MODEL_REGISTRY: dict[str, dict[str, Any]] = {
+    DEFAULT_MODEL_ID: {
+        "id": DEFAULT_MODEL_ID,
+        "label": "旧模型：YOLO26 2类 + OCR",
+        "description": "先检测 bottle/manual，再用 PaddleOCR 将说明书分成四类。",
+        "path": MODEL_PATH,
+        "uses_ocr": True,
+        "model_class_names": MODEL_CLASS_NAMES,
+        "model_to_business_class": MODEL_TO_BUSINESS_CLASS,
+    },
+    "yolo26_5class_direct": {
+        "id": "yolo26_5class_direct",
+        "label": "Jesse 新模型：YOLO26 5类直检",
+        "description": "直接检测 Bottle 和四类说明书，不经过 OCR。",
+        "path": FIVE_CLASS_MODEL_PATH,
+        "uses_ocr": False,
+        "model_class_names": CLASS_NAMES,
+        "model_to_business_class": {idx: idx for idx in CLASS_NAMES},
+    },
+}
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "model_path": str(MODEL_PATH),
+    "active_model_id": DEFAULT_MODEL_ID,
     "image_size": 640,
     "confidence_threshold": 0.25,
     "required_classes": [0, 1, 2, 3, 4],
@@ -114,7 +138,7 @@ app = FastAPI(title="Assembly Line Local Inspection Service")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
-_model: YOLO | None = None
+_models: dict[str, YOLO] = {}
 _ocr: Any | None = None
 
 MANUAL_TYPE_LABELS = {
@@ -231,13 +255,22 @@ def save_config(config: dict[str, Any]) -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
-def model() -> YOLO:
-    global _model
-    if _model is None:
-        if not MODEL_PATH.exists():
-            raise RuntimeError(f"Model file not found: {MODEL_PATH}")
-        _model = YOLO(str(MODEL_PATH))
-    return _model
+def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    requested = model_id or (config or {}).get("active_model_id") or DEFAULT_MODEL_ID
+    if requested not in MODEL_REGISTRY:
+        raise HTTPException(status_code=400, detail=f"Unknown model_id: {requested}")
+    return MODEL_REGISTRY[requested]
+
+
+def model(model_id: str | None = None, config: dict[str, Any] | None = None) -> YOLO:
+    spec = selected_model_spec(model_id, config)
+    model_id = str(spec["id"])
+    model_path = Path(spec["path"])
+    if model_id not in _models:
+        if not model_path.exists():
+            raise RuntimeError(f"Model file not found: {model_path}")
+        _models[model_id] = YOLO(str(model_path))
+    return _models[model_id]
 
 
 def prepare_paddle_runtime() -> None:
@@ -662,24 +695,33 @@ def postprocess_detections(detections: list[dict[str, Any]], image_shape: tuple[
     return dedupe_detections(filter_detections(detections, image_shape))
 
 
-def parse_detections(result: Any) -> list[dict[str, Any]]:
+def detection_names_for_business_class(business_cls_id: int, spec: dict[str, Any]) -> tuple[str, str]:
+    if spec.get("uses_ocr") and business_cls_id == 1:
+        return GENERIC_DETECTION_CLASS_NAMES[1], GENERIC_DETECTION_LABELS[1]
+    return CLASS_NAMES.get(business_cls_id, f"class_{business_cls_id}"), CLASS_LABELS.get(business_cls_id, f"Class {business_cls_id}")
+
+
+def parse_detections(result: Any, spec: dict[str, Any]) -> list[dict[str, Any]]:
     detections = []
     image_shape = tuple(int(x) for x in result.orig_shape[:2])
+    model_to_business = spec["model_to_business_class"]
+    model_class_names = spec["model_class_names"]
     if result.masks is not None and result.boxes is not None and len(result.boxes) > 0:
         classes = result.boxes.cls.cpu().numpy().astype(int)
         confidences = result.boxes.conf.cpu().numpy()
         polygons = result.masks.xy
         for model_cls_id, conf, polygon in zip(classes, confidences, polygons):
-            business_cls_id = MODEL_TO_BUSINESS_CLASS.get(int(model_cls_id))
+            business_cls_id = model_to_business.get(int(model_cls_id))
             if business_cls_id is None or len(polygon) < 3:
                 continue
+            class_name, label = detection_names_for_business_class(business_cls_id, spec)
             detections.append(
                 {
                     "class_id": business_cls_id,
-                    "class_name": GENERIC_DETECTION_CLASS_NAMES.get(business_cls_id, f"class_{business_cls_id}"),
-                    "label": GENERIC_DETECTION_LABELS.get(business_cls_id, f"Class {business_cls_id}"),
+                    "class_name": class_name,
+                    "label": label,
                     "model_class_id": int(model_cls_id),
-                    "model_class_name": MODEL_CLASS_NAMES.get(int(model_cls_id), f"class_{int(model_cls_id)}"),
+                    "model_class_name": model_class_names.get(int(model_cls_id), f"class_{int(model_cls_id)}"),
                     "confidence": round(float(conf), 4),
                     "polygon": [[round(float(x), 2), round(float(y), 2)] for x, y in polygon],
                 }
@@ -692,16 +734,17 @@ def parse_detections(result: Any) -> list[dict[str, Any]]:
     classes = result.obb.cls.cpu().numpy().astype(int)
     confidences = result.obb.conf.cpu().numpy()
     for model_cls_id, conf, polygon in zip(classes, confidences, polygons):
-        business_cls_id = MODEL_TO_BUSINESS_CLASS.get(int(model_cls_id))
+        business_cls_id = model_to_business.get(int(model_cls_id))
         if business_cls_id is None:
             continue
+        class_name, label = detection_names_for_business_class(business_cls_id, spec)
         detections.append(
             {
                 "class_id": business_cls_id,
-                "class_name": GENERIC_DETECTION_CLASS_NAMES.get(business_cls_id, f"class_{business_cls_id}"),
-                "label": GENERIC_DETECTION_LABELS.get(business_cls_id, f"Class {business_cls_id}"),
+                "class_name": class_name,
+                "label": label,
                 "model_class_id": int(model_cls_id),
-                "model_class_name": MODEL_CLASS_NAMES.get(int(model_cls_id), f"class_{int(model_cls_id)}"),
+                "model_class_name": model_class_names.get(int(model_cls_id), f"class_{int(model_cls_id)}"),
                 "confidence": round(float(conf), 4),
                 "polygon": [[round(float(x), 2), round(float(y), 2)] for x, y in polygon],
             }
@@ -805,11 +848,13 @@ def draw_detections(image_bgr: np.ndarray, detections: list[dict[str, Any]], rul
     return annotated
 
 
-def analyze_bgr(image_bgr: np.ndarray, request_id: str) -> dict[str, Any]:
+def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = None) -> dict[str, Any]:
     config = load_config()
-    result = model().predict(image_bgr, imgsz=int(config["image_size"]), device=0, verbose=False)[0]
-    detections = parse_detections(result)
-    detections = attach_ocr_results(image_bgr, detections, config)
+    spec = selected_model_spec(model_id, config)
+    result = model(str(spec["id"]), config).predict(image_bgr, imgsz=int(config["image_size"]), device=0, verbose=False)[0]
+    detections = parse_detections(result, spec)
+    if spec.get("uses_ocr", False):
+        detections = attach_ocr_results(image_bgr, detections, config)
     rule = apply_rule(detections, config)
     annotated = draw_detections(image_bgr, detections, rule)
     out_name = f"{request_id}_annotated.jpg"
@@ -818,6 +863,11 @@ def analyze_bgr(image_bgr: np.ndarray, request_id: str) -> dict[str, Any]:
     return {
         "request_id": request_id,
         "passed": rule["passed"],
+        "model": {
+            "id": spec["id"],
+            "label": spec["label"],
+            "uses_ocr": bool(spec.get("uses_ocr", False)),
+        },
         "rule": rule,
         "detections": detections,
         "annotated_url": f"/outputs/{out_name}",
@@ -838,10 +888,26 @@ def index() -> FileResponse:
 @app.get("/api/status")
 def status() -> dict[str, Any]:
     config = load_config()
+    active_spec = selected_model_spec(None, config)
+    available_models = []
+    for spec in MODEL_REGISTRY.values():
+        path = Path(spec["path"])
+        available_models.append(
+            {
+                "id": spec["id"],
+                "label": spec["label"],
+                "description": spec["description"],
+                "uses_ocr": bool(spec.get("uses_ocr", False)),
+                "path": str(path),
+                "exists": path.exists(),
+            }
+        )
     return {
         "service": "running",
-        "model_exists": MODEL_PATH.exists(),
-        "model_path": str(MODEL_PATH),
+        "model_exists": Path(active_spec["path"]).exists(),
+        "model_path": str(active_spec["path"]),
+        "active_model_id": active_spec["id"],
+        "available_models": available_models,
         "classes": [{"class_id": k, "name": v, "label": CLASS_LABELS[k]} for k, v in CLASS_NAMES.items()],
         "rule": {
             "confidence_threshold": config["confidence_threshold"],
@@ -909,7 +975,7 @@ async def add_accessory(
 
 
 @app.post("/api/analyze/image")
-async def analyze_image(file: UploadFile = File(...)) -> dict[str, Any]:
+async def analyze_image(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
     ensure_dirs()
     payload = await file.read()
     arr = np.frombuffer(payload, np.uint8)
@@ -918,11 +984,11 @@ async def analyze_image(file: UploadFile = File(...)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Could not decode image")
     request_id = safe_name(file.filename).rsplit(".", 1)[0]
     (UPLOAD_DIR / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}").write_bytes(payload)
-    return analyze_bgr(image, request_id)
+    return analyze_bgr(image, request_id, model_id)
 
 
 @app.post("/api/analyze/video")
-async def analyze_video(file: UploadFile = File(...)) -> dict[str, Any]:
+async def analyze_video(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
     ensure_dirs()
     upload_name = safe_name(file.filename)
     video_path = UPLOAD_DIR / upload_name
@@ -947,7 +1013,7 @@ async def analyze_video(file: UploadFile = File(...)) -> dict[str, Any]:
             break
         if idx % stride == 0:
             request_id = f"{Path(upload_name).stem}_frame_{idx:06d}"
-            result = analyze_bgr(frame, request_id)
+            result = analyze_bgr(frame, request_id, model_id)
             if first_preview_url is None:
                 first_preview_url = result["annotated_url"]
             frames.append(

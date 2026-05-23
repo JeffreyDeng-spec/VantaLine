@@ -1,6 +1,8 @@
 const state = {
   config: null,
   classes: [],
+  models: [],
+  activeModelId: null,
   progressTimer: null,
   progressValue: 0,
 };
@@ -63,6 +65,7 @@ function setProgress(value, title, detail) {
 function startProgress(kind) {
   if (state.progressTimer) cancelAnimationFrame(state.progressTimer);
   const isVideo = kind === "video";
+  const usesOcr = selectedModel()?.uses_ocr !== false;
   const phases = isVideo
     ? [
         [18, "上传视频", "正在上传视频文件。"],
@@ -70,12 +73,18 @@ function startProgress(kind) {
         [68, "模型检测中", "正在识别瓶子和说明书位置。"],
         [90, "规则判断中", "正在汇总每一帧的检测结果。"],
       ]
-    : [
-        [18, "上传图片", "正在上传图片文件。"],
-        [42, "模型检测中", "正在识别瓶子和说明书位置。"],
-        [76, "OCR 识别中", "正在判断四张说明书分别属于哪一类。"],
-        [90, "规则判断中", "正在检查五个配件是否齐全。"],
-      ];
+    : usesOcr
+      ? [
+          [18, "上传图片", "正在上传图片文件。"],
+          [42, "模型检测中", "正在识别瓶子和说明书位置。"],
+          [76, "OCR 识别中", "正在判断四张说明书分别属于哪一类。"],
+          [90, "规则判断中", "正在检查五个配件是否齐全。"],
+        ]
+      : [
+          [20, "上传图片", "正在上传图片文件。"],
+          [68, "五类模型检测中", "正在直接识别瓶子和四类说明书。"],
+          [90, "规则判断中", "正在检查五个配件是否齐全。"],
+        ];
   const startTime = performance.now();
   const expectedMs = isVideo ? 36000 : 18000;
   setProgress(3, phases[0][1], phases[0][2]);
@@ -202,6 +211,30 @@ function renderAccessories(items) {
   }
 }
 
+function renderModels(status) {
+  state.models = status.available_models || [];
+  state.activeModelId = status.active_model_id || state.models[0]?.id || "";
+  const select = $("modelSelect");
+  select.innerHTML = "";
+  for (const item of state.models) {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.disabled = !item.exists;
+    option.textContent = `${item.label}${item.uses_ocr ? " / OCR" : " / 直检"}${item.exists ? "" : "（文件缺失）"}`;
+    select.appendChild(option);
+  }
+  select.value = state.activeModelId;
+}
+
+function selectedModelId() {
+  return $("modelSelect")?.value || state.activeModelId || "";
+}
+
+function selectedModel() {
+  const modelId = selectedModelId();
+  return state.models.find((item) => item.id === modelId) || null;
+}
+
 async function loadInitial() {
   const status = await api("/api/status");
   const config = await api("/api/config");
@@ -212,6 +245,7 @@ async function loadInitial() {
   $("serviceState").className = `pill ${status.service === "running" ? "ok" : "fail"}`;
   $("modelState").textContent = status.model_exists ? "模型已加载" : "模型缺失";
   $("modelState").className = `pill ${status.model_exists ? "ok" : "fail"}`;
+  renderModels(status);
   renderRules();
   renderAccessories(accessories.items);
   $("trainingStatus").textContent = STATUS_ZH[config.training?.status] || config.training?.status || "空闲";
@@ -253,6 +287,7 @@ function bindActions() {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("model_id", selectedModelId());
       const result = await api("/api/analyze/image", { method: "POST", body: form });
       renderImageResult(result);
       finishProgress(true);
@@ -274,6 +309,7 @@ function bindActions() {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("model_id", selectedModelId());
       const result = await api("/api/analyze/video", { method: "POST", body: form });
       renderVideoResult(result);
       finishProgress(true);

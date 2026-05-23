@@ -1,5 +1,6 @@
 {
   "model_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/models/current_2class_yolo26s_seg_best.pt",
+  "active_model_id": "yolo26_2class_ocr",
   "image_size": 640,
   "confidence_threshold": 0.25,
   "required_classes": [
