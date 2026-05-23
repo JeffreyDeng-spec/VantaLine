@@ -77,23 +77,23 @@ GENERIC_DETECTION_LABELS = {
 
 DEFAULT_MODEL_ID = "yolo26_2class_ocr"
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
-    DEFAULT_MODEL_ID: {
-        "id": DEFAULT_MODEL_ID,
-        "label": "旧模型：YOLO26 2类 + OCR",
-        "description": "先检测 bottle/manual，再用 PaddleOCR 将说明书分成四类。",
-        "path": MODEL_PATH,
-        "uses_ocr": True,
-        "model_class_names": MODEL_CLASS_NAMES,
-        "model_to_business_class": MODEL_TO_BUSINESS_CLASS,
-    },
     "yolo26_5class_direct": {
         "id": "yolo26_5class_direct",
-        "label": "Jesse 新模型：YOLO26 5类直检",
+        "label": "YOLO26",
         "description": "直接检测 Bottle 和四类说明书，不经过 OCR。",
         "path": FIVE_CLASS_MODEL_PATH,
         "uses_ocr": False,
         "model_class_names": CLASS_NAMES,
         "model_to_business_class": {idx: idx for idx in CLASS_NAMES},
+    },
+    DEFAULT_MODEL_ID: {
+        "id": DEFAULT_MODEL_ID,
+        "label": "YOLO26 + PaddleOCR",
+        "description": "先检测 bottle/manual，再用 PaddleOCR 将说明书分成四类。",
+        "path": MODEL_PATH,
+        "uses_ocr": True,
+        "model_class_names": MODEL_CLASS_NAMES,
+        "model_to_business_class": MODEL_TO_BUSINESS_CLASS,
     },
 }
 

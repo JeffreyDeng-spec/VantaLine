@@ -220,7 +220,7 @@ function renderModels(status) {
     const option = document.createElement("option");
     option.value = item.id;
     option.disabled = !item.exists;
-    option.textContent = `${item.label}${item.uses_ocr ? " / OCR" : " / 直检"}${item.exists ? "" : "（文件缺失）"}`;
+    option.textContent = `${item.label}${item.exists ? "" : "（文件缺失）"}`;
     select.appendChild(option);
   }
   select.value = state.activeModelId;
