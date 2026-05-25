@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>流水线配件检测</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260523-modelname1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260525-automodel15" />
   </head>
   <body>
     <div class="app-shell">
@@ -20,6 +20,7 @@
           <button class="nav-item" data-view="rules">规则设置</button>
           <button class="nav-item" data-view="accessories">配件管理</button>
           <button class="nav-item" data-view="training">模型训练</button>
+          <button class="nav-item" data-view="imageJobs">任务队列</button>
           <button class="nav-item" data-view="stream">实时流接口</button>
         </nav>
 
@@ -174,21 +175,65 @@
             <div>
               <div class="section-title">
                 <span>02</span>
-                <h3>增加参考素材</h3>
+                <h3>增加并规范化</h3>
               </div>
               <div class="field">
-                <label>新参考素材名称</label>
+                <label>配件名称</label>
                 <input id="accessoryName" type="text" placeholder="例如：新的说明书卡片" />
               </div>
               <div class="field">
-                <label>映射到当前类别</label>
-                <select id="accessoryClass"></select>
+                <label>素材类型</label>
+                <select id="accessoryMaterialType">
+                  <option value="text">文字类：说明书 / 标签 / 文档</option>
+                  <option value="object">物品类：外形与轮廓为主</option>
+                </select>
+              </div>
+              <div class="process-box" id="accessoryProcess">
+                <strong>文字类预处理</strong>
+                <span>上传裁剪后的文档图像，系统会生成透视校正后的规范化说明书。</span>
+              </div>
+              <div id="textDimensionFields" class="dimension-panel">
+                <div class="field">
+                  <label>纸张规格</label>
+                  <select id="paperPreset">
+                    <option value="A4">A4 · 210 × 297 mm</option>
+                    <option value="A5">A5 · 148 × 210 mm</option>
+                    <option value="A6">A6 · 105 × 148 mm</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                </div>
+                <div class="dimension-grid">
+                  <div class="field">
+                    <label>宽度 mm</label>
+                    <input id="paperWidthMm" type="number" min="1" step="0.1" value="210" />
+                  </div>
+                  <div class="field">
+                    <label>高度 mm</label>
+                    <input id="paperHeightMm" type="number" min="1" step="0.1" value="297" />
+                  </div>
+                </div>
+              </div>
+              <div id="objectDimensionFields" class="dimension-panel hidden">
+                <div class="dimension-grid three">
+                  <div class="field">
+                    <label>长度 mm</label>
+                    <input id="objectLengthMm" type="number" min="1" step="0.1" placeholder="例如 170" />
+                  </div>
+                  <div class="field">
+                    <label>宽度 mm</label>
+                    <input id="objectWidthMm" type="number" min="1" step="0.1" placeholder="例如 38" />
+                  </div>
+                  <div class="field">
+                    <label>高度 mm</label>
+                    <input id="objectHeightMm" type="number" min="1" step="0.1" placeholder="例如 38" />
+                  </div>
+                </div>
               </div>
               <label class="compact-upload">
-                <input id="accessoryFiles" type="file" multiple accept="image/*,video/*" />
-                上传照片或 360 度视图
+                <input id="accessoryFiles" type="file" multiple accept="image/*,video/*,.pdf" />
+                上传照片、裁剪图或 360 度视图
               </label>
-              <button id="addAccessory" class="secondary">添加参考素材</button>
+              <button id="addAccessory" class="secondary">生成规范化文件</button>
             </div>
           </section>
         </section>
@@ -201,13 +246,54 @@
             </div>
           </header>
 
-          <section class="panel page-panel">
+          <section class="panel page-panel training-panel">
             <div class="section-title">
               <span>01</span>
-              <h3>训练任务</h3>
+              <h3>训练配置</h3>
             </div>
-            <p id="trainingStatus" class="hint">空闲</p>
-            <button id="startTraining" class="secondary">请求训练</button>
+            <div class="training-layout">
+              <div>
+                <div class="field">
+                  <label>训练方式</label>
+                  <select id="trainingMode">
+                    <option value="yolo">YOLO</option>
+                    <option value="yolo_ocr">YOLO + OCR</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>预生成样本数量</label>
+                  <input id="trainingSampleCount" type="number" min="100" max="20000" step="100" value="4000" />
+                </div>
+                <div class="sample-tray-head">
+                  <label>训练集样本</label>
+                  <button id="openAccessoryPicker" class="icon-button" type="button">+</button>
+                </div>
+                <div id="selectedTrainingList" class="selected-training-list">
+                  <span class="empty-inline">尚未添加配件</span>
+                </div>
+                <div id="accessoryPicker" class="accessory-picker">
+                  <div id="trainingAccessoryList" class="training-accessory-list"></div>
+                </div>
+              </div>
+              <div>
+                <div class="training-status-box">
+                  <label>任务状态</label>
+                  <strong id="trainingStatus">空闲</strong>
+                  <span id="trainingNote">等待生成预览样本。</span>
+                  <div id="trainingProgress" class="progress-panel compact-progress" aria-live="polite">
+                    <div class="progress-copy">
+                      <strong id="trainingProgressTitle">等待生成</strong>
+                      <span id="trainingProgressPercent">0%</span>
+                    </div>
+                    <progress id="trainingNativeProgress" class="native-progress" value="0" max="100">0%</progress>
+                    <p id="trainingProgressDetail">点击生成预览图后开始。</p>
+                  </div>
+                </div>
+                <button id="buildTrainingPreview" class="secondary">生成预览图</button>
+                <button id="confirmGenerateSamples" class="secondary spacing-top">确定并正式生成样本</button>
+                <button id="startTraining" class="primary spacing-top">训练模型</button>
+              </div>
+            </div>
           </section>
         </section>
 
@@ -240,10 +326,118 @@
             <p class="hint">实时流接口已预留；当前原型支持图片和视频检测。</p>
           </section>
         </section>
+
+        <section id="imageJobsView" class="view">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Image Worker</p>
+              <h2>任务队列</h2>
+            </div>
+          </header>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <span id="imageJobCount">0</span>
+              <h3>正在进行中的任务</h3>
+            </div>
+            <p id="imageJobSummary" class="hint">空闲</p>
+            <div id="imageJobList" class="job-list page-job-list"></div>
+          </section>
+        </section>
       </main>
     </div>
 
+    <div id="previewModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Dataset Preview</p>
+            <h2 id="previewModalTitle">样本生成确认</h2>
+          </div>
+          <button id="closePreviewModal" class="icon-button" type="button">×</button>
+        </div>
+        <div id="previewSummary" class="summary-grid"></div>
+        <div id="trainingPreviewGrid" class="training-preview-grid">
+          <div class="empty-state light">预览样本会显示在这里</div>
+        </div>
+        <div class="modal-actions">
+          <button id="cancelPreviewModal" class="secondary" type="button">返回修改</button>
+          <button id="modalConfirmGenerate" class="primary" type="button">确定生成完整样本</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="imageViewerModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel image-viewer-panel" role="dialog" aria-modal="true" aria-labelledby="imageViewerTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Preview Image</p>
+            <h2 id="imageViewerTitle">预览大图</h2>
+          </div>
+          <button id="closeImageViewer" class="icon-button" type="button">×</button>
+        </div>
+        <img id="imageViewerImg" class="image-viewer-img" alt="样本预览大图" />
+      </section>
+    </div>
+
+    <div id="accessoryReviewModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="accessoryReviewTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Accessory Review</p>
+            <h2 id="accessoryReviewTitle">确认添加配件</h2>
+          </div>
+          <button id="closeAccessoryReview" class="icon-button" type="button">×</button>
+        </div>
+        <div id="accessoryReviewSummary" class="process-box"></div>
+        <div id="imageWorkerProgress" class="progress-panel compact-progress" aria-live="polite">
+          <div class="progress-copy">
+            <strong id="imageWorkerProgressTitle">等待 Image worker</strong>
+            <span id="imageWorkerProgressPercent">0%</span>
+          </div>
+          <progress id="imageWorkerNativeProgress" class="native-progress" value="0" max="100">0%</progress>
+          <p id="imageWorkerProgressDetail">Pose Collection 任务已排队，等待生成结果。</p>
+        </div>
+        <div id="accessoryThumbGrid" class="training-preview-grid"></div>
+        <div class="modal-actions">
+          <button id="cancelAccessoryReview" class="secondary" type="button">返回修改</button>
+          <button id="confirmAccessoryAdd" class="primary" type="button">确认添加</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="accessoryDetailModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="accessoryDetailTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Accessory Asset</p>
+            <h2 id="accessoryDetailTitle">配件素材</h2>
+          </div>
+          <button id="closeAccessoryDetail" class="icon-button" type="button">×</button>
+        </div>
+        <div id="accessoryDetailSummary" class="process-box"></div>
+        <div id="accessoryDetailGrid" class="training-preview-grid asset-gallery-grid"></div>
+      </section>
+    </div>
+
+    <div id="confirmDeleteModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel confirm-panel" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Confirm</p>
+            <h2 id="confirmDeleteTitle">确认删除配件</h2>
+          </div>
+          <button id="closeConfirmDelete" class="icon-button" type="button">×</button>
+        </div>
+        <p id="confirmDeleteText" class="confirm-text">删除后该配件会从当前配件库和训练选择中移除。</p>
+        <div class="modal-actions">
+          <button id="cancelDeleteAccessory" class="secondary" type="button">取消</button>
+          <button id="confirmDeleteAccessory" class="danger-action" type="button">确认删除</button>
+        </div>
+      </section>
+    </div>
+
     <div id="toast" class="toast"></div>
-    <script src="/static/app.js?v=20260523-modelname1"></script>
+    <script src="/static/app.js?v=20260525-automodel15"></script>
   </body>
 </html>

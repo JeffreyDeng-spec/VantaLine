@@ -2,7 +2,7 @@
   "model_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/models/current_2class_yolo26s_seg_best.pt",
   "active_model_id": "yolo26_2class_ocr",
   "image_size": 640,
-  "confidence_threshold": 0.25,
+  "confidence_threshold": 0.75,
   "required_classes": [
     0,
     1,
@@ -70,11 +70,119 @@
       "name": "Service QR Manual",
       "status": "active",
       "source_files": []
+    },
+    {
+      "id": "acc_e69958ac4a",
+      "class_id": 5,
+      "name": "\u73bb\u7483\u74f6",
+      "material_type": "object",
+      "training_role": "detect_shape",
+      "status": "image_tool_plan_ready",
+      "source_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessory_candidates/src_ca92c251d1/1779683600_97e2619f_10.jpg"
+      ],
+      "created_at": 1779683600,
+      "normalized_assets": [
+        {
+          "kind": "object_view_plan",
+          "source_files": [
+            "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessory_candidates/src_ca92c251d1/1779683600_97e2619f_10.jpg"
+          ],
+          "image_tool_prompt": "Image-to-image asset expansion for '\u73bb\u7483\u74f6'. Generate clean isolated product views with consistent material, multiple angles, standing/lying poses when applicable, calibrated size variants, and transparent or neutral background.",
+          "view_plan": [
+            {
+              "view": "front",
+              "angle": 0,
+              "scale": "1.00x"
+            },
+            {
+              "view": "left_oblique",
+              "angle": -45,
+              "scale": "0.90x"
+            },
+            {
+              "view": "right_oblique",
+              "angle": 45,
+              "scale": "1.10x"
+            },
+            {
+              "view": "top",
+              "angle": 90,
+              "scale": "0.85x"
+            },
+            {
+              "view": "lying_horizontal",
+              "angle": 180,
+              "scale": "1.00x"
+            },
+            {
+              "view": "standing",
+              "angle": "cap diameter calibrated",
+              "scale": "matched_to_proxy_length"
+            }
+          ]
+        }
+      ],
+      "preprocess": "\u7cfb\u7edf\u8bb0\u5f55 Image tool \u6269\u5c55\u8ba1\u5212\uff0c\u7528\u4e8e\u751f\u6210\u591a\u89c6\u89d2\u3001\u591a\u5c3a\u5bf8\u8f85\u52a9\u7d20\u6750\u3002",
+      "thumbnails": [
+        {
+          "url": "/outputs/accessory_candidates/cand_29e989bd3c/source_01.png",
+          "angle": 0,
+          "width": 360,
+          "height": 360
+        }
+      ],
+      "ai_generation_required": true,
+      "pose_collection_prompt": "Create one production-environment Pose Collection image for the accessory '\u73bb\u7483\u74f6' using the uploaded reference photo as the source of truth. Show the same physical item from multiple natural top-down and slightly oblique overhead angles, including horizontal, diagonal, rotated, and upright/standing poses when physically plausible. Keep the item in a realistic assembly-line production context: neutral green conveyor or industrial work-surface lighting, natural shadows, subtle reflections, and believable scale. Preserve the material properties exactly, including transparency, gloss, metal, plastic, rubber, glass, labels, caps, seams, and surface texture. Do not redesign the object. Do not invent extra accessories. Do not add text labels, captions, arrows, measurement marks, borders, or decorative graphics. Arrange the poses as a clean collection sheet with enough separation between each pose for later automatic cropping and segmentation. Make every pose fully visible, sharply bounded, and not overlapping. Avoid messy background fragments around the object; edges must be clean enough for downstream cutout extraction.",
+      "codex_image_job": {
+        "job_id": "imgjob_cand_29e989bd3c",
+        "candidate_id": "cand_29e989bd3c",
+        "status": "completed",
+        "mode": "image_to_image",
+        "input_files": [
+          "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessory_candidates/src_ca92c251d1/1779683600_97e2619f_10.jpg"
+        ],
+        "prompt": "Create one production-environment Pose Collection image for the accessory '\u73bb\u7483\u74f6' using the uploaded reference photo as the source of truth. Show the same physical item from multiple natural top-down and slightly oblique overhead angles, including horizontal, diagonal, rotated, and upright/standing poses when physically plausible. Keep the item in a realistic assembly-line production context: neutral green conveyor or industrial work-surface lighting, natural shadows, subtle reflections, and believable scale. Preserve the material properties exactly, including transparency, gloss, metal, plastic, rubber, glass, labels, caps, seams, and surface texture. Do not redesign the object. Do not invent extra accessories. Do not add text labels, captions, arrows, measurement marks, borders, or decorative graphics. Arrange the poses as a clean collection sheet with enough separation between each pose for later automatic cropping and segmentation. Make every pose fully visible, sharply bounded, and not overlapping. Avoid messy background fragments around the object; edges must be clean enough for downstream cutout extraction.",
+        "output_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/outputs/accessory_pose_collections/cand_29e989bd3c/pose_collection.png",
+        "output_url": "/outputs/accessory_pose_collections/cand_29e989bd3c/pose_collection.png",
+        "progress": 100,
+        "created_at": 1779683600,
+        "note": "Generated by local Codex CLI ImageWorker.",
+        "started_at": 1779683600,
+        "log_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/image_worker_logs/1779683600_86ba097b_imgjob_cand_29e989bd3c.bin.log",
+        "completed_at": 1779683698
+      },
+      "confirmed_at": 1779697371
     }
   ],
   "training": {
-    "status": "idle",
-    "last_requested_at": null,
-    "note": "Prototype hook. Dataset generation and training can be wired to the existing synthetic pipeline."
+    "status": "preview_ready",
+    "last_requested_at": 1779715704,
+    "note": "\u6837\u672c\u751f\u6210\u8bf7\u6c42\u5df2\u8bb0\u5f55\uff1a4000 \u5f20\uff0c\u9884\u8ba1 320 \u5206\u949f\uff0c\u7ea6 7.03 GB\u3002",
+    "selected_accessory_ids": [
+      "acc_e69958ac4a"
+    ],
+    "sample_count": 4000,
+    "mode": "yolo_ocr",
+    "preview_urls": [
+      "/outputs/training_previews/preview_1779720341_212db4/sample_01.png",
+      "/outputs/training_previews/preview_1779720341_212db4/sample_02.png",
+      "/outputs/training_previews/preview_1779720341_212db4/sample_03.png",
+      "/outputs/training_previews/preview_1779720341_212db4/sample_04.png",
+      "/outputs/training_previews/preview_1779720341_212db4/sample_05.png"
+    ],
+    "approved_preview_id": "preview_1779715563_4a380f",
+    "render_policy": {
+      "background_physical_size": {
+        "width_mm": 797.2,
+        "height_mm": 489.51,
+        "mm_per_px": 0.6993,
+        "px_per_mm": 1.43
+      },
+      "physical_size_rule": "All samples must crop each accessory/document body first, then scale the cropped body by physical_size before placement.",
+      "pose_collection_rule": "Pose Collection provides pose only; physical_size is applied only during preview and dataset rendering."
+    },
+    "command_preview": "python scripts/generate_accessory_dataset.py --samples 4000 --mode yolo_ocr --approved-preview preview_1779715563_4a380f",
+    "last_preview_id": "preview_1779720341_212db4"
   }
 }

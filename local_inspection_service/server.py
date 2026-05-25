@@ -1,7 +1,10 @@
 import json
 import os
 import re
+import signal
 import shutil
+import subprocess
+import threading
 import time
 import uuid
 import ctypes
@@ -24,6 +27,10 @@ STATIC_DIR = APP_DIR / "static"
 DATA_DIR = APP_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
+NORMALIZED_DIR = DATA_DIR / "normalized_assets"
+TRAINING_JOBS_DIR = DATA_DIR / "training_jobs"
+ACCESSORY_CANDIDATES_DIR = DATA_DIR / "accessory_candidates"
+IMAGE_WORKER_LOG_DIR = DATA_DIR / "image_worker_logs"
 CONFIG_PATH = DATA_DIR / "config.json"
 LEGACY_MODEL_PATH = (
     ROOT
@@ -127,11 +134,15 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "status": "idle",
         "last_requested_at": None,
         "note": "Prototype hook. Dataset generation and training can be wired to the existing synthetic pipeline.",
+        "selected_accessory_ids": [],
+        "sample_count": 4000,
+        "mode": "yolo_ocr",
+        "preview_urls": [],
     },
 }
 
 
-for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR):
+for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, ACCESSORY_CANDIDATES_DIR, IMAGE_WORKER_LOG_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Assembly Line Local Inspection Service")
@@ -140,6 +151,10 @@ app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
 _models: dict[str, YOLO] = {}
 _ocr: Any | None = None
+_rembg_session: Any | None = None
+_image_worker_lock = threading.Lock()
+_image_worker_thread: threading.Thread | None = None
+_image_worker_processes: dict[str, subprocess.Popen] = {}
 
 MANUAL_TYPE_LABELS = {
     "warranty_service": "Warranty Service Manual",
@@ -228,8 +243,77 @@ class StreamConfig(BaseModel):
     url: str = ""
 
 
+class TrainingPreviewRequest(BaseModel):
+    selected_accessory_ids: list[str]
+    sample_count: int = 4000
+    train_mode: str = "yolo_ocr"
+    preview_count: int = 5
+
+
+class TrainingStartRequest(BaseModel):
+    selected_accessory_ids: list[str]
+    sample_count: int = 4000
+    train_mode: str = "yolo_ocr"
+    approved_preview_id: str | None = None
+
+
+STANDARD_PAPER_SIZES_MM = {
+    "A4": (210.0, 297.0),
+    "A5": (148.0, 210.0),
+    "A6": (105.0, 148.0),
+}
+
+MM_TO_PREVIEW_PX = 1.43
+# Default object size is calibrated to the real reference photo ratio:
+# bottle long side ~= 0.55-0.60 of an A4 manual long side in the 1280x900 preview.
+DEFAULT_OBJECT_SIZE_MM = {"length_mm": 170.0, "width_mm": 38.0, "height_mm": 38.0}
+BACKGROUND_ROI_PX = (70, 100, 1210, 800)
+BACKGROUND_SIZE_MM = {
+    "width_mm": round((BACKGROUND_ROI_PX[2] - BACKGROUND_ROI_PX[0]) / MM_TO_PREVIEW_PX, 2),
+    "height_mm": round((BACKGROUND_ROI_PX[3] - BACKGROUND_ROI_PX[1]) / MM_TO_PREVIEW_PX, 2),
+    "mm_per_px": round(1 / MM_TO_PREVIEW_PX, 4),
+    "px_per_mm": MM_TO_PREVIEW_PX,
+}
+
+
+def optional_float(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        parsed = float(value)
+        return parsed if parsed > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def physical_size_payload(
+    material_type: str,
+    paper_preset: str = "A4",
+    paper_width_mm: Any = None,
+    paper_height_mm: Any = None,
+    object_length_mm: Any = None,
+    object_width_mm: Any = None,
+    object_height_mm: Any = None,
+) -> dict[str, Any]:
+    if material_type == "text":
+        preset = paper_preset if paper_preset in STANDARD_PAPER_SIZES_MM else "custom"
+        default_w, default_h = STANDARD_PAPER_SIZES_MM.get(preset, STANDARD_PAPER_SIZES_MM["A4"])
+        return {
+            "kind": "paper",
+            "preset": preset,
+            "width_mm": optional_float(paper_width_mm) or default_w,
+            "height_mm": optional_float(paper_height_mm) or default_h,
+        }
+    return {
+        "kind": "object",
+        "length_mm": optional_float(object_length_mm) or DEFAULT_OBJECT_SIZE_MM["length_mm"],
+        "width_mm": optional_float(object_width_mm) or DEFAULT_OBJECT_SIZE_MM["width_mm"],
+        "height_mm": optional_float(object_height_mm) or DEFAULT_OBJECT_SIZE_MM["height_mm"],
+    }
+
+
 def ensure_dirs() -> None:
-    for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR):
+    for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, ACCESSORY_CANDIDATES_DIR, IMAGE_WORKER_LOG_DIR):
         path.mkdir(parents=True, exist_ok=True)
     if not CONFIG_PATH.exists():
         save_config(DEFAULT_CONFIG)
@@ -253,6 +337,1070 @@ def load_config() -> dict[str, Any]:
 def save_config(config: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+
+def accessory_uid(item: dict[str, Any]) -> str:
+    if item.get("id"):
+        return str(item["id"])
+    raw = f"{item.get('class_id', 'x')}_{item.get('name', 'accessory')}"
+    return re.sub(r"[^a-zA-Z0-9_-]+", "_", raw).strip("_").lower()
+
+
+def serialize_accessory(item: dict[str, Any]) -> dict[str, Any]:
+    copy = dict(item)
+    copy["id"] = accessory_uid(item)
+    material_type = copy.setdefault("material_type", "object" if int(copy.get("class_id", 0)) == 0 else "text")
+    copy.setdefault("physical_size", physical_size_payload(str(material_type)))
+    copy.setdefault("source_files", [])
+    copy.setdefault("normalized_assets", [])
+    copy.setdefault("training_role", "detect_and_classify")
+    return copy
+
+
+def public_output_url(path: Path) -> str:
+    return f"/outputs/{path.relative_to(OUTPUT_DIR).as_posix()}"
+
+
+def order_points(points: np.ndarray) -> np.ndarray:
+    pts = points.reshape(4, 2).astype("float32")
+    s = pts.sum(axis=1)
+    diff = np.diff(pts, axis=1)
+    ordered = np.zeros((4, 2), dtype="float32")
+    ordered[0] = pts[np.argmin(s)]
+    ordered[2] = pts[np.argmax(s)]
+    ordered[1] = pts[np.argmin(diff)]
+    ordered[3] = pts[np.argmax(diff)]
+    return ordered
+
+
+def normalize_text_image(src: Path, target_dir: Path) -> dict[str, Any] | None:
+    image = cv2.imread(str(src))
+    if image is None:
+        return None
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blur, 50, 160)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    warped = None
+    method = "resize_fallback"
+    for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:12]:
+        peri = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+        if len(approx) == 4 and cv2.contourArea(approx) > image.shape[0] * image.shape[1] * 0.08:
+            rect = order_points(approx)
+            width_a = np.linalg.norm(rect[2] - rect[3])
+            width_b = np.linalg.norm(rect[1] - rect[0])
+            height_a = np.linalg.norm(rect[1] - rect[2])
+            height_b = np.linalg.norm(rect[0] - rect[3])
+            max_w = max(480, int(max(width_a, width_b)))
+            max_h = max(640, int(max(height_a, height_b)))
+            dst = np.array([[0, 0], [max_w - 1, 0], [max_w - 1, max_h - 1], [0, max_h - 1]], dtype="float32")
+            matrix = cv2.getPerspectiveTransform(rect, dst)
+            warped = cv2.warpPerspective(image, matrix, (max_w, max_h))
+            method = "largest_quad_perspective"
+            break
+    if warped is None:
+        h, w = image.shape[:2]
+        scale = min(1200 / max(h, w), 1.0)
+        warped = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    out = target_dir / f"{src.stem}_canonical.png"
+    cv2.imwrite(str(out), warped)
+    return {
+        "kind": "canonical_text_image",
+        "path": str(out),
+        "method": method,
+        "width": int(warped.shape[1]),
+        "height": int(warped.shape[0]),
+        "workflow": ["crop", "perspective_correction", "ocr_keyword_capture"],
+    }
+
+
+def build_object_view_plan(name: str) -> list[dict[str, Any]]:
+    return [
+        {"view": "front", "angle": 0, "scale": "1.00x"},
+        {"view": "left_oblique", "angle": -45, "scale": "0.90x"},
+        {"view": "right_oblique", "angle": 45, "scale": "1.10x"},
+        {"view": "top", "angle": 90, "scale": "0.85x"},
+        {"view": "lying_horizontal", "angle": 180, "scale": "1.00x"},
+        {"view": "standing", "angle": "cap diameter calibrated", "scale": "matched_to_proxy_length"},
+    ]
+
+
+def default_asset_for_accessory(item: dict[str, Any]) -> Path | None:
+    name = str(item.get("name", "")).lower()
+    if "warranty" in name:
+        return ROOT / "standardized_manuals" / "manual_from_2_warranty_service_precise_1240x1754.png"
+    if "battery" in name:
+        return ROOT / "standardized_manuals" / "manual_from_3_battery_instruction_precise_1240x1754.png"
+    if "download" in name:
+        return ROOT / "standardized_manuals" / "manual_from_4_download_service_precise_1240x1754.png"
+    if "qr" in name or "service" in name:
+        return ROOT / "standardized_manuals" / "manual_from_6_service_qr_precise_1240x1754.png"
+    if "bottle" in name:
+        return ROOT / "generated_bottle_pose_collection" / "overhead_bottle_pose_collection_image2.png"
+    return None
+
+
+def load_preview_asset(item: dict[str, Any]) -> np.ndarray | None:
+    for asset in item.get("normalized_assets", []):
+        path = Path(str(asset.get("path", "")))
+        if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if image is not None:
+                return image
+    for path_str in item.get("source_files", []):
+        path = Path(path_str)
+        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"} and path.exists():
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if image is not None:
+                return image
+    default_path = default_asset_for_accessory(item)
+    if default_path and default_path.exists():
+        return cv2.imread(str(default_path), cv2.IMREAD_COLOR)
+    return None
+
+
+def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    job = item.get("codex_image_job") or {}
+    output_path = Path(str(job.get("output_path", "")))
+    if output_path.exists():
+        paths.append(output_path)
+    for asset in item.get("normalized_assets", []):
+        path = Path(str(asset.get("path", "")))
+        if path.exists():
+            paths.append(path)
+    for path_str in item.get("source_files", []):
+        path = Path(path_str)
+        if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            paths.append(path)
+    default_path = default_asset_for_accessory(item)
+    if default_path and default_path.exists():
+        paths.append(default_path)
+    unique = []
+    seen = set()
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            unique.append(path)
+            seen.add(key)
+    return unique
+
+
+def foreground_mask(image: np.ndarray) -> np.ndarray:
+    h, w = image.shape[:2]
+    border = np.concatenate(
+        [
+            image[: max(3, h // 20), :, :].reshape(-1, 3),
+            image[-max(3, h // 20) :, :, :].reshape(-1, 3),
+            image[:, : max(3, w // 20), :].reshape(-1, 3),
+            image[:, -max(3, w // 20) :, :].reshape(-1, 3),
+        ],
+        axis=0,
+    )
+    bg = np.median(border, axis=0).astype(np.float32)
+    diff = np.linalg.norm(image.astype(np.float32) - bg, axis=2)
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue = hsv[:, :, 0]
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    green_bg = (hue > 30) & (hue < 100) & (sat > 24) & (val > 35)
+    red = ((hue < 14) | (hue > 165)) & (sat > 70)
+    dark = val < 78
+    bright_glass = (sat < 62) & (val > 128) & (diff > 10)
+    mask = ((~green_bg & (diff > 18)) | red | dark | bright_glass).astype(np.uint8) * 255
+    edges = cv2.Canny(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 45, 140)
+    mask = cv2.bitwise_or(mask, cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((17, 17), np.uint8), iterations=2)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    return mask
+
+
+def object_cutout_from_image(image: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray] | None:
+    mask = foreground_mask(image)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    components = []
+    image_area = image.shape[0] * image.shape[1]
+    for idx in range(1, num):
+        x, y, w, h, area = stats[idx]
+        if area < max(500, image_area * 0.001) or area > image_area * 0.55:
+            continue
+        if w < 8 or h < 8:
+            continue
+        components.append((x, y, w, h, area))
+    if not components:
+        return None
+    components = sorted(components, key=lambda item: item[4], reverse=True)[:8]
+    weights = np.array([item[4] for item in components], dtype=float)
+    weights = weights / weights.sum()
+    x, y, w, h, _ = components[int(rng.choice(len(components), p=weights))]
+    pad = max(8, int(max(w, h) * 0.18))
+    x1, y1 = max(0, x - pad), max(0, y - pad)
+    x2, y2 = min(image.shape[1], x + w + pad), min(image.shape[0], y + h + pad)
+    crop = image[y1:y2, x1:x2].copy()
+    crop_mask = mask[y1:y2, x1:x2].copy()
+    crop_mask = cv2.GaussianBlur(crop_mask, (5, 5), 0)
+    return crop, crop_mask
+
+
+def rembg_session() -> Any | None:
+    global _rembg_session
+    if _rembg_session is not None:
+        return _rembg_session
+    try:
+        from rembg import new_session
+
+        _rembg_session = new_session("u2net")
+        return _rembg_session
+    except Exception:
+        _rembg_session = None
+        return None
+
+
+def ai_background_cutout(image: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+    session = rembg_session()
+    if session is None:
+        return None
+    try:
+        from PIL import Image
+        from rembg import remove
+
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        result = remove(
+            Image.fromarray(rgb),
+            session=session,
+            alpha_matting=True,
+            alpha_matting_foreground_threshold=240,
+            alpha_matting_background_threshold=12,
+            alpha_matting_erode_size=8,
+        )
+        rgba = np.array(result.convert("RGBA"))
+        alpha = rgba[:, :, 3]
+        ys, xs = np.where(alpha > 12)
+        if len(xs) == 0 or len(ys) == 0:
+            return None
+        x1, x2 = max(0, xs.min() - 4), min(alpha.shape[1], xs.max() + 5)
+        y1, y2 = max(0, ys.min() - 4), min(alpha.shape[0], ys.max() + 5)
+        if (x2 - x1) * (y2 - y1) < 240:
+            return None
+        crop_rgb = rgba[y1:y2, x1:x2, :3]
+        crop_alpha = alpha[y1:y2, x1:x2]
+        crop_bgr = cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR)
+        return crop_bgr, crop_alpha
+    except Exception:
+        return None
+
+
+def green_screen_object_cutout(image: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray] | None:
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue = hsv[:, :, 0]
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    red = (((hue < 14) | (hue > 165)) & (sat > 70)).astype(np.uint8) * 255
+    dark = ((val < 92) & (sat > 25)).astype(np.uint8) * 255
+    glass_highlight = ((sat < 80) & (val > 125)).astype(np.uint8) * 255
+    edges = cv2.Canny(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 45, 135)
+    seed = cv2.bitwise_or(cv2.bitwise_or(red, dark), cv2.bitwise_or(glass_highlight, edges))
+    seed = cv2.morphologyEx(seed, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    joined = cv2.dilate(seed, np.ones((29, 29), np.uint8), iterations=1)
+    joined = cv2.morphologyEx(joined, cv2.MORPH_CLOSE, np.ones((41, 41), np.uint8), iterations=1)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(joined, connectivity=8)
+    components = []
+    image_area = image.shape[0] * image.shape[1]
+    for idx in range(1, num):
+        x, y, w, h, area = stats[idx]
+        if area < max(650, image_area * 0.002) or area > image_area * 0.45:
+            continue
+        if w < 18 or h < 18:
+            continue
+        anchor = int(red[y : y + h, x : x + w].sum() // 255) + int(dark[y : y + h, x : x + w].sum() // 255)
+        highlight = int(glass_highlight[y : y + h, x : x + w].sum() // 255)
+        components.append((x, y, w, h, area, anchor, highlight))
+    if not components:
+        return object_cutout_from_image(image, rng)
+    anchored = [item for item in components if item[5] > 25]
+    components = sorted(anchored or components, key=lambda item: item[5] * 12 + item[6] * 0.2 + item[4] * 0.02, reverse=True)[:5]
+    x, y, w, h, *_ = components[0]
+    pad = max(10, int(max(w, h) * 0.08))
+    x1, y1 = max(0, x - pad), max(0, y - pad)
+    x2, y2 = min(image.shape[1], x + w + pad), min(image.shape[0], y + h + pad)
+    crop = image[y1:y2, x1:x2].copy()
+    crop_hsv = hsv[y1:y2, x1:x2]
+    crop_seed = seed[y1:y2, x1:x2]
+    crop_joined = joined[y1:y2, x1:x2]
+    ch, cs, cv = crop_hsv[:, :, 0], crop_hsv[:, :, 1], crop_hsv[:, :, 2]
+    crop_red = (((ch < 14) | (ch > 165)) & (cs > 70))
+    crop_dark = (cv < 92) & (cs > 25)
+    crop_highlight = (cs < 80) & (cv > 125)
+    alpha = np.zeros(crop.shape[:2], dtype=np.uint8)
+    alpha[crop_highlight | (crop_seed > 0)] = 178
+    alpha[crop_red | crop_dark] = 255
+    alpha = cv2.dilate(alpha, np.ones((3, 3), np.uint8), iterations=1)
+    alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
+    keep = np.zeros_like(alpha)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats((alpha > 28).astype(np.uint8), connectivity=8)
+    alpha_area = alpha.shape[0] * alpha.shape[1]
+    components = []
+    for idx in range(1, num):
+        x, y, w, h, area = stats[idx]
+        if area < max(35, alpha_area * 0.002):
+            continue
+        components.append((idx, area))
+    for idx, _ in sorted(components, key=lambda item: item[1], reverse=True)[:2]:
+        keep[labels == idx] = 255
+    if components:
+        alpha = cv2.bitwise_and(alpha, keep)
+    # Neutralize green-screen color inside transparent glass so the belt underneath shows through naturally.
+    green_tint = (ch > 30) & (ch < 100) & (cs > 22)
+    crop[green_tint & (alpha > 0)] = (
+        crop[green_tint & (alpha > 0)].astype(np.float32) * 0.45
+        + np.array([225, 232, 226], dtype=np.float32) * 0.55
+    ).astype(np.uint8)
+    return crop, alpha
+
+
+def pose_collection_regions(image: np.ndarray) -> list[tuple[int, int, int, int]]:
+    h, w = image.shape[:2]
+    rel_regions = [
+        (0.05, 0.03, 0.36, 0.23),
+        (0.43, 0.02, 0.58, 0.35),
+        (0.62, 0.06, 0.96, 0.25),
+        (0.08, 0.30, 0.33, 0.62),
+        (0.36, 0.32, 0.61, 0.68),
+        (0.68, 0.32, 0.94, 0.66),
+        (0.08, 0.58, 0.30, 0.96),
+        (0.34, 0.72, 0.66, 0.94),
+        (0.74, 0.58, 0.96, 0.96),
+    ]
+    regions = []
+    for x1, y1, x2, y2 in rel_regions:
+        regions.append((int(w * x1), int(h * y1), int(w * x2), int(h * y2)))
+    return regions
+
+
+def load_object_preview_sprite(item: dict[str, Any], rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray] | None:
+    def usable_cutout(cutout: tuple[np.ndarray, np.ndarray] | None, source_shape: tuple[int, int, int]) -> tuple[np.ndarray, np.ndarray] | None:
+        if not cutout:
+            return None
+        cut_asset, cut_mask = trim_masked_asset(cutout[0], cutout[1], pad=2)
+        source_h, source_w = source_shape[:2]
+        cut_h, cut_w = cut_asset.shape[:2]
+        mask_fill = float((cut_mask > 8).sum()) / max(1, cut_mask.shape[0] * cut_mask.shape[1])
+        # Reject loose matting that treats an entire pose-cell as foreground;
+        # otherwise the bottle inside that cell remains visually tiny after scaling.
+        if cut_w > source_w * 0.82 and cut_h > source_h * 0.82 and mask_fill > 0.72:
+            return None
+        return cut_asset, cut_mask
+
+    job = item.get("codex_image_job") or {}
+    pose_path = Path(str(job.get("output_path", "")))
+    if pose_path.exists():
+        pose = cv2.imread(str(pose_path), cv2.IMREAD_COLOR)
+        if pose is not None:
+            regions = pose_collection_regions(pose)
+            pose_sprites: list[tuple[np.ndarray, np.ndarray]] = []
+            for x1, y1, x2, y2 in regions:
+                tile = pose[y1:y2, x1:x2].copy()
+                ai_cutout = usable_cutout(ai_background_cutout(tile), tile.shape)
+                if ai_cutout:
+                    pose_sprites.append(ai_cutout)
+            if pose_sprites:
+                return pose_sprites[int(rng.integers(0, len(pose_sprites)))]
+            for x1, y1, x2, y2 in regions:
+                tile = pose[y1:y2, x1:x2].copy()
+                cutout = usable_cutout(green_screen_object_cutout(tile, rng), tile.shape)
+                if cutout:
+                    pose_sprites.append(cutout)
+            if pose_sprites:
+                return pose_sprites[int(rng.integers(0, len(pose_sprites)))]
+    for path in accessory_image_paths(item):
+        if path == pose_path:
+            continue
+        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if image is None:
+            continue
+        ai_cutout = ai_background_cutout(image)
+        if ai_cutout:
+            return ai_cutout
+        cutout = object_cutout_from_image(image, rng)
+        if cutout:
+            return cutout
+    image = load_preview_asset(item)
+    if image is None:
+        return None
+    mask = np.full(image.shape[:2], 255, dtype=np.uint8)
+    return image, mask
+
+
+def trim_masked_asset(asset: np.ndarray, mask: np.ndarray, pad: int = 4) -> tuple[np.ndarray, np.ndarray]:
+    ys, xs = np.where(mask > 8)
+    if len(xs) == 0 or len(ys) == 0:
+        return asset, mask
+    x1, x2 = max(0, int(xs.min()) - pad), min(mask.shape[1], int(xs.max()) + pad + 1)
+    y1, y2 = max(0, int(ys.min()) - pad), min(mask.shape[0], int(ys.max()) + pad + 1)
+    return asset[y1:y2, x1:x2].copy(), mask[y1:y2, x1:x2].copy()
+
+
+def physical_mask_for_rect_asset(asset: np.ndarray) -> np.ndarray:
+    return np.full(asset.shape[:2], 255, dtype=np.uint8)
+
+
+def trim_rect_asset(asset: np.ndarray, pad: int = 0) -> np.ndarray:
+    gray = cv2.cvtColor(asset, cv2.COLOR_BGR2GRAY)
+    border = np.concatenate([gray[:5, :].reshape(-1), gray[-5:, :].reshape(-1), gray[:, :5].reshape(-1), gray[:, -5:].reshape(-1)])
+    bg = float(np.median(border))
+    diff = np.abs(gray.astype(np.float32) - bg)
+    mask = (diff > 8).astype(np.uint8) * 255
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if num <= 1:
+        return asset
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    idx = int(np.argmax(areas)) + 1
+    x, y, w, h, _ = stats[idx]
+    if w * h < asset.shape[0] * asset.shape[1] * 0.2:
+        return asset
+    x1, y1 = max(0, x - pad), max(0, y - pad)
+    x2, y2 = min(asset.shape[1], x + w + pad), min(asset.shape[0], y + h + pad)
+    return asset[y1:y2, x1:x2].copy()
+
+
+def paste_masked_asset(
+    canvas: np.ndarray,
+    asset: np.ndarray,
+    mask: np.ndarray,
+    center: tuple[int, int],
+    target_size: tuple[int, int],
+    angle: float,
+) -> np.ndarray:
+    asset, mask = trim_masked_asset(asset, mask)
+    target_w, target_h = target_size
+    h, w = asset.shape[:2]
+    scale = min(target_w / max(w, 1), target_h / max(h, 1))
+    resized = cv2.resize(asset, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+    resized_mask = cv2.resize(mask, (resized.shape[1], resized.shape[0]), interpolation=cv2.INTER_LINEAR)
+    rh, rw = resized.shape[:2]
+    diagonal = int(np.ceil(np.sqrt(rw * rw + rh * rh))) + 8
+    patch = np.zeros((diagonal, diagonal, 3), dtype=np.uint8)
+    patch_mask = np.zeros((diagonal, diagonal), dtype=np.uint8)
+    x0 = (diagonal - rw) // 2
+    y0 = (diagonal - rh) // 2
+    patch[y0 : y0 + rh, x0 : x0 + rw] = resized
+    patch_mask[y0 : y0 + rh, x0 : x0 + rw] = resized_mask
+    matrix = cv2.getRotationMatrix2D((diagonal / 2, diagonal / 2), angle, 1.0)
+    rotated = cv2.warpAffine(patch, matrix, (diagonal, diagonal), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+    rotated_mask = cv2.warpAffine(patch_mask, matrix, (diagonal, diagonal), flags=cv2.INTER_LINEAR, borderValue=0)
+    cx, cy = center
+    dest_x = cx - diagonal // 2
+    dest_y = cy - diagonal // 2
+    x1, y1 = max(0, dest_x), max(0, dest_y)
+    x2, y2 = min(canvas.shape[1], dest_x + diagonal), min(canvas.shape[0], dest_y + diagonal)
+    sx1, sy1 = x1 - dest_x, y1 - dest_y
+    sx2, sy2 = sx1 + (x2 - x1), sy1 + (y2 - y1)
+    if x2 <= x1 or y2 <= y1:
+        return canvas
+    roi = canvas[y1:y2, x1:x2]
+    alpha = (rotated_mask[sy1:sy2, sx1:sx2].astype(float) / 255.0)[..., None]
+    roi[:] = (rotated[sy1:sy2, sx1:sx2] * alpha + roi * (1 - alpha)).astype(np.uint8)
+    return canvas
+
+
+def paste_physical_object_asset(
+    canvas: np.ndarray,
+    asset: np.ndarray,
+    mask: np.ndarray,
+    center: tuple[int, int],
+    target_long_side_px: int,
+    target_short_side_px: int,
+    angle: float,
+) -> np.ndarray:
+    asset, mask = trim_masked_asset(asset, mask)
+    h, w = asset.shape[:2]
+    long_side = max(w, h, 1)
+    scale = target_long_side_px / long_side
+    resized_size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+    resized = cv2.resize(asset, resized_size, interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC)
+    resized_mask = cv2.resize(mask, resized_size, interpolation=cv2.INTER_LINEAR)
+    return paste_masked_asset(canvas, resized, resized_mask, center, resized_size, angle)
+
+
+def paste_rotated_asset(canvas: np.ndarray, asset: np.ndarray, center: tuple[int, int], target_size: tuple[int, int], angle: float) -> np.ndarray:
+    asset = trim_rect_asset(asset)
+    return paste_masked_asset(canvas, asset, physical_mask_for_rect_asset(asset), center, target_size, angle)
+
+
+def normalize_accessory_assets(item: dict[str, Any]) -> dict[str, Any]:
+    normalized_dir = NORMALIZED_DIR / accessory_uid(item)
+    normalized_dir.mkdir(parents=True, exist_ok=True)
+    source_files = [Path(path) for path in item.get("source_files", [])]
+    image_sources = [path for path in source_files if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}]
+    material_type = item.get("material_type", "object")
+    if material_type == "text":
+        assets = []
+        for src in image_sources[:4]:
+            normalized = normalize_text_image(src, normalized_dir)
+            if normalized:
+                assets.append(normalized)
+        return {
+            "status": "normalized_text_ready" if assets else "needs_crop",
+            "normalized_assets": assets,
+            "preprocess": "用户裁剪包含完整文字的文档图像，系统进行透视校正并生成规整说明书图。",
+        }
+    prompt = (
+        f"Image-to-image asset expansion for '{item.get('name', 'accessory')}'. "
+        "Generate clean isolated product views with consistent material, multiple angles, "
+        "standing/lying poses when applicable, calibrated size variants, and transparent or neutral background."
+    )
+    return {
+        "status": "image_tool_plan_ready",
+        "normalized_assets": [
+            {
+                "kind": "object_view_plan",
+                "source_files": [str(path) for path in image_sources],
+                "image_tool_prompt": prompt,
+                "view_plan": build_object_view_plan(str(item.get("name", "accessory"))),
+            }
+        ],
+        "preprocess": "系统记录 Image tool 扩展计划，用于生成多视角、多尺寸辅助素材。",
+    }
+
+
+def write_thumbnail(image: np.ndarray, out_path: Path, angle: float = 0.0, size: int = 360) -> dict[str, Any]:
+    h, w = image.shape[:2]
+    scale = min(size / max(h, w), 1.0)
+    resized = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+    rh, rw = resized.shape[:2]
+    canvas = np.full((size, size, 3), (238, 240, 242), dtype=np.uint8)
+    patch = np.full((size, size, 3), (238, 240, 242), dtype=np.uint8)
+    x = (size - rw) // 2
+    y = (size - rh) // 2
+    patch[y : y + rh, x : x + rw] = resized
+    matrix = cv2.getRotationMatrix2D((size / 2, size / 2), angle, 1.0)
+    rotated = cv2.warpAffine(patch, matrix, (size, size), flags=cv2.INTER_LINEAR, borderValue=(238, 240, 242))
+    canvas[:] = rotated
+    cv2.imwrite(str(out_path), canvas)
+    return {"url": public_output_url(out_path), "angle": angle, "width": size, "height": size}
+
+
+def build_pose_collection_prompt(item: dict[str, Any]) -> str:
+    return (
+        f"Create one production-environment Pose Collection image for the accessory '{item.get('name', 'accessory')}' "
+        "using the uploaded reference photo as the source of truth. Before generating, internally infer the object's "
+        "3D spatial structure, stable support surfaces, center of mass, likely contact points, and how it can physically "
+        "stand, lie down, lean, rotate, or rest on a production table. Show the same physical item from multiple natural "
+        "top-down and slightly oblique overhead angles, including horizontal, diagonal, rotated, laid-down, upright, "
+        "standing, and leaning poses when those states are physically plausible. If the reference photo only shows one "
+        "state, still include other realistic physical states that the real object could take. Do not show impossible "
+        "floating, unsupported, intersecting, or gravity-defying poses. Keep the item in a realistic assembly-line "
+        "production context: neutral green conveyor or industrial work-surface lighting, natural contact shadows, "
+        "subtle reflections, and believable scale. "
+        "Preserve the material properties exactly, including transparency, gloss, metal, plastic, rubber, glass, labels, "
+        "caps, seams, and surface texture. Do not redesign the object. Do not invent extra accessories. Do not add text "
+        "labels, captions, arrows, measurement marks, borders, or decorative graphics. Arrange the poses as a clean "
+        "collection sheet with enough separation between each pose for later automatic cropping and segmentation. "
+        "Make every pose fully visible, sharply bounded, and not overlapping. Avoid messy background fragments around "
+        "the object; edges must be clean enough for downstream cutout extraction."
+    )
+
+
+def create_accessory_candidate(
+    name: str,
+    material_type: str,
+    training_role: str,
+    source_files: list[str],
+    physical_size: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    candidate_id = f"cand_{uuid.uuid4().hex[:10]}"
+    thumb_dir = OUTPUT_DIR / "accessory_candidates" / candidate_id
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    item = {
+        "id": candidate_id,
+        "class_id": -1,
+        "name": name,
+        "material_type": material_type,
+        "training_role": training_role,
+        "physical_size": physical_size or physical_size_payload(material_type),
+        "status": "candidate_review",
+        "source_files": source_files,
+        "created_at": int(time.time()),
+    }
+    normalized = normalize_accessory_assets(item)
+    item.update(normalized)
+    thumbnails = []
+    image_sources = [Path(path) for path in source_files if Path(path).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}]
+    for idx, src in enumerate(image_sources[:6]):
+        image = cv2.imread(str(src), cv2.IMREAD_COLOR)
+        if image is not None:
+            thumbnails.append(write_thumbnail(image, thumb_dir / f"source_{idx + 1:02d}.png", 0))
+    if not thumbnails and item.get("normalized_assets"):
+        for idx, asset in enumerate(item["normalized_assets"][:6]):
+            path = Path(asset.get("path", ""))
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR) if path.exists() else None
+            if image is not None:
+                thumbnails.append(write_thumbnail(image, thumb_dir / f"normalized_{idx + 1:02d}.png", 0))
+    item["thumbnails"] = thumbnails[:8]
+    item["ai_generation_required"] = material_type == "object" and len(image_sources) <= 1
+    item["pose_collection_prompt"] = build_pose_collection_prompt(item) if item["ai_generation_required"] else ""
+    if item["ai_generation_required"]:
+        output_path = OUTPUT_DIR / "accessory_pose_collections" / candidate_id / "pose_collection.png"
+        item["codex_image_job"] = {
+            "job_id": f"imgjob_{candidate_id}",
+            "candidate_id": candidate_id,
+            "status": "queued_for_codex_image_worker",
+            "mode": "image_to_image",
+            "input_files": [str(path) for path in image_sources],
+            "prompt": item["pose_collection_prompt"],
+            "output_path": str(output_path),
+            "output_url": public_output_url(output_path),
+            "progress": 0,
+            "created_at": int(time.time()),
+            "note": "Queued for local Codex CLI ImageWorker. The backend will pass the reference image and prompt to Codex CLI and write output_path.",
+        }
+    (ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json").write_text(json.dumps(item, indent=2), encoding="utf-8")
+    return item
+
+
+def load_accessory_candidate(candidate_id: str) -> dict[str, Any]:
+    path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Accessory candidate not found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_accessory_candidate(path: Path, candidate: dict[str, Any]) -> None:
+    path.write_text(json.dumps(candidate, indent=2), encoding="utf-8")
+
+
+def image_job_prompt(job: dict[str, Any]) -> str:
+    output_path = str(job.get("output_path", ""))
+    return f"""
+You are the ImageWorker for the local assembly-line inspection service.
+
+Use the attached input image as the visual source of truth.
+Generate a single realistic bitmap PNG Pose Collection image.
+
+Core prompt:
+{job.get("prompt", "")}
+
+Hard requirements:
+- Save the final generated bitmap exactly to this path:
+  {output_path}
+- The output must be a valid PNG file.
+- Do not return only text. Do not create a script-only placeholder.
+- If you need to create intermediate files, keep them temporary, but the final output must be the exact path above.
+- After generation, verify that the PNG exists at the exact output path.
+""".strip()
+
+
+def image_job_is_active(status: str) -> bool:
+    return status in {"queued_for_codex_image_worker", "queued", "running"}
+
+
+def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | None:
+    for path in sorted(ACCESSORY_CANDIDATES_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime):
+        try:
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        job = candidate.get("codex_image_job")
+        if not job:
+            continue
+        status = str(job.get("status", ""))
+        if status not in {"queued_for_codex_image_worker", "queued"}:
+            continue
+        output_path = Path(str(job.get("output_path", "")))
+        if output_path.exists():
+            job["status"] = "completed"
+            job["progress"] = 100
+            job["output_url"] = public_output_url(output_path)
+            job["completed_at"] = int(output_path.stat().st_mtime)
+            candidate["codex_image_job"] = job
+            save_accessory_candidate(path, candidate)
+            continue
+        return path, candidate, job
+    return None
+
+
+def update_image_worker_status(path: Path, candidate: dict[str, Any], job: dict[str, Any], **fields: Any) -> None:
+    job.update(fields)
+    candidate["codex_image_job"] = job
+    save_accessory_candidate(path, candidate)
+
+
+def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
+    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
+    output_path = Path(str(job.get("output_path", "")))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
+    input_files = [str(Path(item)) for item in job.get("input_files", []) if Path(str(item)).exists()]
+
+    if not shutil.which("codex"):
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error="codex CLI was not found on PATH.",
+            log_path=str(log_path),
+        )
+        return
+    if not input_files:
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error="No valid input image was found for this ImageWorker job.",
+            log_path=str(log_path),
+        )
+        return
+
+    command = [
+        "codex",
+        "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-C",
+        str(ROOT),
+    ]
+    for input_file in input_files[:4]:
+        command.extend(["-i", input_file])
+    command.append("-")
+
+    update_image_worker_status(
+        path,
+        candidate,
+        job,
+        status="running",
+        progress=max(int(job.get("progress", 0) or 0), 12),
+        started_at=int(time.time()),
+        log_path=str(log_path),
+        note="Codex CLI ImageWorker is processing this image-to-image task.",
+    )
+
+    process: subprocess.Popen | None = None
+    try:
+        with log_path.open("w", encoding="utf-8", errors="replace") as log:
+            log.write(f"$ {' '.join(command)}\n\n")
+            log.flush()
+            process = subprocess.Popen(
+                command,
+                cwd=str(ROOT),
+                stdin=subprocess.PIPE,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+            _image_worker_processes[job_id] = process
+            process.communicate(image_job_prompt(job) + "\n", timeout=900)
+            return_code = process.returncode
+    except subprocess.TimeoutExpired:
+        if process:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=10)
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error="Codex CLI image generation timed out after 900 seconds.",
+            log_path=str(log_path),
+        )
+        return
+    except Exception as exc:
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error=str(exc),
+            log_path=str(log_path),
+        )
+        return
+    finally:
+        _image_worker_processes.pop(job_id, None)
+
+    try:
+        latest = json.loads(path.read_text(encoding="utf-8"))
+        latest_job = latest.get("codex_image_job", job)
+    except json.JSONDecodeError:
+        latest = candidate
+        latest_job = job
+    if latest_job.get("status") == "stopped":
+        return
+
+    if return_code == 0 and output_path.exists():
+        latest_job.update(
+            {
+                "status": "completed",
+                "progress": 100,
+                "output_url": public_output_url(output_path),
+                "completed_at": int(time.time()),
+                "log_path": str(log_path),
+                "note": "Generated by local Codex CLI ImageWorker.",
+            }
+        )
+    else:
+        latest_job.update(
+            {
+                "status": "failed",
+                "progress": 100,
+                "failed_at": int(time.time()),
+                "error": f"Codex CLI exited with {return_code}, and output file was not found at {output_path}.",
+                "log_path": str(log_path),
+            }
+        )
+    latest["codex_image_job"] = latest_job
+    save_accessory_candidate(path, latest)
+
+
+def image_worker_loop() -> None:
+    while True:
+        queued = next_queued_image_job()
+        if not queued:
+            return
+        run_codex_image_job(*queued)
+
+
+def start_image_worker() -> bool:
+    global _image_worker_thread
+    with _image_worker_lock:
+        if _image_worker_thread and _image_worker_thread.is_alive():
+            return False
+        _image_worker_thread = threading.Thread(target=image_worker_loop, name="codex-image-worker", daemon=True)
+        _image_worker_thread.start()
+        return True
+
+
+def refresh_codex_image_job(job: dict[str, Any]) -> dict[str, Any]:
+    copy = dict(job)
+    output_path = Path(str(copy.get("output_path", "")))
+    if output_path.exists():
+        copy["status"] = "completed"
+        copy["progress"] = 100
+        copy["output_url"] = public_output_url(output_path)
+        copy["completed_at"] = int(output_path.stat().st_mtime)
+    elif str(copy.get("status")) == "running":
+        started_at = int(copy.get("started_at") or copy.get("created_at") or time.time())
+        elapsed = max(0, int(time.time()) - started_at)
+        copy["progress"] = min(95, max(int(copy.get("progress", 0)), 18 + elapsed // 8))
+        copy.setdefault("output_url", public_output_url(output_path) if str(output_path).startswith(str(OUTPUT_DIR)) else "")
+    elif str(copy.get("status")) in {"failed", "stopped"}:
+        copy["progress"] = int(copy.get("progress", 100))
+    else:
+        copy["progress"] = int(copy.get("progress", 0))
+        copy.setdefault("output_url", public_output_url(output_path) if str(output_path).startswith(str(OUTPUT_DIR)) else "")
+    return copy
+
+
+def list_codex_image_jobs() -> list[dict[str, Any]]:
+    jobs = []
+    for path in sorted(ACCESSORY_CANDIDATES_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        job = candidate.get("codex_image_job")
+        if job:
+            refreshed = refresh_codex_image_job(job)
+            refreshed["candidate_name"] = candidate.get("name", "Accessory")
+            refreshed["candidate_id"] = candidate.get("id", refreshed.get("candidate_id"))
+            refreshed["job_id"] = refreshed.get("job_id") or f"imgjob_{refreshed['candidate_id']}"
+            jobs.append(refreshed)
+    return jobs
+
+
+def update_codex_image_job(job_id: str, action: str) -> dict[str, Any]:
+    for path in ACCESSORY_CANDIDATES_DIR.glob("*.json"):
+        try:
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        job = candidate.get("codex_image_job")
+        if not job:
+            continue
+        candidate_job_id = job.get("job_id") or f"imgjob_{candidate.get('id')}"
+        if candidate_job_id != job_id:
+            continue
+        if action == "stop":
+            process = _image_worker_processes.get(job_id)
+            if process and process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            job["job_id"] = candidate_job_id
+            job["status"] = "stopped"
+            job["progress"] = 100
+            job["stopped_at"] = int(time.time())
+            job["note"] = "Stopped by user from local service queue."
+            candidate["codex_image_job"] = job
+        elif action == "delete":
+            candidate.pop("codex_image_job", None)
+        else:
+            raise HTTPException(status_code=400, detail="Unknown job action")
+        path.write_text(json.dumps(candidate, indent=2), encoding="utf-8")
+        return {"status": action, "job_id": job_id}
+    raise HTTPException(status_code=404, detail="Image job not found")
+
+
+def write_gallery_preview(src: Path, out_path: Path, max_side: int = 1200) -> dict[str, Any] | None:
+    image = cv2.imread(str(src), cv2.IMREAD_COLOR)
+    if image is None:
+        return None
+    h, w = image.shape[:2]
+    scale = min(max_side / max(h, w), 1.0)
+    preview = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out_path), preview)
+    return {"url": public_output_url(out_path), "width": int(preview.shape[1]), "height": int(preview.shape[0])}
+
+
+def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
+    uid = accessory_uid(item)
+    gallery_dir = OUTPUT_DIR / "accessory_gallery" / uid
+    gallery: list[dict[str, Any]] = []
+    material_type = item.get("material_type", "object")
+    job = item.get("codex_image_job") or {}
+    output_path = Path(str(job.get("output_path", "")))
+    if material_type == "object" and output_path.exists() and str(output_path).startswith(str(OUTPUT_DIR)):
+        gallery.append(
+            {
+                "label": "Pose Collection",
+                "kind": "pose_collection",
+                "url": public_output_url(output_path),
+                "source_path": str(output_path),
+            }
+        )
+        return {"item": serialize_accessory(item), "gallery": gallery}
+    source_index = 1
+    for path in accessory_image_paths(item):
+        if path == output_path:
+            continue
+        preview = write_gallery_preview(path, gallery_dir / f"asset_{source_index:02d}.png")
+        if preview:
+            gallery.append(
+                {
+                    "label": "文档图片" if material_type == "text" else "素材图片",
+                    "kind": "source",
+                    "source_path": str(path),
+                    **preview,
+                }
+            )
+            break
+    return {"item": serialize_accessory(item), "gallery": gallery}
+
+
+def selected_accessories(config: dict[str, Any], ids: list[str]) -> list[dict[str, Any]]:
+    indexed = {accessory_uid(item): serialize_accessory(item) for item in config.get("accessories", [])}
+    selected = [indexed[item_id] for item_id in ids if item_id in indexed]
+    if not selected:
+        selected = [serialize_accessory(item) for item in config.get("accessories", [])]
+    return selected
+
+
+def physical_render_size_px(item: dict[str, Any], material_type: str) -> tuple[int, int]:
+    size = item.get("physical_size") or {}
+    if material_type == "text":
+        width_mm = float(size.get("width_mm") or 210.0)
+        height_mm = float(size.get("height_mm") or 297.0)
+        return (
+            max(70, int(round(width_mm * MM_TO_PREVIEW_PX))),
+            max(90, int(round(height_mm * MM_TO_PREVIEW_PX))),
+        )
+    length_mm = float(size.get("length_mm") or DEFAULT_OBJECT_SIZE_MM["length_mm"])
+    width_mm = float(size.get("width_mm") or DEFAULT_OBJECT_SIZE_MM["width_mm"])
+    height_mm = float(size.get("height_mm") or DEFAULT_OBJECT_SIZE_MM["height_mm"])
+    visible_width_mm = max(width_mm, height_mm * 0.72)
+    return (
+        max(34, int(round(length_mm * MM_TO_PREVIEW_PX))),
+        max(16, int(round(visible_width_mm * MM_TO_PREVIEW_PX))),
+    )
+
+
+def random_center_inside_background(
+    rng: np.random.Generator,
+    target_size: tuple[int, int],
+    angle: float,
+    roi: tuple[int, int, int, int] = BACKGROUND_ROI_PX,
+) -> tuple[int, int]:
+    target_w, target_h = target_size
+    radians = np.deg2rad(angle)
+    cos_a = abs(float(np.cos(radians)))
+    sin_a = abs(float(np.sin(radians)))
+    half_w = int(np.ceil((target_w * cos_a + target_h * sin_a) / 2)) + 12
+    half_h = int(np.ceil((target_w * sin_a + target_h * cos_a) / 2)) + 12
+    x1, y1, x2, y2 = roi
+    min_x, max_x = x1 + half_w, x2 - half_w
+    min_y, max_y = y1 + half_h, y2 - half_h
+    if min_x >= max_x:
+        min_x, max_x = x1 + 20, x2 - 20
+    if min_y >= max_y:
+        min_y, max_y = y1 + 20, y2 - 20
+    return (int(rng.integers(min_x, max_x + 1)), int(rng.integers(min_y, max_y + 1)))
+
+
+def draw_training_preview(accessories: list[dict[str, Any]], output_path: Path, seed: int) -> dict[str, Any]:
+    rng = np.random.default_rng(seed)
+    bg_path = ROOT / "backgrounds" / "conveyor_surface_topdown_ai_reference5.png"
+    background = cv2.imread(str(bg_path), cv2.IMREAD_COLOR) if bg_path.exists() else None
+    if background is None:
+        canvas = np.full((900, 1280, 3), (232, 234, 235), dtype=np.uint8)
+        cv2.rectangle(canvas, (70, 100), (1210, 800), (87, 116, 98), -1)
+    else:
+        canvas = cv2.resize(background, (1280, 900), interpolation=cv2.INTER_AREA)
+    cv2.rectangle(canvas, (70, 100), (1210, 800), (49, 72, 60), 2)
+    labels = []
+    render_accessories = sorted(accessories, key=lambda entry: 0 if entry.get("material_type", "object") == "text" else 1)
+    for idx, item in enumerate(render_accessories):
+        material_type = item.get("material_type", "object")
+        angle = float(rng.uniform(-175, 175))
+        size = physical_render_size_px(item, material_type)
+        center = random_center_inside_background(rng, size, angle)
+        asset = load_preview_asset(item)
+        if material_type == "text":
+            if asset is not None:
+                paste_rotated_asset(canvas, asset, center, size, angle)
+            else:
+                rect = (center, size, angle)
+                box = cv2.boxPoints(rect).astype(np.int32)
+                cv2.fillConvexPoly(canvas, box, (245, 246, 246))
+                cv2.polylines(canvas, [box], True, (25, 27, 29), 2)
+        else:
+            sprite = load_object_preview_sprite(item, rng)
+            if sprite is not None:
+                sprite_image, sprite_mask = sprite
+                paste_physical_object_asset(canvas, sprite_image, sprite_mask, center, size[0], size[1], angle)
+            else:
+                rect = (center, size, angle)
+                box = cv2.boxPoints(rect).astype(np.int32)
+                cv2.fillConvexPoly(canvas, box, (34, 36, 38))
+                cv2.polylines(canvas, [box], True, (7, 8, 9), 2)
+                cv2.circle(tuple(box[0]), 18, (128, 37, 31), -1)
+        labels.append(
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "angle": round(angle, 2),
+                "z_index": idx + 1,
+                "physical_size": item.get("physical_size"),
+                "render_size_px": physical_render_size_px(item, material_type),
+                "render_policy": "object_alpha_long_side_equals_physical_length" if material_type == "object" else "paper_width_height_equals_physical_size",
+            }
+        )
+    cv2.imwrite(str(output_path), canvas)
+    return {"url": public_output_url(output_path), "labels": labels}
 
 
 def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -940,19 +2088,81 @@ def update_rules(rule: RuleConfig) -> dict[str, Any]:
 
 @app.get("/api/accessories")
 def get_accessories() -> dict[str, Any]:
-    return {"items": load_config()["accessories"]}
+    return {"items": [serialize_accessory(item) for item in load_config()["accessories"]]}
+
+
+@app.get("/api/accessories/{accessory_id}/detail")
+def get_accessory_detail(accessory_id: str) -> dict[str, Any]:
+    for item in load_config().get("accessories", []):
+        if accessory_uid(item) == accessory_id:
+            return accessory_detail_payload(item)
+    raise HTTPException(status_code=404, detail="Accessory not found")
+
+
+@app.get("/api/accessories/candidates/{candidate_id}")
+def get_accessory_candidate(candidate_id: str) -> dict[str, Any]:
+    candidate = load_accessory_candidate(candidate_id)
+    job = candidate.get("codex_image_job")
+    if job:
+        refreshed = refresh_codex_image_job(job)
+        candidate["codex_image_job"] = refreshed
+        save_accessory_candidate(ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json", candidate)
+    return {"status": "candidate_ready", "candidate": candidate}
+
+
+@app.get("/api/image-jobs")
+def image_jobs() -> dict[str, Any]:
+    start_image_worker()
+    jobs = list_codex_image_jobs()
+    active_statuses = {"queued_for_codex_image_worker", "queued", "running"}
+    return {
+        "items": jobs,
+        "active": [job for job in jobs if job.get("status") in active_statuses],
+        "completed": [job for job in jobs if job.get("status") == "completed"],
+    }
+
+
+@app.get("/api/image-jobs/{job_id}")
+def image_job(job_id: str) -> dict[str, Any]:
+    for job in list_codex_image_jobs():
+        if job.get("job_id") == job_id:
+            return job
+    raise HTTPException(status_code=404, detail="Image job not found")
+
+
+@app.post("/api/image-jobs/{job_id}/stop")
+def stop_image_job(job_id: str) -> dict[str, Any]:
+    return update_codex_image_job(job_id, "stop")
+
+
+@app.delete("/api/image-jobs/{job_id}")
+def delete_image_job(job_id: str) -> dict[str, Any]:
+    return update_codex_image_job(job_id, "delete")
 
 
 @app.post("/api/accessories")
 async def add_accessory(
     name: str = Form(...),
-    class_id: int = Form(...),
+    class_id: int = Form(-1),
+    material_type: str = Form("object"),
+    training_role: str = Form("detect_and_classify"),
+    paper_preset: str = Form("A4"),
+    paper_width_mm: str = Form(""),
+    paper_height_mm: str = Form(""),
+    object_length_mm: str = Form(""),
+    object_width_mm: str = Form(""),
+    object_height_mm: str = Form(""),
     files: list[UploadFile] = File(default=[]),
 ) -> dict[str, Any]:
-    if class_id not in CLASS_NAMES:
-        raise HTTPException(status_code=400, detail="class_id must match an existing model class in this prototype")
+    if material_type not in {"text", "object"}:
+        raise HTTPException(status_code=400, detail="material_type must be text or object")
+    config = load_config()
+    if class_id < 0:
+        existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
+        class_id = max(existing_ids + list(CLASS_NAMES.keys())) + 1
     saved_files = []
-    target_dir = UPLOAD_DIR / "accessories" / str(class_id)
+    accessory_id = f"acc_{uuid.uuid4().hex[:10]}"
+    target_dir = UPLOAD_DIR / "accessories" / accessory_id
     target_dir.mkdir(parents=True, exist_ok=True)
     for upload in files:
         path = target_dir / safe_name(upload.filename)
@@ -960,18 +2170,95 @@ async def add_accessory(
             shutil.copyfileobj(upload.file, f)
         saved_files.append(str(path))
 
-    config = load_config()
-    config["accessories"].append(
-        {
-            "class_id": class_id,
-            "name": name,
-            "status": "draft_reference_uploaded",
-            "source_files": saved_files,
-            "created_at": int(time.time()),
-        }
-    )
+    item = {
+        "id": accessory_id,
+        "class_id": class_id,
+        "name": name,
+        "material_type": material_type,
+        "training_role": training_role,
+        "physical_size": physical_size_payload(
+            material_type,
+            paper_preset,
+            paper_width_mm,
+            paper_height_mm,
+            object_length_mm,
+            object_width_mm,
+            object_height_mm,
+        ),
+        "status": "reference_uploaded",
+        "source_files": saved_files,
+        "created_at": int(time.time()),
+    }
+    normalized = normalize_accessory_assets(item)
+    item.update(normalized)
+    config["accessories"].append(item)
     save_config(config)
-    return {"status": "saved", "item": config["accessories"][-1]}
+    return {"status": "saved", "item": serialize_accessory(config["accessories"][-1])}
+
+
+@app.post("/api/accessories/preview")
+async def preview_accessory(
+    name: str = Form(...),
+    material_type: str = Form("object"),
+    training_role: str = Form("detect_and_classify"),
+    paper_preset: str = Form("A4"),
+    paper_width_mm: str = Form(""),
+    paper_height_mm: str = Form(""),
+    object_length_mm: str = Form(""),
+    object_width_mm: str = Form(""),
+    object_height_mm: str = Form(""),
+    files: list[UploadFile] = File(default=[]),
+) -> dict[str, Any]:
+    if material_type not in {"text", "object"}:
+        raise HTTPException(status_code=400, detail="material_type must be text or object")
+    candidate_source_dir = UPLOAD_DIR / "accessory_candidates" / f"src_{uuid.uuid4().hex[:10]}"
+    candidate_source_dir.mkdir(parents=True, exist_ok=True)
+    saved_files = []
+    for upload in files:
+        path = candidate_source_dir / safe_name(upload.filename)
+        with path.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
+        saved_files.append(str(path))
+    physical_size = physical_size_payload(
+        material_type,
+        paper_preset,
+        paper_width_mm,
+        paper_height_mm,
+        object_length_mm,
+        object_width_mm,
+        object_height_mm,
+    )
+    candidate = create_accessory_candidate(name, material_type, training_role, saved_files, physical_size)
+    if candidate.get("codex_image_job"):
+        start_image_worker()
+    return {"status": "candidate_ready", "candidate": candidate}
+
+
+@app.post("/api/accessories/confirm/{candidate_id}")
+def confirm_accessory(candidate_id: str) -> dict[str, Any]:
+    candidate = load_accessory_candidate(candidate_id)
+    config = load_config()
+    existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
+    candidate["class_id"] = max(existing_ids + list(CLASS_NAMES.keys())) + 1
+    candidate["id"] = f"acc_{uuid.uuid4().hex[:10]}"
+    candidate["status"] = candidate.get("status", "candidate_review").replace("candidate_review", "active")
+    candidate["confirmed_at"] = int(time.time())
+    config["accessories"].append(candidate)
+    save_config(config)
+    return {"status": "saved", "item": serialize_accessory(candidate), "items": [serialize_accessory(item) for item in config["accessories"]]}
+
+
+@app.delete("/api/accessories/{accessory_id}")
+def delete_accessory(accessory_id: str) -> dict[str, Any]:
+    config = load_config()
+    before = len(config.get("accessories", []))
+    config["accessories"] = [item for item in config.get("accessories", []) if accessory_uid(item) != accessory_id]
+    if len(config["accessories"]) == before:
+        raise HTTPException(status_code=404, detail="Accessory not found")
+    selected = config.get("training", {}).get("selected_accessory_ids", [])
+    config["training"]["selected_accessory_ids"] = [item_id for item_id in selected if item_id != accessory_id]
+    save_config(config)
+    return {"status": "deleted", "accessory_id": accessory_id, "items": [serialize_accessory(item) for item in config["accessories"]]}
 
 
 @app.post("/api/analyze/image")
@@ -1056,13 +2343,53 @@ def update_stream(config_in: StreamConfig) -> dict[str, Any]:
 
 
 @app.post("/api/training/start")
-def request_training() -> dict[str, Any]:
+def request_training(request: TrainingStartRequest) -> dict[str, Any]:
     config = load_config()
+    selected = selected_accessories(config, request.selected_accessory_ids)
+    mode_label = "YOLO + OCR" if request.train_mode == "yolo_ocr" else "YOLO"
     config["training"] = {
         "status": "requested",
         "last_requested_at": int(time.time()),
-        "note": "Prototype only: wire this hook to synthetic data generation and YOLO training when the new accessory pipeline is finalized.",
-        "command_preview": "python scripts/build_yolo26_obb_dataset.py && yolo obb train ...",
+        "selected_accessory_ids": [item["id"] for item in selected],
+        "sample_count": max(100, min(20000, int(request.sample_count))),
+        "mode": request.train_mode,
+        "approved_preview_id": request.approved_preview_id,
+        "note": f"{mode_label} 训练请求已记录。下一步将按已确认样本生成训练集并启动训练。",
+        "command_preview": (
+            "python scripts/generate_accessory_dataset.py "
+            f"--samples {max(100, min(20000, int(request.sample_count)))} "
+            f"--mode {request.train_mode} && yolo segment train imgsz=640 ..."
+        ),
+    }
+    save_config(config)
+    return config["training"]
+
+
+@app.post("/api/training/generate")
+def request_sample_generation(request: TrainingStartRequest) -> dict[str, Any]:
+    config = load_config()
+    selected = selected_accessories(config, request.selected_accessory_ids)
+    sample_count = max(100, min(20000, int(request.sample_count)))
+    estimated_minutes = max(4, int(round(sample_count * 0.08)))
+    estimated_gb = round(sample_count * 1.8 / 1024, 2)
+    config["training"] = {
+        "status": "sample_generation_requested",
+        "last_requested_at": int(time.time()),
+        "selected_accessory_ids": [item["id"] for item in selected],
+        "sample_count": sample_count,
+        "mode": request.train_mode,
+        "approved_preview_id": request.approved_preview_id,
+        "preview_urls": config.get("training", {}).get("preview_urls", []),
+        "render_policy": {
+            "background_physical_size": BACKGROUND_SIZE_MM,
+            "physical_size_rule": "All samples must crop each accessory/document body first, then scale the cropped body by physical_size before placement.",
+            "pose_collection_rule": "Pose Collection provides pose only; physical_size is applied only during preview and dataset rendering.",
+        },
+        "note": f"样本生成请求已记录：{sample_count} 张，预计 {estimated_minutes} 分钟，约 {estimated_gb} GB。",
+        "command_preview": (
+            "python scripts/generate_accessory_dataset.py "
+            f"--samples {sample_count} --mode {request.train_mode} --approved-preview {request.approved_preview_id or 'none'}"
+        ),
     }
     save_config(config)
     return config["training"]
@@ -1071,6 +2398,77 @@ def request_training() -> dict[str, Any]:
 @app.get("/api/training/status")
 def training_status() -> dict[str, Any]:
     return load_config()["training"]
+
+
+@app.get("/api/training/plan")
+def training_plan() -> dict[str, Any]:
+    config = load_config()
+    return {
+        "training": config["training"],
+        "accessories": [serialize_accessory(item) for item in config.get("accessories", [])],
+        "render_policy": {
+            "sample_count_default": 4000,
+            "background": "fixed conveyor background",
+            "background_physical_size": BACKGROUND_SIZE_MM,
+            "physical_size_rule": "crop foreground first, then scale foreground body by physical_size, never by original input canvas",
+            "rotation": "full_random_0_to_360_with_random_state",
+            "z_order": "randomized_per_sample",
+            "label_shape": "visible_polygon_for_occluded_regions",
+            "true_rule": "all selected required accessories present",
+        },
+    }
+
+
+@app.post("/api/training/preview")
+def training_preview(request: TrainingPreviewRequest) -> dict[str, Any]:
+    config = load_config()
+    selected = selected_accessories(config, request.selected_accessory_ids)
+    preview_id = f"preview_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+    job_dir = OUTPUT_DIR / "training_previews" / preview_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    previews = []
+    count = max(1, min(12, int(request.preview_count)))
+    for idx in range(count):
+        output_path = job_dir / f"sample_{idx + 1:02d}.png"
+        previews.append(draw_training_preview(selected, output_path, seed=idx + int(time.time())))
+    plan = {
+        "id": preview_id,
+        "status": "preview_ready",
+        "sample_count": max(100, min(20000, int(request.sample_count))),
+        "train_mode": request.train_mode,
+        "selected_accessories": selected,
+        "previews": previews,
+        "pipeline": [
+            "normalize_accessory_assets",
+            "remember_physical_size_metadata",
+            "generate_synthetic_combinations",
+            "crop_foreground_or_document_body",
+            "scale_cropped_body_by_physical_size",
+            "place_on_background_using_background_mm_per_px",
+            "apply_full_rotation_randomization",
+            "compute_visible_polygon_labels",
+            "user_preview_approval",
+            "start_yolo_or_yolo_ocr_training",
+        ],
+    }
+    (TRAINING_JOBS_DIR / f"{preview_id}.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    config["training"].update(
+        {
+            "status": "preview_ready",
+            "last_preview_id": preview_id,
+            "selected_accessory_ids": [item["id"] for item in selected],
+            "sample_count": plan["sample_count"],
+            "mode": request.train_mode,
+            "preview_urls": [item["url"] for item in previews],
+        }
+    )
+    save_config(config)
+    return plan
+
+
+@app.on_event("startup")
+def resume_image_worker_queue() -> None:
+    start_image_worker()
 
 
 ensure_dirs()

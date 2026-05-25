@@ -11,6 +11,10 @@ venv/
 local_inspection_service/data/uploads/
 local_inspection_service/data/outputs/
 local_inspection_service/data/accessories/
+local_inspection_service/data/normalized_assets/
+local_inspection_service/data/training_jobs/
+local_inspection_service/data/accessory_candidates/
+local_inspection_service/data/image_worker_logs/
 
 # Generated image batches and temporary production folders
 /synthetic_*/
