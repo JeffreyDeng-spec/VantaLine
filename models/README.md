@@ -48,7 +48,7 @@ stable reference weights here when they are needed for development or demo use.
 - Full YOLO run folders.
 - Intermediate checkpoints.
 - Temporary or experimental task models.
-- Uploaded media and service outputs.
+- Uploaded media and runtime/service outputs.
 
 Large artifacts remain outside Git and are reproduced through the service UI or
 tracked scripts.
