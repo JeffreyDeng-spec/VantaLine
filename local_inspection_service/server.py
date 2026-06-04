@@ -128,7 +128,10 @@ Use reference accessory images only to understand what each required accessory l
 Return only JSON that matches the provided schema.
 For every required accessory, return present=true or present=false.
 Use confidence from 0 to 1. If uncertain, mark present=false unless clear evidence exists.
-Do not draw boxes. Do not invent accessories that are not visible."""
+For present accessories, include box_2d as [y_min,x_min,y_max,x_max] normalized 0-1000 in the inspection image.
+Return only compact bbox JSON: {"detections":[{"accessory_id":"...","label":"...","present":true,"confidence":0.0,"box_2d":[0,0,0,0]}],"rule":{"counts":{"...":0}}}.
+Do not include narrative, markdown, summaries, or annotated images.
+Do not invent accessories that are not visible."""
 AI_INSPECTION_IMAGE_MAX_SIDE = int(os.environ.get("INSPECTION_AI_IMAGE_MAX_SIDE", "960"))
 AI_INSPECTION_IMAGE_QUALITY = int(os.environ.get("INSPECTION_AI_IMAGE_QUALITY", "72"))
 AI_REFERENCE_IMAGES_PER_ACCESSORY = int(os.environ.get("INSPECTION_AI_REFERENCE_IMAGES_PER_ACCESSORY", "0"))
@@ -147,15 +150,12 @@ _REFERENCE_SHEET_DESCRIPTOR_CACHE: dict[str, dict[str, Any]] = {}
 _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK = threading.RLock()
 AI_DETECTION_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "required": ["detections"],
+    "required": ["detections", "rule"],
     "properties": {
-        "passed": {"type": "boolean"},
         "rule": {
             "type": "object",
+            "required": ["counts"],
             "properties": {
-                "present": {"type": "array", "items": {"type": "string"}},
-                "missing": {"type": "array", "items": {"type": "string"}},
-                "extra": {"type": "array", "items": {"type": "string"}},
                 "counts": {"type": "object", "additionalProperties": {"type": "integer"}},
             },
         },
@@ -163,18 +163,23 @@ AI_DETECTION_OUTPUT_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["accessory_id", "present"],
+                "required": ["accessory_id", "present", "confidence"],
                 "properties": {
                     "accessory_id": {"type": "string"},
                     "label": {"type": "string"},
                     "present": {"type": "boolean"},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "box_2d": {
+                        "type": "array",
+                        "items": {"type": "number", "minimum": 0, "maximum": 1000},
+                        "minItems": 4,
+                        "maxItems": 4,
+                    },
                     "evidence": {"type": "string"},
                     "observed_text": {"type": "array", "items": {"type": "string"}},
                 },
             },
         },
-        "raw_summary": {"type": "string"},
     },
 }
 AI_MCP_RUNTIME_ENV = "INSPECTION_AI_MCP_RUNTIME"
@@ -2552,8 +2557,8 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
                 "type": "text",
                 "text": (
                     "INSPECTION_IMAGE: decide presence only from the next image, using the cached required accessory "
-                    "profile context. Return compact JSON. Evidence must be one short phrase per accessory. "
-                    "For present accessories, use observed_text only when visible text is actually readable."
+                    "profile context. Return compact bbox JSON only. Include box_2d for present accessories as "
+                    "[y_min,x_min,y_max,x_max] normalized 0-1000. No narrative."
                 ),
             },
             {"type": "image_url", "image_url": {"url": inspection_data_url, "detail": "low"}},
@@ -2565,8 +2570,8 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
                 "type": "text",
                 "text": (
                     "INSPECTION_IMAGE: decide presence only from the next image. "
-                    "Return compact JSON. Evidence must be one short phrase per accessory. "
-                    "For present accessories, use observed_text only when visible text is actually readable."
+                    "Return compact bbox JSON only. Include box_2d for present accessories as "
+                    "[y_min,x_min,y_max,x_max] normalized 0-1000. No narrative."
                 ),
             },
             {"type": "image_url", "image_url": {"url": inspection_data_url, "detail": "low"}},
@@ -2598,7 +2603,7 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
             "provider_config": settings,
             "system_prompt": AI_DETECTION_SYSTEM_PROMPT,
             "user_content": user_content,
-            "max_tokens": 520,
+            "max_tokens": ai_detection_output_token_budget(len(required_accessories)),
             "schema_hint": AI_DETECTION_OUTPUT_SCHEMA,
             "cached_content": profile_cache.get("name") if profile_cache.get("enabled") else "",
         },
@@ -8516,11 +8521,14 @@ def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dic
             "required_accessories": payload_accessories,
         },
         "output_contract": {
-            "detections": "Array of {accessory_id,present,confidence,evidence,observed_text}.",
-            "rule": "Object with present, missing, extra, counts keyed by accessory_id.",
-            "passed": "Boolean.",
+            "detections": "Array of {accessory_id,label,present,confidence,box_2d}; box_2d is [y_min,x_min,y_max,x_max] normalized 0-1000 and only for visible present items.",
+            "rule": "Object with counts keyed by accessory_id.",
         },
     }
+
+
+def ai_detection_output_token_budget(required_count: int) -> int:
+    return max(180, min(420, 120 + max(1, required_count) * 64))
 
 
 def ai_presence_failure_payload(
@@ -8602,6 +8610,94 @@ def write_ai_original_output(image_bgr: np.ndarray, request_id: str) -> str:
     return f"/outputs/{out_name}"
 
 
+def normalize_ai_box_2d(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    coords: list[float] = []
+    for raw in value:
+        if type(raw) not in (int, float):
+            return None
+        coord = float(raw)
+        if not math.isfinite(coord):
+            return None
+        coords.append(max(0.0, min(1000.0, coord)))
+    y_min, x_min, y_max, x_max = coords
+    if y_max <= y_min or x_max <= x_min:
+        return None
+    return [round(coord, 2) for coord in coords]
+
+
+def ai_box_2d_to_pixels(box_2d: Any, image_shape: tuple[int, ...]) -> tuple[int, int, int, int] | None:
+    box = normalize_ai_box_2d(box_2d)
+    if not box:
+        return None
+    h, w = image_shape[:2]
+    if h <= 1 or w <= 1:
+        return None
+    y_min, x_min, y_max, x_max = box
+    x1 = max(0, min(w - 1, int(math.floor(x_min / 1000.0 * (w - 1)))))
+    y1 = max(0, min(h - 1, int(math.floor(y_min / 1000.0 * (h - 1)))))
+    x2 = max(0, min(w - 1, int(math.ceil(x_max / 1000.0 * (w - 1)))))
+    y2 = max(0, min(h - 1, int(math.ceil(y_max / 1000.0 * (h - 1)))))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def draw_ai_detection_boxes(image_bgr: np.ndarray, detections: list[dict[str, Any]], rule: dict[str, Any]) -> np.ndarray | None:
+    boxes: list[tuple[dict[str, Any], tuple[int, int, int, int]]] = []
+    for det in detections:
+        if not isinstance(det, dict):
+            continue
+        xyxy = ai_box_2d_to_pixels(det.get("box_2d"), image_bgr.shape)
+        if xyxy:
+            boxes.append((det, xyxy))
+    if not boxes:
+        return None
+
+    annotated = image_bgr.copy()
+    overlay = image_bgr.copy()
+    color = (32, 196, 92) if bool(rule.get("passed")) else (40, 180, 255)
+    thickness = max(2, int(round(min(image_bgr.shape[:2]) / 220)))
+    font_scale = max(0.45, min(0.7, min(image_bgr.shape[:2]) / 640.0))
+    font_thickness = max(1, thickness - 1)
+    for det, (x1, y1, x2, y2) in boxes:
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+        label = bounded_text(det.get("label") or det.get("accessory_id") or "AI", 24)
+        try:
+            confidence = float(det.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        text = f"{label} {confidence:.2f}" if confidence > 0 else label
+        (text_w, text_h), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+        label_y1 = max(0, y1 - text_h - baseline - 6)
+        label_y2 = min(image_bgr.shape[0] - 1, label_y1 + text_h + baseline + 6)
+        label_x2 = min(image_bgr.shape[1] - 1, x1 + text_w + 10)
+        cv2.rectangle(annotated, (x1, label_y1), (label_x2, label_y2), color, -1)
+        cv2.putText(
+            annotated,
+            text,
+            (x1 + 5, max(text_h + 2, label_y2 - baseline - 3)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (255, 255, 255),
+            font_thickness,
+            cv2.LINE_AA,
+        )
+    return cv2.addWeighted(overlay, 0.10, annotated, 0.90, 0)
+
+
+def write_ai_annotated_output(image_bgr: np.ndarray, request_id: str, detections: list[dict[str, Any]], rule: dict[str, Any]) -> str:
+    annotated = draw_ai_detection_boxes(image_bgr, detections, rule)
+    if annotated is None:
+        return write_ai_original_output(image_bgr, request_id)
+    out_name = f"{request_id}_ai_annotated.jpg"
+    out_path = OUTPUT_DIR / out_name
+    cv2.imwrite(str(out_path), annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    return f"/outputs/{out_name}"
+
+
 def ai_model_payload(spec: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": spec["id"],
@@ -8650,7 +8746,12 @@ def normalize_ai_detection_result(
             confidence = max(0.0, min(1.0, confidence_value))
         except (TypeError, ValueError):
             confidence = 0.0
-        present = (raw.get("present") is True and confidence > 0.0) if isinstance(raw, dict) else False
+        box_2d = None
+        provider_present = isinstance(raw, dict) and raw.get("present") is True
+        if provider_present:
+            raw_box = raw.get("box_2d") if "box_2d" in raw else raw.get("bbox")
+            box_2d = normalize_ai_box_2d(raw_box)
+        present = provider_present and confidence > 0.0 and box_2d is not None
         has_raw_count = item_id in raw_counts
         raw_count = raw_counts.get(item_id)
         if type(raw_count) is int and raw_count >= 0:
@@ -8666,17 +8767,18 @@ def normalize_ai_detection_result(
             present_ids.append(item_id)
         else:
             missing_ids.append(item_id)
-        detections.append(
-            {
-                "accessory_id": item_id,
-                "label": bounded_text(raw.get("label") if isinstance(raw, dict) else required.get("name"), 120)
-                or bounded_text(required.get("name") or item_id, 120),
-                "present": item_id in present_ids,
-                "confidence": round(confidence, 4),
-                "evidence": bounded_text(raw.get("evidence") if isinstance(raw, dict) else "", 180),
-                "observed_text": string_list(raw.get("observed_text") if isinstance(raw, dict) else [], max_items=6, max_len=80),
-            }
-        )
+        detection = {
+            "accessory_id": item_id,
+            "label": bounded_text(raw.get("label") if isinstance(raw, dict) else required.get("name"), 120)
+            or bounded_text(required.get("name") or item_id, 120),
+            "present": item_id in present_ids,
+            "confidence": round(confidence, 4),
+            "evidence": bounded_text(raw.get("evidence") if isinstance(raw, dict) else "", 180),
+            "observed_text": string_list(raw.get("observed_text") if isinstance(raw, dict) else [], max_items=6, max_len=80),
+        }
+        if box_2d:
+            detection["box_2d"] = box_2d
+        detections.append(detection)
     required_ids = {str(item.get("accessory_id") or "") for item in required_accessories}
     extra = string_list([item for item in raw_rule.get("extra", []) if str(item) not in required_ids], max_items=12) if isinstance(raw_rule.get("extra"), list) else []
     passed = len(missing_ids) == 0
@@ -8777,7 +8879,6 @@ def analyze_bgr_ai_detection(
             reference_descriptors.extend(reference_result.get("references") or [])
     if changed:
         save_config(config)
-    annotated_url = write_ai_original_output(image_bgr, request_id)
     settings = ai_detection_settings()
     mcp_image_path = write_mcp_inspection_image(image_bgr, request_id) if external_ai_mcp_enabled() else None
     vision_result = call_ai_mcp_tool(
@@ -8795,12 +8896,19 @@ def analyze_bgr_ai_detection(
     for key in ("mcp_transport", "mcp_runtime", "mcp_dispatch_ms", "mcp_fallback_from", "mcp_fallback_error"):
         if vision_result.get(key) is not None:
             ai_debug = {**ai_debug, key: vision_result.get(key)}
+    rule = vision_result.get("rule") if isinstance(vision_result.get("rule"), dict) else {}
+    detections = vision_result.get("detections") if isinstance(vision_result.get("detections"), list) else []
+    annotated_url = (
+        write_ai_original_output(image_bgr, request_id)
+        if bool(ai_debug.get("provider_failure"))
+        else write_ai_annotated_output(image_bgr, request_id, detections, rule)
+    )
     return {
         "request_id": request_id,
         "passed": bool(vision_result.get("passed")),
         "model": ai_model_payload(spec, settings),
-        "rule": vision_result.get("rule") or {},
-        "detections": vision_result.get("detections") or [],
+        "rule": rule,
+        "detections": detections,
         "annotated_url": annotated_url,
         "ai": ai_debug,
     }

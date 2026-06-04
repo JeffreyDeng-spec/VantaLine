@@ -460,6 +460,7 @@ def verify_ai_provider_malformed_json_returns_normal_failure_shape() -> None:
                 assert_true(key in result, f"AI malformed provider result missing top-level key: {key}")
             assert_true(not result["passed"], "provider malformed JSON should fail closed")
             assert_true(result["rule"]["missing"] == ["acc_smoke"], "provider malformed JSON should report required accessory missing")
+            assert_true(all("box_2d" not in det for det in result["detections"]), "provider malformed JSON should not return bbox fields")
             assert_true(result["ai"]["provider_failure"], "provider malformed JSON should be tagged in ai debug metadata")
             assert_true(result["ai"]["mcp_transport"] == "in_process", "AI debug should show in-process tool transport")
             assert_true("test-key" not in result_text, "AI debug output must not leak raw API keys")
@@ -471,9 +472,10 @@ def verify_vision_presence_tool_contract() -> None:
     captured: dict[str, Any] = {}
 
     class ContractProvider:
-        def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], **_kwargs: Any) -> tuple[dict[str, Any], int]:
+        def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], **kwargs: Any) -> tuple[dict[str, Any], int]:
             captured["system_prompt"] = system_prompt
             captured["user_content"] = user_content
+            captured["max_tokens"] = kwargs.get("max_tokens")
             return {
                 "detections": [
                     {
@@ -482,6 +484,7 @@ def verify_vision_presence_tool_contract() -> None:
                         "present": True,
                         "confidence": 0.91,
                         "evidence": "matching text visible",
+                        "box_2d": [100, 200, 700, 800],
                     }
                 ],
                 "rule": {"counts": {"acc_smoke": 1}},
@@ -524,11 +527,67 @@ def verify_vision_presence_tool_contract() -> None:
             assert_true(result["tool"] == "vision.inspect.presence", "vision tool should identify its contract")
             assert_true(result["passed"], "vision tool should return normalized pass state")
             assert_true(result["rule"]["present"] == ["acc_smoke"], "vision tool should normalize present ids")
+            assert_true(result["detections"][0]["box_2d"] == [100.0, 200.0, 700.0, 800.0], "vision tool should normalize provider bbox")
             assert_true(result["ai"]["reference_images"] == 1, "vision tool should bound references to one per accessory")
             assert_true("test-key" not in json.dumps(result, sort_keys=True), "vision tool result must not echo raw API keys")
             image_parts = [part for part in captured["user_content"] if part.get("type") == "image_url"]
             assert_true(len(image_parts) == 2, "provider payload should include inspection image plus one bounded reference")
             assert_true("manuals or cards" not in captured["system_prompt"], "vision prompt should not hardcode manual/card special cases")
+            assert_true("compact bbox JSON" in captured["system_prompt"], "vision prompt should ask for compact bbox JSON")
+            assert_true(captured["max_tokens"] == server.ai_detection_output_token_budget(1), "vision provider output cap should be low and dynamic")
+    finally:
+        patch.restore()
+
+
+def verify_ai_analyze_draws_provider_bbox() -> None:
+    captured: dict[str, Any] = {"calls": 0}
+
+    class BboxProvider:
+        def generate_json(self, *_args: Any, **kwargs: Any) -> tuple[dict[str, Any], int]:
+            captured["calls"] += 1
+            captured["max_tokens"] = kwargs.get("max_tokens")
+            return {
+                "detections": [
+                    {
+                        "accessory_id": "acc_smoke",
+                        "label": "Smoke Manual",
+                        "present": True,
+                        "confidence": 0.937,
+                        "box_2d": [-10, 200, 620, 1200],
+                        "observed_text": ["Smoke Manual"],
+                    }
+                ],
+                "rule": {"counts": {"acc_smoke": 1}},
+            }, 42
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            patch.attr(server, "ai_provider", lambda: BboxProvider())
+            image = np.full((80, 100, 3), 18, dtype=np.uint8)
+            result = server.analyze_bgr(image, "ai_bbox", server.AI_DETECTION_MODEL_ID)
+            assert_true(captured["calls"] == 1, "AI bbox analyze must not make a second provider call")
+            assert_true(captured["max_tokens"] == server.ai_detection_output_token_budget(1), "AI bbox provider max_tokens should use the low dynamic budget")
+            assert_true(result["passed"], "valid provider bbox should keep the local pass decision")
+            assert_true(result["annotated_url"].endswith("_ai_annotated.jpg"), "valid provider bbox should produce an AI annotated output")
+            detection = result["detections"][0]
+            assert_true(detection["box_2d"] == [0.0, 200.0, 620.0, 1000.0], "AI analyze should clamp and return normalized bbox")
+            assert_true(detection["observed_text"] == ["Smoke Manual"], "AI analyze should keep observed_text compatibility")
+
+            out_path = Path(tmp) / "outputs" / result["annotated_url"].removeprefix("/outputs/")
+            saved = cv2.imread(str(out_path), cv2.IMREAD_COLOR)
+            assert_true(saved is not None, "AI annotated output image should be saved")
+            diff = cv2.absdiff(saved, image)
+            assert_true(int(diff.max()) > 80, "AI annotated output should contain visible bbox pixels")
+            assert_true(int(np.count_nonzero(diff > 35)) > 100, "AI annotated output should draw more than compression noise")
+
+            assert_true(server.normalize_ai_box_2d([100, 100, 50, 200]) is None, "inverted AI bbox should be rejected")
+            assert_true(server.normalize_ai_box_2d([0, 0, float("nan"), 100]) is None, "non-finite AI bbox should be rejected")
+            assert_true(server.normalize_ai_box_2d(["0", 0, 100, 100]) is None, "non-numeric AI bbox should be rejected")
     finally:
         patch.restore()
 
@@ -545,6 +604,7 @@ def verify_ai_analyze_disabled_returns_original_shape() -> None:
                 assert_true(key in result, f"AI result missing top-level key: {key}")
             assert_true(result["model"]["is_ai_detection"], "AI result model should be marked as AI Detection")
             assert_true(result["rule"]["match_policy"] == "ai_presence", "AI rule should use ai_presence policy")
+            assert_true(all("box_2d" not in det for det in result["detections"]), "AI disabled path should not return bbox fields")
             out_path = Path(tmp) / "outputs" / result["annotated_url"].removeprefix("/outputs/")
             saved = cv2.imread(str(out_path), cv2.IMREAD_COLOR)
             assert_true(saved is not None and int(saved.max()) <= 2, "AI disabled path should return the original image without drawn boxes")
@@ -699,6 +759,7 @@ def verify_ai_present_without_count_does_not_satisfy_multiple_required() -> None
                         "present": True,
                         "confidence": 0.95,
                         "evidence": "one visible item",
+                        "box_2d": [100, 100, 700, 700],
                     }
                 ],
                 "rule": {"counts": {}},
@@ -719,6 +780,52 @@ def verify_ai_present_without_count_does_not_satisfy_multiple_required() -> None
             assert_true(not result["passed"], "one boolean present without provider count must not satisfy expected_count=2")
             assert_true(result["rule"]["counts"]["acc_smoke"] == 1, "missing provider count should normalize to one visible item")
             assert_true(result["rule"]["missing"] == ["acc_smoke"], "accessory should remain missing until provider returns count >= expected")
+    finally:
+        patch.restore()
+
+
+def verify_ai_present_requires_valid_provider_bbox() -> None:
+    provider_payload: dict[str, Any] = {}
+
+    class CaseProvider:
+        def generate_json(self, *_args: Any, **_kwargs: Any) -> tuple[dict[str, Any], int]:
+            return provider_payload, 81
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.attr(server, "ai_provider", lambda: CaseProvider())
+            image = np.zeros((32, 40, 3), dtype=np.uint8)
+
+            for case_name, box_2d in (("missing_box", None), ("invalid_box", [100, 100, 50, 200])):
+                detection = {
+                    "accessory_id": "acc_smoke",
+                    "label": "Smoke Manual",
+                    "present": True,
+                    "confidence": 0.9,
+                }
+                if box_2d is not None:
+                    detection["box_2d"] = box_2d
+                provider_payload.clear()
+                provider_payload.update(
+                    {
+                        "detections": [detection],
+                        "rule": {"counts": {"acc_smoke": 1}},
+                    }
+                )
+                result = server.analyze_bgr(image, f"ai_present_{case_name}", server.AI_DETECTION_MODEL_ID)
+                assert_true(not result["passed"], f"{case_name} must fail closed even with provider count")
+                assert_true(
+                    result["annotated_url"].endswith("_ai_original.jpg"),
+                    f"{case_name} may return original image but must not pass without a drawn bbox",
+                )
+                assert_true(result["detections"][0]["present"] is False, f"{case_name} should clear present")
+                assert_true("box_2d" not in result["detections"][0], f"{case_name} should not expose invalid bbox")
+                assert_true(result["rule"]["counts"]["acc_smoke"] == 0, f"{case_name} should force zero count")
+                assert_true(result["rule"]["missing"] == ["acc_smoke"], f"{case_name} should report missing accessory")
     finally:
         patch.restore()
 
@@ -853,11 +960,13 @@ def main() -> int:
         verify_provider_malformed_json_and_bad_shape_fail_closed,
         verify_ai_provider_malformed_json_returns_normal_failure_shape,
         verify_vision_presence_tool_contract,
+        verify_ai_analyze_draws_provider_bbox,
         verify_ai_analyze_disabled_returns_original_shape,
         verify_ai_timeout_is_structured,
         verify_ai_video_preserves_frame_debug_metadata,
         verify_ai_malformed_present_string_fails_closed,
         verify_ai_present_without_count_does_not_satisfy_multiple_required,
+        verify_ai_present_requires_valid_provider_bbox,
         verify_ai_invalid_counts_and_confidence_fail_closed,
         verify_missing_required_class_fails_closed,
         verify_yolo_path_still_runs_with_existing_shape,
