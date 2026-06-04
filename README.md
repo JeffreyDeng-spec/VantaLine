@@ -1,57 +1,105 @@
-# Assembly Line Optimize
+# VantaLane
 
-Private visual-inspection project for checking whether an assembly-line image contains all required package components.
+VantaLane is a local-first visual inspection toolflow for building inspection
+tasks from user-defined accessories, generating training datasets, training or
+selecting detection models, and checking images or videos against the selected
+task rule.
 
-The current inspection target is:
+The original bottle plus four manuals setup is now treated as the included
+reference task. It remains useful for validation and examples, but it is not the
+product boundary: VantaLane is intended to support arbitrary inspection
+accessories and multiple detection methods.
 
-1. Bottle
-2. Warranty Service Manual
-3. Battery Instruction Manual
-4. Download Service Manual
-5. Service QR Manual
+## What VantaLane Does
 
-The business rule is simple: if all five components are present, the result is `true`; if any one is missing, the result is `false`.
+- Maintains an accessory library with object and text/manual-like items.
+- Stores reference images, normalized assets, AI profiles, and task metadata for
+  each accessory.
+- Builds task-specific training datasets from selected accessories, production
+  backgrounds, pass/fail rules, and generated previews.
+- Trains or loads task models for inspection.
+- Runs image and video inspection through the selected task and model.
+- Exposes a local web UI for accessory management, dataset generation, model
+  training, training-library cleanup, AI detection settings, and inspection.
 
-## Current Version
+The core rule is task-centric: an inspection task defines the required
+accessories and expected counts. The active detector then reports whether the
+current image satisfies that task.
 
-This repository captures the current working prototype:
+## Detection Methods
 
-- Local FastAPI inspection service with a Chinese web UI.
-- Image and video upload support.
-- Reserved camera/RTSP/folder-watch interface for future live stream input.
-- Five-class business output.
-- Current deployed model path: `models/current_2class_yolo26s_seg_best.pt`.
-- Detection-time model selector:
-  - `yolo26_2class_ocr`: old YOLO26 2-class localization plus PaddleOCR manual classification.
-  - `yolo26_5class_direct`: Jesse-trained YOLO26 5-class direct detector.
-- PaddleOCR-based manual-type identification.
-- Rule editor for required classes, minimum counts, and confidence threshold.
-- Scripts used to generate synthetic datasets and YOLO training datasets.
+VantaLane supports several detection paths through the same inspection flow:
 
-Large generated datasets and training runs are intentionally not committed to Git. The complete local workspace currently contains about 52 GB of generated images, YOLO runs, and intermediate artifacts; those are documented here and reproduced through the scripts.
+| Method | Purpose | Notes |
+| --- | --- | --- |
+| YOLO | Fast object or accessory detection from a trained task model. | Best when visual classes are sufficiently distinct or enough training data is available. |
+| YOLO + OCR | YOLO localizes objects, OCR disambiguates text-heavy accessories. | Useful for manuals, cards, labels, QR sheets, and accessories that differ mainly by printed text. |
+| AI Detection API | A stateless multimodal API checks the image against structured accessory profiles. | Useful as an API-backed option or fallback when a local model has not been trained yet. |
 
-## Architecture
+These are model choices for the same task model selector, not separate products.
+A task may expose only the model variants that exist for that task.
 
-The current deployed pipeline is:
+## Typical Toolflow
 
-1. A YOLO26 segmentation model detects two geometric classes:
-   - `bottle`
-   - generic `manual`
-2. The service extracts each detected manual region.
-3. PaddleOCR reads the manual crop.
-4. Keyword rules classify OCR text into one of four manual business classes:
-   - Warranty Service Manual
-   - Battery Instruction Manual
-   - Download Service Manual
-   - Service QR Manual
-5. The rule engine checks whether all five business classes are present.
-6. The UI shows the final pass/fail result and annotated output.
+1. Add accessories.
+   - Upload source photos or documents.
+   - Mark each accessory as an object-like or text-like item.
+   - Let the service normalize assets and generate a structured AI profile.
 
-This split was chosen because the four manuals have very similar physical shapes and differ mainly by printed text. A pure detector can locate manuals, while OCR gives a more explicit semantic check.
+2. Build a training dataset.
+   - Select one or more accessories for a task.
+   - Choose same-environment backgrounds and sample counts.
+   - Preview generated pass/fail samples before creating the full dataset.
+   - The current false-sample policy emphasizes missing-one cases and includes
+     controlled extra-accessory negatives.
 
-## Local Service
+3. Train or select a model.
+   - Train a YOLO or YOLO + OCR task model from a generated dataset.
+   - Reuse completed training runs from the training library.
+   - Keep the old built-in bottle/manual models as reference models.
 
-Run:
+4. Inspect images or videos.
+   - Select a task and one available model method.
+   - Upload an image or video.
+   - Receive pass/fail status, detections, counts, rule evidence, and output
+     imagery from the same API shape.
+
+5. Iterate.
+   - Add more accessory evidence.
+   - Generate richer datasets.
+   - Retrain task models.
+   - Compare YOLO, YOLO + OCR, and AI Detection behavior.
+
+## Repository Layout
+
+```text
+local_inspection_service/
+  FastAPI service, Chinese web UI, accessory management, dataset generation,
+  model training, AI detection config, and inspection APIs.
+
+models/
+  Small deployable reference weights that are safe to keep in the private repo.
+
+scripts/
+  Dataset-generation and asset-preparation scripts used by the reference task.
+
+standardized_manuals/
+  Canonical manual assets from the original reference task.
+
+backgrounds/
+  Same-environment conveyor/background assets and background-set metadata.
+
+generated_bottle_pose_collection/
+  Bottle pose reference images used by the historical reference dataset.
+
+agent_handoffs/ and qa_reports/
+  Historical implementation, review, and QA artifacts.
+```
+
+Generated datasets, uploads, training runs, temporary outputs, and full YOLO run
+folders are intentionally ignored by Git.
+
+## Local Service Quick Start
 
 ```bash
 cd /mnt/f/CodexWorkspace/assembly_line_optimize
@@ -65,301 +113,101 @@ Open:
 http://127.0.0.1:8765
 ```
 
-Main files:
+For LAN or Mac access, see `local_inspection_service/README.md`.
 
-- `local_inspection_service/server.py`: FastAPI API, YOLO inference, OCR, rule engine, annotation rendering.
-- `local_inspection_service/static/index.html`: web UI.
-- `local_inspection_service/static/app.js`: frontend behavior, upload flow, progress bar, Chinese text.
-- `local_inspection_service/static/styles.css`: UI styling.
-- `local_inspection_service/data/config.json`: active local configuration.
+## Current Reference Configuration
+
+The default committed reference task contains five historical accessories:
+
+1. Bottle
+2. Warranty Service Manual
+3. Battery Instruction Manual
+4. Download Service Manual
+5. Service QR Manual
+
+This setup demonstrates two important patterns:
+
+- Object accessories, such as the bottle, can be detected directly.
+- Text-heavy accessories, such as similar manuals, may need OCR or AI profile
+  evidence because their shape and size are almost identical.
+
+Reference model artifacts include:
+
+- `models/current_2class_yolo26s_seg_best.pt`
+  - Detects bottle and generic manual geometry.
+  - The service uses OCR to map manual crops into business manual classes.
+- `models/current_5class_yolo26s_seg_best.pt`
+  - Detects the five reference classes directly.
+
+New tasks should not copy the five-class assumption. They should define their
+own selected accessories, expected counts, generated dataset, model variant, and
+inspection rule metadata.
+
+## AI Detection Configuration
+
+AI Detection is configured locally through the web UI or environment variables.
+Supported provider modes are:
+
+- `gemini`
+- `openai`
+- `openai_compatible`
+
+Useful environment variables:
+
+```bash
+INSPECTION_AI_PROVIDER=gemini
+INSPECTION_AI_MODEL=gemini-2.5-flash
+INSPECTION_AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+INSPECTION_AI_API_KEY=...
+INSPECTION_AI_API_KEY_ENV=GEMINI_API_KEY
+INSPECTION_AI_TIMEOUT_SECONDS=10
+```
+
+When no provider key is configured, accessory profile generation falls back to a
+local deterministic profile so the rest of the toolflow can still run. Live AI
+inspection requires a configured provider key.
+
+## Development Checks
+
+Use the targeted checks that match the files changed:
+
+```bash
+python3 -m py_compile local_inspection_service/server.py local_inspection_service/scripts/*.py
+node --check local_inspection_service/static/app.js
+python3 local_inspection_service/scripts/smoke_ai_detection.py
+python3 local_inspection_service/scripts/verify_task_pipeline.py
+python3 local_inspection_service/scripts/smoke_cross_device_upload.py --host 0.0.0.0 --port 8876
+git diff --check
+```
+
+Some checks may require local model weights, PaddleOCR runtime compatibility,
+or an available AI provider key.
 
 ## Runtime Notes
 
-PaddleOCR is sensitive to PaddlePaddle runtime versions in this environment.
-
-Known working setup:
-
-- `paddleocr`
-- `paddlepaddle==3.2.2`
-- `numpy==2.3.5`
-- `ultralytics`
-- Python 3.12
-- CUDA GPU is used by YOLO training/inference where available.
-
-The server preloads `libgomp.so.1` from the local torch package when available and sets Paddle runtime flags to avoid the known PIR/oneDNN issues in this WSL environment.
-
-## Current Performance
-
-Measured on the local workstation:
-
-- YOLO-only inference: about `0.08s` per image.
-- PaddleOCR single manual crop, single direction: average about `2.67s`, median about `2.51s`.
-- Old OCR strategy, four rotations per manual: about `49.6s` end to end.
-- Current optimized YOLO+OCR strategy: about `15s` steady-state for a complete five-item image.
-
-The remaining bottleneck is OCR. A complete true image still has four manual OCR passes.
-
-## Source Assets
-
-Core tracked assets:
-
-- `standardized_manuals/`
-  - Four perspective-corrected manual images.
-  - `precise_individual_extraction_manifest.json` records source crop/corner metadata.
-  - `corner_annotations/` contains source corner QA images.
-- `backgrounds/`
-  - Conveyor-surface background matched to the reference production view.
-  - `background_manifest.json` records prompt/source notes.
-- `generated_bottle_pose_collection/`
-  - Generated bottle pose references used to replace proxy sticks/dots.
-  - These references define bottle appearance and scale.
-- `scripts/`
-  - Reproducible generation and dataset-building scripts.
-
-Important local-only generated folders, intentionally ignored by Git:
-
-- `synthetic_1000_atom_proxy_combinations/`
-- `synthetic_3000_atom_proxy_full_rotation_combinations/`
-- `image2_optimized_1000_atom_proxy_combinations/`
-- `image2_optimized_3000_atom_proxy_full_rotation_combinations/`
-- `yolo26_seg_2class_visible_polygon_4000_full_rotation_trial/`
-- `yolo26_seg_5class_visible_polygon_4000_full_rotation_trial/`
-
-## Dataset Generation Design
-
-The training data was built in stages.
-
-### 1. Standardize the manuals
-
-The four original manual images were extracted and perspective-corrected into clean top-down assets. These standardized manuals are the canonical sources used in synthetic composition.
-
-Relevant script:
-
-```text
-scripts/extract_precise_manuals_from_individual_sources.py
-```
-
-### 2. Generate atom proxy combinations
-
-The target scene is one conveyor background plus up to five components. The five components are:
-
-- one bottle
-- four manuals
-
-The generated combinations are based on the non-empty subset logic:
-
-- true class: all five components are present.
-- false class: at least one component is missing.
-
-The initial 1000-sample plan used a false-class distribution weighted toward realistic missing-part cases:
-
-- missing one component: dominant share
-- missing two or three components: smaller shares
-- missing four or five components: excluded as unrealistic for this production case
-
-Relevant scripts:
-
-```text
-scripts/generate_1000_atom_proxy_dataset.py
-scripts/generate_31_item_proxy_combinations.py
-```
-
-### 3. Add full rotation coverage
-
-The first datasets were too biased toward upright manuals. Real images showed that manuals can be rotated, inverted, or sideways. To reduce orientation bias, an additional 3000 samples were generated with broad random rotations.
-
-Requirements used:
-
-- Keep the original 1000 samples unchanged.
-- Add 3000 new samples with full random orientation distribution.
-- Use a random state instead of fixed angles such as 15 or 25 degrees.
-- Preserve random position and layer ordering.
-- Keep visible occlusion behavior realistic.
-
-Relevant scripts:
-
-```text
-scripts/generate_3000_atom_proxy_full_rotation_dataset.py
-scripts/replace_3000_full_rotation_proxy_with_bottle.py
-```
-
-### 4. Replace proxy bottle markers
-
-Early composition used black sticks/dots as bottle proxies:
-
-- horizontal/diagonal stick: bottle lying down in that direction.
-- dot: upright bottle; the dot represented approximately the red cap diameter, not the full bottle size.
-
-The proxies were later replaced with real bottle sprites from `generated_bottle_pose_collection/`. The bottle box length follows the proxy length; the width is based on the real bottle size relationship from the source reference photos.
-
-### 5. Build YOLO labels
-
-The final segmentation dataset uses visible polygons, not full hidden rectangles.
-
-This means:
-
-- If a manual is partially covered, only the visible part is labeled.
-- If one object is above another, the lower object's hidden region is subtracted.
-- Labels can be multi-edge polygons, not just rectangles.
-- Bottle and manual masks are generated from the compositing geometry.
-
-Relevant scripts:
-
-```text
-scripts/build_yolo26_seg_2class_visible_polygon_4000_dataset.py
-scripts/build_yolo26_seg_5class_visible_polygon_4000_dataset.py
-```
-
-## Dataset Quality
-
-The dataset quality improved through several rounds:
-
-- Manual extraction was standardized from source images.
-- The conveyor background was fixed to match the intended camera placement.
-- Object placement and layer order were randomized.
-- Bottle proxies were forced to stay above all manuals when required.
-- Bottle proxies were replaced with generated bottle references.
-- Full rotation coverage was added after real-image tests showed orientation bias.
-- Visible polygon labels were adopted after full hidden boxes caused bad learning under occlusion.
-
-Known limitations:
-
-- Synthetic images are still not a complete substitute for real production photos.
-- Manual classes are visually similar; pure YOLO manual classification may confuse classes unless enough real or high-quality synthetic text variation is included.
-- OCR currently dominates runtime.
-- Reflections on the bottle can still cause false positives in difficult real photos.
-- Real camera calibration, lighting, lens distortion, and conveyor texture variation need more real-world validation.
-
-## Training Runs
-
-### Deployed two-class segmentation model
-
-Current deployed model:
-
-```text
-models/current_2class_yolo26s_seg_best.pt
-```
-
-Original local training output:
-
-```text
-yolo26_seg_2class_visible_polygon_4000_full_rotation_trial/runs/yolo26s_seg_2class_visible_polygon_full_rotation_100e_img640_workers0/weights/best.pt
-```
-
-Training command:
-
-```bash
-yolo segment train \
-  model=/mnt/f/CodexWorkspace/assembly_line_optimize/yolo26s-seg.pt \
-  data=/mnt/f/CodexWorkspace/assembly_line_optimize/yolo26_seg_2class_visible_polygon_4000_full_rotation_trial/dataset/data.yaml \
-  imgsz=640 epochs=100 batch=8 device=0 workers=0 \
-  project=/mnt/f/CodexWorkspace/assembly_line_optimize/yolo26_seg_2class_visible_polygon_4000_full_rotation_trial/runs \
-  name=yolo26s_seg_2class_visible_polygon_full_rotation_100e_img640_workers0 \
-  exist_ok=True
-```
-
-The `workers=0` setting is intentional in this WSL environment because multiprocessing socket behavior caused worker failures.
-
-Recorded metrics for the two-class model:
-
-- Test box mAP50-95: about `0.990`
-- Test mask mAP50-95: about `0.948`
-- Bottle mask mAP50-95: about `0.904`
-- Manual mask mAP50-95: about `0.992`
-
-### Five-class YOLO model
-
-The Jesse-trained five-class segmentation model is available as a selectable local-service model:
-
-```text
-models/current_5class_yolo26s_seg_best.pt
-```
-
-Original local training output:
-
-```text
-yolo26_seg_5class_visible_polygon_4000_full_rotation_trial/runs/yolo26s_seg_5class_visible_polygon_full_rotation_100e_img640_workers0/weights/best.pt
-```
-
-Goal:
-
-- Detect Bottle directly.
-- Detect each of the four manual types directly.
-- Reduce or remove OCR dependency if class performance is reliable enough.
-
-This is selectable in the UI, but the old YOLO+OCR path remains the default because real-photo validation is still needed.
-
-## Why OCR Was Added
-
-The manuals are physically similar:
-
-- same paper size
-- similar rectangular shape
-- similar color
-- different printed text
-
-The detector is strong at finding paper-like objects, but it can confuse manual types because type identity is mainly textual. OCR makes the class decision based on text evidence rather than only object shape.
-
-The current plan is to keep both methods:
-
-1. YOLO+OCR mode: more explainable, slower, better when text needs verification.
-2. Pure five-class YOLO mode: faster, simpler, but must prove reliable on real photos.
-
-The local service now exposes both modes through the detection tool model selector.
-
-## Future Directions
-
-Planned improvements:
-
-1. Add a hybrid inference mode with OCR fallback only on low-confidence five-class YOLO predictions.
-2. Validate the five-class YOLO model against real production photos.
-3. Add real-photo validation set from the actual production camera.
-4. Add camera/live-stream input:
-   - local camera index
-   - RTSP URL
-   - folder watch
-5. Add calibration tools:
-   - fixed conveyor ROI
-   - perspective normalization
-   - camera exposure/lighting check
-6. Add confidence dashboards:
-   - per-class count
-   - per-frame history
-   - false-positive/false-negative review queue
-7. Add dataset regeneration controls to the UI:
-   - upload new component photos
-   - generate synthetic combinations
-   - start training manually
-8. Add export/deployment targets:
-   - ONNX
-   - TensorRT
-   - Windows executable or installer
-   - localhost service package
-9. Improve speed:
-   - OCR only on cropped header/title regions
-   - use model-derived orientation instead of multi-rotation OCR
-   - use lightweight manual image classifier as OCR fallback/replacement
-   - run OCR in a worker queue for video frames
-
-## Repository Policy
-
-This repository is private.
-
-Tracked:
-
-- source code
-- local service UI
-- generation scripts
-- core source assets
-- current deployable model weight
-- documentation
-
-Not tracked:
-
-- 11GB+ image datasets
-- full YOLO run folders
-- temporary uploads/outputs
-- Python virtual environments
-- intermediate generated batches
-
-The ignored artifacts are reproducible from the tracked scripts and documented local paths.
+- Python 3.12 is the current local runtime.
+- Core server dependencies are FastAPI, Uvicorn, OpenCV, NumPy, Ultralytics,
+  PaddleOCR, PaddlePaddle, Pydantic, and Requests.
+- PaddleOCR is sensitive to PaddlePaddle runtime versions in this environment;
+  `paddlepaddle==3.2.2` is the known working version.
+- The service stores local uploads and outputs under
+  `local_inspection_service/data/`.
+- Large generated artifacts should stay out of Git and be reproduced through the
+  tracked scripts or the service UI.
+
+## Project Status
+
+VantaLane is a working local prototype, not a packaged production deployment.
+The strongest current use case is rapid development and validation of visual
+inspection workflows:
+
+- define accessories,
+- generate task datasets,
+- train or select a detector,
+- inspect images/videos,
+- collect evidence,
+- iterate on the task.
+
+Production deployment still needs environment-specific validation for camera
+calibration, lighting, real-photo datasets, model accuracy, AI provider
+latency, and artifact packaging.
