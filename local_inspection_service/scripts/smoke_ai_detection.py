@@ -484,7 +484,6 @@ def verify_vision_presence_tool_contract() -> None:
                         "present": True,
                         "confidence": 0.91,
                         "evidence": "matching text visible",
-                        "box_2d": [100, 200, 700, 800],
                     }
                 ],
                 "rule": {"counts": {"acc_smoke": 1}},
@@ -527,22 +526,24 @@ def verify_vision_presence_tool_contract() -> None:
             assert_true(result["tool"] == "vision.inspect.presence", "vision tool should identify its contract")
             assert_true(result["passed"], "vision tool should return normalized pass state")
             assert_true(result["rule"]["present"] == ["acc_smoke"], "vision tool should normalize present ids")
-            assert_true(result["detections"][0]["box_2d"] == [100.0, 200.0, 700.0, 800.0], "vision tool should normalize provider bbox")
+            assert_true("box_2d" not in result["detections"][0], "vision tool should not expose provider bbox fields")
             assert_true(result["ai"]["reference_images"] == 1, "vision tool should bound references to one per accessory")
             assert_true("test-key" not in json.dumps(result, sort_keys=True), "vision tool result must not echo raw API keys")
             image_parts = [part for part in captured["user_content"] if part.get("type") == "image_url"]
             assert_true(len(image_parts) == 2, "provider payload should include inspection image plus one bounded reference")
             assert_true("manuals or cards" not in captured["system_prompt"], "vision prompt should not hardcode manual/card special cases")
-            assert_true("compact bbox JSON" in captured["system_prompt"], "vision prompt should ask for compact bbox JSON")
+            assert_true("box_2d" not in captured["system_prompt"], "vision prompt should not ask for bbox output")
+            assert_true("box_2d" not in json.dumps(captured["user_content"], sort_keys=True), "vision user content should not ask for bbox output")
+            assert_true("compact QA JSON" in captured["system_prompt"], "vision prompt should ask for compact boolean QA JSON")
             assert_true(captured["max_tokens"] == server.ai_detection_output_token_budget(1), "vision provider output cap should be low and dynamic")
     finally:
         patch.restore()
 
 
-def verify_ai_analyze_draws_provider_bbox() -> None:
+def verify_ai_analyze_returns_boolean_original_output() -> None:
     captured: dict[str, Any] = {"calls": 0}
 
-    class BboxProvider:
+    class BooleanProvider:
         def generate_json(self, *_args: Any, **kwargs: Any) -> tuple[dict[str, Any], int]:
             captured["calls"] += 1
             captured["max_tokens"] = kwargs.get("max_tokens")
@@ -553,7 +554,8 @@ def verify_ai_analyze_draws_provider_bbox() -> None:
                         "label": "Smoke Manual",
                         "present": True,
                         "confidence": 0.937,
-                        "box_2d": [-10, 200, 620, 1200],
+                        "count": 1,
+                        "evidence": "matching text visible",
                         "observed_text": ["Smoke Manual"],
                     }
                 ],
@@ -567,23 +569,25 @@ def verify_ai_analyze_draws_provider_bbox() -> None:
             patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
             patch.env("INSPECTION_AI_API_KEY", "test-key")
             patch.env("GEMINI_API_KEY", None)
-            patch.attr(server, "ai_provider", lambda: BboxProvider())
+            patch.attr(server, "ai_provider", lambda: BooleanProvider())
             image = np.full((80, 100, 3), 18, dtype=np.uint8)
-            result = server.analyze_bgr(image, "ai_bbox", server.AI_DETECTION_MODEL_ID)
-            assert_true(captured["calls"] == 1, "AI bbox analyze must not make a second provider call")
-            assert_true(captured["max_tokens"] == server.ai_detection_output_token_budget(1), "AI bbox provider max_tokens should use the low dynamic budget")
-            assert_true(result["passed"], "valid provider bbox should keep the local pass decision")
-            assert_true(result["annotated_url"].endswith("_ai_annotated.jpg"), "valid provider bbox should produce an AI annotated output")
+            result = server.analyze_bgr(image, "ai_boolean", server.AI_DETECTION_MODEL_ID)
+            assert_true(captured["calls"] == 1, "AI boolean analyze must not make a second provider call")
+            assert_true(captured["max_tokens"] == server.ai_detection_output_token_budget(1), "AI boolean provider max_tokens should use the low dynamic budget")
+            assert_true(result["passed"], "valid provider boolean should keep the local pass decision")
+            assert_true(result["annotated_url"].endswith("_ai_original.jpg"), "AI boolean result should keep original output image")
             detection = result["detections"][0]
-            assert_true(detection["box_2d"] == [0.0, 200.0, 620.0, 1000.0], "AI analyze should clamp and return normalized bbox")
+            assert_true("box_2d" not in detection, "AI boolean result should not return bbox fields")
+            assert_true(detection["count"] == 1, "AI boolean result should preserve explicit provider count")
+            assert_true(detection["evidence"] == "matching text visible", "AI boolean result should preserve short evidence")
             assert_true(detection["observed_text"] == ["Smoke Manual"], "AI analyze should keep observed_text compatibility")
 
             out_path = Path(tmp) / "outputs" / result["annotated_url"].removeprefix("/outputs/")
             saved = cv2.imread(str(out_path), cv2.IMREAD_COLOR)
-            assert_true(saved is not None, "AI annotated output image should be saved")
+            assert_true(saved is not None, "AI original output image should be saved")
             diff = cv2.absdiff(saved, image)
-            assert_true(int(diff.max()) > 80, "AI annotated output should contain visible bbox pixels")
-            assert_true(int(np.count_nonzero(diff > 35)) > 100, "AI annotated output should draw more than compression noise")
+            assert_true(int(diff.max()) <= 3, "AI boolean output should not draw bbox pixels")
+            assert_true(not (Path(tmp) / "outputs" / "ai_boolean_ai_annotated.jpg").exists(), "AI boolean result should not write bbox overlay output")
 
             assert_true(server.normalize_ai_box_2d([100, 100, 50, 200]) is None, "inverted AI bbox should be rejected")
             assert_true(server.normalize_ai_box_2d([0, 0, float("nan"), 100]) is None, "non-finite AI bbox should be rejected")
@@ -759,7 +763,6 @@ def verify_ai_present_without_count_does_not_satisfy_multiple_required() -> None
                         "present": True,
                         "confidence": 0.95,
                         "evidence": "one visible item",
-                        "box_2d": [100, 100, 700, 700],
                     }
                 ],
                 "rule": {"counts": {}},
@@ -784,7 +787,7 @@ def verify_ai_present_without_count_does_not_satisfy_multiple_required() -> None
         patch.restore()
 
 
-def verify_ai_present_requires_valid_provider_bbox() -> None:
+def verify_ai_present_does_not_require_provider_bbox() -> None:
     provider_payload: dict[str, Any] = {}
 
     class CaseProvider:
@@ -817,15 +820,15 @@ def verify_ai_present_requires_valid_provider_bbox() -> None:
                     }
                 )
                 result = server.analyze_bgr(image, f"ai_present_{case_name}", server.AI_DETECTION_MODEL_ID)
-                assert_true(not result["passed"], f"{case_name} must fail closed even with provider count")
+                assert_true(result["passed"], f"{case_name} should pass from boolean/count QA without requiring bbox")
                 assert_true(
                     result["annotated_url"].endswith("_ai_original.jpg"),
-                    f"{case_name} may return original image but must not pass without a drawn bbox",
+                    f"{case_name} should keep original output image without bbox overlay",
                 )
-                assert_true(result["detections"][0]["present"] is False, f"{case_name} should clear present")
-                assert_true("box_2d" not in result["detections"][0], f"{case_name} should not expose invalid bbox")
-                assert_true(result["rule"]["counts"]["acc_smoke"] == 0, f"{case_name} should force zero count")
-                assert_true(result["rule"]["missing"] == ["acc_smoke"], f"{case_name} should report missing accessory")
+                assert_true(result["detections"][0]["present"] is True, f"{case_name} should keep boolean present")
+                assert_true("box_2d" not in result["detections"][0], f"{case_name} should not expose bbox fields")
+                assert_true(result["rule"]["counts"]["acc_smoke"] == 1, f"{case_name} should preserve provider count")
+                assert_true(result["rule"]["missing"] == [], f"{case_name} should not report missing accessory")
     finally:
         patch.restore()
 
@@ -960,13 +963,13 @@ def main() -> int:
         verify_provider_malformed_json_and_bad_shape_fail_closed,
         verify_ai_provider_malformed_json_returns_normal_failure_shape,
         verify_vision_presence_tool_contract,
-        verify_ai_analyze_draws_provider_bbox,
+        verify_ai_analyze_returns_boolean_original_output,
         verify_ai_analyze_disabled_returns_original_shape,
         verify_ai_timeout_is_structured,
         verify_ai_video_preserves_frame_debug_metadata,
         verify_ai_malformed_present_string_fails_closed,
         verify_ai_present_without_count_does_not_satisfy_multiple_required,
-        verify_ai_present_requires_valid_provider_bbox,
+        verify_ai_present_does_not_require_provider_bbox,
         verify_ai_invalid_counts_and_confidence_fail_closed,
         verify_missing_required_class_fails_closed,
         verify_yolo_path_still_runs_with_existing_shape,

@@ -128,8 +128,8 @@ Use reference accessory images only to understand what each required accessory l
 Return only JSON that matches the provided schema.
 For every required accessory, return present=true or present=false.
 Use confidence from 0 to 1. If uncertain, mark present=false unless clear evidence exists.
-For present accessories, include box_2d as [y_min,x_min,y_max,x_max] normalized 0-1000 in the inspection image.
-Return only compact bbox JSON: {"detections":[{"accessory_id":"...","label":"...","present":true,"confidence":0.0,"box_2d":[0,0,0,0]}],"rule":{"counts":{"...":0}}}.
+Include count when multiple visible instances are relevant or count is otherwise known.
+Return only compact QA JSON: {"detections":[{"accessory_id":"...","label":"...","present":true,"confidence":0.0,"count":1,"evidence":"..."}],"rule":{"counts":{"...":0}}}.
 Do not include narrative, markdown, summaries, or annotated images.
 Do not invent accessories that are not visible."""
 AI_INSPECTION_IMAGE_MAX_SIDE = int(os.environ.get("INSPECTION_AI_IMAGE_MAX_SIDE", "960"))
@@ -169,12 +169,7 @@ AI_DETECTION_OUTPUT_SCHEMA: dict[str, Any] = {
                     "label": {"type": "string"},
                     "present": {"type": "boolean"},
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "box_2d": {
-                        "type": "array",
-                        "items": {"type": "number", "minimum": 0, "maximum": 1000},
-                        "minItems": 4,
-                        "maxItems": 4,
-                    },
+                    "count": {"type": "integer", "minimum": 0},
                     "evidence": {"type": "string"},
                     "observed_text": {"type": "array", "items": {"type": "string"}},
                 },
@@ -2557,8 +2552,7 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
                 "type": "text",
                 "text": (
                     "INSPECTION_IMAGE: decide presence only from the next image, using the cached required accessory "
-                    "profile context. Return compact bbox JSON only. Include box_2d for present accessories as "
-                    "[y_min,x_min,y_max,x_max] normalized 0-1000. No narrative."
+                    "profile context. Return compact boolean/count QA JSON only. No narrative."
                 ),
             },
             {"type": "image_url", "image_url": {"url": inspection_data_url, "detail": "low"}},
@@ -2570,8 +2564,7 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
                 "type": "text",
                 "text": (
                     "INSPECTION_IMAGE: decide presence only from the next image. "
-                    "Return compact bbox JSON only. Include box_2d for present accessories as "
-                    "[y_min,x_min,y_max,x_max] normalized 0-1000. No narrative."
+                    "Return compact boolean/count QA JSON only. No narrative."
                 ),
             },
             {"type": "image_url", "image_url": {"url": inspection_data_url, "detail": "low"}},
@@ -8521,7 +8514,7 @@ def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dic
             "required_accessories": payload_accessories,
         },
         "output_contract": {
-            "detections": "Array of {accessory_id,label,present,confidence,box_2d}; box_2d is [y_min,x_min,y_max,x_max] normalized 0-1000 and only for visible present items.",
+            "detections": "Array of {accessory_id,label,present,confidence,count,evidence}. Count is optional unless multiple visible instances matter.",
             "rule": "Object with counts keyed by accessory_id.",
         },
     }
@@ -8746,18 +8739,14 @@ def normalize_ai_detection_result(
             confidence = max(0.0, min(1.0, confidence_value))
         except (TypeError, ValueError):
             confidence = 0.0
-        box_2d = None
         provider_present = isinstance(raw, dict) and raw.get("present") is True
-        if provider_present:
-            raw_box = raw.get("box_2d") if "box_2d" in raw else raw.get("bbox")
-            box_2d = normalize_ai_box_2d(raw_box)
-        present = provider_present and confidence > 0.0 and box_2d is not None
+        present = provider_present and confidence > 0.0
         has_raw_count = item_id in raw_counts
         raw_count = raw_counts.get(item_id)
-        if type(raw_count) is int and raw_count >= 0:
-            count = raw_count
-        elif has_raw_count:
-            count = 0
+        if has_raw_count:
+            count = raw_count if type(raw_count) is int and raw_count >= 0 else 0
+        elif isinstance(raw, dict) and type(raw.get("count")) is int and raw.get("count") >= 0:
+            count = raw["count"]
         else:
             count = 1 if present else 0
         if not present:
@@ -8776,8 +8765,8 @@ def normalize_ai_detection_result(
             "evidence": bounded_text(raw.get("evidence") if isinstance(raw, dict) else "", 180),
             "observed_text": string_list(raw.get("observed_text") if isinstance(raw, dict) else [], max_items=6, max_len=80),
         }
-        if box_2d:
-            detection["box_2d"] = box_2d
+        if count > 1 or expected_count > 1 or (isinstance(raw, dict) and "count" in raw):
+            detection["count"] = count
         detections.append(detection)
     required_ids = {str(item.get("accessory_id") or "") for item in required_accessories}
     extra = string_list([item for item in raw_rule.get("extra", []) if str(item) not in required_ids], max_items=12) if isinstance(raw_rule.get("extra"), list) else []
@@ -8898,11 +8887,7 @@ def analyze_bgr_ai_detection(
             ai_debug = {**ai_debug, key: vision_result.get(key)}
     rule = vision_result.get("rule") if isinstance(vision_result.get("rule"), dict) else {}
     detections = vision_result.get("detections") if isinstance(vision_result.get("detections"), list) else []
-    annotated_url = (
-        write_ai_original_output(image_bgr, request_id)
-        if bool(ai_debug.get("provider_failure"))
-        else write_ai_annotated_output(image_bgr, request_id, detections, rule)
-    )
+    annotated_url = write_ai_original_output(image_bgr, request_id)
     return {
         "request_id": request_id,
         "passed": bool(vision_result.get("passed")),
