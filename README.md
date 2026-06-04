@@ -3,10 +3,9 @@
 Naming note: the product documentation now uses VantaLane. The GitHub
 repository may still appear as VantaLine while the rename settles.
 
-VantaLane is a local-first visual inspection toolflow for building inspection
-tasks from user-defined accessories, generating training datasets, training or
-selecting detection models, and checking images or videos against the selected
-task rule.
+VantaLane is a visual inspection workflow for building inspection tasks from
+user-defined accessories, generating training datasets, training or selecting
+detection models, and checking images or videos against the selected task rule.
 
 The original bottle plus four manuals setup is now treated as the included
 reference task. It remains useful for validation and examples, but it is not the
@@ -22,8 +21,8 @@ accessories and multiple detection methods.
   backgrounds, pass/fail rules, and generated previews.
 - Trains or loads task models for inspection.
 - Runs image and video inspection through the selected task and model.
-- Exposes a local web UI for accessory management, dataset generation, model
-  training, training-library cleanup, AI detection settings, and inspection.
+- Exposes a web UI for accessory management, dataset generation, model training,
+  training-library cleanup, AI detection settings, and inspection.
 
 The core rule is task-centric: an inspection task defines the required
 accessories and expected counts. The active detector then reports whether the
@@ -37,7 +36,7 @@ VantaLane supports several detection paths through the same inspection flow:
 | --- | --- | --- |
 | YOLO | Fast object or accessory detection from a trained task model. | Best when visual classes are sufficiently distinct or enough training data is available. |
 | YOLO + OCR | YOLO localizes candidate accessory classes while OCR supplies text evidence. | The current OCR runtime is proven for the bundled manual reference path. Task-trained `yolo_ocr` variants still rely on YOLO class/accessory IDs for pass/fail unless the task also implements OCR/profile-to-accessory resolution. |
-| AI Detection API | A stateless multimodal API checks the image against structured accessory profiles. | Useful as an API-backed option or fallback when a local model has not been trained yet. |
+| AI Detection API | A stateless multimodal API checks the image against structured accessory profiles. | Useful as an API-backed option or fallback when a trained model is not available yet. |
 
 These are model choices for the same task model selector, not separate products.
 A task may expose only the model variants that exist for that task.
@@ -86,7 +85,7 @@ local_inspection_service/
   model training, AI detection config, and inspection APIs.
 
 models/
-  Small deployable reference weights that are safe to keep in the private repo.
+  Small deployable reference weights for the bundled reference task.
 
 scripts/
   Dataset-generation and asset-preparation scripts used by the reference task.
@@ -107,21 +106,24 @@ agent_handoffs/ and qa_reports/
 Generated datasets, uploads, training runs, temporary outputs, and full YOLO run
 folders are intentionally ignored by Git.
 
-## Local Service Quick Start
+## Quick Start
 
 ```bash
-cd /mnt/f/CodexWorkspace/assembly_line_optimize
+git clone https://github.com/JeffreyDeng-spec/VantaLine.git
+cd VantaLine
 python3 -m pip install -r requirements.txt
-python3 -m uvicorn local_inspection_service.server:app --host 127.0.0.1 --port 8765
+python3 -m uvicorn local_inspection_service.server:app --host <host> --port <port>
 ```
 
-Open:
+Open the service URL configured by the operator:
 
 ```text
-http://127.0.0.1:8765
+http://<service-host>:<port>
 ```
 
-For LAN or Mac access, see `local_inspection_service/README.md`.
+For remote access, bind the service through the chosen deployment environment,
+reverse proxy, container platform, or network policy. Configure explicit trusted
+origins when browser clients call the API from another origin.
 
 ## Current Reference Configuration
 
@@ -158,7 +160,8 @@ inspection rule metadata.
 AI Detection has two configuration layers:
 
 - The current web UI exposes Gemini configuration.
-- The backend also supports provider modes through environment/local settings:
+- The backend also supports provider modes through environment or service
+  settings:
 
 - `gemini`
 - `openai`
@@ -176,7 +179,7 @@ INSPECTION_AI_TIMEOUT_SECONDS=10
 ```
 
 When no provider key is configured, accessory profile generation falls back to a
-local deterministic profile so the rest of the toolflow can still run. Live AI
+deterministic profile so the rest of the toolflow can still run. Live AI
 inspection requires a configured provider key.
 
 ## Development Checks
@@ -188,30 +191,28 @@ python3 -m py_compile local_inspection_service/server.py local_inspection_servic
 node --check local_inspection_service/static/app.js
 python3 local_inspection_service/scripts/smoke_ai_detection.py
 python3 local_inspection_service/scripts/verify_task_pipeline.py
-python3 local_inspection_service/scripts/smoke_cross_device_upload.py --host 0.0.0.0 --port 8876
+python3 local_inspection_service/scripts/smoke_cross_device_upload.py --host <host> --port <port>
 git diff --check
 ```
 
-Some checks may require local model weights, PaddleOCR runtime compatibility,
-or an available AI provider key.
+Some checks may require model weights, PaddleOCR runtime compatibility, or an
+available AI provider key.
 
 ## Runtime Notes
 
-- Python 3.12 is the current local runtime.
+- Python 3.12 is the current runtime.
 - Core server dependencies are FastAPI, Uvicorn, OpenCV, NumPy, Ultralytics,
   PaddleOCR, PaddlePaddle, Pydantic, and Requests.
 - PaddleOCR is sensitive to PaddlePaddle runtime versions in this environment;
   `paddlepaddle==3.2.2` is the known working version.
-- The service stores local uploads and outputs under
-  `local_inspection_service/data/`.
+- The service stores uploads and outputs under `local_inspection_service/data/`.
 - Large generated artifacts should stay out of Git and be reproduced through the
   tracked scripts or the service UI.
 
 ## Project Status
 
-VantaLane is a working local prototype, not a packaged production deployment.
-The strongest current use case is rapid development and validation of visual
-inspection workflows:
+VantaLane is an active visual inspection workflow project. The strongest current
+use case is rapid development and validation of inspection workflows:
 
 - define accessories,
 - generate task datasets,

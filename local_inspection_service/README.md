@@ -1,64 +1,33 @@
-# Local Inspection Service
+# Inspection Service
 
-This directory contains the FastAPI service and web UI for the VantaLane local
-inspection toolflow.
+This directory contains the FastAPI service and web UI for the VantaLane
+inspection workflow.
 
 The service is no longer limited to the original five fixed package components.
 It supports user-defined accessories, task-specific training datasets, multiple
-detection methods, and image/video inspection through a single local UI.
+detection methods, and image/video inspection through a single web UI.
 
 ## Run
 
-Same-machine use:
+Install dependencies from a cloned repository, then choose the bind host and
+port for the target environment:
 
 ```bash
-cd /mnt/f/CodexWorkspace/assembly_line_optimize
-python3 -m uvicorn local_inspection_service.server:app --host 127.0.0.1 --port 8765
+git clone https://github.com/JeffreyDeng-spec/VantaLine.git
+cd VantaLine
+python3 -m pip install -r requirements.txt
+python3 -m uvicorn local_inspection_service.server:app --host <host> --port <port>
 ```
 
-Open:
+Open the service URL configured by the operator:
 
 ```text
-http://127.0.0.1:8765
+http://<service-host>:<port>
 ```
 
-Mac/LAN browser use:
-
-```bash
-cd /mnt/f/CodexWorkspace/assembly_line_optimize
-python3 -m uvicorn local_inspection_service.server:app --host 0.0.0.0 --port 8765
-```
-
-Find this machine's LAN address:
-
-```bash
-hostname -I
-```
-
-Open from the client machine with the reachable host address:
-
-```text
-http://<this-machine-lan-ip>:8765
-```
-
-When the service runs inside WSL2, `hostname -I` returns the WSL internal IP,
-not the Windows host LAN IP. A physical Mac usually cannot reach that WSL IP
-directly. In that case, expose the WSL service through the Windows host with an
-elevated PowerShell:
-
-```powershell
-$wslIp = (wsl.exe hostname -I).Trim().Split()[0]
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8765 connectaddress=$wslIp connectport=8765
-New-NetFirewallRule -DisplayName "Alook Local Inspection 8765" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8765
-netsh interface portproxy show v4tov4
-```
-
-Then open from the Mac with the Windows host address, for example:
-
-```text
-http://192.168.1.40:8765
-http://100.103.240.14:8765
-```
+For remote access, expose the service through the operator's deployment
+environment, reverse proxy, container platform, or network policy. Keep the
+public endpoint and the API endpoint on the same origin when possible.
 
 ## Main UI Areas
 
@@ -121,7 +90,7 @@ POST   /api/analyze/video
 POST   /api/stream/config
 ```
 
-Generated files are served from `/outputs/...` and stored locally under
+Generated files are served from `/outputs/...` and stored under
 `local_inspection_service/data/outputs/`.
 
 ## Accessory And Dataset Flow
@@ -153,7 +122,7 @@ AI Detection uses a structured, stateless request:
 - a strict JSON output schema.
 
 Configure Gemini through the current web UI. Configure Gemini, OpenAI, or
-OpenAI-compatible backend modes with environment variables or saved local
+OpenAI-compatible backend modes with environment variables or saved service
 settings:
 
 ```bash
@@ -166,62 +135,56 @@ INSPECTION_AI_TIMEOUT_SECONDS=10
 ```
 
 If the provider is not configured, accessory profile generation falls back to a
-local deterministic profile. AI inspection itself reports structured provider
-status rather than crashing the server.
+deterministic profile. AI inspection itself reports structured provider status
+rather than crashing the server.
 
-## Cross-Origin And LAN Use
+## Cross-Origin And Remote Use
 
 File inputs in the browser upload bytes with `multipart/form-data`; the service
 stores uploaded streams under `local_inspection_service/data/uploads`. The server
 never reads a path from the client filesystem.
 
-Direct LAN use should open the same URL that serves the web UI, so it is
-same-origin and does not require CORS. For trusted proxy or tunnel frontends
-that call the API from another origin, add explicit origins:
+Open the same URL that serves the web UI when possible, so browser requests are
+same-origin and do not require CORS. For trusted proxy, tunnel, or separate
+frontend deployments that call the API from another origin, add explicit
+origins:
 
 ```bash
-INSPECTION_CORS_ORIGINS=http://mac-hostname.local:8765,http://192.168.1.20:8765 \
-python3 -m uvicorn local_inspection_service.server:app --host 0.0.0.0 --port 8765
+INSPECTION_CORS_ORIGINS=https://inspection.example.internal,https://frontend.example.internal \
+python3 -m uvicorn local_inspection_service.server:app --host <host> --port <port>
 ```
 
-Only use broad private-LAN CORS during trusted local debugging:
-
-```bash
-INSPECTION_ENABLE_LAN_CORS=1 python3 -m uvicorn local_inspection_service.server:app --host 0.0.0.0 --port 8765
-```
-
-Untrusted cross-origin write requests are rejected. This protects local
-file-mutating routes such as accessory preview and confirm from arbitrary
-browser origins.
+Untrusted cross-origin write requests are rejected. This protects file-mutating
+routes such as accessory preview and confirm from arbitrary browser origins.
 
 ## Smoke Checks
 
 Run the checks that match the changed area:
 
 ```bash
-cd /mnt/f/CodexWorkspace/assembly_line_optimize
+cd VantaLine
 python3 -m py_compile local_inspection_service/server.py local_inspection_service/scripts/*.py
 node --check local_inspection_service/static/app.js
 python3 local_inspection_service/scripts/smoke_ai_detection.py
 python3 local_inspection_service/scripts/verify_task_pipeline.py
 ```
 
-Run a local cross-device-style multipart check:
+Run a multipart upload check:
 
 ```bash
-cd /mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service
-python3 scripts/smoke_cross_device_upload.py --host 0.0.0.0 --port 8876
+cd VantaLine/local_inspection_service
+python3 scripts/smoke_cross_device_upload.py --host <host> --port <port>
 ```
 
 To verify an explicit trusted cross-origin frontend:
 
 ```bash
-INSPECTION_CORS_ORIGINS=http://trusted-mac.local:5173 \
-python3 scripts/smoke_cross_device_upload.py --host 0.0.0.0 --port 8876 --origin http://trusted-mac.local:5173 --expect-cors allowed
+INSPECTION_CORS_ORIGINS=https://frontend.example.internal \
+python3 scripts/smoke_cross_device_upload.py --host <host> --port <port> --origin https://frontend.example.internal --expect-cors allowed
 ```
 
 To verify an untrusted origin is not allowed:
 
 ```bash
-python3 scripts/smoke_cross_device_upload.py --host 0.0.0.0 --port 8876 --origin http://example.com --expect-cors denied
+python3 scripts/smoke_cross_device_upload.py --host <host> --port <port> --origin https://untrusted.example --expect-cors denied
 ```
