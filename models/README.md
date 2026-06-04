@@ -12,8 +12,8 @@ toolflow can inspect.
 - `current_2class_yolo26s_seg_best.pt`
   - Reference YOLO26 segmentation model.
   - Detects two geometric classes: `bottle` and generic `manual`.
-  - The local service can then use OCR to map manual crops into text-specific
-    business classes.
+  - The bundled reference flow can then use OCR to map manual crops into
+    text-specific business classes.
 
 - `current_5class_yolo26s_seg_best.pt`
   - Reference YOLO26 segmentation model trained for the original five

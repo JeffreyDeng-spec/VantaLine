@@ -69,8 +69,9 @@ http://100.103.240.14:8765
   datasets, and train YOLO or YOLO + OCR task models.
 - Training Library: inspect, rename, delete, or reuse generated datasets and
   trained model runs.
-- AI Detection Settings: configure Gemini, OpenAI, or OpenAI-compatible API
-  access for structured AI inspection.
+- AI Detection Settings: configure Gemini API access from the web UI. Backend
+  environment settings also support OpenAI and OpenAI-compatible provider modes
+  for structured AI inspection.
 
 ## Task And Model Selection
 
@@ -83,8 +84,10 @@ Inspection is task-centric:
 Supported model methods:
 
 - YOLO: task model detects selected accessories directly.
-- YOLO + OCR: YOLO localizes candidate regions and OCR resolves text-heavy
-  accessories.
+- YOLO + OCR: YOLO localizes candidate accessory classes and OCR supplies text
+  evidence. The bundled manual reference flow has OCR-to-manual resolution;
+  task-trained `yolo_ocr` variants still use YOLO class/accessory IDs for
+  pass/fail unless the task adds explicit OCR/profile-to-accessory resolution.
 - AI Detection: a stateless provider call checks the image against structured
   accessory profiles.
 
@@ -149,7 +152,9 @@ AI Detection uses a structured, stateless request:
 - optional reference descriptors,
 - a strict JSON output schema.
 
-Configure it through the UI or with environment variables:
+Configure Gemini through the current web UI. Configure Gemini, OpenAI, or
+OpenAI-compatible backend modes with environment variables or saved local
+settings:
 
 ```bash
 INSPECTION_AI_PROVIDER=gemini

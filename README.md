@@ -1,5 +1,8 @@
 # VantaLane
 
+Naming note: the product documentation now uses VantaLane. The GitHub
+repository may still appear as VantaLine while the rename settles.
+
 VantaLane is a local-first visual inspection toolflow for building inspection
 tasks from user-defined accessories, generating training datasets, training or
 selecting detection models, and checking images or videos against the selected
@@ -33,11 +36,14 @@ VantaLane supports several detection paths through the same inspection flow:
 | Method | Purpose | Notes |
 | --- | --- | --- |
 | YOLO | Fast object or accessory detection from a trained task model. | Best when visual classes are sufficiently distinct or enough training data is available. |
-| YOLO + OCR | YOLO localizes objects, OCR disambiguates text-heavy accessories. | Useful for manuals, cards, labels, QR sheets, and accessories that differ mainly by printed text. |
+| YOLO + OCR | YOLO localizes candidate accessory classes while OCR supplies text evidence. | The current OCR runtime is proven for the bundled manual reference path. Task-trained `yolo_ocr` variants still rely on YOLO class/accessory IDs for pass/fail unless the task also implements OCR/profile-to-accessory resolution. |
 | AI Detection API | A stateless multimodal API checks the image against structured accessory profiles. | Useful as an API-backed option or fallback when a local model has not been trained yet. |
 
 These are model choices for the same task model selector, not separate products.
 A task may expose only the model variants that exist for that task.
+For new text-heavy tasks, treat OCR as an evidence source or extension point
+until the task manifest and runtime explicitly map OCR/profile output back to
+accessory IDs.
 
 ## Typical Toolflow
 
@@ -54,7 +60,9 @@ A task may expose only the model variants that exist for that task.
      controlled extra-accessory negatives.
 
 3. Train or select a model.
-   - Train a YOLO or YOLO + OCR task model from a generated dataset.
+   - Train a YOLO task model from a generated dataset.
+   - Use a YOLO + OCR task variant only where the task supports OCR evidence or
+     explicit OCR-to-accessory resolution.
    - Reuse completed training runs from the training library.
    - Keep the old built-in bottle/manual models as reference models.
 
@@ -128,14 +136,16 @@ The default committed reference task contains five historical accessories:
 This setup demonstrates two important patterns:
 
 - Object accessories, such as the bottle, can be detected directly.
-- Text-heavy accessories, such as similar manuals, may need OCR or AI profile
-  evidence because their shape and size are almost identical.
+- Text-heavy accessories, such as similar manuals, may need direct trained
+  classes, scoped OCR resolution, or AI profile evidence because their shape and
+  size are almost identical.
 
 Reference model artifacts include:
 
 - `models/current_2class_yolo26s_seg_best.pt`
   - Detects bottle and generic manual geometry.
-  - The service uses OCR to map manual crops into business manual classes.
+  - The bundled reference flow can use OCR to map manual crops into business
+    manual classes.
 - `models/current_5class_yolo26s_seg_best.pt`
   - Detects the five reference classes directly.
 
@@ -145,8 +155,10 @@ inspection rule metadata.
 
 ## AI Detection Configuration
 
-AI Detection is configured locally through the web UI or environment variables.
-Supported provider modes are:
+AI Detection has two configuration layers:
+
+- The current web UI exposes Gemini configuration.
+- The backend also supports provider modes through environment/local settings:
 
 - `gemini`
 - `openai`
