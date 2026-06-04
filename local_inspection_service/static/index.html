@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>流水线配件检测</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260531-training-time-cleanup" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260604-ai-key-menu-fix" />
   </head>
   <body>
     <div class="app-shell">
@@ -134,8 +134,9 @@
                 <label>检测数量</label>
                 <strong id="detectionCount">-</strong>
               </div>
-              <div>
+              <div class="metric-info-card">
                 <label>通过率</label>
+                <button id="openAiDebug" class="metric-info-button" type="button" aria-label="查看 AI 接口返回详情" title="查看 AI 接口返回详情">i</button>
                 <strong id="passRate">-</strong>
               </div>
             </div>
@@ -176,6 +177,49 @@
             </div>
             <div id="classRules" class="check-list"></div>
             <button id="saveRules" class="secondary">保存规则</button>
+          </section>
+
+          <section class="panel page-panel ai-config-panel">
+            <div class="section-title title-with-action">
+              <div class="title-inline">
+                <span>02</span>
+                <h3>AI 检测设置</h3>
+              </div>
+              <strong id="aiConfigStatus" class="pill neutral">未启用</strong>
+            </div>
+            <div class="ai-config-grid">
+              <div class="field">
+                <label>Provider</label>
+                <select id="aiProvider">
+                  <option value="gemini">Gemini</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Model</label>
+                <select id="aiModel">
+                  <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Base URL</label>
+                <input id="aiBaseUrl" type="url" value="https://generativelanguage.googleapis.com/v1beta" readonly />
+              </div>
+              <div class="field">
+                <label>Timeout</label>
+                <input id="aiTimeout" type="number" min="0.5" max="30" step="0.5" value="5" />
+              </div>
+              <div class="field ai-key-field">
+                <label>API Key</label>
+                <div id="aiKeyControl" class="ai-key-select"></div>
+              </div>
+              <div class="ai-actions ai-config-actions">
+                <button id="saveAiConfig" class="secondary" type="button">保存 AI 设置</button>
+              </div>
+            </div>
           </section>
         </section>
 
@@ -565,6 +609,7 @@
           <button id="closeAccessoryDetail" class="icon-button" type="button" aria-label="关闭配件素材">×</button>
         </div>
         <div id="accessoryDetailSummary" class="process-box"></div>
+        <input id="accessoryDetailFiles" class="hidden-file-input" type="file" multiple accept="image/*" hidden />
         <div id="accessoryDetailGrid" class="training-preview-grid asset-gallery-grid"></div>
       </section>
     </div>
@@ -596,6 +641,19 @@
           <button id="cancelDeleteAccessory" class="secondary" type="button">取消</button>
           <button id="confirmDeleteAccessory" class="danger-action" type="button">确认删除</button>
         </div>
+      </section>
+    </div>
+
+    <div id="aiDebugModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel ai-debug-modal" role="dialog" aria-modal="true" aria-labelledby="aiDebugTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">AI Debug</p>
+            <h2 id="aiDebugTitle">接口返回详情</h2>
+          </div>
+          <button id="closeAiDebug" class="icon-button" type="button" aria-label="关闭 AI 返回详情">×</button>
+        </div>
+        <pre id="aiDebugBody" class="ai-debug-body">暂无检测结果。</pre>
       </section>
     </div>
 
@@ -646,6 +704,6 @@
     </section>
 
     <div id="toast" class="toast"></div>
-    <script src="/static/app.js?v=20260531-training-time-cleanup"></script>
+    <script src="/static/app.js?v=20260604-ai-key-menu-fix"></script>
   </body>
 </html>

@@ -1,5 +1,8 @@
 const state = {
   config: null,
+  aiConfig: null,
+  aiKeyMenuOpen: false,
+  aiKeyAdding: false,
   classes: [],
   models: [],
   specializedModels: [],
@@ -30,6 +33,9 @@ const state = {
   lastResult: null,
   accessoryPendingFiles: [],
   accessoryPendingFileUrls: new Map(),
+  accessoryDetailItem: null,
+  accessoryDetailPendingFiles: [],
+  accessoryDetailPendingFileUrls: new Map(),
   promptEntries: [],
   crop: null,
   camera: {
@@ -110,6 +116,12 @@ const TRAINING_IMAGE_SIZE_OPTIONS = [
   { value: "1024", label: "1024 px", meta: "高精度" },
   { value: "1280", label: "1280 px", meta: "更慢" },
 ];
+const AI_PROVIDER_DEFAULTS = {
+  gemini: {
+    model: "gemini-2.5-flash-lite",
+    base_url: "https://generativelanguage.googleapis.com/v1beta",
+  },
+};
 
 function zhLabel(label) {
   return CLASS_LABEL_ZH[label] || label || "-";
@@ -141,16 +153,320 @@ async function api(path, options = {}) {
 }
 
 function setBusy(button, busy) {
+  if (!button) return;
   button.disabled = busy;
 }
 
 function modelVariantLabel(model) {
+  if (model?.is_ai_detection || model?.variant === "ai_detection" || String(model?.id || "").startsWith("ai_detection")) return model?.label || "AI 检测";
   return model?.variant === "yolo_ocr" || model?.uses_ocr ? "YOLO + OCR" : "YOLO";
 }
 
 function taskAccessoryLabel(task) {
   const names = task?.accessory_names || [];
   return names.length ? names.join(" + ") : task?.label || task?.task_id || "通用配件合集";
+}
+
+function aiProviderMeta(status) {
+  if (!status) return "";
+  if (status.status === "ready") return `${status.model || "AI"} · 已配置`;
+  if (status.status === "disabled") return "未启用 · 将返回结构化缺失";
+  if (status.status === "missing_api_key") return "缺少 API Key · 将返回结构化缺失";
+  if (status.status === "unsupported_provider") return "Provider 不支持";
+  return status.message || status.status || "";
+}
+
+function aiStatusText(status) {
+  if (status === "ready") return "已配置";
+  if (status === "disabled") return "未启用";
+  if (status === "missing_api_key") return "缺少 Key";
+  if (status === "unsupported_provider") return "Provider 不支持";
+  if (status === "invalid_base_url") return "URL 无效";
+  return status || "未知";
+}
+
+function aiKeySourceText(source) {
+  if (source === "env") return "环境变量";
+  if (source === "local") return "本地";
+  return "未设置";
+}
+
+function renderAiModelOptions(config) {
+  const options = config.model_options?.length
+    ? config.model_options
+    : [
+        { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
+        { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+        { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+        { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+        { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
+      ];
+  $("aiModel").innerHTML = options
+    .map((item) => `<option value="${escapeAttr(item.id)}">${escapeHtml(item.label || item.id)}</option>`)
+    .join("");
+}
+
+function localAiKeys(config = state.aiConfig || {}) {
+  return Array.isArray(config.api_keys) ? config.api_keys : [];
+}
+
+function activeLocalAiKey(config = state.aiConfig || {}) {
+  return localAiKeys(config).find((item) => item.id === config.active_key_id) || null;
+}
+
+function aiKeyMetaText(config, activeKey) {
+  const keySource = aiKeySourceText(config.key_source);
+  if (config.key_source === "env") {
+    const sourceName = config.key_source_name ? ` · ${config.key_source_name}` : "";
+    const localText = activeKey ? ` · 本地候选：${activeKey.label || "API Key"}` : "";
+    return `当前来源：${keySource}${sourceName}${localText}`;
+  }
+  if (activeKey) return `当前来源：${keySource} · ${activeKey.masked_key || "****"}`;
+  if (config.key_present) return `当前来源：${keySource} · ${config.masked_key || "****"}`;
+  return "未设置 Key";
+}
+
+function renderAiKeyControl(config = state.aiConfig || {}) {
+  const control = $("aiKeyControl");
+  if (!control) return;
+  const keys = localAiKeys(config);
+  const activeKey = activeLocalAiKey(config);
+  const isOpen = state.aiKeyMenuOpen || state.aiKeyAdding;
+  const selectedLabel = activeKey
+    ? `${activeKey.label || "API Key"} · ${activeKey.masked_key || "****"}`
+    : config.key_source === "env" && config.masked_key
+      ? `环境变量 · ${config.masked_key}`
+      : "暂无本地 API Key";
+  const keyRows = keys.length
+    ? keys
+        .map((item) => {
+          const isActive = item.id === config.active_key_id;
+          return `
+            <div class="ai-key-option-row${isActive ? " active" : ""}">
+              <button class="ai-key-option" type="button" data-select-ai-key="${escapeAttr(item.id)}">
+                <span class="ai-key-option-copy">
+                  <strong>${escapeHtml(item.label || "API Key")}</strong>
+                  <small>${escapeHtml(item.masked_key || "****")}</small>
+                </span>
+                ${isActive ? `<span class="ai-key-current">当前</span>` : ""}
+              </button>
+              <button
+                class="ai-key-delete"
+                type="button"
+                data-delete-ai-key="${escapeAttr(item.id)}"
+                aria-label="删除 ${escapeAttr(item.label || "API Key")}"
+                title="删除"
+              >删除</button>
+            </div>
+          `;
+        })
+        .join("")
+    : `<div class="ai-key-empty-row">暂无本地 API Key</div>`;
+  const addRow = state.aiKeyAdding
+    ? `
+      <div class="ai-key-add-editor">
+        <input id="aiKeyNewValue" type="password" autocomplete="off" placeholder="粘贴新的 API Key" />
+        <button id="confirmAddAiKey" class="mini-secondary" type="button">添加</button>
+        <button id="cancelAddAiKey" class="mini-secondary" type="button">取消</button>
+      </div>
+    `
+    : `
+      <button id="addAiKeyRow" class="ai-key-add-row" type="button">
+        <span>+</span>
+        <strong>添加 API Key</strong>
+      </button>
+    `;
+
+  control.className = `ai-key-select${isOpen ? " open" : ""}`;
+  control.innerHTML = `
+    <button id="aiKeyTrigger" class="ai-key-trigger" type="button" aria-haspopup="listbox" aria-expanded="${isOpen ? "true" : "false"}">
+      <span class="ai-key-trigger-copy">
+        <strong>${escapeHtml(selectedLabel)}</strong>
+        <small>${escapeHtml(aiKeyMetaText(config, activeKey))}</small>
+      </span>
+      <span class="ai-key-trigger-icon">⌄</span>
+    </button>
+    <div class="ai-key-menu" role="listbox" aria-label="API Key 列表">
+      ${keyRows}
+      ${addRow}
+    </div>
+  `;
+  bindAiKeyControl();
+  if (state.aiKeyAdding) requestAnimationFrame(() => $("aiKeyNewValue")?.focus());
+}
+
+function renderAiConfig() {
+  if (!$("aiProvider")) return;
+  const config = state.aiConfig || {};
+  const defaults = AI_PROVIDER_DEFAULTS[config.provider] || AI_PROVIDER_DEFAULTS.gemini;
+  $("aiProvider").value = "gemini";
+  renderAiModelOptions(config);
+  $("aiModel").value = config.model || defaults.model;
+  $("aiBaseUrl").value = config.base_url || defaults.base_url;
+  $("aiTimeout").value = config.timeout_seconds || 5;
+  $("aiConfigStatus").textContent = aiStatusText(config.status);
+  $("aiConfigStatus").className = `pill ${config.status === "ready" ? "ok" : config.status === "missing_api_key" ? "neutral" : "fail"}`;
+  renderAiKeyControl(config);
+}
+
+async function refreshStatusAfterAiConfig() {
+  const status = await api("/api/status");
+  state.classes = status.classes;
+  renderModels(status);
+}
+
+function currentAiSettingsPayload(extra = {}) {
+  return {
+    provider: "gemini",
+    model: $("aiModel").value,
+    base_url: $("aiBaseUrl").value.trim(),
+    timeout_seconds: Number($("aiTimeout").value || 5),
+    ...extra,
+  };
+}
+
+async function postAiConfig(payload) {
+  const result = await api("/api/ai/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  state.aiConfig = result;
+  state.aiKeyAdding = false;
+  state.aiKeyMenuOpen = false;
+  renderAiConfig();
+  await refreshStatusAfterAiConfig();
+  return result;
+}
+
+async function saveAiConfig() {
+  await postAiConfig(currentAiSettingsPayload());
+}
+
+async function selectAiKey(keyId, button = null) {
+  if (!keyId) return;
+  if (keyId === state.aiConfig?.active_key_id) {
+    state.aiKeyMenuOpen = false;
+    state.aiKeyAdding = false;
+    renderAiKeyControl();
+    return;
+  }
+  setBusy(button, true);
+  try {
+    await postAiConfig({ active_key_id: keyId });
+    toast("API Key 已切换。");
+  } catch (error) {
+    toast(`切换 API Key 失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function addAiKeyFromControl(button = null) {
+  const input = $("aiKeyNewValue");
+  const apiKey = input?.value.trim() || "";
+  if (!apiKey) {
+    input?.focus();
+    return toast("请输入新的 API Key。");
+  }
+  setBusy(button, true);
+  try {
+    await postAiConfig(currentAiSettingsPayload({ api_key: apiKey }));
+    if (input) input.value = "";
+    toast("API Key 已添加并启用。");
+  } catch (error) {
+    toast(`添加 API Key 失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function deleteAiKeyById(keyId, button = null) {
+  const key = localAiKeys().find((item) => item.id === keyId);
+  if (!key) return toast("要删除的 API Key 不存在。");
+  if (!window.confirm(`确认删除 ${key.label || "API Key"}？`)) return;
+  setBusy(button, true);
+  try {
+    if (keyId !== state.aiConfig?.active_key_id) {
+      await api("/api/ai/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active_key_id: keyId }),
+      });
+    }
+    const result = await api("/api/ai/config/key", { method: "DELETE" });
+    state.aiConfig = result;
+    state.aiKeyAdding = false;
+    state.aiKeyMenuOpen = true;
+    renderAiConfig();
+    await refreshStatusAfterAiConfig();
+    toast(result.active_key_id ? "API Key 已删除，已切换到下一把 Key。" : "API Key 已删除。");
+  } catch (error) {
+    toast(`删除 API Key 失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function closeAiKeyControl() {
+  if (!state.aiKeyMenuOpen && !state.aiKeyAdding) return;
+  state.aiKeyMenuOpen = false;
+  state.aiKeyAdding = false;
+  renderAiKeyControl();
+}
+
+function bindAiKeyControl() {
+  $("aiKeyTrigger")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    state.aiKeyMenuOpen = !state.aiKeyMenuOpen;
+    state.aiKeyAdding = false;
+    renderAiKeyControl();
+  });
+  document.querySelectorAll("[data-select-ai-key]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectAiKey(button.dataset.selectAiKey, button);
+    });
+  });
+  document.querySelectorAll("[data-delete-ai-key]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteAiKeyById(button.dataset.deleteAiKey, button);
+    });
+  });
+  $("addAiKeyRow")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    state.aiKeyMenuOpen = true;
+    state.aiKeyAdding = true;
+    renderAiKeyControl();
+  });
+  $("cancelAddAiKey")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    state.aiKeyAdding = false;
+    state.aiKeyMenuOpen = true;
+    renderAiKeyControl();
+  });
+  $("confirmAddAiKey")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    addAiKeyFromControl($("confirmAddAiKey"));
+  });
+  $("aiKeyNewValue")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addAiKeyFromControl($("confirmAddAiKey"));
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeAiKeyControl();
+    }
+  });
+}
+
+function accessoryAiProfileText(item) {
+  const status = item?.ai_profile_status || {};
+  if (status.source === "provider") return "AI画像已生成";
+  if (item?.ai_profile) return "AI画像本地回退";
+  return "AI画像待生成";
 }
 
 function closeCustomMenus(except = null) {
@@ -268,14 +584,22 @@ function setProgress(value, title, detail) {
 function startProgress(kind) {
   if (state.progressTimer) cancelAnimationFrame(state.progressTimer);
   const isVideo = kind === "video";
-  const usesOcr = selectedModel()?.uses_ocr !== false;
+  const model = selectedModel();
+  const isAi = model?.is_ai_detection || model?.variant === "ai_detection";
+  const usesOcr = model?.uses_ocr !== false;
   const phases = isVideo
     ? [
         [18, "上传视频", "正在上传视频文件。"],
         [38, "抽取关键帧", "正在选取可用画面。"],
-        [68, "识别配件", "正在定位瓶子和说明书。"],
+        [68, "识别配件", isAi ? "正在逐帧调用 AI 检测。" : "正在定位瓶子和说明书。"],
         [90, "汇总结果", "正在合并帧级判断。"],
       ]
+    : isAi
+      ? [
+          [20, "上传图片", "正在上传图片文件。"],
+          [58, "AI 检测", "正在核对配件画像与当前画面。"],
+          [88, "结构化结果", "正在整理存在/缺失判断。"],
+        ]
     : usesOcr
       ? [
           [18, "上传图片", "正在上传图片文件。"],
@@ -289,7 +613,7 @@ function startProgress(kind) {
           [90, "核对规则", "正在检查配件是否齐全。"],
         ];
   const startTime = performance.now();
-  const expectedMs = isVideo ? 36000 : 18000;
+  const expectedMs = isVideo ? 36000 : isAi ? 6500 : 18000;
   setProgress(3, phases[0][1], phases[0][2]);
 
   const tick = (now) => {
@@ -432,20 +756,102 @@ function setBadge(passed, waiting = false) {
 function renderParts(rule) {
   const tbody = $("partsTable");
   tbody.innerHTML = "";
+  if (rule?.match_policy === "ai_presence") {
+    const present = new Set((rule.present || []).map(String));
+    const missing = new Set((rule.missing || []).map(String));
+    const rows = [...present, ...missing];
+    for (const accessoryId of rows) {
+      const det = (state.lastResult?.detections || []).find((item) => String(item.accessory_id) === accessoryId) || {};
+      const accessory = state.accessories.find((item) => String(item.id) === accessoryId);
+      const isMissing = missing.has(accessoryId);
+      const tr = document.createElement("tr");
+      tr.classList.add(isMissing ? "missing-row" : "present-row");
+      if (isMissing) tr.classList.add("missing");
+      tr.innerHTML = `
+        <td>${escapeHtml(zhLabel(det.label || accessory?.name || accessoryId))}</td>
+        <td>${isMissing ? "否" : "是"}</td>
+        <td>是</td>
+        <td>${det.confidence === undefined ? "-" : Number(det.confidence).toFixed(3)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    return;
+  }
   const rows = [...(rule.present || []), ...(rule.missing || [])];
   for (const row of rows) {
     const tr = document.createElement("tr");
-    const isMissing = (rule.missing || []).some((m) => m.class_id === row.class_id);
+    const rowKey = typeof row === "string" ? row : row.class_id;
+    const isMissing = (rule.missing || []).some((m) => (typeof m === "string" ? m : m.class_id) === rowKey);
     tr.classList.add(isMissing ? "missing-row" : "present-row");
     if (isMissing) tr.classList.add("missing");
+    const label = typeof row === "string" ? row : row.label;
     tr.innerHTML = `
-      <td>${zhLabel(row.label)}</td>
-      <td>${row.found}</td>
-      <td>${row.required}</td>
-      <td>${row.max_confidence === undefined ? "-" : Number(row.max_confidence).toFixed(3)}</td>
+      <td>${zhLabel(label)}</td>
+      <td>${typeof row === "string" ? (isMissing ? "否" : "是") : row.found}</td>
+      <td>${typeof row === "string" ? "是" : row.required}</td>
+      <td>${typeof row === "string" || row.max_confidence === undefined ? "-" : Number(row.max_confidence).toFixed(3)}</td>
     `;
     tbody.appendChild(tr);
   }
+}
+
+function aiResultMetaText(result) {
+  if (!result?.ai) return "-";
+  if (result.ai.timed_out) return `AI 超时：${result.ai.error || "超过检测时间"}`;
+  if (result.ai.error) return `AI 错误：${result.ai.error}`;
+  const pieces = [];
+  const provider = aiProviderMeta({ status: result.ai.provider_status, model: result.model?.provider_model });
+  if (provider) pieces.push(provider);
+  if (result.ai.latency_ms !== undefined) pieces.push(`${result.ai.latency_ms} ms`);
+  if (result.ai.fallback_model) pieces.push(`备用 ${result.ai.fallback_model}`);
+  return pieces.join(" / ") || "-";
+}
+
+function aiDebugPayload(result = state.lastResult) {
+  if (!result) return { message: "暂无检测结果。" };
+  const payload = {
+    request_id: result.request_id,
+    passed: result.passed,
+    model: result.model,
+    ai: result.ai || null,
+    rule: result.rule || null,
+    detections: result.detections || [],
+    missing_required: result.missing_required || [],
+    annotated_url: result.annotated_url || result.preview_url || "",
+  };
+  if (Array.isArray(result.frames)) {
+    payload.video = {
+      sampled_frames: result.sampled_frames || 0,
+      passed_frames: result.passed_frames || 0,
+      pass_rate: result.pass_rate || 0,
+      preview_url: result.preview_url || "",
+    };
+    payload.video_frames = result.frames.map((frame) => ({
+      frame_index: frame.frame_index,
+      timestamp_seconds: frame.timestamp_seconds,
+      passed: frame.passed,
+      missing: frame.missing || [],
+      detections: frame.detections,
+      annotated_url: frame.annotated_url || "",
+      model: frame.model || null,
+      ai: frame.ai || null,
+      rule: frame.rule || null,
+      detection_items: frame.detection_items || [],
+    }));
+  }
+  return payload;
+}
+
+function openAiDebugModal() {
+  const body = $("aiDebugBody");
+  if (body) body.textContent = JSON.stringify(aiDebugPayload(), null, 2);
+  $("aiDebugModal").classList.add("visible");
+  $("aiDebugModal").setAttribute("aria-hidden", "false");
+}
+
+function closeAiDebugModal() {
+  $("aiDebugModal").classList.remove("visible");
+  $("aiDebugModal").setAttribute("aria-hidden", "true");
 }
 
 function renderImageResult(result) {
@@ -453,7 +859,7 @@ function renderImageResult(result) {
   setBadge(result.passed);
   $("decisionText").textContent = result.passed ? "通过" : "不通过";
   $("detectionCount").textContent = result.detections?.length ?? "-";
-  $("passRate").textContent = "-";
+  $("passRate").textContent = aiResultMetaText(result);
   renderParts(result.rule);
   const img = $("previewImage");
   img.src = `${result.annotated_url}?t=${Date.now()}`;
@@ -471,10 +877,11 @@ function renderVideoResult(result) {
   const missing = [];
   for (const frame of result.frames || []) {
     for (const item of frame.missing || []) {
-      if (!missing.find((x) => x.class_id === item.class_id)) missing.push(item);
+      const key = typeof item === "string" ? item : item.class_id;
+      if (!missing.find((x) => (typeof x === "string" ? x : x.class_id) === key)) missing.push(item);
     }
   }
-  renderParts({ present: [], missing });
+  renderParts({ match_policy: missing.some((item) => typeof item === "string") ? "ai_presence" : "exact_count", present: [], missing });
   if (result.preview_url) {
     const img = $("previewImage");
     img.src = `${result.preview_url}?t=${Date.now()}`;
@@ -678,7 +1085,7 @@ function renderAccessories(items) {
     row.innerHTML = `
       <div>
         <strong>${escapeHtml(zhLabel(item.name))}</strong>
-        <span>${material} · 类别 ${item.class_id} · ${files} 个素材 · ${size} · ${STATUS_ZH[item.status] || item.status}</span>
+        <span>${material} · 类别 ${item.class_id} · ${files} 个素材 · ${size} · ${STATUS_ZH[item.status] || item.status} · ${accessoryAiProfileText(item)}</span>
       </div>
       <button class="mini-secondary" data-view-accessory="${escapeAttr(item.id)}" type="button">查看</button>
       <button class="mini-danger" data-delete-accessory="${escapeAttr(item.id)}" type="button">删除</button>
@@ -708,44 +1115,43 @@ async function openAccessoryDetail(accessoryId) {
     const result = await api(`/api/accessories/${encodeURIComponent(accessoryId)}/detail`);
     const item = result.item || {};
     const gallery = result.gallery || [];
+    state.accessoryDetailItem = item;
+    renderAccessoryDetailFileQueue();
     $("accessoryDetailTitle").textContent = zhLabel(item.name || "配件素材");
     $("accessoryDetailSummary").innerHTML = `
       <strong>${escapeHtml(zhLabel(item.name || "配件"))} · ${item.material_type === "text" ? "文字类" : "物品类"}</strong>
       <span>这里展示该配件当前可用的原始素材、规范化图片以及多角度视图。</span>
       <span>尺寸：${escapeHtml(formatPhysicalSize(item.physical_size))}</span>
+      <span>${escapeHtml(accessoryAiProfileText(item))}${item.ai_profile_status?.message ? `：${escapeHtml(item.ai_profile_status.message)}` : ""}</span>
       ${item.material_type === "object" ? `<span>透明策略：${escapeHtml(alphaPolicyLabel(item.material_alpha_policy))}</span>` : ""}
       ${item.clean_sprite_count ? `<span>${escapeHtml(`无背景素材：${item.clean_sprite_count}/${item.clean_sprite_expected_count || item.clean_sprite_count}${item.clean_sprite_failed_cells?.length ? `，失败 ${item.clean_sprite_failed_cells.length} 格` : ""}`)}</span>` : ""}
     `;
     const grid = $("accessoryDetailGrid");
     grid.innerHTML = "";
-    if (!gallery.length) {
-      grid.innerHTML = `<div class="empty-state light">当前配件还没有可查看的图片素材</div>`;
-    }
     for (const [index, asset] of gallery.entries()) {
       const card = document.createElement("figure");
-      card.className = "training-preview-card";
+      card.className = `training-preview-card asset-thumb-card${asset.ai_reference ? " ai-reference" : ""}`;
       const assetLabel = userJobLabel(asset.label || `素材 ${index + 1}`);
-      const footprint = Array.isArray(asset.render_footprint_mm)
-        ? ` · ${asset.render_scale_basis || "footprint"} · ${asset.render_footprint_mm.join("×")}mm`
-        : "";
-      const alphaMeta = asset.material_alpha_policy ? ` · ${alphaPolicyLabel(asset.material_alpha_policy)}` : "";
-      const spriteMeta = asset.kind === "clean_object_sprite"
-        ? `${asset.task_id || "无 Task ID"} · ${asset.pose_family || "-"} · ${asset.source_position || asset.pose_position || "-"} · ${(Number(asset.rotation_degrees_applied_to_upright || 0)).toFixed(1)}°${alphaMeta}${footprint}`
-        : asset.kind === "pose_collection"
-        ? "多角度视图"
-        : "参考素材";
       card.innerHTML = `
         <button class="preview-open" type="button" data-preview-url="${escapeAttr(asset.url)}">
           <img src="${escapeAttr(asset.url)}?t=${Date.now()}" alt="${escapeHtml(assetLabel)}" />
         </button>
-        <figcaption>
-          <strong>${escapeHtml(assetLabel)}</strong>
-          <span>${escapeHtml(spriteMeta)}</span>
-        </figcaption>
+        <button class="asset-ai-select" type="button" data-set-ai-reference="${escapeAttr(asset.source_path)}" aria-label="设为 AI 素材"></button>
+        ${asset.deletable ? `<button class="asset-delete" type="button" data-delete-accessory-file="${escapeAttr(asset.source_path)}" aria-label="删除照片">×</button>` : ""}
       `;
       grid.appendChild(card);
     }
+    const addCard = document.createElement("button");
+    addCard.className = "asset-add-card";
+    addCard.type = "button";
+    addCard.dataset.addAccessoryFile = "true";
+    addCard.setAttribute("aria-label", "添加照片");
+    addCard.textContent = "+";
+    grid.appendChild(addCard);
     bindImagePreviewTriggers(grid);
+    bindAccessoryFileDeletes(grid);
+    bindAccessoryAiReferenceButtons(grid);
+    bindAccessoryFileAdd(grid);
     $("accessoryDetailModal").classList.add("visible");
     $("accessoryDetailModal").setAttribute("aria-hidden", "false");
   } catch (error) {
@@ -753,7 +1159,194 @@ async function openAccessoryDetail(accessoryId) {
   }
 }
 
+function clearAccessoryDetailFileQueue() {
+  for (const url of state.accessoryDetailPendingFileUrls.values()) URL.revokeObjectURL(url);
+  state.accessoryDetailPendingFileUrls.clear();
+  state.accessoryDetailPendingFiles = [];
+  if ($("accessoryDetailFiles")) $("accessoryDetailFiles").value = "";
+  renderAccessoryDetailFileQueue();
+}
+
+function addAccessoryDetailPendingFiles(fileList) {
+  const existing = new Set(state.accessoryDetailPendingFiles.map(accessoryFileKey));
+  for (const file of Array.from(fileList || [])) {
+    if (!file.type.startsWith("image/")) continue;
+    const key = accessoryFileKey(file);
+    if (existing.has(key)) continue;
+    state.accessoryDetailPendingFiles.push(file);
+    existing.add(key);
+  }
+  if ($("accessoryDetailFiles")) $("accessoryDetailFiles").value = "";
+  renderAccessoryDetailFileQueue();
+}
+
+function removeAccessoryDetailPendingFile(index) {
+  const file = state.accessoryDetailPendingFiles[Number(index)];
+  if (!file) return;
+  const key = accessoryFileKey(file);
+  const url = state.accessoryDetailPendingFileUrls.get(key);
+  if (url) URL.revokeObjectURL(url);
+  state.accessoryDetailPendingFileUrls.delete(key);
+  state.accessoryDetailPendingFiles.splice(Number(index), 1);
+  renderAccessoryDetailFileQueue();
+}
+
+function renderAccessoryDetailFileQueue() {
+  const queue = $("accessoryDetailFileQueue");
+  if (!queue) return;
+  if (!state.accessoryDetailPendingFiles.length) {
+    const material = state.accessoryDetailItem?.material_type === "text" ? "文档照片会先进入四角裁切" : "物体照片会直接保存";
+    queue.innerHTML = `<div class="upload-thumb-empty">${material}</div>`;
+    return;
+  }
+  queue.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "upload-thumb-summary";
+  title.textContent = `待添加照片 ${state.accessoryDetailPendingFiles.length} 张`;
+  queue.appendChild(title);
+  const grid = document.createElement("div");
+  grid.className = "upload-thumb-grid";
+  for (const [index, file] of state.accessoryDetailPendingFiles.entries()) {
+    const key = accessoryFileKey(file);
+    if (!state.accessoryDetailPendingFileUrls.has(key)) {
+      state.accessoryDetailPendingFileUrls.set(key, URL.createObjectURL(file));
+    }
+    const url = state.accessoryDetailPendingFileUrls.get(key);
+    const card = document.createElement("div");
+    card.className = "upload-thumb-card";
+    card.innerHTML = `
+      <button type="button" class="upload-thumb-remove" data-remove-detail-pending-file="${index}" aria-label="移除照片">×</button>
+      <img src="${escapeAttr(url)}" alt="${escapeHtml(file.name)}" />
+      <span title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <em>图片</em>
+    `;
+    grid.appendChild(card);
+  }
+  queue.appendChild(grid);
+  queue.querySelectorAll("[data-remove-detail-pending-file]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      removeAccessoryDetailPendingFile(button.dataset.removeDetailPendingFile);
+    });
+  });
+}
+
+function applyDetailPaperSizeForCrop(item) {
+  const size = item?.physical_size || {};
+  const previous = {
+    preset: $("paperPreset")?.value,
+    width: $("paperWidthMm")?.value,
+    height: $("paperHeightMm")?.value,
+  };
+  if (size.kind === "paper") {
+    $("paperPreset").value = PAPER_PRESETS[size.preset] ? size.preset : "custom";
+    $("paperWidthMm").value = size.width_mm || PAPER_PRESETS.A4[0];
+    $("paperHeightMm").value = size.height_mm || PAPER_PRESETS.A4[1];
+    updatePaperDimensionLock();
+  }
+  return () => {
+    if (previous.preset !== undefined) $("paperPreset").value = previous.preset;
+    if (previous.width !== undefined) $("paperWidthMm").value = previous.width;
+    if (previous.height !== undefined) $("paperHeightMm").value = previous.height;
+    updatePaperDimensionLock();
+  };
+}
+
+async function uploadAccessoryDetailFiles() {
+  const item = state.accessoryDetailItem;
+  if (!item?.id) return toast("请先打开一个配件。");
+  if (!state.accessoryDetailPendingFiles.length) return toast("请先选择要添加的照片。");
+  const button = $("addAccessoryDetailFiles");
+  setBusy(button, true);
+  let restorePaperSize = null;
+  try {
+    const form = new FormData();
+    let uploadFiles = state.accessoryDetailPendingFiles;
+    if (item.material_type === "text") {
+      restorePaperSize = applyDetailPaperSizeForCrop(item);
+      uploadFiles = await prepareTextAccessoryFiles(state.accessoryDetailPendingFiles);
+    }
+    for (const file of uploadFiles) form.append("files", file);
+    const result = await api(`/api/accessories/${encodeURIComponent(item.id)}/files`, { method: "POST", body: form });
+    renderAccessories(result.items);
+    clearAccessoryDetailFileQueue();
+    await openAccessoryDetail(item.id);
+    toast("照片已添加到当前配件。");
+  } catch (error) {
+    toast(`添加照片失败：${error.message}`);
+  } finally {
+    if (restorePaperSize) restorePaperSize();
+    setBusy(button, false);
+  }
+}
+
+function bindAccessoryFileDeletes(scope) {
+  scope.querySelectorAll("[data-delete-accessory-file]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = state.accessoryDetailItem;
+      if (!item?.id) return;
+      const sourcePath = button.dataset.deleteAccessoryFile;
+      if (!window.confirm("删除这张照片？")) return;
+      setBusy(button, true);
+      try {
+        const result = await api(`/api/accessories/${encodeURIComponent(item.id)}/files`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_path: sourcePath }),
+        });
+        renderAccessories(result.items);
+        await openAccessoryDetail(item.id);
+        toast("照片已删除。");
+      } catch (error) {
+        toast(`删除照片失败：${error.message}`);
+      } finally {
+        setBusy(button, false);
+      }
+    });
+  });
+}
+
+function bindAccessoryAiReferenceButtons(scope) {
+  scope.querySelectorAll("[data-set-ai-reference]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = state.accessoryDetailItem;
+      if (!item?.id) return;
+      const sourcePath = button.dataset.setAiReference;
+      setBusy(button, true);
+      try {
+        const result = await api(`/api/accessories/${encodeURIComponent(item.id)}/ai-reference`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_path: sourcePath }),
+        });
+        renderAccessories(result.items);
+        await openAccessoryDetail(item.id);
+        toast("AI 素材已切换。");
+      } catch (error) {
+        toast(`切换 AI 素材失败：${error.message}`);
+      } finally {
+        setBusy(button, false);
+      }
+    });
+  });
+}
+
+function bindAccessoryFileAdd(scope) {
+  scope.querySelectorAll("[data-add-accessory-file]").forEach((button) => {
+    button.addEventListener("click", () => {
+      $("accessoryDetailFiles")?.click();
+    });
+  });
+}
+
 function closeAccessoryDetail() {
+  clearAccessoryDetailFileQueue();
+  state.accessoryDetailItem = null;
   $("accessoryDetailModal").classList.remove("visible");
   $("accessoryDetailModal").setAttribute("aria-hidden", "true");
 }
@@ -804,8 +1397,8 @@ function renderModelMenu() {
   const modelOptions = models.map((model) => ({
     value: model.id,
     label: modelVariantLabel(model),
-    meta: model.exists ? model.label || "" : `${model.label || ""} 文件缺失`.trim(),
-    disabled: !model.exists,
+    meta: model.is_ai_detection ? aiProviderMeta(model.provider_status) : model.exists ? model.label || "" : `${model.label || ""} 文件缺失`.trim(),
+    disabled: !model.exists && !model.is_ai_detection,
   }));
   if (!modelOptions.some((item) => item.value === state.selectedModelId)) {
     state.selectedModelId = state.selectedTaskId === "__default__" ? state.activeModelId : "";
@@ -912,15 +1505,18 @@ function handleFullscreenChange() {
 async function loadInitial() {
   const status = await api("/api/status");
   const config = await api("/api/config");
+  const aiConfig = await api("/api/ai/config");
   const accessories = await api("/api/accessories");
   const trainingPlan = await api("/api/training/plan");
   state.config = config;
+  state.aiConfig = aiConfig;
   state.classes = status.classes;
   $("serviceState").textContent = STATUS_ZH[status.service] || status.service;
   $("serviceState").className = `pill ${status.service === "running" ? "ok" : "fail"}`;
   $("modelState").textContent = status.model_exists ? "模型已加载" : "模型缺失";
   $("modelState").className = `pill ${status.model_exists ? "ok" : "fail"}`;
   renderModels(status);
+  renderAiConfig();
   renderRules();
   renderAccessories(accessories.items);
   renderTrainingPlan(trainingPlan);
@@ -2569,6 +3165,7 @@ const MODAL_CLOSE_HANDLERS = [
   ["accessoryReviewModal", closeAccessoryReview],
   ["previewModal", closePreviewModal],
   ["backgroundUploadModal", closeBackgroundUploadModal],
+  ["aiDebugModal", closeAiDebugModal],
   ["backgroundGalleryModal", closeBackgroundGalleryModal],
 ];
 
@@ -2651,6 +3248,8 @@ function bindActions() {
   $("closePreviewModal").addEventListener("click", closePreviewModal);
   $("cancelPreviewModal").addEventListener("click", closePreviewModal);
   $("closeImageViewer").addEventListener("click", closeImageViewer);
+  $("openAiDebug")?.addEventListener("click", openAiDebugModal);
+  $("closeAiDebug")?.addEventListener("click", closeAiDebugModal);
   $("toggleInspectFullscreen").addEventListener("click", openInspectFullscreen);
   $("closeInspectFullscreen").addEventListener("click", closeInspectFullscreen);
   document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -2724,6 +3323,11 @@ function bindActions() {
   $("closeConfirmDelete").addEventListener("click", closeDeleteConfirm);
   $("cancelDeleteAccessory").addEventListener("click", closeDeleteConfirm);
   $("accessoryFiles").addEventListener("change", () => addAccessoryPendingFiles($("accessoryFiles").files));
+  $("accessoryDetailFiles")?.addEventListener("change", async () => {
+    addAccessoryDetailPendingFiles($("accessoryDetailFiles").files);
+    if (state.accessoryDetailPendingFiles.length) await uploadAccessoryDetailFiles();
+  });
+  $("addAccessoryDetailFiles")?.addEventListener("click", uploadAccessoryDetailFiles);
   $("confirmDeleteAccessory").addEventListener("click", async () => {
     const id = state.pendingDeleteAccessoryId;
     if (!id) return closeDeleteConfirm();
@@ -2845,6 +3449,28 @@ function bindActions() {
     state.config = result.rule;
     renderRules();
     toast(selectedTask ? "当前任务配件规则自动生效，置信度已保存。" : "规则已保存。");
+  });
+
+  $("aiProvider")?.addEventListener("change", () => {
+    const defaults = AI_PROVIDER_DEFAULTS.gemini;
+    const currentBaseUrl = $("aiBaseUrl").value.trim();
+    if (!currentBaseUrl || Object.values(AI_PROVIDER_DEFAULTS).some((item) => item.base_url === currentBaseUrl)) {
+      $("aiBaseUrl").value = defaults.base_url;
+      $("aiModel").value = defaults.model;
+    }
+  });
+
+  $("saveAiConfig")?.addEventListener("click", async () => {
+    const button = $("saveAiConfig");
+    setBusy(button, true);
+    try {
+      await saveAiConfig();
+      toast("AI 设置已保存。");
+    } catch (error) {
+      toast(`AI 设置保存失败：${error.message}`);
+    } finally {
+      setBusy(button, false);
+    }
   });
 
   $("addAccessory").addEventListener("click", async () => {
@@ -3038,7 +3664,11 @@ bindViews();
 bindTabs();
 bindActions();
 document.addEventListener("click", (event) => {
-  if (!event.target.closest(".custom-menu")) closeCustomMenus();
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  const inCustomMenu = path.some((node) => node?.classList?.contains("custom-menu")) || event.target.closest(".custom-menu");
+  const inAiKeySelect = path.some((node) => node?.classList?.contains("ai-key-select")) || event.target.closest(".ai-key-select");
+  if (!inCustomMenu) closeCustomMenus();
+  if (!inAiKeySelect) closeAiKeyControl();
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && $("inspectFullscreenStage")?.classList.contains("active")) {
@@ -3050,7 +3680,10 @@ document.addEventListener("keydown", (event) => {
     closeInspectFullscreen();
     return;
   }
-  if (event.key === "Escape") closeCustomMenus();
+  if (event.key === "Escape") {
+    closeCustomMenus();
+    closeAiKeyControl();
+  }
 });
 window.addEventListener("beforeunload", stopCameraStream);
 renderAccessoryProcess();

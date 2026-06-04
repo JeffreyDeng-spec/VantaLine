@@ -1,11 +1,14 @@
+import base64
 import json
 import math
 import os
 import re
 import signal
 import hashlib
+import socket
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -13,7 +16,9 @@ import ctypes
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit, urlunsplit
+import urllib.error
+import urllib.request
 
 os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
@@ -41,6 +46,24 @@ TRAINING_TASKS_DIR = DATA_DIR / "training_tasks"
 ACCESSORY_CANDIDATES_DIR = DATA_DIR / "accessory_candidates"
 IMAGE_WORKER_LOG_DIR = DATA_DIR / "image_worker_logs"
 CONFIG_PATH = DATA_DIR / "config.json"
+AI_LOCAL_CONFIG_PATH = DATA_DIR / "ai_config.local.json"
+AI_PROFILE_CACHE_PATH = DATA_DIR / "ai_profile_cache.local.json"
+AI_SUPPORTED_PROVIDERS = {"gemini", "openai", "openai_compatible"}
+AI_DEFAULT_PROVIDER = "gemini"
+AI_DEFAULT_MODEL = "gemini-2.5-flash"
+AI_MODEL_OPTIONS = [
+    {"id": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash-Lite"},
+    {"id": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+    {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+    {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
+    {"id": "gemini-3.5-flash", "label": "Gemini 3.5 Flash"},
+]
+AI_DEFAULT_BASE_URLS = {
+    "gemini": "https://generativelanguage.googleapis.com/v1beta",
+    "openai": "https://api.openai.com/v1/chat/completions",
+    "openai_compatible": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+}
+AI_DEFAULT_TIMEOUT_SECONDS = 10.0
 LEGACY_MODEL_PATH = (
     ROOT
     / "yolo26_seg_2class_visible_polygon_4000_full_rotation_trial"
@@ -92,6 +115,120 @@ GENERIC_DETECTION_LABELS = {
 }
 
 DEFAULT_MODEL_ID = "yolo26_2class_ocr"
+AI_DETECTION_MODEL_ID = "ai_detection"
+AI_DETECTION_TASK_PREFIX = "ai_detection__task_"
+AI_DETECTION_LABEL = "AI 检测"
+AI_DETECTION_SYSTEM_PROMPT = """You are a stateless visual inspection agent for an assembly-line image.
+You receive one inspection image, a JSON list of required accessory profiles, and optional reference images for those accessories.
+Do not use memory from previous calls. Do not infer from prior images.
+Decide whether each required accessory is visible in this image.
+Focus on concrete visual evidence: object shape, material, color, printed text, QR/logo/text fragments, and relative size.
+If two accessories have the same size or shape, distinguish them by profile-specific visible text, markings, material, color, or geometry.
+Use reference accessory images only to understand what each required accessory looks like; do not count a reference image as presence in the inspection image.
+Return only JSON that matches the provided schema.
+For every required accessory, return present=true or present=false.
+Use confidence from 0 to 1. If uncertain, mark present=false unless clear evidence exists.
+Do not draw boxes. Do not invent accessories that are not visible."""
+AI_INSPECTION_IMAGE_MAX_SIDE = int(os.environ.get("INSPECTION_AI_IMAGE_MAX_SIDE", "960"))
+AI_INSPECTION_IMAGE_QUALITY = int(os.environ.get("INSPECTION_AI_IMAGE_QUALITY", "72"))
+AI_REFERENCE_IMAGES_PER_ACCESSORY = int(os.environ.get("INSPECTION_AI_REFERENCE_IMAGES_PER_ACCESSORY", "0"))
+AI_REFERENCE_IMAGE_MAX_SIDE = 512
+AI_REFERENCE_IMAGE_QUALITY = 68
+AI_PROFILE_REFERENCE_IMAGES = 3
+AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE = 1024
+AI_PROFILE_REFERENCE_IMAGE_QUALITY = 78
+AI_PROFILE_REFERENCE_MODE = "sheet_v1"
+AI_PROFILE_REFERENCE_SHEET_MAX_SIDE = 1600
+AI_PROFILE_REFERENCE_SHEET_QUALITY = 86
+AI_PROFILE_CACHE_TTL_SECONDS = max(300, int(os.environ.get("INSPECTION_AI_PROFILE_CACHE_TTL_SECONDS", "3600")))
+AI_PROFILE_CACHE_VERSION = 1
+AI_MCP_INSPECTION_IMAGE_DIR = Path(os.environ.get("INSPECTION_AI_MCP_IMAGE_DIR", "/tmp/alook-inspection-mcp-images"))
+_REFERENCE_SHEET_DESCRIPTOR_CACHE: dict[str, dict[str, Any]] = {}
+_REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK = threading.RLock()
+AI_DETECTION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["detections"],
+    "properties": {
+        "passed": {"type": "boolean"},
+        "rule": {
+            "type": "object",
+            "properties": {
+                "present": {"type": "array", "items": {"type": "string"}},
+                "missing": {"type": "array", "items": {"type": "string"}},
+                "extra": {"type": "array", "items": {"type": "string"}},
+                "counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+            },
+        },
+        "detections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["accessory_id", "present"],
+                "properties": {
+                    "accessory_id": {"type": "string"},
+                    "label": {"type": "string"},
+                    "present": {"type": "boolean"},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "evidence": {"type": "string"},
+                    "observed_text": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+        "raw_summary": {"type": "string"},
+    },
+}
+AI_MCP_RUNTIME_ENV = "INSPECTION_AI_MCP_RUNTIME"
+AI_MCP_LEGACY_ENABLED_ENV = "INSPECTION_AI_MCP_ENABLED"
+AI_MCP_RUNTIME_IN_PROCESS = "in_process"
+AI_MCP_RUNTIME_STDIO = "stdio"
+AI_MCP_EXTRACTION_POINT = (
+    "call_ai_mcp_tool dispatches in process by default. Set INSPECTION_AI_MCP_RUNTIME=stdio "
+    "for the legacy stdio MCP subprocess while keeping tool payloads/results unchanged."
+)
+AI_PROVIDER_MAX_ATTEMPTS = max(1, min(3, int(os.environ.get("INSPECTION_AI_PROVIDER_MAX_ATTEMPTS", "2"))))
+AI_PROVIDER_RETRY_BACKOFF_SECONDS = max(0.0, min(2.0, float(os.environ.get("INSPECTION_AI_RETRY_BACKOFF_SECONDS", "0.35"))))
+AI_MCP_TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "accessory.profile.generate": {
+        "description": "Normalize or provider-generate a reusable accessory profile.",
+        "input": {
+            "accessory": "Accessory metadata dict.",
+            "reference_image_paths": "Optional image paths. Defaults to bounded accessory images.",
+            "provider_config": "Internal AI provider settings.",
+            "allow_provider": "False returns deterministic local fallback.",
+        },
+        "output": {"profile": "Normalized profile JSON.", "status": "Generation status/debug metadata."},
+    },
+    "accessory.reference.collect": {
+        "description": "Collect bounded reference image payload descriptors for one accessory.",
+        "input": {
+            "accessory": "Accessory metadata dict.",
+            "accessory_id": "Optional explicit accessory id.",
+            "max_images": "Upper bound for descriptors.",
+        },
+        "output": {"references": "List of image payload descriptors.", "reference_count": "Descriptor count."},
+    },
+    "vision.inspect.presence": {
+        "description": "Inspect one image against required accessory profiles using stateless provider JSON.",
+        "input": {
+            "inspection_image_bgr": "In-process image array; remote MCP extraction should pass an image descriptor.",
+            "required_accessories": "Normalized required accessory profile payloads.",
+            "reference_descriptors": "Descriptors returned by accessory.reference.collect.",
+            "provider_config": "Internal AI provider settings.",
+        },
+        "output": {"passed": "Boolean.", "rule": "Presence rule JSON.", "detections": "Normalized detections.", "ai": "Debug metadata."},
+    },
+    "provider.gemini.generate_json": {
+        "description": "Provider JSON gateway used by profile and inspection tools.",
+        "input": {
+            "system_prompt": "Provider system instruction.",
+            "user_content": "OpenAI-style text/image parts.",
+            "provider_config": "Internal AI provider settings.",
+            "max_tokens": "Provider output cap.",
+            "schema_hint": "Optional expected output schema.",
+        },
+        "output": {"ok": "Boolean.", "parsed": "Parsed JSON on success.", "latency_ms": "Provider latency.", "error": "Bounded error on failure."},
+    },
+}
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "yolo26_5class_direct": {
         "id": "yolo26_5class_direct",
@@ -111,11 +248,26 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "model_class_names": MODEL_CLASS_NAMES,
         "model_to_business_class": MODEL_TO_BUSINESS_CLASS,
     },
+    AI_DETECTION_MODEL_ID: {
+        "id": AI_DETECTION_MODEL_ID,
+        "label": AI_DETECTION_LABEL,
+        "description": "调用无状态多模态代理，按配件画像判断是否存在；不绘制检测框。",
+        "path": APP_DIR,
+        "uses_ocr": True,
+        "variant": "ai_detection",
+        "is_ai_detection": True,
+        "model_class_names": {},
+        "model_to_business_class": {},
+    },
 }
 
 
 def legacy_model_specs() -> list[dict[str, Any]]:
-    return [{**spec, "is_legacy": True, "variant": "yolo_ocr" if spec.get("uses_ocr") else "yolo"} for spec in MODEL_REGISTRY.values()]
+    specs = []
+    for spec in MODEL_REGISTRY.values():
+        variant = spec.get("variant") or ("yolo_ocr" if spec.get("uses_ocr") else "yolo")
+        specs.append({**spec, "is_legacy": not bool(spec.get("is_ai_detection")), "variant": variant})
+    return specs
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model_path": str(MODEL_PATH),
@@ -152,6 +304,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "mode": "yolo_ocr",
         "preview_urls": [],
     },
+}
+
+DEFAULT_AI_CONFIG: dict[str, Any] = {
+    "provider": AI_DEFAULT_PROVIDER,
+    "model": AI_DEFAULT_MODEL,
+    "base_url": AI_DEFAULT_BASE_URLS[AI_DEFAULT_PROVIDER],
+    "timeout_seconds": AI_DEFAULT_TIMEOUT_SECONDS,
+    "api_key_env": "",
+    "api_key": "",
+    "api_keys": [],
+    "active_key_id": "",
 }
 
 
@@ -361,6 +524,18 @@ class StreamConfig(BaseModel):
     url: str = ""
 
 
+class AiConfigRequest(BaseModel):
+    enabled: bool | None = None
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    active_key_id: str | None = None
+    api_key_env: str | None = None
+    timeout: float | None = None
+    timeout_seconds: float | None = None
+
+
 class TrainingPreviewRequest(BaseModel):
     selected_accessory_ids: list[str]
     sample_count: int = 4000
@@ -390,6 +565,14 @@ class TrainingTaskUpdateRequest(BaseModel):
 class TrainingResourceUpdateRequest(BaseModel):
     display_name: str | None = None
     note: str | None = None
+
+
+class AccessoryFileDeleteRequest(BaseModel):
+    source_path: str
+
+
+class AccessoryAiReferenceRequest(BaseModel):
+    source_path: str
 
 
 STANDARD_PAPER_SIZES_MM = {
@@ -942,6 +1125,1683 @@ def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
             unique.append(path)
             seen.add(key)
     return unique
+
+
+def ai_profile_reference_paths(item: dict[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    for path_str in item.get("ai_profile_reference_files", []) or []:
+        path = Path(str(path_str))
+        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
+            paths.append(path)
+    unique = []
+    seen = set()
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            unique.append(path)
+            seen.add(key)
+    return unique
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def bounded_text(value: Any, limit: int = 240) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    return text[:limit]
+
+
+def string_list(value: Any, fallback: list[str] | None = None, *, max_items: int = 12, max_len: int = 96) -> list[str]:
+    if isinstance(value, str):
+        raw_items = [value]
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = fallback or []
+    items: list[str] = []
+    seen = set()
+    for raw in raw_items:
+        item = bounded_text(raw, max_len)
+        key = item.lower()
+        if not item or key in seen:
+            continue
+        items.append(item)
+        seen.add(key)
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def profile_size_text(size: dict[str, Any] | None) -> str:
+    if not isinstance(size, dict):
+        return "size=unknown"
+    if size.get("kind") == "paper":
+        return f"paper {size.get('preset') or 'custom'} {size.get('width_mm', '?')}x{size.get('height_mm', '?')}mm"
+    if size.get("kind") == "object":
+        return f"object {size.get('length_mm', '?')}x{size.get('width_mm', '?')}x{size.get('height_mm', '?')}mm"
+    return "size=unknown"
+
+
+def image_reference_context(path: Path, accessory_id: str, ordinal: int) -> dict[str, Any] | None:
+    try:
+        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+            return None
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        height = int(image.shape[0]) if image is not None else 0
+        width = int(image.shape[1]) if image is not None else 0
+    except OSError:
+        return None
+    mime_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    return {
+        "accessory_id": bounded_text(accessory_id, 120),
+        "source_path": str(path),
+        "sha256": digest,
+        "mime_type": mime_type,
+        "width": width,
+        "height": height,
+        "ordinal": ordinal,
+    }
+
+
+def accessory_reference_image_contexts(item: dict[str, Any], *, max_images: int = AI_PROFILE_REFERENCE_IMAGES) -> list[dict[str, Any]]:
+    contexts: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    accessory_id = accessory_uid(item)
+    preferred_paths = ai_profile_reference_paths(item)
+    source_paths = preferred_paths if preferred_paths else accessory_image_paths(item)
+    for path in source_paths:
+        path_key = str(path)
+        if path_key in seen:
+            continue
+        seen.add(path_key)
+        context = image_reference_context(path, accessory_id, len(contexts) + 1)
+        if context:
+            contexts.append(context)
+        if len(contexts) >= max_images:
+            break
+    return contexts
+
+
+def fallback_accessory_ai_profile(item: dict[str, Any], reference_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    accessory_id = accessory_uid(item)
+    name = bounded_text(item.get("name") or item.get("label") or accessory_id, 120)
+    material_type = accessory_material_type(item)
+    source_names = sorted(
+        {
+            bounded_text(Path(str(path)).stem.replace("_", " "), 60)
+            for path in [*(item.get("source_files") or []), *(item.get("original_source_files") or [])]
+            if str(path).strip()
+        }
+    )
+    tags = [material_type, str(item.get("training_role") or "detect_and_classify")]
+    physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
+    if physical_size.get("kind"):
+        tags.append(str(physical_size["kind"]))
+    if material_type == "object":
+        tags.append(object_alpha_material_policy(item))
+    tags.extend(source_names[:4])
+    tags = string_list(tags, max_items=12)
+    if reference_images is None:
+        reference_images = accessory_reference_image_contexts(item)
+    image_count = len(reference_images)
+    signature_parts = [
+        f"name={name}",
+        f"material={material_type}",
+        profile_size_text(physical_size),
+        f"visual_evidence_images={image_count}",
+    ]
+    if material_type == "object":
+        signature_parts.append(f"alpha_policy={object_alpha_material_policy(item)}")
+    distinguishing_text = string_list([name, *source_names], max_items=8)
+    negative_cues = [
+        "Do not count a different accessory with only similar size.",
+        "Do not infer presence from previous images or configured task state.",
+    ]
+    if material_type == "text":
+        negative_cues.append("If visible printed text does not match this profile, mark missing.")
+    else:
+        negative_cues.append("If the object shape/material does not match this profile, mark missing.")
+    return {
+        "accessory_id": accessory_id,
+        "name": name,
+        "material_type": material_type,
+        "description": bounded_text(item.get("description") or f"{name} required accessory.", 240),
+        "tags": tags,
+        "visual_signature": "; ".join(signature_parts),
+        "distinguishing_text": distinguishing_text,
+        "negative_cues": negative_cues,
+        "reference_images": reference_images,
+        "provider_cache": {},
+        "expected_count": max(1, int(item.get("expected_count") or 1)),
+    }
+
+
+def normalize_accessory_ai_profile(raw: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    raw_dict = raw if isinstance(raw, dict) else {}
+    raw_reference_images = raw_dict.get("reference_images") if isinstance(raw_dict.get("reference_images"), list) else None
+    fallback = fallback_accessory_ai_profile(item, reference_images=raw_reference_images)
+    expected_count = raw.get("expected_count", fallback["expected_count"]) if isinstance(raw, dict) else fallback["expected_count"]
+    try:
+        expected_count_int = max(1, int(expected_count))
+    except (TypeError, ValueError):
+        expected_count_int = fallback["expected_count"]
+    reference_images = raw.get("reference_images") if isinstance(raw, dict) else None
+    if not isinstance(reference_images, list):
+        reference_images = fallback.get("reference_images", [])
+    safe_reference_images = [
+        {
+            "accessory_id": bounded_text(ref.get("accessory_id") or accessory_uid(item), 120),
+            "source_path": str(ref.get("source_path") or ""),
+            "sha256": bounded_text(ref.get("sha256") or "", 80),
+            "mime_type": bounded_text(ref.get("mime_type") or "image/jpeg", 40),
+            "width": int(ref.get("width") or 0) if isinstance(ref, dict) else 0,
+            "height": int(ref.get("height") or 0) if isinstance(ref, dict) else 0,
+            "ordinal": int(ref.get("ordinal") or idx + 1) if isinstance(ref, dict) else idx + 1,
+        }
+        for idx, ref in enumerate(reference_images)
+        if isinstance(ref, dict) and str(ref.get("source_path") or "").strip()
+    ][:AI_PROFILE_REFERENCE_IMAGES]
+    provider_cache = raw.get("provider_cache") if isinstance(raw, dict) and isinstance(raw.get("provider_cache"), dict) else {}
+    return {
+        "accessory_id": accessory_uid(item),
+        "name": bounded_text(raw.get("name") if isinstance(raw, dict) else fallback["name"], 120) or fallback["name"],
+        "material_type": accessory_material_type(item),
+        "description": bounded_text(raw.get("description") if isinstance(raw, dict) else fallback["description"], 240) or fallback["description"],
+        "tags": string_list(raw.get("tags") if isinstance(raw, dict) else None, fallback["tags"], max_items=12),
+        "visual_signature": bounded_text(raw.get("visual_signature") if isinstance(raw, dict) else fallback["visual_signature"], 420) or fallback["visual_signature"],
+        "distinguishing_text": string_list(
+            raw.get("distinguishing_text") if isinstance(raw, dict) else None,
+            fallback["distinguishing_text"],
+            max_items=12,
+        ),
+        "negative_cues": string_list(raw.get("negative_cues") if isinstance(raw, dict) else None, fallback["negative_cues"], max_items=12),
+        "reference_images": safe_reference_images,
+        "provider_cache": provider_cache,
+        "expected_count": expected_count_int,
+    }
+
+
+def default_ai_base_url(provider: str) -> str:
+    return AI_DEFAULT_BASE_URLS.get(provider, AI_DEFAULT_BASE_URLS[AI_DEFAULT_PROVIDER])
+
+
+def mask_secret(value: str) -> str:
+    secret = str(value or "").strip()
+    if not secret:
+        return ""
+    if len(secret) <= 8:
+        return f"****{secret[-2:]}"
+    return f"{secret[:4]}...{secret[-4:]}"
+
+
+def ai_key_id(secret: str) -> str:
+    digest = hashlib.sha256(str(secret or "").encode("utf-8")).hexdigest()[:12]
+    return f"key_{digest}"
+
+
+def normalize_ai_key_items(config: dict[str, Any]) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    seen: set[str] = set()
+    raw_items = config.get("api_keys") if isinstance(config.get("api_keys"), list) else []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        secret = str(raw.get("key") or raw.get("api_key") or "").strip()
+        if not secret:
+            continue
+        item_id = str(raw.get("id") or ai_key_id(secret)).strip()
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        label = bounded_text(raw.get("label") or f"API Key {len(items) + 1}", 80)
+        items.append({"id": item_id, "label": label, "key": secret})
+    legacy_key = str(config.get("api_key") or "").strip()
+    if legacy_key:
+        item_id = ai_key_id(legacy_key)
+        if item_id not in seen:
+            items.append({"id": item_id, "label": f"API Key {len(items) + 1}", "key": legacy_key})
+    return items
+
+
+def public_ai_key_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [
+        {
+            "id": item["id"],
+            "label": item.get("label") or f"API Key {idx + 1}",
+            "masked_key": mask_secret(item.get("key", "")),
+        }
+        for idx, item in enumerate(items)
+    ]
+
+
+def validate_ai_provider(value: Any) -> str:
+    provider = str(value or "").strip().lower()
+    if provider not in AI_SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unsupported AI provider: {provider or '(empty)'}")
+    return provider
+
+
+def validate_ai_model(value: Any) -> str:
+    model = str(value or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="AI model is required")
+    if len(model) > 160 or not re.fullmatch(r"[A-Za-z0-9._:/@+\-]+", model):
+        raise HTTPException(status_code=400, detail="AI model contains unsupported characters")
+    return model
+
+
+def validate_ai_base_url(value: Any) -> str:
+    base_url = str(value or "").strip()
+    parsed = urlsplit(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="AI base_url must be an http(s) URL")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="AI base_url must not include credentials")
+    if parsed.query or parsed.fragment:
+        raise HTTPException(status_code=400, detail="AI base_url must not include query strings or fragments")
+    host = parsed.hostname or ""
+    if parsed.scheme == "http" and host not in {"localhost", "127.0.0.1", "::1"}:
+        raise HTTPException(status_code=400, detail="AI base_url must use https unless it targets localhost")
+    return base_url
+
+
+def public_ai_base_url(value: Any) -> str:
+    base_url = str(value or "").strip()
+    parsed = urlsplit(base_url)
+    if not parsed.scheme or not parsed.netloc:
+        return bounded_text(base_url.split("?", 1)[0].split("#", 1)[0], 300)
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    try:
+        port = f":{parsed.port}" if parsed.port else ""
+    except ValueError:
+        port = ""
+    return urlunsplit((parsed.scheme, f"{host}{port}", parsed.path, "", ""))
+
+
+def validate_ai_timeout(value: Any) -> float:
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="AI timeout must be a number") from None
+    if not 0.5 <= timeout <= 30.0:
+        raise HTTPException(status_code=400, detail="AI timeout must be between 0.5 and 30 seconds")
+    return round(timeout, 3)
+
+
+def validate_ai_key_env(value: Any) -> str:
+    key_env = str(value or "").strip()
+    if key_env and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key_env):
+        raise HTTPException(status_code=400, detail="AI api_key_env must be a valid environment variable name")
+    return key_env
+
+
+def load_ai_local_config() -> dict[str, Any]:
+    ensure_dirs()
+    if not AI_LOCAL_CONFIG_PATH.exists():
+        return dict(DEFAULT_AI_CONFIG)
+    try:
+        raw = json.loads(AI_LOCAL_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    config = dict(DEFAULT_AI_CONFIG)
+    for key in DEFAULT_AI_CONFIG:
+        if key in raw:
+            config[key] = raw[key]
+    provider = str(config.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
+    if provider == "openai_compatible" and "generativelanguage.googleapis.com" in str(config.get("base_url") or ""):
+        provider = "gemini"
+    config["provider"] = provider
+    config["model"] = str(config.get("model") or AI_DEFAULT_MODEL).strip() or AI_DEFAULT_MODEL
+    config["base_url"] = str(config.get("base_url") or default_ai_base_url(provider)).strip() or default_ai_base_url(provider)
+    if provider == "gemini" and "/openai/" in config["base_url"]:
+        config["base_url"] = default_ai_base_url(provider)
+    try:
+        config["timeout_seconds"] = validate_ai_timeout(config.get("timeout_seconds"))
+    except HTTPException:
+        config["timeout_seconds"] = AI_DEFAULT_TIMEOUT_SECONDS
+    config["api_key_env"] = str(config.get("api_key_env") or "").strip()
+    config["api_keys"] = normalize_ai_key_items(config)
+    active_key_id = str(config.get("active_key_id") or "").strip()
+    if active_key_id and not any(item["id"] == active_key_id for item in config["api_keys"]):
+        active_key_id = ""
+    config["active_key_id"] = active_key_id or (config["api_keys"][0]["id"] if config["api_keys"] else "")
+    config["api_key"] = ""
+    return config
+
+
+def ai_local_config_temp_path() -> Path:
+    return AI_LOCAL_CONFIG_PATH.with_name(f"{AI_LOCAL_CONFIG_PATH.name}.tmp")
+
+
+def save_ai_local_config(config: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {key: config.get(key, DEFAULT_AI_CONFIG[key]) for key in DEFAULT_AI_CONFIG}
+    tmp_path = ai_local_config_temp_path()
+    tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    try:
+        os.chmod(tmp_path, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp_path, AI_LOCAL_CONFIG_PATH)
+    try:
+        os.chmod(AI_LOCAL_CONFIG_PATH, 0o600)
+    except OSError:
+        pass
+
+
+def ai_detection_settings() -> dict[str, Any]:
+    local = load_ai_local_config()
+    provider = os.environ.get("INSPECTION_AI_PROVIDER", "").strip().lower() or str(local.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
+    model = os.environ.get("INSPECTION_AI_MODEL", "").strip() or str(local.get("model") or AI_DEFAULT_MODEL).strip() or AI_DEFAULT_MODEL
+    base_url = os.environ.get("INSPECTION_AI_BASE_URL", "").strip() or str(local.get("base_url") or default_ai_base_url(provider)).strip() or default_ai_base_url(provider)
+    timeout_raw = os.environ.get("INSPECTION_AI_TIMEOUT_SECONDS", "").strip() or local.get("timeout_seconds", AI_DEFAULT_TIMEOUT_SECONDS)
+    try:
+        timeout = validate_ai_timeout(timeout_raw)
+    except HTTPException:
+        timeout = AI_DEFAULT_TIMEOUT_SECONDS
+    key_env = os.environ.get("INSPECTION_AI_API_KEY_ENV", "").strip() or str(local.get("api_key_env") or "").strip()
+    if not key_env and provider == "gemini":
+        key_env = "GEMINI_API_KEY"
+    elif not key_env and provider in AI_SUPPORTED_PROVIDERS:
+        key_env = "OPENAI_API_KEY"
+
+    direct_env_key = os.environ.get("INSPECTION_AI_API_KEY", "").strip()
+    named_env_key = os.environ.get(key_env, "").strip() if key_env else ""
+    local_keys = normalize_ai_key_items(local)
+    active_key_id = str(local.get("active_key_id") or "").strip()
+    active_item = next((item for item in local_keys if item["id"] == active_key_id), None) or (local_keys[0] if local_keys else None)
+    local_key = str(active_item.get("key") if active_item else "").strip()
+    api_key = ""
+    key_source = "missing"
+    key_source_name = ""
+    if direct_env_key:
+        api_key = direct_env_key
+        key_source = "env"
+        key_source_name = "INSPECTION_AI_API_KEY"
+    elif named_env_key:
+        api_key = named_env_key
+        key_source = "env"
+        key_source_name = key_env
+    elif local_key:
+        api_key = local_key
+        key_source = "local"
+
+    supported = provider in AI_SUPPORTED_PROVIDERS
+    try:
+        validate_ai_base_url(base_url)
+        base_url_valid = True
+    except HTTPException:
+        base_url_valid = False
+    configured = bool(supported and base_url_valid and api_key)
+    if not supported:
+        status = "unsupported_provider"
+        message = f"Unsupported INSPECTION_AI_PROVIDER: {provider}"
+    elif not base_url_valid:
+        status = "invalid_base_url"
+        message = "AI provider base_url is invalid."
+    elif not api_key:
+        status = "missing_api_key"
+        message = f"Missing AI provider API key ({key_env or 'INSPECTION_AI_API_KEY'})."
+    else:
+        status = "ready"
+        message = "AI provider is configured."
+    return {
+        "enabled": configured,
+        "configured": configured,
+        "provider": provider,
+        "provider_label": "Gemini" if provider == "gemini" else provider,
+        "model": model,
+        "model_options": AI_MODEL_OPTIONS,
+        "timeout_seconds": timeout,
+        "api_key_env": key_env or "INSPECTION_AI_API_KEY",
+        "api_key_present": bool(api_key),
+        "key_present": bool(api_key),
+        "local_key_present": bool(local_key),
+        "api_keys": public_ai_key_items(local_keys),
+        "active_key_id": active_item["id"] if active_item else "",
+        "key_source": key_source,
+        "key_source_name": key_source_name,
+        "masked_key": mask_secret(api_key),
+        "api_key": api_key,
+        "base_url": public_ai_base_url(base_url),
+        "status": status,
+        "message": message,
+    }
+
+
+def public_ai_detection_status() -> dict[str, Any]:
+    settings = ai_detection_settings()
+    return {key: value for key, value in settings.items() if key != "api_key"}
+
+
+class AiProviderError(RuntimeError):
+    pass
+
+
+class AiProviderTimeout(AiProviderError):
+    pass
+
+
+class AiProviderOverloaded(AiProviderError):
+    pass
+
+
+def parse_ai_json_object(text: str) -> dict[str, Any]:
+    decoder = json.JSONDecoder()
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+    start = text.find("{")
+    if start >= 0:
+        try:
+            parsed, _ = decoder.raw_decode(text[start:])
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            parsed = json.loads(text[start : end + 1])
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    raise AiProviderError("AI provider did not return a JSON object")
+
+
+class OpenAICompatibleAiProvider:
+    def __init__(self, settings: dict[str, Any]):
+        self.settings = settings
+
+    def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], *, max_tokens: int = 1400) -> tuple[dict[str, Any], int]:
+        if not self.settings.get("configured"):
+            raise AiProviderError(str(self.settings.get("message") or "AI provider is not configured"))
+        payload = {
+            "model": self.settings["model"],
+            "temperature": 0,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+        }
+        request = urllib.request.Request(
+            self.settings["base_url"],
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.settings['api_key']}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        start = time.monotonic()
+        try:
+            with urllib.request.urlopen(request, timeout=float(self.settings["timeout_seconds"])) as response:
+                body = response.read().decode("utf-8", errors="replace")
+        except (TimeoutError, socket.timeout) as exc:
+            raise AiProviderTimeout("AI provider timed out") from exc
+        except urllib.error.URLError as exc:
+            if isinstance(getattr(exc, "reason", None), socket.timeout):
+                raise AiProviderTimeout("AI provider timed out") from exc
+            raise AiProviderError(f"AI provider request failed: {bounded_text(exc, 180)}") from exc
+        latency_ms = int((time.monotonic() - start) * 1000)
+        try:
+            response_json = json.loads(body)
+            content = response_json["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise AiProviderError("AI provider response shape was not recognized") from exc
+        if isinstance(content, list):
+            content = "\n".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
+        return parse_ai_json_object(str(content or "")), latency_ms
+
+
+def data_url_payload(data_url: str) -> tuple[str, str]:
+    header, _, payload = str(data_url or "").partition(",")
+    if not payload or ";base64" not in header:
+        raise AiProviderError("AI image payload was not a base64 data URL")
+    mime_type = header.removeprefix("data:").split(";", 1)[0] or "image/jpeg"
+    return mime_type, payload
+
+
+class GeminiAiProvider:
+    def __init__(self, settings: dict[str, Any]):
+        self.settings = settings
+        self.last_usage_metadata: dict[str, Any] = {}
+
+    def content_parts(self, user_content: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        parts: list[dict[str, Any]] = []
+        for item in user_content:
+            if item.get("type") == "text":
+                parts.append({"text": str(item.get("text") or "")})
+            elif item.get("type") == "image_url":
+                image_url = item.get("image_url") if isinstance(item.get("image_url"), dict) else {}
+                mime_type, data = data_url_payload(str(image_url.get("url") or ""))
+                parts.append({"inlineData": {"mimeType": mime_type, "data": data}})
+        return parts
+
+    def create_cached_content(
+        self,
+        system_prompt: str,
+        user_content: list[dict[str, Any]],
+        *,
+        display_name: str,
+        ttl_seconds: int = AI_PROFILE_CACHE_TTL_SECONDS,
+    ) -> dict[str, Any]:
+        if not self.settings.get("configured"):
+            raise AiProviderError(str(self.settings.get("message") or "AI provider is not configured"))
+        model_name = str(self.settings["model"]).strip()
+        model = quote(model_name, safe="-_.")
+        payload = {
+            "model": f"models/{model_name}",
+            "displayName": bounded_text(display_name, 120),
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": self.content_parts(user_content)}],
+            "ttl": f"{max(300, int(ttl_seconds))}s",
+        }
+        base_url = str(self.settings["base_url"]).rstrip("/")
+        request = urllib.request.Request(
+            f"{base_url}/cachedContents",
+            data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.settings["api_key"],
+            },
+            method="POST",
+        )
+        start = time.monotonic()
+        try:
+            with urllib.request.urlopen(request, timeout=float(self.settings["timeout_seconds"])) as response:
+                body = response.read().decode("utf-8", errors="replace")
+        except (TimeoutError, socket.timeout) as exc:
+            raise AiProviderTimeout("AI cache provider timed out") from exc
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:240]
+            raise AiProviderError(f"AI cache create failed: HTTP {exc.code} {bounded_text(detail, 180)}") from exc
+        except urllib.error.URLError as exc:
+            if isinstance(getattr(exc, "reason", None), socket.timeout):
+                raise AiProviderTimeout("AI cache provider timed out") from exc
+            raise AiProviderError(f"AI cache create failed: {bounded_text(exc, 180)}") from exc
+        latency_ms = int((time.monotonic() - start) * 1000)
+        try:
+            response_json = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise AiProviderError("AI cache response shape was not recognized") from exc
+        if not isinstance(response_json, dict) or not response_json.get("name"):
+            raise AiProviderError("AI cache response did not include a cache name")
+        return {
+            "name": str(response_json.get("name")),
+            "model": model_name,
+            "latency_ms": latency_ms,
+            "usage_metadata": response_json.get("usageMetadata") if isinstance(response_json.get("usageMetadata"), dict) else {},
+            "expire_time": str(response_json.get("expireTime") or ""),
+        }
+
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_content: list[dict[str, Any]],
+        *,
+        max_tokens: int = 1400,
+        cached_content: str = "",
+    ) -> tuple[dict[str, Any], int]:
+        if not self.settings.get("configured"):
+            raise AiProviderError(str(self.settings.get("message") or "AI provider is not configured"))
+        parts = self.content_parts(user_content)
+        payload = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "temperature": 0,
+                "maxOutputTokens": max_tokens,
+                "responseMimeType": "application/json",
+            },
+        }
+        if cached_content:
+            payload["cachedContent"] = cached_content
+        else:
+            payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+        model_name = str(self.settings["model"]).strip()
+        generation_config = payload["generationConfig"]
+        if model_name.startswith("gemini-2.5-flash") or model_name.startswith("gemini-flash-lite"):
+            generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+        elif model_name.startswith("gemini-2.5-pro"):
+            generation_config["thinkingConfig"] = {"thinkingBudget": 128}
+        elif model_name.startswith("gemini-3"):
+            generation_config["thinkingConfig"] = {"thinkingLevel": "minimal"}
+        base_url = str(self.settings["base_url"]).rstrip("/")
+        model = quote(model_name, safe="-_.")
+        request = urllib.request.Request(
+            f"{base_url}/models/{model}:generateContent",
+            data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.settings["api_key"],
+            },
+            method="POST",
+        )
+        start = time.monotonic()
+        try:
+            with urllib.request.urlopen(request, timeout=float(self.settings["timeout_seconds"])) as response:
+                body = response.read().decode("utf-8", errors="replace")
+        except (TimeoutError, socket.timeout) as exc:
+            raise AiProviderTimeout("AI provider timed out") from exc
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:240]
+            if exc.code in {429, 503}:
+                raise AiProviderOverloaded(f"AI provider overloaded: HTTP {exc.code} {bounded_text(detail, 180)}") from exc
+            raise AiProviderError(f"AI provider request failed: HTTP {exc.code} {bounded_text(detail, 180)}") from exc
+        except urllib.error.URLError as exc:
+            if isinstance(getattr(exc, "reason", None), socket.timeout):
+                raise AiProviderTimeout("AI provider timed out") from exc
+            raise AiProviderError(f"AI provider request failed: {bounded_text(exc, 180)}") from exc
+        latency_ms = int((time.monotonic() - start) * 1000)
+        try:
+            response_json = json.loads(body)
+            parts = response_json["candidates"][0]["content"]["parts"]
+            content = "\n".join(str(part.get("text", "")) for part in parts if isinstance(part, dict))
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise AiProviderError("AI provider response shape was not recognized") from exc
+        self.last_usage_metadata = response_json.get("usageMetadata") if isinstance(response_json.get("usageMetadata"), dict) else {}
+        return parse_ai_json_object(str(content or "")), latency_ms
+
+
+def ai_provider_from_settings(settings: dict[str, Any]) -> OpenAICompatibleAiProvider | GeminiAiProvider:
+    if settings["provider"] == "gemini":
+        return GeminiAiProvider(settings)
+    if settings["provider"] not in {"gemini", "openai", "openai_compatible"}:
+        raise AiProviderError(settings["message"])
+    return OpenAICompatibleAiProvider(settings)
+
+
+def ai_provider() -> OpenAICompatibleAiProvider | GeminiAiProvider:
+    return ai_provider_from_settings(ai_detection_settings())
+
+
+def ai_settings_match_runtime(settings: dict[str, Any]) -> bool:
+    runtime = ai_detection_settings()
+    for key in ("provider", "model", "base_url", "api_key", "timeout_seconds"):
+        if settings.get(key) != runtime.get(key):
+            return False
+    return True
+
+
+def require_ai_json_object(parsed: Any) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        raise AiProviderError("AI provider returned non-object JSON")
+    return parsed
+
+
+def generate_provider_json_with_fallback(
+    settings: dict[str, Any],
+    system_prompt: str,
+    user_content: list[dict[str, Any]],
+    *,
+    max_tokens: int,
+    cached_content: str = "",
+) -> tuple[dict[str, Any], int, dict[str, Any]]:
+    attempts = AI_PROVIDER_MAX_ATTEMPTS
+    total_latency_ms = 0
+    errors: list[str] = []
+    for attempt in range(1, attempts + 1):
+        try:
+            provider = ai_provider() if ai_settings_match_runtime(settings) else ai_provider_from_settings(settings)
+            if isinstance(provider, GeminiAiProvider):
+                parsed, latency_ms = provider.generate_json(
+                    system_prompt,
+                    user_content,
+                    max_tokens=max_tokens,
+                    cached_content=cached_content,
+                )
+                usage_metadata = dict(provider.last_usage_metadata)
+            else:
+                parsed, latency_ms = provider.generate_json(system_prompt, user_content, max_tokens=max_tokens)
+                usage_metadata = {}
+            parsed = require_ai_json_object(parsed)
+            total_latency_ms += latency_ms
+            retry_meta = {"attempts": attempt, "retry_count": attempt - 1}
+            if usage_metadata:
+                retry_meta["usage_metadata"] = usage_metadata
+            if errors:
+                retry_meta["previous_errors"] = errors[-2:]
+            return parsed, total_latency_ms, retry_meta
+        except AiProviderOverloaded as exc:
+            error_text = str(exc)
+            errors.append(bounded_text(error_text, 180))
+            if "HTTP 429" in error_text:
+                raise
+            if settings.get("provider") == "gemini" and settings.get("model") != "gemini-2.5-flash-lite":
+                fallback_settings = dict(settings)
+                fallback_settings["model"] = "gemini-2.5-flash-lite"
+                fallback_provider = ai_provider_from_settings(fallback_settings)
+                if isinstance(fallback_provider, GeminiAiProvider):
+                    parsed, latency_ms = fallback_provider.generate_json(system_prompt, user_content, max_tokens=max_tokens)
+                else:
+                    parsed, latency_ms = fallback_provider.generate_json(system_prompt, user_content, max_tokens=max_tokens)
+                parsed = require_ai_json_object(parsed)
+                total_latency_ms += latency_ms
+                return parsed, total_latency_ms, {
+                    "attempts": attempt,
+                    "retry_count": attempt - 1,
+                    "fallback_model": fallback_settings["model"],
+                    "fallback_reason": "provider_overloaded",
+                    "previous_errors": errors[-2:],
+                }
+            if attempt >= attempts:
+                raise
+        except AiProviderTimeout as exc:
+            errors.append(bounded_text(str(exc), 180))
+            raise
+        except AiProviderError as exc:
+            errors.append(bounded_text(str(exc), 180))
+            if attempt >= attempts:
+                raise
+        if AI_PROVIDER_RETRY_BACKOFF_SECONDS > 0:
+            time.sleep(AI_PROVIDER_RETRY_BACKOFF_SECONDS * attempt)
+    raise AiProviderError(errors[-1] if errors else "AI provider failed")
+
+
+def generate_ai_detection_json(
+    settings: dict[str, Any],
+    user_content: list[dict[str, Any]],
+    *,
+    max_tokens: int,
+) -> tuple[dict[str, Any], int, dict[str, Any]]:
+    return generate_provider_json_with_fallback(settings, AI_DETECTION_SYSTEM_PROMPT, user_content, max_tokens=max_tokens)
+
+
+def image_bgr_data_url(image_bgr: np.ndarray, max_side: int = 1280, quality: int = 82) -> str:
+    image = image_bgr
+    h, w = image.shape[:2]
+    scale = min(float(max_side) / max(h, w), 1.0)
+    if scale < 1.0:
+        image = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+    if not ok:
+        raise AiProviderError("Failed to encode image for AI provider")
+    return f"data:image/jpeg;base64,{base64.b64encode(encoded.tobytes()).decode('ascii')}"
+
+
+def write_mcp_inspection_image(image_bgr: np.ndarray, request_id: str) -> Path | None:
+    try:
+        AI_MCP_INSPECTION_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+        image = image_bgr
+        h, w = image.shape[:2]
+        scale = min(float(AI_INSPECTION_IMAGE_MAX_SIDE) / max(h, w), 1.0)
+        if scale < 1.0:
+            image = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+        digest = hashlib.sha1(f"{request_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[:12]
+        path = AI_MCP_INSPECTION_IMAGE_DIR / f"{safe_name(request_id)[:80]}_{digest}.jpg"
+        ok = cv2.imwrite(str(path), image, [int(cv2.IMWRITE_JPEG_QUALITY), AI_INSPECTION_IMAGE_QUALITY])
+        return path if ok else None
+    except Exception:
+        return None
+
+
+def image_path_data_url(path: Path, max_side: int = 1024, quality: int = 78) -> str | None:
+    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if image is None:
+        return None
+    return image_bgr_data_url(image, max_side=max_side, quality=quality)
+
+
+def accessory_profile_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "instruction": "Return only deterministic JSON for an accessory profile with the required keys.",
+        "required_keys": list(fallback_accessory_ai_profile(item).keys()),
+        "accessory": {
+            "accessory_id": accessory_uid(item),
+            "name": item.get("name"),
+            "material_type": accessory_material_type(item),
+            "training_role": item.get("training_role"),
+            "physical_size": item.get("physical_size"),
+            "source_file_names": [Path(str(path)).name for path in item.get("source_files", [])],
+            "normalized_asset_kinds": [asset.get("kind") for asset in item.get("normalized_assets", []) if isinstance(asset, dict)],
+            "expected_count": int(item.get("expected_count") or 1),
+        },
+    }
+
+
+def ai_tool_provider_meta(settings: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider": settings.get("provider") or "",
+        "provider_model": settings.get("model") or "",
+        "provider_status": settings.get("status") or "",
+    }
+
+
+def profile_generation_status(settings: dict[str, Any], *, source: str = "fallback") -> dict[str, Any]:
+    return {
+        "source": source,
+        "provider": settings.get("provider") or "",
+        "provider_model": settings.get("model") or "",
+        "status": settings.get("status") or "unknown",
+        "message": settings.get("message") or "",
+        "updated_at": int(time.time()),
+    }
+
+
+def required_accessory_profile_payload(item: dict[str, Any], expected_count: int, profile: dict[str, Any] | None = None) -> dict[str, Any]:
+    profile = normalize_accessory_ai_profile(profile or item.get("ai_profile") or {}, item)
+    try:
+        expected_count = max(1, int(expected_count or profile.get("expected_count") or 1))
+    except (TypeError, ValueError):
+        try:
+            expected_count = max(1, int(profile.get("expected_count") or 1))
+        except (TypeError, ValueError):
+            expected_count = 1
+    profile = {**profile, "expected_count": expected_count}
+    return {
+        "accessory_id": profile["accessory_id"],
+        "name": profile["name"],
+        "label": profile["name"],
+        "material_type": profile["material_type"],
+        "expected_count": expected_count,
+        "profile": {
+            "description": profile["description"],
+            "tags": profile["tags"],
+            "visual_signature": profile["visual_signature"],
+            "distinguishing_text": profile["distinguishing_text"],
+            "negative_cues": profile["negative_cues"],
+            "reference_images": profile.get("reference_images") or [],
+            "provider_cache": profile.get("provider_cache") or {},
+        },
+    }
+
+
+def resolve_required_accessory_refs(required_refs: list[Any]) -> list[dict[str, Any]]:
+    config = load_config()
+    by_id = {accessory_uid(item): item for item in config.get("accessories", []) if isinstance(item, dict)}
+    resolved: list[dict[str, Any]] = []
+    for raw in required_refs:
+        if not isinstance(raw, dict):
+            continue
+        item_id = str(raw.get("accessory_id") or raw.get("id") or "").strip()
+        if not item_id:
+            continue
+        try:
+            expected_count = max(1, int(raw.get("expected_count") or 1))
+        except (TypeError, ValueError):
+            expected_count = 1
+        item = by_id.get(item_id)
+        if not item:
+            item = {
+                "id": item_id,
+                "name": bounded_text(raw.get("name") or item_id, 120),
+                "material_type": raw.get("material_type") or "object",
+                "source_files": [],
+                "normalized_assets": [],
+            }
+        profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else fallback_accessory_ai_profile(item)
+        resolved.append(required_accessory_profile_payload(item, expected_count, profile))
+    return resolved
+
+
+def provider_generate_json_error_payload(
+    settings: dict[str, Any],
+    meta: dict[str, Any],
+    exc: BaseException | str,
+    *,
+    timed_out: bool = False,
+    overloaded: bool = False,
+    latency_ms: int = 0,
+) -> dict[str, Any]:
+    error_text = bounded_text(str(exc) or exc.__class__.__name__, 240)
+    error_type = "not_configured" if isinstance(exc, str) else bounded_text(exc.__class__.__name__, 80)
+    error_meta = {**meta, "error_type": error_type, "overloaded": overloaded}
+    return {
+        "tool": "provider.gemini.generate_json",
+        "ok": False,
+        "parsed": {},
+        "latency_ms": latency_ms,
+        "timed_out": timed_out,
+        "overloaded": overloaded,
+        "provider_failure": True,
+        "error": error_text,
+        "error_type": error_type,
+        "meta": error_meta,
+        **meta,
+    }
+
+
+def tool_provider_gemini_generate_json(payload: dict[str, Any]) -> dict[str, Any]:
+    settings = dict(payload.get("provider_config") or ai_detection_settings())
+    meta = ai_tool_provider_meta(settings)
+    if not settings.get("configured"):
+        return provider_generate_json_error_payload(settings, meta, settings.get("message") or "AI provider is not configured")
+    try:
+        parsed, latency_ms, provider_meta = generate_provider_json_with_fallback(
+            settings,
+            str(payload.get("system_prompt") or ""),
+            payload.get("user_content") if isinstance(payload.get("user_content"), list) else [],
+            max_tokens=int(payload.get("max_tokens") or 1400),
+            cached_content=str(payload.get("cached_content") or ""),
+        )
+        return {
+            "tool": "provider.gemini.generate_json",
+            "ok": True,
+            "parsed": parsed,
+            "latency_ms": latency_ms,
+            "timed_out": False,
+            "error": "",
+            "provider_failure": False,
+            "meta": {**meta, **provider_meta},
+            **meta,
+            **provider_meta,
+        }
+    except AiProviderTimeout as exc:
+        return provider_generate_json_error_payload(
+            settings,
+            meta,
+            exc,
+            timed_out=True,
+            latency_ms=int(float(settings.get("timeout_seconds") or AI_DEFAULT_TIMEOUT_SECONDS) * 1000),
+        )
+    except AiProviderOverloaded as exc:
+        return provider_generate_json_error_payload(settings, meta, exc, overloaded=True)
+    except AiProviderError as exc:
+        return provider_generate_json_error_payload(settings, meta, exc)
+    except Exception as exc:
+        return provider_generate_json_error_payload(settings, meta, exc)
+
+
+def tool_accessory_reference_collect(payload: dict[str, Any]) -> dict[str, Any]:
+    item = payload.get("accessory") if isinstance(payload.get("accessory"), dict) else {}
+    accessory_id = bounded_text(payload.get("accessory_id") or accessory_uid(item), 120)
+    try:
+        max_images = max(0, min(16, int(payload.get("max_images", AI_REFERENCE_IMAGES_PER_ACCESSORY))))
+    except (TypeError, ValueError):
+        max_images = AI_REFERENCE_IMAGES_PER_ACCESSORY
+    try:
+        max_side = max(64, min(2048, int(payload.get("max_side", AI_REFERENCE_IMAGE_MAX_SIDE))))
+    except (TypeError, ValueError):
+        max_side = AI_REFERENCE_IMAGE_MAX_SIDE
+    try:
+        quality = max(40, min(95, int(payload.get("quality", AI_REFERENCE_IMAGE_QUALITY))))
+    except (TypeError, ValueError):
+        quality = AI_REFERENCE_IMAGE_QUALITY
+    raw_paths = payload.get("reference_image_paths")
+    paths = [Path(str(path)) for path in raw_paths] if isinstance(raw_paths, list) else accessory_image_paths(item)
+    descriptors: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in paths:
+        path_key = str(path)
+        if path_key in seen:
+            continue
+        seen.add(path_key)
+        data_url = image_path_data_url(path, max_side=max_side, quality=quality)
+        if not data_url:
+            continue
+        mime_type, _ = data_url_payload(data_url)
+        descriptors.append(
+            {
+                "accessory_id": accessory_id,
+                "source_path": path_key,
+                "mime_type": mime_type,
+                "data_url": data_url,
+                "detail": "low",
+                "ordinal": len(descriptors) + 1,
+            }
+        )
+        if len(descriptors) >= max_images:
+            break
+    return {
+        "tool": "accessory.reference.collect",
+        "accessory_id": accessory_id,
+        "references": descriptors,
+        "reference_count": len(descriptors),
+        "max_images": max_images,
+    }
+
+
+def load_ai_profile_cache() -> dict[str, Any]:
+    if not AI_PROFILE_CACHE_PATH.exists():
+        return {"entries": {}}
+    try:
+        raw = json.loads(AI_PROFILE_CACHE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    entries = raw.get("entries") if isinstance(raw.get("entries"), dict) else {}
+    return {"entries": entries}
+
+
+def save_ai_profile_cache(cache: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {"entries": cache.get("entries") if isinstance(cache.get("entries"), dict) else {}}
+    tmp_path = AI_PROFILE_CACHE_PATH.with_name(f"{AI_PROFILE_CACHE_PATH.name}.tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        os.chmod(tmp_path, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp_path, AI_PROFILE_CACHE_PATH)
+    try:
+        os.chmod(AI_PROFILE_CACHE_PATH, 0o600)
+    except OSError:
+        pass
+
+
+def required_accessory_cache_key(required_accessories: list[dict[str, Any]], settings: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    cache_items: list[dict[str, Any]] = []
+    for required in required_accessories:
+        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
+        references = [
+            {
+                "source_path": str(ref.get("source_path") or ""),
+                "sha256": str(ref.get("sha256") or ""),
+            }
+            for ref in profile.get("reference_images", [])
+            if isinstance(ref, dict) and ref.get("source_path")
+        ]
+        cache_items.append(
+            {
+                "accessory_id": str(required.get("accessory_id") or ""),
+                "expected_count": int(required.get("expected_count") or 1),
+                "visual_signature": profile.get("visual_signature") or "",
+                "distinguishing_text": string_list(profile.get("distinguishing_text"), max_items=12),
+                "references": references,
+            }
+        )
+    payload = {
+        "version": AI_PROFILE_CACHE_VERSION,
+        "reference_mode": AI_PROFILE_REFERENCE_MODE,
+        "provider": settings.get("provider"),
+        "model": settings.get("model"),
+        "system": hashlib.sha256(AI_DETECTION_SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:16],
+        "required": sorted(cache_items, key=lambda item: item["accessory_id"]),
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    return digest, cache_items
+
+
+def fit_image_into_cell(image: np.ndarray, width: int, height: int) -> np.ndarray:
+    canvas = np.full((height, width, 3), 255, dtype=np.uint8)
+    if image is None:
+        return canvas
+    if image.ndim == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    if image.ndim == 3 and image.shape[2] >= 4:
+        alpha = (image[:, :, 3].astype(np.float32) / 255.0)[..., None]
+        bgr = image[:, :, :3].astype(np.float32)
+        background = np.full_like(bgr, 255.0)
+        image = (bgr * alpha + background * (1.0 - alpha)).astype(np.uint8)
+    src_h, src_w = image.shape[:2]
+    if src_h <= 0 or src_w <= 0:
+        return canvas
+    scale = min(width / src_w, height / src_h)
+    resized_w = max(1, int(round(src_w * scale)))
+    resized_h = max(1, int(round(src_h * scale)))
+    resized = cv2.resize(image[:, :, :3], (resized_w, resized_h), interpolation=cv2.INTER_AREA)
+    x = (width - resized_w) // 2
+    y = (height - resized_h) // 2
+    canvas[y : y + resized_h, x : x + resized_w] = resized
+    return canvas
+
+
+def build_reference_sheet_descriptor(required_accessories: list[dict[str, Any]]) -> dict[str, Any] | None:
+    items: list[dict[str, Any]] = []
+    for required in required_accessories:
+        item_id = str(required.get("accessory_id") or "")
+        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
+        refs = [ref for ref in profile.get("reference_images", []) if isinstance(ref, dict) and ref.get("source_path")]
+        if not refs:
+            continue
+        ref = refs[0]
+        path = Path(str(ref.get("source_path") or ""))
+        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+            continue
+        items.append(
+            {
+                "accessory_id": item_id,
+                "name": bounded_text(required.get("name") or profile.get("name") or item_id, 80),
+                "expected_count": int(required.get("expected_count") or 1),
+                "source_path": str(path),
+                "sha256": str(ref.get("sha256") or hashlib.sha256(path.read_bytes()).hexdigest()),
+            }
+        )
+    if not items:
+        return None
+    items = sorted(items, key=lambda item: item["accessory_id"])
+    digest_payload = {
+        "mode": AI_PROFILE_REFERENCE_MODE,
+        "items": [{"accessory_id": item["accessory_id"], "sha256": item["sha256"]} for item in items],
+    }
+    digest = hashlib.sha256(json.dumps(digest_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    sheet_dir = OUTPUT_DIR / "ai_reference_sheets"
+    sheet_dir.mkdir(parents=True, exist_ok=True)
+    sheet_path = sheet_dir / f"reference_sheet_{digest[:16]}.jpg"
+    with _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK:
+        cached = _REFERENCE_SHEET_DESCRIPTOR_CACHE.get(digest)
+        if cached and cached.get("data_url") and cached.get("source_path") == str(sheet_path):
+            return dict(cached)
+    if not sheet_path.exists():
+        cols = 3 if len(items) > 2 else len(items)
+        rows = int(math.ceil(len(items) / max(1, cols)))
+        cell_w, cell_h, label_h, margin = 560, 620, 86, 24
+        sheet_w = cols * cell_w + (cols + 1) * margin
+        sheet_h = rows * (cell_h + label_h) + (rows + 1) * margin
+        sheet = np.full((sheet_h, sheet_w, 3), 250, dtype=np.uint8)
+        for idx, item in enumerate(items):
+            row = idx // cols
+            col = idx % cols
+            x = margin + col * (cell_w + margin)
+            y = margin + row * (cell_h + label_h + margin)
+            image = cv2.imread(item["source_path"], cv2.IMREAD_UNCHANGED)
+            tile = fit_image_into_cell(image, cell_w, cell_h)
+            sheet[y : y + cell_h, x : x + cell_w] = tile
+            cv2.rectangle(sheet, (x, y), (x + cell_w, y + cell_h), (30, 30, 30), 2)
+            label_y = y + cell_h + 30
+            cv2.putText(sheet, item["accessory_id"], (x + 12, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.78, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(sheet, item["name"][:42], (x + 12, label_y + 34), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (70, 70, 70), 1, cv2.LINE_AA)
+        cv2.imwrite(str(sheet_path), sheet, [int(cv2.IMWRITE_JPEG_QUALITY), AI_PROFILE_REFERENCE_SHEET_QUALITY])
+    data_url = image_path_data_url(
+        sheet_path,
+        max_side=AI_PROFILE_REFERENCE_SHEET_MAX_SIDE,
+        quality=AI_PROFILE_REFERENCE_SHEET_QUALITY,
+    )
+    if not data_url:
+        return None
+    descriptor = {
+        "accessory_id": "__reference_sheet__",
+        "data_url": data_url,
+        "detail": "low",
+        "source_path": str(sheet_path),
+        "mode": AI_PROFILE_REFERENCE_MODE,
+        "sheet_items": items,
+    }
+    with _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK:
+        _REFERENCE_SHEET_DESCRIPTOR_CACHE[digest] = dict(descriptor)
+    return descriptor
+
+
+def profile_reference_descriptors(required_accessories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sheet = build_reference_sheet_descriptor(required_accessories)
+    return [sheet] if sheet else []
+
+
+def cached_profile_context_content(required_accessories: list[dict[str, Any]], references: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": (
+                "REQUIRED_ACCESSORY_PROFILE_CONTEXT: reuse this context for later inspection images. "
+                "Reference images are examples of required accessories only; never count them as present in an inspection image.\n"
+                + json.dumps(ai_detection_task_payload(required_accessories), ensure_ascii=False)
+            ),
+        }
+    ]
+    for ref in references:
+        item_id = str(ref.get("accessory_id") or "")
+        if not item_id or not ref.get("data_url"):
+            continue
+        if ref.get("mode") == AI_PROFILE_REFERENCE_MODE:
+            content.append(
+                {
+                    "type": "text",
+                    "text": (
+                        "CACHED_REFERENCE_SHEET: one image containing all required accessory reference tiles. "
+                        "Use it only as appearance evidence and ID mapping. Never count objects in this sheet as present "
+                        "in the inspection image. Sheet item mapping:\n"
+                        + json.dumps(ref.get("sheet_items") or [], ensure_ascii=False)
+                    ),
+                }
+            )
+        else:
+            content.append(
+                {
+                    "type": "text",
+                    "text": f"CACHED_REFERENCE_IMAGE for accessory_id={item_id}. Use as profile appearance evidence only.",
+                }
+            )
+        content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
+    return content
+
+
+def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], settings: dict[str, Any]) -> dict[str, Any]:
+    if settings.get("provider") != "gemini" or not settings.get("configured"):
+        return {"enabled": False, "status": "unsupported_provider", "name": "", "reference_images": 0}
+    cache_key, _ = required_accessory_cache_key(required_accessories, settings)
+    cache = load_ai_profile_cache()
+    entries = cache.setdefault("entries", {})
+    now = int(time.time())
+    existing = entries.get(cache_key) if isinstance(entries.get(cache_key), dict) else None
+    if existing and existing.get("name") and int(existing.get("expires_at") or 0) > now + 60:
+        return {
+            "enabled": True,
+            "status": "hit",
+            "name": existing["name"],
+            "reference_images": int(existing.get("reference_images") or 0),
+            "cache_key": cache_key[:12],
+        }
+    references = profile_reference_descriptors(required_accessories)
+    if not references:
+        return {"enabled": False, "status": "no_reference_images", "name": "", "reference_images": 0}
+    try:
+        provider = ai_provider_from_settings(settings)
+        if not isinstance(provider, GeminiAiProvider):
+            raise AiProviderError("Provider does not support Gemini cachedContent")
+        created = provider.create_cached_content(
+            AI_DETECTION_SYSTEM_PROMPT,
+            cached_profile_context_content(required_accessories, references),
+            display_name=f"inspection-profile-{cache_key[:12]}",
+            ttl_seconds=AI_PROFILE_CACHE_TTL_SECONDS,
+        )
+        entries[cache_key] = {
+            "name": created["name"],
+            "provider": settings.get("provider"),
+            "model": settings.get("model"),
+            "created_at": now,
+            "expires_at": now + AI_PROFILE_CACHE_TTL_SECONDS,
+            "reference_images": len(references),
+            "latency_ms": created.get("latency_ms", 0),
+            "usage_metadata": created.get("usage_metadata") or {},
+        }
+        save_ai_profile_cache(cache)
+        return {
+            "enabled": True,
+            "status": "created",
+            "name": created["name"],
+            "reference_images": len(references),
+            "latency_ms": created.get("latency_ms", 0),
+            "cache_key": cache_key[:12],
+        }
+    except Exception as exc:
+        return {
+            "enabled": False,
+            "status": "create_failed",
+            "name": "",
+            "reference_images": len(references),
+            "error": bounded_text(str(exc), 220),
+            "cache_key": cache_key[:12],
+        }
+
+
+def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
+    item = dict(payload.get("accessory") if isinstance(payload.get("accessory"), dict) else {})
+    if "expected_count" in payload:
+        item["expected_count"] = payload.get("expected_count")
+    fallback = fallback_accessory_ai_profile(item)
+    settings = dict(payload.get("provider_config") or ai_detection_settings())
+    status = profile_generation_status(settings)
+    allow_provider = bool(payload.get("allow_provider", True))
+    if not allow_provider or not settings.get("configured"):
+        return {"tool": "accessory.profile.generate", "profile": fallback, "status": status, "ok": False}
+
+    references = call_ai_mcp_tool(
+        "accessory.reference.collect",
+        {
+            "accessory": item,
+            "reference_image_paths": payload.get("reference_image_paths"),
+            "max_images": payload.get("max_reference_images", AI_PROFILE_REFERENCE_IMAGES),
+            "max_side": payload.get("reference_max_side", AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE),
+            "quality": payload.get("reference_quality", AI_PROFILE_REFERENCE_IMAGE_QUALITY),
+        },
+    )["references"]
+    user_content: list[dict[str, Any]] = [
+        {"type": "text", "text": json.dumps(accessory_profile_prompt_payload(item), ensure_ascii=False)},
+    ]
+    for ref in references:
+        user_content.append(
+            {
+                "type": "text",
+                "text": f"REFERENCE_IMAGE for accessory_id={ref['accessory_id']}. Use this only as profile appearance evidence.",
+            }
+        )
+        user_content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
+    provider_result = call_ai_mcp_tool(
+        "provider.gemini.generate_json",
+        {
+            "provider_config": settings,
+            "system_prompt": (
+                "Create a structured accessory profile for visual inspection. "
+                "Use image evidence when available. Return only JSON with keys: "
+                "accessory_id, name, material_type, description, tags, visual_signature, "
+                "distinguishing_text, negative_cues, expected_count."
+            ),
+            "user_content": user_content,
+            "max_tokens": 900,
+            "schema_hint": {"required_keys": list(fallback.keys())},
+        },
+    )
+    if provider_result.get("ok"):
+        profile = normalize_accessory_ai_profile(provider_result.get("parsed") or {}, item)
+        profile["reference_images"] = accessory_reference_image_contexts(item)
+        return {
+            "tool": "accessory.profile.generate",
+            "profile": profile,
+            "status": {
+                **status,
+                "source": "provider",
+                "status": "generated",
+                "message": "AI profile generated by provider.",
+                "latency_ms": provider_result.get("latency_ms", 0),
+                "reference_images": len(references),
+            },
+            "ok": True,
+        }
+    status.update(
+        {
+            "status": "timeout" if provider_result.get("timed_out") else "provider_error",
+            "message": provider_result.get("error") or "AI provider failed to generate accessory profile.",
+            "timed_out": bool(provider_result.get("timed_out")),
+            "latency_ms": provider_result.get("latency_ms", 0),
+            "reference_images": len(references),
+        }
+    )
+    fallback["reference_images"] = accessory_reference_image_contexts(item)
+    return {"tool": "accessory.profile.generate", "profile": fallback, "status": status, "ok": False}
+
+
+def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
+    trace_start = time.monotonic()
+    timing: dict[str, int] = {}
+
+    def mark(name: str) -> None:
+        timing[name] = int((time.monotonic() - trace_start) * 1000)
+
+    settings = dict(payload.get("provider_config") or ai_detection_settings())
+    required_accessories = [
+        item for item in (payload.get("required_accessories") or []) if isinstance(item, dict) and item.get("accessory_id")
+    ]
+    if not required_accessories:
+        required_accessories = resolve_required_accessory_refs(payload.get("required_accessory_refs") or [])
+    mark("resolved_required_ms")
+    if not settings.get("configured"):
+        return ai_presence_failure_payload(required_accessories, settings, reason=settings.get("message") or "AI provider is not configured")
+    inspection_data_url = str(payload.get("inspection_image_data_url") or "")
+    if not inspection_data_url:
+        inspection_path = str(payload.get("inspection_image_path") or "")
+        if inspection_path:
+            inspection_data_url = image_path_data_url(
+                Path(inspection_path),
+                max_side=AI_INSPECTION_IMAGE_MAX_SIDE,
+                quality=AI_INSPECTION_IMAGE_QUALITY,
+            )
+            if not inspection_data_url:
+                return ai_presence_failure_payload(required_accessories, settings, reason="Inspection image path could not be encoded")
+        else:
+            image_bgr = payload.get("inspection_image_bgr")
+            if not isinstance(image_bgr, np.ndarray):
+                return ai_presence_failure_payload(required_accessories, settings, reason="Inspection image payload was missing")
+            inspection_data_url = image_bgr_data_url(
+                image_bgr,
+                max_side=AI_INSPECTION_IMAGE_MAX_SIDE,
+                quality=AI_INSPECTION_IMAGE_QUALITY,
+            )
+    mark("inspection_encoded_ms")
+    task_payload = ai_detection_task_payload(required_accessories)
+    profile_cache = ensure_required_profile_cache(required_accessories, settings)
+    mark("profile_cache_ready_ms")
+    if profile_cache.get("enabled") and profile_cache.get("name"):
+        user_content: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": (
+                    "INSPECTION_IMAGE: decide presence only from the next image, using the cached required accessory "
+                    "profile context. Return compact JSON. Evidence must be one short phrase per accessory. "
+                    "For present accessories, use observed_text only when visible text is actually readable."
+                ),
+            },
+            {"type": "image_url", "image_url": {"url": inspection_data_url, "detail": "low"}},
+        ]
+    else:
+        user_content = [
+            {"type": "text", "text": json.dumps(task_payload, ensure_ascii=False)},
+            {
+                "type": "text",
+                "text": (
+                    "INSPECTION_IMAGE: decide presence only from the next image. "
+                    "Return compact JSON. Evidence must be one short phrase per accessory. "
+                    "For present accessories, use observed_text only when visible text is actually readable."
+                ),
+            },
+            {"type": "image_url", "image_url": {"url": inspection_data_url, "detail": "low"}},
+        ]
+    reference_count = 0
+    per_accessory_reference_counts: dict[str, int] = {}
+    for ref in payload.get("reference_descriptors") or []:
+        if not isinstance(ref, dict) or not ref.get("data_url"):
+            continue
+        item_id = str(ref.get("accessory_id") or "")
+        if not item_id:
+            continue
+        current_count = per_accessory_reference_counts.get(item_id, 0)
+        if current_count >= AI_REFERENCE_IMAGES_PER_ACCESSORY:
+            continue
+        per_accessory_reference_counts[item_id] = current_count + 1
+        user_content.append(
+            {
+                "type": "text",
+                "text": f"REFERENCE_IMAGE for accessory_id={item_id}. Use this only as appearance evidence; do not count it as present.",
+            }
+        )
+        user_content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
+        reference_count += 1
+    mark("user_content_ready_ms")
+    provider_result = call_ai_mcp_tool(
+        "provider.gemini.generate_json",
+        {
+            "provider_config": settings,
+            "system_prompt": AI_DETECTION_SYSTEM_PROMPT,
+            "user_content": user_content,
+            "max_tokens": 520,
+            "schema_hint": AI_DETECTION_OUTPUT_SCHEMA,
+            "cached_content": profile_cache.get("name") if profile_cache.get("enabled") else "",
+        },
+    )
+    mark("provider_result_ready_ms")
+    if not provider_result.get("ok"):
+        failure = ai_presence_failure_payload(
+            required_accessories,
+            settings,
+            reason=provider_result.get("error") or "AI provider failed",
+            timed_out=bool(provider_result.get("timed_out")),
+            latency_ms=int(provider_result.get("latency_ms") or 0),
+        )
+        failure["ai"].update(provider_result.get("meta") if isinstance(provider_result.get("meta"), dict) else {})
+        failure.setdefault("ai", {})["timing"] = timing
+        return failure
+    result = normalize_ai_detection_result(
+        provider_result.get("parsed") or {},
+        required_accessories,
+        int(provider_result.get("latency_ms") or 0),
+        settings,
+    )
+    result["ai"]["reference_images"] = int(profile_cache.get("reference_images") or reference_count)
+    result["ai"]["profile_cache"] = {
+        key: value
+        for key, value in profile_cache.items()
+        if key in {"enabled", "status", "reference_images", "latency_ms", "cache_key", "error"}
+    }
+    result["ai"].update(provider_result.get("meta") if isinstance(provider_result.get("meta"), dict) else {})
+    result["ai"]["timing"] = timing
+    return result
+
+
+AI_MCP_TOOL_HANDLERS = {
+    "accessory.profile.generate": tool_accessory_profile_generate,
+    "accessory.reference.collect": tool_accessory_reference_collect,
+    "vision.inspect.presence": tool_vision_inspect_presence,
+    "provider.gemini.generate_json": tool_provider_gemini_generate_json,
+}
+
+
+class LocalAiMcpClient:
+    def __init__(self) -> None:
+        self.process: subprocess.Popen[str] | None = None
+        self.lock = threading.RLock()
+        self.next_id = 1
+
+    def close(self) -> None:
+        with self.lock:
+            if self.process and self.process.poll() is None:
+                self.process.terminate()
+            self.process = None
+
+    def ensure_started(self) -> None:
+        if self.process and self.process.poll() is None:
+            return
+        self.process = subprocess.Popen(
+            [sys.executable, "-m", "local_inspection_service.ai_mcp_server"],
+            cwd=str(ROOT),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+        self.request("initialize", {"protocolVersion": "2024-11-05", "clientInfo": {"name": "local-inspection-service", "version": "0.1.0"}})
+
+    def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not self.process or not self.process.stdin or not self.process.stdout:
+            raise AiProviderError("AI MCP client process is not started")
+        message_id = self.next_id
+        self.next_id += 1
+        message = {"jsonrpc": "2.0", "id": message_id, "method": method, "params": params or {}}
+        self.process.stdin.write(json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n")
+        self.process.stdin.flush()
+        line = self.process.stdout.readline()
+        if not line:
+            raise AiProviderError("AI MCP server closed stdout")
+        response = json.loads(line)
+        if not isinstance(response, dict):
+            raise AiProviderError("AI MCP server returned non-object response")
+        if response.get("error"):
+            error = response["error"] if isinstance(response["error"], dict) else {}
+            raise AiProviderError(str(error.get("message") or "AI MCP server error"))
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise AiProviderError("AI MCP response result was not an object")
+        return result
+
+    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        with self.lock:
+            self.ensure_started()
+            result = self.request("tools/call", {"name": tool_name, "arguments": arguments})
+        content = result.get("content") if isinstance(result.get("content"), list) else []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parsed = json.loads(str(item.get("text") or "{}"))
+                if isinstance(parsed, dict):
+                    parsed.setdefault("mcp_transport", "stdio")
+                    parsed.setdefault("mcp_runtime", AI_MCP_RUNTIME_STDIO)
+                    return parsed
+        raise AiProviderError("AI MCP tool response had no JSON text content")
+
+
+_ai_mcp_client = LocalAiMcpClient()
+
+
+def ai_mcp_runtime() -> str:
+    if os.environ.get("INSPECTION_AI_MCP_SERVER_MODE"):
+        return AI_MCP_RUNTIME_IN_PROCESS
+    runtime = os.environ.get(AI_MCP_RUNTIME_ENV, "").strip().lower().replace("-", "_")
+    if runtime in {"stdio", "external", "subprocess", "mcp"}:
+        return AI_MCP_RUNTIME_STDIO
+    if runtime in {"in_process", "inprocess", "local", "direct", ""}:
+        return AI_MCP_RUNTIME_IN_PROCESS
+    legacy_enabled = os.environ.get(AI_MCP_LEGACY_ENABLED_ENV)
+    if legacy_enabled is not None and legacy_enabled.strip().lower() in {"1", "true", "yes", "on", "stdio"}:
+        return AI_MCP_RUNTIME_STDIO
+    return AI_MCP_RUNTIME_IN_PROCESS
+
+
+def external_ai_mcp_enabled() -> bool:
+    return ai_mcp_runtime() == AI_MCP_RUNTIME_STDIO
+
+
+def prepare_ai_mcp_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    prepared = dict(payload)
+    image_bgr = prepared.get("inspection_image_bgr")
+    if tool_name == "vision.inspect.presence" and prepared.get("inspection_image_path"):
+        prepared.pop("inspection_image_bgr", None)
+    elif tool_name == "vision.inspect.presence" and isinstance(image_bgr, np.ndarray):
+        prepared["inspection_image_data_url"] = image_bgr_data_url(
+            image_bgr,
+            max_side=AI_INSPECTION_IMAGE_MAX_SIDE,
+            quality=AI_INSPECTION_IMAGE_QUALITY,
+        )
+        prepared.pop("inspection_image_bgr", None)
+    return prepared
+
+
+def call_ai_mcp_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    # Extraction point for out-of-process MCP: default is an O(1) in-process tool dispatch.
+    dispatch_start = time.monotonic()
+    arguments = payload if isinstance(payload, dict) else {}
+    runtime = ai_mcp_runtime()
+    fallback_error = ""
+    if runtime == AI_MCP_RUNTIME_STDIO:
+        try:
+            result = _ai_mcp_client.call_tool(tool_name, prepare_ai_mcp_payload(tool_name, arguments))
+            result.setdefault("mcp_transport", "stdio")
+            result.setdefault("mcp_runtime", AI_MCP_RUNTIME_STDIO)
+            result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
+            return result
+        except Exception as exc:
+            fallback_error = bounded_text(str(exc) or exc.__class__.__name__, 180)
+            _ai_mcp_client.close()
+    handler = AI_MCP_TOOL_HANDLERS.get(tool_name)
+    if handler is None:
+        raise AiProviderError(f"Unknown AI MCP tool: {tool_name}")
+    result = handler(arguments)
+    if not isinstance(result, dict):
+        raise AiProviderError(f"AI MCP tool returned non-object result: {tool_name}")
+    result.setdefault("tool", tool_name)
+    result.setdefault("mcp_transport", "in_process")
+    result.setdefault("mcp_runtime", AI_MCP_RUNTIME_IN_PROCESS)
+    result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
+    if fallback_error:
+        result.setdefault("mcp_fallback_from", AI_MCP_RUNTIME_STDIO)
+        result.setdefault("mcp_fallback_error", fallback_error)
+    return result
+
+
+def warm_ai_mcp_client() -> None:
+    if not external_ai_mcp_enabled():
+        return
+    try:
+        _ai_mcp_client.ensure_started()
+    except Exception:
+        _ai_mcp_client.close()
+
+
+@app.on_event("startup")
+def start_ai_mcp_warmup() -> None:
+    if external_ai_mcp_enabled():
+        threading.Thread(target=warm_ai_mcp_client, name="ai-mcp-warmup", daemon=True).start()
+
+
+def generate_accessory_ai_profile(item: dict[str, Any], *, allow_provider: bool = True) -> dict[str, Any]:
+    result = call_ai_mcp_tool(
+        "accessory.profile.generate",
+        {"accessory": item, "allow_provider": allow_provider, "provider_config": ai_detection_settings()},
+    )
+    item["ai_profile"] = result["profile"]
+    item["ai_profile_status"] = result["status"]
+    return result["profile"]
+
+
+def ensure_accessory_ai_profile(item: dict[str, Any], *, force: bool = False, allow_provider: bool = True) -> bool:
+    current = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
+    if not force and current and current.get("accessory_id") == accessory_uid(item):
+        return False
+    generate_accessory_ai_profile(item, allow_provider=allow_provider)
+    return True
 
 
 def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -3462,6 +5322,7 @@ def create_accessory_candidate(
         item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
     normalized = normalize_accessory_assets(item)
     item.update(normalized)
+    ensure_accessory_ai_profile(item, allow_provider=True)
     thumbnails = []
     image_sources = [Path(path) for path in expanded_source_files if Path(path).suffix.lower() in IMAGE_REFERENCE_SUFFIXES]
     for idx, src in enumerate(image_sources[:8]):
@@ -4142,29 +6003,89 @@ def write_gallery_preview(src: Path, out_path: Path, max_side: int = 1200) -> di
     return {"url": public_output_url(out_path), "width": int(preview.shape[1]), "height": int(preview.shape[0])}
 
 
+def existing_source_image_paths(item: dict[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    seen: set[str] = set()
+    for path_str in item.get("source_files", []) or []:
+        path = Path(str(path_str))
+        key = str(path)
+        if key in seen:
+            continue
+        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
+            paths.append(path)
+            seen.add(key)
+    return paths
+
+
+def refresh_accessory_assets_after_source_change(item: dict[str, Any], *, force_profile: bool = True) -> None:
+    normalized = normalize_accessory_assets(item)
+    item.update(normalized)
+    valid_sources = {str(path) for path in existing_source_image_paths(item)}
+    current_refs = [
+        str(path)
+        for path in item.get("ai_profile_reference_files", []) or []
+        if str(path) in valid_sources
+    ]
+    if not current_refs:
+        current_refs = [str(path) for path in existing_source_image_paths(item)[:AI_PROFILE_REFERENCE_IMAGES]]
+    item["ai_profile_reference_files"] = current_refs
+    if force_profile:
+        item["ai_profile"] = fallback_accessory_ai_profile(item)
+        item["ai_profile_status"] = "ready"
+        generate_accessory_ai_profile(item, allow_provider=True)
+
+
 def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
     uid = accessory_uid(item)
     gallery_dir = OUTPUT_DIR / "accessory_gallery" / uid
     gallery: list[dict[str, Any]] = []
     material_type = accessory_material_type(item)
+    ai_reference_paths = {
+        str(path)
+        for path in item.get("ai_profile_reference_files", []) or []
+        if str(path).strip()
+    }
+    shown_paths: set[str] = set()
+    for source_index, path in enumerate(existing_source_image_paths(item), start=1):
+        preview = write_gallery_preview(path, gallery_dir / f"source_{source_index:02d}.png")
+        if preview:
+            shown_paths.add(str(path))
+            gallery.append(
+                {
+                    "label": "实拍照片" if material_type == "object" else "文档照片",
+                    "kind": "source",
+                    "source_path": str(path),
+                    "deletable": True,
+                    "ai_reference": str(path) in ai_reference_paths,
+                    **preview,
+                }
+            )
     pose_output_paths = []
     clean_sprites = clean_sprite_assets(item)[:18]
     for job in candidate_image_jobs(item):
         output_path = Path(str(job.get("output_path", "")))
         if material_type == "object" and output_path.exists() and str(output_path).startswith(str(OUTPUT_DIR)):
+            if str(output_path) in shown_paths:
+                continue
             pose_output_paths.append(output_path)
+            shown_paths.add(str(output_path))
             gallery.append(
                 {
                     "label": public_text(job.get("label") or "多角度视图"),
                     "kind": "pose_collection",
                     "url": public_output_url(output_path),
                     "source_path": str(output_path),
+                    "deletable": True,
+                    "ai_reference": str(output_path) in ai_reference_paths,
                 }
             )
     for idx, asset in enumerate(clean_sprites):
         path = Path(str(asset.get("path", "")))
+        if str(path) in shown_paths:
+            continue
         preview = write_gallery_preview(path, gallery_dir / f"clean_sprite_{idx + 1:02d}.png")
         if preview:
+            shown_paths.add(str(path))
             gallery.append(
                 {
                     "label": f"无背景 sprite {idx + 1}",
@@ -4197,26 +6118,32 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
                     "render_scale_basis": asset.get("render_scale_basis"),
                     "render_footprint_mm": asset.get("render_footprint_mm"),
                     "render_footprint_px": asset.get("render_footprint_px"),
+                    "deletable": True,
+                    "ai_reference": str(path) in ai_reference_paths,
                     **preview,
                 }
             )
-    if gallery and material_type == "object":
-        return {"item": public_accessory_detail_item(item), "gallery": gallery}
-    source_index = 1
+    source_paths = {str(path) for path in existing_source_image_paths(item)}
+    normalized_index = 1
     for path in accessory_image_paths(item):
         if path in pose_output_paths:
             continue
-        preview = write_gallery_preview(path, gallery_dir / f"asset_{source_index:02d}.png")
+        if str(path) in source_paths or str(path) in shown_paths:
+            continue
+        preview = write_gallery_preview(path, gallery_dir / f"asset_{normalized_index:02d}.png")
         if preview:
+            shown_paths.add(str(path))
             gallery.append(
                 {
-                    "label": "文档图片" if material_type == "text" else "素材图片",
-                    "kind": "source",
+                    "label": "规范化文档" if material_type == "text" else "派生素材",
+                    "kind": "normalized" if material_type == "text" else "derived",
                     "source_path": str(path),
+                    "deletable": True,
+                    "ai_reference": str(path) in ai_reference_paths,
                     **preview,
                 }
             )
-            break
+            normalized_index += 1
     return {"item": public_accessory_detail_item(item), "gallery": gallery}
 
 
@@ -5781,8 +7708,69 @@ def list_trained_model_specs() -> list[dict[str, Any]]:
     return models
 
 
+def ai_detection_task_model_id(task_id: str) -> str:
+    return f"{AI_DETECTION_TASK_PREFIX}{task_id}"
+
+
+def list_ai_detection_specialized_model_specs(
+    config: dict[str, Any] | None = None,
+    trained_specs: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    config = config or load_config()
+    trained_specs = trained_specs if trained_specs is not None else list_trained_model_specs()
+    accessories_by_id = {
+        str(item.get("id") or accessory_uid(item)): serialize_accessory(item)
+        for item in config.get("accessories", [])
+    }
+    grouped: dict[str, dict[str, Any]] = {}
+    for spec in trained_specs:
+        task_id = str(spec.get("task_id") or spec.get("run_id") or "")
+        if not task_id:
+            continue
+        selected_accessory_ids = [str(item_id) for item_id in spec.get("selected_accessory_ids") or []]
+        if not selected_accessory_ids:
+            continue
+        required_counts = {
+            str(k): max(1, int(v))
+            for k, v in (spec.get("required_accessory_counts") or {}).items()
+        } or {item_id: 1 for item_id in selected_accessory_ids}
+        accessory_names = [
+            str((accessories_by_id.get(item_id) or {}).get("name") or (spec.get("accessory_labels") or {}).get(item_id) or item_id)
+            for item_id in selected_accessory_ids
+        ]
+        current = grouped.setdefault(
+            task_id,
+            {
+                **MODEL_REGISTRY[AI_DETECTION_MODEL_ID],
+                "id": ai_detection_task_model_id(task_id),
+                "run_id": str(spec.get("run_id") or task_id),
+                "task_id": task_id,
+                "is_specialized": True,
+                "is_ai_detection": True,
+                "variant": "ai_detection",
+                "label": AI_DETECTION_LABEL,
+                "description": "按当前任务配件画像调用无状态 AI 检测。",
+                "selected_accessory_ids": selected_accessory_ids,
+                "required_accessory_counts": required_counts,
+                "accessory_names": accessory_names,
+                "accessory_labels": {item_id: accessory_names[idx] for idx, item_id in enumerate(selected_accessory_ids)},
+                "artifact_path": "",
+                "metadata_path": "",
+            },
+        )
+        for item_id in selected_accessory_ids:
+            if item_id not in current["selected_accessory_ids"]:
+                current["selected_accessory_ids"].append(item_id)
+                current["accessory_names"].append(str((accessories_by_id.get(item_id) or {}).get("name") or item_id))
+        current["required_accessory_counts"].update(required_counts)
+    return list(grouped.values())
+
+
 def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = None) -> dict[str, Any]:
     requested = model_id or (config or {}).get("active_model_id") or DEFAULT_MODEL_ID
+    for spec in list_ai_detection_specialized_model_specs(config):
+        if spec["id"] == requested:
+            return spec
     for spec in list_trained_model_specs():
         if spec["id"] == requested:
             return spec
@@ -5793,6 +7781,8 @@ def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = No
 
 def model(model_id: str | None = None, config: dict[str, Any] | None = None) -> YOLO:
     spec = selected_model_spec(model_id, config)
+    if spec.get("is_ai_detection"):
+        raise RuntimeError("AI Detection does not use a local YOLO model")
     model_id = str(spec["id"])
     model_path = Path(spec["path"])
     if model_id not in _models:
@@ -6445,9 +8435,382 @@ def draw_detections(image_bgr: np.ndarray, detections: list[dict[str, Any]], rul
     return annotated
 
 
-def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = None) -> dict[str, Any]:
+def ai_required_accessories(config: dict[str, Any], spec: dict[str, Any]) -> list[tuple[dict[str, Any], int]]:
+    accessories = config.get("accessories", [])
+    by_id = {accessory_uid(item): item for item in accessories}
+    required: list[tuple[dict[str, Any], int]] = []
+    if spec.get("is_specialized"):
+        counts = {
+            str(k): max(1, int(v))
+            for k, v in (spec.get("required_accessory_counts") or {}).items()
+        }
+        ids = [str(item_id) for item_id in spec.get("selected_accessory_ids") or counts.keys()]
+        labels = {str(k): str(v) for k, v in (spec.get("accessory_labels") or {}).items()}
+        for item_id in ids:
+            item = by_id.get(item_id) or {
+                "id": item_id,
+                "class_id": -1,
+                "name": labels.get(item_id, item_id),
+                "material_type": "object",
+                "source_files": [],
+                "normalized_assets": [],
+            }
+            required.append((item, counts.get(item_id, 1)))
+        return required
+
+    required_classes = [int(x) for x in config.get("required_classes", [])]
+    min_counts = {int(k): max(1, int(v)) for k, v in (config.get("min_counts") or {}).items()}
+    by_class: dict[int, dict[str, Any]] = {}
+    for item in accessories:
+        try:
+            by_class[int(item.get("class_id", -1))] = item
+        except (TypeError, ValueError):
+            continue
+    for class_id in required_classes:
+        item = by_class.get(class_id)
+        if not item:
+            item = {
+                "id": f"required_class_{class_id}",
+                "class_id": class_id,
+                "name": CLASS_LABELS.get(class_id, f"Required Class {class_id}"),
+                "material_type": "object" if class_id == 0 else "text",
+                "status": "missing_accessory_metadata",
+                "description": "Configured required class has no matching accessory metadata; fail closed.",
+                "source_files": [],
+                "normalized_assets": [],
+            }
+        required.append((item, min_counts.get(class_id, 1)))
+    if required:
+        return required
+    return []
+
+
+def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dict[str, Any]:
+    payload_accessories = []
+    for required in required_accessories:
+        try:
+            expected_count = max(1, int(required.get("expected_count") or 1))
+        except (TypeError, ValueError):
+            expected_count = 1
+        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
+        text_cues = string_list(profile.get("distinguishing_text"), max_items=6, max_len=64)
+        tags = string_list(profile.get("tags"), max_items=5, max_len=40)
+        visual_signature = bounded_text(profile.get("visual_signature") or profile.get("description"), 180)
+        payload_accessories.append(
+            {
+                "accessory_id": str(required.get("accessory_id") or ""),
+                "name": bounded_text(required.get("name") or required.get("label") or required.get("accessory_id"), 80),
+                "expected_count": expected_count,
+                "material_type": bounded_text(required.get("material_type") or profile.get("material_type"), 32),
+                "visual_cue": visual_signature,
+                "text_cues": text_cues,
+                "tags": tags,
+            }
+        )
+    return {
+        "task": {
+            "policy": "presence_by_accessory_profile",
+            "expected_latency_seconds": 5,
+            "decision_rule": "passed is true only when every required accessory is present at expected_count or higher.",
+            "output_mode": "compact",
+            "required_accessories": payload_accessories,
+        },
+        "output_contract": {
+            "detections": "Array of {accessory_id,present,confidence,evidence,observed_text}.",
+            "rule": "Object with present, missing, extra, counts keyed by accessory_id.",
+            "passed": "Boolean.",
+        },
+    }
+
+
+def ai_presence_failure_payload(
+    required_accessories: list[dict[str, Any]],
+    settings: dict[str, Any],
+    *,
+    reason: str,
+    timed_out: bool = False,
+    latency_ms: int = 0,
+) -> dict[str, Any]:
+    missing_ids = [str(item.get("accessory_id") or "") for item in required_accessories if item.get("accessory_id")]
+    detections = [
+        {
+            "accessory_id": item_id,
+            "label": bounded_text(required.get("name") or required.get("label") or item_id, 120),
+            "present": False,
+            "confidence": 0.0,
+            "evidence": bounded_text(reason, 160),
+            "observed_text": [],
+        }
+        for required in required_accessories
+        for item_id in [str(required.get("accessory_id") or "")]
+        if item_id
+    ]
+    provider_meta = ai_tool_provider_meta(settings)
+    return {
+        "tool": "vision.inspect.presence",
+        "passed": len(missing_ids) == 0,
+        "rule": {
+            "match_policy": "ai_presence",
+            "label": AI_DETECTION_LABEL,
+            "present": [],
+            "missing": missing_ids,
+            "extra": [],
+            "counts": {item_id: 0 for item_id in missing_ids},
+        },
+        "detections": detections,
+        "ai": {
+            "latency_ms": latency_ms,
+            "timed_out": timed_out,
+            "provider_failure": True,
+            "failure_reason": bounded_text(reason, 240),
+            "raw_summary": bounded_text(reason, 240),
+            "provider_status": settings.get("status") or "",
+            "error": bounded_text(reason, 240),
+            **provider_meta,
+        },
+    }
+
+
+def ai_detection_failure_result(
+    request_id: str,
+    spec: dict[str, Any],
+    required_items: list[tuple[dict[str, Any], int]],
+    annotated_url: str,
+    *,
+    reason: str,
+    timed_out: bool = False,
+    latency_ms: int = 0,
+) -> dict[str, Any]:
+    settings = ai_detection_settings()
+    required_accessories = [required_accessory_profile_payload(item, expected_count) for item, expected_count in required_items]
+    payload = ai_presence_failure_payload(required_accessories, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
+    return {
+        "request_id": request_id,
+        "passed": payload["passed"],
+        "model": ai_model_payload(spec, settings),
+        "rule": payload["rule"],
+        "detections": payload["detections"],
+        "annotated_url": annotated_url,
+        "ai": payload["ai"],
+    }
+
+
+def write_ai_original_output(image_bgr: np.ndarray, request_id: str) -> str:
+    out_name = f"{request_id}_ai_original.jpg"
+    out_path = OUTPUT_DIR / out_name
+    cv2.imwrite(str(out_path), image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    return f"/outputs/{out_name}"
+
+
+def ai_model_payload(spec: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": spec["id"],
+        "label": spec.get("label", AI_DETECTION_LABEL),
+        "variant": "ai_detection",
+        "is_ai_detection": True,
+        "provider_model": settings.get("model") or "",
+        "uses_ocr": True,
+    }
+
+
+def normalize_ai_detection_result(
+    parsed: dict[str, Any],
+    required_accessories: list[dict[str, Any]],
+    latency_ms: int,
+    settings: dict[str, Any],
+) -> dict[str, Any]:
+    raw_detections = parsed.get("detections") if isinstance(parsed.get("detections"), list) else []
+    raw_by_id = {
+        str(det.get("accessory_id")): det
+        for det in raw_detections
+        if isinstance(det, dict) and det.get("accessory_id") is not None
+    }
+    raw_rule = parsed.get("rule") if isinstance(parsed.get("rule"), dict) else {}
+    raw_counts = raw_rule.get("counts") if isinstance(raw_rule.get("counts"), dict) else {}
+    detections = []
+    present_ids = []
+    missing_ids = []
+    counts: dict[str, int] = {}
+    for required in required_accessories:
+        item_id = str(required.get("accessory_id") or "")
+        if not item_id:
+            continue
+        try:
+            expected_count = max(1, int(required.get("expected_count") or 1))
+        except (TypeError, ValueError):
+            expected_count = 1
+        raw = raw_by_id.get(item_id, {})
+        raw_confidence = raw.get("confidence", 0.5 if raw.get("present") is True else 0.0) if isinstance(raw, dict) else 0.0
+        try:
+            if isinstance(raw_confidence, bool):
+                raise ValueError("confidence must be numeric")
+            confidence_value = float(raw_confidence)
+            if not math.isfinite(confidence_value):
+                raise ValueError("confidence must be finite")
+            confidence = max(0.0, min(1.0, confidence_value))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        present = (raw.get("present") is True and confidence > 0.0) if isinstance(raw, dict) else False
+        has_raw_count = item_id in raw_counts
+        raw_count = raw_counts.get(item_id)
+        if type(raw_count) is int and raw_count >= 0:
+            count = raw_count
+        elif has_raw_count:
+            count = 0
+        else:
+            count = 1 if present else 0
+        if not present:
+            count = 0
+        counts[item_id] = count
+        if present and count >= expected_count:
+            present_ids.append(item_id)
+        else:
+            missing_ids.append(item_id)
+        detections.append(
+            {
+                "accessory_id": item_id,
+                "label": bounded_text(raw.get("label") if isinstance(raw, dict) else required.get("name"), 120)
+                or bounded_text(required.get("name") or item_id, 120),
+                "present": item_id in present_ids,
+                "confidence": round(confidence, 4),
+                "evidence": bounded_text(raw.get("evidence") if isinstance(raw, dict) else "", 180),
+                "observed_text": string_list(raw.get("observed_text") if isinstance(raw, dict) else [], max_items=6, max_len=80),
+            }
+        )
+    required_ids = {str(item.get("accessory_id") or "") for item in required_accessories}
+    extra = string_list([item for item in raw_rule.get("extra", []) if str(item) not in required_ids], max_items=12) if isinstance(raw_rule.get("extra"), list) else []
+    passed = len(missing_ids) == 0
+    provider_meta = ai_tool_provider_meta(settings)
+    return {
+        "tool": "vision.inspect.presence",
+        "passed": passed,
+        "rule": {
+            "match_policy": "ai_presence",
+            "label": AI_DETECTION_LABEL,
+            "present": present_ids,
+            "missing": missing_ids,
+            "extra": extra,
+            "counts": counts,
+        },
+        "detections": detections,
+        "ai": {
+            "latency_ms": latency_ms,
+            "timed_out": False,
+            "provider_failure": False,
+            "raw_summary": bounded_text(parsed.get("raw_summary") or parsed.get("summary") or "", 240),
+            "provider_status": settings.get("status") or "",
+            **provider_meta,
+        },
+    }
+
+
+def analyze_bgr_ai_detection(
+    image_bgr: np.ndarray,
+    request_id: str,
+    spec: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    image_path: Path | None = None,
+) -> dict[str, Any]:
+    required_items = ai_required_accessories(config, spec)
+    if not required_items:
+        annotated_url = write_ai_original_output(image_bgr, request_id)
+        return ai_detection_failure_result(
+            request_id,
+            spec,
+            [],
+            annotated_url,
+            reason="AI detection task has no required accessories configured.",
+        )
+    changed = False
+    real_ids = {accessory_uid(item) for item in config.get("accessories", [])}
+    required_accessories: list[dict[str, Any]] = []
+    required_accessory_refs: list[dict[str, Any]] = []
+    reference_descriptors: list[dict[str, Any]] = []
+    for item, expected_count in required_items:
+        item_id = accessory_uid(item)
+        current_profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
+        if not current_profile or current_profile.get("accessory_id") != item_id:
+            profile_result = call_ai_mcp_tool(
+                "accessory.profile.generate",
+                {
+                    "accessory": item,
+                    "expected_count": expected_count,
+                    "allow_provider": False,
+                    "provider_config": ai_detection_settings(),
+                },
+            )
+            item["ai_profile"] = profile_result["profile"]
+            item["ai_profile_status"] = profile_result["status"]
+            current_profile = profile_result["profile"]
+            if item_id in real_ids:
+                changed = True
+        else:
+            normalized_profile = normalize_accessory_ai_profile(current_profile, item)
+            current_refs = normalized_profile.get("reference_images") if isinstance(normalized_profile.get("reference_images"), list) else []
+            if current_refs:
+                if normalized_profile != current_profile:
+                    item["ai_profile"] = normalized_profile
+                    current_profile = normalized_profile
+                    if item_id in real_ids:
+                        changed = True
+            else:
+                expected_refs = accessory_reference_image_contexts(item)
+                if expected_refs:
+                    normalized_profile["reference_images"] = expected_refs
+                    item["ai_profile"] = normalized_profile
+                    current_profile = normalized_profile
+                    if item_id in real_ids:
+                        changed = True
+        required_accessories.append(required_accessory_profile_payload(item, expected_count, current_profile))
+        required_accessory_refs.append({"accessory_id": item_id, "expected_count": expected_count})
+        if AI_REFERENCE_IMAGES_PER_ACCESSORY > 0:
+            reference_result = call_ai_mcp_tool(
+                "accessory.reference.collect",
+                {
+                    "accessory": item,
+                    "max_images": AI_REFERENCE_IMAGES_PER_ACCESSORY,
+                    "max_side": AI_REFERENCE_IMAGE_MAX_SIDE,
+                    "quality": AI_REFERENCE_IMAGE_QUALITY,
+                },
+            )
+            reference_descriptors.extend(reference_result.get("references") or [])
+    if changed:
+        save_config(config)
+    annotated_url = write_ai_original_output(image_bgr, request_id)
+    settings = ai_detection_settings()
+    mcp_image_path = write_mcp_inspection_image(image_bgr, request_id) if external_ai_mcp_enabled() else None
+    vision_result = call_ai_mcp_tool(
+        "vision.inspect.presence",
+        {
+            "inspection_image_bgr": image_bgr,
+            "inspection_image_path": str(mcp_image_path) if mcp_image_path else "",
+            "required_accessories": required_accessories,
+            "required_accessory_refs": required_accessory_refs,
+            "reference_descriptors": reference_descriptors,
+            "provider_config": settings,
+        },
+    )
+    ai_debug = vision_result.get("ai") if isinstance(vision_result.get("ai"), dict) else {}
+    for key in ("mcp_transport", "mcp_runtime", "mcp_dispatch_ms", "mcp_fallback_from", "mcp_fallback_error"):
+        if vision_result.get(key) is not None:
+            ai_debug = {**ai_debug, key: vision_result.get(key)}
+    return {
+        "request_id": request_id,
+        "passed": bool(vision_result.get("passed")),
+        "model": ai_model_payload(spec, settings),
+        "rule": vision_result.get("rule") or {},
+        "detections": vision_result.get("detections") or [],
+        "annotated_url": annotated_url,
+        "ai": ai_debug,
+    }
+
+
+def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = None, *, image_path: Path | None = None) -> dict[str, Any]:
     config = load_config()
     spec = selected_model_spec(model_id, config)
+    if spec.get("is_ai_detection"):
+        return analyze_bgr_ai_detection(image_bgr, request_id, spec, config, image_path=image_path)
     result = model(str(spec["id"]), config).predict(image_bgr, imgsz=int(config["image_size"]), device=0, verbose=False)[0]
     detections = parse_detections(result, spec)
     if spec.get("uses_ocr", False):
@@ -6486,11 +8849,14 @@ def index() -> FileResponse:
 def status() -> dict[str, Any]:
     config = load_config()
     active_spec = selected_model_spec(None, config)
+    active_path = Path(active_spec["path"]) if active_spec.get("path") else None
     accessory_names_by_id = {
         str(item.get("id") or accessory_uid(item)): str(item.get("name") or item.get("label") or accessory_uid(item))
         for item in config.get("accessories", [])
     }
     training_tasks = list_training_tasks()
+    trained_specs = list_trained_model_specs()
+    ai_detection_status = public_ai_detection_status()
 
     def task_accessory_names(task: dict[str, Any]) -> list[str]:
         names = [accessory_names_by_id.get(str(item_id), str(item_id)) for item_id in task.get("selected_accessory_ids") or []]
@@ -6498,7 +8864,8 @@ def status() -> dict[str, Any]:
 
     available_models = []
     for spec in legacy_model_specs():
-        path = Path(spec["path"])
+        path = Path(spec["path"]) if spec.get("path") else None
+        exists = bool(spec.get("is_ai_detection")) or bool(path and path.exists())
         available_models.append(
             {
                 "id": spec["id"],
@@ -6507,10 +8874,13 @@ def status() -> dict[str, Any]:
                 "variant": spec.get("variant"),
                 "uses_ocr": bool(spec.get("uses_ocr", False)),
                 "is_legacy": bool(spec.get("is_legacy", False)),
-                "path": str(path),
-                "exists": path.exists(),
+                "is_ai_detection": bool(spec.get("is_ai_detection", False)),
+                "provider_status": ai_detection_status if spec.get("is_ai_detection") else None,
+                "path": str(path or ""),
+                "exists": exists,
             }
         )
+    specialized_specs = [*trained_specs, *list_ai_detection_specialized_model_specs(config, trained_specs)]
     specialized_models = [
         {
             "id": spec["id"],
@@ -6520,17 +8890,19 @@ def status() -> dict[str, Any]:
             "label": spec["label"],
             "description": spec["description"],
             "uses_ocr": bool(spec.get("uses_ocr", False)),
+            "is_ai_detection": bool(spec.get("is_ai_detection", False)),
+            "provider_status": ai_detection_status if spec.get("is_ai_detection") else None,
             "required_accessory_counts": spec.get("required_accessory_counts") or {},
             "accessory_class_map": spec.get("accessory_class_map") or {},
             "ocr_accessory_ids": spec.get("ocr_accessory_ids") or [],
             "artifact_path": str(spec.get("artifact_path") or spec["path"]),
             "metadata_path": str(spec.get("metadata_path") or ""),
             "path": str(spec["path"]),
-            "exists": Path(spec["path"]).exists(),
+            "exists": bool(spec.get("is_ai_detection")) or Path(spec["path"]).exists(),
             "accessory_names": spec.get("accessory_names") or [],
             "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
         }
-        for spec in list_trained_model_specs()
+        for spec in specialized_specs
     ]
     task_labels = {
         str(task.get("job_id")): str(task.get("label") or task.get("candidate_name") or task.get("job_id"))
@@ -6559,12 +8931,13 @@ def status() -> dict[str, Any]:
         task["models"].append(spec)
     return {
         "service": "running",
-        "model_exists": Path(active_spec["path"]).exists(),
-        "model_path": str(active_spec["path"]),
+        "model_exists": bool(active_spec.get("is_ai_detection")) or bool(active_path and active_path.exists()),
+        "model_path": str(active_spec.get("path") or ""),
         "active_model_id": active_spec["id"],
         "available_models": available_models,
         "specialized_models": specialized_models,
         "specialized_model_tasks": list(specialized_model_tasks.values()),
+        "ai_detection": ai_detection_status,
         "classes": [{"class_id": k, "name": v, "label": CLASS_LABELS[k]} for k, v in CLASS_NAMES.items()],
         "rule": {
             "confidence_threshold": config["confidence_threshold"],
@@ -6578,6 +8951,66 @@ def status() -> dict[str, Any]:
 @app.get("/api/config")
 def get_config() -> dict[str, Any]:
     return load_config()
+
+
+@app.get("/api/ai/config")
+def get_ai_config() -> dict[str, Any]:
+    return public_ai_detection_status()
+
+
+@app.post("/api/ai/config")
+def update_ai_config(request: AiConfigRequest) -> dict[str, Any]:
+    local = load_ai_local_config()
+    if request.provider is not None:
+        local["provider"] = validate_ai_provider(request.provider)
+    if request.model is not None:
+        local["model"] = validate_ai_model(request.model)
+    if request.base_url is not None:
+        local["base_url"] = validate_ai_base_url(request.base_url)
+    if request.api_key_env is not None:
+        local["api_key_env"] = validate_ai_key_env(request.api_key_env)
+    timeout_value = request.timeout_seconds if request.timeout_seconds is not None else request.timeout
+    if timeout_value is not None:
+        local["timeout_seconds"] = validate_ai_timeout(timeout_value)
+    if request.api_key is not None and request.api_key.strip():
+        secret = request.api_key.strip()
+        key_items = normalize_ai_key_items(local)
+        item_id = ai_key_id(secret)
+        existing = next((item for item in key_items if item["id"] == item_id), None)
+        if existing:
+            existing["key"] = secret
+        else:
+            key_items.append({"id": item_id, "label": f"API Key {len(key_items) + 1}", "key": secret})
+        local["api_keys"] = key_items
+        local["active_key_id"] = item_id
+    if request.active_key_id is not None:
+        active_key_id = request.active_key_id.strip()
+        if active_key_id and not any(item["id"] == active_key_id for item in normalize_ai_key_items(local)):
+            raise HTTPException(status_code=400, detail="AI active_key_id was not found")
+        local["active_key_id"] = active_key_id
+
+    local["provider"] = validate_ai_provider(local.get("provider"))
+    local["model"] = validate_ai_model(local.get("model"))
+    local["base_url"] = validate_ai_base_url(local.get("base_url") or default_ai_base_url(local["provider"]))
+    local["timeout_seconds"] = validate_ai_timeout(local.get("timeout_seconds"))
+    local["api_key_env"] = validate_ai_key_env(local.get("api_key_env"))
+    local["api_keys"] = normalize_ai_key_items(local)
+    if not local.get("active_key_id") and local["api_keys"]:
+        local["active_key_id"] = local["api_keys"][0]["id"]
+    local["api_key"] = ""
+    save_ai_local_config(local)
+    return public_ai_detection_status()
+
+
+@app.delete("/api/ai/config/key")
+def delete_ai_config_key() -> dict[str, Any]:
+    local = load_ai_local_config()
+    active_key_id = str(local.get("active_key_id") or "").strip()
+    local["api_keys"] = [item for item in normalize_ai_key_items(local) if item["id"] != active_key_id] if active_key_id else []
+    local["active_key_id"] = local["api_keys"][0]["id"] if local["api_keys"] else ""
+    local["api_key"] = ""
+    save_ai_local_config(local)
+    return public_ai_detection_status()
 
 
 @app.post("/api/config/rules")
@@ -6774,6 +9207,7 @@ async def add_accessory(
         item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
     normalized = normalize_accessory_assets(item)
     item.update(normalized)
+    ensure_accessory_ai_profile(item, allow_provider=True)
     config["accessories"].append(item)
     save_config(config)
     return {"status": "saved", "item": serialize_accessory(config["accessories"][-1])}
@@ -6883,9 +9317,154 @@ def confirm_accessory(candidate_id: str) -> dict[str, Any]:
         candidate["id"] = f"acc_{uuid.uuid4().hex[:10]}"
         candidate["status"] = candidate.get("status", "candidate_review").replace("candidate_review", "active")
         candidate["confirmed_at"] = int(time.time())
+        ensure_accessory_ai_profile(candidate, force=True, allow_provider=True)
         config["accessories"].append(candidate)
         save_config(config)
         return {"status": "saved", "item": serialize_accessory(candidate), "items": [serialize_accessory(item) for item in config["accessories"]]}
+
+
+@app.post("/api/accessories/{accessory_id}/files")
+async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(default=[])) -> dict[str, Any]:
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
+    config = load_config()
+    for item in config.get("accessories", []):
+        if accessory_uid(item) != accessory_id:
+            continue
+        target_dir = UPLOAD_DIR / "accessories" / accessory_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        saved_files: list[str] = []
+        for upload in files:
+            path = target_dir / safe_name(upload.filename)
+            if path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+                raise HTTPException(status_code=400, detail="Only image files can be added to accessory profiles")
+            with path.open("wb") as f:
+                shutil.copyfileobj(upload.file, f)
+            saved_files.append(str(path))
+        item.setdefault("source_files", [])
+        item["source_files"].extend(saved_files)
+        item.setdefault("ai_profile_reference_files", [])
+        item["ai_profile_reference_files"].extend(saved_files)
+        refresh_accessory_assets_after_source_change(item, force_profile=True)
+        save_ai_profile_cache({"entries": {}})
+        save_config(config)
+        return {
+            "status": "saved",
+            "item": serialize_accessory(item),
+            "items": [serialize_accessory(accessory) for accessory in config.get("accessories", [])],
+            "detail": accessory_detail_payload(item),
+        }
+    raise HTTPException(status_code=404, detail="Accessory not found")
+
+
+@app.post("/api/accessories/{accessory_id}/ai-reference")
+def set_accessory_ai_reference(accessory_id: str, request: AccessoryAiReferenceRequest) -> dict[str, Any]:
+    target_raw = str(request.source_path or "").strip()
+    if not target_raw:
+        raise HTTPException(status_code=400, detail="source_path is required")
+    config = load_config()
+    for item in config.get("accessories", []):
+        if accessory_uid(item) != accessory_id:
+            continue
+        allowed = {
+            str(asset.get("source_path") or "")
+            for asset in accessory_detail_payload(item).get("gallery", [])
+            if isinstance(asset, dict) and asset.get("source_path")
+        }
+        if target_raw not in allowed or not Path(target_raw).exists():
+            raise HTTPException(status_code=404, detail="Photo is not available on this accessory")
+        item["ai_profile_reference_files"] = [target_raw]
+        item["ai_profile"] = fallback_accessory_ai_profile(item)
+        item["ai_profile_status"] = "ready"
+        try:
+            generate_accessory_ai_profile(item, allow_provider=True)
+        except Exception as exc:
+            item["ai_profile_status"] = {
+                "ok": False,
+                "status": "fallback",
+                "message": f"AI profile provider failed; using selected local reference. {bounded_text(str(exc), 120)}",
+            }
+        save_ai_profile_cache({"entries": {}})
+        save_config(config)
+        return {
+            "status": "saved",
+            "accessory_id": accessory_id,
+            "source_path": target_raw,
+            "item": serialize_accessory(item),
+            "items": [serialize_accessory(accessory) for accessory in config.get("accessories", [])],
+            "detail": accessory_detail_payload(item),
+        }
+    raise HTTPException(status_code=404, detail="Accessory not found")
+
+
+@app.delete("/api/accessories/{accessory_id}/files")
+def delete_accessory_file(accessory_id: str, request: AccessoryFileDeleteRequest) -> dict[str, Any]:
+    target_raw = str(request.source_path or "").strip()
+    if not target_raw:
+        raise HTTPException(status_code=400, detail="source_path is required")
+    config = load_config()
+    for item in config.get("accessories", []):
+        if accessory_uid(item) != accessory_id:
+            continue
+        source_paths = {str(path) for path in existing_source_image_paths(item)}
+        normalized_paths = {
+            str(asset.get("path") or "")
+            for asset in item.get("normalized_assets", [])
+            if isinstance(asset, dict) and asset.get("path")
+        }
+        pose_paths = {
+            str(job.get("output_path") or "")
+            for job in candidate_image_jobs(item)
+            if isinstance(job, dict) and job.get("output_path")
+        }
+        allowed = source_paths | normalized_paths | pose_paths
+        if target_raw not in allowed:
+            raise HTTPException(status_code=404, detail="Photo is not registered on this accessory")
+        removed_source = target_raw in source_paths
+        removed_pose = target_raw in pose_paths
+        for key in ("source_files", "original_source_files", "ai_profile_reference_files"):
+            if isinstance(item.get(key), list):
+                item[key] = [path for path in item[key] if str(path) != target_raw]
+        if isinstance(item.get("normalized_assets"), list):
+            item["normalized_assets"] = [
+                asset
+                for asset in item["normalized_assets"]
+                if not isinstance(asset, dict)
+                or (
+                    str(asset.get("path") or "") != target_raw
+                    and (not removed_pose or str(asset.get("source_pose_collection") or "") != target_raw)
+                )
+            ]
+        if isinstance(item.get("codex_image_jobs"), list):
+            item["codex_image_jobs"] = [
+                job
+                for job in item["codex_image_jobs"]
+                if not isinstance(job, dict) or str(job.get("output_path") or "") != target_raw
+            ]
+            item["codex_image_job"] = item["codex_image_jobs"][0] if item["codex_image_jobs"] else None
+        target_path = Path(target_raw)
+        try:
+            resolved = target_path.resolve()
+            if resolved.exists() and resolved.is_relative_to(DATA_DIR.resolve()):
+                resolved.unlink()
+        except OSError:
+            pass
+        if removed_source:
+            refresh_accessory_assets_after_source_change(item, force_profile=True)
+            save_ai_profile_cache({"entries": {}})
+        else:
+            item["clean_sprite_count"] = len(clean_sprite_assets(item))
+            item["clean_sprite_status"] = "ready" if item["clean_sprite_count"] else item.get("clean_sprite_status", "")
+        save_config(config)
+        return {
+            "status": "deleted",
+            "accessory_id": accessory_id,
+            "source_path": target_raw,
+            "item": serialize_accessory(item),
+            "items": [serialize_accessory(accessory) for accessory in config.get("accessories", [])],
+            "detail": accessory_detail_payload(item),
+        }
+    raise HTTPException(status_code=404, detail="Accessory not found")
 
 
 @app.delete("/api/accessories/{accessory_id}")
@@ -6910,8 +9489,66 @@ async def analyze_image(file: UploadFile = File(...), model_id: str | None = For
     if image is None:
         raise HTTPException(status_code=400, detail="Could not decode image")
     request_id = safe_name(file.filename).rsplit(".", 1)[0]
-    (UPLOAD_DIR / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}").write_bytes(payload)
-    return analyze_bgr(image, request_id, model_id)
+    upload_path = UPLOAD_DIR / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
+    upload_path.write_bytes(payload)
+    return analyze_bgr(image, request_id, model_id, image_path=upload_path)
+
+
+def video_frame_result_payload(result: dict[str, Any], frame_index: int, fps: float) -> dict[str, Any]:
+    rule = result.get("rule") if isinstance(result.get("rule"), dict) else {}
+    detections = result.get("detections") if isinstance(result.get("detections"), list) else []
+    frame_payload: dict[str, Any] = {
+        "frame_index": frame_index,
+        "timestamp_seconds": round(frame_index / fps, 3),
+        "passed": bool(result.get("passed")),
+        "missing": rule.get("missing") if isinstance(rule.get("missing"), list) else [],
+        "detections": len(detections),
+    }
+    model_payload = result.get("model") if isinstance(result.get("model"), dict) else {}
+    ai_payload = result.get("ai") if isinstance(result.get("ai"), dict) else None
+    if ai_payload or model_payload.get("is_ai_detection"):
+        frame_payload.update(
+            {
+                "model": model_payload,
+                "rule": rule,
+                "ai": ai_payload or {},
+                "detection_items": detections,
+                "annotated_url": result.get("annotated_url") or "",
+            }
+        )
+    return frame_payload
+
+
+def video_ai_summary(frames: list[dict[str, Any]]) -> dict[str, Any] | None:
+    ai_frames = [frame for frame in frames if isinstance(frame.get("ai"), dict)]
+    if not ai_frames:
+        return None
+    errors = string_list(
+        [
+            str(frame.get("ai", {}).get("error") or "")
+            for frame in ai_frames
+            if frame.get("ai", {}).get("error")
+        ],
+        max_items=8,
+        max_len=180,
+    )
+    first_error_frame = next(
+        (
+            frame
+            for frame in ai_frames
+            if frame.get("ai", {}).get("error") or frame.get("ai", {}).get("timed_out")
+        ),
+        None,
+    )
+    return {
+        "frame_count": len(ai_frames),
+        "timed_out": any(bool(frame.get("ai", {}).get("timed_out")) for frame in ai_frames),
+        "errors": errors,
+        "first_error": (first_error_frame or {}).get("ai", {}).get("error") if first_error_frame else "",
+        "first_error_frame_index": (first_error_frame or {}).get("frame_index") if first_error_frame else None,
+        "provider_status": next((frame.get("ai", {}).get("provider_status") for frame in ai_frames if frame.get("ai", {}).get("provider_status")), ""),
+        "total_latency_ms": sum(int(frame.get("ai", {}).get("latency_ms") or 0) for frame in ai_frames),
+    }
 
 
 @app.post("/api/analyze/video")
@@ -6943,21 +9580,14 @@ async def analyze_video(file: UploadFile = File(...), model_id: str | None = For
             result = analyze_bgr(frame, request_id, model_id)
             if first_preview_url is None:
                 first_preview_url = result["annotated_url"]
-            frames.append(
-                {
-                    "frame_index": idx,
-                    "timestamp_seconds": round(idx / fps, 3),
-                    "passed": result["passed"],
-                    "missing": result["rule"]["missing"],
-                    "detections": len(result["detections"]),
-                }
-            )
+            frames.append(video_frame_result_payload(result, idx, fps))
             sampled += 1
         idx += 1
     cap.release()
 
     passed_frames = sum(1 for frame in frames if frame["passed"])
     overall = len(frames) > 0 and passed_frames == len(frames)
+    ai_summary = video_ai_summary(frames)
     return {
         "request_id": Path(upload_name).stem,
         "passed": overall,
@@ -6965,6 +9595,7 @@ async def analyze_video(file: UploadFile = File(...), model_id: str | None = For
         "passed_frames": passed_frames,
         "pass_rate": round(passed_frames / len(frames), 4) if frames else 0.0,
         "preview_url": first_preview_url,
+        "ai": ai_summary,
         "frames": frames[:200],
     }
 

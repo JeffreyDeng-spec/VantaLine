@@ -44,30 +44,71 @@
     {
       "class_id": 0,
       "name": "Bottle",
-      "status": "active",
-      "source_files": [],
+      "status": "image_tool_plan_ready",
+      "source_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessories/0_bottle/1780476068_c0b9e418_10.jpg"
+      ],
       "normalized_assets": [
+        {
+          "kind": "object_view_plan",
+          "source_files": [
+            "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessories/0_bottle/1780476068_c0b9e418_10.jpg"
+          ],
+          "image_tool_prompt": "Image-to-image asset expansion for 'Bottle'. Generate clean isolated product views with consistent material, multiple angles, standing/lying poses when applicable, calibrated size variants, object-only framing, no background/backing/surface/shadows, and transparent PNG alpha when supported.",
+          "view_plan": [
+            {
+              "view": "front",
+              "angle": 0,
+              "scale": "1.00x"
+            },
+            {
+              "view": "left_oblique",
+              "angle": -45,
+              "scale": "0.90x"
+            },
+            {
+              "view": "right_oblique",
+              "angle": 45,
+              "scale": "1.10x"
+            },
+            {
+              "view": "top",
+              "angle": 90,
+              "scale": "0.85x"
+            },
+            {
+              "view": "lying_horizontal",
+              "angle": 180,
+              "scale": "1.00x"
+            },
+            {
+              "view": "standing",
+              "angle": "cap diameter calibrated",
+              "scale": "matched_to_proxy_length"
+            }
+          ]
+        },
         {
           "kind": "clean_object_sprite",
           "path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/0_bottle/clean_sprites/sprite_01.png",
-          "method": "source_png_alpha",
-          "width": 190,
-          "height": 389,
+          "method": "legacy_clean_sprite_policy_rebuild",
+          "width": 745,
+          "height": 1856,
           "normalized_asset_size_px": [
-            190,
-            389
+            745,
+            1856
           ],
           "normalized_asset_dimensions_px": [
-            190,
-            389
+            745,
+            1856
           ],
           "normalized_bbox_xyxy": [
-            35,
-            35,
-            155,
-            354
+            136,
+            136,
+            609,
+            1720
           ],
-          "post_rotation_safety_margin_px": 27,
+          "post_rotation_safety_margin_px": 128,
           "edge_alpha_max": 0,
           "edge_alpha_pass": true,
           "alpha_edge_stats": {
@@ -77,35 +118,35 @@
           },
           "mask_strategy": "provided_alpha_mask",
           "foreground_component_bbox_xyxy": [
-            65,
-            64,
-            185,
-            383
+            315,
+            315,
+            789,
+            1899
           ],
           "removed_stray_component_count": 0,
           "removed_stray_component_area_px": 0,
           "physical_size_mm": {},
           "material_alpha_policy": "transparent",
           "transparent_alpha_policy": "preserve_glass_body_weak_alpha",
-          "glass_fraction": 0.18808,
-          "opaque_anchor_fraction": 0.37485,
-          "edge_fraction": 0.48459,
+          "glass_fraction": 0.32754,
+          "opaque_anchor_fraction": 0.16039,
+          "edge_fraction": 0.56584,
           "transparent_alpha_applied": true,
           "object_alpha_material_policy": "transparent",
-          "original_angle_degrees": 88.67,
-          "rotation_degrees": -1.33,
-          "original_orientation_angle": 88.67,
-          "original_orientation_angle_degrees": 88.67,
-          "rotation_degrees_applied": -1.33,
-          "rotation_degrees_applied_to_upright": -1.33,
-          "source_restore_rotation_degrees": 1.33,
+          "original_angle_degrees": -89.987,
+          "rotation_degrees": 0.013,
+          "original_orientation_angle": -89.987,
+          "original_orientation_angle_degrees": -89.987,
+          "rotation_degrees_applied": 0.013,
+          "rotation_degrees_applied_to_upright": 0.013,
+          "source_restore_rotation_degrees": -0.013,
           "normalized_axis_target_degrees": 90.0,
-          "orientation_axis_ratio": 10.0155,
+          "orientation_axis_ratio": 10.6213,
           "pre_normalized_asset_size_px": [
-            129,
-            324
+            478,
+            1588
           ],
-          "pre_rotation_safety_margin_px": 45,
+          "pre_rotation_safety_margin_px": 222,
           "upright_normalized": true,
           "render_scale_basis": "side_major_axis_length_mm",
           "render_footprint_mm": [
@@ -124,140 +165,364 @@
           "canonical_height_px": 243,
           "physical_footprint_basis": "side_major_axis_length_mm",
           "canonical_asset_dimensions_px": [
-            190,
-            389
+            745,
+            1856
           ],
           "canonical_canvas_size_px": [
-            190,
-            389
+            745,
+            1856
           ],
-          "canonical_visible_width_px": 120,
-          "visible_width_px": 120,
-          "visible_height_px": 319,
-          "canonical_family_width_normalized": true
-        },
-        {
-          "kind": "clean_object_sprite",
-          "path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/0_bottle/clean_sprites/sprite_02.png",
-          "method": "source_png_alpha",
-          "width": 217,
-          "height": 242,
-          "normalized_asset_size_px": [
-            217,
-            242
-          ],
-          "normalized_asset_dimensions_px": [
-            217,
-            242
-          ],
-          "normalized_bbox_xyxy": [
-            49,
-            46,
-            170,
-            195
-          ],
-          "post_rotation_safety_margin_px": 18,
-          "edge_alpha_max": 0,
-          "edge_alpha_pass": true,
-          "alpha_edge_stats": {
-            "max": 0,
-            "nonzero_px": 0,
-            "mean": 0.0
-          },
-          "mask_strategy": "provided_alpha_mask",
-          "foreground_component_bbox_xyxy": [
-            28,
-            28,
-            62,
-            69
-          ],
-          "removed_stray_component_count": 0,
-          "removed_stray_component_area_px": 0,
-          "physical_size_mm": {},
-          "material_alpha_policy": "transparent",
-          "transparent_alpha_policy": "preserve_glass_body_weak_alpha",
-          "glass_fraction": 0.0,
-          "opaque_anchor_fraction": 0.99175,
-          "edge_fraction": 0.51815,
-          "transparent_alpha_applied": false,
-          "object_alpha_material_policy": "transparent",
-          "original_angle_degrees": -20.37,
-          "rotation_degrees": 69.63,
-          "original_orientation_angle": -20.37,
-          "original_orientation_angle_degrees": -20.37,
-          "rotation_degrees_applied": 69.63,
-          "rotation_degrees_applied_to_upright": 69.63,
-          "source_restore_rotation_degrees": -69.63,
-          "normalized_axis_target_degrees": 90.0,
-          "orientation_axis_ratio": 1.6372,
-          "pre_normalized_asset_size_px": [
-            44,
-            37
-          ],
-          "pre_rotation_safety_margin_px": 18,
-          "upright_normalized": true,
-          "render_scale_basis": "cap_outer_edge_diameter_mm",
-          "render_footprint_mm": [
-            38.0,
-            38.0
-          ],
-          "render_footprint_px": [
-            54,
+          "canonical_visible_width_px": 473,
+          "canonical_visible_major_axis_px": 1584,
+          "visible_width_px": 473,
+          "visible_height_px": 1584,
+          "canonical_family_width_normalized": true,
+          "canonical_all_pose_family_size_normalized": true,
+          "upright_scale_correction": 1.0,
+          "render_footprint_px_unoriented_long_short": [
+            243,
             54
           ],
-          "render_size_hint_px": [
+          "render_footprint_px_before_laying_standard_orientation": [
             54,
-            54
+            243
           ],
-          "canonical_width_px": 54,
-          "canonical_height_px": 54,
-          "physical_footprint_basis": "cap_outer_edge_diameter_mm",
-          "canonical_asset_dimensions_px": [
-            217,
-            242
+          "render_long_short_orientation_basis": "lying_pose_collection_visible_bbox",
+          "render_long_edge_axis": "height",
+          "render_laying_standard_reference_visible_size_px": [
+            473.0,
+            1584.0
           ],
-          "canonical_canvas_size_px": [
-            217,
-            242
+          "source_object_size_px": [
+            746,
+            1856
           ],
-          "canonical_visible_width_px": 120,
-          "visible_width_px": 121,
-          "visible_height_px": 149,
-          "canonical_family_width_normalized": true
+          "pose_family": "lying",
+          "source_pose_family": "lying",
+          "pose_position": "center",
+          "source_position": "center",
+          "source_image_size_px": [
+            746,
+            1856
+          ],
+          "source_image_width": 746,
+          "source_image_height": 1856,
+          "task_id": "legacy_clean_sprite",
+          "source_pose_collection_job_id": "legacy_clean_sprite",
+          "source_region_bbox_xyxy": [
+            136,
+            136,
+            610,
+            1720
+          ],
+          "source_object_bbox_xyxy": [
+            136,
+            136,
+            610,
+            1720
+          ],
+          "source_object_center_xy": [
+            373,
+            928
+          ],
+          "legacy_sprite_policy_rebuild_source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/0_bottle/clean_sprites/sprite_01.png"
         }
       ],
-      "clean_sprite_status": "partial",
-      "clean_sprite_count": 2,
-      "clean_sprite_preprocessed_at": 1779897258,
-      "preprocess": "\u7cfb\u7edf\u5df2\u9884\u5904\u7406 2/2 \u4e2a\u65e0\u80cc\u666f\u5355\u4f53\u7d20\u6750\uff1b\u5143\u6570\u636e\u672a\u5b8c\u6574\uff0c\u672a\u6807\u8bb0 ready\u3002",
-      "clean_sprite_expected_count": 2,
+      "clean_sprite_status": "ready",
+      "clean_sprite_count": 1,
+      "clean_sprite_preprocessed_at": 1780476089,
+      "preprocess": "\u7cfb\u7edf\u5df2\u9884\u5904\u7406\u65e0\u80cc\u666f\u5355\u4f53\u7d20\u6750\uff0c\u5e76\u8bb0\u5f55\u539f\u56fe\u5750\u6807\u4e0e\u7269\u7406\u5c3a\u5bf8\uff1b\u8bad\u7ec3\u9884\u89c8\u76f4\u63a5\u590d\u7528\u3002",
+      "clean_sprite_expected_count": 1,
       "clean_sprite_failed_cells": [],
       "material_alpha_policy": "transparent",
-      "object_alpha_policy_label": "\u900f\u660e"
+      "object_alpha_policy_label": "\u900f\u660e",
+      "ai_profile": {
+        "accessory_id": "0_bottle",
+        "name": "Bottle",
+        "material_type": "object",
+        "description": "A clear plastic bottle with a black screw-on cap and a red dropper tip.",
+        "tags": [
+          "container",
+          "liquid",
+          "dispenser",
+          "plastic",
+          "dropper"
+        ],
+        "visual_signature": "The bottle is cylindrical and transparent, with vertical ridges. It has a black threaded cap and a red, conical tip for dispensing liquid. The overall shape is slender and elongated.",
+        "distinguishing_text": [
+          "Bottle",
+          "1780476068 c0b9e418 10"
+        ],
+        "negative_cues": [
+          "metal",
+          "glass",
+          "opaque",
+          "no cap",
+          "no dropper"
+        ],
+        "reference_images": [
+          {
+            "accessory_id": "0_bottle",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessories/0_bottle/1780476068_c0b9e418_10.jpg",
+            "sha256": "169f29a28cc490d96c49a87764a0e6fbce7d9f75388a2efd5e8d7483e8715920",
+            "mime_type": "image/jpeg",
+            "width": 4096,
+            "height": 3072,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780476100,
+        "latency_ms": 3073,
+        "reference_images": 3
+      },
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/accessories/0_bottle/1780476068_c0b9e418_10.jpg"
+      ],
+      "material_type": "object"
     },
     {
       "class_id": 1,
       "name": "Warranty Service Manual",
       "status": "active",
-      "source_files": []
+      "source_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/ai_profile_references/bottle_manual_real/1_warranty_service_manual_real.jpg"
+      ],
+      "ai_profile": {
+        "accessory_id": "1_warranty_service_manual",
+        "name": "Warranty Service Manual",
+        "material_type": "text",
+        "description": "A paper document providing warranty and service conditions for an Einhell product. The document features the 'Einhell' logo at the top and lists warranty and service conditions in multiple languages, including English, German, French, Itali",
+        "tags": [
+          "manual",
+          "document",
+          "paper",
+          "warranty",
+          "service",
+          "einhell",
+          "multilingual"
+        ],
+        "visual_signature": "Rectangular paper document with 'Einhell' logo at the top. Text is printed in multiple columns, each representing a different language. The primary visible text includes 'Warranty and service conditions' in various languages.",
+        "distinguishing_text": [
+          "Einhell logo, 'Warranty and service conditions' in multiple languages (e.g., DE: Garantie und Se"
+        ],
+        "negative_cues": [
+          "No product images or diagrams",
+          "Not a user manual with operational instructions",
+          "Not a digital file"
+        ],
+        "reference_images": [
+          {
+            "accessory_id": "1_warranty_service_manual",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_2_warranty_service_precise_1240x1754.png",
+            "sha256": "1305a84fb476d73b013fcb07e6c547e04066ac222aa0b934aa940fe7c31f7c5f",
+            "mime_type": "image/png",
+            "width": 1240,
+            "height": 1754,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780475991,
+        "latency_ms": 5847,
+        "reference_images": 2
+      },
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_2_warranty_service_precise_1240x1754.png"
+      ],
+      "material_type": "text"
     },
     {
       "class_id": 2,
       "name": "Battery Instruction Manual",
       "status": "active",
-      "source_files": []
+      "source_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/ai_profile_references/bottle_manual_real/2_battery_instruction_manual_real.jpg"
+      ],
+      "ai_profile": {
+        "accessory_id": "2_battery_instruction_manual",
+        "name": "Battery Instruction Manual",
+        "material_type": "text",
+        "description": "A multi-language instruction manual for a battery-powered device, likely a chainsaw or similar garden tool, featuring the 'Einhell' brand logo and model number 'GE-PS 18/15 Li BL'. The manual includes safety instructions and operating instr",
+        "tags": [
+          "manual",
+          "instructions",
+          "safety",
+          "multi-language",
+          "paper",
+          "Einhell",
+          "battery",
+          "cordless",
+          "chainsaw"
+        ],
+        "visual_signature": "A white paper booklet with black text. The front cover displays the 'Einhell' logo, the model name 'GE-PS 18/15 Li BL', and a list of 'Original operating instructions' in multiple languages. One page shows a list of 'Sicherheitsinweise' (Safety instructions) also in multiple languages, with page number '10' visible.",
+        "distinguishing_text": [
+          "Einhell, GE-PS 18/15 Li BL, Originalbetriebsanleitung, Original operating instructions, Sicherhe"
+        ],
+        "negative_cues": [],
+        "reference_images": [
+          {
+            "accessory_id": "2_battery_instruction_manual",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_3_battery_instruction_precise_1240x1754.png",
+            "sha256": "ee0be103c201f1303b03dfea04f12aa9ffeb08a3523f752ef63435632838d247",
+            "mime_type": "image/png",
+            "width": 1240,
+            "height": 1754,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780476006,
+        "latency_ms": 7109,
+        "reference_images": 2
+      },
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_3_battery_instruction_precise_1240x1754.png"
+      ],
+      "material_type": "text"
     },
     {
       "class_id": 3,
       "name": "Download Service Manual",
       "status": "active",
-      "source_files": []
+      "source_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/uploads/ai_profile_references/bottle_manual_real/3_download_service_manual_real.jpg"
+      ],
+      "ai_profile": {
+        "accessory_id": "3_download_service_manual",
+        "name": "Download Service Manual",
+        "material_type": "text",
+        "description": "A white paper document providing instructions in multiple languages on where to download the service manual from the Einhell-Service.com website. The document lists various languages with corresponding short phrases indicating that detailed",
+        "tags": [
+          "manual",
+          "instructions",
+          "download",
+          "service",
+          "multilingual",
+          "paper",
+          "document"
+        ],
+        "visual_signature": "A white rectangular paper with black text. The text is organized into two columns, with each entry starting with a two-letter language code followed by a short phrase in that language. The phrases consistently refer to downloading a service manual from 'www.Einhell-Service.com'. The bottom right corner contains 'EH 08/2023 (02)'.",
+        "distinguishing_text": [
+          "www.Einhell-Service.com, EH 08/2023 (02), 'Eine ausf\u00fchrliche Anleitung steht f\u00fcr Sie unter www.E"
+        ],
+        "negative_cues": [
+          "Missing the Einhell-Service.com URL",
+          "Text is illegible or heavily obscured",
+          "Different content or purpose (e.g., a product catalog, warranty card)",
+          "Incorrect date or version number if specified"
+        ],
+        "reference_images": [
+          {
+            "accessory_id": "3_download_service_manual",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_4_download_service_precise_1240x1754.png",
+            "sha256": "4ec3a86164f71977a95ccd2980bb55d4824adb9c03a6fd6114bbea70e5b295e3",
+            "mime_type": "image/png",
+            "width": 1240,
+            "height": 1754,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780476037,
+        "latency_ms": 5574,
+        "reference_images": 2
+      },
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_4_download_service_precise_1240x1754.png"
+      ],
+      "material_type": "text"
     },
     {
       "class_id": 4,
       "name": "Service QR Manual",
-      "status": "active",
-      "source_files": []
+      "status": "needs_crop",
+      "source_files": [],
+      "ai_profile": {
+        "accessory_id": "4_service_qr_manual",
+        "name": "Service QR Manual",
+        "material_type": "text",
+        "description": "A printed manual or sheet providing service information, including a QR code, contact details, and a website address for Einhell Service. The text is in multiple languages, indicating where to find instructions in a larger format.",
+        "tags": [
+          "manual",
+          "service information",
+          "QR code",
+          "contact details",
+          "multilingual",
+          "Einhell"
+        ],
+        "visual_signature": "A light-colored sheet (likely white or light grey) with black text. Features a prominent QR code in the top-left corner. Text is arranged in columns, with different languages providing similar information.",
+        "distinguishing_text": [
+          "Einhell Service, Eschestra\u00dfe 6, D-94405 Landau/Isar, 09951 / 95 920 00, 09951 / 95 917 00, Servi"
+        ],
+        "negative_cues": [
+          "Missing QR code",
+          "Illegible text",
+          "Incorrect contact information",
+          "Absence of Einhell branding"
+        ],
+        "reference_images": [
+          {
+            "accessory_id": "4_service_qr_manual",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_6_service_qr_precise_1240x1754.png",
+            "sha256": "81298ca8bd710f1556188dd645244c23970a3751db4c8923220ec658b86d3460",
+            "mime_type": "image/png",
+            "width": 1240,
+            "height": 1754,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780475667,
+        "latency_ms": 5843,
+        "reference_images": 1
+      },
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/standardized_manuals/manual_from_6_service_qr_precise_1240x1754.png"
+      ],
+      "material_type": "text",
+      "normalized_assets": [],
+      "preprocess": "\u7528\u6237\u88c1\u526a\u5305\u542b\u5b8c\u6574\u6587\u5b57\u7684\u6587\u6863\u56fe\u50cf\uff0c\u7cfb\u7edf\u8fdb\u884c\u900f\u89c6\u6821\u6b63\u5e76\u751f\u6210\u89c4\u6574\u8bf4\u660e\u4e66\u56fe\u3002"
     },
     {
       "id": "acc_f18bdd5a80",
@@ -3582,7 +3847,63 @@
       "clean_sprite_preprocessed_at": 1779897278,
       "confirmed_at": 1779876820,
       "material_alpha_policy": "transparent",
-      "object_alpha_policy_label": "\u900f\u660e"
+      "object_alpha_policy_label": "\u900f\u660e",
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/acc_f18bdd5a80/clean_sprites/sprite_10.png"
+      ],
+      "ai_profile": {
+        "accessory_id": "acc_f18bdd5a80",
+        "name": "\u73bb\u7483\u74f6",
+        "material_type": "object",
+        "description": "A small, clear glass bottle with a black screw-on cap and a conical, bright orange dispenser top. The bottle is cylindrical with a slightly wider base and tapers towards the neck. The orange dispenser has a pointed tip.",
+        "tags": [
+          "bottle",
+          "glass",
+          "dispenser",
+          "orange cap",
+          "clear",
+          "cylindrical",
+          "container"
+        ],
+        "visual_signature": "Clear cylindrical glass bottle with a black cap and a prominent conical orange dispenser top. The orange top is the most visually distinct feature.",
+        "distinguishing_text": [
+          "\u73bb\u7483\u74f6",
+          "1779875989 87be5482 12",
+          "1779875989 dd150981 11",
+          "1779875989 eb633548 10"
+        ],
+        "negative_cues": [
+          "missing cap",
+          "missing orange dispenser",
+          "cracked glass",
+          "liquid inside",
+          "different color cap",
+          "different shape bottle"
+        ],
+        "reference_images": [
+          {
+            "accessory_id": "acc_f18bdd5a80",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/acc_f18bdd5a80/clean_sprites/sprite_10.png",
+            "sha256": "ff2d5aff5e4f512e183961c7d06930834d61c91c80ae24bee0e8c285d543c761",
+            "mime_type": "image/png",
+            "width": 117,
+            "height": 272,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780475624,
+        "latency_ms": 7314,
+        "reference_images": 3
+      }
     },
     {
       "id": "acc_15adc85a40",
@@ -6973,7 +7294,60 @@
       "clean_sprite_preprocessed_at": 1779904308,
       "confirmed_at": 1779898406,
       "material_alpha_policy": "opaque",
-      "object_alpha_policy_label": "\u4e0d\u900f\u660e"
+      "object_alpha_policy_label": "\u4e0d\u900f\u660e",
+      "ai_profile_reference_files": [
+        "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/acc_15adc85a40/clean_sprites/sprite_01.png"
+      ],
+      "ai_profile": {
+        "accessory_id": "acc_15adc85a40",
+        "name": "\u8033\u673a",
+        "material_type": "object",
+        "description": "A white, rectangular charging case for wireless earbuds, with rounded edges. It has a small indicator light on the front and a subtle seam line.",
+        "tags": [
+          "earbuds",
+          "charging case",
+          "wireless",
+          "audio",
+          "white"
+        ],
+        "visual_signature": "The accessory is a small, white, rectangular object with significantly rounded corners. It has a smooth, glossy finish. A faint vertical line is visible on the front face, likely indicating a lid seam. A tiny circular dot, possibly an LED indicator, is located below this line. The overall shape is compact and ergonomic.",
+        "distinguishing_text": [
+          "\u8033\u673a",
+          "1779897956 d6d8d134 IMG 5732",
+          "1779897956 dc553b3c IMG 5731",
+          "1779897956 e51004f2 IMG 5733"
+        ],
+        "negative_cues": [
+          "not a pair of earbuds",
+          "not a charging cable",
+          "not a speaker",
+          "not black or colored",
+          "not a different shape"
+        ],
+        "reference_images": [
+          {
+            "accessory_id": "acc_15adc85a40",
+            "source_path": "/mnt/f/CodexWorkspace/assembly_line_optimize/local_inspection_service/data/normalized_assets/acc_15adc85a40/clean_sprites/sprite_01.png",
+            "sha256": "babd8031bae5c7b81f44cfcc1ed14faccaf6b1009e0829ebb14ce9c55bb9cd2e",
+            "mime_type": "image/png",
+            "width": 165,
+            "height": 223,
+            "ordinal": 1
+          }
+        ],
+        "provider_cache": {},
+        "expected_count": 1
+      },
+      "ai_profile_status": {
+        "source": "provider",
+        "provider": "gemini",
+        "provider_model": "gemini-2.5-flash",
+        "status": "generated",
+        "message": "AI profile generated by provider.",
+        "updated_at": 1780475641,
+        "latency_ms": 5302,
+        "reference_images": 3
+      }
     }
   ],
   "training": {

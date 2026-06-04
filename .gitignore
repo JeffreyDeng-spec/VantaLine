@@ -16,6 +16,9 @@ local_inspection_service/data/training_jobs/
 local_inspection_service/data/training_tasks/
 local_inspection_service/data/accessory_candidates/
 local_inspection_service/data/image_worker_logs/
+local_inspection_service/data/ai_config.local.json*
+local_inspection_service/data/ai_config.local.*.json.tmp
+local_inspection_service/data/ai_profile_cache.local.json*
 local_inspection_service/data/local_server_*.log
 local_inspection_service/data/local_server_*.pid
 local_inspection_service/tmp_*.png
