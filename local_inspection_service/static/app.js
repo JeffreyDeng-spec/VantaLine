@@ -31,7 +31,6 @@ const state = {
     fileName: "",
   },
   lastResult: null,
-  labelExperimentResult: null,
   accessoryPendingFiles: [],
   accessoryPendingFileUrls: new Map(),
   accessoryDetailItem: null,
@@ -1025,157 +1024,6 @@ async function runCameraDetection(button) {
   } catch (error) {
     finishProgress(false);
     toast(`摄像头检测失败：${error.message}`);
-  } finally {
-    setBusy(button, false);
-  }
-}
-
-
-function labelExperimentStatusText(status) {
-  if (status === "pass") return "通过";
-  if (status === "review") return "复核";
-  if (status === "fail") return "异常";
-  if (status === "unknown") return "未知";
-  return status || "-";
-}
-
-function labelExperimentBadgeClass(status) {
-  if (status === "pass") return "pass";
-  if (status === "fail") return "fail";
-  return "waiting";
-}
-
-function labelExperimentPillClass(status) {
-  if (["pass", "fail", "review", "unknown"].includes(status)) return status;
-  return "neutral";
-}
-
-function updateLabelExperimentFileName(inputId, labelId, fallback) {
-  const file = $(inputId)?.files?.[0];
-  const label = $(labelId);
-  if (!label) return;
-  label.textContent = file ? file.name : fallback;
-}
-
-function setLabelExperimentImage(frameId, imageId, url) {
-  const frame = $(frameId);
-  const image = $(imageId);
-  if (!frame || !image) return;
-  if (!url) {
-    image.removeAttribute("src");
-    frame.classList.remove("has-image");
-    return;
-  }
-  image.src = cacheBustImageUrl(url);
-  frame.classList.add("has-image");
-}
-
-function renderLabelExperimentSummary(result) {
-  const summary = result.summary || {};
-  const abnormal = Number(summary.fail || 0) + Number(summary.review || 0) + Number(summary.unknown || 0);
-  $("labelExperimentSummary").innerHTML = `
-    <div><label>来料候选</label><strong>${Number(result.incoming_candidate_count || 0)}</strong></div>
-    <div><label>切分框</label><strong>${Number(result.split_count || 0)}</strong></div>
-    <div><label>异常</label><strong>${abnormal}</strong></div>
-    <div><label>缺失</label><strong>${Number(summary.missing || 0)}</strong></div>
-  `;
-}
-
-function renderLabelExperimentResult(result) {
-  state.labelExperimentResult = result;
-  const badge = $("labelExperimentBadge");
-  const badgeClass = labelExperimentBadgeClass(result.status);
-  badge.className = `result-badge ${badgeClass}`;
-  badge.textContent = result.status === "pass" ? "通过" : result.status === "fail" ? "发现异常" : "需复核";
-  renderLabelExperimentSummary(result);
-  setLabelExperimentImage("labelReferenceOverlayFrame", "labelReferenceOverlay", result.reference_overlay_url);
-  setLabelExperimentImage("labelIncomingOverlayFrame", "labelIncomingOverlay", result.incoming_overlay_url);
-
-  const grid = $("labelExperimentCandidates");
-  const items = result.items || [];
-  const missing = result.missing_references || [];
-  if (!items.length && !missing.length) {
-    grid.innerHTML = `<p class="hint">没有可展示的来料候选。</p>`;
-    return;
-  }
-  const cards = items
-    .map((item) => {
-      const status = item.status || "unknown";
-      const score = Number(item.score || 0).toFixed(3);
-      return `
-        <article class="label-exp-card ${escapeAttr(status)}">
-          <header class="label-exp-card-head">
-            <div>
-              <strong>${escapeHtml(item.id || "候选")}</strong>
-              <span>匹配 ${escapeHtml(item.reference_id || "-")}</span>
-            </div>
-            <span class="pill ${labelExperimentPillClass(status)}">${labelExperimentStatusText(status)}</span>
-          </header>
-          <div class="label-exp-card-images">
-            <button class="preview-open" type="button" data-preview-url="${escapeAttr(item.candidate_url || "")}">
-              <img src="${escapeAttr(cacheBustImageUrl(item.candidate_url || ""))}" alt="${escapeAttr(item.id || "候选标签")}" />
-            </button>
-            <button class="preview-open" type="button" data-preview-url="${escapeAttr(item.diff_url || "")}">
-              <img src="${escapeAttr(cacheBustImageUrl(item.diff_url || ""))}" alt="${escapeAttr(item.id || "候选差异")} 差异图" />
-            </button>
-          </div>
-          <div class="label-exp-card-body">
-            <dl class="label-exp-card-meta">
-              <div><dt>分数</dt><dd>${score}</dd></div>
-              <div><dt>位置</dt><dd>${escapeHtml(item.bbox_text || "-")}</dd></div>
-            </dl>
-            <p class="label-exp-reason">${escapeHtml(item.reason || "-")}</p>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-  const missingCards = missing
-    .map((item) => `
-      <article class="label-exp-card fail">
-        <header class="label-exp-card-head">
-          <div>
-            <strong>${escapeHtml(item.reference_id || "标准")}</strong>
-            <span>最佳候选 ${escapeHtml(item.best_incoming_id || "无")}</span>
-          </div>
-          <span class="pill fail">缺失</span>
-        </header>
-        <div class="label-exp-card-body">
-          <dl class="label-exp-card-meta">
-            <div><dt>最佳分数</dt><dd>${Number(item.best_score || 0).toFixed(3)}</dd></div>
-            <div><dt>状态</dt><dd>${escapeHtml(item.status || "missing")}</dd></div>
-          </dl>
-          <p class="label-exp-reason">标准图中存在该候选，但来料图里没有确认匹配项。</p>
-        </div>
-      </article>
-    `)
-    .join("");
-  grid.innerHTML = cards + missingCards;
-  bindImagePreviewTriggers(grid);
-}
-
-async function runLabelExperiment() {
-  const referenceFile = $("labelReferenceFile")?.files?.[0];
-  const incomingFile = $("labelIncomingFile")?.files?.[0];
-  if (!referenceFile) return toast("请先选择标准标签图。");
-  if (!incomingFile) return toast("请先选择来料整页图。");
-  const button = $("runLabelExperiment");
-  const badge = $("labelExperimentBadge");
-  setBusy(button, true);
-  badge.className = "result-badge waiting";
-  badge.textContent = "处理中";
-  try {
-    const form = new FormData();
-    form.append("reference_file", referenceFile);
-    form.append("incoming_file", incomingFile);
-    form.append("sensitivity", $("labelSensitivity")?.value || "0.72");
-    const result = await api("/api/experimental/label-inspector/analyze", { method: "POST", body: form });
-    renderLabelExperimentResult(result);
-    toast("标签切分比对完成。");
-  } catch (error) {
-    badge.className = "result-badge fail";
-    badge.textContent = "失败";
-    toast(`标签实验失败：${error.message}`);
   } finally {
     setBusy(button, false);
   }
@@ -3522,17 +3370,6 @@ function bindActions() {
     const file = $("videoFile").files[0];
     if (file) setInspectInput("video", file);
   });
-
-  $("labelSensitivity")?.addEventListener("input", (event) => {
-    $("labelSensitivityValue").textContent = Number(event.target.value).toFixed(2);
-  });
-  $("labelReferenceFile")?.addEventListener("change", () => {
-    updateLabelExperimentFileName("labelReferenceFile", "labelReferenceName", "PNG, JPG, JPEG");
-  });
-  $("labelIncomingFile")?.addEventListener("change", () => {
-    updateLabelExperimentFileName("labelIncomingFile", "labelIncomingName", "PNG, JPG, JPEG");
-  });
-  $("runLabelExperiment")?.addEventListener("click", runLabelExperiment);
 
   $("runImage").addEventListener("click", async () => {
     const file = $("imageFile").files[0];
