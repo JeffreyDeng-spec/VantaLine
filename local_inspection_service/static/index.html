@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>流水线配件检测</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260604-ai-key-menu-fix" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260605-ui-polish-label-experiment" />
   </head>
   <body>
     <div class="app-shell">
@@ -17,6 +17,7 @@
 
         <nav class="side-nav" aria-label="主导航">
           <button class="nav-item active" data-view="inspect">检测工作台</button>
+          <button class="nav-item" data-view="labelExperiment">标签实验</button>
           <button class="nav-item" data-view="rules">规则设置</button>
           <button class="nav-item" data-view="accessories">配件管理</button>
           <button class="nav-item" data-view="training">模型训练</button>
@@ -153,6 +154,81 @@
                 </thead>
                 <tbody id="partsTable"></tbody>
               </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="labelExperimentView" class="view">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow">Experimental Feature</p>
+              <h2>标签切分实验</h2>
+            </div>
+            <div id="labelExperimentBadge" class="result-badge waiting">等待输入</div>
+          </header>
+
+          <div class="label-exp-grid">
+            <section class="panel input-panel label-exp-input-panel">
+              <div class="section-title">
+                <span>01</span>
+                <h3>输入</h3>
+              </div>
+
+              <div class="label-exp-dropzones">
+                <label class="dropzone label-exp-dropzone">
+                  <input id="labelReferenceFile" type="file" accept="image/*" />
+                  <strong>标准标签图</strong>
+                  <span id="labelReferenceName">PNG, JPG, JPEG</span>
+                </label>
+                <label class="dropzone label-exp-dropzone">
+                  <input id="labelIncomingFile" type="file" accept="image/*" />
+                  <strong>来料整页图</strong>
+                  <span id="labelIncomingName">PNG, JPG, JPEG</span>
+                </label>
+              </div>
+
+              <div class="field range-field label-exp-range">
+                <label>差异敏感度</label>
+                <input id="labelSensitivity" type="range" min="0" max="1" value="0.72" step="0.05" />
+                <output id="labelSensitivityValue">0.72</output>
+              </div>
+
+              <button id="runLabelExperiment" class="primary" type="button">切分并比对</button>
+            </section>
+
+            <section class="panel result-panel label-exp-result-panel">
+              <div class="section-title">
+                <span>02</span>
+                <h3>切分预览</h3>
+              </div>
+
+              <div id="labelExperimentSummary" class="summary-grid label-exp-summary">
+                <div><label>来料候选</label><strong>-</strong></div>
+                <div><label>切分框</label><strong>-</strong></div>
+                <div><label>异常</label><strong>-</strong></div>
+                <div><label>缺失</label><strong>-</strong></div>
+              </div>
+
+              <div class="label-exp-overlay-grid">
+                <div class="label-exp-media" id="labelReferenceOverlayFrame">
+                  <img id="labelReferenceOverlay" alt="标准标签切分预览" />
+                  <div id="labelReferenceOverlayEmpty" class="empty-state">标准图预览</div>
+                </div>
+                <div class="label-exp-media" id="labelIncomingOverlayFrame">
+                  <img id="labelIncomingOverlay" alt="来料图片切分预览" />
+                  <div id="labelIncomingOverlayEmpty" class="empty-state">来料切分预览</div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel metrics-panel label-exp-candidates-panel">
+            <div class="section-title">
+              <span>03</span>
+              <h3>候选标签</h3>
+            </div>
+            <div id="labelExperimentCandidates" class="label-exp-candidate-grid">
+              <p class="hint">上传后显示来料切分候选。</p>
             </div>
           </section>
         </section>
@@ -704,6 +780,6 @@
     </section>
 
     <div id="toast" class="toast"></div>
-    <script src="/static/app.js?v=20260604-ai-key-menu-fix"></script>
+    <script src="/static/app.js?v=20260605-ui-polish-label-experiment"></script>
   </body>
 </html>
