@@ -4,7 +4,7 @@ This folder stores small deployable reference weights for the bundled reference
 task.
 
 These files are examples for the bundled reference task. They are not the whole
-VantaLane model registry and they should not be treated as a limit on what the
+VantaLine model registry and they should not be treated as a limit on what the
 toolflow can inspect.
 
 ## Tracked Reference Weights

@@ -1,0 +1,31 @@
+{
+  "name": "@vantaline/react-preview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "build:preview": "npm run typecheck && VITE_ROUTER_BASENAME=/react-preview vite build",
+    "build:production-cutover": "npm run typecheck && VITE_ROUTER_BASENAME=/ vite build --base /static/ --outDir dist-production --emptyOutDir",
+    "build": "npm run build:preview",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@tanstack/react-query": "^5.83.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "^5.8.3",
+    "vite": "^8.0.16"
+  }
+}

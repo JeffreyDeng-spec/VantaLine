@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
 from pathlib import Path
@@ -105,6 +106,10 @@ def patch_common(patch: Patch, tmpdir: Path, config: dict[str, Any]) -> None:
     patch.env("INSPECTION_AI_MCP_ENABLED", None)
     patch.attr(server, "OUTPUT_DIR", output_dir)
     patch.attr(server, "AI_LOCAL_CONFIG_PATH", tmpdir / "ai_config.local.json")
+    patch.attr(server, "AI_PROFILE_CACHE_PATH", tmpdir / "ai_profile_cache.local.json")
+    patch.attr(server, "AI_DETECTION_TASKS_PATH", tmpdir / "ai_detection_tasks.json")
+    patch.attr(server, "AI_PROVIDER_MAX_ATTEMPTS", 2)
+    patch.attr(server, "AI_PROVIDER_RETRY_BACKOFF_SECONDS", 0.0)
     patch.attr(server, "load_config", lambda: config)
     patch.attr(server, "save_config", lambda _config: None)
     patch.attr(server, "list_trained_model_specs", lambda: [])
@@ -121,6 +126,22 @@ def disable_ai_env(patch: Patch) -> None:
     patch.env("INSPECTION_AI_API_KEY_ENV", None)
     patch.env("GEMINI_API_KEY", None)
     patch.env("OPENAI_API_KEY", None)
+
+
+def provider_success_payload(evidence: str = "matching text visible") -> dict[str, Any]:
+    return {
+        "detections": [
+            {
+                "accessory_id": "acc_smoke",
+                "label": "Smoke Manual",
+                "present": True,
+                "confidence": 0.94,
+                "count": 1,
+                "evidence": evidence,
+            }
+        ],
+        "rule": {"counts": {"acc_smoke": 1}},
+    }
 
 
 def verify_status_and_ui_ai_option() -> None:
@@ -217,6 +238,57 @@ def verify_ai_config_secret_paths_are_gitignored() -> None:
             check=False,
         )
         assert_true(result.returncode == 0, f"AI config secret path must be gitignored: {path}")
+
+
+def verify_ai_detection_task_crud_and_status_model() -> None:
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            disable_ai_env(patch)
+            created = server.create_ai_detection_task(
+                server.AiDetectionTaskRequest(
+                    name="Smoke AI Task",
+                    accessories=[
+                        server.AiDetectionTaskAccessory(accessory_id="acc_smoke", required_count=2),
+                    ],
+                )
+            )
+            task = created["task"]
+            assert_true(task["model_id"].startswith(server.AI_DETECTION_TASK_PREFIX), "AI task model id should use the AI task prefix")
+            assert_true(task["required_accessory_counts"]["acc_smoke"] == 2, "AI task should persist required counts")
+
+            status = server.status()
+            specs = [item for item in status["specialized_models"] if item["id"] == task["model_id"]]
+            assert_true(len(specs) == 1, "AI-only task should appear as a specialized AI model spec")
+            assert_true(specs[0]["task_source"] == "ai_detection_task_config", "AI task spec should identify its non-training source")
+            assert_true(specs[0]["required_accessory_counts"]["acc_smoke"] == 2, "status model spec should include AI task counts")
+            assert_true(
+                not any(item["task_id"] == task["id"] for item in status["specialized_model_tasks"]),
+                "old inspection task menu should not be populated by AI-only task configs",
+            )
+
+            selected = server.selected_model_spec(task["model_id"], base_config())
+            assert_true(selected["is_ai_detection"], "AI task model id should resolve through selected_model_spec")
+            image = np.zeros((24, 24, 3), dtype=np.uint8)
+            result = server.analyze_bgr(image, "ai_task_missing_key", task["model_id"])
+            assert_true(not result["passed"], "AI task should fail closed when provider config is not ready")
+            assert_true(result["rule"]["missing"] == ["acc_smoke"], "AI task failure should report selected accessory as missing")
+
+            updated = server.update_ai_detection_task(
+                task["id"],
+                server.AiDetectionTaskRequest(
+                    name="Updated Smoke AI Task",
+                    required_accessory_counts={"acc_smoke": 1},
+                ),
+            )
+            assert_true(updated["task"]["name"] == "Updated Smoke AI Task", "AI task update should save the new task name")
+            assert_true(updated["task"]["required_accessory_counts"]["acc_smoke"] == 1, "AI task update should save counts")
+            deleted = server.delete_ai_detection_task(task["id"])
+            assert_true(deleted["status"] == "deleted", "AI task delete should return deleted status")
+            assert_true(not deleted["tasks"], "AI task delete should remove the saved task")
+    finally:
+        patch.restore()
 
 
 def verify_accessory_profile_fallback() -> None:
@@ -468,6 +540,281 @@ def verify_ai_provider_malformed_json_returns_normal_failure_shape() -> None:
         patch.restore()
 
 
+def verify_provider_non_json_retry_then_success() -> None:
+    calls = {"count": 0, "repair_prompt": False}
+
+    class NonJsonThenSuccessProvider:
+        def generate_json(self, _system_prompt: str, user_content: list[dict[str, Any]], **_kwargs: Any) -> tuple[dict[str, Any], int]:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise server.AiProviderError("AI provider did not return a JSON object")
+            calls["repair_prompt"] = any("RETRY_REPAIR" in str(item.get("text") or "") for item in user_content if isinstance(item, dict))
+            return provider_success_payload(), 33
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            patch.attr(server, "ai_provider", lambda: NonJsonThenSuccessProvider())
+            result = server.call_ai_mcp_tool(
+                "provider.gemini.generate_json",
+                {
+                    "provider_config": server.ai_detection_settings(),
+                    "system_prompt": "Return JSON.",
+                    "user_content": [{"type": "text", "text": "{}"}],
+                    "max_tokens": 16,
+                },
+            )
+            assert_true(result["ok"] is True, "non-JSON transient retry should recover when the second attempt returns JSON")
+            assert_true(calls["count"] == 2, "non-JSON retry should use exactly two provider calls")
+            assert_true(calls["repair_prompt"], "non-JSON retry should add the repair instruction on the second attempt")
+            assert_true(result["attempts"] == 2 and result["retry_count"] == 1, "non-JSON retry metadata should report one retry")
+            assert_true(result["previous_errors"], "non-JSON retry metadata should preserve the first error")
+    finally:
+        patch.restore()
+
+
+def verify_ai_timeout_retry_then_success() -> None:
+    calls = {"count": 0}
+
+    class TimeoutThenSuccessProvider:
+        def generate_json(self, *_args: Any, **_kwargs: Any) -> tuple[dict[str, Any], int]:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise server.AiProviderTimeout("synthetic timeout")
+            return provider_success_payload(), 41
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            patch.attr(server, "ai_provider", lambda: TimeoutThenSuccessProvider())
+            image = np.zeros((24, 24, 3), dtype=np.uint8)
+            result = server.analyze_bgr(image, "ai_timeout_retry_success", server.AI_DETECTION_MODEL_ID)
+            assert_true(result["passed"], "timeout retry should pass when the second provider call returns valid presence JSON")
+            assert_true(calls["count"] == 2, "timeout retry should use exactly two provider calls")
+            assert_true(result["ai"]["attempts"] == 2 and result["ai"]["retry_count"] == 1, "timeout retry metadata should report one retry")
+            assert_true(result["ai"]["previous_errors"], "timeout retry metadata should preserve the timeout error")
+            assert_true(not result["ai"]["timed_out"], "successful timeout retry should not mark the final AI result timed out")
+    finally:
+        patch.restore()
+
+
+def verify_provider_503_uses_flash_lite_fallback() -> None:
+    class FakeResponse:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.payload = payload
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(self.payload).encode("utf-8")
+
+    urls: list[str] = []
+
+    def fake_urlopen(request: Any, *_args: Any, **_kwargs: Any) -> FakeResponse:
+        urls.append(str(request.full_url))
+        if len(urls) == 1:
+            raise server.urllib.error.HTTPError(
+                request.full_url,
+                503,
+                "Service Unavailable",
+                {},
+                io.BytesIO(b'{"error":"overloaded"}'),
+            )
+        return FakeResponse(
+            {
+                "candidates": [{"content": {"parts": [{"text": json.dumps(provider_success_payload())}]}}],
+                "usageMetadata": {"totalTokenCount": 7},
+            }
+        )
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_PROVIDER", "gemini")
+            patch.env("INSPECTION_AI_MODEL", "gemini-2.5-flash")
+            patch.env("INSPECTION_AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            settings = server.ai_detection_settings()
+            patch.attr(server.urllib.request, "urlopen", fake_urlopen)
+            result = server.call_ai_mcp_tool(
+                "provider.gemini.generate_json",
+                {
+                    "provider_config": settings,
+                    "system_prompt": "Return JSON.",
+                    "user_content": [{"type": "text", "text": "{}"}],
+                    "max_tokens": 16,
+                },
+            )
+            assert_true(result["ok"] is True, "Gemini HTTP 503 should recover through Flash-Lite fallback")
+            assert_true(len(urls) == 2, "503 fallback should use exactly two HTTP calls")
+            assert_true("gemini-2.5-flash:generateContent" in urls[0], "503 fallback should first use the selected Gemini model")
+            assert_true("gemini-2.5-flash-lite:generateContent" in urls[1], "503 fallback should then use Flash-Lite")
+            assert_true(result["attempts"] == 2 and result["retry_count"] == 1, "503 fallback metadata should report one retry")
+            assert_true(result["fallback_model"] == "gemini-2.5-flash-lite", "503 fallback metadata should expose the fallback model")
+            assert_true(result["fallback_reason"] == "provider_overloaded", "503 fallback metadata should expose the fallback reason")
+            assert_true(result["previous_errors"], "503 fallback metadata should preserve the first overload error")
+            assert_true(result["usage_metadata"]["totalTokenCount"] == 7, "503 fallback should keep successful usage metadata")
+    finally:
+        patch.restore()
+
+
+def verify_cold_profile_cache_consumes_retry_budget() -> None:
+    class FakeResponse:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.payload = payload
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(self.payload).encode("utf-8")
+
+    urls: list[str] = []
+
+    def fake_urlopen(request: Any, *_args: Any, **_kwargs: Any) -> FakeResponse:
+        url = str(request.full_url)
+        urls.append(url)
+        if url.endswith("/cachedContents"):
+            return FakeResponse(
+                {
+                    "name": "cachedContents/smoke-cache",
+                    "expireTime": "2099-01-01T00:00:00Z",
+                    "usageMetadata": {"totalTokenCount": 5},
+                }
+            )
+        raise server.urllib.error.HTTPError(
+            request.full_url,
+            503,
+            "Service Unavailable",
+            {},
+            io.BytesIO(b'{"error":"overloaded"}'),
+        )
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            config = base_config()
+            patch_common(patch, tmpdir, config)
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_PROVIDER", "gemini")
+            patch.env("INSPECTION_AI_MODEL", "gemini-2.5-flash")
+            patch.env("INSPECTION_AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            patch.attr(server.urllib.request, "urlopen", fake_urlopen)
+            patch.attr(server, "_REFERENCE_SHEET_DESCRIPTOR_CACHE", {})
+
+            ref_path = tmpdir / "reference.png"
+            cv2.imwrite(str(ref_path), np.full((16, 16, 3), 255, dtype=np.uint8))
+            item = config["accessories"][0]
+            profile = dict(item["ai_profile"])
+            profile["reference_images"] = [{"source_path": str(ref_path)}]
+            required = server.required_accessory_profile_payload(item, 1, profile)
+            result = server.tool_vision_inspect_presence(
+                {
+                    "inspection_image_bgr": np.zeros((24, 24, 3), dtype=np.uint8),
+                    "required_accessories": [required],
+                    "provider_config": server.ai_detection_settings(),
+                }
+            )
+
+            assert_true(not result["passed"], "cold cache plus transient detection failure should fail closed")
+            assert_true(len(urls) == 2, "cold cache creation should leave only one detection provider call in the default budget")
+            assert_true(urls[0].endswith("/cachedContents"), "first Gemini call should create cachedContents")
+            assert_true("gemini-2.5-flash:generateContent" in urls[1], "second Gemini call should be the selected model detection call")
+            assert_true(all("gemini-2.5-flash-lite" not in url for url in urls), "cold cache budget should not allow Flash-Lite fallback as a third call")
+            profile_cache = result["ai"]["profile_cache"]
+            assert_true(profile_cache["status"] == "created", "profile cache should be cold-created in the smoke")
+            assert_true(profile_cache["provider_call_count"] == 1, "cold cache creation should count as one provider call")
+            assert_true(profile_cache["generate_attempt_budget"] == 1, "detection retry budget should be reduced after cold cache creation")
+            assert_true(result["ai"]["attempts"] == 1 and result["ai"]["retry_count"] == 0, "detection provider metadata should show no retry after cold cache creation")
+            assert_true(result["rule"]["missing"] == ["acc_smoke"], "fail-closed result should preserve the missing required accessory")
+    finally:
+        patch.restore()
+
+
+def verify_repeated_transient_failure_remains_fail_closed() -> None:
+    calls = {"count": 0}
+
+    class RepeatedTimeoutProvider:
+        def generate_json(self, *_args: Any, **_kwargs: Any) -> tuple[dict[str, Any], int]:
+            calls["count"] += 1
+            raise server.AiProviderTimeout("synthetic repeated timeout")
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            patch.attr(server, "ai_provider", lambda: RepeatedTimeoutProvider())
+            image = np.zeros((24, 24, 3), dtype=np.uint8)
+            result = server.analyze_bgr(image, "ai_repeated_timeout", server.AI_DETECTION_MODEL_ID)
+            assert_true(calls["count"] == 2, "repeated transient failure should stop at two provider calls")
+            assert_true(not result["passed"], "repeated transient failure should fail closed")
+            assert_true(result["rule"]["missing"] == ["acc_smoke"], "repeated transient failure should preserve missing required accessory")
+            assert_true(result["ai"]["timed_out"], "repeated timeout should remain visible in AI metadata")
+            assert_true(result["ai"]["attempts"] == 2 and result["ai"]["retry_count"] == 1, "repeated failure metadata should report the bounded retry")
+            assert_true(len(result["ai"]["previous_errors"]) == 2, "repeated failure metadata should preserve both transient errors")
+    finally:
+        patch.restore()
+
+
+def verify_non_retryable_provider_errors_fail_fast() -> None:
+    cases = [
+        ("auth", server.AiProviderAuthError("AI provider request failed: HTTP 401 auth failed", http_status=401)),
+        ("config", server.AiProviderConfigError("AI provider request failed: HTTP 400 bad config", http_status=400)),
+        ("quota", server.AiProviderOverloaded("AI provider overloaded: HTTP 429 quota exceeded", http_status=429)),
+    ]
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_common(patch, Path(tmp), base_config())
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.env("GEMINI_API_KEY", None)
+            payload = {
+                "provider_config": server.ai_detection_settings(),
+                "system_prompt": "Return JSON.",
+                "user_content": [{"type": "text", "text": "{}"}],
+                "max_tokens": 16,
+            }
+            for case_name, exc in cases:
+                calls = {"count": 0}
+
+                class FailFastProvider:
+                    def generate_json(self, *_args: Any, **_kwargs: Any) -> tuple[dict[str, Any], int]:
+                        calls["count"] += 1
+                        raise exc
+
+                patch.attr(server, "ai_provider", lambda: FailFastProvider())
+                result = server.call_ai_mcp_tool("provider.gemini.generate_json", payload)
+                assert_true(calls["count"] == 1, f"{case_name} provider error must not be retried")
+                assert_true(result["ok"] is False, f"{case_name} provider error should return structured failure")
+                assert_true(result["attempts"] == 1 and result["retry_count"] == 0, f"{case_name} metadata should show fail-fast")
+    finally:
+        patch.restore()
+
 def verify_vision_presence_tool_contract() -> None:
     captured: dict[str, Any] = {}
 
@@ -618,20 +965,28 @@ def verify_ai_analyze_disabled_returns_original_shape() -> None:
 
 def verify_ai_timeout_is_structured() -> None:
     class TimeoutProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
         def generate_json(self, *_args: Any, **_kwargs: Any) -> tuple[dict[str, Any], int]:
+            self.calls += 1
             raise server.AiProviderTimeout("synthetic timeout")
 
     patch = Patch()
     try:
         with tempfile.TemporaryDirectory() as tmp:
+            provider = TimeoutProvider()
             patch_common(patch, Path(tmp), base_config())
             patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
             patch.env("INSPECTION_AI_API_KEY", "test-key")
-            patch.attr(server, "ai_provider", lambda: TimeoutProvider())
+            patch.attr(server, "ai_provider", lambda: provider)
             image = np.zeros((24, 24, 3), dtype=np.uint8)
             result = server.analyze_bgr(image, "ai_timeout", server.AI_DETECTION_MODEL_ID)
             assert_true(not result["passed"], "timeout should fail closed")
+            assert_true(provider.calls == 2, "repeated timeout should stop after the configured second attempt")
             assert_true(result["ai"]["timed_out"], "timeout should be surfaced in structured ai metadata")
+            assert_true(result["ai"]["attempts"] == 2, "repeated timeout metadata should expose two attempts")
+            assert_true(result["ai"]["retry_count"] == 1, "repeated timeout metadata should expose one retry")
             assert_true(result["rule"]["missing"] == ["acc_smoke"], "timeout should report required accessory as missing")
     finally:
         patch.restore()
@@ -782,7 +1137,48 @@ def verify_ai_present_without_count_does_not_satisfy_multiple_required() -> None
             result = server.analyze_bgr(image, "ai_present_no_count", server.AI_DETECTION_MODEL_ID)
             assert_true(not result["passed"], "one boolean present without provider count must not satisfy expected_count=2")
             assert_true(result["rule"]["counts"]["acc_smoke"] == 1, "missing provider count should normalize to one visible item")
-            assert_true(result["rule"]["missing"] == ["acc_smoke"], "accessory should remain missing until provider returns count >= expected")
+            assert_true(result["rule"]["missing"] == ["acc_smoke"], "accessory should remain missing until provider returns the exact expected count")
+    finally:
+        patch.restore()
+
+
+def verify_ai_overcount_fails_exact_count() -> None:
+    class OvercountProvider:
+        def generate_json(self, *_args: Any, **_kwargs: Any) -> tuple[dict[str, Any], int]:
+            return {
+                "detections": [
+                    {
+                        "accessory_id": "acc_smoke",
+                        "label": "Smoke Manual",
+                        "present": True,
+                        "confidence": 0.96,
+                        "evidence": "three visible items",
+                    }
+                ],
+                "rule": {"counts": {"acc_smoke": 3}},
+            }, 91
+
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = base_config()
+            config["min_counts"] = {"7": 2}
+            config["accessories"][0]["ai_profile"]["expected_count"] = 2
+            patch_common(patch, Path(tmp), config)
+            patch.env("INSPECTION_AI_DETECTION_ENABLED", "1")
+            patch.env("INSPECTION_AI_API_KEY", "test-key")
+            patch.attr(server, "ai_provider", lambda: OvercountProvider())
+            image = np.zeros((24, 24, 3), dtype=np.uint8)
+            result = server.analyze_bgr(image, "ai_overcount_exact", server.AI_DETECTION_MODEL_ID)
+            assert_true(not result["passed"], "provider overcount must fail exact-count AI rule")
+            assert_true(result["rule"]["counts"]["acc_smoke"] == 3, "overcount should preserve observed provider count")
+            assert_true(result["rule"]["missing"] == ["acc_smoke"], "overcount should keep accessory unsatisfied")
+            assert_true(result["rule"]["extra"] == ["acc_smoke"], "overcount should be exposed as extra rule evidence")
+            assert_true(
+                result["rule"]["count_mismatches"]["acc_smoke"]["issue"] == "over_count",
+                "overcount should be reported as an exact-count mismatch",
+            )
+            assert_true(result["detections"][0]["present"] is False, "overcount must not mark the required accessory satisfied")
     finally:
         patch.restore()
 
@@ -930,6 +1326,288 @@ def verify_missing_required_class_fails_closed() -> None:
         patch.restore()
 
 
+def verify_accessory_confirm_material_gates() -> None:
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            candidate_dir = tmpdir / "candidates"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            asset_dir = tmpdir / "assets"
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            canonical_path = asset_dir / "manual_canonical.png"
+            cv2.imwrite(str(canonical_path), np.full((96, 64, 3), 240, dtype=np.uint8))
+            config = {
+                "accessories": [],
+                "active_model_id": server.DEFAULT_MODEL_ID,
+                "image_size": 64,
+                "confidence_threshold": 0.25,
+                "required_classes": [],
+                "min_counts": {},
+                "ocr": {"enabled": False, "require_manual_types": False},
+                "video": {},
+                "stream": {},
+                "training": {"selected_accessory_ids": []},
+            }
+
+            def fake_ensure_profile(item: dict[str, Any], *, force: bool = False, allow_provider: bool = True) -> bool:
+                item["ai_profile"] = server.fallback_accessory_ai_profile(item)
+                item["ai_profile_status"] = {"status": "generated", "source": "provider"}
+                return True
+
+            patch.attr(server, "ACCESSORY_CANDIDATES_DIR", candidate_dir)
+            patch.attr(server, "load_config", lambda: config)
+            patch.attr(server, "save_config", lambda _config: None)
+            patch.attr(server, "ensure_accessory_ai_profile", fake_ensure_profile)
+            patch.attr(server, "preprocess_object_clean_sprites", lambda *_args, **_kwargs: False)
+
+            text_candidate = {
+                "id": "cand_text_gate",
+                "class_id": -1,
+                "name": "Gate Manual",
+                "material_type": "text",
+                "training_role": "detect_then_ocr",
+                "physical_size": server.physical_size_payload("text"),
+                "status": "candidate_review",
+                "source_files": [str(canonical_path)],
+                "normalized_assets": [
+                    {
+                        "kind": "canonical_text_image",
+                        "path": str(canonical_path),
+                        "method": "paper_resize_fallback",
+                        "width": 64,
+                        "height": 96,
+                    }
+                ],
+                "created_at": 1,
+            }
+            text_candidate["ai_profile"] = server.fallback_accessory_ai_profile(text_candidate)
+            (candidate_dir / "cand_text_gate.json").write_text(json.dumps(text_candidate), encoding="utf-8")
+
+            result = server.confirm_accessory("cand_text_gate")
+            assert_true(result["status"] == "saved", "text accessory confirm should save when canonical asset and AI profile are ready")
+            assert_true(result["item"]["material_type"] == "text", "text accessory confirm should preserve material type")
+            assert_true(len(config["accessories"]) == 1, "text confirm should append the accessory to config")
+
+            object_candidate = {
+                "id": "cand_object_gate",
+                "class_id": -1,
+                "name": "Gate Object",
+                "material_type": "object",
+                "material_alpha_policy": "opaque",
+                "training_role": "detect_and_classify",
+                "physical_size": server.physical_size_payload("object"),
+                "status": "candidate_review",
+                "source_files": [],
+                "normalized_assets": [],
+                "created_at": 1,
+            }
+            (candidate_dir / "cand_object_gate.json").write_text(json.dumps(object_candidate), encoding="utf-8")
+            try:
+                server.confirm_accessory("cand_object_gate")
+            except server.HTTPException as exc:
+                assert_true(exc.status_code == 422, "object confirm without clean sprites should keep failing with 422")
+                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                assert_true(detail.get("message") == "多角度素材切分未完成", "object confirm should keep the multi-angle gate")
+            else:
+                raise AssertionError("object confirm should not bypass the clean-sprite gate")
+    finally:
+        patch.restore()
+
+
+def verify_accessory_confirm_rejects_fallback_profiles() -> None:
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            candidate_dir = tmpdir / "candidates"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            asset_dir = tmpdir / "assets"
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            canonical_path = asset_dir / "manual_canonical.png"
+            cv2.imwrite(str(canonical_path), np.full((96, 64, 3), 240, dtype=np.uint8))
+            config = {
+                "accessories": [],
+                "active_model_id": server.DEFAULT_MODEL_ID,
+                "image_size": 64,
+                "confidence_threshold": 0.25,
+                "required_classes": [],
+                "min_counts": {},
+                "ocr": {"enabled": False, "require_manual_types": False},
+                "video": {},
+                "stream": {},
+                "training": {"selected_accessory_ids": []},
+            }
+            ensure_mode = {"always_fallback": True, "post_id_fallback": False}
+
+            def write_text_candidate(candidate_id: str, name: str) -> None:
+                candidate = {
+                    "id": candidate_id,
+                    "class_id": -1,
+                    "name": name,
+                    "material_type": "text",
+                    "training_role": "detect_then_ocr",
+                    "physical_size": server.physical_size_payload("text"),
+                    "status": "candidate_review",
+                    "source_files": [str(canonical_path)],
+                    "normalized_assets": [
+                        {
+                            "kind": "canonical_text_image",
+                            "path": str(canonical_path),
+                            "method": "paper_resize_fallback",
+                            "width": 64,
+                            "height": 96,
+                        }
+                    ],
+                    "created_at": 1,
+                }
+                (candidate_dir / f"{candidate_id}.json").write_text(json.dumps(candidate), encoding="utf-8")
+
+            def fake_ensure_profile(item: dict[str, Any], *, force: bool = False, allow_provider: bool = True) -> bool:
+                item["ai_profile"] = server.fallback_accessory_ai_profile(item)
+                if ensure_mode["always_fallback"] or (
+                    ensure_mode["post_id_fallback"] and force and str(item.get("id") or "").startswith("acc_")
+                ):
+                    item["ai_profile_status"] = {
+                        "status": "missing_api_key",
+                        "source": "fallback",
+                        "message": "Missing AI provider API key (GEMINI_API_KEY).",
+                    }
+                else:
+                    item["ai_profile_status"] = {"status": "generated", "source": "provider"}
+                return True
+
+            patch.attr(server, "ACCESSORY_CANDIDATES_DIR", candidate_dir)
+            patch.attr(server, "load_config", lambda: config)
+            patch.attr(server, "save_config", lambda _config: None)
+            patch.attr(server, "ensure_accessory_ai_profile", fake_ensure_profile)
+
+            write_text_candidate("cand_text_missing_key", "Missing Key Manual")
+            try:
+                server.confirm_accessory("cand_text_missing_key")
+            except server.HTTPException as exc:
+                assert_true(exc.status_code == 422, "text confirm should reject missing-key fallback profile")
+                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                assert_true(detail.get("ai_profile_status") == "missing_api_key", "fallback rejection should expose profile status")
+                assert_true(detail.get("ai_profile_source") == "fallback", "fallback rejection should expose profile source")
+                assert_true(len(config["accessories"]) == 0, "fallback profile must not save an active text accessory")
+            else:
+                raise AssertionError("text confirm should reject fallback profile before saving")
+
+            ensure_mode["always_fallback"] = False
+            ensure_mode["post_id_fallback"] = True
+            write_text_candidate("cand_text_post_id_fallback", "Post ID Fallback Manual")
+            try:
+                server.confirm_accessory("cand_text_post_id_fallback")
+            except server.HTTPException as exc:
+                assert_true(exc.status_code == 422, "post-id fallback profile should reject text confirm")
+                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                assert_true(detail.get("ai_profile_status") == "missing_api_key", "post-id rejection should expose profile status")
+                saved_candidate = json.loads((candidate_dir / "cand_text_post_id_fallback.json").read_text(encoding="utf-8"))
+                assert_true(saved_candidate["id"] == "cand_text_post_id_fallback", "failed post-id confirm should restore candidate id")
+                assert_true(saved_candidate["status"] == "candidate_review", "failed post-id confirm should remain candidate_review")
+                assert_true(len(config["accessories"]) == 0, "post-id fallback must not save an active text accessory")
+            else:
+                raise AssertionError("text confirm should reject fallback profile after permanent id regeneration")
+    finally:
+        patch.restore()
+
+
+def make_label_sheet_smoke_label() -> np.ndarray:
+    image = np.full((82, 164, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (3, 3), (160, 78), (20, 20, 20), 2)
+    cv2.putText(image, "A42", (16, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (5, 5, 5), 2, cv2.LINE_AA)
+    cv2.putText(image, "LABEL", (16, 64), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 2, cv2.LINE_AA)
+    cv2.circle(image, (136, 51), 12, (40, 120, 220), -1)
+    return image
+
+
+def make_label_sheet_smoke_box() -> np.ndarray:
+    image = np.full((82, 164, 3), (229, 218, 198), dtype=np.uint8)
+    cv2.rectangle(image, (5, 5), (158, 76), (120, 80, 30), 4)
+    cv2.putText(image, "BOX", (40, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.95, (35, 35, 35), 3, cv2.LINE_AA)
+    return image
+
+
+def write_smoke_image(path: Path, image: np.ndarray) -> Path:
+    ok = cv2.imwrite(str(path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    assert_true(ok, f"failed to write smoke image: {path}")
+    return path
+
+
+def verify_label_sheet_local_reference_filter_and_match() -> None:
+    patch = Patch()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            config = base_config()
+            patch_common(patch, tmpdir, config)
+            disable_ai_env(patch)
+
+            label_path = write_smoke_image(tmpdir / "model_label_sticker.jpg", make_label_sheet_smoke_label())
+            box_path = write_smoke_image(tmpdir / "shipping_box_carton.jpg", make_label_sheet_smoke_box())
+            loaded_label = cv2.imread(str(label_path), cv2.IMREAD_COLOR)
+            assert_true(loaded_label is not None, "label smoke reference should decode")
+            sheet = np.full((140, 230, 3), 255, dtype=np.uint8)
+            sheet[28 : 28 + loaded_label.shape[0], 32 : 32 + loaded_label.shape[1]] = loaded_label
+
+            config["accessories"] = [
+                {
+                    "id": "acc_label",
+                    "class_id": 100,
+                    "name": "Model 标签 label sticker",
+                    "material_type": "text",
+                    "source_files": [str(label_path)],
+                    "normalized_assets": [],
+                },
+                {
+                    "id": "acc_box",
+                    "class_id": 101,
+                    "name": "包装盒 shipping box carton",
+                    "material_type": "text",
+                    "source_files": [str(box_path)],
+                    "normalized_assets": [],
+                },
+            ]
+
+            refs, stats = server.collect_label_sheet_references(config, write_previews=False)
+            assert_true(len(refs) == 1, "label sheet filter should keep only label-like references")
+            assert_true(refs[0]["accessory_id"] == "acc_label", "label reference should survive filtering")
+            assert_true(stats["kept_count"] == 1, "filter stats should count kept label references")
+            assert_true(stats["filtered_count"] == 1, "filter stats should count filtered non-label references")
+            filtered_ids = {item.get("accessory_id") for item in stats.get("filtered", [])}
+            assert_true("acc_box" in filtered_ids, "packaging/box annotations should be filtered from label references")
+
+            status = server.status()
+            label_specs = [item for item in status["available_models"] if item["id"] == server.LABEL_SHEET_MODEL_ID]
+            assert_true(label_specs and label_specs[0]["exists"], "local label sheet model should appear in /api/status")
+            assert_true(label_specs[0]["is_label_sheet_match"], "status model spec should identify local label matching")
+            assert_true(not label_specs[0]["is_ai_detection"], "label sheet model must not be marked as AI detection")
+
+            result = server.analyze_bgr_label_sheet(sheet, "label_sheet_smoke", config)
+            assert_true(result["model"]["id"] == server.LABEL_SHEET_MODEL_ID, "label sheet analysis should report the local model id")
+            assert_true("ai" not in result, "label sheet analysis must not attach AI provider metadata")
+            assert_true(result["rule"]["match_policy"] == "label_sheet_local_match", "label sheet rule policy should be explicit")
+            assert_true(result["status"] == "matched", f"synthetic label sheet should match, got {result['status']}")
+            assert_true(result["passed"], "matched label sheet should pass")
+            assert_true(result["matched_reference_id"].startswith("acc_label"), "matched reference should come from the label reference")
+            assert_true(float(result["score"]) >= server.LABEL_SHEET_MATCH_THRESHOLD, "matched label score should clear the local threshold")
+            assert_true(bool(result["matched_reference_image_url"]), "match response should include matched reference image URL")
+            assert_true(bool(result["input_crop_image_url"]), "match response should include input crop image URL")
+            assert_true(bool(result["annotated_url"]), "match response should include an annotated overlay URL")
+            assert_true(result["doc_filter_stats"]["filtered_count"] == 1, "match response should include document filter stats")
+
+            no_ref_config = dict(config)
+            no_ref_config["accessories"] = []
+            no_ref = server.analyze_bgr_label_sheet(sheet, "label_sheet_no_reference", no_ref_config)
+            assert_true(no_ref["status"] == "no_label_reference", "empty reference set should be explicit")
+            assert_true(not no_ref["passed"], "empty reference set must fail closed")
+            assert_true(bool(no_ref["annotated_url"]), "no-reference response should still include a usable overlay")
+            assert_true(bool(no_ref["input_crop_image_url"]), "no-reference response should still include a representative crop")
+    finally:
+        patch.restore()
+
+
 def verify_yolo_path_still_runs_with_existing_shape() -> None:
     class FakeModel:
         def predict(self, *_args: Any, **_kwargs: Any) -> list[object]:
@@ -956,12 +1634,19 @@ def main() -> int:
         verify_status_and_ui_ai_option,
         verify_ai_key_config_smoke,
         verify_ai_config_secret_paths_are_gitignored,
+        verify_ai_detection_task_crud_and_status_model,
         verify_accessory_profile_fallback,
         verify_mcp_tool_contracts,
         verify_mcp_runtime_defaults_to_in_process,
         verify_mcp_stdio_opt_in_failure_falls_back,
         verify_provider_malformed_json_and_bad_shape_fail_closed,
         verify_ai_provider_malformed_json_returns_normal_failure_shape,
+        verify_provider_non_json_retry_then_success,
+        verify_ai_timeout_retry_then_success,
+        verify_provider_503_uses_flash_lite_fallback,
+        verify_cold_profile_cache_consumes_retry_budget,
+        verify_repeated_transient_failure_remains_fail_closed,
+        verify_non_retryable_provider_errors_fail_fast,
         verify_vision_presence_tool_contract,
         verify_ai_analyze_returns_boolean_original_output,
         verify_ai_analyze_disabled_returns_original_shape,
@@ -969,9 +1654,13 @@ def main() -> int:
         verify_ai_video_preserves_frame_debug_metadata,
         verify_ai_malformed_present_string_fails_closed,
         verify_ai_present_without_count_does_not_satisfy_multiple_required,
+        verify_ai_overcount_fails_exact_count,
         verify_ai_present_does_not_require_provider_bbox,
         verify_ai_invalid_counts_and_confidence_fail_closed,
         verify_missing_required_class_fails_closed,
+        verify_accessory_confirm_material_gates,
+        verify_accessory_confirm_rejects_fallback_profiles,
+        verify_label_sheet_local_reference_filter_and_match,
         verify_yolo_path_still_runs_with_existing_shape,
     ]
     for check in checks:

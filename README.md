@@ -1,18 +1,15 @@
-# VantaLane
+# VantaLine
 
-Naming note: the product documentation now uses VantaLane. The GitHub
-repository may still appear as VantaLine while the rename settles.
-
-VantaLane is a visual inspection workflow for building inspection tasks from
+VantaLine is a visual inspection workflow for building inspection tasks from
 user-defined accessories, generating training datasets, training or selecting
 detection models, and checking images or videos against the selected task rule.
 
 The original bottle plus four manuals setup is now treated as the included
 reference task. It remains useful for validation and examples, but it is not the
-product boundary: VantaLane is intended to support arbitrary inspection
+product boundary: VantaLine is intended to support arbitrary inspection
 accessories and multiple detection methods.
 
-## What VantaLane Does
+## What VantaLine Does
 
 - Maintains an accessory library with object and text/manual-like items.
 - Stores reference images, normalized assets, AI profiles, and task metadata for
@@ -30,7 +27,7 @@ current image satisfies that task.
 
 ## Detection Methods
 
-VantaLane supports several detection paths through the same inspection flow:
+VantaLine supports several detection paths through the same inspection flow:
 
 | Method | Purpose | Notes |
 | --- | --- | --- |
@@ -211,7 +208,7 @@ available AI provider key.
 
 ## Project Status
 
-VantaLane is an active visual inspection workflow project. The strongest current
+VantaLine is an active visual inspection workflow project. The strongest current
 use case is rapid development and validation of inspection workflows:
 
 - define accessories,
