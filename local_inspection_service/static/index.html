@@ -4,24 +4,147 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <title>流水线配件检测</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260604-ai-key-menu-fix" />
+    <title>VantaLine 视觉质检平台</title>
+    <link rel="icon" href="/static/favicon.ico?v=20260614-logo" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png?v=20260614-logo" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png?v=20260614-logo" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=20260614-logo" />
+    <link rel="manifest" href="/static/site.webmanifest?v=20260614-logo" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260615-data-analysis-diagnostics" />
   </head>
-  <body>
+  <body class="auth-pending">
+    <div id="authLoading" class="auth-loading">
+      <div class="brand-mark" aria-hidden="true">
+        <img src="/static/brand-logo.png?v=20260614-logo" alt="" width="36" height="36" decoding="async" />
+      </div>
+      <span>正在检查登录状态</span>
+    </div>
+
+    <main id="authShell" class="auth-shell hidden" aria-live="polite">
+      <section class="auth-panel">
+        <div class="auth-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <img src="/static/brand-logo.png?v=20260614-logo" alt="" width="36" height="36" decoding="async" />
+          </div>
+          <div>
+            <h1>VantaLine</h1>
+            <p id="authSubtitle">登录视觉质检平台</p>
+          </div>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>
+            用户名
+            <input id="loginUsername" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            密码
+            <input id="loginPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <button id="loginSubmit" class="primary" type="submit">登录</button>
+        </form>
+
+        <form id="setupForm" class="auth-form hidden">
+          <label>
+            管理员用户名
+            <input id="setupUsername" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            显示名称
+            <input id="setupDisplayName" type="text" autocomplete="name" />
+          </label>
+          <label>
+            管理员密码
+            <input id="setupPassword" type="password" autocomplete="new-password" minlength="8" required />
+          </label>
+          <button id="setupSubmit" class="primary" type="submit">创建管理员</button>
+        </form>
+
+        <p id="authError" class="auth-error" role="alert"></p>
+      </section>
+    </main>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand-block">
-          <p>LOCAL VISION QA</p>
-          <h1>流水线配件检测</h1>
+          <div class="brand-mark" aria-hidden="true">
+            <img src="/static/brand-logo.png?v=20260614-logo" alt="" width="36" height="36" decoding="async" />
+          </div>
+          <div class="brand-copy">
+            <h1>VantaLine</h1>
+            <p>视觉质检平台</p>
+          </div>
+        </div>
+
+        <div class="account-card">
+          <div>
+            <span id="currentUserRole">用户</span>
+            <strong id="currentUserName">-</strong>
+          </div>
+          <button id="logoutButton" class="icon-button" type="button" title="退出登录" aria-label="退出登录">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          </button>
         </div>
 
         <nav class="side-nav" aria-label="主导航">
-          <button class="nav-item active" data-view="inspect">检测工作台</button>
-          <button class="nav-item" data-view="rules">规则设置</button>
-          <button class="nav-item" data-view="accessories">配件管理</button>
-          <button class="nav-item" data-view="training">模型训练</button>
-          <button class="nav-item" data-view="imageJobs">任务队列</button>
-          <button class="nav-item" data-view="trainingLibrary">训练库</button>
+          <div class="nav-group">
+            <button class="nav-item active" data-view="home">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg>
+              <span>总览</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group-label">检测中心</p>
+            <button class="nav-item" data-view="inspect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+              <span>检测工作台</span>
+            </button>
+            <button class="nav-item" data-view="aiInspect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9z"/></svg>
+              <span>AI 检测</span>
+            </button>
+            <button class="nav-item" data-view="labelSheet">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L11 3.8A2 2 0 0 0 9.6 3.2H5a2 2 0 0 0-2 2v4.6c0 .5.2 1 .6 1.4l9.6 9.6a2 2 0 0 0 2.8 0l4.6-4.6a2 2 0 0 0 0-2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>
+              <span>标签匹配</span>
+            </button>
+            <button class="nav-item" data-view="locateAnything">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><line x1="12" y1="2" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="22"/><line x1="2" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+              <span>开放定位</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group-label">资产与训练</p>
+            <button class="nav-item" data-view="accessories">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><line x1="12" y1="13" x2="12" y2="21"/></svg>
+              <span>配件库</span>
+            </button>
+            <button class="nav-item" data-view="dataAnalysis">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="5" rx=".8"/><rect x="12" y="7" width="3" height="9" rx=".8"/><rect x="17" y="9" width="3" height="7" rx=".8"/></svg>
+              <span>数据分析</span>
+            </button>
+            <button class="nav-item" data-view="pipeline">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.2"/><rect x="10" y="4" width="5" height="10" rx="1.2"/><rect x="17" y="4" width="4" height="13" rx="1.2"/></svg>
+              <span>训练流水线</span>
+            </button>
+            <button class="nav-item" data-view="trainingLibrary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v6c0 1.6 3.6 2.8 8 2.8s8-1.2 8-2.8v-6"/><path d="M4 11.5v6c0 1.6 3.6 2.8 8 2.8s8-1.2 8-2.8v-6"/></svg>
+              <span>训练库</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group-label">系统</p>
+            <button class="nav-item" data-view="rules">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03z"/></svg>
+              <span>设置</span>
+            </button>
+            <button class="nav-item" data-view="userManagement" data-permission="user_management">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>
+              <span>用户管理</span>
+            </button>
+          </div>
         </nav>
 
         <div class="system-card">
@@ -33,42 +156,152 @@
       </aside>
 
       <main class="workspace">
-        <section id="inspectView" class="view active">
+        <!-- ======================= 总览 ======================= -->
+        <section id="homeView" class="view active">
           <header class="page-head">
             <div>
-              <p class="eyebrow">Inspection Console</p>
-              <h2>检测工作台</h2>
+              <h2>总览</h2>
+              <p class="page-desc">从这里进入各个检测工作流,或管理配件、训练与系统设置。</p>
             </div>
-            <div id="resultBadge" class="result-badge waiting">等待输入</div>
           </header>
+
+          <section class="home-status-strip">
+            <div class="home-status-item">
+              <label>检测服务</label>
+              <strong id="homeServiceState" class="pill neutral">检查中</strong>
+            </div>
+            <div class="home-status-item">
+              <label>检测模型</label>
+              <strong id="homeModelState" class="pill neutral">检查中</strong>
+            </div>
+            <div class="home-status-item">
+              <label>AI 检测</label>
+              <strong id="homeAiState" class="pill neutral">检查中</strong>
+            </div>
+            <div class="home-status-item">
+              <label>开放定位</label>
+              <strong id="homeLocateState" class="pill neutral">未检查</strong>
+            </div>
+            <div class="home-status-item">
+              <label>Windows Worker</label>
+              <strong id="homeWorkerState" class="pill neutral">未配置</strong>
+            </div>
+          </section>
+
+          <h3 class="home-section-title">检测中心</h3>
+          <div class="home-card-grid">
+            <button class="home-card" type="button" data-go="inspect">
+              <div class="home-card-head">
+                <span class="home-card-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+                </span>
+                <em class="home-card-tag">实时质检</em>
+              </div>
+              <strong>检测工作台</strong>
+              <p>使用已训练的 YOLO 模型对图片、视频或摄像头画面做配件齐全性判定,输出通过 / 不通过。</p>
+            </button>
+            <button class="home-card" type="button" data-go="aiInspect">
+              <div class="home-card-head">
+                <span class="home-card-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9z"/></svg>
+                </span>
+                <em class="home-card-tag">免训练</em>
+              </div>
+              <strong>AI 检测</strong>
+              <p>基于配件画像调用 Gemini 判断配件存在性,适合快速验证还没有训练模型的新配件。</p>
+            </button>
+            <button class="home-card" type="button" data-go="labelSheet">
+              <div class="home-card-head">
+                <span class="home-card-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L11 3.8A2 2 0 0 0 9.6 3.2H5a2 2 0 0 0-2 2v4.6c0 .5.2 1 .6 1.4l9.6 9.6a2 2 0 0 0 2.8 0l4.6-4.6a2 2 0 0 0 0-2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>
+                </span>
+                <em class="home-card-tag">本地匹配</em>
+              </div>
+              <strong>标签匹配</strong>
+              <p>上传标签参考图后,在本地用 OpenCV 对标签纸做相似度匹配,不依赖外部 AI 服务。</p>
+            </button>
+            <button class="home-card" type="button" data-go="locateAnything">
+              <div class="home-card-head">
+                <span class="home-card-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><line x1="12" y1="2" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="22"/><line x1="2" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <em class="home-card-tag">开放词汇</em>
+              </div>
+              <strong>开放定位</strong>
+              <p>使用 LocateAnything 本地模型做开放词汇定位,作为辅助与兜底定位工具(仅限研究验证)。</p>
+            </button>
+          </div>
+
+          <h3 class="home-section-title">资产与训练</h3>
+          <div class="home-link-grid">
+            <button class="home-link" type="button" data-go="accessories">
+              <strong>配件库</strong>
+              <p>添加并规范化配件素材</p>
+            </button>
+            <button class="home-link" type="button" data-go="dataAnalysis">
+              <strong>数据分析</strong>
+              <p>复核 AI 检测与开放定位结果</p>
+            </button>
+            <button class="home-link" type="button" data-go="pipeline">
+              <strong>训练流水线</strong>
+              <p>Agent 辅助的看板式训练链路</p>
+            </button>
+            <button class="home-link" type="button" data-go="trainingLibrary">
+              <strong>训练库</strong>
+              <p>管理样本库与模型库</p>
+            </button>
+            <button class="home-link" type="button" data-go="rules">
+              <strong>设置</strong>
+              <p>通过规则与 AI 服务配置</p>
+            </button>
+          </div>
+        </section>
+
+        <!-- ======================= 检测工作台 ======================= -->
+        <section id="inspectView" class="view">
+          <header class="page-head">
+            <div>
+              <h2>检测工作台</h2>
+              <p class="page-desc">上传图片、视频或使用摄像头,按当前任务规则输出通过 / 不通过。</p>
+            </div>
+            <div class="page-head-actions">
+              <button id="toggleInspectFullscreen" class="mini-secondary" type="button">全屏检测</button>
+              <div id="resultBadge" class="result-badge waiting">等待输入</div>
+            </div>
+          </header>
+
+          <section class="panel toolbar-panel">
+            <div class="toolbar-field">
+              <label>检测任务</label>
+              <div id="taskMenu" class="custom-menu" data-value=""></div>
+            </div>
+            <div class="toolbar-field">
+              <label>使用模型</label>
+              <div id="modelMenu" class="custom-menu" data-value=""></div>
+            </div>
+            <div class="toolbar-note">
+              <span>通过规则与置信度阈值在「设置」中微调</span>
+              <button class="mini-secondary" type="button" data-go="rules">打开设置</button>
+            </div>
+          </section>
 
           <div class="inspect-grid">
             <section class="panel input-panel">
               <div class="section-title">
-                <span>01</span>
                 <h3>输入源</h3>
-              </div>
-
-              <div class="field">
-                <label>任务</label>
-                <div id="taskMenu" class="custom-menu" data-value=""></div>
-              </div>
-              <div class="field">
-                <label>模型</label>
-                <div id="modelMenu" class="custom-menu" data-value=""></div>
               </div>
 
               <div class="tabbar" role="tablist">
                 <button class="mode-tab active" data-tab="image">图片</button>
                 <button class="mode-tab" data-tab="video">视频</button>
-                <button class="mode-tab" data-tab="camera">当前摄像头</button>
+                <button class="mode-tab" data-tab="camera">摄像头</button>
               </div>
 
               <div id="imageTab" class="tabpane active">
                 <label class="dropzone">
                   <input id="imageFile" type="file" accept="image/*" />
                   <strong>上传检测图片</strong>
-                  <span>PNG, JPG, JPEG</span>
+                  <span>支持 PNG / JPG / JPEG</span>
                 </label>
                 <button id="runImage" class="primary">开始检测</button>
               </div>
@@ -77,7 +310,7 @@
                 <label class="dropzone">
                   <input id="videoFile" type="file" accept="video/*" />
                   <strong>上传检测视频</strong>
-                  <span>抽帧检测，并应用同一套通过规则</span>
+                  <span>抽帧检测,并应用同一套通过规则</span>
                 </label>
                 <button id="runVideo" class="primary">分析视频</button>
               </div>
@@ -89,23 +322,19 @@
                 </div>
                 <div class="camera-preview">
                   <video id="cameraVideo" autoplay playsinline muted></video>
-                  <div id="cameraEmpty" class="camera-empty">选择当前摄像头后显示实时画面</div>
+                  <div id="cameraEmpty" class="camera-empty">选择摄像头后显示实时画面</div>
                 </div>
                 <div class="camera-actions">
                   <button id="refreshCameras" class="secondary" type="button">检测摄像头</button>
                   <button id="captureCamera" class="primary" type="button">拍照检测</button>
                 </div>
-                <p id="cameraStatus" class="hint">支持本机摄像头和已连接的 USB/外接摄像头。</p>
+                <p id="cameraStatus" class="hint">支持本机摄像头和已连接的 USB / 外接摄像头。</p>
               </div>
             </section>
 
             <section class="panel result-panel">
-              <div class="section-title title-with-action">
-                <div class="title-inline">
-                  <span>02</span>
-                  <h3>结果预览</h3>
-                </div>
-                <button id="toggleInspectFullscreen" class="mini-secondary" type="button">全屏</button>
+              <div class="section-title">
+                <h3>结果预览</h3>
               </div>
 
               <div id="progressPanel" class="progress-panel" aria-live="polite">
@@ -125,6 +354,12 @@
           </div>
 
           <section class="panel metrics-panel">
+            <div class="section-title title-with-action">
+              <div class="title-inline">
+                <h3>检测结果</h3>
+              </div>
+              <button id="openAiDebug" class="metric-info-button" type="button" aria-label="查看本次检测的完整返回数据" title="查看本次检测的完整返回数据">检测明细</button>
+            </div>
             <div class="metric-grid">
               <div>
                 <label>结论</label>
@@ -136,7 +371,6 @@
               </div>
               <div class="metric-info-card">
                 <label>通过率</label>
-                <button id="openAiDebug" class="metric-info-button" type="button" aria-label="查看 AI 接口返回详情" title="查看 AI 接口返回详情">i</button>
                 <strong id="passRate">-</strong>
               </div>
             </div>
@@ -157,18 +391,499 @@
           </section>
         </section>
 
+        <!-- ======================= AI 检测 ======================= -->
+        <section id="aiInspectView" class="view">
+          <header class="page-head">
+            <div>
+              <h2>AI 检测</h2>
+              <p class="page-desc">基于配件画像调用 Gemini 判断配件存在性,适合免训练的快速验证。</p>
+            </div>
+            <div class="page-head-actions">
+              <strong id="aiInspectStatus" class="pill neutral">检查中</strong>
+              <div id="aiResultBadge" class="result-badge waiting">等待输入</div>
+              <button id="toggleAiFullscreen" class="mini-secondary" type="button">全屏检测</button>
+            </div>
+          </header>
+
+          <div class="inspect-grid ai-inspect-grid">
+            <section class="panel input-panel ai-input-panel">
+              <details class="tune-drawer" open>
+                <summary>
+                  <span class="tune-drawer-title">AI 任务配置</span>
+                  <span class="tune-drawer-hint">选择检测任务</span>
+                </summary>
+                <div class="tune-drawer-body">
+                  <div class="field">
+                    <label>任务</label>
+                    <div id="aiTaskMenu" class="custom-menu" data-value=""></div>
+                  </div>
+                </div>
+              </details>
+
+              <div class="section-title ai-source-title">
+                <h3>输入源</h3>
+              </div>
+
+              <div class="tabbar ai-tabbar" role="tablist">
+                <button class="mode-tab active" data-ai-tab="image">图片</button>
+                <button class="mode-tab" data-ai-tab="video">视频</button>
+                <button class="mode-tab" data-ai-tab="camera">摄像头</button>
+              </div>
+
+              <div id="aiImageTab" class="tabpane active" data-ai-pane="image">
+                <label class="dropzone">
+                  <input id="aiImageFile" type="file" accept="image/*" />
+                  <strong>上传 AI 检测图片</strong>
+                  <span>使用当前 AI 任务的配件画像</span>
+                </label>
+                <button id="runAiImage" class="primary">开始 AI 检测</button>
+              </div>
+
+              <div id="aiVideoTab" class="tabpane" data-ai-pane="video">
+                <label class="dropzone">
+                  <input id="aiVideoFile" type="file" accept="video/*" />
+                  <strong>上传 AI 检测视频</strong>
+                  <span>抽帧后逐帧调用 AI 检测任务</span>
+                </label>
+                <button id="runAiVideo" class="primary">AI 分析视频</button>
+              </div>
+
+              <div id="aiCameraTab" class="tabpane" data-ai-pane="camera">
+                <div class="field">
+                  <label>摄像头</label>
+                  <div id="aiCameraMenu" class="custom-menu" data-value=""></div>
+                </div>
+                <div class="camera-preview">
+                  <video id="aiCameraVideo" autoplay playsinline muted></video>
+                  <div id="aiCameraEmpty" class="camera-empty">选择摄像头后显示实时画面</div>
+                </div>
+                <div class="camera-actions">
+                  <button id="refreshAiCameras" class="secondary" type="button">检测摄像头</button>
+                  <button id="captureAiCamera" class="primary" type="button">拍照 AI 检测</button>
+                </div>
+                <p id="aiCameraStatus" class="hint">摄像头图片会使用当前 AI 任务模型检测。</p>
+              </div>
+            </section>
+
+            <section class="panel result-panel">
+              <div class="section-title">
+                <h3>AI 结果预览</h3>
+              </div>
+
+              <div id="aiProgressPanel" class="progress-panel" aria-live="polite">
+                <div class="progress-copy">
+                  <strong id="aiProgressTitle">准备检测</strong>
+                  <span id="aiProgressPercent">0%</span>
+                </div>
+                <progress id="aiNativeProgress" class="native-progress" value="0" max="100">0%</progress>
+                <p id="aiProgressDetail">保存 AI 任务并上传图片或视频后开始检测。</p>
+              </div>
+
+              <div class="preview-frame">
+                <img id="aiPreviewImage" alt="AI 检测结果" />
+                <div id="aiEmptyPreview" class="empty-state">AI 检测结果会显示在这里</div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel metrics-panel">
+            <div class="section-title title-with-action">
+              <div class="title-inline">
+                <h3>检测结果</h3>
+              </div>
+              <button id="openAiInspectDebug" class="metric-info-button" type="button" aria-label="查看 AI 检测的完整返回数据" title="查看 AI 检测的完整返回数据">检测明细</button>
+            </div>
+            <div class="metric-grid">
+              <div>
+                <label>结论</label>
+                <strong id="aiDecisionText">-</strong>
+              </div>
+              <div>
+                <label>检测数量</label>
+                <strong id="aiDetectionCount">-</strong>
+              </div>
+              <div class="metric-info-card">
+                <label>AI 状态</label>
+                <strong id="aiPassRate">-</strong>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>配件</th>
+                    <th>检测到</th>
+                    <th>要求</th>
+                    <th>置信度</th>
+                  </tr>
+                </thead>
+                <tbody id="aiPartsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= 数据分析 ======================= -->
+        <section id="dataAnalysisView" class="view">
+          <header class="page-head">
+            <div>
+              <h2>数据分析</h2>
+              <p class="page-desc">在资产与训练数据中复核 AI 检测记录,并批量运行 LocateAnything 做结果对比。</p>
+            </div>
+            <div class="page-head-actions">
+              <strong id="dataAnalysisSelectedCount" class="pill neutral">0 已选</strong>
+              <button id="refreshDataAnalysis" class="mini-secondary" type="button">刷新</button>
+            </div>
+          </header>
+
+          <section class="panel data-analysis-toolbar">
+            <label class="toolbar-field">
+              <span>任务</span>
+              <select id="dataAnalysisTaskFilter">
+                <option value="">全部任务</option>
+              </select>
+            </label>
+            <label class="toolbar-field hidden" data-admin-scope-wrap>
+              <span>用户范围</span>
+              <select id="dataAnalysisAdminScope" data-admin-scope-select></select>
+            </label>
+            <div class="toolbar-note data-analysis-actions">
+              <button id="runDataAnalysisSelected" class="primary" type="button">定位已选</button>
+              <button id="runDataAnalysisVisible" class="secondary" type="button">定位当前列表</button>
+              <span id="dataAnalysisProgress" class="hint"></span>
+            </div>
+          </section>
+
+          <section class="panel data-analysis-panel">
+            <div class="table-wrap data-analysis-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="select-cell"><input id="dataAnalysisSelectAll" type="checkbox" aria-label="选择当前列表" /></th>
+                    <th>图片</th>
+                    <th>记录</th>
+                    <th>任务</th>
+                    <th>AI 摘要</th>
+                    <th>LocateAnything</th>
+                    <th>对比</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="dataAnalysisList">
+                  <tr><td colspan="8">暂无 AI 检测记录。</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= 标签匹配 ======================= -->
+        <section id="labelSheetView" class="view">
+          <header class="page-head">
+            <div>
+              <h2>标签匹配</h2>
+              <p class="page-desc">本地 OpenCV 相似度匹配,核对标签纸是否与参考一致,不依赖外部服务。</p>
+            </div>
+            <div class="page-head-actions">
+              <div id="labelSheetBadge" class="result-badge waiting">等待输入</div>
+            </div>
+          </header>
+
+          <div class="inspect-grid label-sheet-grid">
+            <section class="panel input-panel">
+              <div class="section-title title-with-action">
+                <div class="title-inline">
+                  <h3>标签参考库</h3>
+                </div>
+                <button id="refreshLabelReferences" class="mini-secondary" type="button">刷新</button>
+              </div>
+              <p id="labelReferenceSummary" class="hint">保留 0,过滤 0</p>
+              <div class="field">
+                <label>左列标注</label>
+                <input id="labelReferenceAnnotation" type="text" placeholder="标签 / label / sticker" />
+              </div>
+              <label class="dropzone compact-dropzone">
+                <input id="labelReferenceFiles" type="file" accept="image/*" multiple />
+                <strong>上传参考图</strong>
+                <span>只保留标签类标注</span>
+              </label>
+              <button id="addLabelReference" class="secondary" type="button">保存参考</button>
+              <div id="labelReferenceList" class="label-reference-list"></div>
+            </section>
+
+            <section class="panel input-panel">
+              <div class="section-title">
+                <h3>标签纸输入</h3>
+              </div>
+
+              <div class="tabbar" role="tablist">
+                <button class="mode-tab active" data-label-tab="image">图片</button>
+                <button class="mode-tab" data-label-tab="camera">摄像头</button>
+              </div>
+
+              <div id="labelSheetImageTab" class="tabpane active" data-label-pane="image">
+                <label class="dropzone">
+                  <input id="labelSheetImageFile" type="file" accept="image/*" />
+                  <strong>上传标签纸图片</strong>
+                  <span>支持 PNG / JPG / JPEG</span>
+                </label>
+                <button id="runLabelSheetMatch" class="primary" type="button">本地匹配</button>
+              </div>
+
+              <div id="labelSheetCameraTab" class="tabpane" data-label-pane="camera">
+                <div class="field">
+                  <label>摄像头</label>
+                  <div id="labelSheetCameraMenu" class="custom-menu" data-value=""></div>
+                </div>
+                <div class="camera-preview">
+                  <video id="labelSheetCameraVideo" autoplay playsinline muted></video>
+                  <div id="labelSheetCameraEmpty" class="camera-empty">选择摄像头后显示实时画面</div>
+                </div>
+                <div class="camera-actions">
+                  <button id="refreshLabelSheetCameras" class="secondary" type="button">检测摄像头</button>
+                  <button id="captureLabelSheetCamera" class="primary" type="button">拍照匹配</button>
+                </div>
+                <p id="labelSheetCameraStatus" class="hint">摄像头图片会走本地标签匹配。</p>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel label-match-panel">
+            <div class="section-title">
+              <h3>匹配结果</h3>
+            </div>
+            <div class="metric-grid four">
+              <div>
+                <label>状态</label>
+                <strong id="labelMatchStatus">-</strong>
+              </div>
+              <div>
+                <label>分数</label>
+                <strong id="labelMatchScore">-</strong>
+              </div>
+              <div>
+                <label>匹配项</label>
+                <strong id="labelMatchedName">-</strong>
+              </div>
+              <div>
+                <label>复核</label>
+                <strong id="labelReviewState">-</strong>
+              </div>
+            </div>
+
+            <div class="label-match-images">
+              <div>
+                <label>文档参考图</label>
+                <div class="preview-frame label-match-frame">
+                  <img id="labelMatchedReferenceImage" alt="匹配到的文档标签图" />
+                  <div id="labelMatchedReferenceEmpty" class="empty-state">文档标签图</div>
+                </div>
+              </div>
+              <div>
+                <label>物理标签裁剪</label>
+                <div class="preview-frame label-match-frame">
+                  <img id="labelInputCropImage" alt="用于匹配的物理标签裁剪" />
+                  <div id="labelInputCropEmpty" class="empty-state">标签纸裁剪</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>候选参考</th>
+                    <th>分数</th>
+                    <th>裁剪</th>
+                  </tr>
+                </thead>
+                <tbody id="labelCandidateTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= 开放定位 ======================= -->
+        <section id="locateAnythingView" class="view">
+          <header class="page-head">
+            <div>
+              <h2>开放定位</h2>
+              <p class="page-desc">LocateAnything 开放词汇定位,作为辅助与兜底定位工具,不替代实时质检。</p>
+            </div>
+            <div class="page-head-actions">
+              <div id="locateResultBadge" class="result-badge waiting">等待检测</div>
+              <button id="toggleLocateFullscreen" class="mini-secondary" type="button">全屏检测</button>
+            </div>
+          </header>
+
+          <div class="inspect-grid locate-worker-grid">
+            <section class="panel locate-source-panel">
+              <div class="section-title title-with-action">
+                <div class="title-inline">
+                  <h3>检测源</h3>
+                </div>
+                <strong id="locateStatusBadge" class="pill neutral">未检查</strong>
+              </div>
+              <p id="locateStatusText" class="hint">检测服务未启动。可以先启动本地模型,或在下方微调设置中检查端点。</p>
+              <div class="locate-runtime-actions">
+                <button id="startLocateRuntime" class="primary" type="button">启动本地模型</button>
+                <button id="checkLocateStatus" class="secondary" type="button">检查服务</button>
+              </div>
+
+              <div class="field locate-camera-field">
+                <label>摄像头</label>
+                <div id="locateCameraMenu" class="custom-menu" data-value=""></div>
+              </div>
+              <div class="preview-frame locate-live-frame">
+                <video id="locateCameraVideo" autoplay playsinline muted></video>
+                <img id="locateSourceImage" alt="待检测图片" />
+                <div id="locateSourceEmpty" class="empty-state">打开摄像头或上传图片</div>
+              </div>
+              <div class="camera-actions locate-camera-actions">
+                <button id="refreshLocateCameras" class="secondary" type="button">打开摄像头</button>
+                <button id="captureLocateFrame" class="secondary" type="button">检测一帧</button>
+                <button id="startLocateCameraLoop" class="primary" type="button">连续检测</button>
+                <button id="stopLocateCameraLoop" class="danger-action hidden" type="button">停止</button>
+              </div>
+
+              <label class="dropzone compact-dropzone">
+                <input id="locateImageFile" type="file" accept="image/*" />
+                <strong>图片输入</strong>
+                <span>摄像头不可用时上传单张图片检测</span>
+              </label>
+              <button id="runLocateImage" class="secondary" type="button">检测图片</button>
+
+              <details class="tune-drawer locate-advanced-panel">
+                <summary>
+                  <span class="tune-drawer-title">微调设置</span>
+                  <span class="tune-drawer-hint">端点、采样与推理参数</span>
+                </summary>
+                <div class="tune-drawer-body">
+                  <div class="field">
+                    <label>Endpoint URL</label>
+                    <input id="locateEndpointUrl" type="url" value="http://127.0.0.1:8000/locate" />
+                  </div>
+                  <div class="field locate-sampling-field">
+                    <label>采样间隔(秒)</label>
+                    <input id="locateCameraSampleSeconds" type="number" min="0.5" max="2" step="0.1" value="1" />
+                    <small>连续检测按低频帧采样运行,不做实时 30 FPS 推理。</small>
+                  </div>
+                  <div class="locate-param-grid">
+                    <div class="field">
+                      <label>Max Side</label>
+                      <input id="locateMaxSide" type="number" min="256" max="2560" step="64" value="640" />
+                    </div>
+                    <div class="field">
+                      <label>Max Tokens</label>
+                      <input id="locateMaxTokens" type="number" min="64" max="8192" step="64" value="512" />
+                    </div>
+                  </div>
+                  <button id="saveLocateConfig" class="secondary" type="button">保存微调设置</button>
+                </div>
+              </details>
+              <p class="locate-license-note">
+                NVIDIA non-commercial license: research and validation only; commercial use is not permitted.
+              </p>
+            </section>
+
+            <section class="panel locate-config-panel">
+              <div class="section-title title-with-action">
+                <div class="title-inline">
+                  <h3>检测配方</h3>
+                </div>
+                <button id="toggleLocateRecipeDetails" class="mini-secondary" type="button">展开</button>
+              </div>
+              <p class="hint">只保留本次工位要查的项目;新增、禁用和移除分开操作。</p>
+              <div class="locate-recipe-summary">
+                <div>
+                  <label>已配置</label>
+                  <strong id="locateRecipeConfiguredCount">0</strong>
+                </div>
+                <div>
+                  <label>启用</label>
+                  <strong id="locateRecipeEnabledCount">0</strong>
+                </div>
+                <div>
+                  <label>期望总数</label>
+                  <strong id="locateRecipeExpectedTotal">0</strong>
+                </div>
+                <button id="addLocateRecipeItem" class="primary" type="button">添加</button>
+              </div>
+              <div id="locateRecipePicker" class="locate-recipe-picker hidden">
+                <div class="field">
+                  <label>搜索配件 / 类别</label>
+                  <input id="locateRecipeSearch" type="search" placeholder="输入名称、材质或视觉描述" />
+                </div>
+                <div id="locateRecipePickerList" class="locate-picker-list"></div>
+              </div>
+              <div id="locateAccessoryList" class="locate-rule-list"></div>
+            </section>
+          </div>
+
+          <section class="panel locate-result-panel">
+            <div class="section-title title-with-action">
+              <div class="title-inline">
+                <h3>检测结果</h3>
+              </div>
+              <div class="title-inline">
+                <strong id="locateLatencyText" class="pill neutral">-</strong>
+                <button id="openLocateDiagnostic" class="metric-info-button" type="button" aria-label="查看本次定位的诊断详情" title="查看本次定位的诊断详情">诊断详情</button>
+              </div>
+            </div>
+
+            <div class="locate-result-grid">
+              <div>
+                <div id="locateOverallResult" class="locate-overall waiting">等待检测</div>
+                <div class="metric-grid locate-metrics">
+                  <div>
+                    <label>状态</label>
+                    <strong id="locateResultStatus">-</strong>
+                  </div>
+                  <div>
+                    <label>定位框</label>
+                    <strong id="locateBoxCount">0</strong>
+                  </div>
+                  <div>
+                    <label>帧数</label>
+                    <strong id="locateFrameCount">0</strong>
+                  </div>
+                </div>
+                <div class="table-wrap locate-item-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>检测项</th>
+                        <th>状态</th>
+                        <th>要求</th>
+                        <th>找到</th>
+                      </tr>
+                    </thead>
+                    <tbody id="locateInspectionItems"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="preview-frame locate-preview-frame">
+                <img id="locatePreviewImage" alt="检测结果 overlay" />
+                <div id="locateEmptyPreview" class="empty-state">检测结果会显示在这里</div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= 设置 ======================= -->
         <section id="rulesView" class="view">
           <header class="page-head">
             <div>
-              <p class="eyebrow">Rules</p>
-              <h2>规则设置</h2>
+              <h2>设置</h2>
+              <p class="page-desc">通过规则、置信度阈值与 AI 服务配置,改动会作用于各检测工作台。</p>
             </div>
           </header>
 
           <section class="panel page-panel">
             <div class="section-title">
-              <span>01</span>
-              <h3>通过条件</h3>
+              <h3>通过规则</h3>
             </div>
             <div class="field range-field">
               <label>置信度阈值</label>
@@ -182,8 +897,7 @@
           <section class="panel page-panel ai-config-panel">
             <div class="section-title title-with-action">
               <div class="title-inline">
-                <span>02</span>
-                <h3>AI 检测设置</h3>
+                <h3>AI 服务配置</h3>
               </div>
               <strong id="aiConfigStatus" class="pill neutral">未启用</strong>
             </div>
@@ -221,20 +935,130 @@
               </div>
             </div>
           </section>
+
+          <section class="panel page-panel">
+            <div class="section-title title-with-action">
+              <div class="title-inline">
+                <h3>Agent 接入</h3>
+              </div>
+              <strong id="agentConfigStatus" class="pill neutral">规则推荐</strong>
+            </div>
+            <p class="hint">连接外部 Agent 后,流水线会按可用能力规划训练参数;未配置或未通过测试时使用内置规则推荐。</p>
+            <div class="ai-config-grid">
+              <div class="field agent-base-url-field">
+                <label>Base URL</label>
+                <select id="agentBaseUrlPreset" class="agent-base-url-preset" aria-label="选择常用 Agent API">
+                  <option value="">自定义 / 手动输入</option>
+                  <option value="https://api.cursor.com">Cursor</option>
+                  <option value="https://api.openai.com/v1">OpenAI</option>
+                  <option value="https://openrouter.ai/api/v1">OpenRouter</option>
+                  <option value="https://generativelanguage.googleapis.com/v1beta/openai">Gemini OpenAI 兼容</option>
+                </select>
+                <input id="agentBaseUrl" class="agent-custom-base-url" type="url" placeholder="https://api.openai.com/v1" disabled />
+                <p id="agentProviderHint" class="hint agent-provider-hint">根据 Base URL 自动识别供应商。</p>
+              </div>
+              <div class="field agent-model-field">
+                <label>Model</label>
+                <select id="agentModel" disabled>
+                  <option value="">先测试连接生成模型列表</option>
+                </select>
+                <p id="agentModelHint" class="hint agent-provider-hint">测试连接后自动生成可用模型列表。</p>
+              </div>
+              <div class="field agent-key-field">
+                <label>API Key</label>
+                <input id="agentApiKey" type="password" placeholder="保存后只显示掩码" />
+              </div>
+              <div class="field agent-timeout-field">
+                <label>Timeout(秒)</label>
+                <input id="agentTimeout" type="number" min="5" max="300" step="5" value="45" />
+              </div>
+              <label class="pipeline-auto-toggle agent-auto-field">
+                <input id="agentAutoAdvanceDefault" type="checkbox" />
+                <span>新任务默认开启自动推进</span>
+              </label>
+              <div class="ai-actions ai-config-actions">
+                <button id="testAgentConfig" class="secondary" type="button">测试连接</button>
+                <button id="saveAgentConfig" class="secondary" type="button">保存 Agent 设置</button>
+              </div>
+            </div>
+          </section>
         </section>
 
+        <!-- ======================= 用户管理 ======================= -->
+        <section id="userManagementView" class="view">
+          <header class="page-head">
+            <div>
+              <h2>用户管理</h2>
+              <p class="page-desc">创建账号、调整功能权限,并切换管理员查看的数据范围。</p>
+            </div>
+          </header>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <h3>数据范围</h3>
+            </div>
+            <div class="auth-admin-grid">
+              <label class="field">
+                查看用户
+                <select id="adminDataScopeUser" data-admin-scope-select>
+                  <option value="">全部用户与历史数据</option>
+                </select>
+              </label>
+              <button id="refreshAdminDataScope" class="secondary" type="button">刷新当前范围</button>
+            </div>
+          </section>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <h3>新建用户</h3>
+            </div>
+            <form id="createUserForm" class="user-create-form">
+              <div class="auth-admin-grid">
+                <label class="field">
+                  用户名
+                  <input id="newUserName" type="text" autocomplete="off" required />
+                </label>
+                <label class="field">
+                  显示名称
+                  <input id="newUserDisplayName" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  初始密码
+                  <input id="newUserPassword" type="password" autocomplete="new-password" minlength="8" required />
+                </label>
+                <label class="field">
+                  角色
+                  <select id="newUserRole">
+                    <option value="user">普通用户</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+              </div>
+              <div id="newUserPermissions" class="permission-grid"></div>
+              <button id="createUserSubmit" class="secondary" type="submit">创建用户</button>
+            </form>
+          </section>
+
+          <section class="panel page-panel">
+            <div class="section-title">
+              <h3>账号与权限</h3>
+            </div>
+            <div id="userManagementList" class="user-management-list"></div>
+          </section>
+        </section>
+
+        <!-- ======================= 配件库 ======================= -->
         <section id="accessoriesView" class="view">
           <header class="page-head">
             <div>
-              <p class="eyebrow">Parts Library</p>
-              <h2>配件管理</h2>
+              <h2>配件库</h2>
+              <p class="page-desc">管理检测对象的参考素材,新配件会自动规范化并进入训练与 AI 画像流程。</p>
             </div>
           </header>
 
           <section class="panel page-panel split-panel">
             <div>
               <div class="section-title">
-                <span>01</span>
                 <h3>当前配件</h3>
               </div>
               <div id="accessoryList" class="accessory-list"></div>
@@ -242,23 +1066,22 @@
 
             <div>
               <div class="section-title">
-                <span>02</span>
-                <h3>增加并规范化</h3>
+                <h3>添加配件</h3>
               </div>
               <div class="field">
                 <label>配件名称</label>
-                <input id="accessoryName" type="text" placeholder="例如：新的说明书卡片" />
+                <input id="accessoryName" type="text" placeholder="例如:新的说明书卡片" />
               </div>
               <div class="field">
                 <label>素材类型</label>
                 <select id="accessoryMaterialType">
-                  <option value="text">文字类：说明书 / 标签 / 文档</option>
-                  <option value="object">物品类：外形与轮廓为主</option>
+                  <option value="text">文字类:说明书 / 标签 / 文档</option>
+                  <option value="object">物品类:外形与轮廓为主</option>
                 </select>
               </div>
               <div class="process-box" id="accessoryProcess">
                 <strong>文字类预处理</strong>
-                <span>上传裁剪后的文档图像，系统会生成透视校正后的规范化说明书。</span>
+                <span>上传裁剪后的文档图像,系统会生成透视校正后的规范化说明书。</span>
               </div>
               <div id="textDimensionFields" class="dimension-panel">
                 <div class="field">
@@ -310,27 +1133,91 @@
                 <span class="upload-placeholder">上传照片、裁剪图或 360 度视图</span>
               </label>
               <div id="accessoryFileQueue" class="upload-thumb-queue" aria-live="polite"></div>
-              <button id="addAccessory" class="secondary">生成规范化文件</button>
+              <button id="addAccessory" class="primary">生成规范化文件</button>
             </div>
           </section>
         </section>
 
-        <section id="trainingView" class="view">
+        <!-- ======================= 模型训练 ======================= -->
+        <section id="pipelineView" class="view">
           <header class="page-head">
             <div>
-              <p class="eyebrow">Training</p>
-              <h2>模型训练</h2>
+              <h2>训练流水线</h2>
+              <p class="page-desc">从配件建档到模型投产的看板视图。Agent 会预填推荐参数,完成的卡片可拖入下一阶段。</p>
+            </div>
+            <div class="page-head-actions">
+              <span id="pipelineAgentMode" class="pill neutral">规则推荐</span>
+              <button id="openTrainingWizard" class="secondary" type="button">高级训练向导</button>
+              <button id="openJobHistory" class="secondary" type="button">任务记录</button>
             </div>
           </header>
 
-          <section class="panel page-panel training-panel">
-            <div class="section-title">
-              <span>01</span>
-              <h3>训练配置</h3>
+          <div class="pipeline-board">
+            <section class="pipeline-lane" data-lane="accessories">
+              <header class="lane-head">
+                <div class="lane-title">
+                  <span class="lane-step">1</span>
+                  <h3>配件管理</h3>
+                </div>
+              </header>
+              <p class="lane-hint">仅显示当前流水线使用的配件和待确认候选。拖到配件库可移出当前流。</p>
+              <div id="pipelineAccessoryList" class="lane-body"></div>
+              <button id="pipelineAddAccessory" class="pipeline-add-button" type="button">+ 添加配件</button>
+            </section>
+
+            <section class="pipeline-lane" data-lane="draft">
+              <header class="lane-head">
+                <div class="lane-title">
+                  <span class="lane-step">2</span>
+                  <h3>任务创建</h3>
+                </div>
+                <button id="pipelineCreateTask" class="mini-secondary" type="button">新建任务</button>
+              </header>
+              <p class="lane-hint">先新建任务,再把第 1 栏配件拖入任务卡片。</p>
+              <div id="pipelineDraftList" class="lane-body" data-drop-stage="draft"></div>
+            </section>
+
+            <section class="pipeline-lane" data-lane="samples">
+              <header class="lane-head">
+                <div class="lane-title">
+                  <span class="lane-step">3</span>
+                  <h3>生成样本</h3>
+                </div>
+              </header>
+              <p class="lane-hint">把任务卡片拖入这里开始生成样本,完成后再拖入训练。</p>
+              <div id="pipelineSamplesList" class="lane-body" data-drop-stage="samples"></div>
+            </section>
+
+            <section class="pipeline-lane" data-lane="training">
+              <header class="lane-head">
+                <div class="lane-title">
+                  <span class="lane-step">4</span>
+                  <h3>模型训练</h3>
+                </div>
+              </header>
+              <p class="lane-hint">训练完成后拖入下方模型库,即可在工作台切换使用。</p>
+              <div id="pipelineTrainingList" class="lane-body" data-drop-stage="training"></div>
+              <div id="pipelineLibraryZone" class="pipeline-library-zone" data-drop-stage="library">
+                <strong>模型库</strong>
+                <span>拖入训练完成的任务即投入使用</span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <div id="trainingWizardModal" class="modal-backdrop" aria-hidden="true">
+          <section class="modal-panel training-wizard-panel" role="dialog" aria-modal="true" aria-labelledby="trainingWizardTitle">
+            <div class="modal-head">
+              <div>
+                <p class="eyebrow">高级模式</p>
+                <h2 id="trainingWizardTitle">训练向导</h2>
+              </div>
+              <button id="closeTrainingWizard" class="icon-button" type="button" aria-label="关闭训练向导">×</button>
             </div>
+          <section class="panel training-panel">
             <div class="tabbar training-flow-tabs" role="tablist" aria-label="训练流程">
-              <button class="mode-tab active" data-training-flow-tab="samples" type="button">生成样本集</button>
-              <button class="mode-tab" data-training-flow-tab="model" type="button">训练模型</button>
+              <button class="mode-tab active" data-training-flow-tab="samples" type="button">① 生成样本集</button>
+              <button class="mode-tab" data-training-flow-tab="model" type="button">② 训练模型</button>
             </div>
             <div class="training-layout">
               <div id="sampleFlowPane" class="training-flow-pane active">
@@ -341,9 +1228,9 @@
                 <div class="field">
                   <label>预览视角</label>
                   <select id="trainingPreviewPose">
-                    <option value="auto">自动（推荐）</option>
+                    <option value="auto">自动(推荐)</option>
                     <option value="lying">仅平躺视角</option>
-                    <option value="upright">仅正立/顶视角</option>
+                    <option value="upright">仅正立 / 顶视角</option>
                   </select>
                 </div>
                 <div class="field">
@@ -414,52 +1301,253 @@
               </div>
             </div>
           </section>
-        </section>
+          </section>
+        </div>
 
-        <section id="imageJobsView" class="view">
-          <header class="page-head">
-            <div>
-              <p class="eyebrow">Image Worker</p>
-              <h2>任务队列</h2>
+        <div id="jobHistoryModal" class="modal-backdrop" aria-hidden="true">
+          <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="jobHistoryTitle">
+            <div class="modal-head">
+              <div>
+                <p class="eyebrow">后台任务</p>
+                <h2 id="jobHistoryTitle">任务记录</h2>
+              </div>
+              <button id="closeJobHistory" class="icon-button" type="button" aria-label="关闭任务记录">×</button>
             </div>
-          </header>
-
-          <section class="panel page-panel">
-            <div class="section-title">
-              <span id="imageJobCount">0</span>
-              <h3>正在进行中的任务</h3>
+          <section class="panel modal-flat-panel">
+            <div class="section-title title-with-action">
+              <div class="title-inline">
+                <h3>进行中的任务</h3>
+                <span id="imageJobCount" class="count-chip">0</span>
+              </div>
             </div>
             <p id="imageJobSummary" class="hint">空闲</p>
             <div id="imageJobList" class="job-list page-job-list"></div>
           </section>
-        </section>
+          </section>
+        </div>
 
+        <!-- ======================= 训练库 ======================= -->
         <section id="trainingLibraryView" class="view">
           <header class="page-head">
             <div>
-              <p class="eyebrow">Training Repository</p>
               <h2>训练库</h2>
+              <p class="page-desc">管理已归档的样本库与训练完成的模型,点击条目查看详情。</p>
             </div>
-            <button id="refreshTrainingLibrary" class="secondary" type="button">刷新资源</button>
+            <div class="page-head-actions">
+              <label class="field compact-scope-field" data-admin-scope-wrap>
+                查看用户
+                <select id="trainingLibraryDataScopeUser" data-admin-scope-select>
+                  <option value="">全部用户与历史数据</option>
+                </select>
+              </label>
+              <button id="refreshTrainingLibrary" class="secondary" type="button">刷新资源</button>
+            </div>
           </header>
 
-          <section class="panel page-panel">
+          <div class="tabbar training-library-tabs" role="tablist" aria-label="训练库">
+            <button class="mode-tab active" data-training-library-tab="datasets" type="button">样本库</button>
+            <button class="mode-tab" data-training-library-tab="models" type="button">模型库</button>
+          </div>
+
+          <section class="panel page-panel training-library-pane active" data-training-library-pane="datasets">
             <div class="section-title">
-              <span>01</span>
               <h3>样本库</h3>
             </div>
             <div id="datasetLibraryList" class="resource-list"></div>
           </section>
 
-          <section class="panel page-panel">
-            <div class="section-title">
-              <span>02</span>
+          <section class="panel page-panel training-library-pane" data-training-library-pane="models">
+            <div class="section-title model-library-head">
               <h3>模型库</h3>
+              <div class="model-library-filter">
+                <label>任务类型</label>
+                <div id="modelLibraryTypeMenu" class="custom-menu model-library-type-menu" data-value=""></div>
+              </div>
             </div>
             <div id="modelLibraryList" class="resource-list"></div>
           </section>
         </section>
       </main>
+    </div>
+
+    <div id="pipelineTaskModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel pipeline-task-panel" role="dialog" aria-modal="true" aria-labelledby="pipelineTaskTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">流水线</p>
+            <h2 id="pipelineTaskTitle">新建训练任务</h2>
+          </div>
+          <button id="closePipelineTaskModal" class="icon-button" type="button" aria-label="关闭新建任务">×</button>
+        </div>
+        <div class="field">
+          <label>检测方法</label>
+          <select id="pipelineTaskDetectionMethod">
+            <option value="yolo_ocr">YOLO + OCR</option>
+            <option value="yolo">YOLO</option>
+            <option value="ai">AI 检测</option>
+            <option value="locate">Locate Anything</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>任务名称</label>
+          <input id="pipelineTaskName" type="text" placeholder="例如:说明书齐套训练" />
+        </div>
+        <div class="pipeline-task-detail-entry">
+          <span>详情</span>
+          <strong>创建后可在任务卡片查看已选配件，并用 +/- 调整数量。</strong>
+        </div>
+        <div class="modal-actions">
+          <button id="cancelPipelineTaskModal" class="secondary" type="button">取消</button>
+          <button id="confirmPipelineTask" class="primary" type="button">创建任务</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="pipelineTaskDetailModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel pipeline-task-detail-panel" role="dialog" aria-modal="true" aria-labelledby="pipelineTaskDetailTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">任务详情</p>
+            <h2 id="pipelineTaskDetailTitle">任务详情</h2>
+          </div>
+          <button id="closePipelineTaskDetailModal" class="icon-button" type="button" aria-label="关闭任务详情">×</button>
+        </div>
+        <div id="pipelineTaskDetailMeta" class="pipeline-task-detail-meta"></div>
+        <div id="pipelineTaskAccessoryDetailList" class="pipeline-task-accessory-list"></div>
+        <div class="modal-actions">
+          <button id="donePipelineTaskDetailModal" class="primary" type="button">完成</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="pipelineAccessoryModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel pipeline-accessory-panel" role="dialog" aria-modal="true" aria-labelledby="pipelineAccessoryTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">当前流水线</p>
+            <h2 id="pipelineAccessoryTitle">添加配件</h2>
+          </div>
+          <button id="closePipelineAccessoryModal" class="icon-button" type="button" aria-label="关闭添加配件">×</button>
+        </div>
+        <div class="pipeline-add-layout">
+          <section class="pipeline-add-section">
+            <div class="section-title">
+              <h3>从配件库加入</h3>
+            </div>
+            <div id="pipelineLibraryAccessoryList" class="pipeline-library-accessory-list"></div>
+          </section>
+          <section class="pipeline-add-section">
+            <div class="section-title">
+              <h3>新建配件</h3>
+            </div>
+            <div class="pipeline-field-grid">
+              <div class="field">
+                <label>配件名称</label>
+                <input id="pipelineAccessoryName" type="text" placeholder="例如:新的说明书卡片" />
+              </div>
+              <div class="field">
+                <label>素材类型</label>
+                <select id="pipelineAccessoryMaterialType">
+                  <option value="object">物品类</option>
+                  <option value="text">文字类</option>
+                </select>
+              </div>
+            </div>
+            <div id="pipelineObjectFields" class="pipeline-field-grid">
+              <div class="field">
+                <label>材质</label>
+                <select id="pipelineObjectAlphaPolicy">
+                  <option value="">选择透明策略</option>
+                  <option value="opaque">不透明</option>
+                  <option value="transparent">透明 / 半透明</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>长度 mm</label>
+                <input id="pipelineObjectLengthMm" type="number" min="1" step="0.1" placeholder="例如 170" />
+              </div>
+              <div class="field">
+                <label>宽度 mm</label>
+                <input id="pipelineObjectWidthMm" type="number" min="1" step="0.1" placeholder="例如 38" />
+              </div>
+              <div class="field">
+                <label>高度 mm</label>
+                <input id="pipelineObjectHeightMm" type="number" min="1" step="0.1" placeholder="例如 38" />
+              </div>
+            </div>
+            <div id="pipelineTextFields" class="pipeline-field-grid hidden">
+              <div class="field">
+                <label>纸张规格</label>
+                <select id="pipelinePaperPreset">
+                  <option value="A4">A4</option>
+                  <option value="A5">A5</option>
+                  <option value="A6">A6</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>宽度 mm</label>
+                <input id="pipelinePaperWidthMm" type="number" min="1" step="0.1" placeholder="210" />
+              </div>
+              <div class="field">
+                <label>高度 mm</label>
+                <input id="pipelinePaperHeightMm" type="number" min="1" step="0.1" placeholder="297" />
+              </div>
+            </div>
+            <label class="compact-upload">
+              <input id="pipelineAccessoryFiles" type="file" multiple accept="image/*,video/*,.pdf" />
+              <span class="upload-placeholder">上传照片、裁剪图或 360 度视图</span>
+            </label>
+            <div id="pipelineAccessoryFileQueue" class="upload-thumb-queue" aria-live="polite"></div>
+            <div class="modal-actions">
+              <button id="pipelineStartAccessoryAdd" class="primary" type="button">生成规范化文件</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <div id="pipelineParamsModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel pipeline-params-panel" role="dialog" aria-modal="true" aria-labelledby="pipelineParamsTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">参数确认</p>
+            <h2 id="pipelineParamsTitle">推荐参数</h2>
+          </div>
+          <button id="closePipelineParamsModal" class="icon-button" type="button" aria-label="关闭参数确认">×</button>
+        </div>
+        <div id="pipelineParamsReason" class="pipeline-agent-reason">正在获取推荐参数…</div>
+        <div class="pipeline-params-grid">
+          <div class="field" data-param-field="sample_count">
+            <label>样本数量</label>
+            <input id="pipelineParamSampleCount" type="number" min="50" max="20000" step="50" />
+          </div>
+          <div class="field" data-param-field="epochs">
+            <label>Epoch</label>
+            <input id="pipelineParamEpochs" type="number" min="1" max="500" step="1" />
+          </div>
+          <div class="field" data-param-field="image_size">
+            <label>分辨率</label>
+            <select id="pipelineParamImageSize">
+              <option value="480">480px</option>
+              <option value="640">640px</option>
+              <option value="960">960px</option>
+              <option value="1280">1280px</option>
+            </select>
+          </div>
+          <div class="field" data-param-field="train_mode">
+            <label>训练方式</label>
+            <select id="pipelineParamTrainMode">
+              <option value="yolo">YOLO</option>
+              <option value="yolo_ocr">YOLO + OCR</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="savePipelineParams" class="secondary" type="button">保存参数</button>
+          <button id="acceptPipelineParams" class="primary" type="button">接受并继续</button>
+        </div>
+      </section>
     </div>
 
     <div id="previewModal" class="modal-backdrop" aria-hidden="true">
@@ -515,7 +1603,7 @@
         </div>
         <label class="compact-upload background-upload-drop">
           <input id="trainingBackgroundFile" type="file" accept="image/*" />
-          <span class="upload-placeholder">上传一张背景图，系统会生成同环境背景集</span>
+          <span class="upload-placeholder">上传一张背景图,系统会生成同环境背景集</span>
         </label>
         <div class="modal-actions">
           <button id="cancelBackgroundUploadModal" class="secondary" type="button">取消</button>
@@ -554,7 +1642,7 @@
             <span id="imageWorkerProgressPercent">0%</span>
           </div>
           <progress id="imageWorkerNativeProgress" class="native-progress" value="0" max="100">0%</progress>
-          <p id="imageWorkerProgressDetail">视角素材任务已排队，等待生成结果。</p>
+          <p id="imageWorkerProgressDetail">视角素材任务已排队,等待生成结果。</p>
         </div>
         <div id="accessoryThumbGrid" class="training-preview-grid"></div>
         <div class="modal-actions">
@@ -648,19 +1736,47 @@
       <section class="modal-panel ai-debug-modal" role="dialog" aria-modal="true" aria-labelledby="aiDebugTitle">
         <div class="modal-head">
           <div>
-            <p class="eyebrow">AI Debug</p>
+            <p class="eyebrow">检测明细</p>
             <h2 id="aiDebugTitle">接口返回详情</h2>
           </div>
-          <button id="closeAiDebug" class="icon-button" type="button" aria-label="关闭 AI 返回详情">×</button>
+          <button id="closeAiDebug" class="icon-button" type="button" aria-label="关闭检测明细">×</button>
         </div>
         <pre id="aiDebugBody" class="ai-debug-body">暂无检测结果。</pre>
+      </section>
+    </div>
+
+    <div id="dataAnalysisDetailModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel data-analysis-detail-modal" role="dialog" aria-modal="true" aria-labelledby="dataAnalysisDetailTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">数据分析</p>
+            <h2 id="dataAnalysisDetailTitle">记录详情</h2>
+          </div>
+          <button id="closeDataAnalysisDetail" class="icon-button" type="button" aria-label="关闭数据分析详情">×</button>
+        </div>
+        <div id="dataAnalysisDetailSummary" class="data-analysis-detail-summary"></div>
+        <div id="dataAnalysisDetailMedia" class="data-analysis-detail-media"></div>
+        <div id="dataAnalysisDetailRaw"></div>
+      </section>
+    </div>
+
+    <div id="locateDiagnosticModal" class="modal-backdrop" aria-hidden="true">
+      <section class="modal-panel ai-debug-modal" role="dialog" aria-modal="true" aria-labelledby="locateDiagnosticTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">开放定位</p>
+            <h2 id="locateDiagnosticTitle">诊断详情</h2>
+          </div>
+          <button id="closeLocateDiagnostic" class="icon-button" type="button" aria-label="关闭诊断详情">×</button>
+        </div>
+        <pre id="locateDiagnosticText" class="ai-debug-body">暂无诊断信息。</pre>
       </section>
     </div>
 
     <section id="inspectFullscreenStage" class="inspect-fullscreen-stage" aria-hidden="true">
       <header class="fullscreen-head">
         <div>
-          <span>检测全屏模式</span>
+          <span id="fullscreenTitle">VantaLine 全屏检测</span>
           <strong id="fullscreenDecision">等待输入</strong>
         </div>
         <button id="closeInspectFullscreen" class="mini-secondary" type="button">退出全屏</button>
@@ -703,7 +1819,15 @@
       </div>
     </section>
 
+    <div id="cookieConsent" class="cookie-consent" hidden>
+      <div>
+        <strong>Cookie 设置</strong>
+        <span>我们使用必要 Cookie 保存登录、缓存和界面偏好，以提升页面加载速度。</span>
+      </div>
+      <button id="acceptCookies" type="button">接受</button>
+    </div>
+
     <div id="toast" class="toast"></div>
-    <script src="/static/app.js?v=20260604-ai-key-menu-fix"></script>
+    <script src="/static/app.js?v=20260615-data-analysis-diagnostics"></script>
   </body>
 </html>

@@ -1,4 +1,10 @@
 const state = {
+  auth: {
+    user: null,
+    users: [],
+    features: {},
+    dataUserId: "",
+  },
   config: null,
   aiConfig: null,
   aiKeyMenuOpen: false,
@@ -9,8 +15,13 @@ const state = {
   specializedModelTasks: [],
   selectedTaskId: "__default__",
   selectedModelId: "",
+  aiTasks: [],
+  selectedAiTaskId: "",
+  aiTaskDraftCounts: {},
   trainingResources: null,
   trainingResourceDetail: null,
+  trainingLibraryTab: "datasets",
+  modelLibraryTaskTypeFilter: "all",
   activeModelId: null,
   accessories: [],
   trainingPreview: null,
@@ -25,12 +36,50 @@ const state = {
   backgroundSets: [],
   selectedBackgroundSetId: "",
   progressValue: 0,
+  aiProgressValue: 0,
   inspectInput: {
     kind: "",
     url: "",
     fileName: "",
   },
+  aiInspectInput: {
+    kind: "",
+    url: "",
+    fileName: "",
+  },
   lastResult: null,
+  aiLastResult: null,
+  locateAnythingConfig: null,
+  locateAnythingSources: [],
+  locateAnythingRules: [],
+  locateRecipeExpanded: false,
+  locateRecipePickerOpen: false,
+  locateRecipeQuery: "",
+  locateAnythingLastResult: null,
+  locateAnythingInspectInFlight: false,
+  locateAnythingInput: {
+    kind: "",
+    url: "",
+    fileName: "",
+  },
+  dataAnalysis: {
+    records: [],
+    tasks: [],
+    selectedTaskId: "",
+    selectedRecordIds: new Set(),
+    loading: false,
+    running: false,
+    progressText: "",
+    batchLimit: 25,
+  },
+  labelSheetReferences: [],
+  labelSheetFilterStats: null,
+  labelSheetLastResult: null,
+  labelSheetInput: {
+    kind: "",
+    url: "",
+    fileName: "",
+  },
   accessoryPendingFiles: [],
   accessoryPendingFileUrls: new Map(),
   accessoryDetailItem: null,
@@ -44,10 +93,32 @@ const state = {
     selectedDeviceId: "",
     starting: false,
   },
+  aiCamera: {
+    devices: [],
+    stream: null,
+    selectedDeviceId: "",
+    starting: false,
+  },
+  labelSheetCamera: {
+    devices: [],
+    stream: null,
+    selectedDeviceId: "",
+    starting: false,
+  },
+  locateCamera: {
+    devices: [],
+    stream: null,
+    selectedDeviceId: "",
+    starting: false,
+    detecting: false,
+    inFlight: false,
+    frameCount: 0,
+  },
   imageViewer: {
     items: [],
     index: 0,
   },
+  fullscreenMode: "inspect",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -122,6 +193,49 @@ const AI_PROVIDER_DEFAULTS = {
     base_url: "https://generativelanguage.googleapis.com/v1beta",
   },
 };
+const AI_TASK_MODEL_PREFIX = "ai_detection__task_";
+const DEFAULT_PROGRESS_IDS = {
+  panel: "progressPanel",
+  native: "nativeProgress",
+  percent: "progressPercent",
+  title: "progressTitle",
+  detail: "progressDetail",
+};
+const AI_PROGRESS_IDS = {
+  panel: "aiProgressPanel",
+  native: "aiNativeProgress",
+  percent: "aiProgressPercent",
+  title: "aiProgressTitle",
+  detail: "aiProgressDetail",
+};
+const DEFAULT_RESULT_IDS = {
+  badge: "resultBadge",
+  decision: "decisionText",
+  detectionCount: "detectionCount",
+  passRate: "passRate",
+  table: "partsTable",
+  preview: "previewImage",
+  empty: "emptyPreview",
+};
+const AI_RESULT_IDS = {
+  badge: "aiResultBadge",
+  decision: "aiDecisionText",
+  detectionCount: "aiDetectionCount",
+  passRate: "aiPassRate",
+  table: "aiPartsTable",
+  preview: "aiPreviewImage",
+  empty: "aiEmptyPreview",
+};
+const DEFAULT_USER_PERMISSIONS = [
+  "inspection",
+  "ai_detection",
+  "label_sheet",
+  "locate_anything",
+  "accessory_library",
+  "training_pipeline",
+  "model_library",
+];
+const ADMIN_ONLY_PERMISSIONS = new Set(["user_management"]);
 
 function zhLabel(label) {
   return CLASS_LABEL_ZH[label] || label || "-";
@@ -135,6 +249,41 @@ function userJobLabel(label) {
     .replaceAll("Codex CLI", "本地生成");
 }
 
+function formatRecordTime(value) {
+  const raw = Number(value || 0);
+  if (!Number.isFinite(raw) || raw <= 0) return "创建时间缺失";
+  const millis = raw > 100000000000 ? raw : raw * 1000;
+  const date = new Date(millis);
+  if (Number.isNaN(date.getTime())) return "创建时间缺失";
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function ownerDisplayName(record) {
+  const ownerId = String(record?.owner_user_id || "").trim();
+  const username = String(record?.owner_username || "").trim();
+  if (ownerId === "legacy_admin" || username === "legacy_admin") return "历史数据";
+  if (ownerId === "system" || username === "system") return "系统";
+  const user = (state.auth.users || []).find((item) => item.id === ownerId);
+  return user?.display_name || user?.username || username || ownerId || "未标注用户";
+}
+
+function recordAuditText(record, options = {}) {
+  const parts = [`创建 ${formatRecordTime(record?.created_at)}`];
+  if (options.includeUpdated && record?.updated_at && Number(record.updated_at) !== Number(record?.created_at || 0)) {
+    parts.push(`更新 ${formatRecordTime(record.updated_at)}`);
+  }
+  if (isAdmin() && options.owner !== false) {
+    parts.push(`用户 ${ownerDisplayName(record)}`);
+  }
+  return parts.join(" · ");
+}
+
 function toast(message) {
   const node = $("toast");
   node.textContent = message;
@@ -144,20 +293,516 @@ function toast(message) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, options);
+  const response = await fetch(path, { credentials: "same-origin", ...options });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || response.statusText);
+    const message = apiErrorMessage(response, body, path);
+    if (response.status === 401 && !String(path).startsWith("/api/auth/login")) {
+      showAuthLogin("登录已过期,请重新登录。");
+    }
+    throw new Error(message);
   }
   return response.json();
+}
+
+function apiErrorMessage(response, body = "", path = "") {
+  const cleanPath = String(path || "").split("?", 1)[0];
+  let detail = "";
+  try {
+    const parsed = body ? JSON.parse(body) : null;
+    if (typeof parsed?.detail === "string") {
+      detail = parsed.detail;
+    } else if (Array.isArray(parsed?.detail)) {
+      detail = parsed.detail
+        .map((item) => item?.msg || item?.message || JSON.stringify(item))
+        .filter(Boolean)
+        .join("；");
+    } else if (parsed?.message) {
+      detail = String(parsed.message);
+    }
+  } catch {
+    detail = "";
+  }
+  const raw = detail || body || response.statusText || `HTTP ${response.status}`;
+  if (response.status === 401 && cleanPath === "/api/auth/login" && /invalid username or password/i.test(raw)) {
+    return "用户名或密码不正确。";
+  }
+  if (response.status === 401 && /authentication required/i.test(raw)) {
+    return "请先登录。";
+  }
+  if (response.status === 403 && /permission denied/i.test(raw)) {
+    return "没有权限执行此操作。";
+  }
+  return raw;
+}
+
+function authQuery() {
+  if (state.auth.user?.role === "admin" && state.auth.dataUserId) {
+    return `user_id=${encodeURIComponent(state.auth.dataUserId)}`;
+  }
+  return "";
+}
+
+function withAuthScope(path) {
+  const query = authQuery();
+  if (!query || !path.startsWith("/api/")) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}${query}`;
+}
+
+function isAdmin() {
+  return state.auth.user?.role === "admin";
+}
+
+function hasPermission(permission) {
+  if (!permission) return true;
+  if (ADMIN_ONLY_PERMISSIONS.has(permission)) return isAdmin();
+  if (isAdmin()) return true;
+  return (state.auth.user?.permissions || []).includes(permission);
 }
 
 function setBusy(button, busy) {
   if (!button) return;
   button.disabled = busy;
+  button.classList.toggle("is-busy", busy);
+  if (busy) {
+    button.setAttribute("aria-busy", "true");
+  } else {
+    button.removeAttribute("aria-busy");
+  }
+}
+
+function setAuthError(message = "") {
+  const node = $("authError");
+  if (node) node.textContent = message;
+}
+
+function emptyTrainingResources() {
+  return { datasets: [], models: [], tasks: [], training_tasks: [], ai_detection_tasks: [] };
+}
+
+function resetUserScopedState() {
+  clearInterval(state.pipelinePollTimer);
+  state.pipelinePollTimer = null;
+  clearInterval(state.imageJobPollTimer);
+  state.imageJobPollTimer = null;
+  state.config = {
+    confidence_threshold: 0,
+    required_classes: [],
+    min_counts: {},
+    training: { selected_accessory_ids: [] },
+    video: {},
+    stream: {},
+    ocr: {},
+  };
+  state.aiConfig = {};
+  state.classes = [];
+  state.models = [];
+  state.specializedModels = [];
+  state.specializedModelTasks = [];
+  state.selectedTaskId = "__default__";
+  state.selectedModelId = "";
+  state.aiTasks = [];
+  state.selectedAiTaskId = "";
+  state.aiTaskDraftCounts = {};
+  state.dataAnalysis = {
+    records: [],
+    tasks: [],
+    selectedTaskId: "",
+    selectedRecordIds: new Set(),
+    loading: false,
+    running: false,
+    progressText: "",
+    batchLimit: 25,
+  };
+  state.trainingResources = emptyTrainingResources();
+  state.trainingResourceDetail = null;
+  state.accessories = [];
+  state.imageJobs = [];
+  state.accessoryCandidate = null;
+  state.accessoryDetailItem = null;
+  if (state.pipeline) {
+    state.pipeline.tasks = [];
+    state.pipeline.accessories = [];
+    state.pipeline.pendingCandidates = [];
+  }
+  if ($("accessoryList")) renderAccessories([]);
+  if ($("datasetLibraryList") || $("modelLibraryList")) renderTrainingLibrary(state.trainingResources);
+  if ($("imageJobList")) renderImageJobs({ items: [] });
+  if ($("dataAnalysisList")) renderDataAnalysisRecords();
+  if ($("pipelineDraftList")) renderPipeline({ items: [], accessories: [], pending_candidates: [], agent: state.pipeline?.agent || null });
+}
+
+function showAuthLogin(message = "") {
+  resetUserScopedState();
+  document.body.classList.remove("auth-pending", "auth-ready");
+  document.body.classList.add("auth-login");
+  $("authLoading")?.classList.add("hidden");
+  $("authShell")?.classList.remove("hidden");
+  $("loginForm")?.classList.remove("hidden");
+  $("setupForm")?.classList.add("hidden");
+  if ($("authSubtitle")) $("authSubtitle").textContent = "登录视觉质检平台";
+  setAuthError(message);
+}
+
+function showAuthSetup() {
+  document.body.classList.remove("auth-pending", "auth-ready");
+  document.body.classList.add("auth-login");
+  $("authLoading")?.classList.add("hidden");
+  $("authShell")?.classList.remove("hidden");
+  $("loginForm")?.classList.add("hidden");
+  $("setupForm")?.classList.remove("hidden");
+  if ($("authSubtitle")) $("authSubtitle").textContent = "首次使用需要创建管理员";
+  setAuthError("");
+}
+
+function showAuthedApp(user, features = {}) {
+  state.auth.user = user;
+  state.auth.features = features || {};
+  document.body.classList.remove("auth-pending", "auth-login");
+  document.body.classList.add("auth-ready");
+  $("authLoading")?.classList.add("hidden");
+  $("authShell")?.classList.add("hidden");
+  renderCurrentUser();
+  applyPermissions();
+  renderAdminDataScope();
+  startPipelinePolling();
+}
+
+function renderCurrentUser() {
+  const user = state.auth.user || {};
+  if ($("currentUserName")) $("currentUserName").textContent = user.display_name || user.username || "-";
+  if ($("currentUserRole")) $("currentUserRole").textContent = user.role === "admin" ? "Admin" : "普通用户";
+}
+
+function permissionForView(view) {
+  return {
+    inspect: "inspection",
+    aiInspect: "ai_detection",
+    dataAnalysis: "ai_detection",
+    labelSheet: "label_sheet",
+    locateAnything: "locate_anything",
+    accessories: "accessory_library",
+    pipeline: "training_pipeline",
+    trainingLibrary: "model_library",
+    rules: "system_settings",
+    userManagement: "user_management",
+  }[view] || "";
+}
+
+function applyPermissions() {
+  document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+    const permission = item.dataset.permission || permissionForView(item.dataset.view);
+    item.classList.toggle("permission-hidden", !hasPermission(permission));
+  });
+  document.querySelectorAll("[data-go]").forEach((item) => {
+    item.classList.toggle("permission-hidden", !hasPermission(permissionForView(item.dataset.go)));
+  });
+  const active = document.querySelector(".nav-item.active.permission-hidden");
+  if (active) {
+    const firstVisible = document.querySelector(".nav-item:not(.permission-hidden)");
+    firstVisible?.click();
+  }
+  const settingsAllowed = hasPermission("system_settings");
+  $("saveRules")?.toggleAttribute("disabled", !settingsAllowed);
+  ["threshold", "classRules"].forEach((id) => $(id)?.classList.toggle("is-disabled", !settingsAllowed));
+  const aiConfigAllowed = hasPermission("ai_config");
+  document.querySelector(".ai-config-panel")?.classList.toggle("permission-hidden", !aiConfigAllowed);
+  const agentAllowed = hasPermission("agent_config");
+  $("agentConfigStatus")?.closest(".page-panel")?.classList.toggle("permission-hidden", !agentAllowed);
+}
+
+async function initAuth() {
+  try {
+    const result = await api("/api/auth/status");
+    state.auth.features = result.features || {};
+    if (result.setup_required) {
+      showAuthSetup();
+      return;
+    }
+    if (!result.authenticated) {
+      showAuthLogin();
+      return;
+    }
+    resetUserScopedState();
+    showAuthedApp(result.user, result.features);
+    await loadInitial();
+    if (isAdmin()) refreshUsers().catch(() => {});
+  } catch (error) {
+    showAuthLogin(error.message);
+  }
+}
+
+function bindAuth() {
+  $("loginForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("loginSubmit");
+    setBusy(button, true);
+    try {
+      const result = await api("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: $("loginUsername").value.trim(),
+          password: $("loginPassword").value,
+        }),
+      });
+      resetUserScopedState();
+      showAuthedApp(result.user, result.features);
+      await loadInitial();
+      if (isAdmin()) refreshUsers().catch(() => {});
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("setupForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("setupSubmit");
+    setBusy(button, true);
+    try {
+      const result = await api("/api/auth/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: $("setupUsername").value.trim(),
+          display_name: $("setupDisplayName").value.trim(),
+          password: $("setupPassword").value,
+        }),
+      });
+      resetUserScopedState();
+      showAuthedApp(result.user, result.features);
+      await loadInitial();
+      await refreshUsers();
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("logoutButton")?.addEventListener("click", async () => {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Logout should return to the login view even if the session is already gone.
+    }
+    state.auth.user = null;
+    showAuthLogin();
+  });
+  $("createUserForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("createUserSubmit");
+    setBusy(button, true);
+    try {
+      await api("/api/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: $("newUserName").value.trim(),
+          display_name: $("newUserDisplayName").value.trim(),
+          password: $("newUserPassword").value,
+          role: $("newUserRole").value,
+          permissions: selectedPermissions($("newUserPermissions")),
+        }),
+      });
+      $("createUserForm").reset();
+      await refreshUsers();
+      toast("用户已创建。");
+    } catch (error) {
+      toast(`创建用户失败:${error.message}`);
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("userManagementList")?.addEventListener("click", async (event) => {
+    const row = event.target.closest(".user-row");
+    if (!row) return;
+    const userId = row.dataset.userId;
+    const user = state.auth.users.find((item) => item.id === userId);
+    if (!user) return;
+    try {
+      if (event.target.closest("[data-user-save]")) {
+        await api(`/api/auth/users/${encodeURIComponent(userId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: row.querySelector("[data-user-role]").value,
+            permissions: selectedPermissions(row.querySelector("[data-user-permissions]")),
+          }),
+        });
+        toast("用户权限已保存。");
+      } else if (event.target.closest("[data-user-toggle]")) {
+        await api(`/api/auth/users/${encodeURIComponent(userId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: !user.active }),
+        });
+        toast(user.active ? "用户已停用。" : "用户已启用。");
+      } else if (event.target.closest("[data-user-delete]")) {
+        await api(`/api/auth/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+        toast("用户已删除。");
+      } else if (event.target.closest("[data-user-password-reset]")) {
+        const passwordInput = row.querySelector("[data-user-password]");
+        const password = passwordInput?.value || "";
+        if (!password.trim()) return toast("请输入新密码，或使用生成临时密码。");
+        await api(`/api/auth/users/${encodeURIComponent(userId)}/password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password, revoke_sessions: true }),
+        });
+        if (passwordInput) passwordInput.value = "";
+        showTemporaryPassword(row, "");
+        await refreshUsers();
+        toast("密码已重置，目标用户现有会话已撤销。");
+        return;
+      } else if (event.target.closest("[data-user-password-generate]")) {
+        const result = await api(`/api/auth/users/${encodeURIComponent(userId)}/password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ generate: true, revoke_sessions: true }),
+        });
+        await refreshUsers();
+        showTemporaryPassword(userRowById(userId) || row, result.temporary_password || "");
+        toast("临时密码已生成，仅此一次显示。");
+        return;
+      } else if (event.target.closest("[data-user-password-copy]")) {
+        const value = row.querySelector("[data-user-temp-password]")?.textContent || "";
+        if (!value) return toast("没有可复制的临时密码。");
+        if (!navigator.clipboard?.writeText) return toast("浏览器不支持一键复制，请手动复制。");
+        await navigator.clipboard?.writeText(value);
+        toast("临时密码已复制。");
+        return;
+      } else {
+        return;
+      }
+      await refreshUsers();
+    } catch (error) {
+      toast(`用户更新失败:${error.message}`);
+    }
+  });
+  document.querySelectorAll("[data-admin-scope-select]").forEach((select) => {
+    select.addEventListener("change", async (event) => {
+      state.auth.dataUserId = event.currentTarget.value;
+      renderAdminDataScope();
+      await reloadScopedData();
+    });
+  });
+  $("refreshAdminDataScope")?.addEventListener("click", reloadScopedData);
+}
+
+function permissionCheckboxes(container, selected = []) {
+  const selectedSet = new Set(selected);
+  container.innerHTML = Object.entries(state.auth.features || {})
+    .filter(([key]) => !ADMIN_ONLY_PERMISSIONS.has(key))
+    .map(([key, label]) => `
+      <label class="permission-toggle">
+        <input type="checkbox" value="${escapeAttr(key)}" ${selectedSet.has(key) ? "checked" : ""} />
+        <span>${escapeHtml(label)}</span>
+      </label>
+    `)
+    .join("");
+}
+
+function selectedPermissions(container) {
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+}
+
+function showTemporaryPassword(row, password) {
+  const output = row.querySelector("[data-user-temp-password]");
+  const copy = row.querySelector("[data-user-password-copy]");
+  if (!output || !copy) return;
+  output.textContent = password || "";
+  output.classList.toggle("hidden", !password);
+  copy.classList.toggle("hidden", !password);
+}
+
+function userRowById(userId) {
+  return Array.from(document.querySelectorAll(".user-row")).find((row) => row.dataset.userId === userId);
+}
+
+async function refreshUsers() {
+  if (!isAdmin()) return;
+  const result = await api("/api/auth/users");
+  state.auth.users = result.users || [];
+  state.auth.features = result.features || state.auth.features;
+  renderUserManagement();
+}
+
+function renderAdminDataScope() {
+  document.querySelectorAll("[data-admin-scope-wrap]").forEach((wrap) => {
+    wrap.classList.toggle("hidden", !isAdmin());
+  });
+  const selects = document.querySelectorAll("[data-admin-scope-select]");
+  if (!selects.length) return;
+  const current = state.auth.dataUserId || "";
+  const options = [
+    `<option value="">全部用户与历史数据</option>`,
+    `<option value="legacy_admin">历史数据</option>`,
+    ...state.auth.users.map((user) => `<option value="${escapeAttr(user.id)}">${escapeHtml(user.display_name || user.username)}</option>`),
+  ].join("");
+  selects.forEach((select) => {
+    select.innerHTML = options;
+    select.value = current;
+  });
+}
+
+function renderUserManagement() {
+  if (!isAdmin()) return;
+  permissionCheckboxes($("newUserPermissions"), DEFAULT_USER_PERMISSIONS);
+  renderAdminDataScope();
+  const list = $("userManagementList");
+  if (!list) return;
+  list.innerHTML = state.auth.users.length
+    ? state.auth.users.map((user) => `
+        <article class="user-row" data-user-id="${escapeAttr(user.id)}">
+          <div class="user-row-main">
+            <strong>${escapeHtml(user.display_name || user.username)}</strong>
+            <span>${escapeHtml(user.username)}</span>
+            <span>${escapeHtml(recordAuditText(user, { owner: false, includeUpdated: true }))}</span>
+          </div>
+          <label class="user-row-role">
+            角色
+            <select data-user-role>
+              <option value="user" ${user.role === "user" ? "selected" : ""}>普通用户</option>
+              <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+            </select>
+          </label>
+          <div class="user-row-actions">
+            <button class="mini-secondary" type="button" data-user-save>保存</button>
+            <button class="mini-secondary danger" type="button" data-user-toggle>${user.active ? "停用" : "启用"}</button>
+            <button class="mini-secondary danger" type="button" data-user-delete>删除</button>
+          </div>
+          <div class="permission-grid" data-user-permissions></div>
+          <div class="user-password-reset">
+            <label>
+              <span>重置密码</span>
+              <input type="password" autocomplete="new-password" minlength="8" placeholder="输入新密码，不显示旧密码" data-user-password />
+            </label>
+            <div class="user-password-actions">
+              <button class="mini-secondary" type="button" data-user-password-reset>设置新密码</button>
+              <button class="mini-secondary" type="button" data-user-password-generate>生成临时密码</button>
+              <button class="mini-secondary hidden" type="button" data-user-password-copy>复制</button>
+            </div>
+            <code class="user-temp-password hidden" data-user-temp-password></code>
+          </div>
+        </article>
+      `).join("")
+    : `<div class="empty-state">暂无用户</div>`;
+  list.querySelectorAll(".user-row").forEach((row) => {
+    const user = state.auth.users.find((item) => item.id === row.dataset.userId);
+    permissionCheckboxes(row.querySelector("[data-user-permissions]"), user?.permissions || []);
+  });
+}
+
+async function reloadScopedData() {
+  await loadInitial();
+  await refreshTrainingLibrary();
+  await refreshImageJobs();
+  await refreshPipeline();
 }
 
 function modelVariantLabel(model) {
+  if (model?.is_label_sheet_match || model?.variant === "label_sheet_local") return model?.label || "本地标签匹配";
   if (model?.is_ai_detection || model?.variant === "ai_detection" || String(model?.id || "").startsWith("ai_detection")) return model?.label || "AI 检测";
   return model?.variant === "yolo_ocr" || model?.uses_ocr ? "YOLO + OCR" : "YOLO";
 }
@@ -306,13 +951,51 @@ function renderAiConfig() {
   $("aiTimeout").value = config.timeout_seconds || 5;
   $("aiConfigStatus").textContent = aiStatusText(config.status);
   $("aiConfigStatus").className = `pill ${config.status === "ready" ? "ok" : config.status === "missing_api_key" ? "neutral" : "fail"}`;
+  if ($("homeAiState")) {
+    $("homeAiState").textContent = $("aiConfigStatus").textContent;
+    $("homeAiState").className = $("aiConfigStatus").className;
+  }
   renderAiKeyControl(config);
 }
 
+function renderWindowsWorkerStatus(worker = {}) {
+  const badge = $("homeWorkerState");
+  if (!badge) return;
+  if (!worker?.configured) {
+    badge.textContent = "未配置";
+    badge.className = "pill neutral";
+    return;
+  }
+  if (worker.status === "ready" || worker.ok) {
+    badge.textContent = "已连接";
+    badge.className = "pill ok";
+    return;
+  }
+  if (worker.status === "deferred" || worker.status === "unknown") {
+    badge.textContent = "后台检测";
+    badge.className = "pill neutral";
+    return;
+  }
+  badge.textContent = worker.status === "unreachable" ? "不可达" : "异常";
+  badge.className = "pill fail";
+}
+
+async function refreshWindowsWorkerStatus(force = false) {
+  if (!hasPermission("worker_settings")) return null;
+  try {
+    const suffix = force ? "?force=true" : "";
+    const worker = await api(`/api/windows-worker/status${suffix}`);
+    renderWindowsWorkerStatus(worker);
+    return worker;
+  } catch (error) {
+    renderWindowsWorkerStatus({ configured: true, status: "unreachable" });
+    return null;
+  }
+}
+
 async function refreshStatusAfterAiConfig() {
-  const status = await api("/api/status");
-  state.classes = status.classes;
-  renderModels(status);
+  await refreshStatusModels();
+  renderAiInspectStatus();
 }
 
 function currentAiSettingsPayload(extra = {}) {
@@ -571,20 +1254,24 @@ function renderCustomMenu(menuId, options, selectedValue, onSelect) {
   return menu.dataset.value;
 }
 
-function setProgress(value, title, detail) {
-  state.progressValue = Math.max(0, Math.min(100, value));
-  $("nativeProgress").value = state.progressValue;
-  $("nativeProgress").textContent = `${Math.round(state.progressValue)}%`;
-  $("progressPercent").textContent = `${Math.round(state.progressValue)}%`;
-  if (title) $("progressTitle").textContent = title;
-  if (detail) $("progressDetail").textContent = detail;
-  $("progressPanel").classList.toggle("active", state.progressValue > 0);
+function setProgress(value, title, detail, options = {}) {
+  const ids = options.ids || DEFAULT_PROGRESS_IDS;
+  const valueKey = options.valueKey || "progressValue";
+  state[valueKey] = Math.max(0, Math.min(100, value));
+  const progressValue = state[valueKey];
+  $(ids.native).value = progressValue;
+  $(ids.native).textContent = `${Math.round(progressValue)}%`;
+  $(ids.percent).textContent = `${Math.round(progressValue)}%`;
+  if (title) $(ids.title).textContent = title;
+  if (detail) $(ids.detail).textContent = detail;
+  $(ids.panel).classList.toggle("active", progressValue > 0);
 }
 
-function startProgress(kind) {
-  if (state.progressTimer) cancelAnimationFrame(state.progressTimer);
+function startProgress(kind, options = {}) {
+  const timerKey = options.timerKey || "progressTimer";
+  if (state[timerKey]) cancelAnimationFrame(state[timerKey]);
   const isVideo = kind === "video";
-  const model = selectedModel();
+  const model = (options.getModel || selectedModel)();
   const isAi = model?.is_ai_detection || model?.variant === "ai_detection";
   const usesOcr = model?.uses_ocr !== false;
   const phases = isVideo
@@ -614,7 +1301,7 @@ function startProgress(kind) {
         ];
   const startTime = performance.now();
   const expectedMs = isVideo ? 36000 : isAi ? 6500 : 18000;
-  setProgress(3, phases[0][1], phases[0][2]);
+  setProgress(3, phases[0][1], phases[0][2], options);
 
   const tick = (now) => {
     const elapsed = now - startTime;
@@ -625,17 +1312,19 @@ function startProgress(kind) {
     for (const item of phases) {
       if (value >= item[0] - 6) phase = item;
     }
-    setProgress(value, phase[1], phase[2]);
-    state.progressTimer = requestAnimationFrame(tick);
+    setProgress(value, phase[1], phase[2], options);
+    state[timerKey] = requestAnimationFrame(tick);
   };
-  state.progressTimer = requestAnimationFrame(tick);
+  state[timerKey] = requestAnimationFrame(tick);
 }
 
-function finishProgress(success = true) {
-  if (state.progressTimer) cancelAnimationFrame(state.progressTimer);
-  state.progressTimer = null;
-  setProgress(100, success ? "检测完成" : "检测结果不可用", success ? "结果已更新。" : "请检查文件或服务状态。");
-  setTimeout(() => $("progressPanel").classList.remove("active"), 1400);
+function finishProgress(success = true, options = {}) {
+  const ids = options.ids || DEFAULT_PROGRESS_IDS;
+  const timerKey = options.timerKey || "progressTimer";
+  if (state[timerKey]) cancelAnimationFrame(state[timerKey]);
+  state[timerKey] = null;
+  setProgress(100, success ? "检测完成" : "检测结果不可用", success ? "结果已更新。" : "请检查文件或服务状态。", options);
+  setTimeout(() => $(ids.panel).classList.remove("active"), 1400);
 }
 
 function setTaskProgress(prefix, value, title, detail, options = {}) {
@@ -741,8 +1430,8 @@ function summarizeCandidateJobs(jobs) {
   return jobs[0];
 }
 
-function setBadge(passed, waiting = false) {
-  const badge = $("resultBadge");
+function setBadge(passed, waiting = false, badgeId = "resultBadge") {
+  const badge = $(badgeId);
   badge.className = "result-badge";
   if (waiting) {
     badge.classList.add("waiting");
@@ -753,24 +1442,26 @@ function setBadge(passed, waiting = false) {
   badge.textContent = passed ? "通过" : "不通过";
 }
 
-function renderParts(rule) {
-  const tbody = $("partsTable");
+function renderParts(rule, options = {}) {
+  const tbody = $(options.tableId || "partsTable");
+  const result = options.result || state.lastResult;
   tbody.innerHTML = "";
   if (rule?.match_policy === "ai_presence") {
     const present = new Set((rule.present || []).map(String));
     const missing = new Set((rule.missing || []).map(String));
     const rows = [...present, ...missing];
     for (const accessoryId of rows) {
-      const det = (state.lastResult?.detections || []).find((item) => String(item.accessory_id) === accessoryId) || {};
+      const det = (result?.detections || []).find((item) => String(item.accessory_id) === accessoryId) || {};
       const accessory = state.accessories.find((item) => String(item.id) === accessoryId);
       const isMissing = missing.has(accessoryId);
+      const required = options.requiredCounts?.[accessoryId] !== undefined ? options.requiredCounts[accessoryId] : "是";
       const tr = document.createElement("tr");
       tr.classList.add(isMissing ? "missing-row" : "present-row");
       if (isMissing) tr.classList.add("missing");
       tr.innerHTML = `
         <td>${escapeHtml(zhLabel(det.label || accessory?.name || accessoryId))}</td>
         <td>${isMissing ? "否" : "是"}</td>
-        <td>是</td>
+        <td>${escapeHtml(required)}</td>
         <td>${det.confidence === undefined ? "-" : Number(det.confidence).toFixed(3)}</td>
       `;
       tbody.appendChild(tr);
@@ -842,9 +1533,10 @@ function aiDebugPayload(result = state.lastResult) {
   return payload;
 }
 
-function openAiDebugModal() {
+function openAiDebugModal(result = state.lastResult) {
   const body = $("aiDebugBody");
-  if (body) body.textContent = JSON.stringify(aiDebugPayload(), null, 2);
+  if ($("aiDebugTitle")) $("aiDebugTitle").textContent = "接口返回详情";
+  if (body) body.textContent = JSON.stringify(aiDebugPayload(result), null, 2);
   $("aiDebugModal").classList.add("visible");
   $("aiDebugModal").setAttribute("aria-hidden", "false");
 }
@@ -854,26 +1546,69 @@ function closeAiDebugModal() {
   $("aiDebugModal").setAttribute("aria-hidden", "true");
 }
 
-function renderImageResult(result) {
-  state.lastResult = result;
-  setBadge(result.passed);
-  $("decisionText").textContent = result.passed ? "通过" : "不通过";
-  $("detectionCount").textContent = result.detections?.length ?? "-";
-  $("passRate").textContent = aiResultMetaText(result);
-  renderParts(result.rule);
-  const img = $("previewImage");
-  img.src = `${result.annotated_url}?t=${Date.now()}`;
-  img.style.display = "block";
-  $("emptyPreview").style.display = "none";
-  syncInspectFullscreen();
+function openLocateDiagnosticModal() {
+  $("locateDiagnosticModal")?.classList.add("visible");
+  $("locateDiagnosticModal")?.setAttribute("aria-hidden", "false");
 }
 
-function renderVideoResult(result) {
-  state.lastResult = result;
-  setBadge(result.passed);
-  $("decisionText").textContent = result.passed ? "通过" : "不通过";
-  $("detectionCount").textContent = `${result.passed_frames}/${result.sampled_frames} 帧`;
-  $("passRate").textContent = `${Math.round(result.pass_rate * 1000) / 10}%`;
+function closeLocateDiagnosticModal() {
+  $("locateDiagnosticModal")?.classList.remove("visible");
+  $("locateDiagnosticModal")?.setAttribute("aria-hidden", "true");
+}
+
+function uniqueClientToken(seed = "") {
+  const random =
+    window.crypto?.randomUUID?.() ||
+    `${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
+  return [seed, Date.now(), random].filter(Boolean).join("_");
+}
+
+function cacheBustedUrl(url, token = uniqueClientToken()) {
+  if (!url) return "";
+  return `${url}${url.includes("?") ? "&" : "?"}t=${encodeURIComponent(token)}`;
+}
+
+function updatePreviewImage(img, empty, url, token = uniqueClientToken()) {
+  if (!img) return "";
+  if (!url) {
+    img.style.display = "none";
+    img.removeAttribute("src");
+    if (empty) empty.style.display = "grid";
+    return "";
+  }
+  const nextSrc = cacheBustedUrl(url, token);
+  img.style.display = "none";
+  img.removeAttribute("src");
+  void img.offsetWidth;
+  img.src = nextSrc;
+  img.style.display = "block";
+  if (empty) empty.style.display = "none";
+  return nextSrc;
+}
+
+function renderImageResult(result, options = {}) {
+  const ids = options.ids || DEFAULT_RESULT_IDS;
+  const resultKey = options.resultKey || "lastResult";
+  state[resultKey] = result;
+  setBadge(result.passed, false, ids.badge);
+  $(ids.decision).textContent = result.passed ? "通过" : "不通过";
+  $(ids.detectionCount).textContent = result.detections?.length ?? "-";
+  $(ids.passRate).textContent = aiResultMetaText(result);
+  renderParts(result.rule, { tableId: ids.table, result, requiredCounts: options.requiredCounts });
+  const img = $(ids.preview);
+  updatePreviewImage(img, $(ids.empty), result.annotated_url, result.request_id || uniqueClientToken("image"));
+  if (options.syncFullscreen !== false) syncInspectFullscreen();
+}
+
+function renderVideoResult(result, options = {}) {
+  const ids = options.ids || DEFAULT_RESULT_IDS;
+  const resultKey = options.resultKey || "lastResult";
+  state[resultKey] = result;
+  setBadge(result.passed, false, ids.badge);
+  $(ids.decision).textContent = result.passed ? "通过" : "不通过";
+  $(ids.detectionCount).textContent = `${result.passed_frames}/${result.sampled_frames} 帧`;
+  const aiMeta = aiResultMetaText(result);
+  $(ids.passRate).textContent = result.ai ? aiMeta : `${Math.round(result.pass_rate * 1000) / 10}%`;
   const missing = [];
   for (const frame of result.frames || []) {
     for (const item of frame.missing || []) {
@@ -881,14 +1616,15 @@ function renderVideoResult(result) {
       if (!missing.find((x) => (typeof x === "string" ? x : x.class_id) === key)) missing.push(item);
     }
   }
-  renderParts({ match_policy: missing.some((item) => typeof item === "string") ? "ai_presence" : "exact_count", present: [], missing });
+  renderParts(
+    { match_policy: missing.some((item) => typeof item === "string") ? "ai_presence" : "exact_count", present: [], missing },
+    { tableId: ids.table, result, requiredCounts: options.requiredCounts },
+  );
   if (result.preview_url) {
-    const img = $("previewImage");
-    img.src = `${result.preview_url}?t=${Date.now()}`;
-    img.style.display = "block";
-    $("emptyPreview").style.display = "none";
+    const img = $(ids.preview);
+    updatePreviewImage(img, $(ids.empty), result.preview_url, result.request_id || uniqueClientToken("video"));
   }
-  syncInspectFullscreen();
+  if (options.syncFullscreen !== false) syncInspectFullscreen();
 }
 
 function setCameraStatus(message, isError = false) {
@@ -1014,6 +1750,7 @@ async function runCameraDetection(button) {
     const result = await api("/api/analyze/image", { method: "POST", body: form });
     renderImageResult(result);
     finishProgress(true);
+    if (result.model?.is_ai_detection) refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
     toast("摄像头拍照检测完成。");
   } catch (error) {
     finishProgress(false);
@@ -1021,6 +1758,1479 @@ async function runCameraDetection(button) {
   } finally {
     setBusy(button, false);
   }
+}
+
+function setAiCameraStatus(message, isError = false) {
+  const node = $("aiCameraStatus");
+  if (!node) return;
+  node.textContent = message;
+  node.classList.toggle("danger-text", isError);
+}
+
+function setAiCameraPreviewActive(active) {
+  const video = $("aiCameraVideo");
+  const empty = $("aiCameraEmpty");
+  if (!video || !empty) return;
+  video.classList.toggle("active", active);
+  empty.style.display = active ? "none" : "grid";
+}
+
+function cameraVideoForCapture(primaryVideo, stream, mode = "") {
+  const stage = $("inspectFullscreenStage");
+  const fullscreenVideo = $("fullscreenInputVideo");
+  if (
+    mode &&
+    state.fullscreenMode === mode &&
+    stage?.classList.contains("active") &&
+    fullscreenVideo?.srcObject === stream
+  ) {
+    return fullscreenVideo;
+  }
+  return primaryVideo;
+}
+
+async function waitForVideoCaptureFrame(video, timeoutMs = 900) {
+  if (!video) return;
+  if (video.paused && video.srcObject) {
+    await video.play?.().catch(() => {});
+  }
+  if (typeof video.requestVideoFrameCallback === "function") {
+    await new Promise((resolve) => {
+      const timeout = setTimeout(resolve, timeoutMs);
+      video.requestVideoFrameCallback(() => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+    return;
+  }
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+async function captureVideoFrameFile(video, filenamePrefix, quality = 0.92) {
+  await waitForVideoCaptureFrame(video);
+  if (!video?.videoWidth || !video.videoHeight) {
+    throw new Error("摄像头画面尚未准备好");
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("拍照失败"));
+        return;
+      }
+      resolve(new File([blob], `${filenamePrefix}_${uniqueClientToken()}.jpg`, { type: "image/jpeg" }));
+    }, "image/jpeg", quality);
+  });
+}
+
+function stopAiCameraStream() {
+  if (!state.aiCamera.stream) return;
+  for (const track of state.aiCamera.stream.getTracks()) track.stop();
+  state.aiCamera.stream = null;
+  const video = $("aiCameraVideo");
+  if (video) video.srcObject = null;
+  setAiCameraPreviewActive(false);
+}
+
+function renderAiCameraMenu() {
+  const devices = state.aiCamera.devices || [];
+  const options = devices.length
+    ? devices.map((device, index) => ({
+        value: device.deviceId,
+        label: device.label || `摄像头 ${index + 1}`,
+        meta: device.label ? "可用" : "等待授权后显示名称",
+      }))
+    : [{ value: "", label: "未检测到摄像头", meta: "请检查设备连接或浏览器权限", disabled: true }];
+  state.aiCamera.selectedDeviceId = renderCustomMenu("aiCameraMenu", options, state.aiCamera.selectedDeviceId, (value) => {
+    state.aiCamera.selectedDeviceId = value;
+    if (value) startAiCamera(value);
+  });
+}
+
+async function refreshAiCameraDevices() {
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    state.aiCamera.devices = [];
+    renderAiCameraMenu();
+    setAiCameraStatus("当前浏览器不支持摄像头枚举。请使用 localhost 下的 Chrome/Edge。", true);
+    return [];
+  }
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  state.aiCamera.devices = devices.filter((device) => device.kind === "videoinput");
+  if (!state.aiCamera.selectedDeviceId && state.aiCamera.devices.length) {
+    state.aiCamera.selectedDeviceId = state.aiCamera.devices[0].deviceId;
+  }
+  renderAiCameraMenu();
+  return state.aiCamera.devices;
+}
+
+async function startAiCamera(deviceId = state.aiCamera.selectedDeviceId) {
+  if (state.aiCamera.starting) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setAiCameraStatus("当前浏览器不支持摄像头预览。请使用 localhost 下的 Chrome/Edge。", true);
+    return;
+  }
+  state.aiCamera.starting = true;
+  setAiCameraStatus("正在打开摄像头...");
+  try {
+    stopAiCameraStream();
+    const videoConstraints = deviceId ? { deviceId: { exact: deviceId } } : true;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+    state.aiCamera.stream = stream;
+    const video = $("aiCameraVideo");
+    video.srcObject = stream;
+    await video.play();
+    const track = stream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    if (settings.deviceId) state.aiCamera.selectedDeviceId = settings.deviceId;
+    await refreshAiCameraDevices();
+    setAiCameraPreviewActive(true);
+    setAiCameraStatus(`摄像头已连接：${track?.label || "当前摄像头"}`);
+  } catch (error) {
+    stopAiCameraStream();
+    setAiCameraStatus(`摄像头不可用：${error.message}`, true);
+    toast(`摄像头不可用：${error.message}`);
+  } finally {
+    state.aiCamera.starting = false;
+  }
+}
+
+async function captureAiCameraFrame() {
+  if (!state.aiCamera.stream) await startAiCamera();
+  if (!state.aiCamera.stream) {
+    throw new Error("摄像头画面尚未准备好");
+  }
+  const video = cameraVideoForCapture($("aiCameraVideo"), state.aiCamera.stream, "ai");
+  return captureVideoFrameFile(video, "ai_camera_capture", 0.92);
+}
+
+async function runAiCameraDetection(button) {
+  const modelId = selectedAiModelId();
+  if (!modelId) return toast("请先在训练流水线创建并选择 AI 检测任务。");
+  setBusy(button, true);
+  startProgress("image", { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue", getModel: selectedAiModel });
+  try {
+    const file = await captureAiCameraFrame();
+    setAiInspectInput("camera");
+    const form = new FormData();
+    form.append("file", file);
+    form.append("model_id", modelId);
+    const result = await api("/api/analyze/image", { method: "POST", body: form });
+    renderImageResult(result, {
+      ids: AI_RESULT_IDS,
+      resultKey: "aiLastResult",
+      requiredCounts: currentAiTaskRequiredCounts(),
+      syncFullscreen: false,
+    });
+    if (state.fullscreenMode === "ai") syncInspectFullscreen("ai");
+    finishProgress(true, { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue" });
+    refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
+    toast("摄像头 AI 检测完成。");
+  } catch (error) {
+    finishProgress(false, { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue" });
+    toast(`摄像头 AI 检测失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function labelSheetStatusText(status) {
+  if (status === "matched") return "已匹配";
+  if (status === "unclear") return "需复核";
+  if (status === "no_label_reference") return "无标签参考";
+  if (status === "error") return "错误";
+  return "等待输入";
+}
+
+function setLabelSheetBadge(status) {
+  const badge = $("labelSheetBadge");
+  if (!badge) return;
+  badge.className = "result-badge";
+  if (status === "matched") {
+    badge.classList.add("pass");
+  } else if (status === "unclear" || status === "no_label_reference" || status === "error") {
+    badge.classList.add("fail");
+  } else {
+    badge.classList.add("waiting");
+  }
+  badge.textContent = labelSheetStatusText(status);
+}
+
+function renderLabelSheetReferences() {
+  const list = $("labelReferenceList");
+  const summary = $("labelReferenceSummary");
+  if (!list || !summary) return;
+  const stats = state.labelSheetFilterStats || {};
+  summary.textContent = `保留 ${stats.kept_count ?? state.labelSheetReferences.length}，过滤 ${stats.filtered_count ?? 0}`;
+  if (!state.labelSheetReferences.length) {
+    list.innerHTML = `<div class="empty-state compact">没有保留的标签参考</div>`;
+    return;
+  }
+  list.innerHTML = state.labelSheetReferences
+    .map((item) => {
+      const reason = item.filter?.include_terms?.length ? item.filter.include_terms.join(", ") : item.filter?.reason || "kept";
+      return `
+        <article class="label-reference-card">
+          <img src="${escapeAttr(item.image_url || "")}?t=${Date.now()}" alt="${escapeAttr(item.name || "label reference")}" />
+          <div>
+            <strong>${escapeHtml(item.name || item.label || item.reference_id)}</strong>
+            <small>${escapeHtml(recordAuditText(item))}</small>
+            <small>${escapeHtml(reason)}</small>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+async function refreshLabelSheetReferences() {
+  const result = await api("/api/label-sheets/references");
+  state.labelSheetReferences = result.references || [];
+  state.labelSheetFilterStats = result.doc_filter_stats || null;
+  renderLabelSheetReferences();
+}
+
+async function addLabelSheetReference(button) {
+  const files = Array.from($("labelReferenceFiles")?.files || []);
+  const annotation = $("labelReferenceAnnotation")?.value.trim() || "";
+  if (!annotation) return toast("请填写左列标注。");
+  if (!files.length) return toast("请选择标签参考图。");
+  setBusy(button, true);
+  try {
+    const form = new FormData();
+    form.append("annotation", annotation);
+    for (const file of files) form.append("files", file);
+    const result = await api("/api/label-sheets/references", { method: "POST", body: form });
+    state.labelSheetReferences = result.references || [];
+    state.labelSheetFilterStats = result.doc_filter_stats || null;
+    $("labelReferenceFiles").value = "";
+    renderLabelSheetReferences();
+    toast("标签参考已保存。");
+  } catch (error) {
+    toast(`保存标签参考失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function setLabelSheetInput(kind, file = null) {
+  if (state.labelSheetInput.url) URL.revokeObjectURL(state.labelSheetInput.url);
+  state.labelSheetInput = { kind, url: file ? URL.createObjectURL(file) : "", fileName: file?.name || "" };
+}
+
+function renderLabelSheetResult(result) {
+  state.labelSheetLastResult = result;
+  setLabelSheetBadge(result.status);
+  $("labelMatchStatus").textContent = labelSheetStatusText(result.status);
+  $("labelMatchScore").textContent = result.score === undefined ? "-" : Number(result.score).toFixed(4);
+  $("labelMatchedName").textContent =
+    result.matched_reference_name || result.matched_reference_label || result.best_reference_name || result.best_reference_label || "-";
+  $("labelReviewState").textContent = result.status === "matched" ? "自动通过" : result.low_confidence_reason || result.review_status || "needs_review";
+
+  const refUrl = result.matched_reference_image_url || result.best_reference_image_url || "";
+  const cropUrl = result.input_crop_image_url || "";
+  const refImg = $("labelMatchedReferenceImage");
+  const cropImg = $("labelInputCropImage");
+  refImg.style.display = refUrl ? "block" : "none";
+  cropImg.style.display = cropUrl ? "block" : "none";
+  if (refUrl) refImg.src = `${refUrl}?t=${Date.now()}`;
+  if (cropUrl) cropImg.src = `${cropUrl}?t=${Date.now()}`;
+  $("labelMatchedReferenceEmpty").style.display = refUrl ? "none" : "grid";
+  $("labelInputCropEmpty").style.display = cropUrl ? "none" : "grid";
+
+  const tbody = $("labelCandidateTable");
+  const candidates = result.candidates || [];
+  tbody.innerHTML = candidates.length
+    ? candidates
+        .slice(0, 6)
+        .map(
+          (item) => `
+            <tr>
+              <td>${escapeHtml(item.matched_reference_name || item.matched_reference_label || item.reference_id)}</td>
+              <td>${Number(item.score || 0).toFixed(4)}</td>
+              <td>${escapeHtml(item.candidate_id || "-")}</td>
+            </tr>
+          `,
+        )
+        .join("")
+    : `<tr><td colspan="3">暂无候选</td></tr>`;
+}
+
+async function runLabelSheetMatchWithFile(file, button) {
+  if (!file) return toast("请先选择标签纸图片。");
+  setLabelSheetInput("image", file);
+  setBusy(button, true);
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const result = await api("/api/label-sheets/match", { method: "POST", body: form });
+    renderLabelSheetResult(result);
+    toast(result.status === "matched" ? "标签纸匹配完成。" : "标签纸需要人工复核。");
+  } catch (error) {
+    setLabelSheetBadge("error");
+    toast(`标签纸匹配失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function setLabelSheetCameraStatus(message, isError = false) {
+  const node = $("labelSheetCameraStatus");
+  if (!node) return;
+  node.textContent = message;
+  node.classList.toggle("danger-text", isError);
+}
+
+function setLabelSheetCameraPreviewActive(active) {
+  const video = $("labelSheetCameraVideo");
+  const empty = $("labelSheetCameraEmpty");
+  if (!video || !empty) return;
+  video.classList.toggle("active", active);
+  empty.style.display = active ? "none" : "grid";
+}
+
+function stopLabelSheetCameraStream() {
+  if (!state.labelSheetCamera.stream) return;
+  for (const track of state.labelSheetCamera.stream.getTracks()) track.stop();
+  state.labelSheetCamera.stream = null;
+  const video = $("labelSheetCameraVideo");
+  if (video) video.srcObject = null;
+  setLabelSheetCameraPreviewActive(false);
+}
+
+function renderLabelSheetCameraMenu() {
+  const devices = state.labelSheetCamera.devices || [];
+  const options = devices.length
+    ? devices.map((device, index) => ({
+        value: device.deviceId,
+        label: device.label || `摄像头 ${index + 1}`,
+        meta: device.label ? "可用" : "等待授权后显示名称",
+      }))
+    : [{ value: "", label: "未检测到摄像头", meta: "请检查设备连接或浏览器权限", disabled: true }];
+  state.labelSheetCamera.selectedDeviceId = renderCustomMenu(
+    "labelSheetCameraMenu",
+    options,
+    state.labelSheetCamera.selectedDeviceId,
+    (value) => {
+      state.labelSheetCamera.selectedDeviceId = value;
+      if (value) startLabelSheetCamera(value);
+    },
+  );
+}
+
+async function refreshLabelSheetCameraDevices() {
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    state.labelSheetCamera.devices = [];
+    renderLabelSheetCameraMenu();
+    setLabelSheetCameraStatus("当前浏览器不支持摄像头枚举。", true);
+    return [];
+  }
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  state.labelSheetCamera.devices = devices.filter((device) => device.kind === "videoinput");
+  if (!state.labelSheetCamera.selectedDeviceId && state.labelSheetCamera.devices.length) {
+    state.labelSheetCamera.selectedDeviceId = state.labelSheetCamera.devices[0].deviceId;
+  }
+  renderLabelSheetCameraMenu();
+  return state.labelSheetCamera.devices;
+}
+
+async function startLabelSheetCamera(deviceId = state.labelSheetCamera.selectedDeviceId) {
+  if (state.labelSheetCamera.starting) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setLabelSheetCameraStatus("当前浏览器不支持摄像头预览。", true);
+    return;
+  }
+  state.labelSheetCamera.starting = true;
+  setLabelSheetCameraStatus("正在打开摄像头...");
+  try {
+    stopLabelSheetCameraStream();
+    const videoConstraints = deviceId ? { deviceId: { exact: deviceId } } : true;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+    state.labelSheetCamera.stream = stream;
+    const video = $("labelSheetCameraVideo");
+    video.srcObject = stream;
+    await video.play();
+    const track = stream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    if (settings.deviceId) state.labelSheetCamera.selectedDeviceId = settings.deviceId;
+    await refreshLabelSheetCameraDevices();
+    setLabelSheetCameraPreviewActive(true);
+    setLabelSheetCameraStatus(`摄像头已连接：${track?.label || "当前摄像头"}`);
+  } catch (error) {
+    stopLabelSheetCameraStream();
+    setLabelSheetCameraStatus(`摄像头不可用：${error.message}`, true);
+    toast(`摄像头不可用：${error.message}`);
+  } finally {
+    state.labelSheetCamera.starting = false;
+  }
+}
+
+async function captureLabelSheetCameraFrame() {
+  if (!state.labelSheetCamera.stream) await startLabelSheetCamera();
+  const video = $("labelSheetCameraVideo");
+  if (!state.labelSheetCamera.stream || !video.videoWidth || !video.videoHeight) {
+    throw new Error("摄像头画面尚未准备好");
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("拍照失败"));
+        return;
+      }
+      resolve(new File([blob], `label_sheet_capture_${Date.now()}.jpg`, { type: "image/jpeg" }));
+    }, "image/jpeg", 0.92);
+  });
+}
+
+async function runLabelSheetCameraMatch(button) {
+  setBusy(button, true);
+  try {
+    const file = await captureLabelSheetCameraFrame();
+    await runLabelSheetMatchWithFile(file, button);
+  } catch (error) {
+    toast(`摄像头标签匹配失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function locateStatusClass(payload) {
+  if (payload?.ok || payload?.status === "ready") return "ok";
+  if (payload?.status === "starting" || payload?.status === "reachable") return "neutral";
+  if (payload?.configured || payload?.status === "failed" || payload?.status === "unavailable") return "fail";
+  return "neutral";
+}
+
+function locateStatusText(payload) {
+  if (!payload) return "未检查";
+  if (payload.ok || payload.status === "ready") return "检测服务就绪";
+  if (payload.status === "starting") return "启动中";
+  if (payload.status === "reachable") return "需试检确认";
+  if (payload.status === "not_configured" || !payload.configured) return "未启动";
+  return "不可用";
+}
+
+function renderLocateRuntimeStatus(payload = state.locateAnythingConfig || {}) {
+  const badge = $("locateStatusBadge");
+  const text = $("locateStatusText");
+  const startButton = $("startLocateRuntime");
+  if (!badge || !text) return;
+  badge.textContent = locateStatusText(payload);
+  badge.className = `pill ${locateStatusClass(payload)}`;
+  if ($("homeLocateState")) {
+    $("homeLocateState").textContent = badge.textContent;
+    $("homeLocateState").className = badge.className;
+  }
+  const latency = Number(payload.latency_ms);
+  const latencyText = Number.isFinite(latency) && latency > 0 ? ` · ${latency} ms` : "";
+  if (payload.ok || payload.status === "ready") {
+    text.textContent = `本地检测服务已连接${latencyText}，可以开始相机检测。`;
+  } else if (payload.status === "starting") {
+    text.textContent = payload.message || "本地模型正在启动，首次加载会比较慢。";
+  } else if (payload.status === "reachable") {
+    text.textContent = payload.message || "端点可达，但还不能确认模型已加载；请先试检或查看健康检查。";
+  } else if (payload.status === "failed") {
+    text.textContent = payload.message || "启动条件不完整，请查看高级设置。";
+  } else {
+    text.textContent = "检测服务未启动。可以先启动本地模型，或使用高级设置检查端点。";
+  }
+  startButton?.classList.toggle("hidden", Boolean(payload.ok || payload.status === "ready"));
+}
+
+function renderLocateConfig(config = state.locateAnythingConfig || {}) {
+  state.locateAnythingConfig = { ...(state.locateAnythingConfig || {}), ...config, generation_mode: "fast" };
+  if ($("locateEndpointUrl")) $("locateEndpointUrl").value = state.locateAnythingConfig.endpoint_url || "http://127.0.0.1:8000/locate";
+  if ($("locateMaxSide")) $("locateMaxSide").value = state.locateAnythingConfig.max_side || 640;
+  if ($("locateMaxTokens")) $("locateMaxTokens").value = state.locateAnythingConfig.max_new_tokens || 512;
+  renderLocateRuntimeStatus(state.locateAnythingConfig);
+}
+
+function readLocateConfigPayload() {
+  const endpoint = $("locateEndpointUrl")?.value.trim() || "";
+  return {
+    enabled: Boolean(endpoint),
+    endpoint_url: endpoint,
+    generation_mode: "fast",
+    max_side: Number($("locateMaxSide")?.value || 640),
+    max_new_tokens: Number($("locateMaxTokens")?.value || 512),
+  };
+}
+
+async function saveLocateConfig(button, options = {}) {
+  setBusy(button, true);
+  try {
+    const result = await api("/api/locateanything/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(readLocateConfigPayload()),
+    });
+    renderLocateConfig(result);
+    if (!options.quiet) toast("检测服务设置已保存。");
+    return result;
+  } catch (error) {
+    if (!options.quiet) toast(`保存检测服务设置失败：${error.message}`);
+    throw error;
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function checkLocateStatus(button = null, options = {}) {
+  setBusy(button, true);
+  try {
+    const endpoint = $("locateEndpointUrl")?.value.trim() || "";
+    const suffix = endpoint ? `?endpoint_url=${encodeURIComponent(endpoint)}` : "";
+    const result = await api(`/api/locateanything/status${suffix}`);
+    state.locateAnythingConfig = { ...(state.locateAnythingConfig || {}), ...readLocateConfigPayload(), ...result };
+    renderLocateRuntimeStatus(result);
+    if (!options.quiet) toast(result.ok ? "检测服务已就绪。" : "检测服务暂不可用。");
+    return result;
+  } catch (error) {
+    if (!options.quiet) toast(`检查检测服务失败：${error.message}`);
+    renderLocateRuntimeStatus({ status: "unavailable", configured: true, message: error.message });
+    return { ok: false, status: "unavailable", message: error.message };
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function startLocateRuntime(button) {
+  setBusy(button, true);
+  renderLocateRuntimeStatus({ status: "starting", message: "正在启动本地模型..." });
+  try {
+    const result = await api("/api/locateanything/runtime/start", { method: "POST" });
+    state.locateAnythingConfig = { ...(state.locateAnythingConfig || {}), status: result.status, message: result.message, configured: true };
+    renderLocateRuntimeStatus(state.locateAnythingConfig);
+    toast(result.ok ? result.message || "本地模型已就绪。" : result.message || "本地模型启动失败。");
+    setTimeout(() => checkLocateStatus(null, { quiet: true }), 2200);
+    return result;
+  } catch (error) {
+    renderLocateRuntimeStatus({ status: "failed", message: error.message });
+    toast(`启动本地模型失败：${error.message}`);
+    return { ok: false, status: "failed", message: error.message };
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function locateRuleFromSource(item) {
+  return {
+    id: item.id,
+    label: item.label || item.display_label || item.id,
+    display_label: item.display_label || item.label || item.id,
+    material_type: item.material_type || "",
+    source: item.source || "",
+    visual_prompt: item.visual_prompt || "",
+    enabled: true,
+    expected_present: item.default_expected_present !== false,
+    expected_count: Number(item.default_expected_count || 1),
+    prompt_override: "",
+  };
+}
+
+function locateSourceById(id) {
+  return state.locateAnythingSources.find((item) => item.id === id) || null;
+}
+
+function mergeLocateRuleWithSource(rule) {
+  const source = locateSourceById(rule.id);
+  if (!source) return rule;
+  return {
+    ...locateRuleFromSource(source),
+    ...rule,
+    label: source.label || rule.label || rule.id,
+    display_label: source.display_label || source.label || rule.display_label || rule.id,
+    material_type: source.material_type || rule.material_type || "",
+    source: source.source || rule.source || "",
+    visual_prompt: source.visual_prompt || rule.visual_prompt || "",
+  };
+}
+
+function normalizeLocateRules() {
+  const seen = new Set();
+  state.locateAnythingRules = state.locateAnythingRules
+    .filter((rule) => rule && rule.id && !seen.has(rule.id) && (seen.add(rule.id) || true))
+    .map((rule) => mergeLocateRuleWithSource({
+      ...rule,
+      enabled: rule.enabled !== false,
+      expected_present: rule.expected_present !== false,
+      expected_count: Number(rule.expected_count ?? 1),
+      prompt_override: rule.prompt_override || "",
+    }));
+}
+
+function selectedLocateRules() {
+  normalizeLocateRules();
+  return state.locateAnythingRules
+    .filter((rule) => rule.enabled !== false)
+    .map((rule) => ({
+      id: rule.id,
+      label: rule.label || rule.display_label || rule.id,
+      display_label: rule.display_label || rule.label || rule.id,
+      source: rule.source || "",
+      material_type: rule.material_type || "",
+      visual_prompt: rule.visual_prompt || "",
+      expected_present: rule.expected_present !== false,
+      expected_count: rule.expected_present === false ? 0 : Number(rule.expected_count || 1),
+      prompt_override: String(rule.prompt_override || "").trim(),
+    }));
+}
+
+function updateLocateRecipeSummary() {
+  const configured = state.locateAnythingRules.length;
+  const enabledRules = state.locateAnythingRules.filter((rule) => rule.enabled !== false);
+  const expectedTotal = enabledRules.reduce((total, rule) => total + (rule.expected_present === false ? 0 : Number(rule.expected_count || 1)), 0);
+  if ($("locateRecipeConfiguredCount")) $("locateRecipeConfiguredCount").textContent = String(configured);
+  if ($("locateRecipeEnabledCount")) $("locateRecipeEnabledCount").textContent = String(enabledRules.length);
+  if ($("locateRecipeExpectedTotal")) $("locateRecipeExpectedTotal").textContent = String(expectedTotal);
+  if ($("toggleLocateRecipeDetails")) $("toggleLocateRecipeDetails").textContent = state.locateRecipeExpanded ? "收起" : "展开";
+}
+
+function setLocateRecipeExpanded(expanded) {
+  state.locateRecipeExpanded = Boolean(expanded);
+  $("locateAccessoryList")?.classList.toggle("expanded", state.locateRecipeExpanded);
+  updateLocateRecipeSummary();
+}
+
+function upsertLocateRule(itemOrId, options = {}) {
+  const source = typeof itemOrId === "string" ? locateSourceById(itemOrId) : itemOrId;
+  if (!source?.id) return;
+  const index = state.locateAnythingRules.findIndex((rule) => rule.id === source.id);
+  if (index >= 0) {
+    state.locateAnythingRules[index] = mergeLocateRuleWithSource({
+      ...state.locateAnythingRules[index],
+      enabled: options.enabled ?? true,
+    });
+  } else {
+    state.locateAnythingRules.push(locateRuleFromSource(source));
+  }
+  renderLocateSources();
+}
+
+function updateLocateRule(id, updates) {
+  const index = state.locateAnythingRules.findIndex((rule) => rule.id === id);
+  if (index < 0) return;
+  state.locateAnythingRules[index] = mergeLocateRuleWithSource({ ...state.locateAnythingRules[index], ...updates });
+  renderLocateSources();
+}
+
+function removeLocateRule(id) {
+  state.locateAnythingRules = state.locateAnythingRules.filter((rule) => rule.id !== id);
+  renderLocateSources();
+}
+
+function locatePickerSearchText(item) {
+  return [
+    item.label,
+    item.display_label,
+    item.material_type,
+    item.source,
+    item.visual_prompt,
+    ...(item.search_terms || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function renderLocateRecipePicker() {
+  const picker = $("locateRecipePicker");
+  const list = $("locateRecipePickerList");
+  const search = $("locateRecipeSearch");
+  if (!picker || !list) return;
+  picker.classList.toggle("hidden", !state.locateRecipePickerOpen);
+  if (search && search.value !== state.locateRecipeQuery) search.value = state.locateRecipeQuery;
+  const selectedById = new Map(state.locateAnythingRules.map((rule) => [rule.id, rule]));
+  const query = state.locateRecipeQuery.trim().toLowerCase();
+  const matches = state.locateAnythingSources
+    .filter((item) => !query || locatePickerSearchText(item).includes(query))
+    .slice(0, 40);
+  list.innerHTML = matches.length
+    ? matches
+        .map((item) => {
+          const selectedRule = selectedById.get(item.id);
+          const configured = Boolean(selectedRule);
+          const checked = Boolean(selectedRule && selectedRule.enabled !== false);
+          const stateText = configured ? (checked ? "已启用" : "已停用") : "未添加";
+          const detailText = [item.visual_prompt || item.material_type || item.source || "", stateText].filter(Boolean).join(" · ");
+          return `
+            <label class="locate-picker-row" data-locate-picker-item="${escapeAttr(item.id)}">
+              <input type="checkbox" data-locate-picker-checkbox ${checked ? "checked" : ""} />
+              <span>
+                <strong>${escapeHtml(item.display_label || item.label)}</strong>
+                <small>${escapeHtml(detailText)}</small>
+              </span>
+            </label>
+          `;
+        })
+        .join("")
+    : `<p class="hint">没有匹配项。</p>`;
+  list.querySelectorAll("[data-locate-picker-checkbox]").forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const id = event.currentTarget.closest("[data-locate-picker-item]")?.dataset.locatePickerItem || "";
+      if (event.currentTarget.checked) {
+        upsertLocateRule(id, { enabled: true });
+      } else {
+        updateLocateRule(id, { enabled: false });
+      }
+    });
+  });
+}
+
+function renderLocateSources(items = state.locateAnythingSources || []) {
+  const wrap = $("locateAccessoryList");
+  if (!wrap) return;
+  state.locateAnythingSources = items;
+  if (!state.locateAnythingRules.length) {
+    const defaults = items.filter((item) => item.default_selected).slice(0, 4);
+    state.locateAnythingRules = (defaults.length ? defaults : items.slice(0, 2)).map(locateRuleFromSource);
+  }
+  normalizeLocateRules();
+  wrap.classList.toggle("expanded", state.locateRecipeExpanded);
+  wrap.innerHTML = state.locateAnythingRules.length
+    ? state.locateAnythingRules
+        .map((item) => {
+          const expectedPresent = item.expected_present !== false;
+          const expectedCount = item.expected_count ?? 1;
+          return `
+            <div class="locate-rule-row ${item.enabled === false ? "disabled" : ""}" data-locate-rule="${escapeAttr(item.id)}" data-locate-label="${escapeAttr(item.display_label || item.label)}">
+              <label class="locate-rule-main">
+                <input type="checkbox" data-locate-enabled ${item.enabled !== false ? "checked" : ""} />
+                <span>
+                  <strong>${escapeHtml(item.display_label || item.label)}</strong>
+                  <small>${item.source === "accessory" ? "配件" : "类别"} · ${escapeHtml(item.material_type || "-")}</small>
+                </span>
+              </label>
+              <label class="locate-presence-toggle">
+                <input type="checkbox" data-locate-expected-present ${expectedPresent ? "checked" : ""} />
+                <span>应出现</span>
+              </label>
+              <label class="locate-count-field">
+                <span>数量</span>
+                <input type="number" min="0" max="99" data-locate-expected-count value="${escapeAttr(expectedCount)}" />
+              </label>
+              <button class="icon-button locate-remove-rule" type="button" data-locate-remove title="移除">×</button>
+              <details class="locate-rule-advanced">
+                <summary>提示词</summary>
+                <small>${escapeHtml(item.visual_prompt || "系统会根据配件资料生成英文视觉描述。")}</small>
+                <input data-locate-prompt-override type="text" value="${escapeAttr(item.prompt_override || "")}" placeholder="可选：覆盖自动生成提示词" />
+              </details>
+            </div>
+          `;
+        })
+        .join("")
+    : `<p class="hint">还没有检测项。点击“添加”从配件库或类别中选择。</p>`;
+  wrap.querySelectorAll("[data-locate-enabled]").forEach((input) => {
+    input.addEventListener("change", (event) => updateLocateRule(event.currentTarget.closest("[data-locate-rule]")?.dataset.locateRule || "", { enabled: event.currentTarget.checked }));
+  });
+  wrap.querySelectorAll("[data-locate-expected-present]").forEach((input) => {
+    input.addEventListener("change", (event) => updateLocateRule(event.currentTarget.closest("[data-locate-rule]")?.dataset.locateRule || "", { expected_present: event.currentTarget.checked }));
+  });
+  wrap.querySelectorAll("[data-locate-expected-count]").forEach((input) => {
+    input.addEventListener("change", (event) => updateLocateRule(event.currentTarget.closest("[data-locate-rule]")?.dataset.locateRule || "", { expected_count: Number(event.currentTarget.value || 0) }));
+  });
+  wrap.querySelectorAll("[data-locate-prompt-override]").forEach((input) => {
+    input.addEventListener("change", (event) => updateLocateRule(event.currentTarget.closest("[data-locate-rule]")?.dataset.locateRule || "", { prompt_override: event.currentTarget.value.trim() }));
+  });
+  wrap.querySelectorAll("[data-locate-remove]").forEach((button) => {
+    button.addEventListener("click", (event) => removeLocateRule(event.currentTarget.closest("[data-locate-rule]")?.dataset.locateRule || ""));
+  });
+  updateLocateRecipeSummary();
+  renderLocateRecipePicker();
+}
+
+async function refreshLocateSources() {
+  try {
+    const result = await api("/api/locateanything/accessories");
+    renderLocateSources(result.items || []);
+  } catch (error) {
+    toast(`读取检测配置失败：${error.message}`);
+  }
+}
+
+function setLocateInput(kind, file = null) {
+  if (state.locateAnythingInput.url) URL.revokeObjectURL(state.locateAnythingInput.url);
+  state.locateAnythingInput = { kind, url: file ? URL.createObjectURL(file) : "", fileName: file?.name || "" };
+  const cameraVideo = $("locateCameraVideo");
+  const preview = $("locateSourceImage");
+  const empty = $("locateSourceEmpty");
+  if (!preview || !empty) return;
+  if (kind === "camera" && state.locateCamera.stream) {
+    preview.style.display = "none";
+    if (cameraVideo) cameraVideo.style.display = "block";
+    empty.style.display = "none";
+  } else if (state.locateAnythingInput.url) {
+    preview.src = state.locateAnythingInput.url;
+    preview.style.display = "block";
+    if (cameraVideo) cameraVideo.style.display = "none";
+    empty.style.display = "none";
+  }
+  if (state.fullscreenMode === "locate") syncInspectFullscreen("locate");
+}
+
+function locateStatusLabel(status) {
+  return {
+    found: "已找到",
+    missing: "缺失",
+    count_mismatch: "数量不符",
+    uncertain: "不确定",
+    unexpected: "不应出现",
+    not_expected_absent: "未出现",
+  }[status] || status || "-";
+}
+
+function setLocateResultBadge(result) {
+  const badge = $("locateResultBadge");
+  const overall = $("locateOverallResult");
+  if (!badge) return;
+  badge.className = "result-badge";
+  if (result?.overall_pass) {
+    badge.classList.add("pass");
+    badge.textContent = "通过";
+    if (overall) {
+      overall.className = "locate-overall pass";
+      overall.textContent = "通过";
+    }
+  } else if (result) {
+    badge.classList.add("fail");
+    badge.textContent = "不通过";
+    if (overall) {
+      overall.className = "locate-overall fail";
+      overall.textContent = "不通过";
+    }
+  } else {
+    badge.classList.add("waiting");
+    badge.textContent = "等待检测";
+    if (overall) {
+      overall.className = "locate-overall waiting";
+      overall.textContent = "等待检测";
+    }
+  }
+}
+
+function renderLocateResult(result) {
+  state.locateAnythingLastResult = result;
+  setLocateResultBadge(result);
+  $("locateResultStatus").textContent = result.overall_pass ? "全部符合" : result.error || "存在异常";
+  $("locateBoxCount").textContent = (result.items || []).reduce((total, item) => total + Number(item.box_count || 0), 0);
+  $("locateLatencyText").textContent = result.latency_ms ? `${result.latency_ms} ms` : "-";
+  $("locateFrameCount").textContent = String(state.locateCamera.frameCount || 0);
+  const diagnostics = result.diagnostics || [];
+  $("locateDiagnosticText").textContent = diagnostics.length
+    ? diagnostics
+        .map((item) => [
+          `检测项：${item.label || item.id}`,
+          `提示词：${item.prompt || "-"}`,
+          `回答片段：${item.raw_answer_snippet || "-"}`,
+          item.error ? `错误：${item.error}` : `定位框：${item.box_count || 0}`,
+        ].join("\n"))
+        .join("\n\n")
+    : result.diagnostic_url
+      ? `诊断文件：${result.diagnostic_url}`
+      : result.error || "暂无诊断信息。";
+
+  const preview = $("locatePreviewImage");
+  const empty = $("locateEmptyPreview");
+  const imageUrl = result.overlay_url || state.locateAnythingInput.url || "";
+  if (imageUrl) {
+    preview.src = result.overlay_url ? `${result.overlay_url}?t=${Date.now()}` : imageUrl;
+    preview.style.display = "block";
+    empty.style.display = "none";
+  } else {
+    preview.style.display = "none";
+    empty.style.display = "grid";
+  }
+
+  const items = result.items || [];
+  $("locateInspectionItems").innerHTML = items.length
+    ? items
+        .map(
+          (item) => `
+            <tr>
+              <td>${escapeHtml(item.label || item.id)}</td>
+              <td><span class="status-dot ${item.passed ? "ok" : "fail"}">${escapeHtml(locateStatusLabel(item.status))}</span></td>
+              <td>${item.expected_present ? escapeHtml(String(item.expected_count || 1)) : "不应出现"}</td>
+              <td>${Number(item.box_count || 0)}</td>
+            </tr>
+          `,
+        )
+        .join("")
+    : `<tr><td colspan="4">${escapeHtml(result.error || "暂无检测项")}</td></tr>`;
+  if (state.fullscreenMode === "locate") syncInspectFullscreen("locate");
+}
+
+function locateInspectForm(file) {
+  const rules = selectedLocateRules();
+  const form = new FormData();
+  const config = readLocateConfigPayload();
+  form.append("file", file);
+  form.append("rules", JSON.stringify(rules));
+  form.append("endpoint_url", config.endpoint_url);
+  form.append("max_side", config.max_side);
+  form.append("max_new_tokens", config.max_new_tokens);
+  return { form, rules };
+}
+
+function setLocateInspectControlsBusy(busy) {
+  state.locateAnythingInspectInFlight = busy;
+  ["captureLocateFrame", "runLocateImage", "startLocateCameraLoop"].forEach((id) => {
+    const button = $(id);
+    if (button) button.disabled = busy;
+  });
+  $("locateResultStatus").textContent = busy ? "检测中" : $("locateResultStatus").textContent;
+}
+
+async function runLocateInspectWithFile(file, button = null, options = {}) {
+  if (!file) return toast("请先选择图片或打开摄像头。");
+  if (state.locateAnythingInspectInFlight) {
+    if (!options.quiet) toast("检测正在进行，请等待当前帧完成。");
+    return null;
+  }
+  const { form, rules } = locateInspectForm(file);
+  if (!rules.length) return toast("请至少选择一个检测项。");
+  setLocateInput(options.kind || "image", file);
+  setLocateResultBadge(null);
+  setLocateInspectControlsBusy(true);
+  setBusy(button, true);
+  try {
+    const result = await api("/api/locateanything/inspect", { method: "POST", body: form });
+    renderLocateResult(result);
+    if (!options.quiet) toast(result.overall_pass ? "检测通过。" : "检测不通过，请复核。");
+    return result;
+  } catch (error) {
+    const result = { ok: false, overall_pass: false, error: error.message, items: [], latency_ms: 0 };
+    renderLocateResult(result);
+    if (!options.quiet) toast(`检测失败：${error.message}`);
+    return result;
+  } finally {
+    setBusy(button, false);
+    setLocateInspectControlsBusy(false);
+  }
+}
+
+async function runLocateImage(button) {
+  if (state.locateAnythingInspectInFlight) return toast("检测正在进行，请等待当前帧完成。");
+  return runLocateInspectWithFile($("locateImageFile")?.files?.[0], button, { kind: "image" });
+}
+
+function setLocateCameraPreviewActive(active) {
+  const video = $("locateCameraVideo");
+  const empty = $("locateSourceEmpty");
+  if (!video || !empty) return;
+  video.style.display = active ? "block" : "none";
+  empty.style.display = active ? "none" : "grid";
+}
+
+function stopLocateCameraStream() {
+  state.locateCamera.detecting = false;
+  state.locateCamera.inFlight = false;
+  for (const track of state.locateCamera.stream?.getTracks?.() || []) track.stop();
+  state.locateCamera.stream = null;
+  const video = $("locateCameraVideo");
+  if (video) video.srcObject = null;
+  setLocateCameraPreviewActive(false);
+  $("startLocateCameraLoop")?.classList.remove("hidden");
+  $("stopLocateCameraLoop")?.classList.add("hidden");
+}
+
+function renderLocateCameraMenu() {
+  const devices = state.locateCamera.devices || [];
+  const options = devices.length
+    ? devices.map((device, index) => ({
+        value: device.deviceId,
+        label: device.label || `摄像头 ${index + 1}`,
+        meta: device.label ? "可用" : "授权后显示名称",
+      }))
+    : [{ value: "", label: "未检测到摄像头", meta: "可直接用图片检测", disabled: true }];
+  state.locateCamera.selectedDeviceId = renderCustomMenu("locateCameraMenu", options, state.locateCamera.selectedDeviceId, (value) => {
+    state.locateCamera.selectedDeviceId = value;
+    if (value) startLocateCamera(value);
+  });
+}
+
+async function refreshLocateCameraDevices() {
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    state.locateCamera.devices = [];
+    renderLocateCameraMenu();
+    toast("当前浏览器不支持摄像头枚举。");
+    return [];
+  }
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  state.locateCamera.devices = devices.filter((device) => device.kind === "videoinput");
+  if (!state.locateCamera.selectedDeviceId && state.locateCamera.devices.length) {
+    state.locateCamera.selectedDeviceId = state.locateCamera.devices[0].deviceId;
+  }
+  renderLocateCameraMenu();
+  return state.locateCamera.devices;
+}
+
+async function startLocateCamera(deviceId = state.locateCamera.selectedDeviceId) {
+  if (state.locateCamera.starting) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast("当前浏览器不支持摄像头。");
+    return;
+  }
+  state.locateCamera.starting = true;
+  try {
+    stopLocateCameraStream();
+    const videoConstraints = deviceId ? { deviceId: { exact: deviceId } } : true;
+    const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+    state.locateCamera.stream = stream;
+    const video = $("locateCameraVideo");
+    video.srcObject = stream;
+    await video.play();
+    const track = stream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    if (settings.deviceId) state.locateCamera.selectedDeviceId = settings.deviceId;
+    await refreshLocateCameraDevices();
+    setLocateInput("camera");
+    setLocateCameraPreviewActive(true);
+  } catch (error) {
+    stopLocateCameraStream();
+    toast(`摄像头不可用：${error.message}`);
+  } finally {
+    state.locateCamera.starting = false;
+  }
+}
+
+async function captureLocateCameraFrame() {
+  if (!state.locateCamera.stream) await startLocateCamera();
+  const video = $("locateCameraVideo");
+  if (!state.locateCamera.stream || !video.videoWidth || !video.videoHeight) {
+    throw new Error("摄像头画面尚未准备好");
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("摄像头采样失败"));
+        return;
+      }
+      resolve(new File([blob], `locate_camera_${Date.now()}.jpg`, { type: "image/jpeg" }));
+    }, "image/jpeg", 0.9);
+  });
+}
+
+async function runLocateCameraOnce(button = null, options = {}) {
+  if (state.locateAnythingInspectInFlight) {
+    if (!options.quiet) toast("检测正在进行，请等待当前帧完成。");
+    return null;
+  }
+  const file = await captureLocateCameraFrame();
+  state.locateCamera.frameCount += 1;
+  return runLocateInspectWithFile(file, button, { kind: "camera", quiet: options.quiet });
+}
+
+function locateCameraSampleDelayMs() {
+  const input = $("locateCameraSampleSeconds");
+  const value = Number.parseFloat(input?.value || "");
+  const sampleSeconds = Math.min(2, Math.max(0.5, Number.isFinite(value) ? value : 1));
+  if (input && input.value !== String(sampleSeconds)) input.value = String(sampleSeconds);
+  return Math.round(sampleSeconds * 1000);
+}
+
+async function locateCameraLoop() {
+  if (!state.locateCamera.detecting) return;
+  if (state.locateAnythingInspectInFlight) {
+    setTimeout(locateCameraLoop, locateCameraSampleDelayMs());
+    return;
+  }
+  state.locateCamera.inFlight = true;
+  try {
+    await runLocateCameraOnce(null, { quiet: true });
+  } catch (error) {
+    renderLocateResult({ ok: false, overall_pass: false, error: error.message, items: [], latency_ms: 0 });
+  } finally {
+    state.locateCamera.inFlight = false;
+    if (state.locateCamera.detecting) setTimeout(locateCameraLoop, locateCameraSampleDelayMs());
+  }
+}
+
+async function startLocateCameraLoop(button) {
+  if (state.locateAnythingInspectInFlight) return toast("检测正在进行，请等待当前帧完成。");
+  if (!selectedLocateRules().length) return toast("请至少选择一个检测项。");
+  setBusy(button, true);
+  try {
+    if (!state.locateCamera.stream) await startLocateCamera();
+    if (!state.locateCamera.stream) return;
+    state.locateCamera.detecting = true;
+    $("startLocateCameraLoop")?.classList.add("hidden");
+    $("stopLocateCameraLoop")?.classList.remove("hidden");
+    locateCameraLoop();
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function stopLocateCameraLoop() {
+  state.locateCamera.detecting = false;
+  $("startLocateCameraLoop")?.classList.remove("hidden");
+  $("stopLocateCameraLoop")?.classList.add("hidden");
+}
+
+async function onLocateViewEntry() {
+  await refreshLocateSources();
+  await checkLocateStatus(null, { quiet: true });
+  renderLocateCameraMenu();
+}
+
+function dataAnalysisStatusLabel(value) {
+  return {
+    same: "一致",
+    different: "有差异",
+    completed: "已定位",
+    failed: "定位失败",
+    unavailable: "服务不可用",
+  }[value] || value || "未定位";
+}
+
+function dataAnalysisAiSummaryText(summary = {}) {
+  const stateText = summary.passed ? "通过" : "不通过";
+  const present = Number(summary.present_count || 0);
+  const missing = Number(summary.missing_count || 0);
+  const mismatch = Number(summary.count_mismatch_count || 0);
+  return `${stateText} · 命中 ${present} · 缺失 ${missing}${mismatch ? ` · 数量 ${mismatch}` : ""}`;
+}
+
+function dataAnalysisLocateSummaryText(record = {}) {
+  const latest = record.latest_locateanything_run || {};
+  if (!record.locateanything_run_count) return "未定位";
+  if (latest.status === "completed") {
+    return `${latest.overall_pass ? "通过" : "不通过"} · ${Number(latest.box_count || 0)} 框 · ${latest.latency_ms || 0} ms`;
+  }
+  return latest.error || dataAnalysisStatusLabel(latest.status);
+}
+
+function latestDataAnalysisRun(record = {}) {
+  const runs = Array.isArray(record.locateanything_runs) ? record.locateanything_runs.filter((item) => item && typeof item === "object") : [];
+  if (runs.length) return runs[runs.length - 1];
+  return record.latest_locateanything_run && typeof record.latest_locateanything_run === "object" ? record.latest_locateanything_run : {};
+}
+
+function dataAnalysisAiImageUrl(record = {}) {
+  const result = record.ai_detection_result && typeof record.ai_detection_result === "object" ? record.ai_detection_result : {};
+  return result.annotated_url || result.preview_url || result.output_url || record.image_url || record.source_image?.url || "";
+}
+
+function dataAnalysisLocateImageUrl(record = {}, latestRun = latestDataAnalysisRun(record)) {
+  const listLatest = record.latest_locateanything_run && typeof record.latest_locateanything_run === "object" ? record.latest_locateanything_run : {};
+  return latestRun.overlay_url || latestRun.preview_url || listLatest.overlay_url || "";
+}
+
+function dataAnalysisComparisonText(summary = {}) {
+  const parts = [dataAnalysisStatusLabel(summary.status)];
+  const differenceCount = Number(summary.difference_count);
+  if (Number.isFinite(differenceCount) && summary.status) parts.push(`差异 ${differenceCount}`);
+  return parts.join(" · ");
+}
+
+function dataAnalysisRunSummaryText(run = {}) {
+  if (!run.run_id) return "未定位";
+  if (run.status === "completed") {
+    return `${run.overall_pass ? "通过" : "不通过"} · ${Number(run.box_count || 0)} 框 · ${Number(run.latency_ms || 0)} ms`;
+  }
+  return run.error || dataAnalysisStatusLabel(run.status);
+}
+
+function dataAnalysisLocatePlaceholder(run = {}) {
+  if (!run.run_id) return "尚未运行 LocateAnything";
+  if (run.status === "completed") return "本次定位未生成框选图";
+  return run.error || dataAnalysisStatusLabel(run.status);
+}
+
+function renderDataAnalysisMetric(label, value, options = {}) {
+  const className = options.className ? ` ${escapeAttr(options.className)}` : "";
+  return `
+    <div>
+      <label>${escapeHtml(label)}</label>
+      <strong class="${className.trim()}">${escapeHtml(value || "-")}</strong>
+    </div>
+  `;
+}
+
+function renderDataAnalysisImagePanel(title, url, placeholder, rows = [], token = "") {
+  const media = url
+    ? `<img src="${escapeAttr(cacheBustedUrl(url, token || uniqueClientToken(title)))}" alt="${escapeAttr(title)}" />`
+    : `<div class="analysis-compare-empty">${escapeHtml(placeholder)}</div>`;
+  const meta = rows
+    .filter((row) => row && row.value !== undefined && row.value !== null && String(row.value).trim() !== "")
+    .map((row) => `<li><span>${escapeHtml(row.label)}</span><strong>${escapeHtml(row.value)}</strong></li>`)
+    .join("");
+  return `
+    <section class="analysis-compare-card">
+      <div class="analysis-compare-card-head">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="pill ${url ? "ok" : "neutral"}">${url ? "图像可用" : "无图像"}</span>
+      </div>
+      <div class="analysis-compare-frame">${media}</div>
+      <ul class="analysis-compare-meta">${meta}</ul>
+    </section>
+  `;
+}
+
+function renderDataAnalysisDifferences(summary = {}) {
+  const differences = Array.isArray(summary.differences) ? summary.differences : [];
+  if (!differences.length) return "";
+  return `
+    <div class="data-analysis-diff-list">
+      <strong>差异明细</strong>
+      <div>
+        ${differences
+          .slice(0, 6)
+          .map((item) => {
+            const delta = Number(item.delta || 0);
+            const deltaText = delta > 0 ? `+${delta}` : String(delta);
+            return `
+              <span>
+                ${escapeHtml(item.label || item.accessory_id || "未命名")}
+                <small>AI ${Number(item.ai_count || 0)} / LA ${Number(item.locateanything_count || 0)} / ${escapeHtml(deltaText)}</small>
+              </span>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function dataAnalysisCompareClass(summary = {}) {
+  if (summary.status === "same") return "ok";
+  if (summary.status === "different") return "warn";
+  if (summary.status) return "fail";
+  return "neutral";
+}
+
+function dataAnalysisQueryPath() {
+  const params = new URLSearchParams({ limit: "200" });
+  if (state.dataAnalysis.selectedTaskId) params.set("task_id", state.dataAnalysis.selectedTaskId);
+  return withAuthScope(`/api/data-analysis/records?${params.toString()}`);
+}
+
+async function refreshDataAnalysisRecords(options = {}) {
+  if (!hasPermission("ai_detection")) return;
+  state.dataAnalysis.loading = true;
+  if (!options.quiet) renderDataAnalysisRecords();
+  try {
+    const result = await api(dataAnalysisQueryPath());
+    state.dataAnalysis.records = result.records || [];
+    state.dataAnalysis.tasks = result.tasks || [];
+    state.dataAnalysis.batchLimit = Number(result.batch_limit || 25);
+    const visibleIds = new Set(state.dataAnalysis.records.map((record) => record.record_id));
+    state.dataAnalysis.selectedRecordIds = new Set([...state.dataAnalysis.selectedRecordIds].filter((id) => visibleIds.has(id)));
+    renderDataAnalysisTaskFilter();
+    renderDataAnalysisRecords();
+  } catch (error) {
+    toast(`读取数据分析失败：${error.message}`);
+  } finally {
+    state.dataAnalysis.loading = false;
+    renderDataAnalysisRecords();
+  }
+}
+
+function renderDataAnalysisTaskFilter() {
+  const select = $("dataAnalysisTaskFilter");
+  if (!select) return;
+  const current = state.dataAnalysis.selectedTaskId || "";
+  const options = [
+    `<option value="">全部任务</option>`,
+    ...state.dataAnalysis.tasks.map((task) => `<option value="${escapeAttr(task.id)}">${escapeHtml(task.name)} (${Number(task.count || 0)})</option>`),
+  ].join("");
+  select.innerHTML = options;
+  select.value = state.dataAnalysis.tasks.some((task) => task.id === current) ? current : "";
+  state.dataAnalysis.selectedTaskId = select.value;
+}
+
+function selectedDataAnalysisRecords() {
+  const selected = state.dataAnalysis.selectedRecordIds;
+  return state.dataAnalysis.records.filter((record) => selected.has(record.record_id));
+}
+
+function renderDataAnalysisRecords() {
+  const list = $("dataAnalysisList");
+  if (!list) return;
+  const records = state.dataAnalysis.records || [];
+  const selectedCount = selectedDataAnalysisRecords().length;
+  const allVisibleSelected = Boolean(records.length) && records.every((record) => state.dataAnalysis.selectedRecordIds.has(record.record_id));
+  if ($("dataAnalysisSelectedCount")) $("dataAnalysisSelectedCount").textContent = `${selectedCount} 已选`;
+  if ($("dataAnalysisProgress")) $("dataAnalysisProgress").textContent = state.dataAnalysis.progressText || (state.dataAnalysis.running ? "定位中" : "");
+  if ($("dataAnalysisSelectAll")) {
+    $("dataAnalysisSelectAll").checked = allVisibleSelected;
+    $("dataAnalysisSelectAll").indeterminate = selectedCount > 0 && !allVisibleSelected;
+  }
+  ["runDataAnalysisSelected", "runDataAnalysisVisible"].forEach((id) => {
+    const button = $(id);
+    if (!button) return;
+    button.disabled = state.dataAnalysis.running || (id === "runDataAnalysisSelected" ? selectedCount === 0 : records.length === 0);
+  });
+  if (state.dataAnalysis.loading && !records.length) {
+    list.innerHTML = `<tr><td colspan="8">正在读取数据分析记录...</td></tr>`;
+    return;
+  }
+  if (!records.length) {
+    list.innerHTML = `<tr><td colspan="8">暂无 AI 检测记录。完成一次 AI 检测后会自动出现在这里。</td></tr>`;
+    return;
+  }
+  list.innerHTML = records
+    .map((record) => {
+      const task = record.task || {};
+      const comparison = record.comparison_summary || {};
+      const latest = record.latest_locateanything_run || {};
+      const checked = state.dataAnalysis.selectedRecordIds.has(record.record_id) ? "checked" : "";
+      const imageUrl = record.image_url || record.source_image?.url || latest.overlay_url || "";
+      const compareStatus = comparison.status || latest.status || "";
+      return `
+        <tr data-analysis-record="${escapeAttr(record.record_id)}">
+          <td class="select-cell"><input type="checkbox" data-analysis-select ${checked} aria-label="选择记录" /></td>
+          <td>
+            <button class="analysis-thumb" type="button" data-preview-url="${escapeAttr(imageUrl)}" ${imageUrl ? "" : "disabled"}>
+              ${imageUrl ? `<img src="${escapeAttr(imageUrl)}?v=${escapeAttr(record.updated_at || record.created_at || "")}" alt="" />` : `<span>无图</span>`}
+            </button>
+          </td>
+          <td>
+            <strong>${escapeHtml(record.source_image?.filename || record.record_id)}</strong>
+            <span>${escapeHtml(recordAuditText(record, { includeUpdated: true }))}</span>
+          </td>
+          <td>${escapeHtml(task.name || task.id || "AI 检测")}</td>
+          <td>${escapeHtml(dataAnalysisAiSummaryText(record.ai_summary || {}))}</td>
+          <td>${escapeHtml(dataAnalysisLocateSummaryText(record))}</td>
+          <td><span class="status-dot ${dataAnalysisCompareClass(comparison)}">${escapeHtml(dataAnalysisStatusLabel(compareStatus))}</span></td>
+          <td class="row-actions">
+            <button class="mini-secondary" type="button" data-analysis-run>定位</button>
+            <button class="mini-secondary" type="button" data-analysis-detail>详情</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+  list.querySelectorAll("[data-analysis-select]").forEach((checkbox) => {
+    checkbox.addEventListener("change", (event) => {
+      const recordId = event.currentTarget.closest("[data-analysis-record]")?.dataset.analysisRecord || "";
+      if (!recordId) return;
+      if (event.currentTarget.checked) state.dataAnalysis.selectedRecordIds.add(recordId);
+      else state.dataAnalysis.selectedRecordIds.delete(recordId);
+      renderDataAnalysisRecords();
+    });
+  });
+  list.querySelectorAll("[data-analysis-run]").forEach((button) => {
+    button.addEventListener("click", () => runDataAnalysisLocate([button.closest("[data-analysis-record]")?.dataset.analysisRecord].filter(Boolean), button));
+  });
+  list.querySelectorAll("[data-analysis-detail]").forEach((button) => {
+    button.addEventListener("click", () => openDataAnalysisDetail(button.closest("[data-analysis-record]")?.dataset.analysisRecord || ""));
+  });
+  bindImagePreviewTriggers(list);
+}
+
+async function runDataAnalysisLocate(recordIds, button = null) {
+  const ids = [...new Set((recordIds || []).filter(Boolean))];
+  if (!ids.length) return toast("请先选择记录。");
+  if (ids.length > state.dataAnalysis.batchLimit) return toast(`一次最多处理 ${state.dataAnalysis.batchLimit} 条。`);
+  state.dataAnalysis.running = true;
+  setBusy(button, true);
+  try {
+    for (const [index, recordId] of ids.entries()) {
+      state.dataAnalysis.progressText = `定位 ${index + 1}/${ids.length}`;
+      renderDataAnalysisRecords();
+      await api(`/api/data-analysis/records/${encodeURIComponent(recordId)}/locate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    }
+    state.dataAnalysis.progressText = "";
+    await refreshDataAnalysisRecords({ quiet: true });
+    toast(ids.length > 1 ? "批量定位完成。" : "定位完成。");
+  } catch (error) {
+    toast(`定位失败：${error.message}`);
+  } finally {
+    state.dataAnalysis.running = false;
+    state.dataAnalysis.progressText = "";
+    setBusy(button, false);
+    renderDataAnalysisRecords();
+  }
+}
+
+async function openDataAnalysisDetail(recordId) {
+  if (!recordId) return;
+  try {
+    const result = await api(`/api/data-analysis/records/${encodeURIComponent(recordId)}`);
+    const record = result.record || result;
+    const latestRun = latestDataAnalysisRun(record);
+    const comparison = record.comparison_summary || {};
+    const aiSummary = record.ai_summary || {};
+    const aiImageUrl = dataAnalysisAiImageUrl(record);
+    const locateImageUrl = dataAnalysisLocateImageUrl(record, latestRun);
+    const locateRows = [
+      { label: "状态", value: dataAnalysisRunSummaryText(latestRun) },
+      { label: "运行", value: latestRun.created_at ? formatRecordTime(latestRun.created_at) : "未运行" },
+    ];
+    if (isAdmin()) locateRows.push({ label: "诊断", value: latestRun.diagnostic_url || "-" });
+    const filename = record.source_image?.filename || record.record_id || "数据分析记录";
+    if ($("dataAnalysisDetailTitle")) $("dataAnalysisDetailTitle").textContent = filename;
+    if ($("dataAnalysisDetailSummary")) {
+      $("dataAnalysisDetailSummary").innerHTML = [
+        renderDataAnalysisMetric("任务", record.task?.name || record.task?.id || "AI 检测"),
+        renderDataAnalysisMetric("AI 检测", dataAnalysisAiSummaryText(aiSummary)),
+        renderDataAnalysisMetric("LocateAnything", dataAnalysisRunSummaryText(latestRun)),
+        renderDataAnalysisMetric("对比", dataAnalysisComparisonText(comparison), { className: `status-text ${dataAnalysisCompareClass(comparison)}` }),
+      ].join("");
+    }
+    if ($("dataAnalysisDetailMedia")) {
+      $("dataAnalysisDetailMedia").innerHTML = `
+        <div class="analysis-compare-grid">
+          ${renderDataAnalysisImagePanel(
+            "AI 检测结果",
+            aiImageUrl,
+            "AI 检测图未保存",
+            [
+              { label: "状态", value: dataAnalysisAiSummaryText(aiSummary) },
+              { label: "检测数量", value: Number(aiSummary.detection_count || 0) },
+              { label: "请求", value: record.ai_detection_result?.request_id || "-" },
+            ],
+            record.updated_at || record.created_at || record.record_id,
+          )}
+          ${renderDataAnalysisImagePanel(
+            "LocateAnything 框选图",
+            locateImageUrl,
+            dataAnalysisLocatePlaceholder(latestRun),
+            locateRows,
+            latestRun.run_id || record.updated_at || record.record_id,
+          )}
+        </div>
+        ${renderDataAnalysisDifferences(comparison)}
+      `;
+    }
+    if ($("dataAnalysisDetailRaw")) {
+      $("dataAnalysisDetailRaw").innerHTML = isAdmin()
+        ? `
+          <details class="data-analysis-raw-detail">
+            <summary>原始记录</summary>
+            <pre id="dataAnalysisDetailJson" class="debug-pre"></pre>
+          </details>
+        `
+        : "";
+    }
+    if (isAdmin() && $("dataAnalysisDetailJson")) $("dataAnalysisDetailJson").textContent = JSON.stringify(record, null, 2);
+    $("dataAnalysisDetailModal")?.classList.add("visible");
+    $("dataAnalysisDetailModal")?.setAttribute("aria-hidden", "false");
+  } catch (error) {
+    toast(`读取详情失败：${error.message}`);
+  }
+}
+
+function closeDataAnalysisDetailModal() {
+  $("dataAnalysisDetailModal")?.classList.remove("visible");
+  $("dataAnalysisDetailModal")?.setAttribute("aria-hidden", "true");
 }
 
 function renderRules() {
@@ -1080,11 +3290,12 @@ function renderAccessories(items) {
     const row = document.createElement("div");
     row.className = "accessory-item";
     const material = item.material_type === "text" ? "文字类" : "物品类";
-    const files = item.source_files?.length || 0;
+    const files = item.source_file_count ?? item.source_files?.length ?? 0;
     const size = formatPhysicalSize(item.physical_size);
     row.innerHTML = `
       <div>
         <strong>${escapeHtml(zhLabel(item.name))}</strong>
+        <span>${escapeHtml(recordAuditText(item))}</span>
         <span>${material} · 类别 ${item.class_id} · ${files} 个素材 · ${size} · ${STATUS_ZH[item.status] || item.status} · ${accessoryAiProfileText(item)}</span>
       </div>
       <button class="mini-secondary" data-view-accessory="${escapeAttr(item.id)}" type="button">查看</button>
@@ -1093,6 +3304,8 @@ function renderAccessories(items) {
     list.appendChild(row);
   }
   renderTrainingAccessories();
+  renderAiAccessoryConfig();
+  renderPipelineAddLibrary();
   bindAccessoryViews();
   bindAccessoryDeletes();
 }
@@ -1106,11 +3319,17 @@ function formatPhysicalSize(size) {
 
 function bindAccessoryViews() {
   document.querySelectorAll("[data-view-accessory]").forEach((button) => {
-    button.addEventListener("click", () => openAccessoryDetail(button.dataset.viewAccessory));
+    button.addEventListener("click", () => openAccessoryDetail(button.dataset.viewAccessory, button));
   });
 }
 
-async function openAccessoryDetail(accessoryId) {
+async function openAccessoryDetail(accessoryId, trigger = null) {
+  setBusy(trigger, true);
+  $("accessoryDetailTitle").textContent = "加载配件素材";
+  $("accessoryDetailSummary").innerHTML = `<span>正在读取素材详情...</span>`;
+  $("accessoryDetailGrid").innerHTML = `<div class="job-empty">正在加载素材预览...</div>`;
+  $("accessoryDetailModal").classList.add("visible");
+  $("accessoryDetailModal").setAttribute("aria-hidden", "false");
   try {
     const result = await api(`/api/accessories/${encodeURIComponent(accessoryId)}/detail`);
     const item = result.item || {};
@@ -1120,6 +3339,7 @@ async function openAccessoryDetail(accessoryId) {
     $("accessoryDetailTitle").textContent = zhLabel(item.name || "配件素材");
     $("accessoryDetailSummary").innerHTML = `
       <strong>${escapeHtml(zhLabel(item.name || "配件"))} · ${item.material_type === "text" ? "文字类" : "物品类"}</strong>
+      <span>${escapeHtml(recordAuditText(item, { includeUpdated: true }))}</span>
       <span>这里展示该配件当前可用的原始素材、规范化图片以及多角度视图。</span>
       <span>尺寸：${escapeHtml(formatPhysicalSize(item.physical_size))}</span>
       <span>${escapeHtml(accessoryAiProfileText(item))}${item.ai_profile_status?.message ? `：${escapeHtml(item.ai_profile_status.message)}` : ""}</span>
@@ -1134,8 +3354,12 @@ async function openAccessoryDetail(accessoryId) {
       const assetLabel = userJobLabel(asset.label || `素材 ${index + 1}`);
       card.innerHTML = `
         <button class="preview-open" type="button" data-preview-url="${escapeAttr(asset.url)}">
-          <img src="${escapeAttr(asset.url)}?t=${Date.now()}" alt="${escapeHtml(assetLabel)}" />
+          <img src="${escapeAttr(asset.url)}" alt="${escapeHtml(assetLabel)}" loading="lazy" />
         </button>
+        <figcaption>
+          <strong>${escapeHtml(assetLabel)}</strong>
+          <span>${escapeHtml(recordAuditText(asset, { owner: false }))}</span>
+        </figcaption>
         <button class="asset-ai-select" type="button" data-set-ai-reference="${escapeAttr(asset.source_path)}" aria-label="设为 AI 素材"></button>
         ${asset.deletable ? `<button class="asset-delete" type="button" data-delete-accessory-file="${escapeAttr(asset.source_path)}" aria-label="删除照片">×</button>` : ""}
       `;
@@ -1152,10 +3376,10 @@ async function openAccessoryDetail(accessoryId) {
     bindAccessoryFileDeletes(grid);
     bindAccessoryAiReferenceButtons(grid);
     bindAccessoryFileAdd(grid);
-    $("accessoryDetailModal").classList.add("visible");
-    $("accessoryDetailModal").setAttribute("aria-hidden", "false");
   } catch (error) {
     toast(`打开配件失败：${error.message}`);
+  } finally {
+    setBusy(trigger, false);
   }
 }
 
@@ -1418,15 +3642,335 @@ function selectedModel() {
   return [...state.models, ...state.specializedModels].find((item) => item.id === modelId) || null;
 }
 
+function currentAiTask() {
+  return state.aiTasks.find((item) => item.id === state.selectedAiTaskId) || null;
+}
+
+function selectedAiModelId() {
+  const task = currentAiTask();
+  if (!task?.id) return "";
+  return task.model_id || `${AI_TASK_MODEL_PREFIX}${task.id}`;
+}
+
+function selectedAiModel() {
+  const modelId = selectedAiModelId();
+  return [...state.specializedModels, ...state.models].find((item) => item.id === modelId) || {
+    id: modelId,
+    label: "AI 检测",
+    variant: "ai_detection",
+    is_ai_detection: true,
+  };
+}
+
+function currentAiTaskRequiredCounts() {
+  return currentAiTask()?.required_accessory_counts || {};
+}
+
+function renderAiInspectStatus() {
+  const badge = $("aiInspectStatus");
+  const text = $("aiInspectStatusText");
+  if (!badge) return;
+  const config = state.aiConfig || {};
+  const task = currentAiTask();
+  badge.textContent = aiStatusText(config.status);
+  badge.className = `pill ${config.status === "ready" ? "ok" : config.status === "missing_api_key" ? "neutral" : "fail"}`;
+  const taskSuffix = task?.id ? `当前模型 ID：${selectedAiModelId()}` : "请先在训练流水线创建并选择 AI 检测任务。";
+  if (text) {
+    if (config.status === "ready") {
+      text.textContent = `${config.model || "Gemini"} 已配置，AI 检测任务会直接调用当前 Provider。${taskSuffix}`;
+    } else if (config.status === "missing_api_key") {
+      text.textContent = `缺少 API Key；检测会显示结构化未就绪结果，不会静默通过。${taskSuffix}`;
+    } else {
+      text.textContent = `AI 检测未就绪；可在规则设置里配置 Gemini。${taskSuffix}`;
+    }
+    if ((task?.missing_accessory_ids || []).length) {
+      text.textContent += ` 当前任务有 ${task.missing_accessory_ids.length} 个配件已不在配件库中。`;
+    }
+  }
+}
+
+function setAiTaskDraftFromTask(task) {
+  state.aiTaskDraftCounts = {};
+  const counts = task?.required_accessory_counts || {};
+  for (const [itemId, count] of Object.entries(counts)) {
+    state.aiTaskDraftCounts[itemId] = Math.max(1, Number(count || 1));
+  }
+}
+
+function renderAiAccessoryConfig() {
+  const wrap = $("aiAccessoryConfig");
+  if (!wrap) return;
+  const selectedCounts = currentAiTaskRequiredCounts();
+  if (!state.accessories.length) {
+    wrap.innerHTML = `<p class="hint">当前配件库为空，请先在配件管理中添加配件。</p>`;
+    return;
+  }
+  if (!currentAiTask()) {
+    wrap.innerHTML = `<p class="hint">AI 检测任务由训练流水线创建；当前还没有可用任务。</p>`;
+    return;
+  }
+  wrap.innerHTML = state.accessories
+    .map((item) => {
+      const itemId = String(item.id || "");
+      const checked = selectedCounts[itemId] !== undefined;
+      const count = Math.max(1, Number(selectedCounts[itemId] || 1));
+      const material = item.material_type === "text" ? "文本/说明书" : "物体";
+      return `
+        <label class="ai-accessory-row">
+          <input type="checkbox" data-ai-accessory-id="${escapeAttr(itemId)}" ${checked ? "checked" : ""} disabled />
+          <span class="ai-accessory-copy">
+            <strong>${escapeHtml(item.name || item.label || itemId)}</strong>
+            <small>${escapeHtml(material)} · ${escapeHtml(item.status || "active")}</small>
+          </span>
+          <input type="number" min="1" max="99" value="${count}" data-ai-accessory-count="${escapeAttr(itemId)}" disabled />
+        </label>
+      `;
+    })
+    .join("");
+}
+
+function renderAiTasks() {
+  const options = state.aiTasks.length
+    ? state.aiTasks.map((task) => ({
+    value: task.id,
+    label: task.name || task.accessory_names?.join(" + ") || task.id,
+    meta: `${task.source === "pipeline" ? "流水线" : "已建档"} · ${task.accessory_count || task.selected_accessory_ids?.length || 0} 类配件`,
+    }))
+    : [{ value: "", label: "暂无流水线 AI 任务", meta: "请先在训练流水线创建", disabled: true }];
+  if (state.selectedAiTaskId && !state.aiTasks.some((item) => item.id === state.selectedAiTaskId)) {
+    state.selectedAiTaskId = "";
+  }
+  if (!state.selectedAiTaskId && state.aiTasks.length) {
+    state.selectedAiTaskId = state.aiTasks[0].id;
+  }
+  const selected = renderCustomMenu("aiTaskMenu", options, state.selectedAiTaskId, (value) => {
+    state.selectedAiTaskId = value;
+    setAiTaskDraftFromTask(currentAiTask());
+    renderAiTasks();
+  });
+  state.selectedAiTaskId = selected || state.selectedAiTaskId || "";
+  const task = currentAiTask();
+  if ($("aiTaskName")) $("aiTaskName").value = task?.name || "";
+  if ($("deleteAiTask")) $("deleteAiTask").disabled = true;
+  renderAiAccessoryConfig();
+  renderAiInspectStatus();
+}
+
+function readAiTaskForm() {
+  const accessories = [];
+  document.querySelectorAll("[data-ai-accessory-id]").forEach((input) => {
+    if (!input.checked) return;
+    const itemId = input.dataset.aiAccessoryId;
+    const countInput = document.querySelector(`[data-ai-accessory-count="${CSS.escape(itemId)}"]`);
+    accessories.push({
+      accessory_id: itemId,
+      required_count: Math.max(1, Number(countInput?.value || 1)),
+    });
+  });
+  return {
+    name: $("aiTaskName")?.value.trim() || currentAiTask()?.name || "",
+    accessories,
+  };
+}
+
+async function refreshAiTasks(selectedId = state.selectedAiTaskId) {
+  const result = await api(withAuthScope("/api/ai/tasks"));
+  state.aiTasks = result.tasks || [];
+  state.selectedAiTaskId = selectedId || result.selected_task_id || state.aiTasks[0]?.id || "";
+  setAiTaskDraftFromTask(currentAiTask());
+  renderAiTasks();
+}
+
+function startNewAiTask() {
+  state.selectedAiTaskId = "__new__";
+  state.aiTaskDraftCounts = {};
+  if ($("aiTaskName")) $("aiTaskName").value = "";
+  renderAiTasks();
+  $("aiTaskName")?.focus();
+}
+
+async function saveCurrentAiTask(button) {
+  const payload = readAiTaskForm();
+  if (!payload.accessories.length) return toast("请至少选择一个配件。");
+  const isUpdate = state.selectedAiTaskId && state.selectedAiTaskId !== "__new__";
+  setBusy(button, true);
+  try {
+    const result = await api(isUpdate ? `/api/ai/tasks/${encodeURIComponent(state.selectedAiTaskId)}` : "/api/ai/tasks", {
+      method: isUpdate ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    state.aiTasks = result.tasks || [];
+    state.selectedAiTaskId = result.task?.id || result.selected_task_id || "";
+    setAiTaskDraftFromTask(currentAiTask());
+    renderAiTasks();
+    await refreshStatusModels();
+    toast("AI 检测任务已保存。");
+  } catch (error) {
+    toast(`保存 AI 任务失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function deleteCurrentAiTask(button) {
+  const task = currentAiTask();
+  if (!task) return toast("当前没有可删除的 AI 任务。");
+  setBusy(button, true);
+  try {
+    const result = await api(`/api/ai/tasks/${encodeURIComponent(task.id)}`, { method: "DELETE" });
+    state.aiTasks = result.tasks || [];
+    state.selectedAiTaskId = result.selected_task_id || state.aiTasks[0]?.id || "";
+    setAiTaskDraftFromTask(currentAiTask());
+    renderAiTasks();
+    await refreshStatusModels();
+    toast("AI 检测任务已删除。");
+  } catch (error) {
+    toast(`删除 AI 任务失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function runAiImageDetection(button) {
+  const file = $("aiImageFile").files[0];
+  if (!file) return toast("请先选择一张图片。");
+  const modelId = selectedAiModelId();
+  if (!modelId) return toast("请先在训练流水线创建并选择 AI 检测任务。");
+  setAiInspectInput("image", file);
+  setBusy(button, true);
+  startProgress("image", { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue", getModel: selectedAiModel });
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("model_id", modelId);
+    const result = await api("/api/analyze/image", { method: "POST", body: form });
+    renderImageResult(result, {
+      ids: AI_RESULT_IDS,
+      resultKey: "aiLastResult",
+      requiredCounts: currentAiTaskRequiredCounts(),
+      syncFullscreen: false,
+    });
+    if (state.fullscreenMode === "ai") syncInspectFullscreen("ai");
+    finishProgress(true, { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue" });
+    refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
+    toast("AI 图片检测完成。");
+  } catch (error) {
+    finishProgress(false, { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue" });
+    toast(`AI 图片检测失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function runAiVideoDetection(button) {
+  const file = $("aiVideoFile").files[0];
+  if (!file) return toast("请先选择一个视频。");
+  const modelId = selectedAiModelId();
+  if (!modelId) return toast("请先在训练流水线创建并选择 AI 检测任务。");
+  setAiInspectInput("video", file);
+  setBusy(button, true);
+  startProgress("video", { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue", getModel: selectedAiModel });
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("model_id", modelId);
+    const result = await api("/api/analyze/video", { method: "POST", body: form });
+    renderVideoResult(result, {
+      ids: AI_RESULT_IDS,
+      resultKey: "aiLastResult",
+      requiredCounts: currentAiTaskRequiredCounts(),
+      syncFullscreen: false,
+    });
+    if (state.fullscreenMode === "ai") syncInspectFullscreen("ai");
+    finishProgress(true, { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue" });
+    refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
+    toast("AI 视频分析完成。");
+  } catch (error) {
+    finishProgress(false, { ids: AI_PROGRESS_IDS, timerKey: "aiProgressTimer", valueKey: "aiProgressValue" });
+    toast(`AI 视频分析失败：${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function refreshStatusModels() {
+  const status = await api(withAuthScope("/api/status"));
+  state.classes = status.classes;
+  state.aiTasks = status.ai_detection_tasks || state.aiTasks;
+  renderModels(status);
+  return status;
+}
+
 function setInspectInput(kind, file = null) {
   if (state.inspectInput.url) URL.revokeObjectURL(state.inspectInput.url);
   state.inspectInput = { kind, url: file ? URL.createObjectURL(file) : "", fileName: file?.name || "" };
   syncInspectFullscreen();
 }
 
-function syncInspectFullscreen() {
+function setAiInspectInput(kind, file = null) {
+  if (state.aiInspectInput.url) URL.revokeObjectURL(state.aiInspectInput.url);
+  state.aiInspectInput = { kind, url: file ? URL.createObjectURL(file) : "", fileName: file?.name || "" };
+  if (state.fullscreenMode === "ai") syncInspectFullscreen("ai");
+}
+
+function fullscreenModeConfig(mode) {
+  const normalizedMode = ["inspect", "ai", "locate"].includes(mode) ? mode : "inspect";
+  if (normalizedMode === "ai") {
+    return {
+      mode: "ai",
+      title: "AI 全屏检测",
+      captureLabel: "拍照 AI 检测 · Enter",
+      input: state.aiInspectInput,
+      activeInputTab: document.querySelector(".mode-tab[data-ai-tab].active")?.dataset.aiTab || state.aiInspectInput.kind,
+      cameraStream: state.aiCamera.stream,
+      resultPreviewId: "aiPreviewImage",
+      resultBadgeId: "aiResultBadge",
+      decisionTextId: "aiDecisionText",
+      detectionCountId: "aiDetectionCount",
+      passRateId: "aiPassRate",
+      tableId: "aiPartsTable",
+    };
+  }
+  if (normalizedMode === "locate") {
+    return {
+      mode: "locate",
+      title: "Locate Anything 全屏检测",
+      captureLabel: "检测一帧 · Enter",
+      input: state.locateAnythingInput,
+      activeInputTab: state.locateAnythingInput.kind,
+      cameraStream: state.locateCamera.stream,
+      resultPreviewId: "locatePreviewImage",
+      resultBadgeId: "locateOverallResult",
+      decisionTextId: "locateResultStatus",
+      detectionCountId: "locateBoxCount",
+      passRateId: "locateLatencyText",
+      tableId: "locateInspectionItems",
+    };
+  }
+  return {
+    mode: "inspect",
+    title: "VantaLine 全屏检测",
+    captureLabel: "拍照检测 · Enter",
+    input: state.inspectInput,
+    activeInputTab: document.querySelector(".mode-tab[data-tab].active")?.dataset.tab || state.inspectInput.kind,
+    cameraStream: state.camera.stream,
+    resultPreviewId: "previewImage",
+    resultBadgeId: "resultBadge",
+    decisionTextId: "decisionText",
+    detectionCountId: "detectionCount",
+    passRateId: "passRate",
+    tableId: "partsTable",
+  };
+}
+
+function syncInspectFullscreen(mode = state.fullscreenMode || "inspect") {
   const stage = $("inspectFullscreenStage");
   if (!stage) return;
+  const config = fullscreenModeConfig(mode);
+  state.fullscreenMode = config.mode;
+  if ($("fullscreenTitle")) $("fullscreenTitle").textContent = config.title;
+  if ($("fullscreenCaptureCamera")) $("fullscreenCaptureCamera").textContent = config.captureLabel;
   const inputImage = $("fullscreenInputImage");
   const inputVideo = $("fullscreenInputVideo");
   const inputEmpty = $("fullscreenInputEmpty");
@@ -1435,19 +3979,18 @@ function syncInspectFullscreen() {
   inputVideo.pause?.();
   inputVideo.removeAttribute("src");
   inputVideo.srcObject = null;
-  const activeInputTab = document.querySelector(".mode-tab[data-tab].active")?.dataset.tab || state.inspectInput.kind;
-  if (activeInputTab === "camera" && state.camera.stream) {
-    inputVideo.srcObject = state.camera.stream;
+  if (config.activeInputTab === "camera" && config.cameraStream) {
+    inputVideo.srcObject = config.cameraStream;
     inputVideo.controls = false;
     inputVideo.style.display = "block";
     inputVideo.play?.();
     inputEmpty.style.display = "none";
-  } else if (state.inspectInput.kind === "image" && state.inspectInput.url) {
-    inputImage.src = state.inspectInput.url;
+  } else if (config.input.kind === "image" && config.input.url) {
+    inputImage.src = config.input.url;
     inputImage.style.display = "block";
     inputEmpty.style.display = "none";
-  } else if (state.inspectInput.kind === "video" && state.inspectInput.url) {
-    inputVideo.src = state.inspectInput.url;
+  } else if (config.input.kind === "video" && config.input.url) {
+    inputVideo.src = config.input.url;
     inputVideo.controls = true;
     inputVideo.style.display = "block";
     inputEmpty.style.display = "none";
@@ -1455,7 +3998,7 @@ function syncInspectFullscreen() {
     inputEmpty.style.display = "grid";
   }
 
-  const preview = $("previewImage");
+  const preview = $(config.resultPreviewId);
   const resultImage = $("fullscreenResultImage");
   const resultEmpty = $("fullscreenResultEmpty");
   if (preview?.src && preview.style.display !== "none") {
@@ -1466,16 +4009,22 @@ function syncInspectFullscreen() {
     resultImage.style.display = "none";
     resultEmpty.style.display = "grid";
   }
-  $("fullscreenDecision").textContent = $("resultBadge")?.textContent || "等待输入";
-  $("fullscreenDecisionText").textContent = $("decisionText")?.textContent || "-";
-  $("fullscreenDetectionCount").textContent = $("detectionCount")?.textContent || "-";
-  $("fullscreenPassRate").textContent = $("passRate")?.textContent || "-";
-  $("fullscreenPartsTable").innerHTML = $("partsTable")?.innerHTML || "";
+  $("fullscreenDecision").textContent = $(config.resultBadgeId)?.textContent || "等待输入";
+  $("fullscreenDecisionText").textContent = $(config.decisionTextId)?.textContent || "-";
+  $("fullscreenDetectionCount").textContent = $(config.detectionCountId)?.textContent || "-";
+  $("fullscreenPassRate").textContent = $(config.passRateId)?.textContent || "-";
+  $("fullscreenPartsTable").innerHTML = $(config.tableId)?.innerHTML || "";
 }
 
-async function openInspectFullscreen() {
+function runFullscreenCapture(button) {
+  if (state.fullscreenMode === "ai") return runAiCameraDetection(button);
+  if (state.fullscreenMode === "locate") return runLocateCameraOnce(button);
+  return runCameraDetection(button);
+}
+
+async function openInspectFullscreen(mode = "inspect") {
   const stage = $("inspectFullscreenStage");
-  syncInspectFullscreen();
+  syncInspectFullscreen(mode);
   stage.classList.add("active");
   stage.setAttribute("aria-hidden", "false");
   try {
@@ -1503,11 +4052,17 @@ function handleFullscreenChange() {
 }
 
 async function loadInitial() {
-  const status = await api("/api/status");
-  const config = await api("/api/config");
-  const aiConfig = await api("/api/ai/config");
-  const accessories = await api("/api/accessories");
-  const trainingPlan = await api("/api/training/plan");
+  const aiConfigRequest = hasPermission("ai_config") ? api("/api/ai/config") : Promise.resolve({});
+  const locateConfigRequest = hasPermission("locate_config") ? api("/api/locateanything/config") : Promise.resolve({});
+  const [status, config, aiConfig, locateConfig, aiTasks, accessories, trainingPlan] = await Promise.all([
+    api(withAuthScope("/api/status")),
+    api(withAuthScope("/api/config/summary")),
+    aiConfigRequest,
+    locateConfigRequest,
+    api(withAuthScope("/api/ai/tasks")),
+    api(withAuthScope("/api/accessories")),
+    api(withAuthScope("/api/training/plan")),
+  ]);
   state.config = config;
   state.aiConfig = aiConfig;
   state.classes = status.classes;
@@ -1515,19 +4070,39 @@ async function loadInitial() {
   $("serviceState").className = `pill ${status.service === "running" ? "ok" : "fail"}`;
   $("modelState").textContent = status.model_exists ? "模型已加载" : "模型缺失";
   $("modelState").className = `pill ${status.model_exists ? "ok" : "fail"}`;
+  if ($("homeServiceState")) {
+    $("homeServiceState").textContent = $("serviceState").textContent;
+    $("homeServiceState").className = $("serviceState").className;
+  }
+  if ($("homeModelState")) {
+    $("homeModelState").textContent = $("modelState").textContent;
+    $("homeModelState").className = $("modelState").className;
+  }
+  renderWindowsWorkerStatus(status.training_execution?.windows_worker || status.windows_worker || {});
   renderModels(status);
   renderAiConfig();
+  renderAiInspectStatus();
+  renderLocateConfig(locateConfig);
+  await refreshLocateSources();
   renderRules();
   renderAccessories(accessories.items);
+  state.aiTasks = aiTasks.tasks || status.ai_detection_tasks || [];
+  state.selectedAiTaskId = aiTasks.selected_task_id || state.aiTasks[0]?.id || "";
+  setAiTaskDraftFromTask(currentAiTask());
+  renderAiTasks();
+  // 标签参考接口在大量参考图时可能耗时十几秒,异步加载避免阻塞其余页面数据。
+  refreshLabelSheetReferences().catch(() => {});
+  refreshWindowsWorkerStatus().catch(() => {});
   renderTrainingPlan(trainingPlan);
-  await refreshTrainingLibrary();
-  await refreshImageJobs();
-  state.imageJobPollTimer = setInterval(refreshImageJobs, 5000);
+  refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
+  refreshTrainingLibrary().catch(() => {});
+  refreshImageJobs().catch(() => {});
+  if (!state.imageJobPollTimer) state.imageJobPollTimer = setInterval(refreshImageJobs, 5000);
 }
 
 async function refreshImageJobs() {
   try {
-    const result = await api("/api/image-jobs");
+    const result = await api(withAuthScope("/api/image-jobs"));
     state.imageJobs = result.items || [];
     renderImageJobs(result);
     syncOpenAccessoryJobProgress();
@@ -1546,19 +4121,31 @@ async function refreshImageJobs() {
   }
 }
 
-async function refreshTrainingLibrary() {
+async function refreshTrainingLibrary(options = {}) {
+  const refreshButton = options.manual ? $("refreshTrainingLibrary") : null;
+  setBusy(refreshButton, true);
   try {
-    const result = await api("/api/training/resources");
+    const [result, status] = await Promise.all([
+      api(withAuthScope("/api/training/resources")),
+      api(withAuthScope("/api/status")),
+    ]);
     state.trainingResources = result;
     renderTrainingLibrary(result);
     renderTrainingDatasetMenu();
     if ($("trainingResourceModal")?.classList.contains("visible") && state.trainingResourceDetail) {
       openTrainingResourceDetail(state.trainingResourceDetail.kind, state.trainingResourceDetail.id);
     }
-    const status = await api("/api/status");
+    state.aiTasks = status.ai_detection_tasks || state.aiTasks;
+    if (state.trainingResources) state.trainingResources.ai_detection_tasks = state.aiTasks;
+    if (state.selectedAiTaskId && !state.aiTasks.some((item) => item.id === state.selectedAiTaskId)) {
+      state.selectedAiTaskId = state.aiTasks[0]?.id || "";
+    }
+    renderAiTasks();
     renderModels(status);
   } catch (error) {
     toast(`刷新训练库失败：${error.message}`);
+  } finally {
+    setBusy(refreshButton, false);
   }
 }
 
@@ -1600,30 +4187,110 @@ function modelRunAccessoryText(group) {
   return names.length ? names.join("、") : ids.length ? ids.join(", ") : "配件信息缺失";
 }
 
+function modelGroupAuditRecord(group) {
+  const records = [group.task, ...(group.models || [])].filter(Boolean);
+  return records.sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0] || {};
+}
+
+const MODEL_LIBRARY_TYPE_OPTIONS = [
+  { value: "all", label: "全部类型", meta: "模型与任务" },
+  { value: "trained", label: "训练模型", meta: "所有训练产物" },
+  { value: "yolo_ocr", label: "YOLO + OCR", meta: "说明书分类" },
+  { value: "yolo", label: "YOLO", meta: "目标检测" },
+  { value: "ai_detection", label: "AI 检测任务", meta: "无训练模型" },
+  { value: "other", label: "其他类型", meta: "历史模型" },
+];
+
+function aiDetectionLibraryTasks(resources) {
+  const tasks = resources?.ai_detection_tasks || state.aiTasks || [];
+  return tasks
+    .filter((task) => task?.id)
+    .sort((a, b) => Number(b.updated_at || b.created_at || 0) - Number(a.updated_at || a.created_at || 0));
+}
+
+function modelLibraryTypeForGroup(group) {
+  const variants = new Set(group.models.map((model) => String(model.variant || "").toLowerCase()).filter(Boolean));
+  if (variants.has("yolo_ocr")) return "yolo_ocr";
+  if (variants.has("yolo")) return "yolo";
+  return "other";
+}
+
+function modelLibraryFilterOptions(modelGroups, aiTasks) {
+  const present = new Set(["all"]);
+  if (modelGroups.length) present.add("trained");
+  modelGroups.forEach((group) => present.add(modelLibraryTypeForGroup(group)));
+  if (aiTasks.length) present.add("ai_detection");
+  return MODEL_LIBRARY_TYPE_OPTIONS.filter((item) => present.has(item.value));
+}
+
+function renderModelLibraryTypeFilter(modelGroups, aiTasks) {
+  const menu = $("modelLibraryTypeMenu");
+  if (!menu) return;
+  const options = modelLibraryFilterOptions(modelGroups, aiTasks);
+  if (!options.some((item) => item.value === state.modelLibraryTaskTypeFilter)) {
+    state.modelLibraryTaskTypeFilter = "all";
+  }
+  state.modelLibraryTaskTypeFilter = renderCustomMenu(
+    "modelLibraryTypeMenu",
+    options,
+    state.modelLibraryTaskTypeFilter,
+    (value) => {
+      state.modelLibraryTaskTypeFilter = value || "all";
+      renderTrainingLibrary(state.trainingResources);
+    },
+  ) || "all";
+}
+
+function modelGroupMatchesLibraryFilter(group) {
+  const filter = state.modelLibraryTaskTypeFilter || "all";
+  if (filter === "all") return true;
+  if (filter === "trained") return true;
+  return modelLibraryTypeForGroup(group) === filter;
+}
+
+function aiTaskMatchesLibraryFilter() {
+  const filter = state.modelLibraryTaskTypeFilter || "all";
+  return filter === "all" || filter === "ai_detection";
+}
+
+function aiTaskAccessoryText(task) {
+  const labels = task.accessory_labels || {};
+  const counts = task.required_accessory_counts || {};
+  const ids = task.selected_accessory_ids || Object.keys(counts);
+  const names = ids.map((itemId, index) => {
+    const label = labels[itemId] || (task.accessory_names || [])[index] || itemId;
+    const count = Math.max(1, Number(counts[itemId] || 1));
+    return `${label}${count > 1 ? `×${count}` : ""}`;
+  });
+  return names.length ? names.join("、") : "配件信息缺失";
+}
+
 function renderTrainingLibrary(resources) {
   const datasets = resources?.datasets || [];
   const models = resources?.models || [];
   const tasks = resources?.training_tasks || resources?.tasks || [];
   const modelGroups = modelRunGroups(models, tasks);
+  const aiTasks = aiDetectionLibraryTasks(resources);
+  renderModelLibraryTypeFilter(modelGroups, aiTasks);
   const datasetList = $("datasetLibraryList");
   const modelList = $("modelLibraryList");
   if (datasetList) {
     datasetList.innerHTML = datasets.length ? "" : `<div class="job-empty">暂无样本库</div>`;
     for (const dataset of datasets) {
-      const samples = dataset.samples || [];
-      const sampleButtons = samples.slice(0, 8).map((sample) => {
-        const name = (sample.image || "").split(/[\\/]/).pop() || "sample";
-        return `<button type="button" data-delete-dataset-sample="${escapeAttr(dataset.id)}" data-sample-name="${escapeAttr(name)}">${escapeHtml(name)} ×</button>`;
-      }).join("");
+      const accessoryNames = (dataset.selected_accessory_ids || [])
+        .map((accessoryId) => {
+          const accessory = (state.accessories || []).find((item) => String(item.id) === String(accessoryId));
+          return accessory ? zhLabel(accessory.name) : "";
+        })
+        .filter(Boolean);
       const row = document.createElement("article");
       row.className = "resource-card";
       row.innerHTML = `
         <div>
           <strong>${escapeHtml(dataset.display_name || dataset.id)}</strong>
-          <span>${dataset.sample_count || 0} 个样本 · ${dataset.missing_files ? "文件缺失" : "已归档"} · ${escapeHtml((dataset.selected_accessory_ids || []).join(", "))}</span>
+          <span class="record-meta">${escapeHtml(recordAuditText(dataset))}</span>
+          <span>${dataset.sample_count || 0} 个样本 · ${dataset.missing_files ? "文件缺失" : "已归档"}${accessoryNames.length ? ` · ${escapeHtml(accessoryNames.join("、"))}` : ""}</span>
           ${dataset.note ? `<span>${escapeHtml(dataset.note)}</span>` : ""}
-          <small>${escapeHtml(dataset.manifest_path || "")}</small>
-          <div class="sample-chip-row">${sampleButtons}</div>
         </div>
         <div class="resource-actions">
           <button type="button" data-open-dataset="${escapeAttr(dataset.id)}">查看</button>
@@ -1635,18 +4302,22 @@ function renderTrainingLibrary(resources) {
     }
   }
   if (modelList) {
-    modelList.innerHTML = modelGroups.length ? "" : `<div class="job-empty">暂无训练模型资源</div>`;
-    for (const group of modelGroups) {
+    const visibleModelGroups = modelGroups.filter(modelGroupMatchesLibraryFilter);
+    const visibleAiTasks = aiTaskMatchesLibraryFilter() ? aiTasks : [];
+    modelList.innerHTML = visibleModelGroups.length || visibleAiTasks.length ? "" : `<div class="job-empty">当前类型暂无模型资源</div>`;
+    for (const group of visibleModelGroups) {
       const task = group.task || {};
       const taskModels = group.models;
       const dataset = task.dataset;
       const missingCount = taskModels.filter((item) => !item.exists).length;
+      const auditRecord = modelGroupAuditRecord(group);
       const row = document.createElement("article");
       row.className = "resource-card";
       row.innerHTML = `
         <div>
           <strong>${escapeHtml(modelRunLabel(group))}</strong>
-          <span>${escapeHtml(group.id)} · ${task.status ? STATUS_ZH[task.status] || task.status : "历史模型"} · ${task.sample_count || 0} 个样本</span>
+          <span class="record-meta">${escapeHtml(recordAuditText(auditRecord))}</span>
+          <span>${task.status ? STATUS_ZH[task.status] || task.status : "历史模型"} · ${task.sample_count || 0} 个样本</span>
           <span>配件：${escapeHtml(modelRunAccessoryText(group))}</span>
           <span>样本库：${dataset ? "已归档" : "未生成"} · 模型：${taskModels.length ? taskModels.map((item) => `${modelVariantLabel(item)}${item.exists ? "" : "（文件缺失）"}`).join(" / ") : "无"}${missingCount ? ` · 缺失 ${missingCount}` : ""}</span>
           ${task.note ? `<span>${escapeHtml(task.note)}</span>` : ""}
@@ -1659,9 +4330,48 @@ function renderTrainingLibrary(resources) {
       row.querySelector("div").addEventListener("click", () => openTrainingResourceDetail("modelRun", group.id));
       modelList.appendChild(row);
     }
+    for (const task of visibleAiTasks) {
+      const row = document.createElement("article");
+      row.className = "resource-card ai-library-card";
+      row.innerHTML = `
+        <div>
+          <strong>${escapeHtml(task.name || "AI 检测任务")}</strong>
+          <span class="record-meta">${escapeHtml(recordAuditText(task, { includeUpdated: true }))}</span>
+          <span>AI 检测任务 · ${task.accessory_count || task.selected_accessory_ids?.length || 0} 类配件</span>
+          <span>配件：${escapeHtml(aiTaskAccessoryText(task))}</span>
+          <span>模型 ID：${escapeHtml(task.model_id || `${AI_TASK_MODEL_PREFIX}${task.id}`)}</span>
+        </div>
+        <div class="resource-actions">
+          <button type="button" data-open-ai-library-task="${escapeAttr(task.id)}">查看</button>
+          <button type="button" class="danger-action compact-danger" data-delete-ai-library-task="${escapeAttr(task.id)}">删除</button>
+        </div>
+      `;
+      row.querySelector("div").addEventListener("click", () => openTrainingResourceDetail("aiTask", task.id));
+      modelList.appendChild(row);
+    }
   }
   bindTrainingLibraryActions();
+  setTrainingLibraryTab(state.trainingLibraryTab || "datasets");
   renderTrainingDatasetMenu();
+}
+
+function setTrainingLibraryTab(tab) {
+  const active = tab === "models" ? "models" : "datasets";
+  state.trainingLibraryTab = active;
+  document.querySelectorAll("[data-training-library-tab]").forEach((button) => {
+    const selected = button.dataset.trainingLibraryTab === active;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+  });
+  document.querySelectorAll("[data-training-library-pane]").forEach((pane) => {
+    pane.classList.toggle("active", pane.dataset.trainingLibraryPane === active);
+  });
+}
+
+function bindTrainingLibraryTabs() {
+  document.querySelectorAll("[data-training-library-tab]").forEach((button) => {
+    button.addEventListener("click", () => setTrainingLibraryTab(button.dataset.trainingLibraryTab || "datasets"));
+  });
 }
 
 function trainingDatasetOptions() {
@@ -1838,6 +4548,28 @@ function bindTrainingLibraryActions() {
       openTrainingResourceDetail("modelRun", button.dataset.openModelRun);
     });
   });
+  document.querySelectorAll("[data-open-ai-library-task]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openTrainingResourceDetail("aiTask", button.dataset.openAiLibraryTask);
+    });
+  });
+  document.querySelectorAll("[data-delete-ai-library-task]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const taskId = button.dataset.deleteAiLibraryTask || "";
+      if (!window.confirm(`确认删除 AI 检测任务 ${taskId}？`)) return;
+      const result = await api(`/api/ai/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+      state.aiTasks = result.tasks || [];
+      state.selectedAiTaskId = result.selected_task_id || state.aiTasks[0]?.id || "";
+      if (state.trainingResourceDetail?.kind === "aiTask" && state.trainingResourceDetail.id === taskId) {
+        closeTrainingResourceModal();
+      }
+      await refreshTrainingLibrary();
+      renderAiTasks();
+      toast("AI 检测任务已删除。");
+    });
+  });
 }
 
 function closeTrainingResourceModal() {
@@ -1865,13 +4597,29 @@ function samplePublicUrl(sample) {
   return "";
 }
 
-function openTrainingResourceDetail(kind, id) {
+async function openTrainingResourceDetail(kind, id) {
   state.trainingResourceDetail = { kind, id };
   const title = $("trainingResourceTitle");
   const body = $("trainingResourceBody");
+  $("trainingResourceModal").classList.add("visible");
+  $("trainingResourceModal").setAttribute("aria-hidden", "false");
   if (kind === "dataset") {
-    const dataset = (state.trainingResources?.datasets || []).find((item) => item.id === id);
+    let dataset = (state.trainingResources?.datasets || []).find((item) => item.id === id);
     if (!dataset) return toast("样本库不存在。");
+    title.textContent = dataset.display_name || dataset.id;
+    if (!dataset.samples_loaded && !dataset.missing_files) {
+      body.innerHTML = `<div class="job-empty">正在加载样本缩略图...</div>`;
+      try {
+        const detail = await api(`/api/training/resources/datasets/${encodeURIComponent(id)}/detail`);
+        dataset = detail.dataset || dataset;
+        const datasets = state.trainingResources?.datasets || [];
+        const index = datasets.findIndex((item) => item.id === id);
+        if (index >= 0) datasets[index] = dataset;
+      } catch (error) {
+        body.innerHTML = `<div class="job-empty">样本详情加载失败：${escapeHtml(error.message)}</div>`;
+        return;
+      }
+    }
     const samples = dataset.samples || [];
     title.textContent = dataset.display_name || dataset.id;
     body.innerHTML = `
@@ -1879,6 +4627,7 @@ function openTrainingResourceDetail(kind, id) {
         <div><label>样本数量</label><strong>${samples.length || dataset.sample_count || 0}</strong></div>
         <div><label>Dataset ID</label><strong>${escapeHtml(dataset.id)}</strong></div>
         <div><label>配件</label><strong>${escapeHtml((dataset.selected_accessory_ids || []).join(", ") || "-")}</strong></div>
+        <div><label>创建记录</label><strong>${escapeHtml(recordAuditText(dataset))}</strong></div>
       </div>
       <div class="resource-edit-row">
         <input id="resourceRenameInput" type="text" value="${escapeAttr(dataset.display_name || dataset.id)}" />
@@ -1898,6 +4647,7 @@ function openTrainingResourceDetail(kind, id) {
               <figcaption>
                 <strong>${escapeHtml(name)}</strong>
                 <span>${sample.is_true ? "True" : "False"} · ${escapeHtml(sample.split || "-")} · 缺 ${sample.missing_count || 0}</span>
+                <span>${escapeHtml(recordAuditText(sample, { owner: false }))}</span>
                 <button type="button" class="mini-danger" data-delete-detail-sample="${escapeAttr(name)}">删除</button>
               </figcaption>
             </figure>
@@ -1915,6 +4665,34 @@ function openTrainingResourceDetail(kind, id) {
         toast("样本已删除。");
       });
     });
+  } else if (kind === "aiTask") {
+    const task = aiDetectionLibraryTasks(state.trainingResources).find((item) => item.id === id);
+    if (!task) return toast("AI 检测任务不存在。");
+    const counts = task.required_accessory_counts || {};
+    const labels = task.accessory_labels || {};
+    const ids = task.selected_accessory_ids || Object.keys(counts);
+    title.textContent = task.name || "AI 检测任务";
+    body.innerHTML = `
+      <div class="summary-grid resource-summary">
+        <div><label>任务类型</label><strong>AI 检测</strong></div>
+        <div><label>配件数量</label><strong>${task.accessory_count || ids.length || 0}</strong></div>
+        <div><label>来源</label><strong>${escapeHtml(task.source || "ai_detection_workbench")}</strong></div>
+        <div><label>状态</label><strong>${(task.missing_accessory_ids || []).length ? "配件缺失" : "可用"}</strong></div>
+      </div>
+      <div class="resource-detail-list">
+        <p><strong>Task ID</strong><span>${escapeHtml(task.id)}</span></p>
+        <p><strong>创建记录</strong><span>${escapeHtml(recordAuditText(task, { includeUpdated: true }))}</span></p>
+        <p><strong>Model ID</strong><span>${escapeHtml(task.model_id || `${AI_TASK_MODEL_PREFIX}${task.id}`)}</span></p>
+        <p><strong>配件</strong><span>${escapeHtml(aiTaskAccessoryText(task))}</span></p>
+        ${(task.missing_accessory_ids || []).length ? `<p><strong>缺失配件</strong><span>${escapeHtml(task.missing_accessory_ids.join(", "))}</span></p>` : ""}
+        ${ids.map((itemId, index) => `
+          <p>
+            <strong>${escapeHtml(labels[itemId] || (task.accessory_names || [])[index] || itemId)}</strong>
+            <span>Accessory ID: ${escapeHtml(itemId)} · 数量 ${Math.max(1, Number(counts[itemId] || 1))}</span>
+          </p>
+        `).join("")}
+      </div>
+    `;
   } else {
     const group = kind === "modelRun" ? trainingModelRunById(id) : trainingModelRunById(id);
     const task = group?.task || trainingTaskById(id) || {};
@@ -1932,6 +4710,7 @@ function openTrainingResourceDetail(kind, id) {
         <div><label>总 Epoch</label><strong>${task.epochs || totalEpochs || "-"}</strong></div>
         <div><label>分辨率</label><strong>${task.image_size || "-"}</strong></div>
         <div><label>模型</label><strong>${models.length}</strong></div>
+        <div><label>创建记录</label><strong>${escapeHtml(recordAuditText(modelGroupAuditRecord(group || { task, models }), { includeUpdated: true }))}</strong></div>
       </div>
       <div class="resource-edit-row">
         <input id="resourceRenameInput" type="text" value="${escapeAttr(task.label || models[0]?.label || id)}" />
@@ -1951,8 +4730,6 @@ function openTrainingResourceDetail(kind, id) {
     `;
     $("saveResourceRename").addEventListener("click", () => saveTrainingResourceRename(group ? "modelRun" : "task", group?.id || task.job_id));
   }
-  $("trainingResourceModal").classList.add("visible");
-  $("trainingResourceModal").setAttribute("aria-hidden", "false");
 }
 
 async function saveTrainingResourceRename(kind, id) {
@@ -2022,109 +4799,159 @@ function renderImageJobs(result) {
     const statusText = STATUS_ZH[summary.status] || summary.status;
     const isTrainingTask = summary.queue_kind === "training";
     const isBackgroundTask = summary.action === "generate_background_set";
-    const taskIds = group.jobs.map((job) => job.task_id || job.job_id || "task");
-    const taskIdHtml = taskIds.map((id) => `<code class="task-id-chip">${escapeHtml(id)}</code>`).join("");
+    const openKind = group.open_kind || summary.open_kind || "candidate";
     const detail = group.jobs.map((job) => {
-      const provenance = anchorProvenanceText(job);
       const estimate = job.estimated_minutes ? ` · 预计 ${job.estimated_minutes} 分钟` : "";
       const sampleInfo = job.action === "generate_background_set"
         ? ` · ${job.generated_image_count || 0} 张背景`
-        : job.sample_count ? ` · ${job.sample_count} samples` : "";
+        : job.sample_count ? ` · ${job.sample_count} 个样本` : "";
       const epochInfo = job.action === "train_model" ? ` · Epoch ${job.current_epoch || 0}/${job.total_epochs || job.epochs || "-"}` : "";
-      const trainingParams = job.action === "train_model" ? ` · ${job.epochs || "-"} epoch · ${job.image_size || "-"}px${epochInfo}` : "";
-      return `${userJobLabel(job.label || job.pose_family)} · ${STATUS_ZH[job.status] || job.status}${sampleInfo}${trainingParams}${estimate}${provenance ? ` · ${provenance}` : ""}`;
+      return `${userJobLabel(job.label || job.pose_family)} · ${STATUS_ZH[job.status] || job.status}${sampleInfo}${epochInfo}${estimate}`;
     }).join("；");
     const activeJobs = group.jobs.filter((job) => isActiveImageJobStatus(job.status));
+    const retryJobs = group.jobs.filter((job) => !isTrainingTask && !isActiveImageJobStatus(job.status) && job.status !== "completed");
     const row = document.createElement("div");
     row.className = "job-item";
     row.innerHTML = `
       <span>
         <strong>${escapeHtml(zhLabel(group.candidate_name || "Accessory"))}</strong>
         <em>${escapeHtml(statusText)} · ${isBackgroundTask ? `${summary.generated_image_count || 0} 张背景` : isTrainingTask ? `${summary.sample_count || 0} 个样本` : `${group.jobs.length} 张图`}</em>
-        <span class="task-id-row" aria-label="Task IDs">${taskIdHtml}</span>
+        <em>${escapeHtml(recordAuditText(summary, { includeUpdated: true }))}</em>
         <small>${escapeHtml(detail)}</small>
       </span>
       <progress value="${summary.progress || 0}" max="100">${summary.progress || 0}%</progress>
       <div class="job-actions">
-        ${isTrainingTask ? `<button type="button" class="queue-icon-button" data-view-training-task="${escapeAttr(summary.job_id)}" title="查看任务">i</button>` : `<button type="button" data-open-job="${escapeAttr(group.candidate_id)}">打开</button>`}
+        ${isTrainingTask ? `<button type="button" data-view-training-task="${escapeAttr(summary.job_id)}" title="查看任务">详情</button>` : `<button type="button" data-open-job="${escapeAttr(group.candidate_id)}" data-open-kind="${escapeAttr(openKind)}">打开</button>`}
+        ${retryJobs.map((job) => `<button type="button" data-retry-job="${escapeAttr(job.job_id || job.task_id)}" title="重试 ${escapeAttr(userJobLabel(job.label || job.pose_family || "生成任务"))}">重试</button>`).join("")}
         ${!isTrainingTask && activeJobs.length ? `<button type="button" data-stop-candidate="${escapeAttr(group.candidate_id)}">停止</button>` : ""}
-        ${isTrainingTask ? `<button type="button" class="queue-icon-button" data-delete-training-task="${escapeAttr(summary.job_id)}" title="删除任务">Del</button>` : `<button type="button" data-delete-candidate="${escapeAttr(group.candidate_id)}">删除</button>`}
+        ${isTrainingTask ? `<button type="button" class="danger-action compact-danger" data-delete-training-task="${escapeAttr(summary.job_id)}" title="删除任务">删除</button>` : `<button type="button" class="danger-action compact-danger" data-delete-candidate="${escapeAttr(group.candidate_id)}">删除</button>`}
       </div>
     `;
     row.querySelector("span").addEventListener("click", () => {
       if (isTrainingTask) openTrainingTaskDetail(summary.job_id);
-      else openImageJobCandidate(group.candidate_id);
+      else openImageJobCandidate(group.candidate_id, null, openKind);
     });
     list.appendChild(row);
   }
   bindImageJobActions();
 }
 
-async function openImageJobCandidate(candidateId) {
+async function openImageJobCandidate(candidateId, trigger = null, openKind = "candidate") {
+  if (openKind === "accessory") {
+    await openAccessoryDetail(candidateId, trigger);
+    return;
+  }
+  setBusy(trigger, true);
   try {
     const result = await api(`/api/accessories/candidates/${encodeURIComponent(candidateId)}`);
     openAccessoryReview(result.candidate);
     await refreshImageJobs();
     updateOpenAccessoryCandidateFromJobs();
   } catch (error) {
-    toast(`打开任务失败：${error.message}`);
+    if (String(candidateId || "").startsWith("acc_")) {
+      await openAccessoryDetail(candidateId, trigger);
+    } else {
+      toast(`打开任务失败：${error.message}`);
+    }
+  } finally {
+    setBusy(trigger, false);
   }
 }
 
-async function openTrainingTaskDetail(jobId) {
+async function openTrainingTaskDetail(jobId, trigger = null) {
+  setBusy(trigger, true);
   try {
     await refreshTrainingLibrary();
     openTrainingResourceDetail("task", jobId);
   } catch (error) {
     toast(`打开任务失败：${error.message}`);
+  } finally {
+    setBusy(trigger, false);
   }
 }
 
 function bindImageJobActions() {
   document.querySelectorAll("[data-open-job]").forEach((button) => {
-    button.addEventListener("click", () => openImageJobCandidate(button.dataset.openJob));
+    button.addEventListener("click", () => openImageJobCandidate(button.dataset.openJob, button, button.dataset.openKind || "candidate"));
   });
   document.querySelectorAll("[data-view-training-task]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      openTrainingTaskDetail(button.dataset.viewTrainingTask);
+      openTrainingTaskDetail(button.dataset.viewTrainingTask, button);
     });
   });
   document.querySelectorAll("[data-delete-training-task]").forEach((button) => {
     button.addEventListener("click", async (event) => {
       event.stopPropagation();
       if (!window.confirm(`确认删除任务 ${button.dataset.deleteTrainingTask}？`)) return;
-      await api(`/api/training/tasks/${encodeURIComponent(button.dataset.deleteTrainingTask)}`, { method: "DELETE" });
-      await refreshImageJobs();
-      toast("任务已删除。");
+      setBusy(button, true);
+      try {
+        await api(`/api/training/tasks/${encodeURIComponent(button.dataset.deleteTrainingTask)}`, { method: "DELETE" });
+        await refreshImageJobs();
+        toast("任务已删除。");
+      } finally {
+        setBusy(button, false);
+      }
     });
   });
   document.querySelectorAll("[data-stop-candidate]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await api(`/api/image-job-candidates/${encodeURIComponent(button.dataset.stopCandidate)}/stop`, { method: "POST" });
-      await refreshImageJobs();
-      toast("任务已停止。");
+      setBusy(button, true);
+      try {
+        await api(`/api/image-job-candidates/${encodeURIComponent(button.dataset.stopCandidate)}/stop`, { method: "POST" });
+        await refreshImageJobs();
+        toast("任务已停止。");
+      } finally {
+        setBusy(button, false);
+      }
     });
   });
   document.querySelectorAll("[data-delete-candidate]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await api(`/api/image-job-candidates/${encodeURIComponent(button.dataset.deleteCandidate)}`, { method: "DELETE" });
-      await refreshImageJobs();
-      toast("任务已删除。");
+      setBusy(button, true);
+      try {
+        await api(`/api/image-job-candidates/${encodeURIComponent(button.dataset.deleteCandidate)}`, { method: "DELETE" });
+        await refreshImageJobs();
+        toast("任务已删除。");
+      } finally {
+        setBusy(button, false);
+      }
+    });
+  });
+  document.querySelectorAll("[data-retry-job]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      setBusy(button, true);
+      try {
+        await api(`/api/image-jobs/${encodeURIComponent(button.dataset.retryJob)}/retry`, { method: "POST" });
+        await refreshImageJobs();
+        toast("任务已重新排队。");
+      } finally {
+        setBusy(button, false);
+      }
     });
   });
   document.querySelectorAll("[data-stop-job]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await api(`/api/image-jobs/${encodeURIComponent(button.dataset.stopJob)}/stop`, { method: "POST" });
-      await refreshImageJobs();
-      toast("任务已停止。");
+      setBusy(button, true);
+      try {
+        await api(`/api/image-jobs/${encodeURIComponent(button.dataset.stopJob)}/stop`, { method: "POST" });
+        await refreshImageJobs();
+        toast("任务已停止。");
+      } finally {
+        setBusy(button, false);
+      }
     });
   });
   document.querySelectorAll("[data-delete-job]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await api(`/api/image-jobs/${encodeURIComponent(button.dataset.deleteJob)}`, { method: "DELETE" });
-      await refreshImageJobs();
-      toast("任务已删除。");
+      setBusy(button, true);
+      try {
+        await api(`/api/image-jobs/${encodeURIComponent(button.dataset.deleteJob)}`, { method: "DELETE" });
+        await refreshImageJobs();
+        toast("任务已删除。");
+      } finally {
+        setBusy(button, false);
+      }
     });
   });
 }
@@ -2137,6 +4964,8 @@ function groupImageJobsByCandidate(items) {
       groups.set(candidateId, {
         candidate_id: candidateId,
         candidate_name: job.candidate_name || "Accessory",
+        job_store: job.job_store || "candidate",
+        open_kind: job.open_kind || "candidate",
         jobs: [],
         created_at: job.created_at || 0,
       });
@@ -2144,6 +4973,10 @@ function groupImageJobsByCandidate(items) {
     const group = groups.get(candidateId);
     group.jobs.push(job);
     group.created_at = Math.max(group.created_at || 0, job.created_at || 0);
+    if (job.open_kind === "accessory" || job.job_store === "config") {
+      group.open_kind = "accessory";
+      group.job_store = "config";
+    }
   }
   return Array.from(groups.values()).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
 }
@@ -2601,6 +5434,7 @@ function renderTrainingAccessories(selectedIds = null) {
       <span>
         <strong>${escapeHtml(zhLabel(item.name))}</strong>
         <em>${material} · ${escapeHtml(STATUS_ZH[item.status] || item.status)}</em>
+        <em>${escapeHtml(recordAuditText(item))}</em>
       </span>
     `;
     row.addEventListener("click", () => {
@@ -3166,6 +6000,8 @@ const MODAL_CLOSE_HANDLERS = [
   ["previewModal", closePreviewModal],
   ["backgroundUploadModal", closeBackgroundUploadModal],
   ["aiDebugModal", closeAiDebugModal],
+  ["dataAnalysisDetailModal", closeDataAnalysisDetailModal],
+  ["locateDiagnosticModal", closeLocateDiagnosticModal],
   ["backgroundGalleryModal", closeBackgroundGalleryModal],
 ];
 
@@ -3212,10 +6048,14 @@ function bindAccessoryDeletes() {
 function bindTabs() {
   document.querySelectorAll(".mode-tab[data-tab]").forEach((tab) => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".mode-tab[data-tab]").forEach((x) => x.classList.remove("active"));
-      document.querySelectorAll(".tabpane").forEach((x) => x.classList.remove("active"));
+      if (tab.classList.contains("active")) return;
+      const nextPane = $(`${tab.dataset.tab}Tab`);
+      if (!nextPane) return;
+      const scope = tab.closest(".view") || document;
+      scope.querySelectorAll(".mode-tab[data-tab]").forEach((x) => x.classList.remove("active"));
+      scope.querySelectorAll(".tabpane").forEach((x) => x.classList.remove("active"));
       tab.classList.add("active");
-      $(`${tab.dataset.tab}Tab`).classList.add("active");
+      nextPane.classList.add("active");
       if (tab.dataset.tab === "camera") {
         setInspectInput("camera");
         startCamera();
@@ -3226,20 +6066,81 @@ function bindTabs() {
   });
 }
 
+function bindAiTabs() {
+  document.querySelectorAll(".mode-tab[data-ai-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      if (tab.classList.contains("active")) return;
+      const nextPane = $(`ai${tab.dataset.aiTab[0].toUpperCase()}${tab.dataset.aiTab.slice(1)}Tab`);
+      if (!nextPane) return;
+      document.querySelectorAll(".mode-tab[data-ai-tab]").forEach((x) => x.classList.remove("active"));
+      document.querySelectorAll("[data-ai-pane]").forEach((x) => x.classList.remove("active"));
+      tab.classList.add("active");
+      nextPane.classList.add("active");
+      if (tab.dataset.aiTab === "camera") {
+        setAiInspectInput("camera");
+        startAiCamera();
+      } else {
+        stopAiCameraStream();
+      }
+    });
+  });
+}
+
+function bindLabelSheetTabs() {
+  document.querySelectorAll(".mode-tab[data-label-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      if (tab.classList.contains("active")) return;
+      const nextPane = $(`labelSheet${tab.dataset.labelTab[0].toUpperCase()}${tab.dataset.labelTab.slice(1)}Tab`);
+      if (!nextPane) return;
+      document.querySelectorAll(".mode-tab[data-label-tab]").forEach((x) => x.classList.remove("active"));
+      document.querySelectorAll("[data-label-pane]").forEach((x) => x.classList.remove("active"));
+      tab.classList.add("active");
+      nextPane.classList.add("active");
+      if (tab.dataset.labelTab === "camera") {
+        setLabelSheetInput("camera");
+        startLabelSheetCamera();
+      } else {
+        stopLabelSheetCameraStream();
+      }
+    });
+  });
+}
+
 function bindViews() {
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.addEventListener("click", () => {
+      if (item.classList.contains("active")) return;
+      const nextView = $(`${item.dataset.view}View`);
+      if (!nextView) return;
       document.querySelectorAll(".nav-item").forEach((x) => x.classList.remove("active"));
       document.querySelectorAll(".view").forEach((x) => x.classList.remove("active"));
       item.classList.add("active");
-      $(`${item.dataset.view}View`).classList.add("active");
+      nextView.classList.add("active");
+      window.scrollTo({
+        top: 0,
+        behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth",
+      });
       if (item.dataset.view !== "inspect") stopCameraStream();
+      if (item.dataset.view !== "aiInspect") stopAiCameraStream();
+      if (item.dataset.view !== "labelSheet") stopLabelSheetCameraStream();
+      if (item.dataset.view !== "locateAnything") stopLocateCameraStream();
+      if (item.dataset.view === "locateAnything") onLocateViewEntry();
+      if (item.dataset.view === "dataAnalysis") refreshDataAnalysisRecords({ quiet: true });
+    });
+  });
+  document.querySelectorAll("[data-go]").forEach((trigger) => {
+    trigger.addEventListener("click", () => {
+      const target = document.querySelector(`.nav-item[data-view="${trigger.dataset.go}"]`);
+      target?.click();
     });
   });
 }
 
 function bindActions() {
   bindModalDismissal();
+  bindAiTabs();
+  bindLabelSheetTabs();
+  bindTrainingLibraryTabs();
   $("accessoryMaterialType").addEventListener("change", renderAccessoryProcess);
   $("paperPreset").addEventListener("change", updatePaperDimensionLock);
   $("openAccessoryPicker").addEventListener("click", () => {
@@ -3248,9 +6149,31 @@ function bindActions() {
   $("closePreviewModal").addEventListener("click", closePreviewModal);
   $("cancelPreviewModal").addEventListener("click", closePreviewModal);
   $("closeImageViewer").addEventListener("click", closeImageViewer);
-  $("openAiDebug")?.addEventListener("click", openAiDebugModal);
+  $("openAiDebug")?.addEventListener("click", () => openAiDebugModal());
+  $("openAiInspectDebug")?.addEventListener("click", () => openAiDebugModal(state.aiLastResult));
   $("closeAiDebug")?.addEventListener("click", closeAiDebugModal);
-  $("toggleInspectFullscreen").addEventListener("click", openInspectFullscreen);
+  $("closeDataAnalysisDetail")?.addEventListener("click", closeDataAnalysisDetailModal);
+  $("openLocateDiagnostic")?.addEventListener("click", openLocateDiagnosticModal);
+  $("closeLocateDiagnostic")?.addEventListener("click", closeLocateDiagnosticModal);
+  $("refreshDataAnalysis")?.addEventListener("click", () => refreshDataAnalysisRecords());
+  $("dataAnalysisTaskFilter")?.addEventListener("change", (event) => {
+    state.dataAnalysis.selectedTaskId = event.currentTarget.value;
+    state.dataAnalysis.selectedRecordIds.clear();
+    refreshDataAnalysisRecords();
+  });
+  $("dataAnalysisSelectAll")?.addEventListener("change", (event) => {
+    const checked = event.currentTarget.checked;
+    state.dataAnalysis.records.forEach((record) => {
+      if (checked) state.dataAnalysis.selectedRecordIds.add(record.record_id);
+      else state.dataAnalysis.selectedRecordIds.delete(record.record_id);
+    });
+    renderDataAnalysisRecords();
+  });
+  $("runDataAnalysisSelected")?.addEventListener("click", (event) => runDataAnalysisLocate(selectedDataAnalysisRecords().map((record) => record.record_id), event.currentTarget));
+  $("runDataAnalysisVisible")?.addEventListener("click", (event) => runDataAnalysisLocate(state.dataAnalysis.records.map((record) => record.record_id), event.currentTarget));
+  $("toggleInspectFullscreen").addEventListener("click", () => openInspectFullscreen("inspect"));
+  $("toggleAiFullscreen")?.addEventListener("click", () => openInspectFullscreen("ai"));
+  $("toggleLocateFullscreen")?.addEventListener("click", () => openInspectFullscreen("locate"));
   $("closeInspectFullscreen").addEventListener("click", closeInspectFullscreen);
   document.addEventListener("fullscreenchange", handleFullscreenChange);
   $("imageViewerPrev").addEventListener("click", (event) => {
@@ -3302,9 +6225,11 @@ function bindActions() {
       [82, "更新配件库", "即将刷新本地配件列表。"],
     ]);
     try {
+      const fromPipeline = state.accessoryCandidate?.pipeline_context === "pipeline";
       const result = await api(`/api/accessories/confirm/${encodeURIComponent(state.accessoryCandidate.id)}`, { method: "POST" });
       finishTaskProgress("imageWorker", true);
       renderAccessories(result.items);
+      if (fromPipeline) applyPipelineAccessoryPayload(result.pipeline);
       closeAccessoryReview();
       $("accessoryName").value = "";
       clearAccessoryFileQueue();
@@ -3312,7 +6237,10 @@ function bindActions() {
       $("objectWidthMm").value = "";
       $("objectHeightMm").value = "";
       $("objectAlphaPolicy").value = "";
-      toast("配件已确认添加。");
+      if (fromPipeline) resetPipelineAccessoryForm();
+      await refreshImageJobs();
+      await refreshPipeline();
+      toast(fromPipeline ? "配件已确认并加入当前流水线。" : "配件已确认添加。");
     } catch (error) {
       finishTaskProgress("imageWorker", false);
       toast(`确认添加失败：${error.message}`);
@@ -3342,7 +6270,7 @@ function bindActions() {
   });
   $("modalConfirmGenerate").addEventListener("click", () => requestSampleGeneration());
   $("confirmGenerateSamples").addEventListener("click", () => requestSampleGeneration());
-  $("refreshTrainingLibrary")?.addEventListener("click", refreshTrainingLibrary);
+  $("refreshTrainingLibrary")?.addEventListener("click", () => refreshTrainingLibrary({ manual: true }));
   $("threshold").addEventListener("input", (event) => {
     $("thresholdValue").textContent = Number(event.target.value).toFixed(2);
   });
@@ -3354,6 +6282,102 @@ function bindActions() {
     const file = $("videoFile").files[0];
     if (file) setInspectInput("video", file);
   });
+  $("aiImageFile")?.addEventListener("change", () => {
+    const file = $("aiImageFile").files[0];
+    if (file) setAiInspectInput("image", file);
+  });
+  $("aiVideoFile")?.addEventListener("change", () => {
+    const file = $("aiVideoFile").files[0];
+    if (file) setAiInspectInput("video", file);
+  });
+  $("labelSheetImageFile")?.addEventListener("change", () => {
+    const file = $("labelSheetImageFile").files[0];
+    if (file) setLabelSheetInput("image", file);
+  });
+  $("locateImageFile")?.addEventListener("change", () => {
+    const file = $("locateImageFile").files[0];
+    if (file) setLocateInput("image", file);
+  });
+  $("runAiImage")?.addEventListener("click", () => runAiImageDetection($("runAiImage")));
+  $("runAiVideo")?.addEventListener("click", () => runAiVideoDetection($("runAiVideo")));
+  $("addLabelReference")?.addEventListener("click", () => addLabelSheetReference($("addLabelReference")));
+  $("refreshLabelReferences")?.addEventListener("click", async () => {
+    const button = $("refreshLabelReferences");
+    setBusy(button, true);
+    try {
+      await refreshLabelSheetReferences();
+      toast("标签参考已刷新。");
+    } catch (error) {
+      toast(`刷新标签参考失败：${error.message}`);
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("runLabelSheetMatch")?.addEventListener("click", () => runLabelSheetMatchWithFile($("labelSheetImageFile").files[0], $("runLabelSheetMatch")));
+  $("startLocateRuntime")?.addEventListener("click", () => startLocateRuntime($("startLocateRuntime")));
+  $("saveLocateConfig")?.addEventListener("click", () => saveLocateConfig($("saveLocateConfig")));
+  $("checkLocateStatus")?.addEventListener("click", () => checkLocateStatus($("checkLocateStatus")));
+  $("runLocateImage")?.addEventListener("click", () => runLocateImage($("runLocateImage")));
+  $("addLocateRecipeItem")?.addEventListener("click", () => {
+    state.locateRecipePickerOpen = !state.locateRecipePickerOpen;
+    if (state.locateRecipePickerOpen) state.locateRecipeExpanded = true;
+    renderLocateSources();
+    $("locateRecipeSearch")?.focus();
+  });
+  $("toggleLocateRecipeDetails")?.addEventListener("click", () => {
+    setLocateRecipeExpanded(!state.locateRecipeExpanded);
+    renderLocateSources();
+  });
+  $("locateRecipeSearch")?.addEventListener("input", (event) => {
+    state.locateRecipeQuery = event.currentTarget.value;
+    renderLocateRecipePicker();
+  });
+  $("refreshLocateCameras")?.addEventListener("click", async () => {
+    const button = $("refreshLocateCameras");
+    setBusy(button, true);
+    try {
+      if (!state.locateCamera.stream) {
+        await startLocateCamera();
+      } else {
+        await refreshLocateCameraDevices();
+      }
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("captureLocateFrame")?.addEventListener("click", () => runLocateCameraOnce($("captureLocateFrame")));
+  $("startLocateCameraLoop")?.addEventListener("click", () => startLocateCameraLoop($("startLocateCameraLoop")));
+  $("stopLocateCameraLoop")?.addEventListener("click", stopLocateCameraLoop);
+  $("refreshAiCameras")?.addEventListener("click", async () => {
+    const button = $("refreshAiCameras");
+    setBusy(button, true);
+    try {
+      if (!state.aiCamera.stream) {
+        await startAiCamera();
+      } else {
+        const devices = await refreshAiCameraDevices();
+        setAiCameraStatus(devices.length ? `检测到 ${devices.length} 个摄像头。` : "未检测到摄像头。", !devices.length);
+      }
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("captureAiCamera")?.addEventListener("click", () => runAiCameraDetection($("captureAiCamera")));
+  $("refreshLabelSheetCameras")?.addEventListener("click", async () => {
+    const button = $("refreshLabelSheetCameras");
+    setBusy(button, true);
+    try {
+      if (!state.labelSheetCamera.stream) {
+        await startLabelSheetCamera();
+      } else {
+        const devices = await refreshLabelSheetCameraDevices();
+        setLabelSheetCameraStatus(devices.length ? `检测到 ${devices.length} 个摄像头。` : "未检测到摄像头。", !devices.length);
+      }
+    } finally {
+      setBusy(button, false);
+    }
+  });
+  $("captureLabelSheetCamera")?.addEventListener("click", () => runLabelSheetCameraMatch($("captureLabelSheetCamera")));
 
   $("runImage").addEventListener("click", async () => {
     const file = $("imageFile").files[0];
@@ -3371,6 +6395,7 @@ function bindActions() {
       const result = await api("/api/analyze/image", { method: "POST", body: form });
       renderImageResult(result);
       finishProgress(true);
+      if (result.model?.is_ai_detection) refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
       toast("图片检测完成。");
     } catch (error) {
       finishProgress(false);
@@ -3396,6 +6421,7 @@ function bindActions() {
       const result = await api("/api/analyze/video", { method: "POST", body: form });
       renderVideoResult(result);
       finishProgress(true);
+      if (result.ai || result.frames?.some((frame) => frame.model?.is_ai_detection)) refreshDataAnalysisRecords({ quiet: true }).catch(() => {});
       toast("视频分析完成。");
     } catch (error) {
       finishProgress(false);
@@ -3421,7 +6447,7 @@ function bindActions() {
   });
 
   $("captureCamera").addEventListener("click", () => runCameraDetection($("captureCamera")));
-  $("fullscreenCaptureCamera").addEventListener("click", () => runCameraDetection($("fullscreenCaptureCamera")));
+  $("fullscreenCaptureCamera").addEventListener("click", () => runFullscreenCapture($("fullscreenCaptureCamera")));
 
   $("saveRules").addEventListener("click", async () => {
     const required = [];
@@ -3500,9 +6526,16 @@ function bindActions() {
     try {
       const uploadFiles = materialType === "text" ? await prepareTextAccessoryFiles(pendingFiles) : pendingFiles;
       for (const file of uploadFiles) form.append("files", file);
-      const result = await api("/api/accessories/preview", { method: "POST", body: form });
-      openAccessoryReview(result.candidate);
-      toast("缩略图已生成，请确认质量。");
+      const result = await api("/api/accessories", { method: "POST", body: form });
+      renderAccessories(result.items || [result.item].filter(Boolean));
+      $("accessoryName").value = "";
+      clearAccessoryFileQueue();
+      $("objectLengthMm").value = "";
+      $("objectWidthMm").value = "";
+      $("objectHeightMm").value = "";
+      $("objectAlphaPolicy").value = "";
+      await refreshTrainingPlan();
+      toast("配件已添加。");
     } catch (error) {
       toast(`生成失败：${error.message}`);
     } finally {
@@ -3657,12 +6690,16 @@ function bindActions() {
   });
   renderTrainingImageSizeMenu();
   renderCameraMenu();
+  renderAiCameraMenu();
+  renderLabelSheetCameraMenu();
+  renderLocateCameraMenu();
   showTrainingFlowTab("samples");
 }
 
 bindViews();
 bindTabs();
 bindActions();
+bindAuth();
 document.addEventListener("click", (event) => {
   const path = typeof event.composedPath === "function" ? event.composedPath() : [];
   const inCustomMenu = path.some((node) => node?.classList?.contains("custom-menu")) || event.target.closest(".custom-menu");
@@ -3685,7 +6722,1262 @@ document.addEventListener("keydown", (event) => {
     closeAiKeyControl();
   }
 });
-window.addEventListener("beforeunload", stopCameraStream);
+window.addEventListener("beforeunload", () => {
+  stopCameraStream();
+  stopAiCameraStream();
+  stopLabelSheetCameraStream();
+  stopLocateCameraStream();
+});
+
+function hasCookieConsent() {
+  return document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .some((item) => item === "vantaline_cookie_consent=accepted");
+}
+
+function acceptCookieConsent() {
+  document.cookie = "vantaline_cookie_consent=accepted; Max-Age=31536000; Path=/; SameSite=Lax";
+  $("cookieConsent")?.setAttribute("hidden", "");
+}
+
+function initCookieConsent() {
+  const banner = $("cookieConsent");
+  if (!banner) return;
+  if (hasCookieConsent()) {
+    banner.setAttribute("hidden", "");
+  } else {
+    banner.removeAttribute("hidden");
+  }
+  $("acceptCookies")?.addEventListener("click", acceptCookieConsent);
+}
+
+initCookieConsent();
 renderAccessoryProcess();
 renderAccessoryFileQueue();
-loadInitial().catch((error) => toast(`启动失败：${error.message}`));
+initAuth().catch((error) => showAuthLogin(`启动失败：${error.message}`));
+
+// ============================================================
+// 训练流水线看板(Agent 编排)
+// ============================================================
+
+const PIPELINE_ROUTE_META = {
+  yolo: { label: "YOLO 训练", cls: "route-yolo" },
+  ai: { label: "AI 检测", cls: "route-ai" },
+  locate: { label: "Locate Anything", cls: "route-locate" },
+  archive_only: { label: "仅建档", cls: "route-archive" },
+};
+
+const PIPELINE_METHOD_META = {
+  yolo_ocr: { label: "YOLO+OCR", usesTraining: true },
+  yolo: { label: "YOLO", usesTraining: true },
+  ai: { label: "AI 检测", usesTraining: false },
+  locate: { label: "Locate Anything", usesTraining: false },
+};
+
+const PIPELINE_STAGE_LANES = {
+  draft: "pipelineDraftList",
+  samples: "pipelineSamplesList",
+  training: "pipelineTrainingList",
+};
+
+const PIPELINE_NEXT_STAGE = { draft: "samples", samples: "training", training: "library" };
+const AGENT_BASE_URL_PRESETS = [
+  { label: "Cursor", value: "https://api.cursor.com" },
+  { label: "OpenAI", value: "https://api.openai.com/v1" },
+  { label: "OpenRouter", value: "https://openrouter.ai/api/v1" },
+  { label: "Gemini OpenAI 兼容", value: "https://generativelanguage.googleapis.com/v1beta/openai" },
+];
+
+const AGENT_PROVIDER_META = {
+  openai_compatible: {
+    label: "OpenAI 兼容",
+    base_placeholder: "https://api.openai.com/v1",
+    model_placeholder: "例如 gpt-4o-mini",
+    hint: "当前会按 OpenAI 兼容接口测试 /chat/completions；OpenAI、OpenRouter、Gemini OpenAI 兼容入口都走这里。",
+  },
+  cursor: {
+    label: "Cursor",
+    base_placeholder: "https://api.cursor.com",
+    model_placeholder: "auto 或 Cursor 模型 ID",
+    hint: "检测到 Cursor API；测试连接会调用 /v1/models，不会调用 /chat/completions。",
+  },
+};
+
+const PIPELINE_STATUS_ZH = {
+  ready: "待开始",
+  running: "执行中",
+  completed: "已完成",
+  failed: "失败",
+  stopped: "已停止",
+};
+
+state.pipeline = { tasks: [], agent: null, accessories: [], pendingCandidates: [] };
+state.pipelineParamsTarget = null;
+state.pipelineDetailTaskId = "";
+state.pipelinePollTimer = null;
+state.pipelineAccessoryPendingFiles = [];
+state.pipelineAccessoryPendingFileUrls = new Map();
+
+function pipelineModalOpen(id) {
+  $(id)?.classList.add("visible");
+  $(id)?.setAttribute("aria-hidden", "false");
+}
+
+function pipelineModalClose(id) {
+  $(id)?.classList.remove("visible");
+  $(id)?.setAttribute("aria-hidden", "true");
+}
+
+async function refreshPipeline() {
+  try {
+    if (!state.accessories?.length) {
+      // 首次渲染可能早于 loadInitial 完成,补拉配件列表。
+      const accessories = await api(withAuthScope("/api/accessories"));
+      renderAccessories(accessories.items);
+    }
+    const result = await api(withAuthScope("/api/pipeline/tasks"));
+    state.pipeline.tasks = result.items || [];
+    state.pipeline.agent = result.agent || null;
+    state.pipeline.accessories = result.accessories || [];
+    state.pipeline.pendingCandidates = result.pending_candidates || [];
+    renderPipeline();
+  } catch {
+    // 轮询失败保持安静,下一轮重试。
+  }
+}
+
+function renderPipeline() {
+  renderPipelineAgentPill();
+  renderPipelineAccessories();
+  renderPipelineTasks();
+}
+
+function applyPipelineAccessoryPayload(payload) {
+  if (!payload) return false;
+  state.pipeline.accessories = payload.accessories || [];
+  state.pipeline.pendingCandidates = payload.pending_candidates || [];
+  renderPipelineAccessories();
+  renderPipelineAddLibrary();
+  return true;
+}
+
+function renderPipelineAgentPill() {
+  const pill = $("pipelineAgentMode");
+  if (!pill) return;
+  const agent = state.pipeline.agent;
+  const isAgent = agent?.mode === "agent";
+  pill.textContent = isAgent ? "Agent 推荐" : "规则推荐";
+  pill.className = `pill ${isAgent ? "ok" : "neutral"}`;
+}
+
+function normalizePipelineMethod(value) {
+  const method = String(value || "").trim().toLowerCase();
+  if (["ai_detection", "ai_inspect", "gemini"].includes(method)) return "ai";
+  if (["locate_anything", "locateanything", "open_vocab"].includes(method)) return "locate";
+  return PIPELINE_METHOD_META[method] ? method : "yolo_ocr";
+}
+
+function pipelineTaskMethod(task) {
+  const params = task?.params || {};
+  return normalizePipelineMethod(task?.detection_method || params.train_mode || params.route);
+}
+
+function pipelineMethodMeta(method) {
+  return PIPELINE_METHOD_META[normalizePipelineMethod(method)] || PIPELINE_METHOD_META.yolo_ocr;
+}
+
+function pipelineTaskById(taskId) {
+  return (state.pipeline.tasks || []).find((item) => item.id === taskId) || null;
+}
+
+function pipelineTaskUsesTraining(task) {
+  if (task?.uses_training_flow !== undefined) return task.uses_training_flow !== false;
+  return Boolean(pipelineMethodMeta(pipelineTaskMethod(task)).usesTraining);
+}
+
+function pipelineAssignedAccessoryIds() {
+  const ids = new Set();
+  for (const task of state.pipeline.tasks || []) {
+    if (task.stage === "library") continue;
+    for (const itemId of task.accessory_ids || []) ids.add(String(itemId));
+  }
+  return ids;
+}
+
+function pipelineTaskAccessoryCount(task, accessoryId) {
+  const counts = task?.accessory_counts || {};
+  return Math.max(1, Math.min(99, Number(counts[accessoryId] || 1)));
+}
+
+function pipelineTaskTypePill(task) {
+  const method = pipelineTaskMethod(task);
+  const methodMeta = pipelineMethodMeta(method);
+  const hasAccessories = Boolean((task.accessory_ids || []).length);
+  const ready = method === "ai" && hasAccessories;
+  const text = method === "ai"
+    ? `AI Type · ${ready ? "Ready" : "待配件"}`
+    : `Type · ${methodMeta.label}`;
+  return `<span class="pipeline-type-pill ${ready ? "ready" : ""}">${escapeHtml(text)}</span>`;
+}
+
+function normalizeAgentBaseUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function agentProviderFromBaseUrl(baseUrl) {
+  try {
+    const url = new URL(normalizeAgentBaseUrl(baseUrl));
+    return url.hostname.toLowerCase() === "api.cursor.com" ? "cursor" : "openai_compatible";
+  } catch {
+    return "openai_compatible";
+  }
+}
+
+function syncAgentBaseUrlPreset() {
+  const preset = $("agentBaseUrlPreset");
+  if (!preset) return;
+  const current = normalizeAgentBaseUrl($("agentBaseUrl")?.value);
+  const match = AGENT_BASE_URL_PRESETS.find((item) => item.value === current);
+  preset.value = match?.value || "";
+}
+
+function currentAgentBaseUrl() {
+  const presetValue = $("agentBaseUrlPreset")?.value || "";
+  return normalizeAgentBaseUrl(presetValue || $("agentBaseUrl")?.value || "");
+}
+
+function syncAgentEndpointUi(options = {}) {
+  const baseUrlInput = $("agentBaseUrl");
+  const modelInput = $("agentModel");
+  const presetValue = $("agentBaseUrlPreset")?.value || "";
+  if (baseUrlInput) {
+    if (presetValue) {
+      baseUrlInput.value = presetValue;
+      baseUrlInput.disabled = true;
+    } else {
+      baseUrlInput.disabled = false;
+    }
+  }
+  const provider = agentProviderFromBaseUrl(currentAgentBaseUrl());
+  const meta = AGENT_PROVIDER_META[provider] || AGENT_PROVIDER_META.openai_compatible;
+  if (baseUrlInput) baseUrlInput.placeholder = meta.base_placeholder;
+  if (modelInput) {
+    modelInput.placeholder = meta.model_placeholder;
+    if (options.applyModelDefault && provider === "cursor" && !modelInput.value.trim()) {
+      modelInput.value = "auto";
+    }
+  }
+  syncAgentBaseUrlPreset();
+  if ($("agentProviderHint")) $("agentProviderHint").textContent = `${meta.label}: ${meta.hint}`;
+}
+
+function normalizeAgentModelOptions(options) {
+  const seen = new Set();
+  const result = [];
+  for (const item of Array.isArray(options) ? options : []) {
+    const id = String(item?.id || item?.value || item || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push({ id, label: String(item?.label || item?.name || id).trim() || id });
+  }
+  return result;
+}
+
+function renderAgentModelOptions(config = {}) {
+  const options = normalizeAgentModelOptions(config.model_options || []);
+  const select = $("agentModel");
+  if (select) {
+    const current = String(config.model || select.value || "").trim();
+    select.innerHTML = "";
+    if (options.length) {
+      for (const option of options) {
+        const node = document.createElement("option");
+        node.value = option.id;
+        node.textContent = option.id;
+        node.title = option.label;
+        select.appendChild(node);
+      }
+      const selected = options.some((option) => option.id === current) ? current : options[0].id;
+      select.value = selected;
+      select.disabled = false;
+    } else {
+      const node = document.createElement("option");
+      node.value = "";
+      node.textContent = "先测试连接生成模型列表";
+      select.appendChild(node);
+      select.value = "";
+      select.disabled = true;
+    }
+  }
+  const hint = $("agentModelHint");
+  if (hint) {
+    hint.textContent = options.length
+      ? `已获取 ${options.length} 个可用模型，点击 Model 可选择。`
+      : "测试连接后自动生成可用模型列表。";
+  }
+}
+
+function applyAgentBaseUrlPreset(value) {
+  if (value && $("agentBaseUrl")) {
+    $("agentBaseUrl").value = value;
+  }
+  syncAgentEndpointUi({ applyModelDefault: true });
+  renderAgentModelOptions({ model_options: [] });
+}
+
+function agentConnectionLabel(config) {
+  if (!config?.configured) return "未配置";
+  const providerLabel = config.provider_label || AGENT_PROVIDER_META[config.provider]?.label || "Agent";
+  if (config.connection_status === "connected") return `${providerLabel} 已连接`;
+  if (config.connection_status === "failed") return "测试失败";
+  return "已配置，未测试";
+}
+
+function agentConnectionClass(config) {
+  if (config?.configured && config.connection_status === "connected") return "ok";
+  if (config?.configured && config.connection_status === "failed") return "fail";
+  return "neutral";
+}
+
+function renderPipelineAccessories() {
+  const list = $("pipelineAccessoryList");
+  if (!list) return;
+  list.innerHTML = "";
+  const candidates = state.pipeline.pendingCandidates || [];
+  for (const candidate of candidates) {
+    const failed = candidate.status === "failed";
+    const ready = candidate.status === "ready";
+    const running = candidate.status === "running";
+    const dotClass = failed ? "failed" : ready ? "ready" : "pending";
+    const rawProgress = Number(candidate.progress);
+    const progressValue = Math.max(2, Math.min(100, Number.isFinite(rawProgress) ? rawProgress : 0));
+    const showProgress = Number.isFinite(rawProgress) && (ready || failed || running || progressValue > 2);
+    const card = document.createElement("article");
+    card.className = `pipeline-card accessory-card ${ready ? "ready candidate-ready" : "pending"}${failed ? " failed" : ""}`;
+    card.innerHTML = `
+      <div class="pipeline-card-head">
+        <strong>${escapeHtml(zhLabel(candidate.name || "新配件"))}</strong>
+        <span class="pipeline-state-dot ${dotClass}" title="${escapeAttr(candidate.status_text || "待确认")}"></span>
+      </div>
+      <p class="pipeline-card-meta">${escapeHtml(candidate.status_text || STATUS_ZH[candidate.status] || candidate.status || "待确认")} · ${escapeHtml(recordAuditText(candidate))}</p>
+      ${showProgress ? `<div class="pipeline-progress"><div class="pipeline-progress-bar" style="width:${progressValue}%"></div></div>` : ""}
+      <div class="pipeline-card-actions">
+        <button type="button" class="mini-secondary" data-pipeline-open-candidate="${escapeAttr(candidate.id || "")}">${ready ? "确认" : "查看"}</button>
+      </div>
+    `;
+    list.appendChild(card);
+  }
+  const assignedAccessoryIds = pipelineAssignedAccessoryIds();
+  const visibleAccessories = (state.pipeline.accessories || []).filter((item) => !assignedAccessoryIds.has(String(item.id)));
+  for (const item of visibleAccessories) {
+    const ready = pipelineAccessoryReady(item);
+    const card = document.createElement("article");
+    card.className = `pipeline-card accessory-card ${ready ? "ready" : "pending"}`;
+    if (ready) {
+      card.draggable = true;
+      card.addEventListener("dragstart", (event) => {
+        event.dataTransfer.setData("text/plain", `acc:${item.id}`);
+        event.dataTransfer.effectAllowed = "copyMove";
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    }
+    card.innerHTML = `
+      <div class="pipeline-card-head">
+        <strong>${escapeHtml(zhLabel(item.name))}</strong>
+        <span class="pipeline-state-dot ${ready ? "ready" : "pending"}" title="${ready ? "可使用" : "等待中"}"></span>
+      </div>
+      <p class="pipeline-card-meta">${(item.source_files || []).length} 份素材 · ${ready ? "已上传" : "等待中"} · ${escapeHtml(recordAuditText(item))}</p>
+      <div class="pipeline-card-actions">
+        <button type="button" class="mini-secondary" data-view-accessory="${escapeAttr(item.id)}">查看</button>
+        <button type="button" class="danger-action compact-danger" data-pipeline-remove-accessory="${escapeAttr(item.id)}">移除</button>
+      </div>
+    `;
+    list.appendChild(card);
+  }
+  if (!list.children.length) {
+    list.innerHTML = assignedAccessoryIds.size
+      ? `<div class="lane-empty">当前配件都已分配到任务。</div>`
+      : `<div class="lane-empty">当前流水线还没有配件。</div>`;
+  }
+  list.querySelectorAll("[data-pipeline-open-candidate]").forEach((button) => {
+    button.addEventListener("click", () => openImageJobCandidate(button.dataset.pipelineOpenCandidate));
+  });
+  list.querySelectorAll("[data-view-accessory]").forEach((button) => {
+    button.addEventListener("click", () => openAccessoryDetail(button.dataset.viewAccessory));
+  });
+  list.querySelectorAll("[data-pipeline-remove-accessory]").forEach((button) => {
+    button.addEventListener("click", () => removePipelineAccessory(button.dataset.pipelineRemoveAccessory, button));
+  });
+}
+
+function pipelineAccessoryReady(item) {
+  const status = String(item?.status || "active").trim().toLowerCase();
+  return !["queued", "running", "pending", "candidate_review", "building", "generating", "failed", "error"].includes(status);
+}
+
+function pipelineAccessoryById(accessoryId) {
+  return (state.pipeline.accessories || []).find((item) => item.id === accessoryId);
+}
+
+async function removePipelineAccessory(accessoryId, button = null) {
+  if (!accessoryId) return;
+  if (button) setBusy(button, true);
+  try {
+    const result = await api(`/api/pipeline/accessories/${encodeURIComponent(accessoryId)}`, { method: "DELETE" });
+    applyPipelineAccessoryPayload(result);
+    toast("已从当前流水线移除,配件库仍保留。");
+  } catch (error) {
+    toast(`移除失败:${error.message}`);
+  } finally {
+    if (button) setBusy(button, false);
+  }
+}
+
+function renderPipelineAddLibrary() {
+  const list = $("pipelineLibraryAccessoryList");
+  if (!list) return;
+  const currentIds = new Set((state.pipeline.accessories || []).map((item) => item.id));
+  const items = state.accessories || [];
+  list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = `<div class="lane-empty">配件库暂无可用配件。</div>`;
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement("div");
+    const inFlow = currentIds.has(item.id);
+    row.className = "pipeline-library-accessory-row";
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(zhLabel(item.name))}</strong>
+        <span>${escapeHtml(item.material_type === "text" ? "文字类" : "物品类")} · ${escapeHtml(STATUS_ZH[item.status] || item.status || "active")}</span>
+        <span>${escapeHtml(recordAuditText(item))}</span>
+      </div>
+      <button type="button" class="mini-secondary" data-pipeline-add-existing="${escapeAttr(item.id)}" ${inFlow ? "disabled" : ""}>${inFlow ? "已加入" : "加入"}</button>
+    `;
+    list.appendChild(row);
+  }
+  list.querySelectorAll("[data-pipeline-add-existing]").forEach((button) => {
+    button.addEventListener("click", () => addExistingPipelineAccessory(button.dataset.pipelineAddExisting, button));
+  });
+}
+
+async function openPipelineAccessoryModal() {
+  try {
+    const accessories = await api(withAuthScope("/api/accessories"));
+    renderAccessories(accessories.items);
+  } catch {
+    // 保留现有列表,弹窗仍可用于新建配件。
+  }
+  updatePipelineMaterialFields();
+  renderPipelineAccessoryFileQueue();
+  renderPipelineAddLibrary();
+  pipelineModalOpen("pipelineAccessoryModal");
+}
+
+function closePipelineAccessoryModal() {
+  pipelineModalClose("pipelineAccessoryModal");
+}
+
+async function addExistingPipelineAccessory(accessoryId, button) {
+  if (!accessoryId) return;
+  setBusy(button, true);
+  try {
+    const result = await api(`/api/pipeline/accessories/${encodeURIComponent(accessoryId)}`, { method: "POST" });
+    applyPipelineAccessoryPayload(result);
+    toast("配件已加入当前流水线。");
+  } catch (error) {
+    toast(`加入失败:${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function clearPipelineAccessoryFileQueue() {
+  for (const url of state.pipelineAccessoryPendingFileUrls.values()) URL.revokeObjectURL(url);
+  state.pipelineAccessoryPendingFileUrls.clear();
+  state.pipelineAccessoryPendingFiles = [];
+  if ($("pipelineAccessoryFiles")) $("pipelineAccessoryFiles").value = "";
+  renderPipelineAccessoryFileQueue();
+}
+
+function addPipelineAccessoryPendingFiles(fileList) {
+  const existing = new Set(state.pipelineAccessoryPendingFiles.map(accessoryFileKey));
+  for (const file of Array.from(fileList || [])) {
+    const key = accessoryFileKey(file);
+    if (existing.has(key)) continue;
+    state.pipelineAccessoryPendingFiles.push(file);
+    existing.add(key);
+  }
+  if ($("pipelineAccessoryFiles")) $("pipelineAccessoryFiles").value = "";
+  renderPipelineAccessoryFileQueue();
+}
+
+function removePipelineAccessoryPendingFile(index) {
+  const file = state.pipelineAccessoryPendingFiles[Number(index)];
+  if (!file) return;
+  const key = accessoryFileKey(file);
+  const url = state.pipelineAccessoryPendingFileUrls.get(key);
+  if (url) URL.revokeObjectURL(url);
+  state.pipelineAccessoryPendingFileUrls.delete(key);
+  state.pipelineAccessoryPendingFiles.splice(Number(index), 1);
+  renderPipelineAccessoryFileQueue();
+}
+
+function renderPipelineAccessoryFileQueue() {
+  const queue = $("pipelineAccessoryFileQueue");
+  if (!queue) return;
+  if (!state.pipelineAccessoryPendingFiles.length) {
+    queue.innerHTML = `<div class="upload-thumb-empty">还没有添加素材</div>`;
+    return;
+  }
+  queue.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "upload-thumb-summary";
+  title.textContent = `待上传素材 ${state.pipelineAccessoryPendingFiles.length} 个`;
+  queue.appendChild(title);
+  const grid = document.createElement("div");
+  grid.className = "upload-thumb-grid";
+  for (const [index, file] of state.pipelineAccessoryPendingFiles.entries()) {
+    const key = accessoryFileKey(file);
+    if (!state.pipelineAccessoryPendingFileUrls.has(key) && file.type.startsWith("image/")) {
+      state.pipelineAccessoryPendingFileUrls.set(key, URL.createObjectURL(file));
+    }
+    const url = state.pipelineAccessoryPendingFileUrls.get(key);
+    const kind = file.type.startsWith("video/") ? "视频" : file.type.startsWith("image/") ? "图片" : "文件";
+    const card = document.createElement("div");
+    card.className = "upload-thumb-card";
+    card.innerHTML = `
+      <button type="button" class="upload-thumb-remove" data-remove-pipeline-file="${index}" aria-label="移除素材">×</button>
+      ${url ? `<img src="${url}" alt="${escapeHtml(file.name)}" />` : `<div class="upload-thumb-file">${kind}</div>`}
+      <span title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+      <em>${kind}</em>
+    `;
+    grid.appendChild(card);
+  }
+  queue.appendChild(grid);
+  queue.querySelectorAll("[data-remove-pipeline-file]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      removePipelineAccessoryPendingFile(button.dataset.removePipelineFile);
+    });
+  });
+}
+
+function updatePipelineMaterialFields() {
+  const materialType = $("pipelineAccessoryMaterialType")?.value || "object";
+  $("pipelineObjectFields")?.classList.toggle("hidden", materialType !== "object");
+  $("pipelineTextFields")?.classList.toggle("hidden", materialType !== "text");
+}
+
+function resetPipelineAccessoryForm() {
+  if ($("pipelineAccessoryName")) $("pipelineAccessoryName").value = "";
+  if ($("pipelineObjectAlphaPolicy")) $("pipelineObjectAlphaPolicy").value = "";
+  for (const id of ["pipelineObjectLengthMm", "pipelineObjectWidthMm", "pipelineObjectHeightMm", "pipelinePaperWidthMm", "pipelinePaperHeightMm"]) {
+    if ($(id)) $(id).value = "";
+  }
+  clearPipelineAccessoryFileQueue();
+}
+
+async function startPipelineAccessoryAdd(button) {
+  const name = $("pipelineAccessoryName")?.value.trim() || "";
+  if (!name) return toast("请输入配件名称。");
+  const materialType = $("pipelineAccessoryMaterialType")?.value || "object";
+  const pendingFiles = state.pipelineAccessoryPendingFiles;
+  if (!pendingFiles.length) return toast("请先添加至少一张照片或一段视频。");
+  const form = new FormData();
+  form.append("name", name);
+  form.append("material_type", materialType);
+  form.append("training_role", materialType === "text" ? "detect_then_ocr" : "detect_shape");
+  form.append("pipeline_context", "pipeline");
+  if (materialType === "text") {
+    form.append("paper_preset", $("pipelinePaperPreset")?.value || "A4");
+    form.append("paper_width_mm", $("pipelinePaperWidthMm")?.value || "");
+    form.append("paper_height_mm", $("pipelinePaperHeightMm")?.value || "");
+  } else {
+    const alphaPolicy = $("pipelineObjectAlphaPolicy")?.value || "";
+    if (!alphaPolicy) return toast("请先选择物品透明或不透明。");
+    form.append("material_alpha_policy", alphaPolicy);
+    form.append("object_length_mm", $("pipelineObjectLengthMm")?.value || "");
+    form.append("object_width_mm", $("pipelineObjectWidthMm")?.value || "");
+    form.append("object_height_mm", $("pipelineObjectHeightMm")?.value || "");
+  }
+  setBusy(button, true);
+  try {
+    const uploadFiles = materialType === "text" ? await prepareTextAccessoryFiles(pendingFiles) : pendingFiles;
+    for (const file of uploadFiles) form.append("files", file);
+    const result = await api("/api/accessories", { method: "POST", body: form });
+    closePipelineAccessoryModal();
+    resetPipelineAccessoryForm();
+    if (result.items) renderAccessories(result.items);
+    if (result.pipeline) {
+      applyPipelineAccessoryPayload(result.pipeline);
+    } else if (result.item?.id) {
+      const pipeline = await api(`/api/pipeline/accessories/${encodeURIComponent(result.item.id)}`, { method: "POST" });
+      applyPipelineAccessoryPayload(pipeline);
+    }
+    await refreshPipeline();
+    toast("配件已添加到当前流水线，可直接拖入任务。");
+  } catch (error) {
+    toast(`添加失败:${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function setAccessoryRoute(accessoryId, route, select) {
+  if (select) select.disabled = true;
+  try {
+    const result = await api(`/api/accessories/${encodeURIComponent(accessoryId)}/route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ route, apply: true }),
+    });
+    for (const collection of [state.accessories || [], state.pipeline.accessories || []]) {
+      const target = collection.find((item) => item.id === accessoryId);
+      if (target) target.detection_route = route;
+    }
+    if (route === "ai") {
+      if (result.profile_status === "ready") {
+        toast("已切换为 AI 检测:画像已就绪,并加入 Dashboard 快捷 AI 检测任务。");
+      } else {
+        toast(`已切换为 AI 检测,但画像生成失败:${result.profile_error || "未知原因"}`);
+      }
+      await loadAiTasksQuietly();
+    } else if (route === "locate") {
+      toast("已切换为开放定位:该配件会出现在开放定位工作台的检测项里。");
+    } else if (route === "archive_only") {
+      toast("已切换为仅建档:配件保留档案,不参与训练或检测。");
+    } else {
+      toast("已切换为 YOLO 训练路线。");
+    }
+    renderPipelineAccessories();
+  } catch (error) {
+    toast(`切换检测路线失败:${error.message}`);
+    renderPipelineAccessories();
+  } finally {
+    if (select) select.disabled = false;
+  }
+}
+
+async function loadAiTasksQuietly() {
+  try {
+    const aiTasks = await api(withAuthScope("/api/ai/tasks"));
+    state.aiTasks = aiTasks.tasks || [];
+    state.selectedAiTaskId = aiTasks.selected_task_id || state.aiTasks[0]?.id || "";
+    renderAiTasks();
+  } catch {
+    // AI 任务刷新失败不影响主流程。
+  }
+}
+
+function pipelineParamsSummary(task) {
+  const method = pipelineTaskMethod(task);
+  if (!pipelineMethodMeta(method).usesTraining) {
+    return method === "ai" ? "AI 检测工作台" : "Locate Anything 工作台";
+  }
+  const params = task.params || {};
+  const parts = [];
+  if (params.sample_count) parts.push(`${params.sample_count} 样本`);
+  if (params.epochs) parts.push(`${params.epochs} epoch`);
+  if (params.image_size) parts.push(`${params.image_size}px`);
+  if (params.train_mode) parts.push(params.train_mode === "yolo_ocr" ? "YOLO+OCR" : "YOLO");
+  return parts.length ? parts.join(" · ") : "待 Agent 推荐";
+}
+
+function pipelineTaskAccessoryRows(task) {
+  if (Array.isArray(task?.accessories) && task.accessories.length) return task.accessories;
+  return (task?.accessory_ids || []).map((itemId) => {
+    const accessory = [...(state.pipeline.accessories || []), ...(state.accessories || [])].find((item) => String(item.id) === String(itemId));
+    return {
+      id: itemId,
+      name: accessory?.name || itemId,
+      material_type: accessory?.material_type || "",
+      count: pipelineTaskAccessoryCount(task, itemId),
+    };
+  });
+}
+
+function renderPipelineTaskDetail() {
+  const task = pipelineTaskById(state.pipelineDetailTaskId);
+  const title = $("pipelineTaskDetailTitle");
+  const meta = $("pipelineTaskDetailMeta");
+  const list = $("pipelineTaskAccessoryDetailList");
+  if (!title || !meta || !list) return;
+  if (!task) {
+    title.textContent = "任务详情";
+    meta.innerHTML = `<div class="lane-empty">任务不存在或已删除。</div>`;
+    list.innerHTML = "";
+    return;
+  }
+  const method = pipelineTaskMethod(task);
+  const methodMeta = pipelineMethodMeta(method);
+  const canEditCounts = task.stage === "draft";
+  title.textContent = task.name || "任务详情";
+  meta.innerHTML = `
+    <span>${escapeHtml(methodMeta.label)}</span>
+    <strong class="${method === "ai" && (task.accessory_ids || []).length ? "ready" : ""}">${method === "ai" && (task.accessory_ids || []).length ? "Type Ready" : PIPELINE_STATUS_ZH[task.status] || task.status || "待开始"}</strong>
+    <span>${escapeHtml(task.stage || "draft")}</span>
+    <span>${escapeHtml(recordAuditText(task, { includeUpdated: true }))}</span>
+  `;
+  const rows = pipelineTaskAccessoryRows(task);
+  if (!rows.length) {
+    list.innerHTML = `<div class="lane-empty">还没有选择配件。把左侧配件拖入这个任务后，可在这里调整数量。</div>`;
+    return;
+  }
+  list.innerHTML = rows
+    .map((item) => {
+      const count = pipelineTaskAccessoryCount(task, item.id);
+      const kind = item.material_type === "text" ? "文本/说明书" : item.material_type === "object" ? "物体" : "配件";
+      return `
+        <div class="pipeline-task-accessory-row">
+          <div>
+            <strong>${escapeHtml(zhLabel(item.name || item.id))}</strong>
+            <span>${escapeHtml(kind)}</span>
+          </div>
+          <div class="pipeline-quantity-control">
+            <button type="button" data-pipeline-count="${escapeAttr(item.id)}" data-count-delta="-1" ${!canEditCounts || count <= 1 ? "disabled" : ""} aria-label="减少数量">−</button>
+            <strong>${count}</strong>
+            <button type="button" data-pipeline-count="${escapeAttr(item.id)}" data-count-delta="1" ${!canEditCounts || count >= 99 ? "disabled" : ""} aria-label="增加数量">+</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+  list.querySelectorAll("[data-pipeline-count]").forEach((button) => {
+    button.addEventListener("click", () => updatePipelineTaskAccessoryCount(task.id, button.dataset.pipelineCount, Number(button.dataset.countDelta || 0), button));
+  });
+}
+
+function openPipelineTaskDetail(taskId) {
+  state.pipelineDetailTaskId = taskId || "";
+  renderPipelineTaskDetail();
+  pipelineModalOpen("pipelineTaskDetailModal");
+}
+
+async function updatePipelineTaskAccessoryCount(taskId, accessoryId, delta, button = null) {
+  const task = pipelineTaskById(taskId);
+  if (!task || !accessoryId || !delta) return;
+  const counts = { ...(task.accessory_counts || {}) };
+  counts[accessoryId] = Math.max(1, Math.min(99, pipelineTaskAccessoryCount(task, accessoryId) + delta));
+  if (button) setBusy(button, true);
+  try {
+    const updated = await api(`/api/pipeline/tasks/${encodeURIComponent(taskId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessory_counts: counts }),
+    });
+    const index = state.pipeline.tasks.findIndex((item) => item.id === taskId);
+    if (index >= 0) state.pipeline.tasks[index] = updated;
+    renderPipeline();
+    state.pipelineDetailTaskId = taskId;
+    renderPipelineTaskDetail();
+  } catch (error) {
+    toast(`调整数量失败:${error.message}`);
+  } finally {
+    if (button) setBusy(button, false);
+  }
+}
+
+function pipelineTaskDraggable(task) {
+  if (task.stage === "draft") return task.status !== "running";
+  if (task.stage === "samples" || task.stage === "training") return task.status === "completed";
+  return false;
+}
+
+function renderPipelineTasks() {
+  for (const laneId of Object.values(PIPELINE_STAGE_LANES)) {
+    const lane = $(laneId);
+    if (lane) lane.innerHTML = "";
+  }
+  const libraryZone = $("pipelineLibraryZone");
+  if (libraryZone) libraryZone.querySelectorAll(".pipeline-library-chip").forEach((chip) => chip.remove());
+  for (const task of state.pipeline.tasks) {
+    if (task.stage === "library") {
+      continue;
+    }
+    const lane = $(PIPELINE_STAGE_LANES[task.stage] || "pipelineDraftList");
+    if (!lane) continue;
+    const card = document.createElement("article");
+    card.className = `pipeline-card task-card status-${task.status || "ready"}`;
+    const draggable = pipelineTaskDraggable(task);
+    if (draggable) {
+      card.draggable = true;
+      card.addEventListener("dragstart", (event) => {
+        event.dataTransfer.setData("text/plain", `task:${task.id}`);
+        event.dataTransfer.effectAllowed = "move";
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    }
+    const progress = task.stage === "samples" || task.stage === "training"
+      ? `<div class="pipeline-progress"><div class="pipeline-progress-bar" style="width:${Math.max(2, Math.min(100, Number(task.progress || 0)))}%"></div></div>`
+      : "";
+    const epochInfo = task.stage === "training" && task.total_epochs
+      ? ` · Epoch ${task.current_epoch || 0}/${task.total_epochs}`
+      : "";
+    const method = pipelineTaskMethod(task);
+    const methodMeta = pipelineMethodMeta(method);
+    const usesTraining = pipelineTaskUsesTraining(task);
+    const methodLabel = methodMeta.label;
+    const accessorySummary = pipelineTaskAccessoryRows(task)
+      .map((item) => `${zhLabel(item.name || item.id)}×${pipelineTaskAccessoryCount(task, item.id)}`)
+      .join("、");
+    const advanceLabel = task.stage === "draft"
+      ? usesTraining
+        ? "生成样本"
+        : method === "ai"
+          ? "创建 AI 任务"
+          : "启用定位任务"
+      : task.stage === "samples"
+        ? "开始训练"
+        : "入库使用";
+    const canAdvance = task.stage === "draft" ? task.status !== "running" : task.status === "completed";
+    const paramsChip = usesTraining
+      ? `<button type="button" class="pipeline-params-chip" data-pipeline-params="${escapeAttr(task.id)}" title="${escapeAttr(task.agent_reason || "")}">${escapeHtml(pipelineParamsSummary(task))}</button>`
+      : `<button type="button" class="pipeline-params-chip" disabled title="${escapeAttr(method === "ai" ? "AI 检测任务会由流水线创建" : "Locate Anything 任务会由流水线创建")}">${escapeHtml(pipelineParamsSummary(task))}</button>`;
+    card.innerHTML = `
+      <div class="pipeline-card-head">
+        <strong>${escapeHtml(task.name)}</strong>
+        <div class="pipeline-card-badges">
+          ${pipelineTaskTypePill(task)}
+          <span class="pill ${task.status === "completed" ? "ok" : task.status === "failed" ? "fail" : "neutral"}">${PIPELINE_STATUS_ZH[task.status] || task.status}</span>
+        </div>
+      </div>
+      <p class="pipeline-card-meta">${escapeHtml(`${methodLabel} · ${accessorySummary || (task.accessory_names || []).join("、") || "未选择配件"}`)}${epochInfo}</p>
+      <p class="pipeline-card-meta">${escapeHtml(recordAuditText(task, { includeUpdated: true }))}</p>
+      ${progress}
+      ${task.last_error ? `<p class="pipeline-card-error">${escapeHtml(task.last_error)}</p>` : ""}
+      ${paramsChip}
+      <div class="pipeline-card-actions">
+        <button type="button" class="mini-secondary" data-pipeline-detail="${escapeAttr(task.id)}">详情</button>
+        ${canAdvance ? `<button type="button" class="mini-secondary" data-pipeline-advance="${escapeAttr(task.id)}">${advanceLabel}</button>` : ""}
+        <label class="pipeline-auto-mini" title="阶段完成后自动进入下一步">
+          <input type="checkbox" data-pipeline-auto="${escapeAttr(task.id)}" ${task.auto_advance ? "checked" : ""} />
+          <span>自动</span>
+        </label>
+        <button type="button" class="danger-action compact-danger" data-pipeline-delete="${escapeAttr(task.id)}">删除</button>
+      </div>
+    `;
+    lane.appendChild(card);
+    card.addEventListener("dragover", (event) => {
+      // dragover 阶段读不到拖拽内容,先放行,drop 时再校验类型。
+      if (task.stage !== "draft") return;
+      if (event.dataTransfer.types.includes("text/plain")) {
+        event.preventDefault();
+        card.classList.add("drop-target");
+      }
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("drop-target"));
+    card.addEventListener("drop", async (event) => {
+      card.classList.remove("drop-target");
+      const payload = event.dataTransfer.getData("text/plain");
+      if (task.stage === "draft" && payload.startsWith("acc:")) {
+        event.preventDefault();
+        event.stopPropagation();
+        const accessoryId = payload.slice(4);
+        if ((task.accessory_ids || []).includes(accessoryId)) return;
+        try {
+          await api(`/api/pipeline/tasks/${encodeURIComponent(task.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessory_ids: [...(task.accessory_ids || []), accessoryId] }),
+          });
+          toast("配件已加入任务。");
+          await refreshPipeline();
+          state.pipelineDetailTaskId = task.id;
+          if ($("pipelineTaskDetailModal")?.classList.contains("visible")) renderPipelineTaskDetail();
+        } catch (error) {
+          toast(`加入配件失败:${error.message}`);
+        }
+      }
+    });
+  }
+  for (const [stage, laneId] of Object.entries(PIPELINE_STAGE_LANES)) {
+    const lane = $(laneId);
+    if (lane && !lane.children.length) {
+      const empty = document.createElement("div");
+      empty.className = "lane-empty";
+      empty.textContent = stage === "draft" ? "新建任务或拖入配件开始。" : stage === "samples" ? "把待开始的任务拖到这里生成样本。" : "样本完成后拖到这里开始训练。";
+      lane.appendChild(empty);
+    }
+  }
+  document.querySelectorAll("[data-pipeline-advance]").forEach((button) => {
+    button.addEventListener("click", () => advancePipelineTaskById(button.dataset.pipelineAdvance, button));
+  });
+  document.querySelectorAll("[data-pipeline-detail]").forEach((button) => {
+    button.addEventListener("click", () => openPipelineTaskDetail(button.dataset.pipelineDetail));
+  });
+  document.querySelectorAll("[data-pipeline-params]").forEach((button) => {
+    button.addEventListener("click", () => openPipelineParamsModal(button.dataset.pipelineParams));
+  });
+  document.querySelectorAll("[data-pipeline-delete]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await api(`/api/pipeline/tasks/${encodeURIComponent(button.dataset.pipelineDelete)}`, { method: "DELETE" });
+        toast("流水线任务已删除。");
+        refreshPipeline();
+      } catch (error) {
+        toast(`删除失败:${error.message}`);
+      }
+    });
+  });
+  document.querySelectorAll("[data-pipeline-auto]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      try {
+        await api(`/api/pipeline/tasks/${encodeURIComponent(input.dataset.pipelineAuto)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ auto_advance: input.checked }),
+        });
+        toast(input.checked ? "已开启自动推进。" : "已关闭自动推进。");
+      } catch (error) {
+        toast(`设置失败:${error.message}`);
+        input.checked = !input.checked;
+      }
+    });
+  });
+}
+
+async function advancePipelineTaskById(taskId, button) {
+  const task = state.pipeline.tasks.find((item) => item.id === taskId);
+  if (!task) return;
+  if (task.stage === "draft" && !(task.accessory_ids || []).length) {
+    toast("先拖入至少一个配件。");
+    return;
+  }
+  const method = pipelineTaskMethod(task);
+  const usesTraining = pipelineTaskUsesTraining(task);
+  // 进入下一阶段前若还没有确认过参数,先弹出参数确认。
+  const stageKey = task.stage === "draft" ? "samples" : "training";
+  const params = task.params || {};
+  const missing = stageKey === "samples" ? !params.sample_count : !params.epochs;
+  if (usesTraining && missing && task.stage !== "training") {
+    openPipelineParamsModal(taskId, { advanceAfter: true });
+    return;
+  }
+  if (button) setBusy(button, true);
+  try {
+    await api(`/api/pipeline/tasks/${encodeURIComponent(taskId)}/advance`, { method: "POST" });
+    toast(
+      !usesTraining && task.stage === "draft"
+        ? method === "ai"
+          ? "AI 检测任务已创建，可在 AI 检测工作台使用。"
+          : "Locate Anything 任务已入库，可在开放定位工作台使用。"
+        : task.stage === "training"
+          ? "模型已入库,可在工作台切换使用。"
+          : "已进入下一阶段。",
+    );
+    refreshPipeline();
+    if (task.stage === "training") refreshTrainingLibrary();
+    if (method === "ai") loadAiTasksQuietly();
+    if (method === "locate") refreshLocateSources();
+  } catch (error) {
+    toast(`推进失败:${error.message}`);
+  } finally {
+    if (button) setBusy(button, false);
+  }
+}
+
+async function openPipelineParamsModal(taskId, options = {}) {
+  const task = state.pipeline.tasks.find((item) => item.id === taskId);
+  if (!task) return;
+  if (!pipelineTaskUsesTraining(task)) {
+    toast("AI 检测与 Locate Anything 任务不需要训练参数。");
+    return;
+  }
+  const stageKey = task.stage === "draft" ? "samples" : "training";
+  state.pipelineParamsTarget = { taskId, stageKey, advanceAfter: Boolean(options.advanceAfter) };
+  const modal = $("pipelineParamsModal");
+  modal.querySelectorAll("[data-param-field]").forEach((field) => {
+    const name = field.dataset.paramField;
+    const forSamples = name === "sample_count";
+    const forTraining = name === "epochs" || name === "image_size";
+    field.classList.toggle("hidden", (stageKey === "samples" && forTraining) || (stageKey === "training" && forSamples));
+  });
+  $("pipelineParamsTitle").textContent = stageKey === "samples" ? `生成样本参数 · ${task.name}` : `训练参数 · ${task.name}`;
+  $("pipelineParamsReason").textContent = "正在获取推荐参数…";
+  pipelineModalOpen("pipelineParamsModal");
+  let params = { ...(task.params || {}) };
+  let reason = task.agent_reason || "";
+  let source = task.agent_source || "";
+  const needRecommend = stageKey === "samples" ? !params.sample_count : !params.epochs;
+  if (needRecommend) {
+    try {
+      const recommendation = await api("/api/agent/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: stageKey,
+          accessory_ids: task.accessory_ids || [],
+          sample_count: params.sample_count || null,
+        }),
+      });
+      params = { ...recommendation.params, ...params };
+      reason = recommendation.reason || reason;
+      source = recommendation.source || source;
+    } catch (error) {
+      reason = `获取推荐失败,使用默认值:${error.message}`;
+    }
+  }
+  if ($("pipelineParamSampleCount")) $("pipelineParamSampleCount").value = params.sample_count || 400;
+  if ($("pipelineParamEpochs")) $("pipelineParamEpochs").value = params.epochs || 40;
+  if ($("pipelineParamImageSize")) $("pipelineParamImageSize").value = String(params.image_size || 640);
+  if ($("pipelineParamTrainMode")) $("pipelineParamTrainMode").value = params.train_mode || "yolo_ocr";
+  const sourceLabel = source === "agent" ? "Agent 推荐" : "规则推荐";
+  $("pipelineParamsReason").textContent = reason ? `${sourceLabel}:${reason}` : `${sourceLabel}:可直接接受或修改后保存。`;
+}
+
+function collectPipelineParams() {
+  const target = state.pipelineParamsTarget;
+  if (!target) return {};
+  if (target.stageKey === "samples") {
+    return {
+      sample_count: Number($("pipelineParamSampleCount").value) || 400,
+      train_mode: $("pipelineParamTrainMode").value,
+    };
+  }
+  return {
+    epochs: Number($("pipelineParamEpochs").value) || 40,
+    image_size: Number($("pipelineParamImageSize").value) || 640,
+    train_mode: $("pipelineParamTrainMode").value,
+  };
+}
+
+async function savePipelineParams(advance) {
+  const target = state.pipelineParamsTarget;
+  if (!target) return;
+  try {
+    await api(`/api/pipeline/tasks/${encodeURIComponent(target.taskId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ params: collectPipelineParams() }),
+    });
+    pipelineModalClose("pipelineParamsModal");
+    if (advance || target.advanceAfter) {
+      await api(`/api/pipeline/tasks/${encodeURIComponent(target.taskId)}/advance`, { method: "POST" });
+      toast("参数已确认,任务开始执行。");
+    } else {
+      toast("参数已保存。");
+    }
+    refreshPipeline();
+  } catch (error) {
+    toast(`保存参数失败:${error.message}`);
+  }
+}
+
+function openPipelineTaskModal() {
+  if ($("pipelineTaskDetectionMethod")) $("pipelineTaskDetectionMethod").value = "yolo_ocr";
+  $("pipelineTaskName").value = "";
+  pipelineModalOpen("pipelineTaskModal");
+}
+
+async function confirmPipelineTaskCreate() {
+  try {
+    await api("/api/pipeline/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: $("pipelineTaskName").value.trim(),
+        detection_method: $("pipelineTaskDetectionMethod")?.value || "yolo_ocr",
+      }),
+    });
+    pipelineModalClose("pipelineTaskModal");
+    toast("任务已创建,拖入配件后即可确认参数。");
+    refreshPipeline();
+  } catch (error) {
+    toast(`创建任务失败:${error.message}`);
+  }
+}
+
+function bindPipelineLaneDrops() {
+  document.querySelectorAll("[data-drop-stage]").forEach((zone) => {
+    zone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      zone.classList.add("drop-target");
+    });
+    zone.addEventListener("dragleave", () => zone.classList.remove("drop-target"));
+    zone.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      zone.classList.remove("drop-target");
+      const payload = event.dataTransfer.getData("text/plain");
+      const targetStage = zone.dataset.dropStage;
+      if (payload.startsWith("acc:")) {
+        if (targetStage === "draft") toast("先新建任务,再把配件拖到任务卡片上。");
+        else toast("配件需要先在第 2 栏组成任务。");
+        return;
+      }
+      if (!payload.startsWith("task:")) return;
+      const taskId = payload.slice(5);
+      const task = state.pipeline.tasks.find((item) => item.id === taskId);
+      if (!task) return;
+      if (PIPELINE_NEXT_STAGE[task.stage] !== targetStage) {
+        toast("只能拖入下一个阶段。");
+        return;
+      }
+      await advancePipelineTaskById(taskId);
+    });
+  });
+}
+
+function bindPipelineSidebarDropTarget() {
+  const target = document.querySelector('.nav-item[data-view="accessories"]');
+  if (!target) return;
+  target.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer.types.includes("text/plain")) return;
+    event.preventDefault();
+    target.classList.add("sidebar-drop-target");
+    event.dataTransfer.dropEffect = "move";
+  });
+  target.addEventListener("dragleave", () => target.classList.remove("sidebar-drop-target"));
+  target.addEventListener("drop", async (event) => {
+    const payload = event.dataTransfer.getData("text/plain");
+    target.classList.remove("sidebar-drop-target");
+    if (!payload.startsWith("acc:")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    await removePipelineAccessory(payload.slice(4));
+  });
+}
+
+async function refreshAgentConfigPanel() {
+  if (!hasPermission("agent_config")) return;
+  try {
+    const config = await api("/api/agent/config");
+    state.pipeline.agent = config;
+    if ($("agentBaseUrl")) $("agentBaseUrl").value = config.base_url || "";
+    if ($("agentModel")) $("agentModel").value = config.model || "";
+    if ($("agentApiKey")) $("agentApiKey").placeholder = config.has_api_key ? `已保存:${config.api_key_masked}` : "保存后只显示掩码";
+    if ($("agentTimeout")) $("agentTimeout").value = config.timeout_seconds || 45;
+    if ($("agentAutoAdvanceDefault")) $("agentAutoAdvanceDefault").checked = Boolean(config.auto_advance_default);
+    syncAgentBaseUrlPreset();
+    syncAgentEndpointUi();
+    renderAgentModelOptions(config);
+    const pill = $("agentConfigStatus");
+    if (pill) {
+      pill.textContent = agentConnectionLabel(config);
+      pill.className = `pill ${agentConnectionClass(config)}`;
+      pill.title = config.connection_message || "";
+    }
+    renderPipelineAgentPill();
+  } catch {
+    // 设置面板刷新失败保持安静。
+  }
+}
+
+function currentAgentConfigPayload() {
+  const payload = {
+    base_url: currentAgentBaseUrl(),
+    model: $("agentModel").value.trim(),
+    timeout_seconds: Number($("agentTimeout").value) || 45,
+    auto_advance_default: $("agentAutoAdvanceDefault").checked,
+  };
+  const key = $("agentApiKey").value.trim();
+  if (key) payload.api_key = key;
+  return payload;
+}
+
+async function postAgentConfigFromPanel() {
+  const result = await api("/api/agent/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(currentAgentConfigPayload()),
+  });
+  $("agentApiKey").value = "";
+  state.pipeline.agent = result;
+  if ($("agentBaseUrl")) $("agentBaseUrl").value = result.base_url || $("agentBaseUrl").value.trim();
+  if ($("agentModel")) $("agentModel").value = result.model || "";
+  if ($("agentTimeout")) $("agentTimeout").value = result.timeout_seconds || 45;
+  if ($("agentAutoAdvanceDefault")) $("agentAutoAdvanceDefault").checked = Boolean(result.auto_advance_default);
+  if ($("agentApiKey")) $("agentApiKey").placeholder = result.has_api_key ? `已保存:${result.api_key_masked}` : "保存后只显示掩码";
+  syncAgentBaseUrlPreset();
+  syncAgentEndpointUi();
+  renderAgentModelOptions(result);
+  return result;
+}
+
+async function saveAgentConfigFromPanel(button) {
+  setBusy(button, true);
+  try {
+    await postAgentConfigFromPanel();
+    toast("Agent 设置已保存。");
+    refreshAgentConfigPanel();
+  } catch (error) {
+    toast(`保存失败:${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function testAgentConfigFromPanel(button) {
+  setBusy(button, true);
+  try {
+    await postAgentConfigFromPanel();
+    const result = await api("/api/agent/config/test", { method: "POST" });
+    toast(result.message || (result.ok ? "连接成功。" : "连接失败。"));
+    state.pipeline.agent = result;
+    if ($("agentModel")) $("agentModel").value = result.model || $("agentModel").value;
+    renderAgentModelOptions(result);
+    const pill = $("agentConfigStatus");
+    if (pill) {
+      pill.textContent = agentConnectionLabel(result);
+      pill.className = `pill ${agentConnectionClass(result)}`;
+      pill.title = result.connection_message || "";
+    }
+    renderPipelineAgentPill();
+  } catch (error) {
+    toast(`测试失败:${error.message}`);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function startPipelinePolling() {
+  if (!state.auth.user || state.pipelinePollTimer) return;
+  state.pipelinePollTimer = setInterval(refreshPipeline, 6000);
+  refreshPipeline();
+  refreshAgentConfigPanel();
+}
+
+function bindPipeline() {
+  $("openTrainingWizard")?.addEventListener("click", () => pipelineModalOpen("trainingWizardModal"));
+  $("closeTrainingWizard")?.addEventListener("click", () => pipelineModalClose("trainingWizardModal"));
+  $("openJobHistory")?.addEventListener("click", () => pipelineModalOpen("jobHistoryModal"));
+  $("closeJobHistory")?.addEventListener("click", () => pipelineModalClose("jobHistoryModal"));
+  $("pipelineAddAccessory")?.addEventListener("click", openPipelineAccessoryModal);
+  $("closePipelineAccessoryModal")?.addEventListener("click", closePipelineAccessoryModal);
+  $("pipelineAccessoryMaterialType")?.addEventListener("change", updatePipelineMaterialFields);
+  $("pipelineAccessoryFiles")?.addEventListener("change", () => addPipelineAccessoryPendingFiles($("pipelineAccessoryFiles").files));
+  $("pipelineStartAccessoryAdd")?.addEventListener("click", (event) => startPipelineAccessoryAdd(event.currentTarget));
+  $("pipelineCreateTask")?.addEventListener("click", () => openPipelineTaskModal());
+  $("closePipelineTaskModal")?.addEventListener("click", () => pipelineModalClose("pipelineTaskModal"));
+  $("cancelPipelineTaskModal")?.addEventListener("click", () => pipelineModalClose("pipelineTaskModal"));
+  $("confirmPipelineTask")?.addEventListener("click", confirmPipelineTaskCreate);
+  $("closePipelineTaskDetailModal")?.addEventListener("click", () => pipelineModalClose("pipelineTaskDetailModal"));
+  $("donePipelineTaskDetailModal")?.addEventListener("click", () => pipelineModalClose("pipelineTaskDetailModal"));
+  $("closePipelineParamsModal")?.addEventListener("click", () => pipelineModalClose("pipelineParamsModal"));
+  $("savePipelineParams")?.addEventListener("click", () => savePipelineParams(false));
+  $("acceptPipelineParams")?.addEventListener("click", () => savePipelineParams(true));
+  $("saveAgentConfig")?.addEventListener("click", (event) => saveAgentConfigFromPanel(event.currentTarget));
+  $("testAgentConfig")?.addEventListener("click", (event) => testAgentConfigFromPanel(event.currentTarget));
+  $("agentBaseUrlPreset")?.addEventListener("change", (event) => applyAgentBaseUrlPreset(event.currentTarget.value));
+  $("agentBaseUrl")?.addEventListener("input", () => {
+    syncAgentEndpointUi();
+    renderAgentModelOptions({ model_options: [] });
+  });
+  for (const id of ["trainingWizardModal", "jobHistoryModal", "pipelineTaskModal", "pipelineTaskDetailModal", "pipelineAccessoryModal", "pipelineParamsModal"]) {
+    MODAL_CLOSE_HANDLERS.push([id, () => pipelineModalClose(id)]);
+    $(id)?.addEventListener("click", (event) => {
+      if (event.target === $(id)) pipelineModalClose(id);
+    });
+  }
+  document.querySelector('.nav-item[data-view="pipeline"]')?.addEventListener("click", refreshPipeline);
+  bindPipelineLaneDrops();
+  bindPipelineSidebarDropTarget();
+  startPipelinePolling();
+}
+
+bindPipeline();

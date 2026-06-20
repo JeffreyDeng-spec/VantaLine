@@ -1,6 +1,6 @@
 # Inspection Service
 
-This directory contains the FastAPI service and web UI for the VantaLane
+This directory contains the FastAPI service and web UI for the VantaLine
 inspection workflow.
 
 The service is no longer limited to the original five fixed package components.

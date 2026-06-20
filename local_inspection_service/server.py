@@ -1,6 +1,11 @@
 import base64
+import binascii
+import copy
+import io
+import ipaddress
 import json
 import math
+import mimetypes
 import os
 import re
 import signal
@@ -9,34 +14,90 @@ import socket
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import traceback
 import uuid
 import ctypes
+import contextvars
+import hmac
+import secrets
 from collections import Counter, defaultdict
-from pathlib import Path
-from typing import Any
+from pathlib import Path, PurePosixPath
+from typing import Any, Callable
 from urllib.parse import quote, urlsplit, urlunsplit
 import urllib.error
 import urllib.request
+import zipfile
 
 os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 
 import cv2
 import numpy as np
+import requests
+from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from local_inspection_service.label_experiment import (
+        compare_candidate_to_reference,
+        crop_to_content_bgr,
+        draw_split_overlay,
+        run_label_experiment,
+        segment_label_candidates_bgr,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name not in {"local_inspection_service", "local_inspection_service.label_experiment"}:
+        raise
+    try:
+        from label_experiment import (
+            compare_candidate_to_reference,
+            crop_to_content_bgr,
+            draw_split_overlay,
+            run_label_experiment,
+            segment_label_candidates_bgr,
+        )
+    except ModuleNotFoundError as fallback_exc:
+        if fallback_exc.name != "label_experiment":
+            raise
+        compare_candidate_to_reference = None
+        crop_to_content_bgr = None
+        draw_split_overlay = None
+        run_label_experiment = None
+        segment_label_candidates_bgr = None
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
+from fastapi import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.gzip import GZipMiddleware
 from ultralytics import YOLO
 
 
-ROOT = Path("/mnt/f/CodexWorkspace/assembly_line_optimize")
+def resolve_service_root() -> Path:
+    override = (
+        os.environ.get("LOCAL_INSPECTION_ROOT")
+        or os.environ.get("INSPECTION_SERVICE_ROOT")
+        or os.environ.get("VANTALINE_REPO_ROOT")
+    )
+    raw_root = Path(override).expanduser() if override else Path(__file__).resolve().parents[1]
+    if raw_root.name == "local_inspection_service":
+        raw_root = raw_root.parent
+    root = raw_root.resolve()
+    if not (root / "local_inspection_service").is_dir():
+        raise RuntimeError(f"Resolved service root {root} does not contain local_inspection_service")
+    return root
+
+
+ROOT = resolve_service_root()
 APP_DIR = ROOT / "local_inspection_service"
 STATIC_DIR = APP_DIR / "static"
+REACT_PREVIEW_DIST_DIR = APP_DIR / "frontend" / "dist"
+REACT_PREVIEW_ASSETS_DIR = REACT_PREVIEW_DIST_DIR / "assets"
 DATA_DIR = APP_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 OUTPUT_DIR = DATA_DIR / "outputs"
@@ -46,8 +107,17 @@ TRAINING_TASKS_DIR = DATA_DIR / "training_tasks"
 ACCESSORY_CANDIDATES_DIR = DATA_DIR / "accessory_candidates"
 IMAGE_WORKER_LOG_DIR = DATA_DIR / "image_worker_logs"
 CONFIG_PATH = DATA_DIR / "config.json"
+CONFIG_BACKUP_PATH = DATA_DIR / "config.last_good.json"
 AI_LOCAL_CONFIG_PATH = DATA_DIR / "ai_config.local.json"
 AI_PROFILE_CACHE_PATH = DATA_DIR / "ai_profile_cache.local.json"
+AI_DETECTION_TASKS_PATH = DATA_DIR / "ai_detection_tasks.json"
+AUTH_PATH = DATA_DIR / "auth.json"
+DATA_ANALYSIS_RECORDS_PATH = DATA_DIR / "data_analysis_records.json"
+LOCATEANYTHING_LOCAL_CONFIG_PATH = DATA_DIR / "locateanything_config.local.json"
+LOCATEANYTHING_OUTPUT_DIR = OUTPUT_DIR / "locateanything"
+LOCATEANYTHING_RUNTIME_SCRIPT_PATH = APP_DIR / "scripts" / "start_locateanything_runtime.sh"
+LOCATEANYTHING_RUNTIME_LOG_DIR = ROOT / ".locateanything_logs"
+LOCATEANYTHING_RUNTIME_SERVICE_NAME = "vantaline-locateanything-8000"
 AI_SUPPORTED_PROVIDERS = {"gemini", "openai", "openai_compatible"}
 AI_DEFAULT_PROVIDER = "gemini"
 AI_DEFAULT_MODEL = "gemini-2.5-flash"
@@ -57,6 +127,8 @@ AI_MODEL_OPTIONS = [
     {"id": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
     {"id": "gemini-2.0-flash", "label": "Gemini 2.0 Flash"},
     {"id": "gemini-3.5-flash", "label": "Gemini 3.5 Flash"},
+    {"id": "gemini-3.1-flash-image", "label": "Gemini 3.1 Flash Image"},
+    {"id": "gemini-3-pro-image", "label": "Gemini 3 Pro Image"},
 ]
 AI_DEFAULT_BASE_URLS = {
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
@@ -64,6 +136,37 @@ AI_DEFAULT_BASE_URLS = {
     "openai_compatible": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
 }
 AI_DEFAULT_TIMEOUT_SECONDS = 10.0
+AI_PROXY_ENV_NAMES = ("INSPECTION_AI_PROXY_URL", "AI_PROVIDER_PROXY_URL", "HTTPS_PROXY", "ALL_PROXY")
+AI_LOCAL_PROXY_URL = "http://127.0.0.1:17890"
+AI_AUTO_LOCAL_PROXY_ENV = "INSPECTION_AI_AUTO_LOCAL_PROXY"
+REMOTE_TRAINING_EXECUTOR_ENV = "INSPECTION_TRAINING_EXECUTOR"
+REMOTE_TRAINING_ENDPOINT_ENV = "INSPECTION_REMOTE_TRAINING_ENDPOINT"
+REMOTE_TRAINING_API_KEY_ENV = "INSPECTION_REMOTE_TRAINING_API_KEY"
+REMOTE_TRAINING_TIMEOUT_ENV = "INSPECTION_REMOTE_TRAINING_TIMEOUT_SECONDS"
+REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS = 600.0
+WINDOWS_WORKER_BASE_URL_ENV = "VANTALINE_WORKER_BASE_URL"
+WINDOWS_WORKER_TOKEN_ENV = "VANTALINE_WORKER_TOKEN"
+WINDOWS_WORKER_TIMEOUT_ENV = "VANTALINE_WORKER_TIMEOUT_SECONDS"
+WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS = 30.0
+CURSOR_IMAGE2_PROVIDER = "cursor_image2"
+WINDOWS_WORKER_IMAGE_PROVIDER = "windows_worker_image_fallback"
+LOCAL_CODEX_IMAGE_PROVIDER = "local_codex_image_worker"
+CURSOR_IMAGE2_QUEUE_STATUS = "queued_for_cursor_image2"
+CODEX_IMAGE_WORKER_QUEUE_STATUS = "queued_for_codex_image_worker"
+CURSOR_IMAGE2_API_KEY_ENV = "INSPECTION_CURSOR_IMAGE2_API_KEY"
+CURSOR_IMAGE2_BASE_URL_ENV = "INSPECTION_CURSOR_IMAGE2_BASE_URL"
+CURSOR_IMAGE2_ENDPOINT_ENV = "INSPECTION_CURSOR_IMAGE2_ENDPOINT"
+CURSOR_IMAGE2_MODEL_ENV = "INSPECTION_CURSOR_IMAGE2_MODEL"
+CURSOR_IMAGE2_DEFAULT_MODEL = ""
+CURSOR_IMAGE_MODEL_KEYWORDS = ("image", "imagen", "gpt-image", "dall-e", "dalle", "flux", "stable-diffusion", "sdxl", "banana")
+CURSOR_IMAGE_MODEL_PRIORITY = ("nano-banana-pro", "gpt-image-2", "gpt-image-1", "imagen", "flux")
+STALE_REPO_PATH_PREFIXES = (
+    "/mnt/f/CodexWorkspace/assembly_line_optimize",
+    "F:/CodexWorkspace/assembly_line_optimize",
+    "/opt/vantalane/app",
+)
+IMAGE_JOB_ACTIVE_STATUSES = {CODEX_IMAGE_WORKER_QUEUE_STATUS, CURSOR_IMAGE2_QUEUE_STATUS, "queued", "running"}
+IMAGE_JOB_QUEUED_STATUSES = {CODEX_IMAGE_WORKER_QUEUE_STATUS, CURSOR_IMAGE2_QUEUE_STATUS, "queued"}
 LEGACY_MODEL_PATH = (
     ROOT
     / "yolo26_seg_2class_visible_polygon_4000_full_rotation_trial"
@@ -75,6 +178,10 @@ LEGACY_MODEL_PATH = (
 REPO_MODEL_PATH = ROOT / "models" / "current_2class_yolo26s_seg_best.pt"
 MODEL_PATH = Path(os.environ.get("INSPECTION_MODEL_PATH", REPO_MODEL_PATH if REPO_MODEL_PATH.exists() else LEGACY_MODEL_PATH))
 FIVE_CLASS_MODEL_PATH = ROOT / "models" / "current_5class_yolo26s_seg_best.pt"
+# Base checkpoint for NEW detection-model training. We train a bbox-only detector
+# (no masks). Override with INSPECTION_DETECT_BASE_MODEL; otherwise transfer-learn
+# from a COCO-pretrained YOLO detector (downloaded/cached by Ultralytics).
+DETECT_BASE_MODEL_OVERRIDE = os.environ.get("INSPECTION_DETECT_BASE_MODEL", "").strip()
 
 MODEL_CLASS_NAMES = {
     0: "bottle",
@@ -116,8 +223,14 @@ GENERIC_DETECTION_LABELS = {
 
 DEFAULT_MODEL_ID = "yolo26_2class_ocr"
 AI_DETECTION_MODEL_ID = "ai_detection"
+LABEL_SHEET_MODEL_ID = "label_sheet_local_match"
 AI_DETECTION_TASK_PREFIX = "ai_detection__task_"
 AI_DETECTION_LABEL = "AI 检测"
+LABEL_SHEET_LABEL = "标签纸本地匹配"
+LABEL_SHEET_INCLUDE_TERMS = ("标签", "label", "sticker", "mark", "贴纸")
+LABEL_SHEET_EXCLUDE_TERMS = ("包装盒", "纸箱", "说明书", "carton", "manual", "package", "bag", "box", "盒", "箱")
+LABEL_SHEET_MATCH_THRESHOLD = 0.78
+LABEL_SHEET_REVIEW_MARGIN_THRESHOLD = 0.03
 AI_DETECTION_SYSTEM_PROMPT = """You are a stateless visual inspection agent for an assembly-line image.
 You receive one inspection image, a JSON list of required accessory profiles, and optional reference images for those accessories.
 Do not use memory from previous calls. Do not infer from prior images.
@@ -129,6 +242,7 @@ Return only JSON that matches the provided schema.
 For every required accessory, return present=true or present=false.
 Use confidence from 0 to 1. If uncertain, mark present=false unless clear evidence exists.
 Include count when multiple visible instances are relevant or count is otherwise known.
+If expected_count is provided, the count must match exactly; visible undercounts and overcounts both fail the rule.
 Return only compact QA JSON: {"detections":[{"accessory_id":"...","label":"...","present":true,"confidence":0.0,"count":1,"evidence":"..."}],"rule":{"counts":{"...":0}}}.
 Do not include narrative, markdown, summaries, or annotated images.
 Do not invent accessories that are not visible."""
@@ -146,6 +260,35 @@ AI_PROFILE_REFERENCE_SHEET_QUALITY = 86
 AI_PROFILE_CACHE_TTL_SECONDS = max(300, int(os.environ.get("INSPECTION_AI_PROFILE_CACHE_TTL_SECONDS", "3600")))
 AI_PROFILE_CACHE_VERSION = 1
 AI_MCP_INSPECTION_IMAGE_DIR = Path(os.environ.get("INSPECTION_AI_MCP_IMAGE_DIR", "/tmp/alook-inspection-mcp-images"))
+LOCATEANYTHING_DEFAULT_ENDPOINT = "http://127.0.0.1:8000/locate"
+LOCATEANYTHING_GENERATION_MODES = {"fast", "hybrid", "slow"}
+LOCATEANYTHING_PROXY_IMAGE_QUALITY = 90
+DATA_ANALYSIS_BATCH_LIMIT = 25
+LOCATEANYTHING_DEFAULT_CONFIG = {
+    "enabled": False,
+    "endpoint_url": LOCATEANYTHING_DEFAULT_ENDPOINT,
+    "generation_mode": "fast",
+    "max_new_tokens": 64,
+    "max_side": 640,
+    "timeout_seconds": 60.0,
+}
+LOCATEANYTHING_PROFILE_VERSION = 1
+LOCATEANYTHING_TASK_TYPES = {
+    "ai_detection",
+    "object_presence",
+    "text_document",
+    "data_analysis_comparison",
+}
+LOCATEANYTHING_VISUAL_FALLBACKS = {
+    "管子": "long tube or pipe, hose-like cylindrical accessory with elongated body",
+    "玻璃瓶": "transparent glass bottle, clear cylindrical bottle with visible cap or dispenser top",
+    "耳机": "headphones or wireless earbud charging case, small rounded white electronic accessory",
+    "手表": "wristwatch or smartwatch with rectangular face and dark strap",
+    "卷尺": "compact tape measure, measuring tool with rounded orange body and strap or clip",
+    "护目镜": "safety goggles or clear protective glasses with transparent lenses",
+    "记号笔": "marker pen, cylindrical writing pen with cap",
+    "剪刀": "scissors, two metal blades with handle loops",
+}
 _REFERENCE_SHEET_DESCRIPTOR_CACHE: dict[str, dict[str, Any]] = {}
 _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK = threading.RLock()
 AI_DETECTION_OUTPUT_SCHEMA: dict[str, Any] = {
@@ -259,6 +402,17 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "model_class_names": {},
         "model_to_business_class": {},
     },
+    LABEL_SHEET_MODEL_ID: {
+        "id": LABEL_SHEET_MODEL_ID,
+        "label": LABEL_SHEET_LABEL,
+        "description": "本地裁剪标签纸代表单元，并用 OpenCV 相似度匹配已上传标签参考图；不调用 AI Provider。",
+        "path": APP_DIR,
+        "uses_ocr": False,
+        "variant": "label_sheet_local",
+        "is_label_sheet_match": True,
+        "model_class_names": {},
+        "model_to_business_class": {},
+    },
 }
 
 
@@ -266,7 +420,7 @@ def legacy_model_specs() -> list[dict[str, Any]]:
     specs = []
     for spec in MODEL_REGISTRY.values():
         variant = spec.get("variant") or ("yolo_ocr" if spec.get("uses_ocr") else "yolo")
-        specs.append({**spec, "is_legacy": not bool(spec.get("is_ai_detection")), "variant": variant})
+        specs.append({**spec, "is_legacy": not bool(spec.get("is_ai_detection") or spec.get("is_label_sheet_match")), "variant": variant})
     return specs
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -276,6 +430,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "confidence_threshold": 0.25,
     "required_classes": [0, 1, 2, 3, 4],
     "min_counts": {"0": 1, "1": 1, "2": 1, "3": 1, "4": 1},
+    "task_rules": {},
     "ocr": {
         "enabled": True,
         "require_manual_types": False,
@@ -315,13 +470,56 @@ DEFAULT_AI_CONFIG: dict[str, Any] = {
     "api_key": "",
     "api_keys": [],
     "active_key_id": "",
+    "proxy_url": "",
+    "auto_local_proxy": True,
 }
+
+AUTH_SESSION_COOKIE = "vantaline_session"
+AUTH_SESSION_TTL_SECONDS = max(900, int(os.environ.get("VANTALINE_SESSION_TTL_SECONDS", str(12 * 60 * 60))))
+# Sliding-expiry persistence is throttled: a valid session is only rewritten to
+# disk at most once per this interval. Avoids rewriting the whole auth store on
+# every request (including bursts of /outputs image fetches), which previously
+# caused write amplification, lock contention, and apparent server hangs.
+AUTH_SESSION_PERSIST_INTERVAL_SECONDS = max(30, int(os.environ.get("VANTALINE_SESSION_PERSIST_INTERVAL_SECONDS", "120")))
+PASSWORD_HASH_ITERATIONS = max(120000, int(os.environ.get("VANTALINE_PASSWORD_HASH_ITERATIONS", "260000")))
+LEGACY_OWNER_ID = "legacy_admin"
+SYSTEM_OWNER_ID = "system"
+_request_user: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("vantaline_request_user", default=None)
+
+FEATURE_PERMISSIONS: dict[str, str] = {
+    "inspection": "检测工作台",
+    "ai_detection": "AI 检测",
+    "label_sheet": "标签匹配",
+    "locate_anything": "开放定位",
+    "accessory_library": "配件库",
+    "training_pipeline": "训练流水线",
+    "model_library": "训练库 / 模型库",
+    "system_settings": "通过规则 / API 服务设置",
+    "ai_config": "AI 服务配置",
+    "agent_config": "Agent 接入配置",
+    "locate_config": "Locate Anything 配置",
+    "worker_settings": "Worker / 远程执行设置",
+    "user_management": "用户与权限管理",
+}
+
+ADMIN_ONLY_PERMISSIONS = {"user_management"}
+
+DEFAULT_USER_PERMISSIONS = [
+    "inspection",
+    "ai_detection",
+    "label_sheet",
+    "locate_anything",
+    "accessory_library",
+    "training_pipeline",
+    "model_library",
+]
 
 
 for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, IMAGE_WORKER_LOG_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Assembly Line Local Inspection Service")
+app = FastAPI(title="VantaLine Local Inspection Service")
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 LOCAL_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
 LAN_CORS_ORIGIN_REGEX = (
@@ -345,7 +543,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_origin_regex=CORS_ORIGIN_REGEX,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -384,6 +582,617 @@ def cors_origin_allowed(origin: str) -> bool:
     return re.match(CORS_ORIGIN_REGEX, normalized) is not None
 
 
+def clean_username(value: Any) -> str:
+    username = re.sub(r"[^a-zA-Z0-9_.@-]+", "_", str(value or "").strip().lower())
+    return username[:64]
+
+
+def clean_display_name(value: Any, fallback: str) -> str:
+    name = str(value or "").strip()
+    return name[:80] if name else fallback
+
+
+def normalize_role(value: Any) -> str:
+    role = str(value or "").strip().lower()
+    return "admin" if role == "admin" else "user"
+
+
+def normalize_permissions(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    seen: set[str] = set()
+    permissions: list[str] = []
+    for raw in values:
+        permission = str(raw or "").strip()
+        if permission in FEATURE_PERMISSIONS and permission not in ADMIN_ONLY_PERMISSIONS and permission not in seen:
+            seen.add(permission)
+            permissions.append(permission)
+    return permissions
+
+
+def password_hash(password: str) -> str:
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), PASSWORD_HASH_ITERATIONS)
+    return f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}${salt}${digest.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        algorithm, iterations_raw, salt_hex, digest_hex = str(stored_hash or "").split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        iterations = int(iterations_raw)
+        expected = bytes.fromhex(digest_hex)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), iterations)
+        return hmac.compare_digest(actual, expected)
+    except (TypeError, ValueError, binascii.Error):
+        return False
+
+
+def empty_auth_store() -> dict[str, Any]:
+    return {"users": [], "sessions": {}}
+
+
+def load_auth_store() -> dict[str, Any]:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not AUTH_PATH.exists():
+        return empty_auth_store()
+    try:
+        raw = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty_auth_store()
+    users = raw.get("users") if isinstance(raw.get("users"), list) else []
+    sessions = raw.get("sessions") if isinstance(raw.get("sessions"), dict) else {}
+    return {"users": users, "sessions": sessions}
+
+
+_auth_store_write_lock = threading.RLock()
+
+
+def save_auth_store(store: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(store, indent=2, ensure_ascii=False)
+    # Serialize writes and use a unique temp file so concurrent request threads
+    # cannot clobber a shared temp path mid-write (which corrupted the store and
+    # surfaced as random FileNotFound/decode failures under load).
+    with _auth_store_write_lock:
+        tmp_path = AUTH_PATH.with_suffix(f".json.tmp.{uuid.uuid4().hex}")
+        try:
+            tmp_path.write_text(payload, encoding="utf-8")
+            tmp_path.replace(AUTH_PATH)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+
+def public_user(user: dict[str, Any]) -> dict[str, Any]:
+    role = normalize_role(user.get("role"))
+    permissions = sorted(FEATURE_PERMISSIONS) if role == "admin" else normalize_permissions(user.get("permissions"))
+    return {
+        "id": str(user.get("id") or ""),
+        "username": str(user.get("username") or ""),
+        "display_name": str(user.get("display_name") or user.get("username") or ""),
+        "role": role,
+        "permissions": permissions,
+        "active": bool(user.get("active", True)),
+        "created_at": int(user.get("created_at") or 0),
+        "updated_at": int(user.get("updated_at") or 0),
+    }
+
+
+def users_exist(store: dict[str, Any] | None = None) -> bool:
+    store = store or load_auth_store()
+    return any(isinstance(user, dict) for user in store.get("users", []))
+
+
+def create_auth_user(
+    store: dict[str, Any],
+    *,
+    username: str,
+    password: str,
+    display_name: str | None = None,
+    role: str = "user",
+    permissions: list[str] | None = None,
+    active: bool = True,
+) -> dict[str, Any]:
+    clean = clean_username(username)
+    if not clean:
+        raise HTTPException(status_code=400, detail="Username is required")
+    if any(clean_username(user.get("username")) == clean for user in store.get("users", []) if isinstance(user, dict)):
+        raise HTTPException(status_code=409, detail="Username already exists")
+    now = int(time.time())
+    normalized_role = normalize_role(role)
+    user = {
+        "id": f"user_{uuid.uuid4().hex[:12]}",
+        "username": clean,
+        "display_name": clean_display_name(display_name, clean),
+        "role": normalized_role,
+        "permissions": sorted(FEATURE_PERMISSIONS) if normalized_role == "admin" else normalize_permissions(permissions or []),
+        "password_hash": password_hash(password),
+        "active": bool(active),
+        "created_at": now,
+        "updated_at": now,
+    }
+    store.setdefault("users", []).append(user)
+    return user
+
+
+def bootstrap_admin_from_env(store: dict[str, Any]) -> bool:
+    if users_exist(store):
+        return False
+    username = os.environ.get("VANTALINE_BOOTSTRAP_ADMIN_USERNAME", "").strip()
+    password = os.environ.get("VANTALINE_BOOTSTRAP_ADMIN_PASSWORD", "")
+    if not username or not password:
+        return False
+    create_auth_user(store, username=username, password=password, display_name=username, role="admin", permissions=sorted(FEATURE_PERMISSIONS))
+    save_auth_store(store)
+    return True
+
+
+def find_user(store: dict[str, Any], user_id: str) -> dict[str, Any] | None:
+    for user in store.get("users", []):
+        if isinstance(user, dict) and str(user.get("id") or "") == str(user_id or ""):
+            return user
+    return None
+
+
+def find_user_by_username(store: dict[str, Any], username: str) -> dict[str, Any] | None:
+    clean = clean_username(username)
+    for user in store.get("users", []):
+        if isinstance(user, dict) and clean_username(user.get("username")) == clean:
+            return user
+    return None
+
+
+def user_is_admin(user: dict[str, Any] | None) -> bool:
+    return normalize_role((user or {}).get("role")) == "admin"
+
+
+def user_has_permission(user: dict[str, Any] | None, permission: str | None) -> bool:
+    if not permission:
+        return True
+    if user_is_admin(user):
+        return True
+    return permission in normalize_permissions((user or {}).get("permissions"))
+
+
+def prune_expired_sessions(store: dict[str, Any]) -> bool:
+    now = int(time.time())
+    sessions = store.get("sessions") if isinstance(store.get("sessions"), dict) else {}
+    active = {
+        session_id: session
+        for session_id, session in sessions.items()
+        if isinstance(session, dict) and int(session.get("expires_at") or 0) > now
+    }
+    changed = len(active) != len(sessions)
+    store["sessions"] = active
+    return changed
+
+
+def request_is_https(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
+    return request.url.scheme == "https" or forwarded_proto == "https"
+
+
+def set_session_cookie(response: Response, request: Request, session_id: str) -> None:
+    response.set_cookie(
+        AUTH_SESSION_COOKIE,
+        session_id,
+        max_age=AUTH_SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=request_is_https(request),
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(AUTH_SESSION_COOKIE, path="/", secure=request_is_https(request), samesite="lax")
+
+
+def create_session(store: dict[str, Any], user: dict[str, Any]) -> str:
+    session_id = secrets.token_urlsafe(32)
+    now = int(time.time())
+    store.setdefault("sessions", {})[session_id] = {
+        "user_id": user["id"],
+        "created_at": now,
+        "last_seen_at": now,
+        "expires_at": now + AUTH_SESSION_TTL_SECONDS,
+    }
+    return session_id
+
+
+TEMP_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^*-_"
+
+
+def generate_temporary_password(length: int = 18) -> str:
+    length = max(12, min(48, int(length or 18)))
+    return "".join(secrets.choice(TEMP_PASSWORD_ALPHABET) for _ in range(length))
+
+
+def revoke_user_sessions(store: dict[str, Any], user_id: str, *, keep_session_id: str = "") -> int:
+    sessions = store.get("sessions") if isinstance(store.get("sessions"), dict) else {}
+    revoked = 0
+    kept: dict[str, Any] = {}
+    for session_id, session in sessions.items():
+        if (
+            isinstance(session, dict)
+            and str(session.get("user_id") or "") == str(user_id or "")
+            and session_id != keep_session_id
+        ):
+            revoked += 1
+            continue
+        kept[session_id] = session
+    store["sessions"] = kept
+    return revoked
+
+
+def set_user_password(user: dict[str, Any], password: str) -> None:
+    user["password_hash"] = password_hash(password)
+    user["updated_at"] = int(time.time())
+
+
+def authenticate_request(request: Request) -> tuple[dict[str, Any] | None, dict[str, Any], bool]:
+    store = load_auth_store()
+    changed = prune_expired_sessions(store)
+    if bootstrap_admin_from_env(store):
+        store = load_auth_store()
+    session_id = request.cookies.get(AUTH_SESSION_COOKIE, "")
+    session = store.get("sessions", {}).get(session_id) if session_id else None
+    user = find_user(store, str((session or {}).get("user_id") or "")) if isinstance(session, dict) else None
+    if not user or not bool(user.get("active", True)):
+        if changed:
+            save_auth_store(store)
+        return None, store, changed
+    now = int(time.time())
+    prev_seen = int(session.get("last_seen_at") or 0)
+    session["last_seen_at"] = now
+    session["expires_at"] = now + AUTH_SESSION_TTL_SECONDS
+    # Throttle disk writes: only persist the slid expiry when something else
+    # changed (pruned sessions) or enough time has elapsed since the last write.
+    if changed or (now - prev_seen) >= AUTH_SESSION_PERSIST_INTERVAL_SECONDS:
+        changed = True
+        save_auth_store(store)
+    return public_user(user), store, changed
+
+
+def current_auth_user() -> dict[str, Any]:
+    user = _request_user.get()
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+
+def require_admin_role(detail: str = "Admin role required") -> dict[str, Any]:
+    user = current_auth_user()
+    if not user_is_admin(user):
+        raise HTTPException(status_code=403, detail=detail)
+    return user
+
+
+def record_owner_id(record: dict[str, Any] | None) -> str:
+    if not isinstance(record, dict):
+        return LEGACY_OWNER_ID
+    owner = str(record.get("owner_user_id") or record.get("created_by_user_id") or "").strip()
+    return owner or LEGACY_OWNER_ID
+
+
+def current_owner_fields() -> dict[str, Any]:
+    user = _request_user.get()
+    if not user:
+        return {}
+    return {"owner_user_id": user["id"], "owner_username": user.get("username") or ""}
+
+
+def coerce_record_timestamp(value: Any) -> int:
+    try:
+        return int(float(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def path_mtime_timestamp(path: Path | None) -> int:
+    if not path:
+        return 0
+    try:
+        return int(path.stat().st_mtime)
+    except OSError:
+        return 0
+
+
+def record_created_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
+    if isinstance(record, dict):
+        for key in ("created_at", "created", "started_at", "queued_at", "requested_at", "completed_at", "updated_at"):
+            timestamp = coerce_record_timestamp(record.get(key))
+            if timestamp:
+                return timestamp
+    return path_mtime_timestamp(fallback_path)
+
+
+def record_updated_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
+    if isinstance(record, dict):
+        for key in ("updated_at", "completed_at", "failed_at", "confirmed_at", "started_at", "created_at"):
+            timestamp = coerce_record_timestamp(record.get(key))
+            if timestamp:
+                return timestamp
+    return path_mtime_timestamp(fallback_path)
+
+
+def record_owner_username(record: dict[str, Any] | None) -> str:
+    if not isinstance(record, dict):
+        return LEGACY_OWNER_ID
+    username = str(record.get("owner_username") or record.get("created_by_username") or "").strip()
+    if username:
+        return username
+    owner = record_owner_id(record)
+    if owner == LEGACY_OWNER_ID:
+        return LEGACY_OWNER_ID
+    if owner == SYSTEM_OWNER_ID:
+        return "system"
+    return owner
+
+
+def record_audit_fields(record: dict[str, Any] | None, fallback_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "created_at": record_created_at(record, fallback_path),
+        "updated_at": record_updated_at(record, fallback_path),
+        "owner_user_id": record_owner_id(record),
+        "owner_username": record_owner_username(record),
+    }
+
+
+def enrich_record_audit_fields(record: dict[str, Any], fallback_path: Path | None = None) -> dict[str, Any]:
+    copy = dict(record)
+    copy.update(record_audit_fields(copy, fallback_path))
+    return copy
+
+
+def record_matches_owner_filter(record: dict[str, Any], target_user_id: str | None) -> bool:
+    if not target_user_id:
+        return True
+    target = str(target_user_id).strip()
+    owner = record_owner_id(record)
+    if target in {LEGACY_OWNER_ID, "legacy"}:
+        return owner == LEGACY_OWNER_ID
+    if target in {SYSTEM_OWNER_ID, "system"}:
+        return owner == SYSTEM_OWNER_ID
+    return owner == target
+
+
+def record_visible_to_user(record: dict[str, Any], user: dict[str, Any], target_user_id: str | None = None) -> bool:
+    if user_is_admin(user):
+        return record_matches_owner_filter(record, target_user_id)
+    owner = record_owner_id(record)
+    shared = record.get("shared_with_user_ids") if isinstance(record.get("shared_with_user_ids"), list) else []
+    return owner == user["id"] or user["id"] in {str(item) for item in shared} or "*" in shared
+
+
+def record_mutable_by_user(record: dict[str, Any], user: dict[str, Any]) -> bool:
+    return user_is_admin(user) or record_owner_id(record) == user["id"]
+
+
+def default_training_state() -> dict[str, Any]:
+    return json.loads(json.dumps(DEFAULT_CONFIG["training"]))
+
+
+def clear_training_private_state(training: dict[str, Any], reason: str) -> dict[str, Any]:
+    training["preview_urls"] = []
+    training["previews"] = []
+    training["preview_cache_key"] = None
+    training["preview_sprite_versions"] = {}
+    training["last_preview_id"] = ""
+    training["approved_preview_id"] = ""
+    training["active_training_task_id"] = ""
+    training["preview_stale_reason"] = reason
+    return training
+
+
+def normalize_training_owner_key(owner_user_id: Any) -> str:
+    owner = str(owner_user_id or "").strip()
+    return owner or LEGACY_OWNER_ID
+
+
+def training_state_store(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw_store = config.get("training_by_user_id") if isinstance(config.get("training_by_user_id"), dict) else {}
+    store: dict[str, dict[str, Any]] = {
+        normalize_training_owner_key(owner): state
+        for owner, state in raw_store.items()
+        if isinstance(state, dict)
+    }
+    legacy_training = config.get("training") if isinstance(config.get("training"), dict) else None
+    if legacy_training:
+        owner = normalize_training_owner_key(record_owner_id(legacy_training))
+        store.setdefault(owner, legacy_training)
+    config["training_by_user_id"] = store
+    return store
+
+
+def sanitize_training_state_for_user(
+    training: dict[str, Any] | None,
+    user: dict[str, Any],
+    selected_ids: set[str],
+    target_user_id: str | None = None,
+) -> dict[str, Any]:
+    if not isinstance(training, dict):
+        return default_training_state()
+    if not record_visible_to_user(training, user, target_user_id):
+        return default_training_state()
+    scoped_training = training
+    raw_selected = [str(item) for item in scoped_training.get("selected_accessory_ids", []) if str(item)]
+    if raw_selected:
+        visible_selected = [item_id for item_id in raw_selected if item_id in selected_ids]
+        if len(visible_selected) != len(raw_selected):
+            scoped_training["selected_accessory_ids"] = visible_selected
+            clear_training_private_state(scoped_training, "training_selection_not_visible")
+    return scoped_training
+
+
+def training_state_for_user(
+    config: dict[str, Any],
+    user: dict[str, Any],
+    selected_ids: set[str],
+    target_user_id: str | None = None,
+) -> dict[str, Any]:
+    store = training_state_store(config)
+    if user_is_admin(user) and target_user_id:
+        owner_key = normalize_training_owner_key(target_user_id)
+    elif user_is_admin(user):
+        states = [
+            sanitize_training_state_for_user(dict(state), user, selected_ids, None)
+            for state in store.values()
+            if isinstance(state, dict) and record_visible_to_user(state, user)
+        ]
+        aggregate = default_training_state()
+        aggregate["training_states"] = states
+        return aggregate
+    else:
+        owner_key = normalize_training_owner_key(user["id"])
+    state = store.get(owner_key)
+    return sanitize_training_state_for_user(dict(state) if isinstance(state, dict) else None, user, selected_ids, target_user_id)
+
+
+def set_training_state_for_user(config: dict[str, Any], user: dict[str, Any], training_state: dict[str, Any]) -> None:
+    state = {**default_training_state(), **training_state, **current_owner_fields()}
+    owner_key = normalize_training_owner_key(state.get("owner_user_id") or user["id"])
+    store = training_state_store(config)
+    store[owner_key] = state
+    config["training_by_user_id"] = store
+    if user_is_admin(user):
+        config["training"] = state
+
+
+def merge_scoped_accessory_updates(full_config: dict[str, Any], scoped_config: dict[str, Any], user: dict[str, Any]) -> None:
+    scoped_by_id = {
+        accessory_uid(item): item
+        for item in scoped_config.get("accessories", [])
+        if isinstance(item, dict)
+    }
+    merged = []
+    for item in full_config.get("accessories", []):
+        if not isinstance(item, dict):
+            merged.append(item)
+            continue
+        uid = accessory_uid(item)
+        if uid in scoped_by_id and record_mutable_by_user(item, user):
+            merged.append(scoped_by_id[uid])
+        else:
+            merged.append(item)
+    full_config["accessories"] = merged
+
+
+def scope_config_for_user(config: dict[str, Any], user: dict[str, Any] | None = None, target_user_id: str | None = None) -> dict[str, Any]:
+    user = user or current_auth_user()
+    scoped = json.loads(json.dumps(config))
+    scoped["accessories"] = [
+        item
+        for item in scoped.get("accessories", [])
+        if isinstance(item, dict) and record_visible_to_user(item, user, target_user_id)
+    ]
+    selected_ids = {accessory_uid(item) for item in scoped.get("accessories", [])}
+    training = training_state_for_user(scoped, user, selected_ids, target_user_id)
+    if isinstance(training.get("selected_accessory_ids"), list):
+        training["selected_accessory_ids"] = [item_id for item_id in training["selected_accessory_ids"] if str(item_id) in selected_ids]
+    scoped["training"] = training
+    return scoped
+
+
+def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = None, *, write: bool = False) -> None:
+    user = user or current_auth_user()
+    allowed = record_mutable_by_user(record, user) if write else record_visible_to_user(record, user)
+    if not allowed:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+
+def route_required_permission(path: str, method: str) -> str | None:
+    clean_path = path.rstrip("/") or "/"
+    if clean_path.startswith("/api/auth/users"):
+        return "user_management"
+    if clean_path.startswith("/api/windows-worker"):
+        return "worker_settings"
+    if clean_path.startswith("/api/agent"):
+        return "agent_config"
+    if clean_path.startswith("/api/ai/config"):
+        return "ai_config"
+    if clean_path.startswith("/api/stream/config"):
+        return "system_settings"
+    if clean_path.startswith("/api/data-analysis"):
+        return "ai_detection"
+    if clean_path.startswith("/api/locateanything/config") or clean_path.startswith("/api/locateanything/runtime"):
+        return "locate_config"
+    if clean_path.startswith("/api/locateanything"):
+        return "locate_anything"
+    if clean_path.startswith("/api/ai/tasks"):
+        return "ai_detection"
+    if clean_path.startswith("/api/label-sheets"):
+        return "label_sheet"
+    if clean_path.startswith("/api/experimental/label-inspector"):
+        return "label_sheet"
+    if clean_path == "/api/config" or clean_path.startswith("/api/config/"):
+        return "system_settings" if method != "GET" or clean_path == "/api/config" else None
+    if clean_path.startswith("/api/accessories"):
+        return "accessory_library"
+    if clean_path.startswith("/api/training/resources"):
+        return "model_library"
+    if clean_path.startswith("/api/training") or clean_path.startswith("/api/pipeline") or clean_path.startswith("/api/image-jobs") or clean_path.startswith("/api/image-job-candidates"):
+        return "training_pipeline"
+    if clean_path.startswith("/api/backgrounds"):
+        return "training_pipeline"
+    if clean_path.startswith("/api/analyze"):
+        return "inspection"
+    return None
+
+
+def route_allowed_permissions(path: str, method: str) -> tuple[str, ...]:
+    clean_path = path.rstrip("/") or "/"
+    permission = route_required_permission(path, method)
+    if clean_path.startswith("/api/training/resources"):
+        return ("model_library", "training_pipeline")
+    if clean_path.startswith("/api/analyze"):
+        return ("inspection", "ai_detection")
+    return (permission,) if permission else ()
+
+
+def require_permission(permission: str, *, detail: str = "Permission denied") -> None:
+    if not user_has_permission(current_auth_user(), permission):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def require_analyze_model_permission(model_id: str | None) -> None:
+    user = current_auth_user()
+    if user_has_permission(user, "inspection"):
+        return
+    if user_has_permission(user, "ai_detection"):
+        spec = selected_model_spec(model_id, scope_config_for_user(load_config(), user))
+        if spec.get("is_ai_detection"):
+            return
+    raise HTTPException(status_code=403, detail="Inspection permission required for non-AI detection models")
+
+
+def require_locateanything_endpoint_override(endpoint_url: Any) -> None:
+    if endpoint_url is not None and str(endpoint_url).strip():
+        require_permission("locate_config", detail="LocateAnything endpoint overrides require locate_config permission")
+
+
+def output_path_visible_to_user(request_path: str, user: dict[str, Any]) -> bool:
+    if user_is_admin(user):
+        return True
+    relative = request_path.removeprefix("/outputs/").lstrip("/")
+    candidate = (OUTPUT_DIR / PurePosixPath(relative)).resolve()
+    try:
+        rel_parts = candidate.relative_to(OUTPUT_DIR.resolve()).parts
+    except ValueError:
+        return False
+    # Per-user subtree (outputs/users/<id>/...) is private to its owner.
+    if len(rel_parts) >= 2 and rel_parts[0] == "users":
+        return rel_parts[1] == str(user["id"])
+    # Shared/legacy outputs written to the OUTPUT_DIR root are visible to any
+    # authenticated user (the /api permission gate already protects who can
+    # create pipeline artifacts); this keeps pose/sample images loadable when a
+    # task was owned by a legacy/empty owner instead of a per-user subtree.
+    return True
+
+
 @app.middleware("http")
 async def reject_untrusted_cross_origin_writes(request: Request, call_next):
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -391,9 +1200,62 @@ async def reject_untrusted_cross_origin_writes(request: Request, call_next):
         host = request.headers.get("host", "")
         if origin and not same_origin(origin, host) and not cors_origin_allowed(origin):
             return PlainTextResponse("Untrusted cross-origin write request", status_code=403)
-    return await call_next(request)
+    path = request.url.path
+    auth_user: dict[str, Any] | None = None
+    token = None
+    public_auth_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout"}
+    if path.startswith("/api/") and path not in public_auth_paths:
+        auth_user, auth_store, _ = authenticate_request(request)
+        if not users_exist(auth_store):
+            return JSONResponse({"detail": "First admin setup required", "setup_required": True}, status_code=503)
+        if not auth_user:
+            return JSONResponse({"detail": "Authentication required"}, status_code=401)
+        required_permissions = route_allowed_permissions(path, request.method.upper())
+        if required_permissions and not any(user_has_permission(auth_user, permission) for permission in required_permissions):
+            return JSONResponse(
+                {"detail": "Permission denied", "permission": " / ".join(required_permissions)},
+                status_code=403,
+            )
+        request.state.user = auth_user
+        token = _request_user.set(auth_user)
+    elif path.startswith("/outputs/"):
+        auth_user, auth_store, _ = authenticate_request(request)
+        if not users_exist(auth_store):
+            return PlainTextResponse("First admin setup required", status_code=503)
+        if not auth_user:
+            return PlainTextResponse("Authentication required", status_code=401)
+        if not output_path_visible_to_user(path, auth_user):
+            return PlainTextResponse("Not found", status_code=404)
+        request.state.user = auth_user
+        token = _request_user.set(auth_user)
+    try:
+        response = await call_next(request)
+    finally:
+        if token is not None:
+            _request_user.reset(token)
+    if request.method in {"GET", "HEAD"}:
+        cacheable_ok = getattr(response, "status_code", 200) < 400
+        if path.startswith("/static/") and cacheable_ok:
+            response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
+        elif path.startswith("/react-preview/assets/") and cacheable_ok:
+            response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
+        elif path == "/react-preview" or path.startswith("/react-preview/"):
+            response.headers.setdefault("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        elif path.startswith("/outputs/"):
+            # Output artifacts are effectively write-once; let the browser show the
+            # cached copy instantly on reopen and revalidate in the background
+            # (StaticFiles still answers conditional requests with a cheap 304).
+            response.headers.setdefault("Cache-Control", "private, max-age=600, stale-while-revalidate=86400")
+        elif path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store")
+    return response
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount(
+    "/react-preview/assets",
+    StaticFiles(directory=REACT_PREVIEW_ASSETS_DIR, check_dir=False),
+    name="react-preview-assets",
+)
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
 _models: dict[str, YOLO] = {}
@@ -403,10 +1265,26 @@ _rembg_lock = threading.RLock()
 _image_worker_lock = threading.Lock()
 _candidate_store_lock = threading.RLock()
 _training_task_lock = threading.RLock()
+_path_migration_lock = threading.RLock()
+_path_migration_done = False
 _image_worker_thread: threading.Thread | None = None
 _image_worker_processes: dict[str, subprocess.Popen] = {}
 _training_task_threads: dict[str, threading.Thread] = {}
+_training_task_delete_tombstones: dict[str, dict[str, Any]] = {}
+_locateanything_runtime_start_lock = threading.RLock()
+_locateanything_runtime_start_process: subprocess.Popen | None = None
+_locateanything_runtime_start_time = 0.0
+_locateanything_runtime_warmup_lock = threading.RLock()
+_locateanything_runtime_warmup_thread: threading.Thread | None = None
+_locateanything_runtime_warmup_state: dict[str, Any] = {}
+_data_analysis_store_lock = threading.RLock()
+_windows_worker_status_lock = threading.RLock()
+_windows_worker_status_cache: dict[str, Any] = {}
+_windows_worker_status_cache_at = 0.0
 MAX_PARALLEL_IMAGE_WORKERS = 2
+IMAGE_WORKER_STALE_SECONDS = max(30, int(os.environ.get("LOCAL_INSPECTION_IMAGE_WORKER_STALE_SECONDS", "180")))
+IMAGE_WORKER_LOG_TAIL_BYTES = 64000
+WINDOWS_WORKER_STATUS_CACHE_SECONDS = max(2.0, float(os.environ.get("VANTALINE_WORKER_STATUS_CACHE_SECONDS", "15")))
 IMAGE_REFERENCE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 VIDEO_REFERENCE_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 MAX_IMAGE_WORKER_INPUTS = 10
@@ -429,6 +1307,10 @@ POSE_ANCHOR_DIR = DATA_DIR / "anchor_pose_guides"
 POSE_ANCHOR_IMAGES = {
     "upright": POSE_ANCHOR_DIR / "endface_9bar_anchor.png",
     "lying": POSE_ANCHOR_DIR / "flat_9bar_anchor.png",
+}
+POSE_TARGET_GUIDE_IMAGES = {
+    "upright": [POSE_ANCHOR_DIR / "circle_endface_9target_guide.png"],
+    "lying": [],
 }
 
 POSE_COLLECTION_BATCHES: list[tuple[str, str, list[str]]] = [
@@ -518,6 +1400,11 @@ class RuleConfig(BaseModel):
     min_counts: dict[str, int]
 
 
+class TaskRuleConfig(BaseModel):
+    confidence_threshold: float
+    required_accessory_counts: dict[str, int]
+
+
 class StreamConfig(BaseModel):
     enabled: bool = False
     source: str = "camera"
@@ -529,11 +1416,41 @@ class AiConfigRequest(BaseModel):
     provider: str | None = None
     model: str | None = None
     base_url: str | None = None
+    proxy_url: str | None = None
+    auto_local_proxy: bool | None = None
     api_key: str | None = None
     active_key_id: str | None = None
     api_key_env: str | None = None
     timeout: float | None = None
     timeout_seconds: float | None = None
+
+
+class LocateAnythingConfigRequest(BaseModel):
+    enabled: bool | None = None
+    endpoint_url: str | None = None
+    generation_mode: str | None = None
+    max_new_tokens: int | None = None
+    max_side: int | None = None
+    timeout_seconds: float | None = None
+
+
+class DataAnalysisLocateRequest(BaseModel):
+    record_ids: list[str] | None = None
+    endpoint_url: str | None = None
+    max_side: int | None = None
+    max_new_tokens: int | None = None
+    timeout_seconds: float | None = None
+
+
+class AiDetectionTaskAccessory(BaseModel):
+    accessory_id: str
+    required_count: int = 1
+
+
+class AiDetectionTaskRequest(BaseModel):
+    name: str | None = None
+    accessories: list[AiDetectionTaskAccessory] | None = None
+    required_accessory_counts: dict[str, int] | None = None
 
 
 class TrainingPreviewRequest(BaseModel):
@@ -575,24 +1492,137 @@ class AccessoryAiReferenceRequest(BaseModel):
     source_path: str
 
 
+class AuthBootstrapRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str | None = None
+
+
+class AuthLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserCreateRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str | None = None
+    role: str = "user"
+    permissions: list[str] = []
+    active: bool = True
+
+
+class UserUpdateRequest(BaseModel):
+    display_name: str | None = None
+    password: str | None = None
+    role: str | None = None
+    permissions: list[str] | None = None
+    active: bool | None = None
+
+
+class UserPasswordResetRequest(BaseModel):
+    password: str | None = None
+    generate: bool = False
+    revoke_sessions: bool = True
+
+
 STANDARD_PAPER_SIZES_MM = {
     "A4": (210.0, 297.0),
     "A5": (148.0, 210.0),
     "A6": (105.0, 148.0),
 }
 
-MM_TO_PREVIEW_PX = 1.43
+# Physical-to-pixel scale models a top-down inspection camera mounted ~70cm
+# above the belt. At that height a moderate industrial lens frames roughly a
+# 600mm-wide field of view, so a 1280px-wide canvas yields ~2.13 px/mm. This
+# makes parts read at a realistic, prominent size while keeping every
+# accessory's relative size physically consistent.
+INSPECTION_CAMERA_HEIGHT_MM = 700.0
+INSPECTION_CAMERA_FRAME_WIDTH_MM = 600.0
+MM_TO_PREVIEW_PX = 1280.0 / INSPECTION_CAMERA_FRAME_WIDTH_MM
 # Default object size is calibrated to the real reference photo ratio:
 # bottle long side ~= 0.55-0.60 of an A4 manual long side in the 1280x900 preview.
 DEFAULT_OBJECT_SIZE_MM = {"length_mm": 170.0, "width_mm": 38.0, "height_mm": 38.0}
+# Object accessories no longer carry hand-entered dimensions. Instead the user
+# picks a known-size reference object (and includes one photo of the part next to
+# it); the size-inference agent calibrates the part's real dimensions from that
+# reference. The catalog below provides the ground-truth scale for each option.
+SIZE_REFERENCE_OBJECTS: dict[str, dict[str, Any]] = {
+    "a4": {"id": "a4", "label": "A4 纸", "kind": "paper", "long_mm": 297.0, "short_mm": 210.0,
+           "note": "A4 打印纸，长边 297mm、短边 210mm。"},
+    "a5": {"id": "a5", "label": "A5 纸", "kind": "paper", "long_mm": 210.0, "short_mm": 148.0,
+           "note": "A5 打印纸，长边 210mm、短边 148mm。"},
+    "b5": {"id": "b5", "label": "B5 纸", "kind": "paper", "long_mm": 250.0, "short_mm": 176.0,
+           "note": "B5 打印纸，长边 250mm、短边 176mm。"},
+    "ruler": {"id": "ruler", "label": "直尺/卷尺", "kind": "ruler",
+              "note": "直尺或卷尺：直接读取其厘米/毫米刻度作为比例尺（1 大格=10mm）。"},
+}
+DEFAULT_SIZE_REFERENCE = "a4"
+
+
+def normalize_size_reference(value: Any) -> str:
+    key = str(value or "").strip().lower()
+    if key in {"", "none", "no", "无", "null"}:
+        return ""
+    if key in SIZE_REFERENCE_OBJECTS:
+        return key
+    aliases = {"尺子": "ruler", "直尺": "ruler", "卷尺": "ruler", "rule": "ruler",
+               "a4纸": "a4", "a5纸": "a5", "b5纸": "b5"}
+    return aliases.get(key, "")
+
+
+def size_reference_payload(reference_key: str) -> dict[str, Any] | None:
+    key = normalize_size_reference(reference_key)
+    if not key:
+        return None
+    spec = SIZE_REFERENCE_OBJECTS.get(key)
+    return dict(spec) if spec else None
+# Legacy anchor/grid "pose collection" generation (the source of the old
+# black-stick/anchor sprites) is disabled. Object standard images are now
+# generated inside the training pipeline as single-object top-down photos and
+# segmented into clean sprites.
+POSE_COLLECTION_GRID_ENABLED = False
+# Bump when the agent-MCP sprite build pipeline changes (segmentation method,
+# render scale, metadata) so cached sprites on existing accessories are rebuilt
+# on the next task instead of being reused stale.
+AGENT_MCP_SPRITE_BUILD_VERSION = 3
+# Pose Planner Agent: a multimodal agent analyses each accessory's material and
+# decides the structured pose set (count + per-pose generation instructions) as
+# strict JSON. Rules only act as guardrail/validation (schema, bounds, physics,
+# dedup) and as a fallback when the provider is unavailable. The plan is cached
+# once per accessory so AI pose images are generated a single time and reused.
+AGENT_MCP_POSE_PLAN_VERSION = 1
+AGENT_MCP_POSE_PLAN_MIN_POSES = 1
+AGENT_MCP_POSE_PLAN_MAX_POSES = 6
+AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE = 0.35
+SOURCE_ASPECT_ELONGATED_MIN_RATIO = 1.35
 UPRIGHT_SCALE_CORRECTION_MIN_RATIO = 1.01
 UPRIGHT_SCALE_CORRECTION_MAX_RATIO = 3.25
 UPRIGHT_SCALE_VISUAL_ADJUSTMENT = 0.8
+PREVIEW_CANVAS_SIZE_PX = (1280, 900)
+# Detection (bbox) label policy. Each object/document keeps its FULL (amodal)
+# bounding box even when another part is pasted on top of it, so an occluded part
+# is never truncated to a half-box. A part is only dropped from the labels when it
+# is almost entirely hidden (and therefore not learnably visible).
+DETECTION_MAX_OCCLUSION_FRACTION = 0.85
+DETECTION_MIN_VISIBLE_AREA_PX = 220
+# Background-plate derivation guards. A raw capture can be 4096x3072+, which makes
+# cv2.inpaint(TELEA) on a large mask pathologically slow (the original incident
+# pegged a core for 50+ min). We therefore downscale to a bounded working size,
+# cap the inpaint radius, skip inpaint entirely when the hole is too large (cheap
+# median+noise fill instead), and enforce a wall-clock budget. The plate is only
+# an auxiliary background, so mild blur from up/downscaling is acceptable.
+PIPELINE_BG_PLATE_MAX_SIDE = 1280
+PIPELINE_BG_PLATE_MAX_INPAINT_RADIUS = 10
+PIPELINE_BG_PLATE_INPAINT_MAX_MASK_FRAC = 0.35
+PIPELINE_BG_PLATE_TIME_BUDGET_S = 20.0
 BACKGROUND_ROI_PX = (70, 100, 1210, 800)
 BACKGROUND_DIR = ROOT / "backgrounds"
 BACKGROUND_SETS_DIR = BACKGROUND_DIR / "sets"
 BACKGROUND_SETS_MANIFEST = BACKGROUND_DIR / "background_sets.json"
 DEFAULT_BACKGROUND_IMAGE = BACKGROUND_DIR / "conveyor_surface_topdown_ai_reference5.png"
+STANDARDIZED_MANUALS_DIR = ROOT / "standardized_manuals"
+PRECISE_MANUALS_DIR = ROOT / "manuals_from_individual_sources_precise"
 BACKGROUND_SIZE_MM = {
     "width_mm": round((BACKGROUND_ROI_PX[2] - BACKGROUND_ROI_PX[0]) / MM_TO_PREVIEW_PX, 2),
     "height_mm": round((BACKGROUND_ROI_PX[3] - BACKGROUND_ROI_PX[1]) / MM_TO_PREVIEW_PX, 2),
@@ -642,6 +1672,61 @@ def physical_size_payload(
     }
 
 
+def ai_profile_dimensions_from_physical_size(physical_size: dict[str, Any] | None) -> dict[str, Any]:
+    size = physical_size if isinstance(physical_size, dict) else {}
+    if size.get("kind") == "paper":
+        width = optional_float(size.get("width_mm")) or 210.0
+        height = optional_float(size.get("height_mm")) or 297.0
+        return {"length_mm": round(max(width, height), 2), "width_mm": round(min(width, height), 2), "height_mm": 0.3}
+    length = optional_float(size.get("length_mm")) or DEFAULT_OBJECT_SIZE_MM["length_mm"]
+    width = optional_float(size.get("width_mm")) or DEFAULT_OBJECT_SIZE_MM["width_mm"]
+    height = optional_float(size.get("height_mm")) or DEFAULT_OBJECT_SIZE_MM["height_mm"]
+    return {"length_mm": round(length, 2), "width_mm": round(width, 2), "height_mm": round(height, 2)}
+
+
+def ai_profile_top_view_aspect_ratio(dimensions: dict[str, Any] | None) -> float:
+    dims = dimensions if isinstance(dimensions, dict) else {}
+    length = optional_float(dims.get("length_mm")) or 0.0
+    width = optional_float(dims.get("width_mm")) or 0.0
+    if length <= 0 or width <= 0:
+        return 1.0
+    return round(max(length, width) / max(1e-6, min(length, width)), 3)
+
+
+def normalize_ai_profile_dimensions(raw: Any, fallback: dict[str, Any]) -> dict[str, Any]:
+    raw_dict = raw if isinstance(raw, dict) else {}
+    fallback_dict = fallback if isinstance(fallback, dict) else {}
+    result: dict[str, Any] = {}
+    for key in ("length_mm", "width_mm", "height_mm"):
+        value = optional_float(raw_dict.get(key))
+        result[key] = round(value, 2) if value else float(fallback_dict.get(key) or 0.0)
+    return result
+
+
+def apply_ai_profile_dimensions_to_physical_size(item: dict[str, Any], dimensions: dict[str, Any] | None) -> bool:
+    """When the AI Profile judges real-world dimensions, feed them into the
+    accessory physical_size so the compositor renders a consistent footprint for
+    this accessory across every training set."""
+    if accessory_material_type(item) != "object":
+        return False
+    dims = dimensions if isinstance(dimensions, dict) else {}
+    length = optional_float(dims.get("length_mm"))
+    width = optional_float(dims.get("width_mm"))
+    height = optional_float(dims.get("height_mm"))
+    if not (length and width and height):
+        return False
+    new_size = physical_size_payload(
+        "object",
+        object_length_mm=length,
+        object_width_mm=width,
+        object_height_mm=height,
+    )
+    if isinstance(item.get("physical_size"), dict) and item.get("physical_size") == new_size:
+        return False
+    item["physical_size"] = new_size
+    return True
+
+
 def ensure_dirs() -> None:
     for path in (
         UPLOAD_DIR,
@@ -652,43 +1737,143 @@ def ensure_dirs() -> None:
         TRAINING_TASKS_DIR,
         ACCESSORY_CANDIDATES_DIR,
         IMAGE_WORKER_LOG_DIR,
+        LOCATEANYTHING_OUTPUT_DIR,
         BACKGROUND_DIR,
         BACKGROUND_SETS_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)
     if not CONFIG_PATH.exists():
         save_config(DEFAULT_CONFIG)
+    migrate_persisted_local_paths_once()
+
+
+_config_io_lock = threading.RLock()
+
+
+def _read_config_file() -> dict[str, Any] | None:
+    """Read config.json, retrying briefly on transient partial/empty reads.
+
+    Returns the parsed dict, an empty dict when the file legitimately does not
+    exist, or ``None`` when the file is present but could not be parsed cleanly
+    (e.g. mid-write). Callers must NOT treat ``None`` as "no accessories" — doing
+    so would silently drop every persisted record whenever a concurrent writer
+    is in the middle of replacing the file.
+    """
+    for attempt in range(6):
+        try:
+            text = CONFIG_PATH.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return {}
+        except OSError:
+            time.sleep(0.05)
+            continue
+        if not text.strip():
+            # Empty/zero-byte read can happen during a non-atomic legacy write;
+            # give the writer a moment and retry rather than wiping state.
+            time.sleep(0.05)
+            continue
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            time.sleep(0.05)
+    return None
 
 
 def load_config() -> dict[str, Any]:
     ensure_dirs()
-    try:
-        current = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        current = {}
+    current = _read_config_file()
+    if current is None:
+        # The primary file exists but is unreadable right now. Fall back to the
+        # last-good snapshot instead of DEFAULT_CONFIG so we never report that
+        # user accessories/models suddenly vanished due to a write race.
+        try:
+            backup_text = CONFIG_BACKUP_PATH.read_text(encoding="utf-8")
+            current = json.loads(backup_text)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            current = {}
     merged = json.loads(json.dumps(DEFAULT_CONFIG))
     for key, value in current.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
             merged[key].update(value)
         else:
             merged[key] = value
-    return merged
+    return public_path_sanitized(merged)
 
 
 def save_config(config: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    payload = json.dumps(config, indent=2)
+    with _config_io_lock:
+        tmp_path = CONFIG_PATH.with_name(f"{CONFIG_PATH.name}.tmp.{uuid.uuid4().hex}")
+        try:
+            tmp_path.write_text(payload, encoding="utf-8")
+            os.replace(tmp_path, CONFIG_PATH)
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        # Best-effort last-good snapshot for disaster recovery.
+        try:
+            backup_tmp = CONFIG_BACKUP_PATH.with_name(f"{CONFIG_BACKUP_PATH.name}.tmp.{uuid.uuid4().hex}")
+            backup_tmp.write_text(payload, encoding="utf-8")
+            os.replace(backup_tmp, CONFIG_BACKUP_PATH)
+        except OSError:
+            pass
+
+
+def task_rule_id(value: Any) -> str:
+    return re.sub(r"[^a-zA-Z0-9_.@-]+", "_", str(value or "").strip()).strip("_")[:96]
+
+
+def task_rule_overrides(config: dict[str, Any], task_id: Any) -> dict[str, Any]:
+    rules = config.get("task_rules") if isinstance(config.get("task_rules"), dict) else {}
+    clean_id = task_rule_id(task_id)
+    raw = rules.get(clean_id) if clean_id else None
+    return raw if isinstance(raw, dict) else {}
+
+
+def apply_task_rule_override_to_spec(spec: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    task_id = str(spec.get("task_id") or spec.get("run_id") or "").strip()
+    override = task_rule_overrides(config, task_id)
+    if not override:
+        spec.setdefault("confidence_threshold", float(config.get("confidence_threshold", 0.25)))
+        return spec
+    next_spec = {**spec}
+    try:
+        next_spec["confidence_threshold"] = max(0.001, min(0.99, float(override.get("confidence_threshold", config.get("confidence_threshold", 0.25)))))
+    except (TypeError, ValueError):
+        next_spec["confidence_threshold"] = float(config.get("confidence_threshold", 0.25))
+    selected_ids = {str(item_id) for item_id in next_spec.get("selected_accessory_ids") or []}
+    counts: dict[str, int] = {}
+    for item_id, value in (override.get("required_accessory_counts") or {}).items():
+        clean_item_id = str(item_id)
+        if selected_ids and clean_item_id not in selected_ids:
+            continue
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            counts[clean_item_id] = count
+    if counts:
+        next_spec["required_accessory_counts"] = counts
+    return next_spec
 
 
 def accessory_uid(item: dict[str, Any]) -> str:
     if item.get("id"):
         return str(item["id"])
+    return accessory_legacy_uid(item)
+
+
+def accessory_legacy_uid(item: dict[str, Any]) -> str:
     raw = f"{item.get('class_id', 'x')}_{item.get('name', 'accessory')}"
     return re.sub(r"[^a-zA-Z0-9_-]+", "_", raw).strip("_").lower()
 
 
 def serialize_accessory(item: dict[str, Any]) -> dict[str, Any]:
-    copy = dict(item)
+    copy = public_path_sanitized(enrich_record_audit_fields(item))
     copy["id"] = accessory_uid(item)
     material_type = copy.setdefault("material_type", "object" if int(copy.get("class_id", 0)) == 0 else "text")
     copy.setdefault("physical_size", physical_size_payload(str(material_type)))
@@ -697,7 +1882,69 @@ def serialize_accessory(item: dict[str, Any]) -> dict[str, Any]:
     copy.setdefault("source_files", [])
     copy.setdefault("normalized_assets", [])
     copy.setdefault("training_role", "detect_and_classify")
+    copy.setdefault("detection_route", "yolo")
     return copy
+
+
+def serialize_accessory_summary(item: dict[str, Any]) -> dict[str, Any]:
+    full = serialize_accessory(item)
+    source_files = full.get("source_files") if isinstance(full.get("source_files"), list) else []
+    thumbnails = full.get("thumbnails") if isinstance(full.get("thumbnails"), list) else []
+    ai_status = full.get("ai_profile_status") if isinstance(full.get("ai_profile_status"), dict) else {}
+    locate_status = full.get("locateanything_profile_status") if isinstance(full.get("locateanything_profile_status"), dict) else {}
+    return {
+        "id": full["id"],
+        "class_id": full.get("class_id"),
+        "name": full.get("name") or full["id"],
+        "label": full.get("label") or full.get("name") or full["id"],
+        "material_type": full.get("material_type"),
+        "material_alpha_policy": full.get("material_alpha_policy"),
+        "object_alpha_policy_label": full.get("object_alpha_policy_label"),
+        "training_role": full.get("training_role"),
+        "detection_route": full.get("detection_route"),
+        "physical_size": full.get("physical_size"),
+        "size_reference": full.get("size_reference"),
+        "size_reference_label": (size_reference_payload(full.get("size_reference")) or {}).get("label"),
+        "status": full.get("status"),
+        "source_files": source_files[:4],
+        "source_file_count": len(source_files),
+        "normalized_asset_count": len(full.get("normalized_assets") or []),
+        "clean_sprite_status": full.get("clean_sprite_status"),
+        "clean_sprite_count": full.get("clean_sprite_count"),
+        "clean_sprite_expected_count": full.get("clean_sprite_expected_count"),
+        "clean_sprite_failed_cells": full.get("clean_sprite_failed_cells") or [],
+        "ai_profile_status": {
+            "status": ai_status.get("status"),
+            "source": ai_status.get("source"),
+            "message": ai_status.get("message"),
+            "updated_at": ai_status.get("updated_at"),
+        }
+        if ai_status
+        else full.get("ai_profile_status"),
+        "ai_profile_ready": accessory_ai_profile_ready(full),
+        "locateanything_profile_status": {
+            "status": locate_status.get("status"),
+            "source": locate_status.get("source"),
+            "message": locate_status.get("message"),
+            "updated_at": locate_status.get("updated_at"),
+            "profile_version": locate_status.get("profile_version"),
+        }
+        if locate_status
+        else full.get("locateanything_profile_status"),
+        "locateanything_profile_ready": accessory_locateanything_profile_ready(full),
+        "thumbnails": thumbnails[:2],
+        "thumbnail_url": thumbnails[0].get("url") if thumbnails and isinstance(thumbnails[0], dict) else "",
+        "created_at": full.get("created_at"),
+        "updated_at": full.get("updated_at"),
+        "confirmed_at": full.get("confirmed_at"),
+        "owner_user_id": full.get("owner_user_id"),
+        "owner_username": full.get("owner_username"),
+    }
+
+
+def serialize_accessory_items(items: list[dict[str, Any]], *, summary: bool = True) -> list[dict[str, Any]]:
+    serializer = serialize_accessory_summary if summary else serialize_accessory
+    return [serializer(item) for item in items]
 
 
 def accessory_material_type(item: dict[str, Any]) -> str:
@@ -742,8 +1989,173 @@ def object_alpha_policy_label(policy: str) -> str:
     return "透明" if policy == "transparent" else "不透明"
 
 
+def service_rebased_path(path: Path) -> Path | None:
+    raw = str(path).replace("\\", "/")
+    parts = PurePosixPath(raw).parts
+    if "assembly_line_optimize" in parts:
+        index = parts.index("assembly_line_optimize")
+        return ROOT.joinpath(*parts[index + 1 :])
+    if "local_inspection_service" not in parts:
+        return None
+    index = parts.index("local_inspection_service")
+    return ROOT.joinpath(*parts[index:])
+
+
+def rebase_stale_local_path_text(value: str) -> str:
+    text = str(value or "")
+    if not text:
+        return text
+    normalized = text.replace("\\", "/")
+    for prefix in STALE_REPO_PATH_PREFIXES:
+        normalized = normalized.replace(prefix, ROOT.as_posix())
+    return normalized
+
+
+def rebase_stale_local_payload_text(text: str) -> str:
+    migrated = text
+    root_text = ROOT.as_posix()
+    for prefix in STALE_REPO_PATH_PREFIXES:
+        normalized_prefix = prefix.replace("\\", "/")
+        variants = {
+            prefix,
+            normalized_prefix,
+            normalized_prefix.replace("/", "\\/"),
+        }
+        if ":" in normalized_prefix:
+            variants.add(normalized_prefix.replace("/", "\\\\"))
+        for variant in variants:
+            replacement = root_text.replace("/", "\\/") if "\\/" in variant else root_text
+            migrated = migrated.replace(variant, replacement)
+    return migrated
+
+
+def public_path_sanitized(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            rebase_stale_local_path_text(key) if isinstance(key, str) else key: public_path_sanitized(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [public_path_sanitized(item) for item in value]
+    if isinstance(value, str):
+        return rebase_stale_local_path_text(value)
+    return value
+
+
+def migrate_json_file_paths(path: Path) -> bool:
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    try:
+        original = json.loads(raw_text)
+    except json.JSONDecodeError:
+        migrated_text = rebase_stale_local_payload_text(raw_text)
+        if migrated_text == raw_text:
+            return False
+        try:
+            path.write_text(migrated_text, encoding="utf-8")
+        except OSError:
+            return False
+        return True
+    migrated = public_path_sanitized(original)
+    if migrated == original:
+        return False
+    try:
+        path.write_text(json.dumps(migrated, indent=2), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
+def migrate_persisted_local_paths_once() -> None:
+    global _path_migration_done
+    if _path_migration_done:
+        return
+    with _path_migration_lock:
+        if _path_migration_done:
+            return
+        candidates: set[Path] = {CONFIG_PATH}
+        for root in (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR):
+            if root.exists():
+                candidates.update(path for path in root.rglob("*.json") if path.is_file())
+        for path in sorted(candidates):
+            migrate_json_file_paths(path)
+        _path_migration_done = True
+
+
+def resolve_service_path(value: Any, *, for_write: bool = False) -> Path:
+    raw = rebase_stale_local_path_text(str(value or "")).strip()
+    if not raw:
+        return Path("")
+    path = Path(raw).expanduser()
+    rebased = service_rebased_path(path)
+    if for_write and rebased is not None:
+        return rebased
+
+    candidates: list[Path] = []
+    if rebased is not None:
+        candidates.append(rebased)
+    if path.is_absolute():
+        candidates.append(path)
+    else:
+        candidates.extend([APP_DIR / path, ROOT / path, path])
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0]
+
+
+def path_is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def public_output_url(path: Path) -> str:
-    return f"/outputs/{path.relative_to(OUTPUT_DIR).as_posix()}"
+    resolved = resolve_service_path(path, for_write=True)
+    try:
+        return f"/outputs/{resolved.relative_to(OUTPUT_DIR).as_posix()}"
+    except ValueError:
+        return ""
+
+
+def public_output_url_for_existing(path: Path) -> str:
+    resolved = resolve_service_path(path)
+    return public_output_url(resolved) if resolved.exists() and path_is_under(resolved, OUTPUT_DIR) else ""
+
+
+def output_write_dir(kind: str = "") -> Path:
+    user = _request_user.get()
+    return output_write_dir_for_owner(kind, user["id"] if user and not user_is_admin(user) else "")
+
+
+def output_write_dir_for_owner(kind: str = "", owner_user_id: str = "") -> Path:
+    safe_kind = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(kind or "").strip()).strip("._")
+    clean_owner = str(owner_user_id or "").strip()
+    if clean_owner and clean_owner not in {LEGACY_OWNER_ID, SYSTEM_OWNER_ID}:
+        root = OUTPUT_DIR / "users" / clean_owner
+    else:
+        root = OUTPUT_DIR
+    target = root / safe_kind if safe_kind else root
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def output_url(path: Path) -> str:
+    resolved = resolve_service_path(path, for_write=True)
+    try:
+        return f"/outputs/{resolved.relative_to(OUTPUT_DIR).as_posix()}"
+    except ValueError:
+        return ""
 
 
 def order_points(points: np.ndarray) -> np.ndarray:
@@ -827,27 +2239,124 @@ def best_document_quad(image: np.ndarray, target_aspect: float | None = None) ->
     return best[1] if best else None
 
 
+def document_quad_mean_size(quad: np.ndarray) -> tuple[float, float]:
+    """Mean width / height (px) of an ordered tl,tr,br,bl quad — used to recover
+    the document's true (deskewed) proportions."""
+    pts = quad.reshape(4, 2).astype("float32")
+    tl, tr, br, bl = pts[0], pts[1], pts[2], pts[3]
+    top = float(np.linalg.norm(tr - tl))
+    bottom = float(np.linalg.norm(br - bl))
+    left = float(np.linalg.norm(bl - tl))
+    right = float(np.linalg.norm(br - tr))
+    return (top + bottom) / 2.0, (left + right) / 2.0
+
+
+def detect_document_quad(image: np.ndarray, target_aspect: float | None = None) -> np.ndarray | None:
+    """Robustly auto-crop the document/manual body. Tries edge contours first, then
+    bright-paper (Otsu) and low-saturation paper segmentation, so a manual shot on
+    a darker tabletop is still found even when its edges are weak. Returns an
+    ordered tl,tr,br,bl quad or None."""
+    h, w = image.shape[:2]
+    area = max(1, h * w)
+    candidates: list[np.ndarray] = []
+    edge_quad = best_document_quad(image, target_aspect)
+    if edge_quad is not None:
+        candidates.append(edge_quad)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (7, 7), 0)
+    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if float((otsu > 0).mean()) < 0.5:
+        otsu = cv2.bitwise_not(otsu)  # keep the bright paper as foreground
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    sat, val = hsv[:, :, 1], hsv[:, :, 2]
+    paper = ((sat < 70) & (val > 110)).astype(np.uint8) * 255
+    for mask in (otsu, paper):
+        closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8), iterations=2)
+        opened = cv2.morphologyEx(closed, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
+        cnts, _ = cv2.findContours(opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not cnts:
+            continue
+        contour = max(cnts, key=cv2.contourArea)
+        if float(cv2.contourArea(contour)) < area * 0.12:
+            continue
+        peri = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+        if len(approx) == 4:
+            candidates.append(order_points(approx.astype(np.float32)))
+        else:
+            box = cv2.boxPoints(cv2.minAreaRect(contour)).reshape(4, 1, 2).astype(np.float32)
+            candidates.append(order_points(box))
+    best: tuple[float, np.ndarray] | None = None
+    for quad in candidates:
+        quad_area = float(cv2.contourArea(quad.astype(np.float32)))
+        if quad_area < area * 0.10 or quad_area > area * 0.999:
+            continue
+        if best is None or quad_area > best[0]:
+            best = (quad_area, quad)
+    return best[1] if best else None
+
+
+def letterbox_document_onto_paper(
+    image: np.ndarray,
+    target_w: int,
+    target_h: int,
+    pad_value: tuple[int, int, int] = (255, 255, 255),
+) -> np.ndarray:
+    """Place a document image onto a clean paper-sized canvas preserving aspect
+    (white letterbox). Never stretches the content non-uniformly."""
+    target_w = max(1, int(target_w))
+    target_h = max(1, int(target_h))
+    h, w = image.shape[:2]
+    scale = min(target_w / max(1, w), target_h / max(1, h))
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    resized = cv2.resize(
+        image,
+        (new_w, new_h),
+        interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
+    )
+    canvas = np.full((target_h, target_w, 3), pad_value, dtype=np.uint8)
+    x0 = (target_w - new_w) // 2
+    y0 = (target_h - new_h) // 2
+    canvas[y0 : y0 + new_h, x0 : x0 + new_w] = resized
+    return canvas
+
+
 def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Lightweight document pipeline (no image generation): auto-crop the document
+    body, deskew/perspective-correct any tilt, then normalize onto the chosen paper
+    page (A4/A5/...). The output is always exactly the paper pixel size at the paper
+    aspect ratio, with the content never non-uniformly stretched."""
     image = cv2.imread(str(src))
     if image is None:
         return None
-    warped = None
-    method = "resize_fallback"
     is_manual_rectified = src.stem.endswith("_rectified")
-    if is_manual_rectified:
-        target_w, target_h = int(image.shape[1]), int(image.shape[0])
-    else:
-        target_w, target_h = target_paper_pixel_size(physical_size)
+    target_w, target_h = target_paper_pixel_size(physical_size)
     target_aspect = target_w / max(1, target_h)
-    rect = None if is_manual_rectified else best_document_quad(image, target_aspect)
-    if rect is not None:
-        dst = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
-        matrix = cv2.getPerspectiveTransform(rect, dst)
-        warped = cv2.warpPerspective(image, matrix, (target_w, target_h))
-        method = "paper_quad_perspective"
-    if warped is None:
-        warped = cv2.resize(image, (target_w, target_h), interpolation=cv2.INTER_AREA)
-        method = "manual_quad_perspective" if is_manual_rectified else "paper_resize_fallback"
+    quad = None if is_manual_rectified else detect_document_quad(image, target_aspect)
+    if quad is not None:
+        mean_w, mean_h = document_quad_mean_size(quad)
+        quad_aspect = mean_w / max(1.0, mean_h)
+        if ratio_close(quad_aspect, target_aspect, tolerance=0.18):
+            # Cropped document already matches the chosen paper proportions: deskew
+            # straight onto the page (fills the page, correct proportions).
+            dst = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
+            warped = cv2.warpPerspective(image, cv2.getPerspectiveTransform(quad.astype("float32"), dst), (target_w, target_h))
+            method = "paper_quad_perspective"
+        else:
+            # Deskew to the document's own true aspect, then letterbox onto the page
+            # so the content keeps its real proportions instead of being stretched.
+            rect_w = max(1, int(round(mean_w)))
+            rect_h = max(1, int(round(mean_h)))
+            dst = np.array([[0, 0], [rect_w - 1, 0], [rect_w - 1, rect_h - 1], [0, rect_h - 1]], dtype="float32")
+            deskewed = cv2.warpPerspective(image, cv2.getPerspectiveTransform(quad.astype("float32"), dst), (rect_w, rect_h))
+            warped = letterbox_document_onto_paper(deskewed, target_w, target_h)
+            method = "paper_quad_deskew_letterbox"
+    else:
+        # Already-rectified manual, or no reliable crop: letterbox the whole image
+        # onto the page. Crucially, we never stretch to the paper aspect.
+        warped = letterbox_document_onto_paper(image, target_w, target_h)
+        method = "manual_rectified_letterbox" if is_manual_rectified else "paper_letterbox_fallback"
     out = target_dir / f"{src.stem}_canonical.png"
     cv2.imwrite(str(out), warped)
     return {
@@ -857,7 +2366,7 @@ def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, A
         "paper_size": physical_size or {},
         "width": int(warped.shape[1]),
         "height": int(warped.shape[0]),
-        "workflow": ["crop", "perspective_correction", "ocr_keyword_capture"],
+        "workflow": ["auto_crop", "deskew_perspective_correction", "paper_size_normalize"],
     }
 
 
@@ -889,8 +2398,9 @@ def default_asset_for_accessory(item: dict[str, Any]) -> Path | None:
 
 def load_preview_asset_with_metadata(item: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
     for asset in item.get("normalized_assets", []):
-        path = Path(str(asset.get("path", "")))
+        path = resolve_service_path(asset.get("path"))
         if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            asset["path"] = str(path)
             image = cv2.imread(str(path), cv2.IMREAD_COLOR)
             if image is not None:
                 return image, {
@@ -902,7 +2412,7 @@ def load_preview_asset_with_metadata(item: dict[str, Any]) -> tuple[np.ndarray, 
                     "canonical_asset_dimensions_px": [int(asset.get("width") or image.shape[1]), int(asset.get("height") or image.shape[0])],
                 }
     for path_str in item.get("source_files", []):
-        path = Path(path_str)
+        path = resolve_service_path(path_str)
         if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"} and path.exists():
             image = cv2.imread(str(path), cv2.IMREAD_COLOR)
             if image is not None:
@@ -929,35 +2439,122 @@ def load_preview_asset_with_metadata(item: dict[str, Any]) -> tuple[np.ndarray, 
     return None
 
 
-def load_rectified_document_asset_with_metadata(item: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
-    for asset in item.get("normalized_assets", []):
-        path = Path(str(asset.get("path", "")))
-        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-            if image is not None:
-                return image, {
-                    "asset_path": str(path),
-                    "asset_kind": asset.get("kind"),
-                    "asset_method": asset.get("method"),
-                    "asset_source": "normalized_assets",
-                    "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-                    "canonical_asset_dimensions_px": [int(asset.get("width") or image.shape[1]), int(asset.get("height") or image.shape[0])],
-                }
+def load_document_image_candidate(path_value: Any, metadata: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
+    path = resolve_service_path(path_value)
+    if not path or not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+        return None
+    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if image is None:
+        return None
+    asset_width = int(metadata.get("width") or image.shape[1])
+    asset_height = int(metadata.get("height") or image.shape[0])
+    return image, {
+        **metadata,
+        "asset_path": str(path),
+        "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
+        "canonical_asset_dimensions_px": [asset_width, asset_height],
+    }
+
+
+def select_document_image_candidate(
+    candidates: list[tuple[np.ndarray, dict[str, Any]]],
+    rng: np.random.Generator | None,
+    *,
+    multi_policy: str,
+    single_policy: str,
+) -> tuple[np.ndarray, dict[str, Any]] | None:
+    if not candidates:
+        return None
+    count = len(candidates)
+    selected_index = int(rng.integers(0, count)) if rng is not None and count > 1 else 0
+    image, metadata = candidates[selected_index]
+    policy = multi_policy if count > 1 else single_policy
+    return image, {
+        **metadata,
+        "document_asset_index": selected_index,
+        "document_asset_count": count,
+        "document_asset_selection_policy": policy,
+    }
+
+
+def load_rectified_document_asset_with_metadata(
+    item: dict[str, Any],
+    rng: np.random.Generator | None = None,
+) -> tuple[np.ndarray, dict[str, Any]] | None:
+    normalized_candidates: list[tuple[np.ndarray, dict[str, Any]]] = []
+    for normalized_index, asset in enumerate(item.get("normalized_assets", [])):
+        if asset.get("kind") != "canonical_text_image":
+            continue
+        loaded = load_document_image_candidate(
+            asset.get("path"),
+            {
+                "asset_kind": asset.get("kind"),
+                "asset_method": asset.get("method"),
+                "asset_source": "normalized_assets",
+                "document_asset_source_index": normalized_index,
+                "width": asset.get("width"),
+                "height": asset.get("height"),
+            },
+        )
+        if loaded is not None:
+            normalized_candidates.append(loaded)
+    selected = select_document_image_candidate(
+        normalized_candidates,
+        rng,
+        multi_policy="seeded_uniform_canonical_text_image",
+        single_policy="single_canonical_text_image",
+    )
+    if selected is not None:
+        return selected
+
+    normalized_fallback_candidates: list[tuple[np.ndarray, dict[str, Any]]] = []
+    for normalized_index, asset in enumerate(item.get("normalized_assets", [])):
+        loaded = load_document_image_candidate(
+            asset.get("path"),
+            {
+                "asset_kind": asset.get("kind"),
+                "asset_method": asset.get("method"),
+                "asset_source": "normalized_assets",
+                "document_asset_source_index": normalized_index,
+                "width": asset.get("width"),
+                "height": asset.get("height"),
+            },
+        )
+        if loaded is not None:
+            normalized_fallback_candidates.append(loaded)
+    selected = select_document_image_candidate(
+        normalized_fallback_candidates,
+        rng,
+        multi_policy="seeded_uniform_normalized_document_image_fallback",
+        single_policy="single_normalized_document_image_fallback",
+    )
+    if selected is not None:
+        return selected
+
+    rectified_source_candidates: list[tuple[np.ndarray, dict[str, Any]]] = []
     for path_str in item.get("source_files", []):
-        path = Path(path_str)
+        path = resolve_service_path(path_str)
         if not path.stem.endswith("_rectified"):
             continue
-        if path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES and path.exists():
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-            if image is not None:
-                return image, {
-                    "asset_path": str(path),
-                    "asset_kind": "rectified_source_image",
-                    "asset_method": "manual_rectified_source_direct",
-                    "asset_source": "source_files_rectified",
-                    "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-                    "canonical_asset_dimensions_px": [int(image.shape[1]), int(image.shape[0])],
-                }
+        loaded = load_document_image_candidate(
+            path,
+            {
+                "asset_kind": "rectified_source_image",
+                "asset_method": "manual_rectified_source_direct",
+                "asset_source": "source_files_rectified",
+            },
+        )
+        if loaded is not None:
+            rectified_source_candidates.append(loaded)
+    selected = select_document_image_candidate(
+        rectified_source_candidates,
+        rng,
+        multi_policy="seeded_uniform_rectified_source_image",
+        single_policy="single_rectified_source_image",
+    )
+    if selected is not None:
+        return selected
+
     default_path = default_asset_for_accessory(item)
     if default_path and default_path.exists() and default_path.parent.name == "standardized_manuals":
         image = cv2.imread(str(default_path), cv2.IMREAD_COLOR)
@@ -969,8 +2566,557 @@ def load_rectified_document_asset_with_metadata(item: dict[str, Any]) -> tuple[n
                 "asset_source": "standardized_default_asset",
                 "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
                 "canonical_asset_dimensions_px": [int(image.shape[1]), int(image.shape[0])],
+                "document_asset_index": 0,
+                "document_asset_count": 1,
+                "document_asset_selection_policy": "standardized_document_default",
             }
     return None
+
+
+def label_sheet_slug(value: Any, fallback: str = "label_sheet") -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip())[:96].strip("._")
+    return slug or fallback
+
+
+def label_sheet_annotation_text(item: dict[str, Any], metadata: dict[str, Any] | None = None) -> str:
+    metadata = metadata or {}
+    fields: list[str] = []
+    for key in (
+        "label_sheet_annotation",
+        "name",
+        "label",
+        "title",
+        "description",
+        "note",
+        "notes",
+        "training_role",
+        "material_type",
+    ):
+        value = item.get(key)
+        if value:
+            fields.append(str(value))
+    if not item.get("label_sheet_reference"):
+        value = item.get("preprocess")
+        if value:
+            fields.append(str(value))
+    for key in ("asset_kind", "asset_method", "asset_source", "source_path", "asset_path"):
+        value = metadata.get(key)
+        if value:
+            fields.append(str(value))
+            fields.append(Path(str(value)).stem)
+    profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
+    for key in ("name", "visual_label", "short_description"):
+        value = profile.get(key)
+        if value:
+            fields.append(str(value))
+    return " ".join(fields)
+
+
+def label_sheet_filter_decision(annotation: str) -> dict[str, Any]:
+    normalized = str(annotation or "").lower()
+    include_hits = [term for term in LABEL_SHEET_INCLUDE_TERMS if term.lower() in normalized]
+    exclude_hits = [term for term in LABEL_SHEET_EXCLUDE_TERMS if term.lower() in normalized]
+    if exclude_hits:
+        status = "filtered"
+        reason = "packaging_or_non_label_annotation"
+    elif include_hits:
+        status = "kept"
+        reason = "label_annotation_match"
+    else:
+        status = "filtered"
+        reason = "no_label_annotation_match"
+    return {
+        "status": status,
+        "reason": reason,
+        "include_terms": include_hits,
+        "exclude_terms": exclude_hits,
+        "rule": "exclude packaging/object terms first; keep only annotations with label-like terms",
+    }
+
+
+def write_label_sheet_image(path: Path, image_bgr: np.ndarray, max_side: int = 960) -> str:
+    out = image_bgr
+    h, w = out.shape[:2]
+    longest = max(h, w)
+    if longest > max_side:
+        scale = max_side / float(longest)
+        out = cv2.resize(out, (max(1, int(round(w * scale))), max(1, int(round(h * scale)))), interpolation=cv2.INTER_AREA)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(path), out, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    return public_output_url(path)
+
+
+def label_sheet_candidate_bbox_payload(candidate: Any) -> dict[str, int] | None:
+    bbox = getattr(candidate, "bbox", None)
+    if bbox is None:
+        return None
+    x1, y1, x2, y2 = bbox
+    return {"x": int(x1), "y": int(y1), "width": int(x2 - x1), "height": int(y2 - y1)}
+
+
+def label_sheet_image_entries_for_item(item: dict[str, Any]) -> list[tuple[np.ndarray, dict[str, Any]]]:
+    entries: list[tuple[np.ndarray, dict[str, Any]]] = []
+    seen: set[str] = set()
+
+    for source_index, path_str in enumerate(item.get("source_files", []) or [], start=1):
+        path = resolve_service_path(path_str)
+        key = str(path)
+        if key in seen:
+            continue
+        loaded = load_document_image_candidate(
+            path,
+            {
+                "asset_kind": "source_image",
+                "asset_method": "source_file_direct",
+                "asset_source": "source_files",
+                "source_index": source_index,
+                "source_path": str(path),
+            },
+        )
+        if loaded is not None:
+            entries.append(loaded)
+            seen.add(key)
+
+    if item.get("label_sheet_reference") and entries:
+        return entries
+
+    for normalized_index, asset in enumerate(item.get("normalized_assets", []) or [], start=1):
+        if not isinstance(asset, dict):
+            continue
+        path = resolve_service_path(asset.get("path"))
+        key = str(path)
+        if key in seen:
+            continue
+        loaded = load_document_image_candidate(
+            path,
+            {
+                "asset_kind": asset.get("kind") or "normalized_image",
+                "asset_method": asset.get("method") or "",
+                "asset_source": "normalized_assets",
+                "normalized_index": normalized_index,
+                "source_path": str(asset.get("source_path") or ""),
+                "width": asset.get("width"),
+                "height": asset.get("height"),
+            },
+        )
+        if loaded is not None:
+            entries.append(loaded)
+            seen.add(key)
+    return entries
+
+
+def collect_label_sheet_references(
+    config: dict[str, Any],
+    *,
+    write_previews: bool = True,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    kept: list[dict[str, Any]] = []
+    filtered: list[dict[str, Any]] = []
+    reason_counts: Counter[str] = Counter()
+    output_dir = output_write_dir("label_sheet_references")
+    for item in config.get("accessories", []) or []:
+        accessory_id = accessory_uid(item)
+        image_entries = label_sheet_image_entries_for_item(item)
+        if not image_entries:
+            annotation = label_sheet_annotation_text(item)
+            decision = label_sheet_filter_decision(annotation)
+            filtered.append(
+                {
+                    "accessory_id": accessory_id,
+                    "name": str(item.get("name") or item.get("label") or accessory_id),
+                    "annotation": annotation,
+                    "filter": {**decision, "reason": "no_reference_image"},
+                }
+            )
+            reason_counts["no_reference_image"] += 1
+            continue
+        for image_index, (image_bgr, metadata) in enumerate(image_entries, start=1):
+            annotation = label_sheet_annotation_text(item, metadata)
+            decision = label_sheet_filter_decision(annotation)
+            reference_id = f"{accessory_id}__img{image_index:02d}"
+            source_path = str(metadata.get("asset_path") or metadata.get("source_path") or "")
+            source_file = resolve_service_path(source_path) if source_path else None
+            audit = record_audit_fields(item, source_file if source_file and source_file.exists() else None)
+            base_payload = {
+                "reference_id": reference_id,
+                "accessory_id": accessory_id,
+                "name": str(item.get("name") or item.get("label") or accessory_id),
+                "label": str(item.get("label") or item.get("name") or accessory_id),
+                "annotation": annotation,
+                "source_path": source_path,
+                "asset_kind": metadata.get("asset_kind") or "",
+                "asset_source": metadata.get("asset_source") or "",
+                "image_width": int(image_bgr.shape[1]),
+                "image_height": int(image_bgr.shape[0]),
+                "filter": decision,
+                "created_at": audit["created_at"],
+                "updated_at": audit["updated_at"],
+                "owner_user_id": audit["owner_user_id"],
+                "owner_username": audit["owner_username"],
+            }
+            reason_counts[str(decision["reason"])] += 1
+            if decision["status"] != "kept":
+                filtered.append(base_payload)
+                continue
+            preview_url = ""
+            if write_previews:
+                digest = hashlib.sha1(f"{reference_id}|{source_path}".encode("utf-8")).hexdigest()[:10]
+                preview_path = output_dir / f"{label_sheet_slug(reference_id)}_{digest}.jpg"
+                preview_url = write_label_sheet_image(preview_path, image_bgr, max_side=900)
+            kept.append({**base_payload, "image_url": preview_url, "image_bgr": image_bgr})
+
+    stats = {
+        "kept_count": len(kept),
+        "filtered_count": len(filtered),
+        "reason_counts": dict(reason_counts),
+        "rules": {
+            "include_terms": list(LABEL_SHEET_INCLUDE_TERMS),
+            "exclude_terms": list(LABEL_SHEET_EXCLUDE_TERMS),
+            "source": "accessory/reference annotation and image filename metadata",
+        },
+        "filtered": filtered[:120],
+    }
+    return kept, stats
+
+
+def public_label_sheet_reference(reference: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in reference.items() if key != "image_bgr"}
+
+
+def label_sheet_candidate_quality(candidate: Any) -> float:
+    image = getattr(candidate, "image_bgr", None)
+    if image is None or image.size == 0:
+        return 0.0
+    h, w = image.shape[:2]
+    if min(h, w) < 18:
+        return 0.0
+    area = float(h * w)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    aspect = w / float(max(1, h))
+    aspect_penalty = abs(math.log(max(0.05, min(20.0, aspect))))
+    size_bonus = min(1.0, area / 90000.0)
+    return sharpness / 100.0 + size_bonus * 3.0 - aspect_penalty * 0.35
+
+
+def label_sheet_segment_candidates(image_bgr: np.ndarray) -> tuple[np.ndarray, list[Any]]:
+    if segment_label_candidates_bgr is None:
+        return image_bgr.copy(), []
+    canvas, candidates = segment_label_candidates_bgr(image_bgr, "incoming", max_labels=32)
+    clear = [candidate for candidate in candidates if getattr(candidate, "image_bgr", None) is not None]
+    clear.sort(key=label_sheet_candidate_quality, reverse=True)
+    return canvas, clear[:8]
+
+
+def label_sheet_inset_variants(image_bgr: np.ndarray) -> list[tuple[str, np.ndarray]]:
+    variants: list[tuple[str, np.ndarray]] = [("full", image_bgr)]
+    if crop_to_content_bgr is not None:
+        cropped = crop_to_content_bgr(image_bgr)
+        if cropped.size and cropped.shape[:2] != image_bgr.shape[:2]:
+            variants.append(("content", cropped))
+    h, w = image_bgr.shape[:2]
+    for ratio in (0.025, 0.045, 0.065, 0.085):
+        dx = int(round(w * ratio))
+        dy = int(round(h * ratio))
+        if w - 2 * dx < 24 or h - 2 * dy < 24:
+            continue
+        variants.append((f"inset_{ratio:.3f}", image_bgr[dy : h - dy, dx : w - dx].copy()))
+    return variants
+
+
+def label_sheet_gray_for_match(image_bgr: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    return cv2.GaussianBlur(gray, (3, 3), 0)
+
+
+def label_sheet_template_similarity(candidate_bgr: np.ndarray, reference_bgr: np.ndarray) -> float:
+    candidate_gray = label_sheet_gray_for_match(candidate_bgr)
+    reference_gray = label_sheet_gray_for_match(reference_bgr)
+    pairs: list[tuple[np.ndarray, np.ndarray]] = []
+    ch, cw = candidate_gray.shape[:2]
+    rh, rw = reference_gray.shape[:2]
+    if ch >= rh and cw >= rw and rh >= 18 and rw >= 18:
+        pairs.append((candidate_gray, reference_gray))
+    if rh >= ch and rw >= cw and ch >= 18 and cw >= 18:
+        pairs.append((reference_gray, candidate_gray))
+    if not pairs:
+        target_w = max(24, min(cw, rw))
+        target_h = max(24, min(ch, rh))
+        pairs.append(
+            (
+                cv2.resize(candidate_gray, (target_w, target_h), interpolation=cv2.INTER_AREA),
+                cv2.resize(reference_gray, (target_w, target_h), interpolation=cv2.INTER_AREA),
+            )
+        )
+    best = 0.0
+    for haystack, needle in pairs:
+        if haystack.shape[0] < needle.shape[0] or haystack.shape[1] < needle.shape[1]:
+            continue
+        if needle.shape[0] < 18 or needle.shape[1] < 18:
+            continue
+        result = cv2.matchTemplate(haystack, needle, cv2.TM_CCOEFF_NORMED)
+        if result.size:
+            _, max_value, _, _ = cv2.minMaxLoc(result)
+            best = max(best, float(max_value))
+    return max(0.0, min(1.0, best))
+
+
+def label_sheet_center_crop_to_shape(image_bgr: np.ndarray, target_shape: tuple[int, ...]) -> np.ndarray | None:
+    target_h, target_w = target_shape[:2]
+    h, w = image_bgr.shape[:2]
+    if target_h < 18 or target_w < 18 or target_h > h or target_w > w:
+        return None
+    trim_h = h - target_h
+    trim_w = w - target_w
+    if trim_h == 0 and trim_w == 0:
+        return None
+    if trim_h > max(28, int(round(h * 0.22))) or trim_w > max(28, int(round(w * 0.22))):
+        return None
+    y = trim_h // 2
+    x = trim_w // 2
+    return image_bgr[y : y + target_h, x : x + target_w].copy()
+
+
+def label_sheet_pair_variants(candidate_bgr: np.ndarray, reference_bgr: np.ndarray) -> list[tuple[str, np.ndarray, str, np.ndarray]]:
+    pairs: list[tuple[str, np.ndarray, str, np.ndarray]] = []
+    for candidate_variant_name, candidate_variant in label_sheet_inset_variants(candidate_bgr):
+        for reference_variant_name, reference_variant in label_sheet_inset_variants(reference_bgr):
+            pairs.append((candidate_variant_name, candidate_variant, reference_variant_name, reference_variant))
+    candidate_centered = label_sheet_center_crop_to_shape(candidate_bgr, reference_bgr.shape)
+    if candidate_centered is not None:
+        pairs.append(("center_crop_to_reference", candidate_centered, "full", reference_bgr))
+    reference_centered = label_sheet_center_crop_to_shape(reference_bgr, candidate_bgr.shape)
+    if reference_centered is not None:
+        pairs.append(("full", candidate_bgr, "center_crop_to_candidate", reference_centered))
+    return pairs
+
+
+def compare_label_sheet_images(candidate_bgr: np.ndarray, reference_bgr: np.ndarray, sensitivity: float) -> dict[str, Any]:
+    assert compare_candidate_to_reference is not None
+    best: dict[str, Any] | None = None
+    for candidate_variant_name, candidate_variant, reference_variant_name, reference_variant in label_sheet_pair_variants(candidate_bgr, reference_bgr):
+        metrics, _, _ = compare_candidate_to_reference(candidate_variant, reference_variant, sensitivity)
+        strict_score = float(metrics.get("score") or 0.0)
+        template_score = label_sheet_template_similarity(candidate_variant, reference_variant)
+        strict_status = str(metrics.get("status") or "unknown")
+        auto_match_eligible = strict_status == "pass"
+        current = {
+            **metrics,
+            "score": round(strict_score, 4),
+            "strict_score": round(strict_score, 4),
+            "template_similarity": round(template_score, 4),
+            "auto_match_eligible": auto_match_eligible,
+            "strict_gate": "pass" if auto_match_eligible else f"strict_{strict_status}",
+            "candidate_variant": candidate_variant_name,
+            "reference_variant": reference_variant_name,
+        }
+        if best is None or float(current.get("score") or 0.0) > float(best.get("score") or 0.0):
+            best = current
+    return best or {"score": 0.0, "status": "unknown", "reason": "No comparable image variants"}
+
+
+def match_label_sheet_to_references(
+    image_bgr: np.ndarray,
+    references: list[dict[str, Any]],
+    *,
+    request_id: str,
+    output_dir: Path,
+    doc_filter_stats: dict[str, Any],
+    sensitivity: float = 0.62,
+) -> dict[str, Any]:
+    if compare_candidate_to_reference is None or segment_label_candidates_bgr is None:
+        return {
+            "status": "error",
+            "error": "Local label matcher helpers are unavailable.",
+            "doc_filter_stats": doc_filter_stats,
+        }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prefix = label_sheet_slug(f"label_sheet_{request_id}_{uuid.uuid4().hex[:8]}")
+    canvas, input_candidates = label_sheet_segment_candidates(image_bgr)
+    if draw_split_overlay is not None:
+        overlay_url = write_label_sheet_image(output_dir / f"{prefix}_sheet_candidates.jpg", draw_split_overlay(canvas, input_candidates, "label sheet candidates"), max_side=1200)
+    else:
+        overlay_url = write_label_sheet_image(output_dir / f"{prefix}_sheet.jpg", canvas, max_side=1200)
+
+    if not references:
+        crop_url = ""
+        if input_candidates:
+            first_crop = getattr(input_candidates[0], "image_bgr", None)
+            if first_crop is not None and first_crop.size:
+                crop_url = write_label_sheet_image(output_dir / f"{prefix}_input_crop.jpg", first_crop, max_side=720)
+        return {
+            "status": "no_label_reference",
+            "review_status": "needs_review",
+            "matched_reference_id": "",
+            "matched_reference_label": "",
+            "matched_reference_name": "",
+            "matched_reference_image_url": "",
+            "input_crop_image_url": crop_url,
+            "sheet_overlay_url": overlay_url,
+            "score": 0.0,
+            "candidates": [],
+            "doc_filter_stats": doc_filter_stats,
+        }
+
+    if not input_candidates:
+        return {
+            "status": "unclear",
+            "review_status": "needs_review",
+            "matched_reference_id": "",
+            "matched_reference_label": "",
+            "matched_reference_name": "",
+            "matched_reference_image_url": "",
+            "input_crop_image_url": "",
+            "sheet_overlay_url": overlay_url,
+            "score": 0.0,
+            "candidates": [],
+            "doc_filter_stats": doc_filter_stats,
+        }
+
+    scored: list[dict[str, Any]] = []
+    best_candidate_image: np.ndarray | None = None
+    for input_candidate in input_candidates:
+        input_image = getattr(input_candidate, "image_bgr", None)
+        if input_image is None or input_image.size == 0:
+            continue
+        for reference in references:
+            metrics = compare_label_sheet_images(input_image, reference["image_bgr"], sensitivity)
+            score = float(metrics.get("score") or 0.0)
+            row = {
+                "reference_id": reference["reference_id"],
+                "matched_reference_id": reference["reference_id"],
+                "matched_reference_label": reference.get("label") or reference.get("name") or "",
+                "matched_reference_name": reference.get("name") or reference.get("label") or "",
+                "matched_reference_image_url": reference.get("image_url") or "",
+                "accessory_id": reference.get("accessory_id") or "",
+                "score": round(score, 4),
+                "candidate_id": str(getattr(input_candidate, "id", "")),
+                "candidate_bbox": label_sheet_candidate_bbox_payload(input_candidate),
+                "metrics": metrics,
+            }
+            scored.append(row)
+            if best_candidate_image is None or score > float(scored[0].get("score") or 0.0):
+                best_candidate_image = input_image
+    scored.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+    if not scored:
+        return {
+            "status": "unclear",
+            "review_status": "needs_review",
+            "matched_reference_id": "",
+            "matched_reference_label": "",
+            "matched_reference_name": "",
+            "matched_reference_image_url": "",
+            "input_crop_image_url": "",
+            "sheet_overlay_url": overlay_url,
+            "score": 0.0,
+            "candidates": [],
+            "doc_filter_stats": doc_filter_stats,
+        }
+
+    best = scored[0]
+    best_input = next(
+        (candidate for candidate in input_candidates if str(getattr(candidate, "id", "")) == str(best.get("candidate_id"))),
+        input_candidates[0],
+    )
+    best_crop_image = getattr(best_input, "image_bgr", None)
+    crop_url = ""
+    if best_crop_image is not None and best_crop_image.size:
+        crop_url = write_label_sheet_image(output_dir / f"{prefix}_input_crop.jpg", best_crop_image, max_side=720)
+
+    best_score = float(best.get("score") or 0.0)
+    second_other = next((item for item in scored[1:] if item.get("reference_id") != best.get("reference_id")), None)
+    ambiguous = bool(
+        second_other
+        and best_score < 0.88
+        and best_score - float(second_other.get("score") or 0.0) < LABEL_SHEET_REVIEW_MARGIN_THRESHOLD
+    )
+    auto_match_eligible = bool((best.get("metrics") or {}).get("auto_match_eligible"))
+    status = "matched" if auto_match_eligible and best_score >= LABEL_SHEET_MATCH_THRESHOLD and not ambiguous else "unclear"
+    review_status = "confirmed_by_local_match" if status == "matched" else "needs_review"
+    top_candidates = scored[:8]
+    response = {
+        "status": status,
+        "review_status": review_status,
+        "matched_reference_id": best["matched_reference_id"] if status == "matched" else "",
+        "matched_reference_label": best["matched_reference_label"] if status == "matched" else "",
+        "matched_reference_name": best["matched_reference_name"] if status == "matched" else "",
+        "matched_reference_image_url": best["matched_reference_image_url"] if status == "matched" else "",
+        "best_reference_id": best["matched_reference_id"],
+        "best_reference_label": best["matched_reference_label"],
+        "best_reference_name": best["matched_reference_name"],
+        "best_reference_image_url": best["matched_reference_image_url"],
+        "input_crop_image_url": crop_url,
+        "sheet_overlay_url": overlay_url,
+        "score": round(best_score, 4),
+        "confidence": round(best_score, 4),
+        "candidates": top_candidates,
+        "doc_filter_stats": doc_filter_stats,
+        "thresholds": {
+            "match_score": LABEL_SHEET_MATCH_THRESHOLD,
+            "review_margin": LABEL_SHEET_REVIEW_MARGIN_THRESHOLD,
+        },
+    }
+    if not auto_match_eligible:
+        response["low_confidence_reason"] = "strict comparison did not pass"
+    elif ambiguous:
+        response["low_confidence_reason"] = "top references are too close to auto-pass"
+    elif best_score < LABEL_SHEET_MATCH_THRESHOLD:
+        response["low_confidence_reason"] = "best score is below local match threshold"
+    return response
+
+
+def label_sheet_match_model_payload() -> dict[str, Any]:
+    return {
+        "id": LABEL_SHEET_MODEL_ID,
+        "label": LABEL_SHEET_LABEL,
+        "variant": "label_sheet_local",
+        "is_label_sheet_match": True,
+        "provider_model": "",
+        "uses_ocr": False,
+    }
+
+
+def analyze_bgr_label_sheet(image_bgr: np.ndarray, request_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    references, doc_filter_stats = collect_label_sheet_references(config, write_previews=True)
+    result = match_label_sheet_to_references(
+        image_bgr,
+        references,
+        request_id=request_id,
+        output_dir=output_write_dir("label_sheet_matches"),
+        doc_filter_stats=doc_filter_stats,
+    )
+    status = str(result.get("status") or "error")
+    matched_id = str(result.get("matched_reference_id") or "")
+    score = float(result.get("score") or 0.0)
+    detections = []
+    if matched_id or result.get("best_reference_id"):
+        detections.append(
+            {
+                "accessory_id": matched_id or result.get("best_reference_id"),
+                "label": result.get("matched_reference_label") or result.get("best_reference_label") or LABEL_SHEET_LABEL,
+                "present": status == "matched",
+                "confidence": round(score, 4),
+                "evidence": result.get("review_status") or "",
+            }
+        )
+    result.update(
+        {
+            "request_id": request_id,
+            "passed": status == "matched",
+            "model": label_sheet_match_model_payload(),
+            "rule": {
+                "match_policy": "label_sheet_local_match",
+                "status": status,
+                "present": [matched_id] if matched_id else [],
+                "missing": [] if matched_id else ["label_reference_match"],
+                "score": round(score, 4),
+                "threshold": LABEL_SHEET_MATCH_THRESHOLD,
+            },
+            "detections": detections,
+            "annotated_url": result.get("sheet_overlay_url") or result.get("input_crop_image_url") or "",
+        }
+    )
+    return result
 
 
 def load_preview_asset(item: dict[str, Any]) -> np.ndarray | None:
@@ -1066,12 +3212,41 @@ def ensure_anchor_image_provenance(job: dict[str, Any]) -> bool:
     return changed
 
 
+def ensure_image_job_target_guides(job: dict[str, Any]) -> bool:
+    pose_family = str(job.get("pose_family") or "")
+    guides = [path for path in POSE_TARGET_GUIDE_IMAGES.get(pose_family, []) if path.exists()]
+    if not guides:
+        return False
+    changed = False
+    input_files = [str(item) for item in job.get("input_files", []) or []]
+    anchor_path = str(job.get("anchor_image_path") or "")
+    insert_at = 1 if anchor_path and input_files and input_files[0] == anchor_path else 0
+    for guide in guides:
+        guide_text = str(guide)
+        if guide_text not in input_files:
+            input_files.insert(insert_at, guide_text)
+            insert_at += 1
+            changed = True
+    target_paths = [str(path) for path in guides]
+    target_hashes = {path.name: file_sha256(path) for path in guides}
+    if job.get("target_guide_paths") != target_paths:
+        job["target_guide_paths"] = target_paths
+        changed = True
+    if job.get("target_guide_sha256") != target_hashes:
+        job["target_guide_sha256"] = target_hashes
+        changed = True
+    if changed:
+        job["input_files"] = input_files[:MAX_IMAGE_WORKER_INPUTS]
+    return changed
+
+
 def ensure_candidate_image_job_task_ids(candidate: dict[str, Any]) -> bool:
     changed = False
     jobs = candidate_image_jobs(candidate)
     for job in jobs:
         changed = ensure_image_job_task_id(candidate, job) or changed
         changed = ensure_anchor_image_provenance(job) or changed
+        changed = ensure_image_job_target_guides(job) or changed
     if jobs:
         candidate["codex_image_jobs"] = jobs
         candidate["codex_image_job"] = jobs[0]
@@ -1081,6 +3256,7 @@ def ensure_candidate_image_job_task_ids(candidate: dict[str, Any]) -> bool:
 def store_candidate_image_job(candidate: dict[str, Any], updated_job: dict[str, Any]) -> None:
     ensure_image_job_task_id(candidate, updated_job)
     ensure_anchor_image_provenance(updated_job)
+    ensure_image_job_target_guides(updated_job)
     job_id = str(updated_job.get("job_id", ""))
     jobs = candidate_image_jobs(candidate)
     replaced = False
@@ -1103,15 +3279,17 @@ def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
     for job in candidate_image_jobs(item):
         if job.get("intermediate"):
             continue
-        output_path = Path(str(job.get("output_path", "")))
+        output_path = resolve_service_path(job.get("output_path"))
         if output_path.exists():
+            job["output_path"] = str(output_path)
             paths.append(output_path)
     for asset in item.get("normalized_assets", []):
-        path = Path(str(asset.get("path", "")))
+        path = resolve_service_path(asset.get("path"))
         if path.exists():
+            asset["path"] = str(path)
             paths.append(path)
     for path_str in item.get("source_files", []):
-        path = Path(path_str)
+        path = resolve_service_path(path_str)
         if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
             paths.append(path)
     default_path = default_asset_for_accessory(item)
@@ -1130,7 +3308,7 @@ def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
 def ai_profile_reference_paths(item: dict[str, Any]) -> list[Path]:
     paths: list[Path] = []
     for path_str in item.get("ai_profile_reference_files", []) or []:
-        path = Path(str(path_str))
+        path = resolve_service_path(path_str)
         if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
             paths.append(path)
     unique = []
@@ -1176,6 +3354,177 @@ def string_list(value: Any, fallback: list[str] | None = None, *, max_items: int
     return items
 
 
+ACCESSORY_ENGLISH_NAME_FALLBACKS = {
+    "玻璃瓶": "Glass Bottle",
+    "管子": "Tube",
+    "耳机": "Earbuds",
+    "手表": "Watch",
+    "卷尺": "Tape Measure",
+    "护目镜": "Goggles",
+    "记号笔": "Marker",
+    "剪刀": "Scissors",
+    "说明书": "Manual",
+    "充电器": "Charger",
+    "电池": "Battery",
+}
+
+ACCESSORY_ENGLISH_PHRASES = (
+    ("glass bottle", "Glass Bottle"),
+    ("bottle", "Bottle"),
+    ("tube", "Tube"),
+    ("pipe", "Tube"),
+    ("earbuds", "Earbuds"),
+    ("earpod", "Earbuds"),
+    ("earphone", "Earbuds"),
+    ("headphone", "Headphones"),
+    ("smartwatch", "Watch"),
+    ("watch", "Watch"),
+    ("tape measure", "Tape Measure"),
+    ("goggles", "Goggles"),
+    ("marker", "Marker"),
+    ("scissors", "Scissors"),
+    ("manual", "Manual"),
+    ("charger", "Charger"),
+    ("adapter", "Charger"),
+    ("battery", "Battery"),
+)
+
+ACCESSORY_ENGLISH_NAME_FIELDS = (
+    "english_name",
+    "display_label",
+    "display_name_en",
+    "english_display_name",
+    "short_english_name",
+    "box_display_label",
+)
+
+GENERIC_ENGLISH_NAME_TOKENS = {
+    "a",
+    "an",
+    "and",
+    "accessory",
+    "clear",
+    "complete",
+    "configured",
+    "cylindrical",
+    "detect",
+    "detection",
+    "for",
+    "image",
+    "object",
+    "physical",
+    "required",
+    "target",
+    "the",
+    "visible",
+    "with",
+}
+
+
+def compact_english_accessory_name(value: Any, *, max_words: int = 6) -> str:
+    text = bounded_text(value, 120)
+    if not text or "?" in text or "unknown" in text.lower():
+        return ""
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9-]*", text)
+    tokens = [token for token in tokens if token.lower() not in GENERIC_ENGLISH_NAME_TOKENS]
+    if not tokens:
+        return ""
+    tokens = tokens[: max(1, min(6, int(max_words or 2)))]
+    return " ".join(token[:1].upper() + token[1:].lower() for token in tokens)
+
+
+def preferred_english_accessory_name(item: dict[str, Any]) -> str:
+    profiles = [
+        item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {},
+        item.get("locateanything_profile") if isinstance(item.get("locateanything_profile"), dict) else {},
+    ]
+    for source in [item, *profiles]:
+        for key in ACCESSORY_ENGLISH_NAME_FIELDS:
+            name = compact_english_accessory_name(source.get(key) if isinstance(source, dict) else "", max_words=6)
+            if name:
+                return name
+    for source in [item, *profiles]:
+        if not isinstance(source, dict):
+            continue
+        for key in ("name", "label"):
+            name = compact_english_accessory_name(source.get(key), max_words=2)
+            if name:
+                return name
+    native_name = str(item.get("name") or item.get("label") or "").strip()
+    for marker, english_name in ACCESSORY_ENGLISH_NAME_FALLBACKS.items():
+        if marker and marker in native_name:
+            return english_name
+    search_parts: list[str] = []
+    for source in [item, *profiles]:
+        if not isinstance(source, dict):
+            continue
+        for key in ("description", "visual_signature", "positive_visual_prompt"):
+            text = str(source.get(key) or "").strip()
+            if text:
+                search_parts.append(text)
+        search_parts.extend(string_list(source.get("tags"), max_items=8))
+        search_parts.extend(string_list(source.get("distinguishing_text"), max_items=8))
+    search_text = " ".join(search_parts).lower()
+    for phrase, english_name in ACCESSORY_ENGLISH_PHRASES:
+        if phrase in search_text:
+            return english_name
+    for text in search_parts:
+        name = compact_english_accessory_name(text, max_words=2)
+        if name:
+            return name
+    return "Accessory"
+
+
+def ensure_accessory_english_name(item: dict[str, Any]) -> bool:
+    english_name = preferred_english_accessory_name(item)
+    changed = False
+    if item.get("english_name") != english_name:
+        item["english_name"] = english_name
+        changed = True
+    for key in ("ai_profile", "locateanything_profile"):
+        profile = item.get(key) if isinstance(item.get(key), dict) else None
+        if profile is not None and profile.get("english_name") != english_name:
+            profile["english_name"] = english_name
+            changed = True
+    return changed
+
+
+def accessory_display_label(item: dict[str, Any]) -> str:
+    return preferred_english_accessory_name(item)
+
+
+LOCATEANYTHING_OVERLAY_FONT_PATHS = (
+    os.environ.get("LOCATEANYTHING_OVERLAY_FONT", ""),
+    "/mnt/f/CodexWorkspace/playwright-deps/root/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+)
+_LOCATEANYTHING_OVERLAY_FONT_CACHE: dict[int, ImageFont.ImageFont] = {}
+
+
+def locateanything_overlay_font(size: int = 22) -> ImageFont.ImageFont:
+    normalized_size = max(10, min(64, int(size or 22)))
+    cached = _LOCATEANYTHING_OVERLAY_FONT_CACHE.get(normalized_size)
+    if cached is not None:
+        return cached
+    for raw_path in LOCATEANYTHING_OVERLAY_FONT_PATHS:
+        if not raw_path:
+            continue
+        path = Path(raw_path)
+        if not path.exists():
+            continue
+        try:
+            font = ImageFont.truetype(str(path), normalized_size)
+            _LOCATEANYTHING_OVERLAY_FONT_CACHE[normalized_size] = font
+            return font
+        except OSError:
+            continue
+    font = ImageFont.load_default()
+    _LOCATEANYTHING_OVERLAY_FONT_CACHE[normalized_size] = font
+    return font
+
+
 def profile_size_text(size: dict[str, Any] | None) -> str:
     if not isinstance(size, dict):
         return "size=unknown"
@@ -1213,7 +3562,8 @@ def accessory_reference_image_contexts(item: dict[str, Any], *, max_images: int 
     seen: set[str] = set()
     accessory_id = accessory_uid(item)
     preferred_paths = ai_profile_reference_paths(item)
-    source_paths = preferred_paths if preferred_paths else accessory_image_paths(item)
+    default_source_path = first_source_ai_reference_path(item) if not preferred_paths else None
+    source_paths = preferred_paths if preferred_paths else ([default_source_path] if default_source_path else accessory_image_paths(item))
     for path in source_paths:
         path_key = str(path)
         if path_key in seen:
@@ -1230,6 +3580,7 @@ def accessory_reference_image_contexts(item: dict[str, Any], *, max_images: int 
 def fallback_accessory_ai_profile(item: dict[str, Any], reference_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     accessory_id = accessory_uid(item)
     name = bounded_text(item.get("name") or item.get("label") or accessory_id, 120)
+    english_name = preferred_english_accessory_name(item)
     material_type = accessory_material_type(item)
     source_names = sorted(
         {
@@ -1266,15 +3617,20 @@ def fallback_accessory_ai_profile(item: dict[str, Any], reference_images: list[d
         negative_cues.append("If visible printed text does not match this profile, mark missing.")
     else:
         negative_cues.append("If the object shape/material does not match this profile, mark missing.")
+    dimensions_mm = ai_profile_dimensions_from_physical_size(physical_size)
+    top_view_aspect_ratio = ai_profile_top_view_aspect_ratio(dimensions_mm)
     return {
         "accessory_id": accessory_id,
         "name": name,
+        "english_name": english_name,
         "material_type": material_type,
         "description": bounded_text(item.get("description") or f"{name} required accessory.", 240),
         "tags": tags,
         "visual_signature": "; ".join(signature_parts),
         "distinguishing_text": distinguishing_text,
         "negative_cues": negative_cues,
+        "dimensions_mm": dimensions_mm,
+        "top_view_aspect_ratio": top_view_aspect_ratio,
         "reference_images": reference_images,
         "provider_cache": {},
         "expected_count": max(1, int(item.get("expected_count") or 1)),
@@ -1307,9 +3663,17 @@ def normalize_accessory_ai_profile(raw: dict[str, Any], item: dict[str, Any]) ->
         if isinstance(ref, dict) and str(ref.get("source_path") or "").strip()
     ][:AI_PROFILE_REFERENCE_IMAGES]
     provider_cache = raw.get("provider_cache") if isinstance(raw, dict) and isinstance(raw.get("provider_cache"), dict) else {}
+    dimensions_mm = normalize_ai_profile_dimensions(
+        raw.get("dimensions_mm") if isinstance(raw, dict) else None,
+        fallback.get("dimensions_mm") if isinstance(fallback.get("dimensions_mm"), dict) else {},
+    )
+    top_view_aspect_ratio = (
+        optional_float(raw.get("top_view_aspect_ratio")) if isinstance(raw, dict) else None
+    ) or ai_profile_top_view_aspect_ratio(dimensions_mm)
     return {
         "accessory_id": accessory_uid(item),
         "name": bounded_text(raw.get("name") if isinstance(raw, dict) else fallback["name"], 120) or fallback["name"],
+        "english_name": compact_english_accessory_name(raw.get("english_name") if isinstance(raw, dict) else "") or fallback["english_name"],
         "material_type": accessory_material_type(item),
         "description": bounded_text(raw.get("description") if isinstance(raw, dict) else fallback["description"], 240) or fallback["description"],
         "tags": string_list(raw.get("tags") if isinstance(raw, dict) else None, fallback["tags"], max_items=12),
@@ -1320,9 +3684,166 @@ def normalize_accessory_ai_profile(raw: dict[str, Any], item: dict[str, Any]) ->
             max_items=12,
         ),
         "negative_cues": string_list(raw.get("negative_cues") if isinstance(raw, dict) else None, fallback["negative_cues"], max_items=12),
+        "dimensions_mm": dimensions_mm,
+        "top_view_aspect_ratio": round(float(top_view_aspect_ratio), 3),
         "reference_images": safe_reference_images,
         "provider_cache": provider_cache,
         "expected_count": expected_count_int,
+    }
+
+
+def fallback_accessory_locateanything_profile(item: dict[str, Any], reference_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    accessory_id = accessory_uid(item)
+    name = bounded_text(item.get("name") or item.get("label") or accessory_id, 120)
+    english_name = preferred_english_accessory_name(item)
+    material_type = accessory_material_type(item)
+    ai_profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
+    ai_signature = locateanything_profile_text(ai_profile.get("visual_signature"))
+    ai_description = locateanything_profile_text(ai_profile.get("description"))
+    fallback_prompt = LOCATEANYTHING_VISUAL_FALLBACKS.get(name) or ai_signature or ai_description or name
+    physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
+    source_names = sorted(
+        {
+            bounded_text(Path(str(path)).stem.replace("_", " "), 60)
+            for path in [*(item.get("source_files") or []), *(item.get("original_source_files") or [])]
+            if str(path).strip()
+        }
+    )
+    target_scope = "complete printed document/manual sheet" if material_type == "text" else "complete physical object accessory"
+    if reference_images is None:
+        reference_images = accessory_reference_image_contexts(item)
+    required_features = [
+        fallback_prompt,
+        f"target_scope={target_scope}",
+        f"material_type={material_type}",
+        profile_size_text(physical_size),
+    ]
+    if material_type == "text":
+        required_features.extend(
+            [
+                "visible text/layout must match the configured document or label",
+                "box the complete sheet, document, card, or label surface",
+            ]
+        )
+    else:
+        required_features.extend(
+            [
+                "must be the actual physical object in the inspection scene",
+                "box the full object silhouette, not a detail or printed depiction",
+            ]
+        )
+    optional_features = string_list([*source_names[:4], ai_description, ai_signature], max_items=8, max_len=140)
+    reject_cues = string_list(
+        [
+            *string_list(ai_profile.get("negative_cues") if isinstance(ai_profile, dict) else [], max_items=6),
+            "similar shape or size but different accessory",
+            "unclear partial crop where the complete target cannot be localized",
+            "object only implied by task selection or previous images",
+        ],
+        max_items=10,
+        max_len=140,
+    )
+    packaging_exclusions = [
+        "Reject retail packaging, cartons, blister packs, manuals, labels, screenshots, catalog photos, and printed product illustrations.",
+        "Reject printed or photographed accessories on packaging unless the real physical target itself is visible outside the package.",
+    ]
+    name_search = f"{name} {ai_signature} {ai_description}".lower()
+    if any(marker in name_search for marker in ("充电器", "charger", "adapter", "charging")):
+        packaging_exclusions.insert(
+            0,
+            "For chargers, require the real charger/adapter/cable object; printed cable graphics on earphone/EarPods packaging are not a charger.",
+        )
+    if material_type == "text":
+        packaging_exclusions.append("For document tasks, reject packaging unless the requested document/label itself is the package surface.")
+    return {
+        "profile_version": LOCATEANYTHING_PROFILE_VERSION,
+        "accessory_id": accessory_id,
+        "name": name,
+        "english_name": english_name,
+        "display_label": english_name,
+        "material_type": material_type,
+        "positive_visual_prompt": bounded_text(fallback_prompt, 620),
+        "target_scope": target_scope,
+        "required_features": string_list(required_features, max_items=12, max_len=160),
+        "optional_features": optional_features,
+        "reject_cues": reject_cues,
+        "packaging_exclusions": string_list(packaging_exclusions, max_items=8, max_len=180),
+        "subpart_text_logo_exclusions": [
+            "Do not box only text, a logo, an icon, a printed cable drawing, a connector, a cap, a button, or another subpart.",
+            "Do not box a brand mark or label if the complete requested target is not visible.",
+        ],
+        "count_strategy": "Count each complete visible accepted target once; expected_count must match exactly; printed depictions count as zero.",
+        "box_constraints": {
+            "box_target": "complete_document" if material_type == "text" else "complete_physical_object",
+            "minimum_visible_evidence": "clear enough to localize the complete requested target",
+            "reject_if": ["printed_depiction_only", "packaging_only", "subpart_only", "text_or_logo_only"],
+        },
+        "reference_images": reference_images,
+        "expected_count": max(1, int(item.get("expected_count") or 1)),
+    }
+
+
+def normalize_accessory_locateanything_profile(raw: dict[str, Any] | None, item: dict[str, Any]) -> dict[str, Any]:
+    raw_dict = raw if isinstance(raw, dict) else {}
+    raw_reference_images = raw_dict.get("reference_images") if isinstance(raw_dict.get("reference_images"), list) else None
+    fallback = fallback_accessory_locateanything_profile(item, reference_images=raw_reference_images)
+    try:
+        expected_count = max(1, int(raw_dict.get("expected_count", fallback["expected_count"])))
+    except (TypeError, ValueError):
+        expected_count = fallback["expected_count"]
+    reference_images = raw_dict.get("reference_images") if isinstance(raw_dict.get("reference_images"), list) else fallback.get("reference_images", [])
+    safe_reference_images = [
+        {
+            "accessory_id": bounded_text(ref.get("accessory_id") or accessory_uid(item), 120),
+            "source_path": str(ref.get("source_path") or ""),
+            "sha256": bounded_text(ref.get("sha256") or "", 80),
+            "mime_type": bounded_text(ref.get("mime_type") or "image/jpeg", 40),
+            "width": int(ref.get("width") or 0) if isinstance(ref, dict) else 0,
+            "height": int(ref.get("height") or 0) if isinstance(ref, dict) else 0,
+            "ordinal": int(ref.get("ordinal") or idx + 1) if isinstance(ref, dict) else idx + 1,
+        }
+        for idx, ref in enumerate(reference_images)
+        if isinstance(ref, dict) and str(ref.get("source_path") or "").strip()
+    ][:AI_PROFILE_REFERENCE_IMAGES]
+    raw_constraints = raw_dict.get("box_constraints") if isinstance(raw_dict.get("box_constraints"), dict) else {}
+    fallback_constraints = fallback["box_constraints"]
+    box_constraints = {
+        "box_target": bounded_text(raw_constraints.get("box_target") or fallback_constraints["box_target"], 80),
+        "minimum_visible_evidence": bounded_text(
+            raw_constraints.get("minimum_visible_evidence") or fallback_constraints["minimum_visible_evidence"],
+            160,
+        ),
+        "reject_if": string_list(raw_constraints.get("reject_if"), fallback_constraints["reject_if"], max_items=10, max_len=80),
+    }
+    return {
+        "profile_version": LOCATEANYTHING_PROFILE_VERSION,
+        "accessory_id": accessory_uid(item),
+        "name": bounded_text(raw_dict.get("name") or fallback["name"], 120) or fallback["name"],
+        "english_name": compact_english_accessory_name(raw_dict.get("english_name")) or fallback["english_name"],
+        "display_label": compact_english_accessory_name(raw_dict.get("display_label")) or compact_english_accessory_name(raw_dict.get("english_name")) or fallback["display_label"],
+        "material_type": accessory_material_type(item),
+        "positive_visual_prompt": bounded_text(raw_dict.get("positive_visual_prompt") or fallback["positive_visual_prompt"], 620)
+        or fallback["positive_visual_prompt"],
+        "target_scope": bounded_text(raw_dict.get("target_scope") or fallback["target_scope"], 160) or fallback["target_scope"],
+        "required_features": string_list(raw_dict.get("required_features"), fallback["required_features"], max_items=12, max_len=160),
+        "optional_features": string_list(raw_dict.get("optional_features"), fallback["optional_features"], max_items=10, max_len=160),
+        "reject_cues": string_list(raw_dict.get("reject_cues"), fallback["reject_cues"], max_items=12, max_len=160),
+        "packaging_exclusions": string_list(
+            raw_dict.get("packaging_exclusions"),
+            fallback["packaging_exclusions"],
+            max_items=10,
+            max_len=180,
+        ),
+        "subpart_text_logo_exclusions": string_list(
+            raw_dict.get("subpart_text_logo_exclusions"),
+            fallback["subpart_text_logo_exclusions"],
+            max_items=8,
+            max_len=180,
+        ),
+        "count_strategy": bounded_text(raw_dict.get("count_strategy") or fallback["count_strategy"], 220) or fallback["count_strategy"],
+        "box_constraints": box_constraints,
+        "reference_images": safe_reference_images,
+        "expected_count": expected_count,
     }
 
 
@@ -1425,6 +3946,90 @@ def public_ai_base_url(value: Any) -> str:
     return urlunsplit((parsed.scheme, f"{host}{port}", parsed.path, "", ""))
 
 
+def masked_url_for_status(value: Any) -> str:
+    raw = str(value or "").strip()
+    parsed = urlsplit(raw)
+    if not parsed.scheme or not parsed.netloc:
+        return bounded_text(raw.split("?", 1)[0].split("#", 1)[0], 300)
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    try:
+        port = f":{parsed.port}" if parsed.port else ""
+    except ValueError:
+        port = ""
+    username = "****@" if parsed.username or parsed.password else ""
+    return urlunsplit((parsed.scheme, f"{username}{host}{port}", parsed.path, "", ""))
+
+
+def validate_ai_proxy_url(value: Any) -> str:
+    proxy_url = str(value or "").strip()
+    if not proxy_url:
+        return ""
+    parsed = urlsplit(proxy_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="AI proxy URL must be an http(s) URL")
+    if parsed.query or parsed.fragment:
+        raise HTTPException(status_code=400, detail="AI proxy URL must not include query strings or fragments")
+    return proxy_url
+
+
+def ai_proxy_url_from_environment() -> tuple[str, str]:
+    for name in AI_PROXY_ENV_NAMES:
+        value = os.environ.get(name, "").strip()
+        if not value:
+            continue
+        try:
+            return validate_ai_proxy_url(value), name
+        except HTTPException:
+            return "", name
+    return "", ""
+
+
+def local_proxy_available(proxy_url: str = AI_LOCAL_PROXY_URL) -> bool:
+    parsed = urlsplit(str(proxy_url or "").strip())
+    host = parsed.hostname or ""
+    port = parsed.port
+    if not host or not port:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=0.15):
+            return True
+    except OSError:
+        return False
+
+
+def env_flag_enabled(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() not in {"0", "false", "no", "off", "disabled"}
+
+
+def ai_proxy_url_from_config(local: dict[str, Any], provider: str) -> tuple[str, str, bool]:
+    proxy_url, proxy_source_name = ai_proxy_url_from_environment()
+    if proxy_url:
+        return proxy_url, proxy_source_name, False
+    configured_proxy = str(local.get("proxy_url") or "").strip()
+    if configured_proxy:
+        try:
+            return validate_ai_proxy_url(configured_proxy), "ai_config.local.proxy_url", False
+        except HTTPException:
+            return "", "ai_config.local.proxy_url_invalid", False
+    auto_local_enabled = bool(local.get("auto_local_proxy", True)) and env_flag_enabled(AI_AUTO_LOCAL_PROXY_ENV, True)
+    if provider == "gemini" and auto_local_enabled and local_proxy_available(AI_LOCAL_PROXY_URL):
+        return AI_LOCAL_PROXY_URL, "auto_local_mihomo", True
+    return "", "", False
+
+
+def ai_urlopen(request: urllib.request.Request, settings: dict[str, Any], *, timeout: float):
+    proxy_url = str(settings.get("proxy_url_raw") or settings.get("proxy_url") or "").strip()
+    if not proxy_url:
+        return urllib.request.urlopen(request, timeout=timeout)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+    return opener.open(request, timeout=timeout)
+
+
 def validate_ai_timeout(value: Any) -> float:
     try:
         timeout = float(value)
@@ -1465,6 +4070,11 @@ def load_ai_local_config() -> dict[str, Any]:
     if provider == "gemini" and "/openai/" in config["base_url"]:
         config["base_url"] = default_ai_base_url(provider)
     try:
+        config["proxy_url"] = validate_ai_proxy_url(config.get("proxy_url"))
+    except HTTPException:
+        config["proxy_url"] = ""
+    config["auto_local_proxy"] = bool(config.get("auto_local_proxy", True))
+    try:
         config["timeout_seconds"] = validate_ai_timeout(config.get("timeout_seconds"))
     except HTTPException:
         config["timeout_seconds"] = AI_DEFAULT_TIMEOUT_SECONDS
@@ -1498,11 +4108,2424 @@ def save_ai_local_config(config: dict[str, Any]) -> None:
         pass
 
 
+def locateanything_config_temp_path() -> Path:
+    return LOCATEANYTHING_LOCAL_CONFIG_PATH.with_name(f"{LOCATEANYTHING_LOCAL_CONFIG_PATH.name}.tmp")
+
+
+def validate_locateanything_endpoint_url(value: Any) -> str:
+    url = str(value or "").strip()
+    if not url:
+        return ""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="LocateAnything endpoint URL must be http(s)")
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.query, ""))
+
+
+def validate_locateanything_generation_mode(value: Any) -> str:
+    mode = str(value or LOCATEANYTHING_DEFAULT_CONFIG["generation_mode"]).strip().lower()
+    if mode not in LOCATEANYTHING_GENERATION_MODES:
+        raise HTTPException(status_code=400, detail="LocateAnything generation_mode must be fast, hybrid, or slow")
+    return mode
+
+
+def validate_locateanything_int(value: Any, default: int, minimum: int, maximum: int, label: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if not minimum <= parsed <= maximum:
+        raise HTTPException(status_code=400, detail=f"LocateAnything {label} must be between {minimum} and {maximum}")
+    return parsed
+
+
+def validate_locateanything_timeout(value: Any) -> float:
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        timeout = float(LOCATEANYTHING_DEFAULT_CONFIG["timeout_seconds"])
+    if not 1.0 <= timeout <= 300.0:
+        raise HTTPException(status_code=400, detail="LocateAnything timeout_seconds must be between 1 and 300")
+    return round(timeout, 3)
+
+
+def normalize_locateanything_config(raw: dict[str, Any] | None = None) -> dict[str, Any]:
+    source = raw if isinstance(raw, dict) else {}
+    config = dict(LOCATEANYTHING_DEFAULT_CONFIG)
+    for key in LOCATEANYTHING_DEFAULT_CONFIG:
+        if key in source:
+            config[key] = source[key]
+    try:
+        config["endpoint_url"] = validate_locateanything_endpoint_url(config.get("endpoint_url"))
+    except HTTPException:
+        config["endpoint_url"] = LOCATEANYTHING_DEFAULT_ENDPOINT
+    try:
+        config["generation_mode"] = validate_locateanything_generation_mode(config.get("generation_mode"))
+    except HTTPException:
+        config["generation_mode"] = LOCATEANYTHING_DEFAULT_CONFIG["generation_mode"]
+    try:
+        config["max_new_tokens"] = validate_locateanything_int(
+            config.get("max_new_tokens"),
+            int(LOCATEANYTHING_DEFAULT_CONFIG["max_new_tokens"]),
+            64,
+            8192,
+            "max_new_tokens",
+        )
+    except HTTPException:
+        config["max_new_tokens"] = int(LOCATEANYTHING_DEFAULT_CONFIG["max_new_tokens"])
+    try:
+        config["max_side"] = validate_locateanything_int(config.get("max_side"), 640, 256, 2560, "max_side")
+    except HTTPException:
+        config["max_side"] = int(LOCATEANYTHING_DEFAULT_CONFIG["max_side"])
+    try:
+        config["timeout_seconds"] = validate_locateanything_timeout(config.get("timeout_seconds"))
+    except HTTPException:
+        config["timeout_seconds"] = float(LOCATEANYTHING_DEFAULT_CONFIG["timeout_seconds"])
+    config["enabled"] = bool(config.get("enabled")) and bool(config.get("endpoint_url"))
+    return config
+
+
+def load_locateanything_config() -> dict[str, Any]:
+    ensure_dirs()
+    if not LOCATEANYTHING_LOCAL_CONFIG_PATH.exists():
+        return normalize_locateanything_config()
+    try:
+        raw = json.loads(LOCATEANYTHING_LOCAL_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raw = {}
+    return normalize_locateanything_config(raw)
+
+
+def save_locateanything_config(config: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {key: config.get(key, LOCATEANYTHING_DEFAULT_CONFIG[key]) for key in LOCATEANYTHING_DEFAULT_CONFIG}
+    tmp_path = locateanything_config_temp_path()
+    tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(tmp_path, LOCATEANYTHING_LOCAL_CONFIG_PATH)
+
+
+def public_locateanything_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    current = normalize_locateanything_config(config or load_locateanything_config())
+    try:
+        worker_base = windows_worker_base_url()
+    except RuntimeError:
+        worker_base = ""
+    worker_available = bool(worker_base)
+    return {
+        **current,
+        "configured": bool(current.get("enabled") and current.get("endpoint_url")) or worker_available,
+        "worker_configured": worker_available,
+        "worker_status": "configured" if worker_available else "not_configured",
+        "worker_base_url": masked_url_for_status(worker_base),
+        "model": "nvidia/LocateAnything-3B",
+        "license": "NVIDIA non-commercial; academic/non-profit research only. Commercial use is not permitted except by NVIDIA and affiliates.",
+        "role": "Open-vocabulary grounding/fallback for low-frequency localization; not a YOLO real-time replacement.",
+    }
+
+
+def locateanything_settings_from_request(
+    *,
+    endpoint_url: Any = None,
+    generation_mode: Any = None,
+    max_new_tokens: Any = None,
+    max_side: Any = None,
+    timeout_seconds: Any = None,
+) -> dict[str, Any]:
+    config = load_locateanything_config()
+    if endpoint_url is not None and str(endpoint_url).strip():
+        config["endpoint_url"] = validate_locateanything_endpoint_url(endpoint_url)
+        config["enabled"] = True
+    if generation_mode is not None and str(generation_mode).strip():
+        config["generation_mode"] = validate_locateanything_generation_mode(generation_mode)
+    if max_new_tokens is not None:
+        config["max_new_tokens"] = validate_locateanything_int(max_new_tokens, int(config["max_new_tokens"]), 64, 8192, "max_new_tokens")
+    if max_side is not None:
+        config["max_side"] = validate_locateanything_int(max_side, int(config["max_side"]), 256, 2560, "max_side")
+    if timeout_seconds is not None:
+        config["timeout_seconds"] = validate_locateanything_timeout(timeout_seconds)
+    return normalize_locateanything_config(config)
+
+
+def parse_locateanything_boxes(answer: str, image_width: int, image_height: int) -> list[dict[str, Any]]:
+    if not answer or image_width <= 0 or image_height <= 0:
+        return []
+    answer_text = str(answer)
+    pattern = re.compile(
+        r"<\s*box\s*>\s*<\s*(\d+(?:\.\d+)?)\s*>\s*<\s*(\d+(?:\.\d+)?)\s*>\s*<\s*(\d+(?:\.\d+)?)\s*>\s*<\s*(\d+(?:\.\d+)?)\s*>\s*<\s*/\s*box\s*>",
+        re.IGNORECASE,
+    )
+    ref_pattern = re.compile(r"<\s*ref\s*>(.*?)<\s*/\s*ref\s*>", re.IGNORECASE | re.DOTALL)
+    boxes: list[dict[str, Any]] = []
+    for index, match in enumerate(pattern.finditer(answer_text), start=1):
+        values = [float(group) for group in match.groups()]
+        if any(not math.isfinite(value) for value in values):
+            continue
+        x1n, y1n, x2n, y2n = values
+        if any(value < 0.0 or value > 1000.0 for value in values):
+            continue
+        x1n, x2n = sorted((x1n, x2n))
+        y1n, y2n = sorted((y1n, y2n))
+        if x2n - x1n < 1 or y2n - y1n < 1:
+            continue
+        x1 = int(round(x1n / 1000.0 * image_width))
+        y1 = int(round(y1n / 1000.0 * image_height))
+        x2 = int(round(x2n / 1000.0 * image_width))
+        y2 = int(round(y2n / 1000.0 * image_height))
+        box = {
+            "index": index,
+            "x1": max(0, min(image_width, x1)),
+            "y1": max(0, min(image_height, y1)),
+            "x2": max(0, min(image_width, x2)),
+            "y2": max(0, min(image_height, y2)),
+            "normalized": {"x1": x1n, "y1": y1n, "x2": x2n, "y2": y2n},
+        }
+        refs = list(ref_pattern.finditer(answer_text, 0, match.start()))
+        if refs:
+            ref_text = bounded_text(re.sub(r"\s+", " ", refs[-1].group(1)).strip(), 180)
+            if ref_text:
+                box["ref_text"] = ref_text
+        boxes.append(box)
+    return boxes
+
+
+def resize_bgr_max_side(image_bgr: np.ndarray, max_side: int) -> np.ndarray:
+    height, width = image_bgr.shape[:2]
+    longest = max(width, height)
+    if longest <= max_side:
+        return image_bgr
+    scale = max_side / float(longest)
+    next_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+    return cv2.resize(image_bgr, next_size, interpolation=cv2.INTER_AREA)
+
+
+def encode_locateanything_multipart(
+    fields: dict[str, Any],
+    file_field: str,
+    filename: str,
+    content_type: str,
+    file_bytes: bytes,
+) -> tuple[bytes, str]:
+    boundary = f"----VantaLineLocateAnything{uuid.uuid4().hex}"
+    body = bytearray()
+    for name, value in fields.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+        body.extend(str(value).encode("utf-8"))
+        body.extend(b"\r\n")
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+        f"Content-Type: {content_type}\r\n\r\n".encode("utf-8")
+    )
+    body.extend(file_bytes)
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+    return bytes(body), f"multipart/form-data; boundary={boundary}"
+
+
+def extract_locateanything_answer(payload: dict[str, Any]) -> str:
+    for key in ("answer", "raw_answer", "text", "response", "output"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        message = first.get("message") if isinstance(first.get("message"), dict) else {}
+        content = message.get("content") or first.get("text")
+        if isinstance(content, str) and content.strip():
+            return content
+    return ""
+
+
+def post_locateanything_endpoint(
+    endpoint_url: str,
+    image_bytes: bytes,
+    *,
+    prompt: str,
+    generation_mode: str,
+    max_new_tokens: int,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    body, content_type = encode_locateanything_multipart(
+        {
+            "prompt": prompt,
+            "generation_mode": generation_mode,
+            "max_new_tokens": max_new_tokens,
+        },
+        "image",
+        "locateanything.jpg",
+        "image/jpeg",
+        image_bytes,
+    )
+    request = urllib.request.Request(
+        endpoint_url,
+        data=body,
+        headers={"Content-Type": content_type, "Accept": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        response_body = response.read()
+    try:
+        decoded = json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise RuntimeError("LocateAnything endpoint returned non-JSON output") from None
+    if not isinstance(decoded, dict):
+        raise RuntimeError("LocateAnything endpoint returned malformed JSON")
+    return decoded
+
+
+def locateanything_should_use_worker(settings: dict[str, Any]) -> bool:
+    try:
+        base_url = windows_worker_base_url()
+    except RuntimeError:
+        return False
+    if not base_url:
+        return False
+    endpoint_url = str(settings.get("endpoint_url") or "")
+    return not endpoint_url or locateanything_is_local_runtime_endpoint(endpoint_url)
+
+
+def post_windows_worker_locateanything_endpoint(
+    image_bytes: bytes,
+    *,
+    prompt: str,
+    generation_mode: str,
+    max_new_tokens: int,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    base_url = windows_worker_base_url()
+    if not base_url:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
+    body, content_type = encode_locateanything_multipart(
+        {
+            "prompt": prompt,
+            "generation_mode": generation_mode,
+            "max_new_tokens": max_new_tokens,
+        },
+        "image",
+        "locateanything.jpg",
+        "image/jpeg",
+        image_bytes,
+    )
+    headers = {"Content-Type": content_type, "Accept": "application/json", **windows_worker_headers()}
+    request = urllib.request.Request(
+        f"{base_url}/locate-anything/infer",
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            response_body = response.read()
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            detail = {"detail": str(exc)}
+        raise RuntimeError(f"Windows worker LocateAnything returned HTTP {exc.code}: {detail.get('detail') or detail}") from exc
+    try:
+        decoded = json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise RuntimeError("Windows worker LocateAnything returned non-JSON output") from None
+    if not isinstance(decoded, dict):
+        raise RuntimeError("Windows worker LocateAnything returned malformed JSON")
+    return decoded
+
+
+def locateanything_box_visible_label(box: dict[str, Any]) -> str:
+    for key in ("display_label", "english_name", "label", "accessory_name"):
+        label = str(box.get(key) or "").strip()
+        if not label or "?" in label:
+            continue
+        if label.lower() in {"unknown", "accessory", "target", "placeholder"}:
+            continue
+        return bounded_text(label, 42)
+    return f"LA {box.get('index') or ''}".strip()
+
+
+def draw_locateanything_overlay(image_bgr: np.ndarray, boxes: list[dict[str, Any]], request_id: str, prompt: str) -> str:
+    if not boxes:
+        return ""
+    LOCATEANYTHING_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    annotated = image_bgr.copy()
+    palette = [(10, 132, 255), (32, 180, 134), (180, 87, 39), (132, 92, 210)]
+    for box in boxes:
+        color = palette[(int(box["index"]) - 1) % len(palette)]
+        x1, y1, x2, y2 = int(box["x1"]), int(box["y1"]), int(box["x2"]), int(box["y2"])
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3, cv2.LINE_AA)
+    rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(rgb)
+    draw = ImageDraw.Draw(pil_image)
+    label_font = locateanything_overlay_font(22)
+    prompt_font = locateanything_overlay_font(22)
+    image_w, image_h = pil_image.size
+    for box in boxes:
+        color_bgr = palette[(int(box["index"]) - 1) % len(palette)]
+        color_rgb = (int(color_bgr[2]), int(color_bgr[1]), int(color_bgr[0]))
+        x1, y1 = int(box["x1"]), int(box["y1"])
+        label = locateanything_box_visible_label(box)
+        text_box = draw.textbbox((0, 0), label, font=label_font)
+        label_w = text_box[2] - text_box[0]
+        label_h = text_box[3] - text_box[1]
+        pad_x, pad_y = 7, 5
+        label_x1 = max(0, min(x1, image_w - label_w - pad_x * 2))
+        label_y2 = max(label_h + pad_y * 2, y1)
+        label_y1 = max(0, label_y2 - label_h - pad_y * 2)
+        label_x2 = min(image_w, label_x1 + label_w + pad_x * 2)
+        draw.rounded_rectangle((label_x1, label_y1, label_x2, label_y2), radius=3, fill=color_rgb)
+        draw.text((label_x1 + pad_x, label_y1 + pad_y - text_box[1]), label, font=label_font, fill=(255, 255, 255))
+    prompt_line = str(prompt or "").strip()[:120]
+    if prompt_line:
+        prompt_box = draw.textbbox((0, 0), prompt_line, font=prompt_font)
+        draw.text((14, 10 - prompt_box[1]), prompt_line, font=prompt_font, fill=(20, 20, 20), stroke_width=3, stroke_fill=(20, 20, 20))
+        draw.text((14, 10 - prompt_box[1]), prompt_line, font=prompt_font, fill=(245, 248, 252))
+    annotated = cv2.cvtColor(np.asarray(pil_image), cv2.COLOR_RGB2BGR)
+    out_path = output_write_dir("locateanything") / f"{safe_name(request_id)}_overlay.jpg"
+    cv2.imwrite(str(out_path), annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    return public_output_url(out_path)
+
+
+def write_locateanything_diagnostic(request_id: str, payload: dict[str, Any]) -> str:
+    out_path = output_write_dir("locateanything") / f"{safe_name(request_id)}_diagnostic.json"
+    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return public_output_url(out_path)
+
+
+def locateanything_failure_payload(
+    *,
+    error: str,
+    configured: bool,
+    prompt: str = "",
+    generation_mode: str = "",
+    max_new_tokens: int = 0,
+    source_image_size: dict[str, int] | None = None,
+    sent_image_size: dict[str, int] | None = None,
+    raw_answer: str = "",
+    latency_ms: int = 0,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "configured": configured,
+        "prompt": prompt,
+        "generation_mode": generation_mode,
+        "max_new_tokens": max_new_tokens,
+        "source_image_size": source_image_size or {},
+        "sent_image_size": sent_image_size or {},
+        "raw_answer": raw_answer,
+        "boxes": [],
+        "latency_ms": latency_ms,
+        "overlay_url": "",
+        "diagnostic_url": "",
+        "error": error,
+    }
+
+
+def locateanything_latest_snapshot(hf_home: Path | None = None) -> Path | None:
+    home = hf_home or Path(os.environ.get("HF_HOME") or "/mnt/f/CodexHome/.cache/huggingface")
+    snapshot_root = home / "hub" / "models--nvidia--LocateAnything-3B" / "snapshots"
+    if not snapshot_root.exists():
+        return None
+    candidates = sorted(path for path in snapshot_root.iterdir() if path.is_dir() and (path / "config.json").exists())
+    return candidates[-1] if candidates else None
+
+
+def locateanything_runtime_preflight() -> dict[str, Any]:
+    venv_path = Path(os.environ.get("LOCATEANYTHING_VENV") or (ROOT / ".venv_locateanything"))
+    hf_home = Path(os.environ.get("HF_HOME") or "/mnt/f/CodexHome/.cache/huggingface")
+    snapshot = locateanything_latest_snapshot(hf_home)
+    python_path = venv_path / "bin" / "python"
+    issues: list[str] = []
+    if not LOCATEANYTHING_RUNTIME_SCRIPT_PATH.exists():
+        issues.append(f"runtime helper missing: {LOCATEANYTHING_RUNTIME_SCRIPT_PATH}")
+    if not os.access(LOCATEANYTHING_RUNTIME_SCRIPT_PATH, os.X_OK):
+        issues.append(f"runtime helper is not executable: {LOCATEANYTHING_RUNTIME_SCRIPT_PATH}")
+    if not python_path.exists():
+        issues.append(f"LocateAnything Python environment missing: {venv_path}")
+    if snapshot is None:
+        issues.append(f"LocateAnything model snapshot missing under {hf_home}")
+    return {
+        "ready_to_start": not issues,
+        "issues": issues,
+        "script_path": str(LOCATEANYTHING_RUNTIME_SCRIPT_PATH),
+        "venv_path": str(venv_path),
+        "python_path": str(python_path),
+        "hf_home": str(hf_home),
+        "snapshot_path": str(snapshot) if snapshot else "",
+        "service_name": LOCATEANYTHING_RUNTIME_SERVICE_NAME,
+        "log_path": str(LOCATEANYTHING_RUNTIME_LOG_DIR / "runtime.log"),
+    }
+
+
+def locateanything_runtime_process_status() -> dict[str, Any]:
+    process = _locateanything_runtime_start_process
+    if process is None:
+        return {}
+    return_code = process.poll()
+    if return_code is None:
+        return {
+            "start_pid": process.pid,
+            "start_process": "running",
+            "start_requested_at": int(_locateanything_runtime_start_time),
+        }
+    return {
+        "start_pid": process.pid,
+        "start_process": "exited",
+        "start_return_code": int(return_code),
+        "start_requested_at": int(_locateanything_runtime_start_time),
+    }
+
+
+def locateanything_runtime_service_status() -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "is-active", LOCATEANYTHING_RUNTIME_SERVICE_NAME],
+            capture_output=True,
+            text=True,
+            timeout=1.5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"service_active": False, "service_state": "unknown", "service_message": bounded_text(str(exc), 180)}
+    state = (result.stdout or result.stderr or "").strip() or "inactive"
+    return {
+        "service_active": result.returncode == 0 or state in {"active", "activating"},
+        "service_state": state,
+    }
+
+
+def locateanything_is_local_runtime_endpoint(endpoint_url: str) -> bool:
+    parts = urlsplit(endpoint_url)
+    host = (parts.hostname or "").lower()
+    return parts.scheme in {"http", "https"} and host in {"127.0.0.1", "localhost", "::1"} and parts.path.rstrip("/") == "/locate"
+
+
+def locateanything_health_url(endpoint_url: str) -> str:
+    parts = urlsplit(endpoint_url)
+    return urlunsplit((parts.scheme or "http", parts.netloc, "/health", "", ""))
+
+
+def locateanything_runtime_health_status(endpoint_url: str, timeout_seconds: float = 4.0) -> dict[str, Any]:
+    health_url = locateanything_health_url(endpoint_url)
+    request = urllib.request.Request(health_url, method="GET", headers={"Accept": "application/json"})
+    start = time.monotonic()
+    try:
+        with urllib.request.urlopen(request, timeout=max(0.2, min(float(timeout_seconds), 4.0))) as response:
+            status_code = int(getattr(response, "status", 200))
+            raw_body = response.read(64 * 1024).decode("utf-8", errors="replace")
+        latency_ms = int((time.monotonic() - start) * 1000)
+        try:
+            payload = json.loads(raw_body) if raw_body else {}
+        except json.JSONDecodeError:
+            payload = {"raw": bounded_text(raw_body, 300)}
+        loaded = payload.get("loaded") is True
+        health_ok = payload.get("ok") is not False and status_code < 500
+        if loaded:
+            return {
+                "ok": True,
+                "status": "ready",
+                "status_code": status_code,
+                "latency_ms": latency_ms,
+                "health": payload,
+                "health_url": health_url,
+                "message": "本地模型已加载。",
+            }
+        if health_ok:
+            return {
+                "ok": False,
+                "status": "starting",
+                "status_code": status_code,
+                "latency_ms": latency_ms,
+                "health": payload,
+                "health_url": health_url,
+                "message": "本地模型进程已响应，模型仍在加载。",
+            }
+        return {
+            "ok": False,
+            "status": "unavailable",
+            "status_code": status_code,
+            "latency_ms": latency_ms,
+            "health": payload,
+            "health_url": health_url,
+            "message": "本地模型健康检查未就绪。",
+        }
+    except urllib.error.HTTPError as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return {
+            "ok": False,
+            "status": "unavailable",
+            "status_code": exc.code,
+            "latency_ms": latency_ms,
+            "health_url": health_url,
+            "message": str(exc),
+        }
+    except (OSError, TimeoutError, urllib.error.URLError) as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return {
+            "ok": False,
+            "status": "unavailable",
+            "latency_ms": latency_ms,
+            "health_url": health_url,
+            "message": str(exc),
+        }
+
+
+def locateanything_runtime_warmup_status() -> dict[str, Any]:
+    with _locateanything_runtime_warmup_lock:
+        state = dict(_locateanything_runtime_warmup_state)
+        thread = _locateanything_runtime_warmup_thread
+        if thread and thread.is_alive():
+            state["warmup"] = "running"
+        elif state:
+            state.setdefault("warmup", "done" if state.get("ok") else "failed")
+        return state
+
+
+def mark_locateanything_runtime_warmup_ready(endpoint_url: str, health: dict[str, Any]) -> dict[str, Any]:
+    global _locateanything_runtime_warmup_state
+    with _locateanything_runtime_warmup_lock:
+        _locateanything_runtime_warmup_state = {
+            "ok": True,
+            "warmup": "done",
+            "completed_at": int(time.time()),
+            "endpoint_url": endpoint_url,
+            "message": "本地模型已加载。",
+            "health": health.get("health", {}),
+        }
+        return dict(_locateanything_runtime_warmup_state)
+
+
+def locateanything_warmup_image_bytes() -> bytes:
+    image = np.full((128, 128, 3), 255, dtype=np.uint8)
+    cv2.rectangle(image, (36, 32), (92, 96), (20, 20, 220), thickness=-1)
+    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    if not ok:
+        raise RuntimeError("could not encode LocateAnything warmup image")
+    return encoded.tobytes()
+
+
+def run_locateanything_runtime_warmup(endpoint_url: str, *, max_new_tokens: int, timeout_seconds: float) -> None:
+    global _locateanything_runtime_warmup_state
+    with _locateanything_runtime_warmup_lock:
+        _locateanything_runtime_warmup_state = {
+            "ok": False,
+            "warmup": "running",
+            "started_at": int(time.time()),
+            "endpoint_url": endpoint_url,
+            "message": "本地模型正在加载。",
+        }
+    try:
+        deadline = time.monotonic() + 90.0
+        health: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            health = locateanything_runtime_health_status(endpoint_url, timeout_seconds=2.0)
+            if health.get("status") == "ready":
+                with _locateanything_runtime_warmup_lock:
+                    _locateanything_runtime_warmup_state = {
+                        "ok": True,
+                        "warmup": "done",
+                        "completed_at": int(time.time()),
+                        "endpoint_url": endpoint_url,
+                        "message": "本地模型已加载。",
+                        "health": health.get("health", {}),
+                    }
+                return
+            if health.get("status") == "starting":
+                break
+            time.sleep(2.0)
+        started = time.monotonic()
+        response = post_locateanything_endpoint(
+            endpoint_url,
+            locateanything_warmup_image_bytes(),
+            prompt="Locate all the instances that match the following description: red rectangle.",
+            generation_mode="fast",
+            max_new_tokens=max(64, min(int(max_new_tokens or 128), 128)),
+            timeout_seconds=max(300.0, min(float(timeout_seconds or 300.0), 300.0)),
+        )
+        latency_ms = int((time.monotonic() - started) * 1000)
+        health = locateanything_runtime_health_status(endpoint_url, timeout_seconds=2.0)
+        with _locateanything_runtime_warmup_lock:
+            _locateanything_runtime_warmup_state = {
+                "ok": health.get("status") == "ready",
+                "warmup": "done" if health.get("status") == "ready" else "failed",
+                "completed_at": int(time.time()),
+                "endpoint_url": endpoint_url,
+                "latency_ms": latency_ms,
+                "message": "本地模型已加载。" if health.get("status") == "ready" else "本地模型 warmup 已返回，但健康检查仍未就绪。",
+                "answer": bounded_text(extract_locateanything_answer(response), 180),
+                "health": health.get("health", {}),
+            }
+    except Exception as exc:
+        with _locateanything_runtime_warmup_lock:
+            _locateanything_runtime_warmup_state = {
+                "ok": False,
+                "warmup": "failed",
+                "completed_at": int(time.time()),
+                "endpoint_url": endpoint_url,
+                "message": bounded_text(str(exc), 240),
+            }
+
+
+def ensure_locateanything_runtime_warmup(endpoint_url: str, config: dict[str, Any]) -> dict[str, Any]:
+    global _locateanything_runtime_warmup_thread
+    with _locateanything_runtime_warmup_lock:
+        thread = _locateanything_runtime_warmup_thread
+        if thread and thread.is_alive():
+            return locateanything_runtime_warmup_status()
+        state = locateanything_runtime_warmup_status()
+        if state.get("ok") and state.get("endpoint_url") == endpoint_url:
+            return state
+        _locateanything_runtime_warmup_thread = threading.Thread(
+            target=run_locateanything_runtime_warmup,
+            kwargs={
+                "endpoint_url": endpoint_url,
+                "max_new_tokens": int(config.get("max_new_tokens") or 128),
+                "timeout_seconds": float(config.get("timeout_seconds") or 300.0),
+            },
+            name="locateanything-runtime-warmup",
+            daemon=True,
+        )
+        _locateanything_runtime_warmup_thread.start()
+        return locateanything_runtime_warmup_status()
+
+
+def start_locateanything_runtime() -> dict[str, Any]:
+    global _locateanything_runtime_start_process, _locateanything_runtime_start_time
+    config = load_locateanything_config()
+    config["enabled"] = True
+    config["endpoint_url"] = LOCATEANYTHING_DEFAULT_ENDPOINT
+    config["generation_mode"] = "fast"
+    config["max_side"] = int(config.get("max_side") or LOCATEANYTHING_DEFAULT_CONFIG["max_side"])
+    config["max_new_tokens"] = int(config.get("max_new_tokens") or LOCATEANYTHING_DEFAULT_CONFIG["max_new_tokens"])
+    save_locateanything_config(normalize_locateanything_config(config))
+    endpoint_url = str(config["endpoint_url"])
+
+    if locateanything_is_local_runtime_endpoint(endpoint_url):
+        health = locateanything_runtime_health_status(endpoint_url, timeout_seconds=1.5)
+        if health["status"] in {"ready", "starting"}:
+            warmup = {} if health["status"] == "ready" else ensure_locateanything_runtime_warmup(endpoint_url, config)
+            return {
+                **health,
+                "message": "本地模型已就绪。" if health["status"] == "ready" else "本地模型正在加载，请稍后再检查。",
+                "warmup": warmup,
+                **locateanything_runtime_process_status(),
+            }
+        service = locateanything_runtime_service_status()
+        if service["service_active"]:
+            warmup = ensure_locateanything_runtime_warmup(endpoint_url, config)
+            return {
+                **health,
+                **service,
+                "ok": False,
+                "status": "starting",
+                "message": "本地模型服务正在启动，健康检查暂未就绪。",
+                "warmup": warmup,
+                **locateanything_runtime_process_status(),
+            }
+
+    preflight = locateanything_runtime_preflight()
+    if not preflight["ready_to_start"]:
+        return {
+            "ok": False,
+            "status": "failed",
+            "message": "本地模型启动条件不完整。",
+            "preflight": preflight,
+            **locateanything_runtime_process_status(),
+        }
+
+    with _locateanything_runtime_start_lock:
+        if _locateanything_runtime_start_process and _locateanything_runtime_start_process.poll() is None:
+            return {
+                "ok": True,
+                "status": "starting",
+                "message": "本地模型正在启动。",
+                "preflight": preflight,
+                **locateanything_runtime_process_status(),
+            }
+        LOCATEANYTHING_RUNTIME_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_file = (LOCATEANYTHING_RUNTIME_LOG_DIR / "start.log").open("ab")
+        env = os.environ.copy()
+        env.setdefault("HF_HOME", preflight["hf_home"])
+        env.setdefault("HF_HUB_OFFLINE", "1")
+        env.setdefault("TRANSFORMERS_OFFLINE", "1")
+        env.setdefault("LOCATEANYTHING_QUANTIZATION", "4bit")
+        env.setdefault("LOCATEANYTHING_VENV", preflight["venv_path"])
+        if preflight.get("snapshot_path"):
+            env.setdefault("LOCATEANYTHING_MODEL_ID", preflight["snapshot_path"])
+        try:
+            _locateanything_runtime_start_process = subprocess.Popen(
+                [str(LOCATEANYTHING_RUNTIME_SCRIPT_PATH)],
+                cwd=str(ROOT),
+                env=env,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            _locateanything_runtime_start_time = time.time()
+        except OSError as exc:
+            return {
+                "ok": False,
+                "status": "failed",
+                "message": f"启动本地模型失败：{bounded_text(str(exc), 180)}",
+                "preflight": preflight,
+            }
+    return {
+        "ok": True,
+        "status": "starting",
+        "message": "本地模型启动中；首次加载可能需要一两分钟。",
+        "preflight": preflight,
+        "warmup": ensure_locateanything_runtime_warmup(endpoint_url, config),
+        **locateanything_runtime_process_status(),
+    }
+
+
+def locateanything_profile_text(value: Any, max_items: int = 4) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        parts = []
+        for key, child in value.items():
+            text = locateanything_profile_text(child, max_items=max_items)
+            if text:
+                parts.append(f"{key}: {text}")
+        return "; ".join(parts[:max_items])
+    if isinstance(value, (list, tuple)):
+        parts = [locateanything_profile_text(item, max_items=max_items) for item in value[:max_items]]
+        return ", ".join(part for part in parts if part)
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def locateanything_profile_for_item(item: dict[str, Any]) -> dict[str, Any]:
+    raw = item.get("locateanything_profile") if isinstance(item.get("locateanything_profile"), dict) else {}
+    return normalize_accessory_locateanything_profile(raw, item)
+
+
+def locateanything_visual_prompt_for_item(item: dict[str, Any]) -> str:
+    profile = locateanything_profile_for_item(item)
+    label = str(item.get("name") or item.get("label") or "").strip()
+    parts: list[str] = []
+    positive_prompt = locateanything_profile_text(profile.get("positive_visual_prompt"))
+    if positive_prompt:
+        parts.append(positive_prompt)
+    required_features = locateanything_profile_text(profile.get("required_features"), max_items=6)
+    if required_features:
+        parts.append(required_features)
+    optional_features = locateanything_profile_text(profile.get("optional_features"), max_items=4)
+    if optional_features:
+        parts.append(optional_features)
+    parts.append(str(profile.get("target_scope") or "").strip())
+    if label and not parts:
+        parts.append(label)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        clean = bounded_text(part, 220).strip(" ,.;")
+        key = clean.lower()
+        if clean and key not in seen:
+            seen.add(key)
+            deduped.append(clean)
+    return bounded_text("; ".join(deduped), 520)
+
+
+def locateanything_search_terms_for_item(item: dict[str, Any]) -> list[str]:
+    profile = locateanything_profile_for_item(item)
+    terms = [
+        item.get("name"),
+        item.get("label"),
+        item.get("material_type"),
+        profile.get("positive_visual_prompt"),
+        profile.get("required_features"),
+        profile.get("optional_features"),
+        profile.get("target_scope"),
+    ]
+    return [bounded_text(locateanything_profile_text(value), 180) for value in terms if locateanything_profile_text(value)]
+
+
+def normalize_locateanything_task_type(value: Any, material_type: str = "", source: str = "") -> str:
+    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "ai": "ai_detection",
+        "ai_presence": "ai_detection",
+        "presence": "object_presence",
+        "object": "object_presence",
+        "object_detection": "object_presence",
+        "document": "text_document",
+        "text": "text_document",
+        "text_detection": "text_document",
+        "comparison": "data_analysis_comparison",
+        "data_analysis": "data_analysis_comparison",
+        "analysis": "data_analysis_comparison",
+    }
+    task_type = aliases.get(raw, raw)
+    if task_type in LOCATEANYTHING_TASK_TYPES:
+        return task_type
+    if str(source or "").strip() == "data_analysis":
+        return "data_analysis_comparison"
+    if str(material_type or "").strip() == "text":
+        return "text_document"
+    return "object_presence"
+
+
+def locateanything_source_items(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    config = config or scope_config_for_user(load_config())
+    required_classes = {int(value) for value in config.get("required_classes", []) if str(value).isdigit()}
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for accessory in config.get("accessories", []):
+        serialized = serialize_accessory(accessory)
+        ensure_accessory_english_name(serialized)
+        ensure_accessory_locateanything_profile(serialized)
+        locate_profile = locateanything_profile_for_item(serialized)
+        item_id = f"accessory:{serialized['id']}"
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        class_id = int(serialized.get("class_id", 0))
+        native_label = str(serialized.get("name") or CLASS_LABELS.get(class_id, serialized["id"]))
+        label = accessory_display_label(serialized)
+        visual_prompt = locateanything_visual_prompt_for_item(serialized)
+        material_type = str(serialized.get("material_type", ""))
+        items.append(
+            {
+                "id": item_id,
+                "source": "accessory",
+                "accessory_id": serialized["id"],
+                "class_id": class_id,
+                "label": label,
+                "display_label": label,
+                "native_label": native_label,
+                "english_name": label,
+                "material_type": material_type,
+                "task_type": normalize_locateanything_task_type("", material_type, "accessory"),
+                "locateanything_profile": locate_profile,
+                "target_scope": locate_profile.get("target_scope") or "",
+                "reject_cues": locate_profile.get("reject_cues") or [],
+                "packaging_exclusions": locate_profile.get("packaging_exclusions") or [],
+                "subpart_text_logo_exclusions": locate_profile.get("subpart_text_logo_exclusions") or [],
+                "count_strategy": locate_profile.get("count_strategy") or "",
+                "box_constraints": locate_profile.get("box_constraints") or {},
+                "visual_prompt": visual_prompt,
+                "search_terms": locateanything_search_terms_for_item(serialized),
+                "default_expected_present": True,
+                "default_expected_count": int((config.get("min_counts") or {}).get(str(class_id), 1) or 1),
+                "default_selected": class_id in required_classes or len(items) < 2,
+            }
+        )
+    for class_id, label in CLASS_LABELS.items():
+        item_id = f"class:{class_id}"
+        if item_id in seen:
+            continue
+        material_type = "object" if int(class_id) == 0 else "text"
+        class_item = {"name": label, "label": label, "material_type": material_type, "id": item_id}
+        display_label = accessory_display_label(class_item)
+        locate_profile = locateanything_profile_for_item(class_item)
+        items.append(
+            {
+                "id": item_id,
+                "source": "class",
+                "class_id": int(class_id),
+                "label": display_label,
+                "display_label": display_label,
+                "native_label": label,
+                "english_name": display_label,
+                "material_type": material_type,
+                "task_type": normalize_locateanything_task_type("", material_type, "class"),
+                "locateanything_profile": locate_profile,
+                "target_scope": locate_profile.get("target_scope") or "",
+                "reject_cues": locate_profile.get("reject_cues") or [],
+                "packaging_exclusions": locate_profile.get("packaging_exclusions") or [],
+                "subpart_text_logo_exclusions": locate_profile.get("subpart_text_logo_exclusions") or [],
+                "count_strategy": locate_profile.get("count_strategy") or "",
+                "box_constraints": locate_profile.get("box_constraints") or {},
+                "visual_prompt": locateanything_visual_prompt_for_item(class_item),
+                "search_terms": [label],
+                "default_expected_present": True,
+                "default_expected_count": int((config.get("min_counts") or {}).get(str(class_id), 1) or 1),
+                "default_selected": int(class_id) in required_classes or len(items) < 2,
+            }
+        )
+    return items
+
+
+def parse_locateanything_inspection_rules(raw_rules: Any, source_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if isinstance(raw_rules, str):
+        try:
+            decoded = json.loads(raw_rules or "[]")
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="LocateAnything rules must be valid JSON") from exc
+    else:
+        decoded = raw_rules
+    if isinstance(decoded, dict):
+        decoded = decoded.get("items") or decoded.get("rules") or []
+    if not isinstance(decoded, list):
+        raise HTTPException(status_code=400, detail="LocateAnything rules must be a list")
+    source_by_id = {str(item["id"]): item for item in source_items}
+    rules: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(decoded, start=1):
+        if not isinstance(raw_item, dict):
+            continue
+        item_id = str(raw_item.get("id") or raw_item.get("accessory_id") or raw_item.get("class_id") or f"item_{index}").strip()
+        source = source_by_id.get(item_id, {})
+        locate_profile = raw_item.get("locateanything_profile") if isinstance(raw_item.get("locateanything_profile"), dict) else source.get("locateanything_profile")
+        locate_profile = locate_profile if isinstance(locate_profile, dict) else {}
+        raw_label = bounded_text(
+            str(
+                raw_item.get("label")
+                or raw_item.get("native_label")
+                or source.get("native_label")
+                or source.get("label")
+                or raw_item.get("display_label")
+                or item_id
+            ).strip(),
+            160,
+        )
+        label = raw_label
+        if not label:
+            continue
+        display_label = (
+            compact_english_accessory_name(source.get("display_label"))
+            or compact_english_accessory_name(source.get("english_name"))
+            or compact_english_accessory_name(locate_profile.get("display_label"))
+            or compact_english_accessory_name(locate_profile.get("english_name"))
+            or compact_english_accessory_name(raw_item.get("display_label"))
+            or compact_english_accessory_name(raw_item.get("english_name"))
+            or compact_english_accessory_name(raw_item.get("label"))
+            or label
+        )
+        expected_present = bool(raw_item.get("expected_present", source.get("default_expected_present", True)))
+        expected_count = validate_locateanything_int(raw_item.get("expected_count"), int(source.get("default_expected_count", 1) or 1), 0, 99, "expected_count")
+        if not expected_present:
+            expected_count = 0
+        prompt_override = bounded_text(str(raw_item.get("prompt_override") or "").strip(), 240)
+        visual_prompt = bounded_text(str(raw_item.get("visual_prompt") or source.get("visual_prompt") or "").strip(), 520)
+        material_type = bounded_text(str(raw_item.get("material_type") or source.get("material_type") or "").strip(), 80)
+        task_type = normalize_locateanything_task_type(raw_item.get("task_type") or source.get("task_type"), material_type, str(source.get("source") or raw_item.get("source") or ""))
+        box_constraints = raw_item.get("box_constraints") if isinstance(raw_item.get("box_constraints"), dict) else source.get("box_constraints")
+        box_constraints = box_constraints if isinstance(box_constraints, dict) else locate_profile.get("box_constraints") if isinstance(locate_profile.get("box_constraints"), dict) else {}
+        rules.append(
+            {
+                "id": item_id,
+                "source": str(source.get("source") or raw_item.get("source") or ""),
+                "label": label,
+                "display_label": bounded_text(display_label, 160),
+                "native_label": bounded_text(source.get("native_label") or raw_item.get("native_label") or label, 160),
+                "material_type": material_type,
+                "task_type": task_type,
+                "visual_prompt": visual_prompt,
+                "target_scope": bounded_text(raw_item.get("target_scope") or source.get("target_scope") or locate_profile.get("target_scope") or "", 160),
+                "locateanything_profile": locate_profile,
+                "reject_cues": string_list(raw_item.get("reject_cues"), source.get("reject_cues") or locate_profile.get("reject_cues"), max_items=12, max_len=160),
+                "packaging_exclusions": string_list(
+                    raw_item.get("packaging_exclusions"),
+                    source.get("packaging_exclusions") or locate_profile.get("packaging_exclusions"),
+                    max_items=10,
+                    max_len=180,
+                ),
+                "subpart_text_logo_exclusions": string_list(
+                    raw_item.get("subpart_text_logo_exclusions"),
+                    source.get("subpart_text_logo_exclusions") or locate_profile.get("subpart_text_logo_exclusions"),
+                    max_items=8,
+                    max_len=180,
+                ),
+                "count_strategy": bounded_text(raw_item.get("count_strategy") or source.get("count_strategy") or locate_profile.get("count_strategy") or "", 220),
+                "box_constraints": box_constraints,
+                "expected_present": expected_present,
+                "expected_count": expected_count,
+                "prompt_override": prompt_override,
+            }
+        )
+    return rules
+
+
+def locateanything_box_constraints_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    parts = []
+    for key in ("box_target", "minimum_visible_evidence"):
+        text = bounded_text(value.get(key), 140)
+        if text:
+            parts.append(f"{key}: {text}")
+    reject_if = locateanything_profile_text(value.get("reject_if"), max_items=8)
+    if reject_if:
+        parts.append(f"reject_if: {reject_if}")
+    return "; ".join(parts)
+
+
+def locateanything_negative_visual_prompt(text: str) -> bool:
+    lowered = text.lower()
+    negative_markers = (
+        "does not contain",
+        "not contain",
+        "not visible",
+        "no object matching",
+        "no accepted target",
+        "is missing",
+        "is absent",
+    )
+    return any(marker in lowered for marker in negative_markers)
+
+
+def locateanything_rule_ref_label(rule: dict[str, Any]) -> str:
+    batch_ref = str(rule.get("batch_ref") or "").strip()
+    if batch_ref:
+        return bounded_text(batch_ref, 80)
+    label = str(rule.get("display_label") or rule.get("label") or rule.get("native_label") or "target").strip()
+    return bounded_text(label or "target", 80)
+
+
+def locateanything_rule_human_label(rule: dict[str, Any]) -> str:
+    label = str(rule.get("display_label") or rule.get("label") or rule.get("native_label") or "target").strip()
+    return bounded_text(label or "target", 120)
+
+
+def locateanything_batch_prompt_for_rules(rules: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    ref_labels: list[str] = []
+    for index, rule in enumerate(rules, start=1):
+        rule["batch_ref"] = f"T{index}"
+        label_ref = locateanything_rule_ref_label(rule)
+        human_label = locateanything_rule_human_label(rule)
+        ref_labels.append(label_ref)
+        profile = rule.get("locateanything_profile") if isinstance(rule.get("locateanything_profile"), dict) else {}
+        visual_prompt = str(rule.get("visual_prompt") or profile.get("positive_visual_prompt") or "").strip()
+        if visual_prompt and locateanything_negative_visual_prompt(visual_prompt):
+            visual_prompt = ""
+        description = bounded_text(visual_prompt or LOCATEANYTHING_VISUAL_FALLBACKS.get(human_label) or human_label, 180)
+        target_scope = str(rule.get("target_scope") or profile.get("target_scope") or "").strip()
+        if not target_scope:
+            target_scope = "complete printed document or sheet" if str(rule.get("material_type") or "") == "text" else "complete physical object"
+        required = bounded_text(locateanything_profile_text(rule.get("required_features") or profile.get("required_features"), max_items=3), 160)
+        reject = bounded_text(locateanything_profile_text(rule.get("reject_cues") or profile.get("reject_cues"), max_items=3), 150)
+        parts = [
+            f"{index}. <ref>{label_ref}</ref> = {human_label}",
+            f"scope: {bounded_text(target_scope, 80)}",
+            f"cues: {description}",
+        ]
+        if required:
+            parts.append(f"required: {required}")
+        if reject:
+            parts.append(f"reject: {reject}")
+        lines.append("; ".join(parts) + ".")
+    allowed_refs = ", ".join(ref_labels)
+    return " ".join(
+        [
+            "Find only the selected targets listed below. Do not locate unlisted objects.",
+            *lines,
+            f"Allowed single ref labels: {allowed_refs}.",
+            "Each output entry must use exactly one single ref label. Never combine refs in one <ref> tag.",
+            "Return separate <ref>label</ref><box><x1><y1><x2><y2></box> entries for matches.",
+            "If a listed target is absent, return <ref>label</ref><box>None</box> for that target.",
+        ]
+    )
+
+
+def locateanything_prompt_for_rule(rule: dict[str, Any]) -> str:
+    if rule.get("prompt_override"):
+        return str(rule["prompt_override"])
+    label = str(rule.get("label") or rule.get("display_label") or "target").strip()
+    profile = rule.get("locateanything_profile") if isinstance(rule.get("locateanything_profile"), dict) else {}
+    visual_prompt = str(rule.get("visual_prompt") or profile.get("positive_visual_prompt") or "").strip()
+    if visual_prompt and locateanything_negative_visual_prompt(visual_prompt):
+        visual_prompt = ""
+    description = bounded_text(visual_prompt or LOCATEANYTHING_VISUAL_FALLBACKS.get(label) or label, 220)
+    target_scope = str(rule.get("target_scope") or profile.get("target_scope") or "").strip()
+    if not target_scope:
+        target_scope = "complete printed document or sheet" if str(rule.get("material_type") or "") == "text" else "complete physical object"
+    required = bounded_text(locateanything_profile_text(rule.get("required_features") or profile.get("required_features"), max_items=5), 260)
+    optional = bounded_text(locateanything_profile_text(profile.get("optional_features"), max_items=3), 180)
+    reject = bounded_text(locateanything_profile_text(rule.get("reject_cues") or profile.get("reject_cues"), max_items=5), 220)
+    packaging = bounded_text(locateanything_profile_text(rule.get("packaging_exclusions") or profile.get("packaging_exclusions"), max_items=4), 200)
+    subparts = bounded_text(locateanything_profile_text(rule.get("subpart_text_logo_exclusions") or profile.get("subpart_text_logo_exclusions"), max_items=4), 200)
+    count_strategy = bounded_text(str(rule.get("count_strategy") or profile.get("count_strategy") or "Count each complete accepted target once.").strip(), 140)
+    constraints = locateanything_box_constraints_text(rule.get("box_constraints") or profile.get("box_constraints"))
+    label_ref = bounded_text(label, 80)
+    sections = [
+        f"Find visible {target_scope}: {label_ref}.",
+        f"Visual cues: {description}.",
+    ]
+    if required:
+        sections.append(f"Required: {required}.")
+    if optional:
+        sections.append(f"Optional: {optional}.")
+    if reject:
+        sections.append(f"Reject cues: {reject}.")
+    if packaging:
+        sections.append(f"Exclude packaging/printed photos: {packaging}.")
+    if subparts:
+        sections.append(f"Exclude subparts/text/logos alone: {subparts}.")
+    if constraints:
+        sections.append(f"Box constraints: {bounded_text(constraints, 180)}.")
+    sections.append(f"Count: {count_strategy}")
+    sections.append(
+        f"Return only <ref>{label_ref}</ref><box><x1><y1><x2><y2></box> for each match, "
+        f"or <ref>{label_ref}</ref><box>None</box>."
+    )
+    return " ".join(section.strip() for section in sections if section.strip())
+
+
+def locateanything_box_area(box: dict[str, Any]) -> float:
+    return max(0.0, float(box.get("x2", 0)) - float(box.get("x1", 0))) * max(0.0, float(box.get("y2", 0)) - float(box.get("y1", 0)))
+
+
+def locateanything_box_iou(a: dict[str, Any], b: dict[str, Any]) -> float:
+    ax1, ay1, ax2, ay2 = float(a.get("x1", 0)), float(a.get("y1", 0)), float(a.get("x2", 0)), float(a.get("y2", 0))
+    bx1, by1, bx2, by2 = float(b.get("x1", 0)), float(b.get("y1", 0)), float(b.get("x2", 0)), float(b.get("y2", 0))
+    inter_w = max(0.0, min(ax2, bx2) - max(ax1, bx1))
+    inter_h = max(0.0, min(ay2, by2) - max(ay1, by1))
+    inter = inter_w * inter_h
+    union = locateanything_box_area(a) + locateanything_box_area(b) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def locateanything_box_center_inside(inner: dict[str, Any], outer: dict[str, Any]) -> bool:
+    cx = (float(inner.get("x1", 0)) + float(inner.get("x2", 0))) / 2
+    cy = (float(inner.get("y1", 0)) + float(inner.get("y2", 0))) / 2
+    return float(outer.get("x1", 0)) <= cx <= float(outer.get("x2", 0)) and float(outer.get("y1", 0)) <= cy <= float(outer.get("y2", 0))
+
+
+def dedupe_locateanything_rule_boxes(rule: dict[str, Any], boxes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(boxes, key=locateanything_box_area, reverse=True)
+    kept: list[dict[str, Any]] = []
+    for box in ordered:
+        if any(locateanything_box_iou(box, existing) >= 0.85 for existing in kept):
+            continue
+        kept.append(box)
+    if int(rule.get("expected_count", 1) or 0) == 1 and len(kept) > 1:
+        largest = kept[0]
+        if all(box is largest or locateanything_box_center_inside(box, largest) or locateanything_box_iou(box, largest) >= 0.1 for box in kept):
+            return [largest]
+    return kept
+
+
+def locateanything_judgement_policy(task_type: str) -> str:
+    if task_type == "data_analysis_comparison":
+        return "comparison_exact_count"
+    if task_type == "ai_detection":
+        return "ai_detection_presence_count"
+    if task_type == "text_document":
+        return "document_presence_count"
+    return "object_presence_count"
+
+
+def locateanything_answer_cue_text(raw_answer: str = "", boxes: list[dict[str, Any]] | None = None) -> str:
+    parts = [
+        bounded_text(str(box.get("ref_text") or box.get("ref") or ""), 180)
+        for box in (boxes or [])
+        if isinstance(box, dict) and str(box.get("ref_text") or box.get("ref") or "").strip()
+    ]
+    if raw_answer:
+        refs = re.findall(r"<\s*ref\s*>(.*?)<\s*/\s*ref\s*>", str(raw_answer), flags=re.IGNORECASE | re.DOTALL)
+        parts.extend(bounded_text(re.sub(r"\s+", " ", ref).strip(), 180) for ref in refs)
+        if not parts:
+            without_boxes = re.sub(r"<\s*box\s*>.*?<\s*/\s*box\s*>", " ", str(raw_answer), flags=re.IGNORECASE | re.DOTALL)
+            without_tags = re.sub(r"<[^>]+>", " ", without_boxes)
+            parts.append(bounded_text(re.sub(r"\s+", " ", without_tags).strip(), 240))
+    return " ".join(part for part in parts if part).casefold()
+
+
+def locateanything_physical_rejection_reason(rule: dict[str, Any], boxes: list[dict[str, Any]], raw_answer: str = "") -> str:
+    if not boxes:
+        return ""
+    task_type = normalize_locateanything_task_type(rule.get("task_type"), str(rule.get("material_type") or ""), str(rule.get("source") or ""))
+    if task_type not in {"object_presence", "ai_detection"}:
+        return ""
+    if str(rule.get("material_type") or "").strip().casefold() == "text":
+        return ""
+    profile = rule.get("locateanything_profile") if isinstance(rule.get("locateanything_profile"), dict) else {}
+    box_constraints = rule.get("box_constraints") if isinstance(rule.get("box_constraints"), dict) else profile.get("box_constraints")
+    reject_if = box_constraints.get("reject_if") if isinstance(box_constraints, dict) else []
+    rejection_text = " ".join(
+        [
+            locateanything_profile_text(rule.get("reject_cues") or profile.get("reject_cues"), max_items=12),
+            locateanything_profile_text(rule.get("packaging_exclusions") or profile.get("packaging_exclusions"), max_items=12),
+            locateanything_profile_text(rule.get("subpart_text_logo_exclusions") or profile.get("subpart_text_logo_exclusions"), max_items=8),
+            locateanything_profile_text(reject_if, max_items=10),
+        ]
+    ).casefold()
+    if not any(marker in rejection_text for marker in ("printed", "packaging", "package", "printed_depiction", "包装", "印刷")):
+        return ""
+    answer_text = locateanything_answer_cue_text(raw_answer, boxes)
+    if not answer_text:
+        return ""
+    depiction_terms = (
+        "printed",
+        "print",
+        "graphic",
+        "graphics",
+        "illustration",
+        "drawing",
+        "photo",
+        "photographed",
+        "picture",
+        "image",
+        "screenshot",
+        "catalog",
+        "印刷",
+        "图案",
+        "图片",
+        "照片",
+        "画",
+    )
+    packaging_terms = (
+        "package",
+        "packaging",
+        "retail",
+        "carton",
+        "box",
+        "blister",
+        "manual",
+        "label",
+        "earpod",
+        "earpods",
+        "earphone",
+        "包装",
+        "包装盒",
+        "盒",
+        "纸盒",
+        "说明书",
+        "标签",
+    )
+    limiter_terms = ("only", "just", "仅", "只有")
+    subpart_terms = ("subpart", "partial", "logo", "text", "icon", "connector", "cap", "button", "局部", "标志", "文字")
+    if any(term in answer_text for term in depiction_terms) and any(term in answer_text for term in packaging_terms):
+        return "profile_reject_printed_packaging_depiction"
+    if any(term in answer_text for term in limiter_terms) and any(term in answer_text for term in subpart_terms):
+        return "profile_reject_subpart_or_text_only"
+    return ""
+
+
+def evaluate_locateanything_rule(rule: dict[str, Any], boxes: list[dict[str, Any]], error: str = "", raw_answer: str = "") -> dict[str, Any]:
+    count = len(boxes)
+    expected_present = bool(rule.get("expected_present", True))
+    expected_count = int(rule.get("expected_count", 1) or 0)
+    if not expected_present:
+        expected_count = 0
+    task_type = normalize_locateanything_task_type(rule.get("task_type"), str(rule.get("material_type") or ""), str(rule.get("source") or ""))
+    judgement_policy = locateanything_judgement_policy(task_type)
+    rejection_reason = locateanything_physical_rejection_reason(rule, boxes, raw_answer) if expected_present else ""
+    if error:
+        status = "uncertain"
+        passed = False
+    elif task_type == "data_analysis_comparison":
+        if expected_count <= 0:
+            if count == 0:
+                status = "comparison_same_absent"
+                passed = True
+            else:
+                status = "comparison_extra"
+                passed = False
+        elif count == expected_count:
+            status = "comparison_same_count"
+            passed = True
+        elif count == 0:
+            status = "comparison_missing"
+            passed = False
+        else:
+            status = "comparison_count_mismatch"
+            passed = False
+    elif expected_present:
+        if count <= 0:
+            status = "missing"
+            passed = False
+        elif rejection_reason:
+            status = "rejected_by_profile_cues"
+            passed = False
+        elif expected_count > 0 and count != expected_count:
+            status = "count_mismatch"
+            passed = False
+        else:
+            status = "found"
+            passed = True
+    else:
+        if count == 0:
+            status = "not_expected_absent"
+            passed = True
+        else:
+            status = "unexpected"
+            passed = False
+    return {
+        "id": rule["id"],
+        "label": rule["display_label"],
+        "expected_present": expected_present,
+        "expected_count": expected_count,
+        "task_type": task_type,
+        "judgement_policy": judgement_policy,
+        "status": status,
+        "passed": passed,
+        "box_count": count,
+        "boxes": boxes,
+        "rejection_reason": rejection_reason,
+        "error": bounded_text(error, 240) if error else "",
+    }
+
+
+def data_analysis_records_temp_path() -> Path:
+    return DATA_ANALYSIS_RECORDS_PATH.with_name(f"{DATA_ANALYSIS_RECORDS_PATH.name}.tmp")
+
+
+def sanitize_data_analysis_record_id(value: Any) -> str:
+    return re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value or "").strip()).strip("_")[:120]
+
+
+def normalize_data_analysis_record(raw: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    record_id = sanitize_data_analysis_record_id(raw.get("record_id") or raw.get("id"))
+    if not record_id:
+        return None
+    ai_result = raw.get("ai_detection_result") if isinstance(raw.get("ai_detection_result"), dict) else {}
+    ai_summary = raw.get("ai_summary") if isinstance(raw.get("ai_summary"), dict) else {}
+    source_image = raw.get("source_image") if isinstance(raw.get("source_image"), dict) else {}
+    model = ai_result.get("model") if isinstance(ai_result.get("model"), dict) else {}
+    task = raw.get("task") if isinstance(raw.get("task"), dict) else {}
+    task_id = str(task.get("id") or raw.get("task_id") or model.get("task_id") or model.get("id") or AI_DETECTION_MODEL_ID).strip()
+    task_name = clean_ai_detection_task_name(task.get("name") or raw.get("task_name") or model.get("task_label") or model.get("label"), AI_DETECTION_LABEL)
+    created_at = record_created_at(raw)
+    updated_at = record_updated_at(raw)
+    if not created_at:
+        created_at = int(time.time())
+    if not updated_at:
+        updated_at = created_at
+    runs = [item for item in raw.get("locateanything_runs", []) if isinstance(item, dict)]
+    return {
+        "record_id": record_id,
+        "owner_user_id": record_owner_id(raw),
+        "owner_username": record_owner_username(raw),
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "task": {
+            "id": task_id,
+            "name": task_name,
+            "type": str(task.get("type") or raw.get("task_type") or "ai_detection"),
+            "model_id": str(task.get("model_id") or model.get("id") or ""),
+        },
+        "source_image": {
+            "url": str(source_image.get("url") or raw.get("image_url") or raw.get("annotated_url") or ai_result.get("annotated_url") or ""),
+            "path": str(source_image.get("path") or raw.get("source_image_path") or ""),
+            "filename": str(source_image.get("filename") or raw.get("source_filename") or ""),
+        },
+        "image_url": str(raw.get("image_url") or source_image.get("url") or ai_result.get("annotated_url") or ""),
+        "ai_detection_result": ai_result,
+        "ai_summary": ai_summary,
+        "locateanything_runs": runs[-20:],
+        "comparison_summary": raw.get("comparison_summary") if isinstance(raw.get("comparison_summary"), dict) else {},
+    }
+
+
+def load_data_analysis_records() -> list[dict[str, Any]]:
+    ensure_dirs()
+    with _data_analysis_store_lock:
+        if not DATA_ANALYSIS_RECORDS_PATH.exists():
+            return []
+        try:
+            data = json.loads(DATA_ANALYSIS_RECORDS_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        raw_records = data.get("records") if isinstance(data, dict) else data
+        if not isinstance(raw_records, list):
+            return []
+        records = []
+        for raw in raw_records:
+            record = normalize_data_analysis_record(raw)
+            if record:
+                records.append(record)
+        records.sort(key=lambda item: (int(item.get("created_at") or 0), str(item.get("record_id") or "")), reverse=True)
+        return records
+
+
+def save_data_analysis_records(records: list[dict[str, Any]]) -> None:
+    ensure_dirs()
+    payload = {"records": records}
+    with _data_analysis_store_lock:
+        tmp_path = data_analysis_records_temp_path()
+        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp_path, DATA_ANALYSIS_RECORDS_PATH)
+
+
+def ai_detection_summary_for_analysis(result: dict[str, Any]) -> dict[str, Any]:
+    rule = result.get("rule") if isinstance(result.get("rule"), dict) else {}
+    detections = result.get("detections") if isinstance(result.get("detections"), list) else []
+    counts = rule.get("counts") if isinstance(rule.get("counts"), dict) else {}
+    missing = string_list(rule.get("missing"), max_items=50, max_len=120)
+    extra = string_list(rule.get("extra"), max_items=50, max_len=120)
+    mismatches = rule.get("count_mismatches") if isinstance(rule.get("count_mismatches"), dict) else {}
+    present_count = sum(1 for item in detections if isinstance(item, dict) and item.get("present") is True)
+    return {
+        "passed": bool(result.get("passed")),
+        "detection_count": len([item for item in detections if isinstance(item, dict)]),
+        "present_count": present_count,
+        "missing_count": len(missing),
+        "extra_count": len(extra),
+        "count_mismatch_count": len(mismatches),
+        "counts": {str(k): int(v) for k, v in counts.items() if type(v) is int},
+        "missing": missing,
+        "extra": extra,
+        "provider_status": str((result.get("ai") or {}).get("provider_status") or "") if isinstance(result.get("ai"), dict) else "",
+        "latency_ms": int((result.get("ai") or {}).get("latency_ms") or 0) if isinstance(result.get("ai"), dict) else 0,
+    }
+
+
+def persist_data_analysis_record_for_ai_detection(
+    result: dict[str, Any],
+    request_id: str,
+    *,
+    image_path: Path | None = None,
+) -> dict[str, Any] | None:
+    user = _request_user.get()
+    if not user:
+        return None
+    model_payload = result.get("model") if isinstance(result.get("model"), dict) else {}
+    task_id = str(model_payload.get("task_id") or model_payload.get("id") or AI_DETECTION_MODEL_ID).strip() or AI_DETECTION_MODEL_ID
+    task_name = clean_ai_detection_task_name(model_payload.get("task_label") or model_payload.get("label"), AI_DETECTION_LABEL)
+    now = int(time.time())
+    source_path = str(resolve_service_path(image_path)) if image_path else ""
+    image_url = str(result.get("annotated_url") or "")
+    record = {
+        "record_id": f"analysis_{now}_{uuid.uuid4().hex[:10]}",
+        **current_owner_fields(),
+        "created_at": now,
+        "updated_at": now,
+        "task": {
+            "id": task_id,
+            "name": task_name,
+            "type": "ai_detection",
+            "model_id": str(model_payload.get("id") or ""),
+        },
+        "source_image": {
+            "url": image_url,
+            "path": source_path,
+            "filename": Path(source_path).name if source_path else safe_name(f"{request_id}.jpg"),
+        },
+        "image_url": image_url,
+        "ai_detection_result": result,
+        "ai_summary": ai_detection_summary_for_analysis(result),
+        "locateanything_runs": [],
+        "comparison_summary": {},
+    }
+    with _data_analysis_store_lock:
+        records = load_data_analysis_records()
+        records.insert(0, record)
+        records = records[:5000]
+        save_data_analysis_records(records)
+    return record
+
+
+def public_data_analysis_ai_result(record: dict[str, Any], *, include_debug: bool = False) -> dict[str, Any]:
+    result = record.get("ai_detection_result") if isinstance(record.get("ai_detection_result"), dict) else {}
+    if include_debug:
+        return result
+    model = result.get("model") if isinstance(result.get("model"), dict) else {}
+    return {
+        "request_id": result.get("request_id") or "",
+        "passed": bool(result.get("passed")),
+        "annotated_url": result.get("annotated_url") or "",
+        "preview_url": result.get("preview_url") or "",
+        "output_url": result.get("output_url") or "",
+        "model": {
+            "id": model.get("id") or "",
+            "label": model.get("label") or "",
+            "task_id": model.get("task_id") or "",
+            "task_label": model.get("task_label") or "",
+            "is_ai_detection": bool(model.get("is_ai_detection")),
+        },
+    }
+
+
+def public_data_analysis_locate_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item.get("id") or "",
+        "label": item.get("label") or "",
+        "status": item.get("status") or "",
+        "passed": bool(item.get("passed")),
+        "expected_count": int(item.get("expected_count") or 0),
+        "box_count": int(item.get("box_count") or 0),
+        "error": bounded_text(item.get("error") or "", 180),
+    }
+
+
+def public_data_analysis_locate_run(run: dict[str, Any], *, include_debug: bool = False) -> dict[str, Any]:
+    if include_debug:
+        return run
+    items = run.get("items") if isinstance(run.get("items"), list) else []
+    return {
+        "run_id": run.get("run_id") or "",
+        "created_at": run.get("created_at") or 0,
+        "status": run.get("status") or "",
+        "configured": bool(run.get("configured")),
+        "overall_pass": bool(run.get("overall_pass")),
+        "decision": run.get("decision") or "",
+        "items": [public_data_analysis_locate_item(item) for item in items if isinstance(item, dict)],
+        "source_image_size": run.get("source_image_size") if isinstance(run.get("source_image_size"), dict) else {},
+        "sent_image_size": run.get("sent_image_size") if isinstance(run.get("sent_image_size"), dict) else {},
+        "latency_ms": int(run.get("latency_ms") or 0),
+        "box_count": int(run.get("box_count") or 0),
+        "overlay_url": run.get("overlay_url") or "",
+        "preview_url": run.get("preview_url") or "",
+        "error": bounded_text(run.get("error") or "", 240),
+    }
+
+
+def public_data_analysis_record(record: dict[str, Any], *, detail: bool = False, include_debug: bool = False) -> dict[str, Any]:
+    runs = record.get("locateanything_runs") if isinstance(record.get("locateanything_runs"), list) else []
+    latest_run = runs[-1] if runs else {}
+    payload = {
+        "record_id": record.get("record_id") or "",
+        "owner_user_id": record_owner_id(record),
+        "owner_username": record_owner_username(record),
+        "created_at": record_created_at(record),
+        "updated_at": record_updated_at(record),
+        "task": record.get("task") if isinstance(record.get("task"), dict) else {},
+        "source_image": record.get("source_image") if isinstance(record.get("source_image"), dict) else {},
+        "image_url": record.get("image_url") or "",
+        "ai_summary": data_analysis_scoped_ai_summary(record),
+        "required_accessory_scope": public_data_analysis_scope_payload(record),
+        "comparison_summary": record.get("comparison_summary") if isinstance(record.get("comparison_summary"), dict) else {},
+        "locateanything_run_count": len(runs),
+        "latest_locateanything_run": {
+            "run_id": latest_run.get("run_id") or "",
+            "created_at": latest_run.get("created_at") or 0,
+            "status": latest_run.get("status") or "",
+            "overall_pass": bool(latest_run.get("overall_pass")),
+            "box_count": int(latest_run.get("box_count") or 0),
+            "latency_ms": int(latest_run.get("latency_ms") or 0),
+            "error": latest_run.get("error") or "",
+            "overlay_url": latest_run.get("overlay_url") or "",
+        },
+    }
+    if detail:
+        payload["ai_detection_result"] = public_data_analysis_ai_result(record, include_debug=include_debug)
+        payload["locateanything_runs"] = [public_data_analysis_locate_run(run, include_debug=include_debug) for run in runs]
+        payload["debug_available"] = include_debug
+    return payload
+
+
+def data_analysis_records_for_user(
+    user: dict[str, Any],
+    *,
+    target_user_id: str | None = None,
+    task_id: str | None = None,
+) -> list[dict[str, Any]]:
+    if target_user_id and not user_is_admin(user) and str(target_user_id) != str(user.get("id") or ""):
+        raise HTTPException(status_code=403, detail="Admin role required for user filtering")
+    clean_task_id = str(task_id or "").strip()
+    records = [
+        record
+        for record in load_data_analysis_records()
+        if record_visible_to_user(record, user, target_user_id if user_is_admin(user) else None)
+    ]
+    if clean_task_id:
+        records = [record for record in records if str((record.get("task") or {}).get("id") or "") == clean_task_id]
+    return records
+
+
+def find_data_analysis_record(record_id: str, user: dict[str, Any], *, write: bool = False) -> dict[str, Any]:
+    clean_id = sanitize_data_analysis_record_id(record_id)
+    for record in load_data_analysis_records():
+        if str(record.get("record_id") or "") != clean_id:
+            continue
+        require_record_access(record, user, write=write)
+        return record
+    raise HTTPException(status_code=404, detail="Analysis record not found")
+
+
+def data_analysis_task_groups(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for record in records:
+        task = record.get("task") if isinstance(record.get("task"), dict) else {}
+        task_id = str(task.get("id") or "ai_detection")
+        group = groups.setdefault(
+            task_id,
+            {
+                "id": task_id,
+                "name": str(task.get("name") or AI_DETECTION_LABEL),
+                "type": str(task.get("type") or "ai_detection"),
+                "count": 0,
+                "latest_at": 0,
+            },
+        )
+        group["count"] += 1
+        group["latest_at"] = max(int(group["latest_at"]), record_updated_at(record))
+    return sorted(groups.values(), key=lambda item: (int(item["latest_at"]), str(item["id"])), reverse=True)
+
+
+def data_analysis_record_image_path(record: dict[str, Any]) -> Path:
+    source = record.get("source_image") if isinstance(record.get("source_image"), dict) else {}
+    for raw_url in (source.get("url"), record.get("image_url")):
+        url = str(raw_url or "").split("?", 1)[0]
+        if not url.startswith("/outputs/"):
+            continue
+        candidate = (OUTPUT_DIR / PurePosixPath(url.removeprefix("/outputs/").lstrip("/"))).resolve()
+        if candidate.exists() and path_is_under(candidate, OUTPUT_DIR):
+            return candidate
+    raw_path = str(source.get("path") or "").strip()
+    if raw_path:
+        candidate = resolve_service_path(raw_path)
+        if candidate.exists():
+            return candidate
+    raise HTTPException(status_code=404, detail="Analysis record image is not available")
+
+
+def data_analysis_scope_match_key(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+
+
+def data_analysis_record_required_scope(record: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    ai_result = record.get("ai_detection_result") if isinstance(record.get("ai_detection_result"), dict) else {}
+    model_payload = ai_result.get("model") if isinstance(ai_result.get("model"), dict) else {}
+    user = current_auth_user()
+    full_config = load_config()
+    if ensure_config_locateanything_profiles(full_config, user):
+        save_config(full_config)
+    config = scope_config_for_user(full_config, user)
+    accessories_by_alias = accessory_lookup_by_id(config)
+    source_items = locateanything_source_items(config)
+    source_by_accessory = {
+        str(item.get("accessory_id") or ""): item
+        for item in source_items
+        if item.get("accessory_id")
+    }
+
+    task_payload: dict[str, Any] = {}
+    task_id = str(model_payload.get("task_id") or (record.get("task") or {}).get("id") or "").strip()
+    if task_id:
+        for task in load_ai_detection_tasks():
+            if str(task.get("id") or "") == task_id:
+                task_payload = serialize_ai_detection_task(task, config)
+                break
+
+    model_counts = normalize_ai_detection_task_counts(model_payload.get("required_accessory_counts") or {})
+    task_counts = normalize_ai_detection_task_counts(task_payload.get("required_accessory_counts") or {})
+    required_counts = model_counts or task_counts
+    selected_ids = [str(item_id) for item_id in model_payload.get("selected_accessory_ids") or [] if str(item_id).strip()]
+    if not selected_ids:
+        selected_ids = [str(item_id) for item_id in task_payload.get("selected_accessory_ids") or [] if str(item_id).strip()]
+    if not selected_ids:
+        selected_ids = list(required_counts.keys())
+
+    labels = {str(k): str(v) for k, v in (task_payload.get("accessory_labels") or {}).items() if str(v).strip()}
+    labels.update({str(k): str(v) for k, v in (model_payload.get("accessory_labels") or {}).items() if str(v).strip()})
+    accessory_names = [str(name) for name in model_payload.get("accessory_names") or [] if str(name).strip()]
+    for index, item_id in enumerate(selected_ids):
+        if item_id not in labels and index < len(accessory_names):
+            labels[item_id] = accessory_names[index]
+
+    scope: dict[str, dict[str, Any]] = {}
+
+    def resolve_accessory(raw_id: Any) -> tuple[str, dict[str, Any]]:
+        item_id = str(raw_id or "").strip()
+        if not item_id:
+            return "", {}
+        accessory = accessories_by_alias.get(item_id)
+        if accessory:
+            canonical_id = accessory_uid(accessory)
+            return canonical_id, accessory
+        return item_id, {}
+
+    def add_scope_item(raw_id: Any, expected_count: Any = 1, label: Any = "", source: str = "") -> None:
+        canonical_id, accessory = resolve_accessory(raw_id)
+        if not canonical_id:
+            return
+        try:
+            count = max(1, min(99, int(expected_count or 1)))
+        except (TypeError, ValueError):
+            count = 1
+        item = scope.setdefault(
+            canonical_id,
+            {
+                "accessory_id": canonical_id,
+                "required_count": count,
+                "label": "",
+                "aliases": set(),
+                "label_aliases": set(),
+                "source_item": source_by_accessory.get(canonical_id, {}),
+                "scope_source": source,
+            },
+        )
+        item["required_count"] = count
+        item["aliases"].add(canonical_id)
+        raw_text = str(raw_id or "").strip()
+        if raw_text:
+            item["aliases"].add(raw_text)
+        source_item = item.get("source_item") if isinstance(item.get("source_item"), dict) else {}
+        if accessory:
+            for alias in accessory_id_aliases(accessory):
+                item["aliases"].add(alias)
+            latest_source_item = source_by_accessory.get(canonical_id)
+            if latest_source_item:
+                item["source_item"] = latest_source_item
+                source_item = latest_source_item
+        native_label = str(
+            label
+            or labels.get(raw_text)
+            or labels.get(canonical_id)
+            or source_item.get("native_label")
+            or (accessory or {}).get("name")
+            or (accessory or {}).get("label")
+            or canonical_id
+        ).strip()
+        display_label = (
+            compact_english_accessory_name(source_item.get("display_label"))
+            or compact_english_accessory_name(source_item.get("english_name"))
+            or compact_english_accessory_name(label)
+            or compact_english_accessory_name(labels.get(raw_text))
+            or compact_english_accessory_name(labels.get(canonical_id))
+            or compact_english_accessory_name((accessory or {}).get("english_name"))
+            or compact_english_accessory_name((accessory or {}).get("name"))
+            or native_label
+        )
+        item["label"] = bounded_text(display_label, 160)
+        item["native_label"] = bounded_text(native_label, 160)
+        for candidate in (display_label, native_label, labels.get(raw_text), labels.get(canonical_id), source_item.get("native_label"), (accessory or {}).get("name"), (accessory or {}).get("label")):
+            key = data_analysis_scope_match_key(candidate)
+            if key:
+                item["label_aliases"].add(key)
+
+    for item_id in selected_ids:
+        if not item_id:
+            continue
+        add_scope_item(item_id, required_counts.get(item_id, 1), labels.get(item_id), "model_required_accessories")
+    for item_id, count in required_counts.items():
+        if item_id not in scope:
+            add_scope_item(item_id, count, labels.get(item_id), "model_required_counts")
+
+    if scope:
+        for item in scope.values():
+            item["aliases"] = sorted(str(alias) for alias in item["aliases"] if str(alias).strip())
+            item["label_aliases"] = sorted(str(alias) for alias in item["label_aliases"] if str(alias).strip())
+        return scope
+
+    rule_payload = ai_result.get("rule") if isinstance(ai_result.get("rule"), dict) else {}
+    detections = [item for item in ai_result.get("detections", []) if isinstance(item, dict)]
+    for det in detections:
+        accessory_id = str(det.get("accessory_id") or "").strip()
+        if not accessory_id:
+            continue
+        expected = det.get("required") or det.get("expected_count") or det.get("count") or 1
+        add_scope_item(accessory_id, expected, det.get("label"), "legacy_detection_fallback")
+    if not scope:
+        for item_id, count in (rule_payload.get("counts") or {}).items():
+            add_scope_item(item_id, count, "", "legacy_rule_count_fallback")
+    for item in scope.values():
+        item["aliases"] = sorted(str(alias) for alias in item["aliases"] if str(alias).strip())
+        item["label_aliases"] = sorted(str(alias) for alias in item["label_aliases"] if str(alias).strip())
+    return scope
+
+
+def data_analysis_count_for_scope_item(record: dict[str, Any], scope_item: dict[str, Any]) -> int:
+    ai_result = record.get("ai_detection_result") if isinstance(record.get("ai_detection_result"), dict) else {}
+    rule_payload = ai_result.get("rule") if isinstance(ai_result.get("rule"), dict) else {}
+    aliases = {str(item) for item in scope_item.get("aliases", []) if str(item).strip()}
+    label_aliases = {str(item) for item in scope_item.get("label_aliases", []) if str(item).strip()}
+    for raw_key, raw_count in (rule_payload.get("counts") or {}).items():
+        key_text = str(raw_key or "").strip()
+        if key_text not in aliases and data_analysis_scope_match_key(key_text) not in label_aliases:
+            continue
+        try:
+            return max(0, int(raw_count))
+        except (TypeError, ValueError):
+            return 0
+    for det in ai_result.get("detections", []):
+        if not isinstance(det, dict):
+            continue
+        det_id = str(det.get("accessory_id") or "").strip()
+        det_label_key = data_analysis_scope_match_key(det.get("label"))
+        if det_id not in aliases and det_label_key not in label_aliases:
+            continue
+        if det.get("present") is not True:
+            return 0
+        try:
+            return max(1, int(det.get("count") or 1))
+        except (TypeError, ValueError):
+            return 1
+    return 0
+
+
+def data_analysis_scoped_ai_summary(record: dict[str, Any]) -> dict[str, Any]:
+    scope = data_analysis_record_required_scope(record)
+    if not scope:
+        return record.get("ai_summary") if isinstance(record.get("ai_summary"), dict) else {}
+    counts: dict[str, int] = {}
+    missing: list[str] = []
+    mismatches: dict[str, dict[str, Any]] = {}
+    for accessory_id, scope_item in scope.items():
+        expected = int(scope_item.get("required_count") or 1)
+        found = data_analysis_count_for_scope_item(record, scope_item)
+        counts[accessory_id] = found
+        if found <= 0:
+            missing.append(accessory_id)
+        if found != expected:
+            mismatches[accessory_id] = {
+                "expected": expected,
+                "found": found,
+                "issue": "over_count" if found > expected else "under_count",
+            }
+    result = record.get("ai_detection_result") if isinstance(record.get("ai_detection_result"), dict) else {}
+    ai = result.get("ai") if isinstance(result.get("ai"), dict) else {}
+    return {
+        "passed": not mismatches,
+        "detection_count": sum(1 for count in counts.values() if count > 0),
+        "present_count": sum(1 for accessory_id, found in counts.items() if found == int(scope[accessory_id].get("required_count") or 1)),
+        "missing_count": len(missing),
+        "extra_count": 0,
+        "count_mismatch_count": len(mismatches),
+        "counts": counts,
+        "missing": missing,
+        "extra": [],
+        "provider_status": str(ai.get("provider_status") or ""),
+        "latency_ms": int(ai.get("latency_ms") or 0),
+    }
+
+
+def public_data_analysis_scope_payload(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": "ai_detection_task_required_accessories",
+        "required_accessories": [
+            {
+                "accessory_id": accessory_id,
+                "label": scope_item.get("label") or accessory_id,
+                "required_count": int(scope_item.get("required_count") or 1),
+                "ai_detection_count": data_analysis_count_for_scope_item(record, scope_item),
+            }
+            for accessory_id, scope_item in data_analysis_record_required_scope(record).items()
+        ],
+    }
+
+
+def locateanything_scope_terms_for_rule(rule: dict[str, Any]) -> set[str]:
+    profile = rule.get("locateanything_profile") if isinstance(rule.get("locateanything_profile"), dict) else {}
+    raw_terms = [
+        rule.get("batch_ref"),
+        rule.get("id"),
+        str(rule.get("id") or "").replace("analysis:", "", 1),
+        rule.get("label"),
+        rule.get("display_label"),
+        rule.get("visual_prompt"),
+        profile.get("name"),
+        profile.get("positive_visual_prompt"),
+        profile.get("visual_signature"),
+    ]
+    terms: set[str] = set()
+    for value in raw_terms:
+        text = data_analysis_scope_match_key(locateanything_profile_text(value, max_items=8))
+        if len(text) >= 2 and text not in {"target", "object", "item", "目标", "物体"}:
+            terms.add(text)
+    return terms
+
+
+def locateanything_box_in_required_scope(rule: dict[str, Any], box: dict[str, Any], *, require_ref_match: bool = False) -> bool:
+    ref_text = data_analysis_scope_match_key(box.get("ref_text") or box.get("ref"))
+    if not ref_text:
+        return not require_ref_match
+    batch_ref = data_analysis_scope_match_key(rule.get("batch_ref"))
+    if require_ref_match and batch_ref:
+        batch_refs = re.findall(r"\bt\d+\b", ref_text)
+        if batch_refs:
+            return batch_refs == [batch_ref]
+        return ref_text == batch_ref
+    terms = locateanything_scope_terms_for_rule(rule)
+    if not terms:
+        return not require_ref_match
+    return any(term in ref_text or ref_text in term for term in terms)
+
+
+def locateanything_final_rule_boxes(rule: dict[str, Any], raw_boxes: list[dict[str, Any]], *, require_ref_match: bool = False) -> dict[str, Any]:
+    kept = [box for box in raw_boxes if locateanything_box_in_required_scope(rule, box, require_ref_match=require_ref_match)]
+    filtered_out = [box for box in raw_boxes if not locateanything_box_in_required_scope(rule, box, require_ref_match=require_ref_match)]
+    return {
+        "boxes": dedupe_locateanything_rule_boxes(rule, kept),
+        "raw_box_count": len(raw_boxes),
+        "filtered_out_box_count": len(filtered_out),
+        "filtered_out_boxes": filtered_out,
+    }
+
+
+def data_analysis_locate_rules(record: dict[str, Any]) -> list[dict[str, Any]]:
+    ai_result = record.get("ai_detection_result") if isinstance(record.get("ai_detection_result"), dict) else {}
+    model_payload = ai_result.get("model") if isinstance(ai_result.get("model"), dict) else {}
+    rule_payload = ai_result.get("rule") if isinstance(ai_result.get("rule"), dict) else {}
+    detections = [item for item in ai_result.get("detections", []) if isinstance(item, dict)]
+    required_scope = data_analysis_record_required_scope(record)
+    required_counts = {
+        str(k): max(1, int(v))
+        for k, v in (model_payload.get("required_accessory_counts") or {}).items()
+        if str(k).strip()
+    }
+    count_mismatches = rule_payload.get("count_mismatches") if isinstance(rule_payload.get("count_mismatches"), dict) else {}
+    config = scope_config_for_user(load_config())
+    source_by_accessory = {
+        str(item.get("accessory_id") or ""): item
+        for item in locateanything_source_items(config)
+        if item.get("accessory_id")
+    }
+    seen: set[str] = set()
+    rules: list[dict[str, Any]] = []
+    labels = model_payload.get("accessory_labels") if isinstance(model_payload.get("accessory_labels"), dict) else {}
+    ai_counts = {str(k): int(v) for k, v in (rule_payload.get("counts") or {}).items() if type(v) is int and v >= 0}
+    detections_by_id = {
+        str(det.get("accessory_id") or ""): det
+        for det in detections
+        if str(det.get("accessory_id") or "").strip()
+    }
+    for accessory_id, scope_item in required_scope.items():
+        if not accessory_id or accessory_id in seen:
+            continue
+        seen.add(accessory_id)
+        source = scope_item.get("source_item") if isinstance(scope_item.get("source_item"), dict) else source_by_accessory.get(accessory_id, {})
+        det = detections_by_id.get(accessory_id, {})
+        mismatch = count_mismatches.get(accessory_id) if isinstance(count_mismatches.get(accessory_id), dict) else {}
+        ai_count = data_analysis_count_for_scope_item(record, scope_item)
+        required_count = int(scope_item.get("required_count") or required_counts.get(accessory_id) or mismatch.get("expected") or 1)
+        label = bounded_text(scope_item.get("native_label") or det.get("label") or labels.get(accessory_id) or source.get("native_label") or source.get("label") or accessory_id, 160)
+        display_label = (
+            compact_english_accessory_name(source.get("display_label"))
+            or compact_english_accessory_name(source.get("english_name"))
+            or compact_english_accessory_name(scope_item.get("label"))
+            or compact_english_accessory_name(det.get("label"))
+            or compact_english_accessory_name(labels.get(accessory_id))
+            or label
+        )
+        visual = str(source.get("visual_prompt") or "").strip()
+        if not visual:
+            evidence = bounded_text(det.get("evidence") if isinstance(det, dict) else "", 180)
+            visual = bounded_text(f"{label}; {evidence}" if evidence else label, 520)
+        expected_present = required_count > 0
+        locate_profile = source.get("locateanything_profile") if isinstance(source.get("locateanything_profile"), dict) else {}
+        rules.append(
+            {
+                "id": f"analysis:{accessory_id}",
+                "source": "data_analysis",
+                "task_type": "data_analysis_comparison",
+                "label": label,
+                "display_label": bounded_text(display_label, 160),
+                "native_label": label,
+                "material_type": str(source.get("material_type") or ""),
+                "visual_prompt": visual,
+                "target_scope": source.get("target_scope") or locate_profile.get("target_scope") or "",
+                "locateanything_profile": locate_profile,
+                "reject_cues": source.get("reject_cues") or locate_profile.get("reject_cues") or [],
+                "packaging_exclusions": source.get("packaging_exclusions") or locate_profile.get("packaging_exclusions") or [],
+                "subpart_text_logo_exclusions": source.get("subpart_text_logo_exclusions") or locate_profile.get("subpart_text_logo_exclusions") or [],
+                "count_strategy": source.get("count_strategy") or locate_profile.get("count_strategy") or "",
+                "box_constraints": source.get("box_constraints") or locate_profile.get("box_constraints") or {},
+                "expected_present": expected_present,
+                "expected_count": required_count if expected_present else 0,
+                "ai_detection_count": ai_count,
+                "ai_detection_present": ai_count > 0,
+                "required_scope": True,
+                "prompt_override": "",
+            }
+        )
+    if rules:
+        return rules
+    for det in detections:
+        accessory_id = str(det.get("accessory_id") or "").strip()
+        if not accessory_id or accessory_id in seen:
+            continue
+        seen.add(accessory_id)
+        source = source_by_accessory.get(accessory_id, {})
+        mismatch = count_mismatches.get(accessory_id) if isinstance(count_mismatches.get(accessory_id), dict) else {}
+        expected_count = required_counts.get(accessory_id) or int(mismatch.get("expected") or det.get("count") or 1)
+        label = bounded_text(det.get("label") or source.get("native_label") or source.get("label") or accessory_id, 160)
+        display_label = (
+            compact_english_accessory_name(source.get("display_label"))
+            or compact_english_accessory_name(source.get("english_name"))
+            or compact_english_accessory_name(det.get("label"))
+            or label
+        )
+        visual = str(source.get("visual_prompt") or "").strip()
+        if not visual:
+            evidence = bounded_text(det.get("evidence") or "", 180)
+            visual = bounded_text(f"{label}; {evidence}" if evidence else label, 520)
+        rules.append(
+                {
+                    "id": f"analysis:{accessory_id}",
+                    "source": "data_analysis",
+                    "task_type": "data_analysis_comparison",
+                    "label": label,
+                    "display_label": bounded_text(display_label, 160),
+                    "native_label": label,
+                    "material_type": str(source.get("material_type") or ""),
+                    "visual_prompt": visual,
+                    "expected_present": True,
+                "expected_count": max(1, min(99, int(expected_count or 1))),
+                "prompt_override": "",
+            }
+        )
+    if not rules:
+        for accessory_id, expected_count in required_counts.items():
+            source = source_by_accessory.get(accessory_id, {})
+            label = bounded_text(labels.get(accessory_id) or source.get("native_label") or source.get("label") or accessory_id, 160)
+            display_label = (
+                compact_english_accessory_name(source.get("display_label"))
+                or compact_english_accessory_name(source.get("english_name"))
+                or compact_english_accessory_name(labels.get(accessory_id))
+                or label
+            )
+            rules.append(
+                {
+                    "id": f"analysis:{accessory_id}",
+                    "source": "data_analysis",
+                    "task_type": "data_analysis_comparison",
+                    "label": label,
+                    "display_label": bounded_text(display_label, 160),
+                    "native_label": label,
+                    "material_type": str(source.get("material_type") or ""),
+                    "visual_prompt": str(source.get("visual_prompt") or label),
+                    "expected_present": True,
+                    "expected_count": max(1, min(99, int(expected_count or 1))),
+                    "prompt_override": "",
+                }
+            )
+    return rules
+
+
+def compare_ai_and_locateanything(record: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]:
+    ai_result = record.get("ai_detection_result") if isinstance(record.get("ai_detection_result"), dict) else {}
+    required_scope = data_analysis_record_required_scope(record)
+    if not required_scope:
+        rule = ai_result.get("rule") if isinstance(ai_result.get("rule"), dict) else {}
+        ai_counts = {str(k): int(v) for k, v in (rule.get("counts") or {}).items() if type(v) is int}
+        locate_counts: dict[str, int] = {}
+        differences = []
+        for item in run.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or "").replace("analysis:", "", 1)
+            locate_count = int(item.get("box_count") or 0)
+            locate_counts[item_id] = locate_count
+            ai_count = int(ai_counts.get(item_id, 0))
+            if ai_count != locate_count:
+                differences.append(
+                    {
+                        "accessory_id": item_id,
+                        "label": item.get("label") or item_id,
+                        "ai_count": ai_count,
+                        "locateanything_count": locate_count,
+                        "delta": locate_count - ai_count,
+                        "locate_status": item.get("status") or "",
+                    }
+                )
+        ai_passed = bool(ai_result.get("passed"))
+        locate_passed = bool(run.get("overall_pass"))
+        status = "same" if ai_passed == locate_passed and not differences and run.get("status") == "completed" else "different"
+        if run.get("status") != "completed":
+            status = str(run.get("status") or "failed")
+        return {
+            "status": status,
+            "ai_passed": ai_passed,
+            "locateanything_passed": locate_passed,
+            "ai_counts": ai_counts,
+            "locateanything_counts": locate_counts,
+            "difference_count": len(differences),
+            "differences": differences[:20],
+            "latest_run_id": run.get("run_id") or "",
+            "updated_at": int(time.time()),
+        }
+    ai_counts: dict[str, int] = {
+        accessory_id: data_analysis_count_for_scope_item(record, scope_item)
+        for accessory_id, scope_item in required_scope.items()
+    }
+    required_counts: dict[str, int] = {
+        accessory_id: int(scope_item.get("required_count") or 1)
+        for accessory_id, scope_item in required_scope.items()
+    }
+    locate_counts: dict[str, int] = {}
+    locate_item_by_id: dict[str, dict[str, Any]] = {}
+    differences = []
+    for item in run.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or "").replace("analysis:", "", 1)
+        if required_scope and item_id not in required_scope:
+            continue
+        locate_count = int(item.get("box_count") or 0)
+        locate_counts[item_id] = locate_count
+        locate_item_by_id[item_id] = item
+    for item_id, scope_item in required_scope.items():
+        locate_counts.setdefault(item_id, 0)
+        ai_count = int(ai_counts.get(item_id, 0))
+        locate_count = int(locate_counts.get(item_id, 0))
+        if ai_count != locate_count:
+            differences.append(
+                {
+                    "accessory_id": item_id,
+                    "label": (locate_item_by_id.get(item_id) or {}).get("label") or scope_item.get("label") or item_id,
+                    "required_count": int(required_counts.get(item_id, 1)),
+                    "ai_count": ai_count,
+                    "locateanything_count": locate_count,
+                    "delta": locate_count - ai_count,
+                    "locate_status": (locate_item_by_id.get(item_id) or {}).get("status") or "",
+                }
+            )
+    ai_passed = all(int(ai_counts.get(item_id, 0)) == int(required_counts.get(item_id, 1)) for item_id in required_scope)
+    locate_passed = all(int(locate_counts.get(item_id, 0)) == int(required_counts.get(item_id, 1)) for item_id in required_scope)
+    status = "same" if ai_passed == locate_passed and not differences and run.get("status") == "completed" else "different"
+    if run.get("status") != "completed":
+        status = str(run.get("status") or "failed")
+    return {
+        "status": status,
+        "ai_passed": ai_passed,
+        "locateanything_passed": locate_passed,
+        "ai_counts": ai_counts,
+        "locateanything_counts": locate_counts,
+        "required_counts": required_counts,
+        "required_accessory_ids": list(required_scope.keys()),
+        "required_accessories": [
+            {
+                "accessory_id": item_id,
+                "label": scope_item.get("label") or item_id,
+                "required_count": int(required_counts.get(item_id, 1)),
+            }
+            for item_id, scope_item in required_scope.items()
+        ],
+        "difference_count": len(differences),
+        "differences": differences[:20],
+        "latest_run_id": run.get("run_id") or "",
+        "updated_at": int(time.time()),
+    }
+
+
+def run_locateanything_for_analysis_record(record: dict[str, Any], request: DataAnalysisLocateRequest | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    request = request or DataAnalysisLocateRequest()
+    require_locateanything_endpoint_override(request.endpoint_url)
+    settings = locateanything_settings_from_request(
+        endpoint_url=request.endpoint_url,
+        generation_mode="fast",
+        max_new_tokens=request.max_new_tokens,
+        max_side=request.max_side,
+        timeout_seconds=request.timeout_seconds,
+    )
+    settings["generation_mode"] = "fast"
+    worker_route = locateanything_should_use_worker(settings)
+    configured = bool(settings.get("enabled") and settings.get("endpoint_url")) or worker_route
+    run_id = f"la_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    rules = data_analysis_locate_rules(record)
+    required_counts = {
+        str(rule.get("id") or "").replace("analysis:", "", 1): int(rule.get("expected_count") or 0)
+        for rule in rules
+        if str(rule.get("id") or "").startswith("analysis:")
+    }
+    image_path = data_analysis_record_image_path(record)
+    image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        raise HTTPException(status_code=400, detail="Analysis record image could not be decoded")
+    source_height, source_width = image_bgr.shape[:2]
+    source_size = {"width": int(source_width), "height": int(source_height)}
+    sent_bgr = resize_bgr_max_side(image_bgr, int(settings["max_side"]))
+    sent_height, sent_width = sent_bgr.shape[:2]
+    sent_size = {"width": int(sent_width), "height": int(sent_height)}
+    base_run: dict[str, Any] = {
+        "run_id": run_id,
+        "created_at": int(time.time()),
+        "status": "failed",
+        "configured": configured,
+        "rules_count": len(rules),
+        "overall_pass": False,
+        "decision": "fail",
+        "items": [
+            evaluate_locateanything_rule(rule, [], "LocateAnything endpoint is not configured or enabled.")
+            for rule in rules
+        ],
+        "required_accessory_ids": list(required_counts.keys()),
+        "required_counts": required_counts,
+        "source_image_size": source_size,
+        "sent_image_size": sent_size,
+        "latency_ms": 0,
+        "box_count": 0,
+        "overlay_url": "",
+        "diagnostic_url": "",
+        "error": "",
+    }
+    if not configured:
+        base_run["status"] = "unavailable"
+        base_run["error"] = "LocateAnything endpoint is not configured or enabled."
+        base_run["diagnostic_url"] = write_locateanything_diagnostic(run_id, base_run)
+        return base_run, compare_ai_and_locateanything(record, base_run)
+    ok, encoded = cv2.imencode(".jpg", sent_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), LOCATEANYTHING_PROXY_IMAGE_QUALITY])
+    if not ok:
+        base_run["error"] = "Could not encode image for LocateAnything endpoint."
+        base_run["diagnostic_url"] = write_locateanything_diagnostic(run_id, base_run)
+        return base_run, compare_ai_and_locateanything(record, base_run)
+
+    started = time.monotonic()
+    encoded_bytes = encoded.tobytes()
+    result_items: list[dict[str, Any]] = []
+    all_boxes: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    batch_prompt = locateanything_batch_prompt_for_rules(rules) if len(rules) > 1 else ""
+    batch_raw_answer = ""
+    batch_error = ""
+    batch_raw_boxes: list[dict[str, Any]] = []
+    batch_latency_ms = 0
+    batch_model_latency_ms = 0
+    if batch_prompt:
+        batch_started = time.monotonic()
+        try:
+            if worker_route:
+                batch_payload = post_windows_worker_locateanything_endpoint(
+                    encoded_bytes,
+                    prompt=batch_prompt,
+                    generation_mode="fast",
+                    max_new_tokens=int(settings["max_new_tokens"]),
+                    timeout_seconds=float(settings["timeout_seconds"]),
+                )
+            else:
+                batch_payload = post_locateanything_endpoint(
+                    str(settings["endpoint_url"]),
+                    encoded_bytes,
+                    prompt=batch_prompt,
+                    generation_mode="fast",
+                    max_new_tokens=int(settings["max_new_tokens"]),
+                    timeout_seconds=float(settings["timeout_seconds"]),
+                )
+            batch_raw_answer = extract_locateanything_answer(batch_payload)
+            try:
+                batch_model_latency_ms = int(batch_payload.get("latency_ms") or 0)
+            except (TypeError, ValueError, AttributeError):
+                batch_model_latency_ms = 0
+            batch_raw_boxes = parse_locateanything_boxes(batch_raw_answer, source_width, source_height)
+        except Exception as exc:
+            batch_error = f"LocateAnything endpoint unavailable: {bounded_text(str(exc), 220)}"
+        batch_latency_ms = int((time.monotonic() - batch_started) * 1000)
+    for rule in rules:
+        prompt = batch_prompt or locateanything_prompt_for_rule(rule)
+        raw_answer = ""
+        error = ""
+        item_started = time.monotonic()
+        item_latency_ms = 0
+        model_latency_ms = 0
+        raw_boxes: list[dict[str, Any]] = []
+        filtered_out_boxes: list[dict[str, Any]] = []
+        boxes: list[dict[str, Any]] = []
+        if batch_prompt:
+            raw_answer = batch_raw_answer
+            error = batch_error
+            item_latency_ms = batch_latency_ms
+            model_latency_ms = batch_model_latency_ms
+            raw_boxes = batch_raw_boxes
+            if not error:
+                final_boxes = locateanything_final_rule_boxes(rule, raw_boxes, require_ref_match=True)
+                boxes = final_boxes["boxes"]
+                filtered_out_boxes = final_boxes["filtered_out_boxes"]
+        else:
+            try:
+                if worker_route:
+                    endpoint_payload = post_windows_worker_locateanything_endpoint(
+                        encoded_bytes,
+                        prompt=prompt,
+                        generation_mode="fast",
+                        max_new_tokens=int(settings["max_new_tokens"]),
+                        timeout_seconds=float(settings["timeout_seconds"]),
+                    )
+                else:
+                    endpoint_payload = post_locateanything_endpoint(
+                        str(settings["endpoint_url"]),
+                        encoded_bytes,
+                        prompt=prompt,
+                        generation_mode="fast",
+                        max_new_tokens=int(settings["max_new_tokens"]),
+                        timeout_seconds=float(settings["timeout_seconds"]),
+                    )
+                raw_answer = extract_locateanything_answer(endpoint_payload)
+                item_latency_ms = int((time.monotonic() - item_started) * 1000)
+                try:
+                    model_latency_ms = int(endpoint_payload.get("latency_ms") or 0)
+                except (TypeError, ValueError, AttributeError):
+                    model_latency_ms = 0
+                raw_boxes = parse_locateanything_boxes(raw_answer, source_width, source_height)
+                final_boxes = locateanything_final_rule_boxes(rule, raw_boxes)
+                boxes = final_boxes["boxes"]
+                filtered_out_boxes = final_boxes["filtered_out_boxes"]
+            except Exception as exc:
+                item_latency_ms = int((time.monotonic() - item_started) * 1000)
+                error = f"LocateAnything endpoint unavailable: {bounded_text(str(exc), 220)}"
+        item_boxes: list[dict[str, Any]] = []
+        for box in boxes:
+            next_box = dict(box)
+            next_box["index"] = len(all_boxes) + 1
+            next_box["rule_id"] = rule["id"]
+            next_box["label"] = rule["display_label"]
+            next_box["display_label"] = rule["display_label"]
+            next_box["english_name"] = rule["display_label"]
+            next_box["native_label"] = rule.get("native_label") or rule.get("label") or rule["display_label"]
+            item_boxes.append(next_box)
+            all_boxes.append(next_box)
+        evaluated = evaluate_locateanything_rule(rule, item_boxes, error, raw_answer)
+        evaluated["prompt"] = prompt
+        evaluated["raw_answer_snippet"] = bounded_text(raw_answer, 260)
+        evaluated["raw_box_count"] = len(raw_boxes)
+        evaluated["filtered_out_box_count"] = len(filtered_out_boxes)
+        evaluated["latency_ms"] = item_latency_ms
+        evaluated["batched"] = bool(batch_prompt)
+        if model_latency_ms:
+            evaluated["model_latency_ms"] = model_latency_ms
+        result_items.append(evaluated)
+        diagnostics.append(
+            {
+                "id": rule["id"],
+                "label": rule["display_label"],
+                "prompt": prompt,
+                "raw_answer_snippet": bounded_text(raw_answer, 500),
+                "error": error,
+                "latency_ms": item_latency_ms,
+                "model_latency_ms": model_latency_ms,
+                "batched": bool(batch_prompt),
+                "raw_box_count": len(raw_boxes),
+                "box_count": len(item_boxes),
+                "filtered_out_box_count": len(filtered_out_boxes),
+                "filtered_out_boxes": filtered_out_boxes[:20],
+            }
+        )
+
+    latency_ms = int((time.monotonic() - started) * 1000)
+    overall_pass = bool(result_items) and all(item["passed"] for item in result_items)
+    overlay_url = draw_locateanything_overlay(image_bgr, all_boxes, run_id, "Data analysis comparison") if all_boxes else ""
+    run = {
+        **base_run,
+        "status": "completed" if not any(item.get("error") for item in result_items) else "failed",
+        "overall_pass": overall_pass,
+        "decision": "pass" if overall_pass else "fail",
+        "items": result_items,
+        "latency_ms": latency_ms,
+        "batched": bool(batch_prompt),
+        "batch_target_count": len(rules) if batch_prompt else 0,
+        "box_count": len(all_boxes),
+        "overlay_url": overlay_url,
+        "diagnostics": diagnostics,
+        "error": "" if not any(item.get("error") for item in result_items) else "One or more LocateAnything requests failed.",
+    }
+    run["diagnostic_url"] = write_locateanything_diagnostic(run_id, run)
+    return run, compare_ai_and_locateanything(record, run)
+
+
+def append_data_analysis_locate_run(
+    record_id: str,
+    user: dict[str, Any],
+    run: dict[str, Any],
+    comparison: dict[str, Any],
+) -> dict[str, Any]:
+    with _data_analysis_store_lock:
+        records = load_data_analysis_records()
+        for index, record in enumerate(records):
+            if str(record.get("record_id") or "") != record_id:
+                continue
+            require_record_access(record, user, write=True)
+            runs = [item for item in record.get("locateanything_runs", []) if isinstance(item, dict)]
+            record["locateanything_runs"] = [*runs, run][-20:]
+            record["comparison_summary"] = comparison
+            record["updated_at"] = int(time.time())
+            records[index] = record
+            save_data_analysis_records(records)
+            return record
+    raise HTTPException(status_code=404, detail="Analysis record not found")
+
+
 def ai_detection_settings() -> dict[str, Any]:
     local = load_ai_local_config()
     provider = os.environ.get("INSPECTION_AI_PROVIDER", "").strip().lower() or str(local.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
     model = os.environ.get("INSPECTION_AI_MODEL", "").strip() or str(local.get("model") or AI_DEFAULT_MODEL).strip() or AI_DEFAULT_MODEL
     base_url = os.environ.get("INSPECTION_AI_BASE_URL", "").strip() or str(local.get("base_url") or default_ai_base_url(provider)).strip() or default_ai_base_url(provider)
+    proxy_url, proxy_source_name, proxy_auto_local = ai_proxy_url_from_config(local, provider)
     timeout_raw = os.environ.get("INSPECTION_AI_TIMEOUT_SECONDS", "").strip() or local.get("timeout_seconds", AI_DEFAULT_TIMEOUT_SECONDS)
     try:
         timeout = validate_ai_timeout(timeout_raw)
@@ -1573,6 +6596,12 @@ def ai_detection_settings() -> dict[str, Any]:
         "masked_key": mask_secret(api_key),
         "api_key": api_key,
         "base_url": public_ai_base_url(base_url),
+        "proxy_configured": bool(proxy_url),
+        "proxy_url": masked_url_for_status(proxy_url),
+        "proxy_source_name": proxy_source_name,
+        "proxy_auto_local": bool(proxy_auto_local),
+        "auto_local_proxy_enabled": bool(local.get("auto_local_proxy", True)) and env_flag_enabled(AI_AUTO_LOCAL_PROXY_ENV, True),
+        "proxy_url_raw": proxy_url,
         "status": status,
         "message": message,
     }
@@ -1580,10 +6609,43 @@ def ai_detection_settings() -> dict[str, Any]:
 
 def public_ai_detection_status() -> dict[str, Any]:
     settings = ai_detection_settings()
-    return {key: value for key, value in settings.items() if key != "api_key"}
+    return {key: value for key, value in settings.items() if key not in {"api_key", "proxy_url_raw"}}
 
 
 class AiProviderError(RuntimeError):
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        usage_metadata: dict[str, Any] | None = None,
+        failed_usage_metadata: list[dict[str, Any]] | None = None,
+        attempts: int | None = None,
+        retry_count: int | None = None,
+        previous_errors: list[str] | None = None,
+        http_status: int | None = None,
+        fallback_model: str = "",
+        fallback_reason: str = "",
+    ):
+        super().__init__(message)
+        self.usage_metadata = usage_metadata or {}
+        self.failed_usage_metadata = failed_usage_metadata or []
+        self.attempts = attempts
+        self.retry_count = retry_count
+        self.previous_errors = previous_errors or []
+        self.http_status = http_status
+        self.fallback_model = fallback_model
+        self.fallback_reason = fallback_reason
+
+
+class AiProviderNonRetryableError(AiProviderError):
+    pass
+
+
+class AiProviderConfigError(AiProviderNonRetryableError):
+    pass
+
+
+class AiProviderAuthError(AiProviderNonRetryableError):
     pass
 
 
@@ -1595,31 +6657,69 @@ class AiProviderOverloaded(AiProviderError):
     pass
 
 
+def provider_http_error(message_prefix: str, exc: urllib.error.HTTPError) -> AiProviderError:
+    detail = exc.read().decode("utf-8", errors="replace")[:240]
+    error_text = f"{message_prefix}: HTTP {exc.code} {bounded_text(detail, 180)}"
+    if exc.code in {401, 403}:
+        return AiProviderAuthError(error_text, http_status=exc.code)
+    if exc.code in {429, 503}:
+        return AiProviderOverloaded(f"AI provider overloaded: HTTP {exc.code} {bounded_text(detail, 180)}", http_status=exc.code)
+    if exc.code in {400, 404}:
+        return AiProviderConfigError(error_text, http_status=exc.code)
+    if exc.code in {408, 500, 502, 504}:
+        return AiProviderError(error_text, http_status=exc.code)
+    return AiProviderNonRetryableError(error_text, http_status=exc.code)
+
+
+def normalize_ai_json_root(parsed: Any) -> dict[str, Any] | None:
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        dict_items = [item for item in parsed if isinstance(item, dict)]
+        if dict_items and all("accessory_id" in item for item in dict_items):
+            return {"detections": dict_items, "rule": {"counts": {}}}
+        if len(dict_items) == 1 and len(parsed) == 1:
+            return dict_items[0]
+    return None
+
+
+def ai_json_text_candidates(text: str) -> list[str]:
+    raw = str(text or "").strip()
+    if not raw:
+        return []
+    candidates = [raw]
+    for match in re.finditer(r"```(?:json|JSON)?\s*([\s\S]*?)\s*```", raw):
+        fenced = match.group(1).strip()
+        if fenced:
+            candidates.insert(0, fenced)
+    if raw.startswith("```"):
+        stripped = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", raw)
+        stripped = re.sub(r"\s*```$", "", stripped).strip()
+        if stripped and stripped not in candidates:
+            candidates.insert(0, stripped)
+    return candidates
+
+
 def parse_ai_json_object(text: str) -> dict[str, Any]:
     decoder = json.JSONDecoder()
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict):
-            return parsed
-    except json.JSONDecodeError:
-        pass
-    start = text.find("{")
-    if start >= 0:
+    for candidate in ai_json_text_candidates(text):
         try:
-            parsed, _ = decoder.raw_decode(text[start:])
-            if isinstance(parsed, dict):
-                return parsed
+            normalized = normalize_ai_json_root(json.loads(candidate))
+            if normalized is not None:
+                return normalized
         except json.JSONDecodeError:
             pass
-    end = text.rfind("}")
-    if start >= 0 and end > start:
-        try:
-            parsed = json.loads(text[start : end + 1])
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-    raise AiProviderError("AI provider did not return a JSON object")
+        for index, char in enumerate(candidate):
+            if char not in "{[":
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(candidate[index:])
+            except json.JSONDecodeError:
+                continue
+            normalized = normalize_ai_json_root(parsed)
+            if normalized is not None:
+                return normalized
+    raise AiProviderError("AI provider did not return a parseable JSON object")
 
 
 class OpenAICompatibleAiProvider:
@@ -1628,7 +6728,7 @@ class OpenAICompatibleAiProvider:
 
     def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], *, max_tokens: int = 1400) -> tuple[dict[str, Any], int]:
         if not self.settings.get("configured"):
-            raise AiProviderError(str(self.settings.get("message") or "AI provider is not configured"))
+            raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
         payload = {
             "model": self.settings["model"],
             "temperature": 0,
@@ -1650,10 +6750,12 @@ class OpenAICompatibleAiProvider:
         )
         start = time.monotonic()
         try:
-            with urllib.request.urlopen(request, timeout=float(self.settings["timeout_seconds"])) as response:
+            with ai_urlopen(request, self.settings, timeout=float(self.settings["timeout_seconds"])) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except (TimeoutError, socket.timeout) as exc:
             raise AiProviderTimeout("AI provider timed out") from exc
+        except urllib.error.HTTPError as exc:
+            raise provider_http_error("AI provider request failed", exc) from exc
         except urllib.error.URLError as exc:
             if isinstance(getattr(exc, "reason", None), socket.timeout):
                 raise AiProviderTimeout("AI provider timed out") from exc
@@ -1681,6 +6783,7 @@ class GeminiAiProvider:
     def __init__(self, settings: dict[str, Any]):
         self.settings = settings
         self.last_usage_metadata: dict[str, Any] = {}
+        self.last_raw_text = ""
 
     def content_parts(self, user_content: list[dict[str, Any]]) -> list[dict[str, Any]]:
         parts: list[dict[str, Any]] = []
@@ -1702,7 +6805,7 @@ class GeminiAiProvider:
         ttl_seconds: int = AI_PROFILE_CACHE_TTL_SECONDS,
     ) -> dict[str, Any]:
         if not self.settings.get("configured"):
-            raise AiProviderError(str(self.settings.get("message") or "AI provider is not configured"))
+            raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
         model_name = str(self.settings["model"]).strip()
         model = quote(model_name, safe="-_.")
         payload = {
@@ -1724,7 +6827,7 @@ class GeminiAiProvider:
         )
         start = time.monotonic()
         try:
-            with urllib.request.urlopen(request, timeout=float(self.settings["timeout_seconds"])) as response:
+            with ai_urlopen(request, self.settings, timeout=float(self.settings["timeout_seconds"])) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except (TimeoutError, socket.timeout) as exc:
             raise AiProviderTimeout("AI cache provider timed out") from exc
@@ -1759,7 +6862,9 @@ class GeminiAiProvider:
         cached_content: str = "",
     ) -> tuple[dict[str, Any], int]:
         if not self.settings.get("configured"):
-            raise AiProviderError(str(self.settings.get("message") or "AI provider is not configured"))
+            raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
+        self.last_usage_metadata = {}
+        self.last_raw_text = ""
         parts = self.content_parts(user_content)
         payload = {
             "contents": [{"role": "user", "parts": parts}],
@@ -1794,15 +6899,12 @@ class GeminiAiProvider:
         )
         start = time.monotonic()
         try:
-            with urllib.request.urlopen(request, timeout=float(self.settings["timeout_seconds"])) as response:
+            with ai_urlopen(request, self.settings, timeout=float(self.settings["timeout_seconds"])) as response:
                 body = response.read().decode("utf-8", errors="replace")
         except (TimeoutError, socket.timeout) as exc:
             raise AiProviderTimeout("AI provider timed out") from exc
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:240]
-            if exc.code in {429, 503}:
-                raise AiProviderOverloaded(f"AI provider overloaded: HTTP {exc.code} {bounded_text(detail, 180)}") from exc
-            raise AiProviderError(f"AI provider request failed: HTTP {exc.code} {bounded_text(detail, 180)}") from exc
+            raise provider_http_error("AI provider request failed", exc) from exc
         except urllib.error.URLError as exc:
             if isinstance(getattr(exc, "reason", None), socket.timeout):
                 raise AiProviderTimeout("AI provider timed out") from exc
@@ -1810,19 +6912,115 @@ class GeminiAiProvider:
         latency_ms = int((time.monotonic() - start) * 1000)
         try:
             response_json = json.loads(body)
+            self.last_usage_metadata = response_json.get("usageMetadata") if isinstance(response_json.get("usageMetadata"), dict) else {}
             parts = response_json["candidates"][0]["content"]["parts"]
             content = "\n".join(str(part.get("text", "")) for part in parts if isinstance(part, dict))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AiProviderError("AI provider response shape was not recognized") from exc
-        self.last_usage_metadata = response_json.get("usageMetadata") if isinstance(response_json.get("usageMetadata"), dict) else {}
+        self.last_raw_text = str(content or "")
         return parse_ai_json_object(str(content or "")), latency_ms
+
+    def generate_image(
+        self,
+        prompt: str,
+        user_content: list[dict[str, Any]],
+        *,
+        model: str,
+    ) -> dict[str, Any]:
+        if not self.settings.get("configured"):
+            raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
+        self.last_usage_metadata = {}
+        self.last_raw_text = ""
+        model_name = str(model or self.settings.get("model") or "").strip()
+        if not model_name:
+            raise AiProviderConfigError("Gemini image model is not configured")
+        parts = self.content_parts([{"type": "text", "text": prompt}, *user_content])
+        payload = {"contents": [{"role": "user", "parts": parts}]}
+        base_url = str(self.settings["base_url"]).rstrip("/")
+        request = urllib.request.Request(
+            f"{base_url}/models/{quote(model_name, safe='-_.')}:generateContent",
+            data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.settings["api_key"],
+            },
+            method="POST",
+        )
+        start = time.monotonic()
+        try:
+            with ai_urlopen(request, self.settings, timeout=float(self.settings["timeout_seconds"])) as response:
+                body = response.read().decode("utf-8", errors="replace")
+        except (TimeoutError, socket.timeout) as exc:
+            raise AiProviderTimeout("Gemini image provider timed out") from exc
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            proxy_used = bool(str(self.settings.get("proxy_url_raw") or self.settings.get("proxy_url") or "").strip())
+            proxy_source = str(self.settings.get("proxy_source_name") or "proxy").strip()
+            if exc.code == 400 and "User location is not supported" in detail:
+                if proxy_used:
+                    raise AiProviderConfigError(
+                        f"Gemini image provider is still region-blocked while using proxy source {proxy_source}; verify server-side proxy routing."
+                    ) from exc
+                raise AiProviderConfigError(
+                    "Gemini image provider is region-blocked on direct egress; configure AI proxy or enable the server-local Gemini proxy."
+                ) from exc
+            error_text = f"Gemini image provider request failed: HTTP {exc.code} {bounded_text(detail, 180)}"
+            if exc.code in {401, 403}:
+                raise AiProviderAuthError(error_text, http_status=exc.code) from exc
+            if exc.code in {429, 503}:
+                raise AiProviderOverloaded(f"Gemini image provider overloaded: HTTP {exc.code} {bounded_text(detail, 180)}", http_status=exc.code) from exc
+            if exc.code in {400, 404}:
+                raise AiProviderConfigError(error_text, http_status=exc.code) from exc
+            raise AiProviderError(error_text, http_status=exc.code) from exc
+        except urllib.error.URLError as exc:
+            if isinstance(getattr(exc, "reason", None), socket.timeout):
+                raise AiProviderTimeout("Gemini image provider timed out") from exc
+            if str(self.settings.get("proxy_url_raw") or self.settings.get("proxy_url") or "").strip():
+                proxy_source = str(self.settings.get("proxy_source_name") or "proxy").strip()
+                raise AiProviderError(f"Gemini image provider proxy/connectivity failed via {proxy_source}: {bounded_text(exc, 180)}") from exc
+            raise AiProviderError(f"Gemini image provider request failed: {bounded_text(exc, 180)}") from exc
+        latency_ms = int((time.monotonic() - start) * 1000)
+        try:
+            response_json = json.loads(body)
+            self.last_usage_metadata = response_json.get("usageMetadata") if isinstance(response_json.get("usageMetadata"), dict) else {}
+            parts = response_json["candidates"][0]["content"]["parts"]
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise AiProviderError("Gemini image provider response shape was not recognized") from exc
+        text_parts: list[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            if part.get("text"):
+                text_parts.append(str(part.get("text") or ""))
+                continue
+            inline = part.get("inlineData") if isinstance(part.get("inlineData"), dict) else part.get("inline_data")
+            if not isinstance(inline, dict):
+                continue
+            image_bytes = decode_b64_image(inline.get("data"))
+            if image_bytes:
+                self.last_raw_text = "\n".join(text_parts)
+                return {
+                    "bytes": image_bytes,
+                    "mime_type": str(inline.get("mimeType") or inline.get("mime_type") or "image/png"),
+                    "latency_ms": latency_ms,
+                    "model": model_name,
+                    "usage_metadata": self.last_usage_metadata,
+                    "text": self.last_raw_text,
+                    "proxy_used": bool(str(self.settings.get("proxy_url_raw") or self.settings.get("proxy_url") or "").strip()),
+                    "proxy_source_name": str(self.settings.get("proxy_source_name") or ""),
+                    "proxy_url": masked_url_for_status(self.settings.get("proxy_url_raw") or self.settings.get("proxy_url") or ""),
+                    "proxy_auto_local": bool(self.settings.get("proxy_auto_local")),
+                }
+        self.last_raw_text = "\n".join(text_parts)
+        raise AiProviderError("Gemini image provider did not return inline image data")
 
 
 def ai_provider_from_settings(settings: dict[str, Any]) -> OpenAICompatibleAiProvider | GeminiAiProvider:
-    if settings["provider"] == "gemini":
+    provider = str(settings.get("provider") or "").strip()
+    if provider == "gemini":
         return GeminiAiProvider(settings)
-    if settings["provider"] not in {"gemini", "openai", "openai_compatible"}:
-        raise AiProviderError(settings["message"])
+    if provider not in {"openai", "openai_compatible"}:
+        raise AiProviderConfigError(str(settings.get("message") or f"Unsupported AI provider: {provider or 'missing'}"))
     return OpenAICompatibleAiProvider(settings)
 
 
@@ -1832,7 +7030,7 @@ def ai_provider() -> OpenAICompatibleAiProvider | GeminiAiProvider:
 
 def ai_settings_match_runtime(settings: dict[str, Any]) -> bool:
     runtime = ai_detection_settings()
-    for key in ("provider", "model", "base_url", "api_key", "timeout_seconds"):
+    for key in ("provider", "model", "base_url", "api_key", "timeout_seconds", "proxy_url_raw"):
         if settings.get(key) != runtime.get(key):
             return False
     return True
@@ -1844,6 +7042,68 @@ def require_ai_json_object(parsed: Any) -> dict[str, Any]:
     return parsed
 
 
+def provider_error_is_retryable(exc: AiProviderError) -> bool:
+    if isinstance(exc, AiProviderNonRetryableError):
+        return False
+    status = getattr(exc, "http_status", None)
+    if isinstance(exc, AiProviderOverloaded):
+        return status != 429 and "HTTP 429" not in str(exc)
+    if isinstance(exc, AiProviderTimeout):
+        return True
+    text = str(exc).lower()
+    non_retryable_markers = (
+        "not configured",
+        "missing ai provider api key",
+        "missing api key",
+        "unsupported ai provider",
+        "invalid provider",
+        "http 400",
+        "http 401",
+        "http 403",
+        "http 404",
+        "http 429",
+    )
+    return not any(marker in text for marker in non_retryable_markers)
+
+
+def provider_error_needs_repair_prompt(exc: AiProviderError) -> bool:
+    text = str(exc).lower()
+    return "json" in text or "response shape" in text or "non-object" in text
+
+
+def provider_failure_usage_metadata(
+    provider: OpenAICompatibleAiProvider | GeminiAiProvider | None,
+    exc: AiProviderError,
+) -> dict[str, Any]:
+    if isinstance(provider, GeminiAiProvider) and provider.last_usage_metadata:
+        return dict(provider.last_usage_metadata)
+    return dict(getattr(exc, "usage_metadata", {}) or {})
+
+
+def annotate_provider_failure(
+    exc: AiProviderError,
+    *,
+    attempt: int,
+    errors: list[str],
+    failed_usage_metadata: list[dict[str, Any]],
+    usage_metadata: dict[str, Any] | None = None,
+    fallback_model: str = "",
+    fallback_reason: str = "",
+) -> AiProviderError:
+    if usage_metadata and not exc.usage_metadata:
+        exc.usage_metadata = usage_metadata
+    if failed_usage_metadata:
+        exc.failed_usage_metadata = failed_usage_metadata
+    exc.attempts = attempt
+    exc.retry_count = max(0, attempt - 1)
+    exc.previous_errors = errors[-2:]
+    if fallback_model:
+        exc.fallback_model = fallback_model
+    if fallback_reason:
+        exc.fallback_reason = fallback_reason
+    return exc
+
+
 def generate_provider_json_with_fallback(
     settings: dict[str, Any],
     system_prompt: str,
@@ -1851,66 +7111,100 @@ def generate_provider_json_with_fallback(
     *,
     max_tokens: int,
     cached_content: str = "",
+    max_attempts: int | None = None,
 ) -> tuple[dict[str, Any], int, dict[str, Any]]:
     attempts = AI_PROVIDER_MAX_ATTEMPTS
+    if max_attempts is not None:
+        attempts = max(1, min(AI_PROVIDER_MAX_ATTEMPTS, int(max_attempts)))
     total_latency_ms = 0
     errors: list[str] = []
+    failed_usage_metadata: list[dict[str, Any]] = []
+    attempt_settings = dict(settings)
+    repair_next_attempt = False
+    fallback_model = ""
+    fallback_reason = ""
     for attempt in range(1, attempts + 1):
+        attempt_user_content = user_content
+        if repair_next_attempt:
+            attempt_user_content = [
+                *user_content,
+                {
+                    "type": "text",
+                    "text": (
+                        "RETRY_REPAIR: the previous provider response was not a valid JSON object. "
+                        "Return only the compact JSON object matching the schema; no markdown, prose, or code fences."
+                    ),
+                },
+            ]
+        provider: OpenAICompatibleAiProvider | GeminiAiProvider | None = None
         try:
-            provider = ai_provider() if ai_settings_match_runtime(settings) else ai_provider_from_settings(settings)
+            provider = ai_provider() if ai_settings_match_runtime(attempt_settings) else ai_provider_from_settings(attempt_settings)
             if isinstance(provider, GeminiAiProvider):
                 parsed, latency_ms = provider.generate_json(
                     system_prompt,
-                    user_content,
+                    attempt_user_content,
                     max_tokens=max_tokens,
                     cached_content=cached_content,
                 )
                 usage_metadata = dict(provider.last_usage_metadata)
             else:
-                parsed, latency_ms = provider.generate_json(system_prompt, user_content, max_tokens=max_tokens)
+                parsed, latency_ms = provider.generate_json(system_prompt, attempt_user_content, max_tokens=max_tokens)
                 usage_metadata = {}
             parsed = require_ai_json_object(parsed)
             total_latency_ms += latency_ms
             retry_meta = {"attempts": attempt, "retry_count": attempt - 1}
+            if fallback_model:
+                retry_meta["fallback_model"] = fallback_model
+            if fallback_reason:
+                retry_meta["fallback_reason"] = fallback_reason
             if usage_metadata:
                 retry_meta["usage_metadata"] = usage_metadata
+            if failed_usage_metadata:
+                retry_meta["failed_usage_metadata"] = failed_usage_metadata
             if errors:
                 retry_meta["previous_errors"] = errors[-2:]
             return parsed, total_latency_ms, retry_meta
-        except AiProviderOverloaded as exc:
-            error_text = str(exc)
-            errors.append(bounded_text(error_text, 180))
-            if "HTTP 429" in error_text:
-                raise
-            if settings.get("provider") == "gemini" and settings.get("model") != "gemini-2.5-flash-lite":
-                fallback_settings = dict(settings)
-                fallback_settings["model"] = "gemini-2.5-flash-lite"
-                fallback_provider = ai_provider_from_settings(fallback_settings)
-                if isinstance(fallback_provider, GeminiAiProvider):
-                    parsed, latency_ms = fallback_provider.generate_json(system_prompt, user_content, max_tokens=max_tokens)
-                else:
-                    parsed, latency_ms = fallback_provider.generate_json(system_prompt, user_content, max_tokens=max_tokens)
-                parsed = require_ai_json_object(parsed)
-                total_latency_ms += latency_ms
-                return parsed, total_latency_ms, {
-                    "attempts": attempt,
-                    "retry_count": attempt - 1,
-                    "fallback_model": fallback_settings["model"],
-                    "fallback_reason": "provider_overloaded",
-                    "previous_errors": errors[-2:],
-                }
-            if attempt >= attempts:
-                raise
-        except AiProviderTimeout as exc:
-            errors.append(bounded_text(str(exc), 180))
-            raise
         except AiProviderError as exc:
+            usage_metadata = provider_failure_usage_metadata(provider, exc)
+            if usage_metadata:
+                failed_usage_metadata.append(usage_metadata)
             errors.append(bounded_text(str(exc), 180))
-            if attempt >= attempts:
+            retryable = provider_error_is_retryable(exc)
+            can_retry = retryable and attempt < attempts
+            if (
+                can_retry
+                and isinstance(exc, AiProviderOverloaded)
+                and (getattr(exc, "http_status", None) == 503 or "HTTP 503" in str(exc))
+                and attempt_settings.get("provider") == "gemini"
+                and attempt_settings.get("model") != "gemini-2.5-flash-lite"
+                and not cached_content
+            ):
+                fallback_model = "gemini-2.5-flash-lite"
+                fallback_reason = "provider_overloaded"
+                attempt_settings = {**attempt_settings, "model": fallback_model}
+            if not can_retry:
+                annotate_provider_failure(
+                    exc,
+                    attempt=attempt,
+                    errors=errors,
+                    failed_usage_metadata=failed_usage_metadata,
+                    usage_metadata=usage_metadata,
+                    fallback_model=fallback_model,
+                    fallback_reason=fallback_reason,
+                )
                 raise
+            repair_next_attempt = provider_error_needs_repair_prompt(exc)
         if AI_PROVIDER_RETRY_BACKOFF_SECONDS > 0:
             time.sleep(AI_PROVIDER_RETRY_BACKOFF_SECONDS * attempt)
-    raise AiProviderError(errors[-1] if errors else "AI provider failed")
+    raise AiProviderError(
+        errors[-1] if errors else "AI provider failed",
+        failed_usage_metadata=failed_usage_metadata,
+        attempts=attempts,
+        retry_count=max(0, attempts - 1),
+        previous_errors=errors[-2:],
+        fallback_model=fallback_model,
+        fallback_reason=fallback_reason,
+    )
 
 
 def generate_ai_detection_json(
@@ -1958,7 +7252,7 @@ def image_path_data_url(path: Path, max_side: int = 1024, quality: int = 78) -> 
 
 
 def accessory_profile_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "instruction": "Return only deterministic JSON for an accessory profile with the required keys.",
         "required_keys": list(fallback_accessory_ai_profile(item).keys()),
         "accessory": {
@@ -1972,6 +7266,21 @@ def accessory_profile_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
             "expected_count": int(item.get("expected_count") or 1),
         },
     }
+    reference = size_reference_payload(item.get("size_reference")) if accessory_material_type(item) == "object" else None
+    if reference:
+        payload["size_reference"] = {
+            "id": reference.get("id"),
+            "label": reference.get("label"),
+            "kind": reference.get("kind"),
+            "long_mm": reference.get("long_mm"),
+            "short_mm": reference.get("short_mm"),
+            "note": reference.get("note"),
+            "usage": (
+                "至少有一张参考图里把该配件和这个参照物放在一起拍摄。"
+                "请用参照物的已知真实尺寸作为比例尺，测量并推断配件的真实 length_mm/width_mm/height_mm。"
+            ),
+        }
+    return payload
 
 
 def ai_tool_provider_meta(settings: dict[str, Any]) -> dict[str, Any]:
@@ -2060,7 +7369,33 @@ def provider_generate_json_error_payload(
 ) -> dict[str, Any]:
     error_text = bounded_text(str(exc) or exc.__class__.__name__, 240)
     error_type = "not_configured" if isinstance(exc, str) else bounded_text(exc.__class__.__name__, 80)
-    error_meta = {**meta, "error_type": error_type, "overloaded": overloaded}
+    provider_failure_meta: dict[str, Any] = {}
+    if not isinstance(exc, str):
+        usage_metadata = getattr(exc, "usage_metadata", None)
+        failed_usage_metadata = getattr(exc, "failed_usage_metadata", None)
+        attempts = getattr(exc, "attempts", None)
+        retry_count = getattr(exc, "retry_count", None)
+        previous_errors = getattr(exc, "previous_errors", None)
+        http_status = getattr(exc, "http_status", None)
+        fallback_model = getattr(exc, "fallback_model", "")
+        fallback_reason = getattr(exc, "fallback_reason", "")
+        if isinstance(usage_metadata, dict) and usage_metadata:
+            provider_failure_meta["usage_metadata"] = usage_metadata
+        if isinstance(failed_usage_metadata, list) and failed_usage_metadata:
+            provider_failure_meta["failed_usage_metadata"] = failed_usage_metadata
+        if isinstance(attempts, int):
+            provider_failure_meta["attempts"] = attempts
+        if isinstance(retry_count, int):
+            provider_failure_meta["retry_count"] = retry_count
+        if isinstance(previous_errors, list) and previous_errors:
+            provider_failure_meta["previous_errors"] = previous_errors[-2:]
+        if isinstance(http_status, int):
+            provider_failure_meta["http_status"] = http_status
+        if fallback_model:
+            provider_failure_meta["fallback_model"] = str(fallback_model)
+        if fallback_reason:
+            provider_failure_meta["fallback_reason"] = str(fallback_reason)
+    error_meta = {**meta, "error_type": error_type, "overloaded": overloaded, **provider_failure_meta}
     return {
         "tool": "provider.gemini.generate_json",
         "ok": False,
@@ -2073,6 +7408,7 @@ def provider_generate_json_error_payload(
         "error_type": error_type,
         "meta": error_meta,
         **meta,
+        **provider_failure_meta,
     }
 
 
@@ -2081,6 +7417,12 @@ def tool_provider_gemini_generate_json(payload: dict[str, Any]) -> dict[str, Any
     meta = ai_tool_provider_meta(settings)
     if not settings.get("configured"):
         return provider_generate_json_error_payload(settings, meta, settings.get("message") or "AI provider is not configured")
+    max_attempts: int | None = None
+    if payload.get("max_attempts") is not None:
+        try:
+            max_attempts = max(1, int(payload.get("max_attempts")))
+        except (TypeError, ValueError):
+            max_attempts = None
     try:
         parsed, latency_ms, provider_meta = generate_provider_json_with_fallback(
             settings,
@@ -2088,6 +7430,7 @@ def tool_provider_gemini_generate_json(payload: dict[str, Any]) -> dict[str, Any
             payload.get("user_content") if isinstance(payload.get("user_content"), list) else [],
             max_tokens=int(payload.get("max_tokens") or 1400),
             cached_content=str(payload.get("cached_content") or ""),
+            max_attempts=max_attempts,
         )
         return {
             "tool": "provider.gemini.generate_json",
@@ -2281,7 +7624,7 @@ def build_reference_sheet_descriptor(required_accessories: list[dict[str, Any]])
         "items": [{"accessory_id": item["accessory_id"], "sha256": item["sha256"]} for item in items],
     }
     digest = hashlib.sha256(json.dumps(digest_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
-    sheet_dir = OUTPUT_DIR / "ai_reference_sheets"
+    sheet_dir = output_write_dir("ai_reference_sheets")
     sheet_dir.mkdir(parents=True, exist_ok=True)
     sheet_path = sheet_dir / f"reference_sheet_{digest[:16]}.jpg"
     with _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK:
@@ -2373,7 +7716,7 @@ def cached_profile_context_content(required_accessories: list[dict[str, Any]], r
 
 def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], settings: dict[str, Any]) -> dict[str, Any]:
     if settings.get("provider") != "gemini" or not settings.get("configured"):
-        return {"enabled": False, "status": "unsupported_provider", "name": "", "reference_images": 0}
+        return {"enabled": False, "status": "unsupported_provider", "name": "", "reference_images": 0, "provider_call_count": 0}
     cache_key, _ = required_accessory_cache_key(required_accessories, settings)
     cache = load_ai_profile_cache()
     entries = cache.setdefault("entries", {})
@@ -2386,10 +7729,11 @@ def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], se
             "name": existing["name"],
             "reference_images": int(existing.get("reference_images") or 0),
             "cache_key": cache_key[:12],
+            "provider_call_count": 0,
         }
     references = profile_reference_descriptors(required_accessories)
     if not references:
-        return {"enabled": False, "status": "no_reference_images", "name": "", "reference_images": 0}
+        return {"enabled": False, "status": "no_reference_images", "name": "", "reference_images": 0, "provider_call_count": 0}
     try:
         provider = ai_provider_from_settings(settings)
         if not isinstance(provider, GeminiAiProvider):
@@ -2417,7 +7761,9 @@ def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], se
             "name": created["name"],
             "reference_images": len(references),
             "latency_ms": created.get("latency_ms", 0),
+            "usage_metadata": created.get("usage_metadata") or {},
             "cache_key": cache_key[:12],
+            "provider_call_count": 1,
         }
     except Exception as exc:
         return {
@@ -2427,6 +7773,7 @@ def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], se
             "reference_images": len(references),
             "error": bounded_text(str(exc), 220),
             "cache_key": cache_key[:12],
+            "provider_call_count": 1,
         }
 
 
@@ -2468,9 +7815,22 @@ def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
             "provider_config": settings,
             "system_prompt": (
                 "Create a structured accessory profile for visual inspection. "
-                "Use image evidence when available. Return only JSON with keys: "
-                "accessory_id, name, material_type, description, tags, visual_signature, "
-                "distinguishing_text, negative_cues, expected_count."
+                "Use image evidence when available. Estimate the part's real-world physical "
+                "size by reasoning about the object type and any scale cues in the images: "
+                "return dimensions_mm as an object with numeric length_mm (longest side), "
+                "width_mm (second side), and height_mm (thickness), in millimeters, plus "
+                "top_view_aspect_ratio (length_mm divided by width_mm, >= 1.0). "
+                "SCALE CALIBRATION: if the payload contains a 'size_reference' object, then one "
+                "of the supplied images shows this part photographed next to that reference "
+                "object whose REAL dimensions are given (e.g. an A4 sheet is 297mm x 210mm, a "
+                "ruler shows centimeter graduations). Find the reference in the image, use its "
+                "known size as the measuring stick, and derive the part's true millimeter "
+                "dimensions by visual proportion against it. Prefer this calibrated measurement "
+                "over any generic guess. If the reference is not visible in any image, fall back "
+                "to reasoning from the object type. Keep the estimate physically plausible and "
+                "internally consistent. Return only JSON with keys: accessory_id, name, "
+                "material_type, description, tags, visual_signature, distinguishing_text, "
+                "negative_cues, dimensions_mm, top_view_aspect_ratio, expected_count."
             ),
             "user_content": user_content,
             "max_tokens": 900,
@@ -2545,6 +7905,10 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
     mark("inspection_encoded_ms")
     task_payload = ai_detection_task_payload(required_accessories)
     profile_cache = ensure_required_profile_cache(required_accessories, settings)
+    cache_provider_calls = max(0, int(profile_cache.get("provider_call_count") or 0))
+    generate_attempt_budget = max(1, AI_PROVIDER_MAX_ATTEMPTS - cache_provider_calls)
+    profile_cache["provider_call_budget"] = AI_PROVIDER_MAX_ATTEMPTS
+    profile_cache["generate_attempt_budget"] = generate_attempt_budget
     mark("profile_cache_ready_ms")
     if profile_cache.get("enabled") and profile_cache.get("name"):
         user_content: list[dict[str, Any]] = [
@@ -2599,6 +7963,7 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
             "max_tokens": ai_detection_output_token_budget(len(required_accessories)),
             "schema_hint": AI_DETECTION_OUTPUT_SCHEMA,
             "cached_content": profile_cache.get("name") if profile_cache.get("enabled") else "",
+            "max_attempts": generate_attempt_budget,
         },
     )
     mark("provider_result_ready_ms")
@@ -2611,6 +7976,23 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
             latency_ms=int(provider_result.get("latency_ms") or 0),
         )
         failure["ai"].update(provider_result.get("meta") if isinstance(provider_result.get("meta"), dict) else {})
+        failure["ai"]["profile_cache"] = {
+            key: value
+            for key, value in profile_cache.items()
+            if key
+            in {
+                "enabled",
+                "status",
+                "reference_images",
+                "latency_ms",
+                "cache_key",
+                "error",
+                "usage_metadata",
+                "provider_call_count",
+                "provider_call_budget",
+                "generate_attempt_budget",
+            }
+        }
         failure.setdefault("ai", {})["timing"] = timing
         return failure
     result = normalize_ai_detection_result(
@@ -2623,7 +8005,19 @@ def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
     result["ai"]["profile_cache"] = {
         key: value
         for key, value in profile_cache.items()
-        if key in {"enabled", "status", "reference_images", "latency_ms", "cache_key", "error"}
+        if key
+        in {
+            "enabled",
+            "status",
+            "reference_images",
+            "latency_ms",
+            "cache_key",
+            "error",
+            "usage_metadata",
+            "provider_call_count",
+            "provider_call_budget",
+            "generate_attempt_budget",
+        }
     }
     result["ai"].update(provider_result.get("meta") if isinstance(provider_result.get("meta"), dict) else {})
     result["ai"]["timing"] = timing
@@ -2790,16 +8184,64 @@ def generate_accessory_ai_profile(item: dict[str, Any], *, allow_provider: bool 
         {"accessory": item, "allow_provider": allow_provider, "provider_config": ai_detection_settings()},
     )
     item["ai_profile"] = result["profile"]
+    ensure_accessory_english_name(item)
     item["ai_profile_status"] = result["status"]
+    if isinstance(result.get("profile"), dict):
+        apply_ai_profile_dimensions_to_physical_size(item, result["profile"].get("dimensions_mm"))
     return result["profile"]
 
 
 def ensure_accessory_ai_profile(item: dict[str, Any], *, force: bool = False, allow_provider: bool = True) -> bool:
     current = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
     if not force and current and current.get("accessory_id") == accessory_uid(item):
-        return False
+        return ensure_accessory_english_name(item)
     generate_accessory_ai_profile(item, allow_provider=allow_provider)
     return True
+
+
+def locateanything_profile_status_payload(*, source: str = "local_rules", status: str = "ready", message: str = "") -> dict[str, Any]:
+    return {
+        "source": source,
+        "status": status,
+        "message": message or "LocateAnything profile generated locally.",
+        "updated_at": int(time.time()),
+        "profile_version": LOCATEANYTHING_PROFILE_VERSION,
+    }
+
+
+def generate_accessory_locateanything_profile(item: dict[str, Any]) -> dict[str, Any]:
+    ensure_accessory_english_name(item)
+    profile = normalize_accessory_locateanything_profile({}, item)
+    item["locateanything_profile"] = profile
+    ensure_accessory_english_name(item)
+    item["locateanything_profile_status"] = locateanything_profile_status_payload()
+    return profile
+
+
+def ensure_accessory_locateanything_profile(item: dict[str, Any], *, force: bool = False) -> bool:
+    current = item.get("locateanything_profile") if isinstance(item.get("locateanything_profile"), dict) else None
+    if force or not current or current.get("accessory_id") != accessory_uid(item):
+        generate_accessory_locateanything_profile(item)
+        return True
+    normalized = normalize_accessory_locateanything_profile(current, item)
+    if normalized != current:
+        item["locateanything_profile"] = normalized
+        item["locateanything_profile_status"] = locateanything_profile_status_payload(message="LocateAnything profile normalized locally.")
+        return True
+    return False
+
+
+def ensure_config_locateanything_profiles(config: dict[str, Any], user: dict[str, Any] | None = None) -> bool:
+    changed = False
+    for item in config.get("accessories", []):
+        if not isinstance(item, dict):
+            continue
+        if user and not record_mutable_by_user(item, user):
+            continue
+        changed = ensure_accessory_english_name(item) or changed
+        changed = ensure_accessory_locateanything_profile(item) or changed
+        changed = ensure_accessory_english_name(item) or changed
+    return changed
 
 
 def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2807,9 +8249,10 @@ def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
     for asset in item.get("normalized_assets", []):
         if asset.get("kind") != "clean_object_sprite":
             continue
-        path = Path(str(asset.get("path", "")))
+        path = resolve_service_path(asset.get("path"))
         if not path.exists() or path.suffix.lower() != ".png":
             continue
+        asset["path"] = str(path)
         if not asset.get("width") or not asset.get("height"):
             image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
             if image is not None:
@@ -2851,6 +8294,92 @@ def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
     return assets
 
 
+def agent_mcp_pose_reference_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
+    assets = []
+    for asset in item.get("normalized_assets", []):
+        if asset.get("kind") != "agent_mcp_pose_reference":
+            continue
+        path = resolve_service_path(asset.get("path"))
+        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+            continue
+        asset["path"] = str(path)
+        assets.append(asset)
+    return assets
+
+
+def agent_mcp_accessory_pose_images_exist(item: dict[str, Any]) -> bool:
+    """True once an accessory already carries its AI standard pose images (or, for
+    text parts, its canonical text assets). Used to skip a SECOND round of image
+    generation: per the one-set policy, the pipeline generates an accessory's pose
+    images on the first task and reuses them forever after."""
+    if not isinstance(item, dict):
+        return False
+    if accessory_material_type(item) == "text":
+        return bool(canonical_text_assets(item))
+    return bool(agent_mcp_pose_reference_assets(item))
+
+
+def dedup_agent_mcp_pose_references(item: dict[str, Any]) -> bool:
+    """Keep a single AI pose image per pose_id on an accessory, removing the
+    duplicates that earlier tasks accumulated. Returns True when anything was
+    dropped so callers can rebuild the clean sprites from the deduplicated set."""
+    assets = item.get("normalized_assets")
+    if not isinstance(assets, list):
+        return False
+    seen: set[str] = set()
+    kept: list[Any] = []
+    removed = False
+    for asset in assets:
+        if isinstance(asset, dict) and asset.get("kind") == "agent_mcp_pose_reference":
+            pose_id = str(asset.get("pose_id") or "")
+            key = pose_id or str(asset.get("path") or "")
+            if key in seen:
+                removed = True
+                continue
+            seen.add(key)
+        kept.append(asset)
+    if removed:
+        item["normalized_assets"] = kept
+    return removed
+
+
+def agent_mcp_accessory_standard_images_ready(item: dict[str, Any]) -> bool:
+    """A "YOLO/OCR-ready" accessory already carries its standard images and the
+    clean sprites cut from them. When true, a later task reuses these cached
+    assets instead of regenerating standard images for this accessory."""
+    if not isinstance(item, dict):
+        return False
+    if accessory_material_type(item) == "text":
+        text_assets = canonical_text_assets(item)
+        return bool(text_assets) and canonical_text_assets_complete(item, text_assets)
+    if not agent_mcp_pose_reference_assets(item):
+        return False
+    sprites = clean_sprite_assets(item)
+    return bool(sprites) and clean_sprites_policy_complete(item, sprites) and not agent_mcp_clean_sprites_need_rebuild(item)
+
+
+def agent_mcp_clean_sprites_need_rebuild(item: dict[str, Any]) -> bool:
+    """True when an accessory's cached clean sprites were cut from AI pose images
+    but still carry the legacy grid metadata (a real grid job id and/or a raw
+    pose-id family). Such sprites are NOT selectable by the top-view compositor
+    and render as black placeholder boxes, so they must be rebuilt with the
+    non-grid sentinel + top-view family."""
+    if accessory_material_type(item) == "text":
+        return False
+    if not agent_mcp_pose_reference_assets(item):
+        return False
+    for asset in clean_sprite_assets(item):
+        if not (asset.get("agent_mcp_pose_reference_path") or asset.get("agent_mcp_pose_call_id")):
+            continue
+        if int(asset.get("agent_mcp_sprite_build") or 0) < AGENT_MCP_SPRITE_BUILD_VERSION:
+            return True
+        if str(asset.get("source_pose_collection_job_id") or "") != "legacy_clean_sprite":
+            return True
+        if canonical_pose_family_name(asset.get("source_pose_family") or asset.get("pose_family")) not in {"upright", "lying"}:
+            return True
+    return False
+
+
 def clean_sprite_metadata_complete(asset: dict[str, Any]) -> bool:
     required_keys = [
         "task_id",
@@ -2890,6 +8419,12 @@ def clean_sprite_metadata_complete(asset: dict[str, Any]) -> bool:
         "canonical_width_px",
         "canonical_height_px",
         "physical_footprint_basis",
+        "source_long_side_px",
+        "source_short_side_px",
+        "source_long_edge_axis",
+        "source_short_edge_axis",
+        "source_long_short_ratio",
+        "source_length_width_rule",
     ]
     return all(asset.get(key) is not None for key in required_keys)
 
@@ -2903,6 +8438,92 @@ def clean_sprite_material_policy_matches(item: dict[str, Any], asset: dict[str, 
 def clean_sprites_policy_complete(item: dict[str, Any], assets: list[dict[str, Any]] | None = None) -> bool:
     sprites = assets if assets is not None else clean_sprite_assets(item)
     return bool(sprites) and all(clean_sprite_metadata_complete(asset) and clean_sprite_material_policy_matches(item, asset) for asset in sprites)
+
+
+def canonical_text_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
+    assets = []
+    for asset in item.get("normalized_assets", []):
+        if asset.get("kind") != "canonical_text_image":
+            continue
+        path = resolve_service_path(asset.get("path"))
+        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+            continue
+        if not asset.get("width") or not asset.get("height"):
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if image is not None:
+                asset.setdefault("width", int(image.shape[1]))
+                asset.setdefault("height", int(image.shape[0]))
+        assets.append(asset)
+    return assets
+
+
+def canonical_text_assets_complete(item: dict[str, Any], assets: list[dict[str, Any]] | None = None) -> bool:
+    text_assets = assets if assets is not None else canonical_text_assets(item)
+    return bool(text_assets) and all(asset.get("width") and asset.get("height") for asset in text_assets)
+
+
+AI_PROFILE_PROVIDER_READY_STATUSES = {"generated", "ready"}
+AI_PROFILE_REJECTED_STATUSES = {
+    "missing_api_key",
+    "provider_error",
+    "timeout",
+    "create_failed",
+    "fallback",
+    "unsupported_provider",
+    "invalid_base_url",
+}
+
+
+def accessory_ai_profile_ready(item: dict[str, Any]) -> bool:
+    profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
+    if not profile:
+        return False
+    if profile.get("accessory_id") != accessory_uid(item):
+        return False
+    if profile.get("material_type") != accessory_material_type(item):
+        return False
+    if not (profile.get("name") and (profile.get("visual_signature") or profile.get("description") or profile.get("reference_images"))):
+        return False
+    status = item.get("ai_profile_status") if isinstance(item.get("ai_profile_status"), dict) else {}
+    source = str(status.get("source") or "").strip().lower()
+    state = str(status.get("status") or "").strip().lower()
+    if source == "fallback" or state in AI_PROFILE_REJECTED_STATUSES:
+        return False
+    return source == "provider" and state in AI_PROFILE_PROVIDER_READY_STATUSES
+
+
+def accessory_locateanything_profile_ready(item: dict[str, Any]) -> bool:
+    profile = item.get("locateanything_profile") if isinstance(item.get("locateanything_profile"), dict) else None
+    if not profile:
+        return False
+    if profile.get("accessory_id") != accessory_uid(item):
+        return False
+    if profile.get("material_type") != accessory_material_type(item):
+        return False
+    if int(profile.get("profile_version") or 0) != LOCATEANYTHING_PROFILE_VERSION:
+        return False
+    required_lists = ("required_features", "reject_cues", "packaging_exclusions", "subpart_text_logo_exclusions")
+    if not profile.get("positive_visual_prompt") or not profile.get("target_scope") or not profile.get("count_strategy"):
+        return False
+    return all(isinstance(profile.get(key), list) and profile.get(key) for key in required_lists)
+
+
+def text_accessory_confirm_detail(
+    item: dict[str, Any],
+    text_assets: list[dict[str, Any]],
+    text_assets_complete: bool,
+    profile_ready: bool,
+) -> dict[str, Any]:
+    status = item.get("ai_profile_status") if isinstance(item.get("ai_profile_status"), dict) else {}
+    return {
+        "message": "文字/文档素材未完成",
+        "canonical_text_asset_count": len(text_assets),
+        "canonical_text_assets_complete": text_assets_complete,
+        "ai_profile_ready": profile_ready,
+        "ai_profile_status": status.get("status") or "",
+        "ai_profile_source": status.get("source") or "",
+        "ai_profile_message": status.get("message") or "",
+    }
 
 
 def accessory_sprite_version(item: dict[str, Any]) -> str:
@@ -2919,7 +8540,7 @@ def accessory_sprite_version(item: dict[str, Any]) -> str:
         str(item.get("clean_sprite_expected_count") or ""),
     ]
     for idx, asset in enumerate(sprites):
-        path = Path(str(asset.get("path", "")))
+        path = resolve_service_path(asset.get("path"))
         try:
             stat = path.stat()
             mtime_ns = stat.st_mtime_ns
@@ -2941,6 +8562,11 @@ def accessory_sprite_version(item: dict[str, Any]) -> str:
                 json.dumps(asset.get("physical_size_mm") or {}, sort_keys=True, separators=(",", ":")),
                 json.dumps(asset.get("source_object_bbox_xyxy") or [], separators=(",", ":")),
                 json.dumps(asset.get("source_object_size_px") or [], separators=(",", ":")),
+                str(asset.get("source_long_side_px") or ""),
+                str(asset.get("source_short_side_px") or ""),
+                str(asset.get("source_long_edge_axis") or ""),
+                str(asset.get("source_short_edge_axis") or ""),
+                str(asset.get("source_long_short_ratio") or ""),
                 json.dumps(asset.get("normalized_bbox_xyxy") or [], separators=(",", ":")),
                 json.dumps(asset.get("render_footprint_px") or [], separators=(",", ":")),
                 json.dumps(asset.get("render_footprint_mm") or [], separators=(",", ":")),
@@ -3091,16 +8717,75 @@ def pose_family_is_top_view(pose_family: str, source_size_px: list[int] | tuple[
     return False
 
 
+def source_object_long_short_metadata(source_size_px: list[int] | tuple[int, int] | None) -> dict[str, Any]:
+    try:
+        source_w = max(1, int(source_size_px[0] if source_size_px and len(source_size_px) >= 1 else 1))
+        source_h = max(1, int(source_size_px[1] if source_size_px and len(source_size_px) >= 2 else 1))
+    except (TypeError, ValueError):
+        source_w, source_h = 1, 1
+    long_axis = "width" if source_w >= source_h else "height"
+    short_axis = "height" if long_axis == "width" else "width"
+    long_side = max(source_w, source_h)
+    short_side = max(1, min(source_w, source_h))
+    return {
+        "source_visible_width_px": source_w,
+        "source_visible_height_px": source_h,
+        "source_long_side_px": int(long_side),
+        "source_short_side_px": int(short_side),
+        "source_long_edge_axis": long_axis,
+        "source_short_edge_axis": short_axis,
+        "source_long_short_ratio": round(float(long_side) / float(short_side), 6),
+        "source_length_width_rule": "source_visible_long_side_is_length_short_side_is_width",
+    }
+
+
+def oriented_long_short_pair_for_source(source_size_px: list[int] | tuple[int, int] | None, long_value: float, short_value: float) -> list[float]:
+    metadata = source_object_long_short_metadata(source_size_px)
+    if metadata["source_long_edge_axis"] == "width":
+        return [long_value, short_value]
+    return [short_value, long_value]
+
+
+def source_long_short_oriented_px(long_side: int, short_side: int, long_axis: Any) -> list[int]:
+    if str(long_axis or "").strip().lower() == "height":
+        return [int(short_side), int(long_side)]
+    return [int(long_side), int(short_side)]
+
+
 def pose_render_footprint_metadata(
     pose_family: str,
     source_size_px: list[int] | tuple[int, int],
     physical_size: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    source_w = max(1, int(source_size_px[0] if source_size_px else 1))
-    source_h = max(1, int(source_size_px[1] if source_size_px else 1))
+    source_long_short = source_object_long_short_metadata(source_size_px)
+    source_w = int(source_long_short["source_visible_width_px"])
+    source_h = int(source_long_short["source_visible_height_px"])
     length_mm, width_mm, height_mm = object_physical_size_mm(physical_size)
-    source_aspect = source_w / max(1, source_h)
     length_to_cross_section = length_mm / max(width_mm, height_mm, 1.0)
+    source_ratio = float(source_long_short["source_long_short_ratio"])
+    source_is_elongated = source_ratio >= SOURCE_ASPECT_ELONGATED_MIN_RATIO
+    if source_is_elongated:
+        footprint_long_mm = max(length_mm, width_mm, height_mm)
+        footprint_short_mm = max(1.0, footprint_long_mm / source_ratio)
+        footprint_mm = oriented_long_short_pair_for_source([source_w, source_h], footprint_long_mm, footprint_short_mm)
+        footprint_px = [
+            max(16, int(round(footprint_mm[0] * MM_TO_PREVIEW_PX))),
+            max(16, int(round(footprint_mm[1] * MM_TO_PREVIEW_PX))),
+        ]
+        basis = "source_visible_long_short_aspect"
+        return {
+            **source_long_short,
+            "render_scale_basis": basis,
+            "render_footprint_mm": [round(float(footprint_mm[0]), 2), round(float(footprint_mm[1]), 2)],
+            "render_footprint_px": footprint_px,
+            "render_size_hint_px": footprint_px,
+            "canonical_width_px": footprint_px[0],
+            "canonical_height_px": footprint_px[1],
+            "physical_footprint_basis": basis,
+            "render_footprint_mm_unoriented_long_short": [round(float(footprint_long_mm), 2), round(float(footprint_short_mm), 2)],
+            "render_footprint_px_unoriented_long_short": [max(16, int(round(footprint_long_mm * MM_TO_PREVIEW_PX))), max(16, int(round(footprint_short_mm * MM_TO_PREVIEW_PX)))],
+            "render_source_aspect_preserved": True,
+        }
     if length_to_cross_section <= 2.0:
         footprint_w_mm = length_mm
         footprint_h_mm = max(width_mm, height_mm)
@@ -3120,6 +8805,7 @@ def pose_render_footprint_metadata(
         max(16, int(round(footprint_h_mm * MM_TO_PREVIEW_PX))),
     ]
     return {
+        **source_long_short,
         "render_scale_basis": basis,
         "render_footprint_mm": [round(float(footprint_w_mm), 2), round(float(footprint_h_mm), 2)],
         "render_footprint_px": footprint_px,
@@ -3127,6 +8813,7 @@ def pose_render_footprint_metadata(
         "canonical_width_px": footprint_px[0],
         "canonical_height_px": footprint_px[1],
         "physical_footprint_basis": basis,
+        "render_source_aspect_preserved": False,
     }
 
 
@@ -3215,7 +8902,7 @@ def apply_upright_scale_correction_metadata(assets: list[dict[str, Any]], physic
         except (TypeError, ValueError):
             continue
         basis_before = str(asset.get("render_scale_basis") or "cap_outer_edge_diameter_mm")
-        if basis_before in {"top_view_length_width_physical_footprint", "shared_length_width_physical_footprint"}:
+        if basis_before in {"top_view_length_width_physical_footprint", "shared_length_width_physical_footprint", "source_visible_long_short_aspect"}:
             asset.update(
                 {
                     "render_footprint_px_before_correction": before_px,
@@ -3232,9 +8919,9 @@ def apply_upright_scale_correction_metadata(assets: list[dict[str, Any]], physic
                     "upright_scale_correction_before_visual_adjustment": 1.0,
                     "upright_scale_visual_adjustment": 1.0,
                     "upright_scale_adjustment_percent": 0.0,
-                    "upright_scale_adjustment_reason": "non_cylindrical_top_view_uses_physical_length_width_no_visual_adjustment",
+                    "upright_scale_adjustment_reason": "source_visible_long_short_aspect_uses_no_visual_adjustment",
                     "upright_scale_visually_adjusted": False,
-                    "upright_scale_correction_basis": "physical_length_width_top_view",
+                    "upright_scale_correction_basis": "source_visible_long_short_aspect",
                     "upright_scale_correction_source_dimensions": correction["upright_scale_correction_source_dimensions"],
                     "upright_scale_correction_physical_ratio": correction["upright_scale_correction_physical_ratio"],
                     "upright_scale_correction_clamped": False,
@@ -3325,7 +9012,16 @@ def apply_laying_standard_render_size_hints(assets: list[dict[str, Any]]) -> Non
             continue
         long_side = max(first, second)
         short_side = min(first, second)
-        oriented = [long_side, short_side] if long_axis == "width" else [short_side, long_side]
+        is_source_aspect = str(asset.get("render_scale_basis") or "") == "source_visible_long_short_aspect"
+        if is_source_aspect:
+            asset_long_axis = str(asset.get("source_long_edge_axis") or "").strip().lower()
+            oriented = source_long_short_oriented_px(long_side, short_side, asset_long_axis)
+            orientation_basis = "source_visible_long_short_aspect_preserve_source_axis"
+            render_long_edge_axis = asset_long_axis or ("height" if oriented[1] >= oriented[0] else "width")
+        else:
+            oriented = [long_side, short_side] if long_axis == "width" else [short_side, long_side]
+            orientation_basis = "lying_pose_collection_visible_bbox"
+            render_long_edge_axis = long_axis
         asset.update(
             {
                 "render_footprint_px_unoriented_long_short": [int(long_side), int(short_side)],
@@ -3334,8 +9030,8 @@ def apply_laying_standard_render_size_hints(assets: list[dict[str, Any]]) -> Non
                 "render_size_hint_px": oriented,
                 "canonical_width_px": oriented[0],
                 "canonical_height_px": oriented[1],
-                "render_long_short_orientation_basis": "lying_pose_collection_visible_bbox",
-                "render_long_edge_axis": long_axis,
+                "render_long_short_orientation_basis": orientation_basis,
+                "render_long_edge_axis": render_long_edge_axis,
                 "render_laying_standard_reference_visible_size_px": [round(median_w, 3), round(median_h, 3)],
             }
         )
@@ -3502,6 +9198,27 @@ def rotate_masked_asset(
     return trim_masked_asset(rotated_asset, rotated_mask, pad=safety_pad)
 
 
+def restore_object_sprite_source_orientation_for_render(
+    asset: np.ndarray,
+    mask: np.ndarray,
+    sprite_meta: dict[str, Any],
+    *,
+    top_view_pose: bool,
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    try:
+        requested = float(sprite_meta.get("source_restore_rotation_degrees") or 0.0)
+    except (TypeError, ValueError):
+        requested = 0.0
+    if top_view_pose or abs(requested) < 0.05:
+        sprite_meta["source_orientation_restored_for_render"] = False
+        sprite_meta["source_restore_rotation_degrees_requested"] = round(float(requested), 2)
+        return asset, mask, 0.0, requested if abs(requested) >= 0.05 else 0.0
+    restored_asset, restored_mask = rotate_masked_asset(asset, mask, requested)
+    sprite_meta["source_orientation_restored_for_render"] = True
+    sprite_meta["source_restore_rotation_degrees_requested"] = round(float(requested), 2)
+    return restored_asset, restored_mask, requested, 0.0
+
+
 def alpha_bbox(mask: np.ndarray, threshold: int = 8) -> list[int]:
     ys, xs = np.where(mask > threshold)
     if len(xs) == 0 or len(ys) == 0:
@@ -3631,9 +9348,11 @@ def normalize_sprite_family_canvases(generated: list[dict[str, Any]]) -> None:
         loaded: list[tuple[dict[str, Any], np.ndarray, np.ndarray]] = []
         visible_major_axes = []
         for asset in family_assets:
-            image = cv2.imread(str(Path(str(asset.get("path", "")))), cv2.IMREAD_UNCHANGED)
+            path = resolve_service_path(asset.get("path"))
+            image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
             if image is None or image.ndim != 3 or image.shape[2] < 4:
                 continue
+            asset["path"] = str(path)
             alpha = image[:, :, 3]
             bbox = alpha_bbox(alpha)
             visible_w = int(bbox[2] - bbox[0])
@@ -3667,7 +9386,7 @@ def normalize_sprite_family_canvases(generated: list[dict[str, Any]]) -> None:
             bbox = alpha_bbox(asset_alpha)
             rgba = cv2.cvtColor(asset_bgr, cv2.COLOR_BGR2BGRA)
             rgba[:, :, 3] = asset_alpha
-            cv2.imwrite(str(Path(str(asset.get("path", "")))), rgba)
+            cv2.imwrite(str(resolve_service_path(asset.get("path"))), rgba)
             edge_max = alpha_edge_max(asset_alpha)
             asset.update(
                 {
@@ -4025,6 +9744,11 @@ def preprocess_object_clean_sprites(item: dict[str, Any], allow_ai_cutout: bool 
                                 fallback_cutout[0], fallback_cutout[1], fallback_cutout[2], full_alpha
                             )
                             cutout = (crop_asset, crop_alpha)
+                if cutout is None:
+                    local_bbox = (0, 0, tile.shape[1], tile.shape[0])
+                    cutout = (tile.copy(), np.full(tile.shape[:2], 255, dtype=np.uint8))
+                    method = "pose_collection_full_cell_fallback"
+                    mask_diagnostics["pose_collection_full_cell_fallback"] = True
                 if local_bbox is None:
                     local_bbox = (0, 0, tile.shape[1], tile.shape[0])
                 bx1, by1, bx2, by2 = local_bbox
@@ -4059,7 +9783,36 @@ def preprocess_object_clean_sprites(item: dict[str, Any], allow_ai_cutout: bool 
                 }
                 metadata.update(mask_diagnostics)
                 metadata.update(pose_render_footprint_metadata(pose_family, source_size_px, physical_size))
-                if not add_cutout(cutout, tile.shape, method, metadata):
+                added_cutout = add_cutout(cutout, tile.shape, method, metadata)
+                if not added_cutout:
+                    full_source_bbox = [int(x1), int(y1), int(x2), int(y2)]
+                    full_source_size_px = [int(x2 - x1), int(y2 - y1)]
+                    fallback_metadata = dict(metadata)
+                    fallback_metadata.update(
+                        {
+                            "source_object_bbox_xyxy": full_source_bbox,
+                            "source_object_center_xy": [
+                                int(round((full_source_bbox[0] + full_source_bbox[2]) / 2)),
+                                int(round((full_source_bbox[1] + full_source_bbox[3]) / 2)),
+                            ],
+                            "source_object_size_px": full_source_size_px,
+                            "pose_collection_full_cell_fallback": True,
+                            "pose_collection_failed_cutout_method": method,
+                        }
+                    )
+                    fallback_metadata.update(pose_render_footprint_metadata(pose_family, full_source_size_px, physical_size))
+                    out_path = sprite_dir / f"sprite_{len(generated) + 1:02d}.png"
+                    fallback_asset = write_clean_sprite(
+                        out_path,
+                        tile.copy(),
+                        np.full(tile.shape[:2], 255, dtype=np.uint8),
+                        fallback_metadata,
+                    )
+                    if fallback_asset:
+                        fallback_asset["method"] = "pose_collection_full_cell_fallback"
+                        generated.append(fallback_asset)
+                        added_cutout = True
+                if not added_cutout:
                     failed_cells.append(
                         {
                             "pose_family": pose_family,
@@ -4132,6 +9885,39 @@ def preprocess_object_clean_sprites(item: dict[str, Any], allow_ai_cutout: bool 
                 break
 
     if not generated:
+        for path in accessory_image_paths(item):
+            if path in pose_paths:
+                continue
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if image is None:
+                continue
+            full_mask = np.full(image.shape[:2], 255, dtype=np.uint8)
+            metadata = {
+                "physical_size_mm": physical_size,
+                "material_alpha_policy": alpha_policy,
+                "source_path": str(path),
+                "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
+                "source_image_width": int(image.shape[1]),
+                "source_image_height": int(image.shape[0]),
+                "source_region_bbox_xyxy": [0, 0, int(image.shape[1]), int(image.shape[0])],
+                "source_object_bbox_xyxy": [0, 0, int(image.shape[1]), int(image.shape[0])],
+                "source_object_center_xy": [int(image.shape[1] // 2), int(image.shape[0] // 2)],
+                "source_object_size_px": [int(image.shape[1]), int(image.shape[0])],
+                "pose_family": "lying",
+                "source_pose_family": "lying",
+                "pose_position": "center",
+                "source_position": "center",
+                "task_id": "source_full_image_fallback",
+                "source_pose_collection_job_id": "source_full_image_fallback",
+            }
+            out_path = sprite_dir / f"sprite_{len(generated) + 1:02d}.png"
+            asset = write_clean_sprite(out_path, image.copy(), full_mask, metadata)
+            if asset:
+                asset["method"] = "source_full_image_fallback"
+                generated.append(asset)
+                break
+
+    if not generated:
         return False
 
     retained = [
@@ -4159,6 +9945,20 @@ def preprocess_object_clean_sprites(item: dict[str, Any], allow_ai_cutout: bool 
     else:
         item["preprocess"] = "系统已预处理无背景单体素材，并记录原图坐标与物理尺寸；训练预览直接复用。"
     return True
+
+
+def ensure_object_clean_sprites_ready(item: dict[str, Any], *, force: bool = False) -> bool:
+    if accessory_material_type(item) == "text":
+        return False
+    sprites = clean_sprite_assets(item)
+    if (
+        not force
+        and sprites
+        and item.get("clean_sprite_status") == "ready"
+        and clean_sprites_policy_complete(item, sprites)
+    ):
+        return False
+    return preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=force or bool(sprites))
 
 
 def foreground_mask(image: np.ndarray) -> np.ndarray:
@@ -4578,7 +10378,7 @@ def load_object_preview_sprite(
         if not candidates:
             candidates = sprites
         asset = candidates[int(rng.integers(0, len(candidates)))]
-        sprite = load_clean_sprite(Path(str(asset.get("path", ""))))
+        sprite = load_clean_sprite(resolve_service_path(asset.get("path")))
         if sprite:
             meta = dict(asset)
             all_sprites = clean_sprite_assets(item)
@@ -4638,15 +10438,20 @@ def paste_masked_asset(
     angle: float,
     trim_before_paste: bool = True,
     return_visible_mask: bool = False,
+    resize_to_target: bool = True,
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     if trim_before_paste:
         asset, mask = trim_masked_asset(asset, mask)
     visible_mask = np.zeros(canvas.shape[:2], dtype=np.uint8) if return_visible_mask else None
     target_w, target_h = target_size
     h, w = asset.shape[:2]
-    scale = min(target_w / max(w, 1), target_h / max(h, 1))
-    resized = cv2.resize(asset, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
-    resized_mask = cv2.resize(mask, (resized.shape[1], resized.shape[0]), interpolation=cv2.INTER_LINEAR)
+    if resize_to_target:
+        scale = min(target_w / max(w, 1), target_h / max(h, 1))
+        resized = cv2.resize(asset, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+        resized_mask = cv2.resize(mask, (resized.shape[1], resized.shape[0]), interpolation=cv2.INTER_LINEAR)
+    else:
+        resized = asset
+        resized_mask = mask
     rh, rw = resized.shape[:2]
     diagonal = int(np.ceil(np.sqrt(rw * rw + rh * rh))) + 8
     patch = np.zeros((diagonal, diagonal, 3), dtype=np.uint8)
@@ -4733,6 +10538,29 @@ def resize_masked_asset_to_visible_footprint(
     }
 
 
+def long_axis_unified_render_box(
+    visible_w: int,
+    visible_h: int,
+    target_long_px: int,
+    target_short_px: int,
+) -> tuple[int, int]:
+    """Return a render box whose aspect equals the sprite's own visible aspect and
+    whose LONG side equals the physical-footprint long side.
+
+    The compositor pastes with preserve_aspect_ratio=min(w/vw, h/vh). When the
+    footprint aspect (from physical dims) does not match a particular AI pose
+    image's visible aspect, that min() clamps to the short side and the object
+    shrinks to a fraction of its true size (the source of the 10x size spread).
+    By matching the box aspect to the sprite, min() resolves to the long-axis
+    scale, so every view of the same accessory renders at the same long-axis
+    length and stays size-consistent without distortion."""
+    vw = max(1, int(visible_w))
+    vh = max(1, int(visible_h))
+    target_long = max(16, int(round(max(target_long_px, target_short_px))))
+    scale = target_long / max(1, max(vw, vh))
+    return max(16, int(round(vw * scale))), max(16, int(round(vh * scale)))
+
+
 def paste_physical_object_asset(
     canvas: np.ndarray,
     asset: np.ndarray,
@@ -4745,6 +10573,7 @@ def paste_physical_object_asset(
 ) -> dict[str, Any]:
     target_size = (max(1, int(target_long_side_px)), max(1, int(target_short_side_px)))
     resized, resized_mask, render_meta = resize_masked_asset_to_visible_footprint(asset, mask, target_size, preserve_aspect_ratio)
+    pre_paste_visible_footprint = render_meta.get("render_visible_footprint_px")
     _, visible_mask = paste_masked_asset(
         canvas,
         resized,
@@ -4752,9 +10581,16 @@ def paste_physical_object_asset(
         center,
         target_size,
         angle,
-        trim_before_paste=False,
+        trim_before_paste=True,
         return_visible_mask=True,
+        resize_to_target=False,
     )
+    final_visible_footprint = visible_mask_size_px(visible_mask)
+    render_meta["pre_paste_visible_footprint_px"] = pre_paste_visible_footprint
+    render_meta["final_pasted_visible_footprint_px"] = final_visible_footprint
+    render_meta["render_visible_footprint_px"] = final_visible_footprint
+    render_meta["render_paste_rescaled"] = False
+    render_meta["render_paste_resize_policy"] = "trim_already_sized_physical_object_no_second_resize"
     render_meta["_visible_mask_canvas"] = visible_mask
     return render_meta
 
@@ -4768,18 +10604,24 @@ def paste_rectified_document_asset(
 ) -> dict[str, Any]:
     target_w, target_h = max(1, int(target_size[0])), max(1, int(target_size[1]))
     source_h, source_w = asset.shape[:2]
+    # Fit the document into the paper box preserving aspect (never stretch). The
+    # canonical asset already matches the paper aspect, so this is normally a clean
+    # uniform scale; the min() guard protects any legacy/odd-aspect canonical.
+    fit_scale = min(target_w / max(1, source_w), target_h / max(1, source_h))
+    fit_w = max(1, int(round(source_w * fit_scale)))
+    fit_h = max(1, int(round(source_h * fit_scale)))
     resized = cv2.resize(
         asset,
-        (target_w, target_h),
-        interpolation=cv2.INTER_AREA if max(source_h, source_w) > max(target_h, target_w) else cv2.INTER_CUBIC,
+        (fit_w, fit_h),
+        interpolation=cv2.INTER_AREA if fit_scale < 1 else cv2.INTER_CUBIC,
     )
     diagonal = int(np.ceil(np.sqrt(target_w * target_w + target_h * target_h))) + 8
     patch = np.zeros((diagonal, diagonal, 3), dtype=np.uint8)
     patch_mask = np.zeros((diagonal, diagonal), dtype=np.uint8)
-    x0 = (diagonal - target_w) // 2
-    y0 = (diagonal - target_h) // 2
-    patch[y0 : y0 + target_h, x0 : x0 + target_w] = resized
-    patch_mask[y0 : y0 + target_h, x0 : x0 + target_w] = 255
+    x0 = (diagonal - fit_w) // 2
+    y0 = (diagonal - fit_h) // 2
+    patch[y0 : y0 + fit_h, x0 : x0 + fit_w] = resized
+    patch_mask[y0 : y0 + fit_h, x0 : x0 + fit_w] = 255
     matrix = cv2.getRotationMatrix2D((diagonal / 2, diagonal / 2), angle, 1.0)
     rotated = cv2.warpAffine(patch, matrix, (diagonal, diagonal), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
     rotated_mask = cv2.warpAffine(patch_mask, matrix, (diagonal, diagonal), flags=cv2.INTER_LINEAR, borderValue=0)
@@ -4806,12 +10648,12 @@ def paste_rectified_document_asset(
         "document_asset_policy": "full_rectified_asset_direct_physical_size",
         "document_physical_scale_basis": "paper_width_height_mm_to_background_px",
         "render_box_px": [target_w, target_h],
-        "render_visible_footprint_px": [target_w, target_h],
-        "render_resize_policy": "document_rectified_full_canvas_exact_physical_size",
+        "render_visible_footprint_px": [fit_w, fit_h],
+        "render_resize_policy": "document_rectified_fit_preserve_aspect_paper_box",
         "source_visible_footprint_px": [int(source_w), int(source_h)],
-        "non_uniform_scaling_applied": bool(abs((target_w / max(1, source_w)) - (target_h / max(1, source_h))) > 0.0005),
-        "render_scale_x": round(float(target_w / max(1, source_w)), 6),
-        "render_scale_y": round(float(target_h / max(1, source_h)), 6),
+        "non_uniform_scaling_applied": False,
+        "render_scale_x": round(float(fit_scale), 6),
+        "render_scale_y": round(float(fit_scale), 6),
         "_visible_mask_canvas": visible_mask,
     }
 
@@ -4857,6 +10699,20 @@ def normalize_accessory_assets(item: dict[str, Any]) -> dict[str, Any]:
         ],
         "preprocess": "系统记录 Image tool 扩展计划，用于生成多视角、多尺寸辅助素材。",
     }
+
+
+def defer_accessory_normalization(item: dict[str, Any]) -> None:
+    item["normalized_assets"] = []
+    for key in (
+        "clean_sprite_status",
+        "clean_sprite_count",
+        "clean_sprite_expected_count",
+        "clean_sprite_failed_cells",
+        "clean_sprite_preprocessed_at",
+    ):
+        item.pop(key, None)
+    item["normalization_deferred"] = True
+    item["preprocess"] = "已保存用户上传素材；任务进入生成样本阶段后再生成规范化文件。"
 
 
 def frame_detail_score(frame: np.ndarray) -> float:
@@ -4991,12 +10847,18 @@ def pose_collection_dimension_text(item: dict[str, Any]) -> str:
     length = physical.get("length_mm")
     width = physical.get("width_mm")
     height = physical.get("height_mm")
+    long_short_rule = (
+        "Durable dimension rule: in every source/reference image, the visible longer side of the object is its physical "
+        "length, and the visible shorter side is its physical width. Preserve that source long:short aspect ratio; never "
+        "swap length/width and never squash or stretch an elongated object to fill a square or anchor footprint. "
+    )
     if length and width and height:
         return (
-            f"Use these physical dimensions to infer the 3D form and perspective: "
+            f"{long_short_rule}"
+            "Use these physical dimensions to infer the 3D form and perspective without overriding the source aspect: "
             f"length {length} mm, width {width} mm, height {height} mm. "
         )
-    return "Infer the object's approximate 3D form and proportions from the reference image. "
+    return f"{long_short_rule}Infer the object's approximate 3D form and proportions from the reference image. "
 
 
 def tabletop_scene_text(surface_mode: str = "white") -> str:
@@ -5263,13 +11125,25 @@ def build_white_table_replacement_prompt(item: dict[str, Any], pose_family: str)
 
 
 def build_anchor_replacement_pose_prompt(item: dict[str, Any], pose_family: str) -> str:
+    long_short_rule = (
+        "Mandatory size rule: infer the replacement object's length from the longer visible side of the attached "
+            "reference object, and infer its width from the shorter visible side. Preserve the reference long:short aspect "
+            "ratio exactly. Map the source long edge to the anchor/bar long direction and the source short edge to the "
+            "anchor/bar short direction. Do not swap length and width, and do not non-uniformly stretch, squash, or compress "
+            "a long object just to fill the anchor footprint. For watch-like or other non-cylindrical accessories, the strap/"
+            "body long axis must remain visibly long. "
+    )
     if pose_family == "upright":
         return (
             "Priority camera-facing rule: the object's top must face the camera, and the visible top is the part we "
             "should see. "
-            "The first attached image is the anchor image. It contains nine metal bars. Replace each metal bar with the "
+            f"{long_short_rule}"
+            "The first attached image is the anchor image. It contains nine metal bars. The second attached image is a "
+            "circular end-face target guide for the same 3x3 layout; use it to preserve round/cylindrical top footprints "
+            "and do not omit it when the object has a circular cap, nozzle, bottle mouth, lens, wheel, washer, or other round end. "
+            "Replace each metal bar with the "
             "object from the other attached reference image(s). For every replacement, copy the matched bar's center "
-            "position, long-axis direction, end-face direction, visible footprint, size, and perspective. The object's "
+            "position, long-axis direction, end-face direction, and perspective. The object's "
             "main axis must follow the bar's main axis, and the object's end-facing part must sit where that bar's "
             "square end face appears. "
             "Keep the anchor image's 3x3 layout, spacing, tabletop, background, camera angle, and framing unchanged. "
@@ -5278,13 +11152,173 @@ def build_anchor_replacement_pose_prompt(item: dict[str, Any], pose_family: str)
     return (
         "Priority camera-facing rule: the object's side must face the camera, and the visible side surface is the part "
         "we should see. "
+        f"{long_short_rule}"
         "The first attached image is the anchor image. It contains nine horizontal metal bars. Replace each metal bar "
         "with the object from the other attached reference image(s). A horizontal metal bar means the replacement object "
-        "must also be horizontal. Keep each replacement object's position, size, direction, footprint, and perspective "
-        "matched to the metal bar it replaces. "
+        "must also be horizontal. Keep each replacement object's position, long-axis direction, and perspective matched "
+        "to the metal bar it replaces while preserving the source object's own long:short aspect. "
         "Keep the anchor image's 3x3 layout, spacing, tabletop, background, camera angle, and framing unchanged. "
         "Remove all metal bars from the final image. Do not add anything else."
     )
+
+
+def safe_record_id(value: Any) -> str:
+    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value or "record")).strip("._") or "record"
+
+
+def pose_collection_output_dir(item: dict[str, Any]) -> Path:
+    owner = record_owner_id(item)
+    return output_write_dir_for_owner("accessory_pose_collections", owner) / safe_record_id(accessory_uid(item) or str(uuid.uuid4()))
+
+
+def pose_collection_output_name(pose_family: str) -> str:
+    return "pose_collection_endface.png" if pose_family == "upright" else "pose_collection_flat.png"
+
+
+def pose_collection_job_id(item: dict[str, Any], pose_family: str) -> str:
+    return f"imgjob_{safe_record_id(accessory_uid(item))}_{pose_family}_anchor_replacement"
+
+
+def source_reference_inputs_for_pose_job(item: dict[str, Any], pose_family: str) -> list[str]:
+    inputs: list[str] = []
+    anchor = POSE_ANCHOR_IMAGES.get(pose_family)
+    if anchor and anchor.exists():
+        inputs.append(str(anchor))
+    for path in existing_source_image_paths(item):
+        text = str(path)
+        if text not in inputs:
+            inputs.append(text)
+    return inputs[:MAX_IMAGE_WORKER_INPUTS]
+
+
+def make_pose_collection_job(item: dict[str, Any], pose_family: str) -> dict[str, Any]:
+    output_path = pose_collection_output_dir(item) / pose_collection_output_name(pose_family)
+    anchor_path = POSE_ANCHOR_IMAGES.get(pose_family)
+    job = {
+        "job_id": pose_collection_job_id(item, pose_family),
+        "task_id": deterministic_task_id(item, {"pose_family": pose_family, "output_path": str(output_path)}),
+        "candidate_id": accessory_uid(item),
+        "candidate_name": item.get("name") or accessory_uid(item),
+        "label": "正立多角度图" if pose_family == "upright" else "平躺多角度图",
+        "queue_kind": "image_generation",
+        "status": "completed" if output_path.exists() else CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        "progress": 100 if output_path.exists() else 0,
+        "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+        "generation_method": "codex_exec_image_worker",
+        "generation_step": "anchor_replacement",
+        "pose_family": pose_family,
+        "prompt": build_anchor_replacement_pose_prompt(item, pose_family),
+        "input_files": source_reference_inputs_for_pose_job(item, pose_family),
+        "anchor_image_path": str(anchor_path) if anchor_path else "",
+        "output_path": str(output_path),
+        "output_url": public_output_url(output_path),
+        "created_at": int(time.time()),
+        **record_audit_fields(item),
+    }
+    if output_path.exists():
+        job["completed_at"] = int(output_path.stat().st_mtime)
+    ensure_image_job_task_id(item, job)
+    ensure_anchor_image_provenance(job)
+    ensure_image_job_target_guides(job)
+    return job
+
+
+def ensure_pose_collection_image_jobs(item: dict[str, Any]) -> bool:
+    if accessory_material_type(item) == "text":
+        return False
+    # Legacy anchor/grid pose-collection generation is retired. Object standard
+    # images are now produced inside the training pipeline as single-object
+    # top-down photos (agent_mcp pose images) and segmented into clean sprites;
+    # no anchor grids are generated at accessory creation anymore.
+    if not POSE_COLLECTION_GRID_ENABLED:
+        return False
+    jobs = candidate_image_jobs(item)
+    changed = False
+    for job in jobs:
+        changed = ensure_image_job_task_id(item, job) or changed
+        changed = ensure_anchor_image_provenance(job) or changed
+        changed = ensure_image_job_target_guides(job) or changed
+        if str(job.get("generation_step") or "") == "anchor_replacement":
+            if job.get("provider") != LOCAL_CODEX_IMAGE_PROVIDER:
+                job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
+                changed = True
+            if job.get("generation_method") != "codex_exec_image_worker":
+                job["generation_method"] = "codex_exec_image_worker"
+                changed = True
+            if job.get("queue_kind") != "image_generation":
+                job["queue_kind"] = "image_generation"
+                changed = True
+            output_path = image_job_output_path(job, for_write=True)
+            if output_path.exists() and job.get("status") != "completed":
+                job["status"] = "completed"
+                job["progress"] = 100
+                job["completed_at"] = int(output_path.stat().st_mtime)
+                job["output_url"] = public_output_url(output_path)
+                changed = True
+            elif job.get("status") == "completed" and not output_path.exists():
+                job["status"] = CODEX_IMAGE_WORKER_QUEUE_STATUS
+                job["progress"] = 0
+                job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
+                job["generation_method"] = "codex_exec_image_worker"
+                job["error"] = f"Missing target PNG: {output_path}. Requeued for Windows CodexImageWorker."
+                job.pop("completed_at", None)
+                changed = True
+    for pose_family in ("upright", "lying"):
+        expected_name = pose_collection_output_name(pose_family)
+        existing = next(
+            (
+                job
+                for job in jobs
+                if str(job.get("generation_step") or "") == "anchor_replacement"
+                and str(job.get("pose_family") or "") == pose_family
+                and Path(str(job.get("output_path") or "")).name == expected_name
+            ),
+            None,
+        )
+        if existing is None:
+            jobs.append(make_pose_collection_job(item, pose_family))
+            changed = True
+    if changed or jobs:
+        item["codex_image_jobs"] = jobs
+        item["codex_image_job"] = jobs[0] if jobs else None
+        item["ai_generation_required"] = True
+        item["pose_collection_prompts"] = {
+            "upright": build_anchor_replacement_pose_prompt(item, "upright"),
+            "lying": build_anchor_replacement_pose_prompt(item, "lying"),
+        }
+        item["pose_collection_prompt"] = item["pose_collection_prompts"]["lying"]
+        item["status"] = "image_tool_plan_ready" if item.get("status") in {"candidate_review", "reference_uploaded", "active"} else item.get("status", "image_tool_plan_ready")
+    return changed
+
+
+def pending_pose_collection_jobs(item: dict[str, Any]) -> list[dict[str, Any]]:
+    pending: list[dict[str, Any]] = []
+    for job in candidate_image_jobs(item):
+        if str(job.get("generation_step") or "") != "anchor_replacement":
+            continue
+        output_path = image_job_output_path(job, for_write=True)
+        if str(job.get("status") or "") != "completed" or not output_path.exists():
+            copy = dict(job)
+            copy["missing_output_path"] = str(output_path)
+            pending.append(copy)
+    return pending
+
+
+def pose_collection_pending_detail(item: dict[str, Any], pending: list[dict[str, Any]]) -> str:
+    details = []
+    for job in pending[:4]:
+        status = str(job.get("status") or "missing")
+        pose = str(job.get("pose_family") or "pose")
+        error = str(job.get("error") or "").strip()
+        missing = str(job.get("missing_output_path") or job.get("output_path") or "")
+        parts = [pose, status]
+        if missing:
+            parts.append(f"target={missing}")
+        if error:
+            parts.append(error)
+        details.append(" / ".join(parts))
+    suffix = "；..." if len(pending) > 4 else ""
+    return f"配件 {item.get('name') or accessory_uid(item)} 的 Windows CodexImageWorker 多角度图还未完成：{'；'.join(details)}{suffix}。请等待生成任务完成，或重试失败任务后再生成训练样本。"
 
 
 def create_accessory_candidate(
@@ -5294,10 +11328,11 @@ def create_accessory_candidate(
     source_files: list[str],
     physical_size: dict[str, Any] | None = None,
     material_alpha_policy: str | None = None,
+    size_reference: str | None = None,
 ) -> dict[str, Any]:
     candidate_id = f"cand_{uuid.uuid4().hex[:10]}"
     expanded_source_files, extracted_video_frames = expand_accessory_reference_sources(candidate_id, source_files)
-    thumb_dir = OUTPUT_DIR / "accessory_candidates" / candidate_id
+    thumb_dir = output_write_dir("accessory_candidates") / candidate_id
     thumb_dir.mkdir(parents=True, exist_ok=True)
     alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
     if material_type == "object" and not alpha_policy:
@@ -5314,69 +11349,31 @@ def create_accessory_candidate(
         "original_source_files": source_files,
         "video_reference_frames": extracted_video_frames,
         "created_at": int(time.time()),
+        **current_owner_fields(),
     }
     if alpha_policy:
         item["material_alpha_policy"] = alpha_policy
         item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
-    normalized = normalize_accessory_assets(item)
-    item.update(normalized)
+    size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
+    if size_reference_key:
+        item["size_reference"] = size_reference_key
+    defer_accessory_normalization(item)
+    ensure_default_ai_profile_reference(item)
     ensure_accessory_ai_profile(item, allow_provider=True)
+    ensure_accessory_locateanything_profile(item)
     thumbnails = []
     image_sources = [Path(path) for path in expanded_source_files if Path(path).suffix.lower() in IMAGE_REFERENCE_SUFFIXES]
     for idx, src in enumerate(image_sources[:8]):
         image = cv2.imread(str(src), cv2.IMREAD_COLOR)
         if image is not None:
             thumbnails.append(write_thumbnail(image, thumb_dir / f"source_{idx + 1:02d}.png", 0))
-    if not thumbnails and item.get("normalized_assets"):
-        for idx, asset in enumerate(item["normalized_assets"][:6]):
-            path = Path(asset.get("path", ""))
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR) if path.exists() else None
-            if image is not None:
-                thumbnails.append(write_thumbnail(image, thumb_dir / f"normalized_{idx + 1:02d}.png", 0))
     item["thumbnails"] = thumbnails[:8]
-    item["ai_generation_required"] = material_type == "object" and len(image_sources) >= 1
-    item["pose_collection_prompt"] = build_pose_collection_prompt(item) if item["ai_generation_required"] else ""
-    if item["ai_generation_required"]:
-        item["pose_collection_prompts"] = {
-            "upright": build_anchor_replacement_pose_prompt(item, "upright"),
-            "lying": build_anchor_replacement_pose_prompt(item, "lying"),
-        }
-        jobs = []
-        for pose_family in ("upright", "lying"):
-            label_prefix = "正立" if pose_family == "upright" else "平躺"
-            anchor_path = POSE_ANCHOR_IMAGES[pose_family]
-            output_name = "pose_collection_endface.png" if pose_family == "upright" else "pose_collection_flat.png"
-            final_output_path = OUTPUT_DIR / "accessory_pose_collections" / candidate_id / output_name
-            anchor_sha256 = file_sha256(anchor_path)
-            jobs.append(
-                {
-                    "job_id": f"imgjob_{candidate_id}_{pose_family}_anchor_replacement",
-                    "candidate_id": candidate_id,
-                    "pose_family": pose_family,
-                    "generation_step": "anchor_replacement",
-                    "label": f"{label_prefix} Pose Collection",
-                    "status": "queued_for_codex_image_worker",
-                    "mode": "anchor_image_replacement",
-                    "anchor_image_path": str(anchor_path),
-                    "anchor_image_basename": anchor_path.name,
-                    "anchor_image_sha256": anchor_sha256,
-                    "anchor_policy_version": ANCHOR_POLICY_VERSION,
-                    "anchor_provenance": "sha256",
-                    "input_files": [str(anchor_path), *[str(path) for path in image_sources[: max(0, MAX_IMAGE_WORKER_INPUTS - 1)]]],
-                    "input_video_files": [str(path) for path in source_files if Path(path).suffix.lower() in VIDEO_REFERENCE_SUFFIXES],
-                    "video_reference_frames": extracted_video_frames,
-                    "prompt": item["pose_collection_prompts"][pose_family],
-                    "output_path": str(final_output_path),
-                    "output_url": public_output_url(final_output_path),
-                    "progress": 0,
-                    "created_at": int(time.time()),
-                    "note": "One-step generation: replace the nine square metal bars in the hidden anchor image with the accessory.",
-                }
-            )
-        item["codex_image_jobs"] = jobs
-        for job in item["codex_image_jobs"]:
-            ensure_image_job_task_id(item, job)
-        item["codex_image_job"] = jobs[0]
+    item["ai_generation_required"] = False
+    item["pose_collection_prompt"] = ""
+    item["pose_collection_prompts"] = {}
+    item["codex_image_jobs"] = []
+    item["codex_image_job"] = None
+    ensure_pose_collection_image_jobs(item)
     save_accessory_candidate(ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json", item)
     return item
 
@@ -5415,6 +11412,31 @@ def mutate_candidate_image_job(
     ensure_image_job_task_id(candidate, job)
     job_id = str(job.get("job_id", ""))
     with _candidate_store_lock:
+        if path == CONFIG_PATH:
+            latest_config = load_config()
+            latest = next(
+                (
+                    item
+                    for item in latest_config.get("accessories", [])
+                    if isinstance(item, dict) and accessory_uid(item) == accessory_uid(candidate)
+                ),
+                None,
+            )
+            if latest is None:
+                return job
+            ensure_candidate_image_job_task_ids(latest)
+            latest_job = next(
+                (item for item in candidate_image_jobs(latest) if str(item.get("job_id", "")) == job_id),
+                dict(job),
+            )
+            if latest_job.get("status") == "stopped" and updates.get("status") != "stopped":
+                return latest_job
+            latest_job.update(updates)
+            store_candidate_image_job(latest, latest_job)
+            if preprocess_clean_sprites:
+                preprocess_object_clean_sprites(latest, allow_ai_cutout=True)
+            save_config(latest_config)
+            return latest_job
         if not path.exists():
             return job
         try:
@@ -5437,8 +11459,7 @@ def mutate_candidate_image_job(
 
 
 def candidate_has_active_image_jobs(candidate: dict[str, Any]) -> bool:
-    active_statuses = {"queued_for_codex_image_worker", "queued", "running"}
-    return any(str(job.get("status", "")) in active_statuses for job in candidate_image_jobs(candidate))
+    return any(str(job.get("status", "")) in IMAGE_JOB_ACTIVE_STATUSES for job in candidate_image_jobs(candidate))
 
 
 def image_job_prompt(job: dict[str, Any]) -> str:
@@ -5473,7 +11494,7 @@ Core prompt:
 
 
 def image_job_is_active(status: str) -> bool:
-    return status in {"queued_for_codex_image_worker", "queued", "running"}
+    return status in IMAGE_JOB_ACTIVE_STATUSES
 
 
 def codex_log_has_generated_image(log_path: Path) -> bool:
@@ -5484,6 +11505,107 @@ def codex_log_has_generated_image(log_path: Path) -> bool:
     except OSError:
         return False
     return "/.codex/generated_images/" in text or "/home/dministrator/.codex/generated_images/" in text
+
+
+def image_job_output_path(job: dict[str, Any], *, for_write: bool = False) -> Path:
+    return resolve_service_path(job.get("output_path", ""), for_write=for_write)
+
+
+def image_job_log_path(job: dict[str, Any]) -> Path:
+    raw_path = str(job.get("log_path") or "").strip()
+    if raw_path:
+        return resolve_service_path(raw_path)
+    job_id = str(job.get("job_id") or job.get("task_id") or "image_worker")
+    return IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
+
+
+def read_image_worker_log_tail(log_path: Path) -> str:
+    if not log_path.exists():
+        return ""
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - IMAGE_WORKER_LOG_TAIL_BYTES))
+            return handle.read().decode("utf-8", errors="ignore")
+    except OSError:
+        return ""
+
+
+def classify_image_worker_failure(log_path: Path, return_code: int | None, output_path: Path, *, stale: bool = False) -> str:
+    text = read_image_worker_log_tail(log_path)
+    lower = text.lower()
+    causes: list[str] = []
+    if "toomanyrequests" in lower or "too many requests" in lower or "rate limit" in lower or "429" in lower:
+        causes.append("图像生成供应商限流（TooManyRequests/429）")
+    if "forbidden" in lower:
+        causes.append("备用图像连接器被拒绝（FORBIDDEN）")
+    if "fallback" in lower and ("approval" in lower or "approve" in lower or "explicit" in lower or "openai_api_key" in lower):
+        causes.append("CLI fallback 需要显式配置或批准")
+    if stale:
+        causes.append("任务标记为 running，但当前服务没有发现仍在写日志的 Image Worker 进程")
+    if return_code is not None:
+        if return_code == 0:
+            causes.append("Codex CLI 退出码 0，但没有写出目标 PNG")
+        else:
+            causes.append(f"Codex CLI 退出码 {return_code}")
+    if not output_path.exists():
+        causes.append(f"未生成目标 PNG：{output_path}")
+    if not causes:
+        causes.append("图像生成结束但未产出可用图片")
+    return "；".join(causes) + "。请稍后重试，或配置并批准可用的 Image Worker fallback 后重新排队。"
+
+
+def image_worker_process_alive(job_id: str) -> bool:
+    process = _image_worker_processes.get(job_id)
+    return bool(process and process.poll() is None)
+
+
+def codex_process_has_log_open(log_path: Path) -> bool:
+    if not log_path.exists() or not Path("/proc").exists():
+        return False
+    target = str(log_path.resolve())
+    for pid_dir in Path("/proc").iterdir():
+        if not pid_dir.name.isdigit():
+            continue
+        try:
+            cmdline = (pid_dir / "cmdline").read_bytes().decode("utf-8", errors="ignore").replace("\x00", " ")
+        except OSError:
+            continue
+        if "codex" not in cmdline:
+            continue
+        fd_dir = pid_dir / "fd"
+        try:
+            for fd in fd_dir.iterdir():
+                try:
+                    linked = os.readlink(fd)
+                except OSError:
+                    continue
+                if linked.removesuffix(" (deleted)") == target:
+                    return True
+        except OSError:
+            continue
+    return False
+
+
+def image_job_has_live_worker(job: dict[str, Any], log_path: Path) -> bool:
+    job_id = str(job.get("job_id") or "")
+    return image_worker_process_alive(job_id) or codex_process_has_log_open(log_path)
+
+
+def running_image_job_is_stale(job: dict[str, Any], log_path: Path) -> bool:
+    if image_job_has_live_worker(job, log_path):
+        return False
+    now = int(time.time())
+    try:
+        age = now - int(log_path.stat().st_mtime) if log_path.exists() else now - int(job.get("started_at") or job.get("created_at") or now)
+    except (OSError, ValueError, TypeError):
+        age = 0
+    provider = str(job.get("provider") or "")
+    generation_method = str(job.get("generation_method") or "")
+    if generation_method == "codex_exec_image_worker" and provider in {LOCAL_CODEX_IMAGE_PROVIDER, WINDOWS_WORKER_IMAGE_PROVIDER}:
+        return age >= max(IMAGE_WORKER_STALE_SECONDS, int(windows_worker_image_timeout_seconds()) + 60)
+    return age >= IMAGE_WORKER_STALE_SECONDS
 
 
 def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | None:
@@ -5498,16 +11620,20 @@ def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | Non
                 if changed:
                     store_candidate_image_job(candidate, job)
                 status = str(job.get("status", ""))
-                if status not in {"queued_for_codex_image_worker", "queued"}:
+                if status not in IMAGE_JOB_QUEUED_STATUSES:
                     if changed:
                         save_accessory_candidate(path, candidate)
                     continue
                 depends_on_output = str(job.get("depends_on_output_path") or "")
-                if depends_on_output and not Path(depends_on_output).exists():
+                if depends_on_output and not resolve_service_path(depends_on_output).exists():
                     if changed:
                         save_accessory_candidate(path, candidate)
                     continue
-                output_path = Path(str(job.get("output_path", "")))
+                output_path = image_job_output_path(job, for_write=True)
+                if str(output_path) and str(output_path) != str(job.get("output_path", "")):
+                    job["output_path"] = str(output_path)
+                    job["output_url"] = public_output_url(output_path)
+                    changed = True
                 if output_path.exists():
                     job["status"] = "completed"
                     job["progress"] = 100
@@ -5520,6 +11646,49 @@ def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | Non
                 if changed:
                     save_accessory_candidate(path, candidate)
                 return path, candidate, job
+    with _candidate_store_lock:
+        config = load_config()
+        config_changed = False
+        for candidate in config.get("accessories", []):
+            if not isinstance(candidate, dict):
+                continue
+            if accessory_material_type(candidate) == "text":
+                continue
+            if ensure_pose_collection_image_jobs(candidate):
+                config_changed = True
+            for job in candidate_image_jobs(candidate):
+                changed = ensure_image_job_task_id(candidate, job)
+                if changed:
+                    store_candidate_image_job(candidate, job)
+                    config_changed = True
+                status = str(job.get("status", ""))
+                if status not in IMAGE_JOB_QUEUED_STATUSES:
+                    continue
+                depends_on_output = str(job.get("depends_on_output_path") or "")
+                if depends_on_output and not resolve_service_path(depends_on_output).exists():
+                    continue
+                output_path = image_job_output_path(job, for_write=True)
+                if str(output_path) and str(output_path) != str(job.get("output_path", "")):
+                    job["output_path"] = str(output_path)
+                    job["output_url"] = public_output_url(output_path)
+                    changed = True
+                if output_path.exists():
+                    job["status"] = "completed"
+                    job["progress"] = 100
+                    job["output_url"] = public_output_url(output_path)
+                    job["completed_at"] = int(output_path.stat().st_mtime)
+                    store_candidate_image_job(candidate, job)
+                    preprocess_object_clean_sprites(candidate, allow_ai_cutout=True)
+                    config_changed = True
+                    continue
+                if changed:
+                    store_candidate_image_job(candidate, job)
+                    config_changed = True
+                if config_changed:
+                    save_config(config)
+                return CONFIG_PATH, candidate, job
+        if config_changed:
+            save_config(config)
     return None
 
 
@@ -5528,13 +11697,545 @@ def update_image_worker_status(path: Path, candidate: dict[str, Any], job: dict[
     job.update(updated_job)
 
 
+def cursor_image_model_score(model_id: str) -> tuple[int, int]:
+    lowered = str(model_id or "").lower()
+    for index, marker in enumerate(CURSOR_IMAGE_MODEL_PRIORITY):
+        if marker in lowered:
+            return (100 - index, len(lowered))
+    if any(marker in lowered for marker in CURSOR_IMAGE_MODEL_KEYWORDS):
+        return (10, len(lowered))
+    return (0, len(lowered))
+
+
+def inspect_cursor_image_models(agent_config: dict[str, Any]) -> dict[str, Any]:
+    options = normalize_agent_model_options(agent_config.get("model_options"))
+    image_options = [
+        option
+        for option in options
+        if cursor_image_model_score(str(option.get("id") or option.get("label") or ""))[0] > 0
+    ]
+    image_options.sort(key=lambda item: cursor_image_model_score(str(item.get("id") or item.get("label") or "")), reverse=True)
+    recommended_model = str(image_options[0]["id"]) if image_options else ""
+    connected = normalize_agent_provider(agent_config.get("provider"), agent_config.get("base_url", "")) == AGENT_PROVIDER_CURSOR and agent_connected(agent_config)
+    if recommended_model:
+        status = "image_model_available"
+        message = f"Cursor model list includes image-capable candidate {recommended_model}."
+    elif connected and options:
+        status = "no_image_model"
+        message = "Cursor /v1/models is reachable, but the returned model list does not expose an image-generation-capable model."
+    elif connected:
+        status = "no_model_list"
+        message = "Cursor is connected, but no cached model list is available; run Agent config test to refresh /v1/models."
+    else:
+        status = "not_connected"
+        message = "Cursor Agent credentials are not connected; cannot inspect /v1/models for image-capable models."
+    return {
+        "status": status,
+        "connected": bool(connected),
+        "model_count": len(options),
+        "image_model_count": len(image_options),
+        "image_models": image_options[:12],
+        "recommended_model": recommended_model,
+        "message": message,
+    }
+
+
+def cursor_image2_settings() -> dict[str, Any]:
+    agent_config = load_agent_config()
+    agent_is_cursor = normalize_agent_provider(agent_config.get("provider"), agent_config.get("base_url", "")) == AGENT_PROVIDER_CURSOR
+    model_inspection = inspect_cursor_image_models(agent_config)
+    base_url = (
+        os.environ.get(CURSOR_IMAGE2_BASE_URL_ENV, "").strip().rstrip("/")
+        or (str(agent_config.get("base_url") or "").strip().rstrip("/") if agent_is_cursor else "")
+        or AGENT_CURSOR_DEFAULT_BASE_URL
+    )
+    endpoint = os.environ.get(CURSOR_IMAGE2_ENDPOINT_ENV, "").strip().rstrip("/")
+    api_key = os.environ.get(CURSOR_IMAGE2_API_KEY_ENV, "").strip() or (str(agent_config.get("api_key") or "").strip() if agent_is_cursor else "")
+    model = os.environ.get(CURSOR_IMAGE2_MODEL_ENV, "").strip() or model_inspection.get("recommended_model") or CURSOR_IMAGE2_DEFAULT_MODEL
+    missing: list[str] = []
+    if not endpoint:
+        missing.append(CURSOR_IMAGE2_ENDPOINT_ENV)
+    if not api_key:
+        missing.append(CURSOR_IMAGE2_API_KEY_ENV)
+    if not model:
+        missing.append(CURSOR_IMAGE2_MODEL_ENV)
+    return {
+        "configured": not missing,
+        "base_url": base_url,
+        "endpoint": endpoint,
+        "endpoint_public": masked_url_for_status(endpoint),
+        "api_key": api_key,
+        "has_api_key": bool(api_key),
+        "model": model,
+        "missing": missing,
+        "status": "ready" if not missing else "missing_config",
+        "message": (
+            "Cursor Image2 endpoint is configured."
+            if not missing
+            else f"{model_inspection['message']} Cursor image generation requires an explicit image-generation endpoint/protocol or private relay. "
+            + f"Set {CURSOR_IMAGE2_ENDPOINT_ENV}; use {CURSOR_IMAGE2_API_KEY_ENV} if the existing Cursor Agent key should not be reused."
+        ),
+        "model_inspection": model_inspection,
+        "timeout_seconds": max(10.0, min(900.0, float(agent_config.get("timeout_seconds") or 120.0))),
+    }
+
+
+def public_cursor_image2_status() -> dict[str, Any]:
+    settings = cursor_image2_settings()
+    try:
+        worker_endpoint = windows_worker_base_url()
+        fallback = {
+            "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+            "configured": True,
+            "endpoint": masked_url_for_status(worker_endpoint),
+            "route": "/images/codex-default-crops",
+            "status": "available",
+            "message": "Windows local CodexImageWorker fallback is configured.",
+        }
+    except Exception as exc:
+        fallback = {
+            "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+            "configured": False,
+            "endpoint": "",
+            "route": "/images/codex-default-crops",
+            "status": "missing_config",
+            "message": str(exc),
+        }
+    return {
+        "provider": CURSOR_IMAGE2_PROVIDER,
+        "configured": bool(settings.get("configured")),
+        "endpoint": settings.get("endpoint_public") or "",
+        "model": settings.get("model") or "",
+        "has_api_key": bool(settings.get("has_api_key")),
+        "status": settings.get("status") or "",
+        "message": settings.get("message") or "",
+        "missing": settings.get("missing") or [],
+        "model_inspection": settings.get("model_inspection") or {},
+        "fallback": fallback,
+    }
+
+
+def image_file_payload(path: Path) -> dict[str, str]:
+    mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
+    return {
+        "name": path.name,
+        "mime_type": mime_type,
+        "data": base64.b64encode(path.read_bytes()).decode("ascii"),
+    }
+
+
+def cursor_image2_payload(job: dict[str, Any], input_files: list[str], settings: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "model": settings["model"],
+        "prompt": image_job_prompt(job),
+        "n": 1,
+        "size": os.environ.get("INSPECTION_CURSOR_IMAGE2_SIZE", "1024x1024").strip() or "1024x1024",
+        "response_format": "b64_json",
+        "input_images": [image_file_payload(Path(path)) for path in input_files[:MAX_IMAGE_WORKER_INPUTS]],
+    }
+
+
+def decode_b64_image(value: Any) -> bytes | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.startswith("data:"):
+        _, _, text = text.partition(",")
+    try:
+        return base64.b64decode(text, validate=True)
+    except (ValueError, binascii.Error):
+        return None
+
+
+def cursor_image2_response_candidates(payload: Any) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    if isinstance(payload, dict):
+        for key in ("data", "images", "output", "result"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                candidates.extend(item for item in value if isinstance(item, dict))
+            elif isinstance(value, dict):
+                candidates.append(value)
+        if any(key in payload for key in ("b64_json", "base64", "image_base64", "url")):
+            candidates.append(payload)
+    elif isinstance(payload, list):
+        candidates.extend(item for item in payload if isinstance(item, dict))
+    return candidates
+
+
+def extract_cursor_image2_bytes(payload: dict[str, Any], settings: dict[str, Any]) -> bytes:
+    for item in cursor_image2_response_candidates(payload):
+        for key in ("b64_json", "base64", "image_base64"):
+            image_bytes = decode_b64_image(item.get(key))
+            if image_bytes:
+                return image_bytes
+        url = str(item.get("url") or "").strip()
+        if url:
+            response = requests.get(url, timeout=float(settings["timeout_seconds"]))
+            response.raise_for_status()
+            return response.content
+    raise RuntimeError(
+        "Cursor Image2 response did not include image bytes. Expected data[0].b64_json/base64/image_base64 or data[0].url; "
+        f"set {CURSOR_IMAGE2_ENDPOINT_ENV} if this Cursor Image2 endpoint uses a different response shape."
+    )
+
+
+def windows_worker_image_response_bytes(payload: dict[str, Any]) -> bytes:
+    for key in ("b64_json", "base64", "image_base64"):
+        image_bytes = decode_b64_image(payload.get(key))
+        if image_bytes:
+            return image_bytes
+    for item in cursor_image2_response_candidates(payload):
+        for key in ("b64_json", "base64", "image_base64"):
+            image_bytes = decode_b64_image(item.get(key))
+            if image_bytes:
+                return image_bytes
+    raise RuntimeError("Windows Worker image fallback response did not include base64 PNG bytes.")
+
+
+def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any], *, reason: str) -> bool:
+    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
+    output_path = image_job_output_path(job, for_write=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.windows_worker_image.log"
+    input_files: list[Path] = []
+    missing_input_files: list[str] = []
+    for item in job.get("input_files", []) or []:
+        input_path = resolve_service_path(item)
+        if input_path.exists():
+            input_files.append(input_path)
+        else:
+            missing_input_files.append(str(item))
+    if missing_input_files:
+        mutate_candidate_image_job(
+            path,
+            candidate,
+            job,
+            {
+                "status": "failed",
+                "progress": 100,
+                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+                "generation_method": "codex_exec_image_worker",
+                "failed_at": int(time.time()),
+                "error": "Windows Codex image worker cannot run because input files are missing: "
+                + "；".join(missing_input_files[:4])
+                + ("；..." if len(missing_input_files) > 4 else ""),
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
+                "log_path": str(log_path),
+            },
+        )
+        return False
+    if not input_files:
+        mutate_candidate_image_job(
+            path,
+            candidate,
+            job,
+            {
+                "status": "failed",
+                "progress": 100,
+                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+                "generation_method": "codex_exec_image_worker",
+                "failed_at": int(time.time()),
+                "error": "Windows Codex image worker cannot run because no input image files were found.",
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
+                "log_path": str(log_path),
+            },
+        )
+        return False
+
+    try:
+        endpoint = windows_worker_base_url()
+    except Exception as exc:
+        mutate_candidate_image_job(
+            path,
+            candidate,
+            job,
+            {
+                "status": "failed",
+                "progress": 100,
+                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+                "generation_method": "codex_exec_image_worker",
+                "failed_at": int(time.time()),
+                "error": f"{reason}; Windows Codex image worker is not configured: {exc}",
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
+                "log_path": str(log_path),
+            },
+        )
+        return False
+
+    update_image_worker_status(
+        path,
+        candidate,
+        job,
+        status="running",
+        progress=max(int(job.get("progress", 0) or 0), 18),
+        started_at=int(time.time()),
+        provider=LOCAL_CODEX_IMAGE_PROVIDER,
+        generation_method="codex_exec_image_worker",
+        output_path=str(output_path),
+        output_url=public_output_url(output_path),
+        log_path=str(log_path),
+        note="系统正在通过 Windows 本地 CodexImageWorker 生成默认多角度图片。",
+    )
+    file_handles: list[Any] = []
+    try:
+        files = []
+        for ref_path in input_files[:MAX_IMAGE_WORKER_INPUTS]:
+            handle = ref_path.open("rb")
+            file_handles.append(handle)
+            files.append(
+                (
+                    "reference_images",
+                    (
+                        ref_path.name,
+                        handle,
+                        mimetypes.guess_type(ref_path.name)[0] or "image/png",
+                    ),
+                )
+            )
+        data = {
+            "pose_family": str(job.get("pose_family") or "lying"),
+            "output_name": output_path.name,
+            "prompt": str(job.get("prompt") or ""),
+            "generation_step": str(job.get("generation_step") or ""),
+        }
+        log_path.write_text(
+            json.dumps(
+                {
+                    "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+                    "endpoint": masked_url_for_status(endpoint),
+                    "route": "/images/codex-default-crops",
+                    "reason": reason,
+                    "pose_family": data["pose_family"],
+                    "input_count": len(files),
+                    "input_files": [item.name for item in input_files[:MAX_IMAGE_WORKER_INPUTS]],
+                    "output_path": str(output_path),
+                    "requested_at": int(time.time()),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        response = requests.post(
+            f"{endpoint}/images/codex-default-crops",
+            data=data,
+            files=files,
+            headers=windows_worker_headers(),
+            timeout=windows_worker_image_timeout_seconds(),
+        )
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Windows Codex image worker returned non-JSON response: {response.text[:240]}") from exc
+        if response.status_code >= 400:
+            detail = payload.get("detail") if isinstance(payload, dict) else payload
+            raise RuntimeError(f"Windows Codex image worker failed: HTTP {response.status_code} {bounded_text(detail, 180)}")
+        if not isinstance(payload, dict):
+            raise RuntimeError("Windows Codex image worker response was not a JSON object")
+        output_path.write_bytes(windows_worker_image_response_bytes(payload))
+        image = cv2.imread(str(output_path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            raise RuntimeError("Windows Codex image worker wrote bytes, but the saved output is not a readable image")
+        mutate_candidate_image_job(
+            path,
+            candidate,
+            job,
+            {
+                "status": "completed",
+                "progress": 100,
+                "provider": str(payload.get("provider") or LOCAL_CODEX_IMAGE_PROVIDER),
+                "generation_method": str(payload.get("method") or "codex_exec_image_worker"),
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
+                "completed_at": int(time.time()),
+                "log_path": str(log_path),
+                "note": "Windows 本地 CodexImageWorker 生成任务已完成。",
+            },
+            preprocess_clean_sprites=True,
+        )
+        return True
+    except Exception as exc:
+        mutate_candidate_image_job(
+            path,
+            candidate,
+            job,
+            {
+                "status": "failed",
+                "progress": 100,
+                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
+                "generation_method": "codex_exec_image_worker",
+                "failed_at": int(time.time()),
+                "error": f"{reason}; {bounded_text(str(exc), 240)}",
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
+                "log_path": str(log_path),
+            },
+        )
+        return False
+    finally:
+        for handle in file_handles:
+            try:
+                handle.close()
+            except OSError:
+                pass
+
+
+def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
+    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
+    output_path = image_job_output_path(job, for_write=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.cursor_image2.log"
+    input_files: list[str] = []
+    missing_input_files: list[str] = []
+    for item in job.get("input_files", []) or []:
+        input_path = resolve_service_path(item)
+        if input_path.exists():
+            input_files.append(str(input_path))
+        else:
+            missing_input_files.append(str(item))
+
+    settings = cursor_image2_settings()
+    if not settings["configured"]:
+        run_windows_worker_image_job(
+            path,
+            candidate,
+            job,
+            reason=(
+                "Cursor Image2 is not configured. Missing "
+                + ", ".join(settings.get("missing") or [CURSOR_IMAGE2_ENDPOINT_ENV, CURSOR_IMAGE2_MODEL_ENV])
+            ),
+        )
+        return
+    if missing_input_files:
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error="部分输入图片路径不存在，且无法按当前服务根迁移：" + "；".join(missing_input_files[:4]) + ("；..." if len(missing_input_files) > 4 else ""),
+            provider=CURSOR_IMAGE2_PROVIDER,
+            output_path=str(output_path),
+            output_url=public_output_url(output_path),
+            log_path=str(log_path),
+        )
+        return
+    if not input_files:
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error="没有找到可用于 Cursor Image2 生成的有效输入图片。",
+            provider=CURSOR_IMAGE2_PROVIDER,
+            output_path=str(output_path),
+            output_url=public_output_url(output_path),
+            log_path=str(log_path),
+        )
+        return
+
+    update_image_worker_status(
+        path,
+        candidate,
+        job,
+        status="running",
+        progress=max(int(job.get("progress", 0) or 0), 12),
+        started_at=int(time.time()),
+        provider=CURSOR_IMAGE2_PROVIDER,
+        output_path=str(output_path),
+        output_url=public_output_url(output_path),
+        log_path=str(log_path),
+        note="系统正在通过 Cursor Image2 API 生成默认图片。",
+    )
+
+    try:
+        payload = cursor_image2_payload(job, input_files, settings)
+        log_path.write_text(
+            json.dumps(
+                {
+                    "provider": CURSOR_IMAGE2_PROVIDER,
+                    "endpoint": settings["endpoint_public"],
+                    "model": settings["model"],
+                    "input_count": len(input_files),
+                    "output_path": str(output_path),
+                    "requested_at": int(time.time()),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        response = requests.post(
+            settings["endpoint"],
+            json=payload,
+            headers={**cursor_auth_headers(settings["api_key"]), "Content-Type": "application/json"},
+            timeout=float(settings["timeout_seconds"]),
+        )
+        response.raise_for_status()
+        response_payload = response.json()
+        if not isinstance(response_payload, dict):
+            raise RuntimeError("Cursor Image2 response was not a JSON object")
+        image_bytes = extract_cursor_image2_bytes(response_payload, settings)
+        output_path.write_bytes(image_bytes)
+        image = cv2.imread(str(output_path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            raise RuntimeError("Cursor Image2 returned bytes, but the saved output is not a readable image")
+        mutate_candidate_image_job(
+            path,
+            candidate,
+            job,
+            {
+                "status": "completed",
+                "progress": 100,
+                "provider": CURSOR_IMAGE2_PROVIDER,
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
+                "completed_at": int(time.time()),
+                "log_path": str(log_path),
+                "note": "Cursor Image2 API 生成任务已完成。",
+            },
+            preprocess_clean_sprites=True,
+        )
+    except requests.HTTPError as exc:
+        detail = exc.response.text[:240] if exc.response is not None else str(exc)
+        run_windows_worker_image_job(
+            path,
+            candidate,
+            job,
+            reason=f"Cursor Image2 API 请求失败：HTTP {getattr(exc.response, 'status_code', '')} {bounded_text(detail, 180)}",
+        )
+    except Exception as exc:
+        run_windows_worker_image_job(
+            path,
+            candidate,
+            job,
+            reason=f"Cursor Image2 fallback trigger: {bounded_text(str(exc), 180)}",
+        )
+
+
 def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
     job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
-    output_path = Path(str(job.get("output_path", "")))
+    output_path = image_job_output_path(job, for_write=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
-    input_files = [str(Path(item)) for item in job.get("input_files", []) if Path(str(item)).exists()]
+    input_files: list[str] = []
+    missing_input_files: list[str] = []
+    for item in job.get("input_files", []) or []:
+        input_path = resolve_service_path(item)
+        if input_path.exists():
+            input_files.append(str(input_path))
+        else:
+            missing_input_files.append(str(item))
 
     if not shutil.which("codex"):
         update_image_worker_status(
@@ -5545,6 +12246,24 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
             progress=100,
             failed_at=int(time.time()),
             error="codex CLI was not found on PATH.",
+            output_path=str(output_path),
+            output_url=public_output_url(output_path),
+            log_path=str(log_path),
+        )
+        return
+    if missing_input_files:
+        update_image_worker_status(
+            path,
+            candidate,
+            job,
+            status="failed",
+            progress=100,
+            failed_at=int(time.time()),
+            error="部分输入图片路径不存在，且无法按当前服务根迁移："
+            + "；".join(missing_input_files[:4])
+            + ("；..." if len(missing_input_files) > 4 else ""),
+            output_path=str(output_path),
+            output_url=public_output_url(output_path),
             log_path=str(log_path),
         )
         return
@@ -5557,6 +12276,8 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
             progress=100,
             failed_at=int(time.time()),
             error="没有找到可用于生成的有效输入图片。",
+            output_path=str(output_path),
+            output_url=public_output_url(output_path),
             log_path=str(log_path),
         )
         return
@@ -5564,7 +12285,8 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
     command = [
         "codex",
         "exec",
-        "--dangerously-bypass-approvals-and-sandbox",
+        "--sandbox",
+        "workspace-write",
         "-C",
         str(ROOT),
     ]
@@ -5579,6 +12301,8 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
         status="running",
         progress=max(int(job.get("progress", 0) or 0), 12),
         started_at=int(time.time()),
+        output_path=str(output_path),
+        output_url=public_output_url(output_path),
         log_path=str(log_path),
         note="系统正在处理这个图像生成任务。",
     )
@@ -5642,7 +12366,9 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
                 "status": "failed",
                 "progress": 100,
                 "failed_at": int(time.time()),
-                "error": "生成结束但没有可用的图像结果；已拒绝非生成输出。",
+                "error": "生成结束但日志中没有可用的 AI 图像结果；已拒绝非生成输出。",
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
                 "log_path": str(log_path),
             },
         )
@@ -5659,6 +12385,7 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
             {
                 "status": "completed",
                 "progress": 100,
+                "output_path": str(output_path),
                 "output_url": public_output_url(output_path),
                 "completed_at": int(time.time()),
                 "log_path": str(log_path),
@@ -5675,10 +12402,34 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
                 "status": "failed",
                 "progress": 100,
                 "failed_at": int(time.time()),
-                "error": f"生成任务退出码 {return_code}，但没有在 {output_path} 找到输出文件。",
+                "error": classify_image_worker_failure(log_path, return_code, output_path),
+                "output_path": str(output_path),
+                "output_url": public_output_url(output_path),
                 "log_path": str(log_path),
             },
         )
+
+
+def run_image_generation_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
+    provider = str(job.get("provider") or "").strip()
+    status = str(job.get("status") or "").strip()
+    if provider == CURSOR_IMAGE2_PROVIDER or status == CURSOR_IMAGE2_QUEUE_STATUS:
+        run_cursor_image2_job(path, candidate, job)
+        return
+    if provider == LOCAL_CODEX_IMAGE_PROVIDER or status == CODEX_IMAGE_WORKER_QUEUE_STATUS:
+        try:
+            windows_worker_base_url()
+        except RuntimeError:
+            run_codex_image_job(path, candidate, job)
+        else:
+            run_windows_worker_image_job(
+                path,
+                candidate,
+                job,
+                reason="Delegated to Windows local CodexImageWorker.",
+            )
+        return
+    run_codex_image_job(path, candidate, job)
 
 
 def image_worker_loop() -> None:
@@ -5701,9 +12452,9 @@ def image_worker_loop() -> None:
                 note="系统正在处理这个图像生成任务。",
             )
             worker = threading.Thread(
-                target=run_codex_image_job,
+                target=run_image_generation_job,
                 args=(path, candidate, job),
-                name=f"codex-image-worker-{job.get('job_id', 'job')}",
+                name=f"image-generation-worker-{job.get('job_id', 'job')}",
                 daemon=True,
             )
             worker.start()
@@ -5719,31 +12470,51 @@ def start_image_worker() -> bool:
     with _image_worker_lock:
         if _image_worker_thread and _image_worker_thread.is_alive():
             return False
-        _image_worker_thread = threading.Thread(target=image_worker_loop, name="codex-image-worker", daemon=True)
+        _image_worker_thread = threading.Thread(target=image_worker_loop, name="image-generation-worker", daemon=True)
         _image_worker_thread.start()
         return True
 
 
 def refresh_codex_image_job(job: dict[str, Any]) -> dict[str, Any]:
     copy = dict(job)
-    output_path = Path(str(copy.get("output_path", "")))
+    if str(copy.get("generation_method") or "") == "codex_exec_image_worker" and str(copy.get("provider") or "") == WINDOWS_WORKER_IMAGE_PROVIDER:
+        copy["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
+    output_path = image_job_output_path(copy, for_write=str(copy.get("status")) in IMAGE_JOB_ACTIVE_STATUSES)
+    log_path = image_job_log_path(copy)
     status = str(copy.get("status"))
+    if status in IMAGE_JOB_ACTIVE_STATUSES and str(output_path) != str(copy.get("output_path", "")):
+        copy["output_path"] = str(output_path)
     if status in {"failed", "stopped"}:
         copy["progress"] = int(copy.get("progress", 100))
-        copy.setdefault("output_url", public_output_url(output_path) if str(output_path).startswith(str(OUTPUT_DIR)) and output_path.exists() else "")
+        copy.setdefault("output_url", public_output_url_for_existing(output_path))
+        if status == "failed" and not output_path.exists():
+            classified_error = classify_image_worker_failure(log_path, None, output_path)
+            if any(marker in classified_error for marker in ("TooManyRequests", "FORBIDDEN", "fallback")) and classified_error != copy.get("error"):
+                copy["error"] = classified_error
+                copy["log_path"] = str(log_path)
     elif output_path.exists():
         copy["status"] = "completed"
         copy["progress"] = 100
         copy["output_url"] = public_output_url(output_path)
         copy["completed_at"] = int(output_path.stat().st_mtime)
+        if str(copy.get("generation_method") or "") == "codex_exec_image_worker":
+            copy["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
+            copy["note"] = "Windows 本地 CodexImageWorker 生成任务已完成。"
     elif status == "running":
-        started_at = int(copy.get("started_at") or copy.get("created_at") or time.time())
-        elapsed = max(0, int(time.time()) - started_at)
-        copy["progress"] = min(95, max(int(copy.get("progress", 0)), 18 + elapsed // 8))
-        copy.setdefault("output_url", public_output_url(output_path) if str(output_path).startswith(str(OUTPUT_DIR)) else "")
+        if running_image_job_is_stale(copy, log_path):
+            copy["status"] = "failed"
+            copy["progress"] = 100
+            copy["failed_at"] = int(time.time())
+            copy["error"] = classify_image_worker_failure(log_path, None, output_path, stale=True)
+            copy["log_path"] = str(log_path)
+        else:
+            started_at = int(copy.get("started_at") or copy.get("created_at") or time.time())
+            elapsed = max(0, int(time.time()) - started_at)
+            copy["progress"] = min(95, max(int(copy.get("progress", 0)), 18 + elapsed // 8))
+        copy.setdefault("output_url", public_output_url(output_path))
     else:
         copy["progress"] = int(copy.get("progress", 0))
-        copy.setdefault("output_url", public_output_url(output_path) if str(output_path).startswith(str(OUTPUT_DIR)) else "")
+        copy.setdefault("output_url", public_output_url(output_path))
     return copy
 
 
@@ -5781,7 +12552,57 @@ def public_accessory_detail_item(item: dict[str, Any]) -> dict[str, Any]:
     return copy
 
 
-def list_codex_image_jobs() -> list[dict[str, Any]]:
+CODEX_IMAGE_JOB_PERSISTED_KEYS = (
+    "status",
+    "progress",
+    "completed_at",
+    "failed_at",
+    "stopped_at",
+    "error",
+    "output_path",
+    "output_url",
+    "log_path",
+    "provider",
+    "generation_method",
+    "generation_step",
+    "queue_kind",
+    "note",
+    "task_id",
+    "job_id",
+    "candidate_id",
+)
+
+
+def refreshed_public_codex_jobs_for_record(
+    record: dict[str, Any],
+    *,
+    fallback_path: Path | None = None,
+    job_store: str = "candidate",
+) -> tuple[list[dict[str, Any]], bool]:
+    changed = ensure_candidate_image_job_task_ids(record)
+    public_jobs: list[dict[str, Any]] = []
+    record_id = str(record.get("id") or accessory_uid(record) or "")
+    for job in candidate_image_jobs(record):
+        changed = ensure_image_job_task_id(record, job) or changed
+        refreshed = refresh_codex_image_job(job)
+        refreshed["candidate_name"] = record.get("name", "Accessory")
+        refreshed["candidate_id"] = record_id or refreshed.get("candidate_id")
+        refreshed["job_id"] = refreshed.get("job_id") or f"imgjob_{refreshed['candidate_id']}"
+        refreshed["task_id"] = refreshed.get("task_id") or deterministic_task_id(record, refreshed)
+        refreshed["created_at"] = record_created_at(refreshed, fallback_path) or record_created_at(record, fallback_path)
+        refreshed["updated_at"] = record_updated_at(refreshed, fallback_path) or record_updated_at(record, fallback_path)
+        refreshed["owner_user_id"] = record_owner_id(record)
+        refreshed["owner_username"] = record_owner_username(record)
+        refreshed["job_store"] = job_store
+        refreshed["open_kind"] = "accessory" if job_store == "config" else "candidate"
+        if any(refreshed.get(key) != job.get(key) for key in CODEX_IMAGE_JOB_PERSISTED_KEYS):
+            store_candidate_image_job(record, refreshed)
+            changed = True
+        public_jobs.append(public_image_job(refreshed))
+    return public_jobs, changed
+
+
+def list_codex_image_jobs(user: dict[str, Any] | None = None, target_user_id: str | None = None) -> list[dict[str, Any]]:
     jobs = []
     for path in sorted(ACCESSORY_CANDIDATES_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         with _candidate_store_lock:
@@ -5789,21 +12610,31 @@ def list_codex_image_jobs() -> list[dict[str, Any]]:
                 candidate = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 continue
-            changed = False
-            changed = ensure_candidate_image_job_task_ids(candidate) or changed
-            for job in candidate_image_jobs(candidate):
-                changed = ensure_image_job_task_id(candidate, job) or changed
-                refreshed = refresh_codex_image_job(job)
-                refreshed["candidate_name"] = candidate.get("name", "Accessory")
-                refreshed["candidate_id"] = candidate.get("id", refreshed.get("candidate_id"))
-                refreshed["job_id"] = refreshed.get("job_id") or f"imgjob_{refreshed['candidate_id']}"
-                refreshed["task_id"] = refreshed.get("task_id") or deterministic_task_id(candidate, refreshed)
-                if refreshed.get("status") != job.get("status") or refreshed.get("completed_at") != job.get("completed_at"):
-                    store_candidate_image_job(candidate, refreshed)
-                    changed = True
-                jobs.append(public_image_job(refreshed))
+            candidate = enrich_record_audit_fields(candidate, path)
+            if user and not record_visible_to_user(candidate, user, target_user_id):
+                continue
+            public_jobs, changed = refreshed_public_codex_jobs_for_record(candidate, fallback_path=path, job_store="candidate")
+            jobs.extend(public_jobs)
             if changed:
                 save_accessory_candidate(path, candidate)
+    with _candidate_store_lock:
+        config = load_config()
+        config_changed = False
+        for item in config.get("accessories", []):
+            if not isinstance(item, dict):
+                continue
+            if user and not record_visible_to_user(item, user, target_user_id):
+                continue
+            has_jobs = bool(candidate_image_jobs(item))
+            if has_jobs or item.get("ai_generation_required"):
+                config_changed = ensure_pose_collection_image_jobs(item) or config_changed
+            if not candidate_image_jobs(item):
+                continue
+            public_jobs, changed = refreshed_public_codex_jobs_for_record(item, job_store="config")
+            config_changed = changed or config_changed
+            jobs.extend(public_jobs)
+        if config_changed:
+            save_config(config)
     return jobs
 
 
@@ -5824,18 +12655,105 @@ def load_training_task(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def list_training_tasks() -> list[dict[str, Any]]:
+def find_training_task(job_id: str) -> dict[str, Any] | None:
+    requested = str(job_id or "").strip()
+    if not requested:
+        return None
+    direct = load_training_task(training_task_path(requested))
+    if direct and (
+        str(direct.get("job_id") or "") == requested
+        or str(direct.get("task_id") or "") == requested
+        or str(direct.get("remote_training_job_id") or "") == requested
+    ):
+        return direct
+    for path in TRAINING_TASKS_DIR.glob("*.json"):
+        task = load_training_task(path)
+        if not task:
+            continue
+        if requested in {
+            str(task.get("job_id") or ""),
+            str(task.get("task_id") or ""),
+            str(task.get("remote_training_job_id") or ""),
+        }:
+            return task
+    return None
+
+
+def training_task_uses_worker(task: dict[str, Any]) -> bool:
+    return task.get("training_executor") == "worker" or bool(str(task.get("remote_training_job_id") or "").strip())
+
+
+def local_training_task_is_active(task: dict[str, Any]) -> bool:
+    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
+    if not job_id:
+        return False
+    thread = _training_task_threads.get(job_id)
+    if thread and thread.is_alive():
+        return True
+    pid = task.get("training_pid")
+    if not pid:
+        return False
+    try:
+        return Path(f"/proc/{int(pid)}").exists()
+    except (TypeError, ValueError):
+        return False
+
+
+def refresh_interrupted_local_training_task(task: dict[str, Any]) -> dict[str, Any]:
+    if training_task_uses_worker(task):
+        return task
+    if task.get("status") not in {"queued", "running"}:
+        return task
+    if local_training_task_is_active(task):
+        return task
+    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
+    if not job_id:
+        return task
+    return update_training_task(
+        job_id,
+        status="stopped",
+        progress=100,
+        stopped_at=int(time.time()),
+        completed_at=int(time.time()),
+        error="Local training worker is no longer active. Delete and retry the task.",
+        note="本地训练任务已中断；请删除后重试。",
+    )
+
+
+def public_refreshed_training_task(task: dict[str, Any], *, allow_remote_refresh: bool = False) -> dict[str, Any]:
+    if training_task_uses_worker(task):
+        # Worker refresh makes blocking HTTP calls to the Windows worker (status,
+        # artifacts, model download). NEVER do that from list endpoints: it blocks
+        # request threads and exhausts the threadpool, which hangs the whole API.
+        # The background watcher (_worker_training_watcher_loop) keeps worker tasks
+        # up to date, so list/detail reads can safely return cached state.
+        if allow_remote_refresh:
+            return refresh_worker_training_task(task)
+        return public_training_task(task)
+    task = refresh_interrupted_local_training_task(task)
+    return public_training_task(task)
+
+
+def list_training_tasks(
+    user: dict[str, Any] | None = None,
+    target_user_id: str | None = None,
+    *,
+    allow_remote_refresh: bool = False,
+) -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     for path in sorted(TRAINING_TASKS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         task = load_training_task(path)
         if not task:
             continue
-        tasks.append(public_training_task(task))
+        task = enrich_record_audit_fields(task, path)
+        if user and not record_visible_to_user(task, user, target_user_id):
+            continue
+        tasks.append(public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh))
     return tasks
 
 
 def public_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    copy = dict(task)
+    copy = public_path_sanitized(enrich_record_audit_fields(task))
     command = copy.get("training_command") if isinstance(copy.get("training_command"), list) else []
     if not copy.get("epochs"):
         epoch_arg = next((str(item).split("=", 1)[1] for item in command if str(item).startswith("epochs=")), None)
@@ -5888,18 +12806,149 @@ def parse_yolo_epoch_progress(log_path: Path, total_epochs: int) -> tuple[int, i
 def update_training_task(job_id: str, **updates: Any) -> dict[str, Any]:
     path = training_task_path(job_id)
     with _training_task_lock:
+        tombstone = _training_task_delete_tombstones.get(str(job_id or "").strip())
+        if tombstone:
+            existing = load_training_task(path)
+            return dict(existing or tombstone)
         task = load_training_task(path) or {"job_id": job_id, "created_at": int(time.time())}
         task.update(updates)
         save_training_task(task)
         return task
 
 
+def stop_training_task_process(task: dict[str, Any], *, note: str) -> dict[str, Any]:
+    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
+    if not job_id:
+        return task
+    pid = task.get("training_pid")
+    if task.get("status") == "running" and pid:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except (OSError, ValueError):
+            pass
+    if task.get("status") in {"queued", "running"}:
+        return update_training_task(
+            job_id,
+            status="stopped",
+            progress=100,
+            stopped_at=int(time.time()),
+            completed_at=int(time.time()),
+            note=note,
+        )
+    return task
+
+
+def delete_training_task_record(job_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
+    clean_job_id = str(job_id or "").strip()
+    if not clean_job_id:
+        return None
+    path = training_task_path(clean_job_id)
+    task = load_training_task(path)
+    if not task:
+        if missing_ok:
+            return None
+        raise HTTPException(status_code=404, detail="Training task not found")
+    require_record_access(task, user, write=True)
+    preserve_stopped_record = (
+        not training_task_uses_worker(task)
+        and local_training_task_is_active(task)
+        and task.get("status") in {"queued", "running"}
+    )
+    stopped = stop_training_task_process(task, note="关联流水线任务已删除，训练任务已停止。")
+    with _training_task_lock:
+        tombstone = dict(stopped or task)
+        tombstone.update(
+            {
+                "job_id": clean_job_id,
+                "task_id": tombstone.get("task_id") or clean_job_id,
+                "status": "stopped",
+                "progress": 100,
+                "stopped_at": int(time.time()),
+                "completed_at": int(time.time()),
+                "cancelled_at": int(time.time()),
+                "deleted_at": int(time.time()),
+                "delete_tombstone": True,
+                "note": "关联流水线任务已删除，训练任务已停止。",
+            }
+        )
+        _training_task_delete_tombstones[clean_job_id] = tombstone
+        if preserve_stopped_record:
+            save_training_task(tombstone)
+        else:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail=f"Failed to delete task: {exc}") from exc
+    return stopped
+
+
+def apply_codex_image_job_action(record: dict[str, Any], job: dict[str, Any], lookup_id: str, action: str) -> dict[str, Any]:
+    record_id = str(record.get("id") or accessory_uid(record) or job.get("candidate_id") or "")
+    candidate_job_id = str(job.get("job_id") or f"imgjob_{record_id}")
+    if action == "stop":
+        process = _image_worker_processes.get(candidate_job_id)
+        if process and process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        job["job_id"] = candidate_job_id
+        job["status"] = "stopped"
+        job["progress"] = 100
+        job["stopped_at"] = int(time.time())
+        job["note"] = "Stopped by user from local service queue."
+        store_candidate_image_job(record, job)
+    elif action == "delete":
+        remaining = [item for item in candidate_image_jobs(record) if not image_job_matches(record, item, lookup_id)]
+        record["codex_image_jobs"] = remaining
+        record["codex_image_job"] = remaining[0] if remaining else None
+        if not remaining:
+            record["ai_generation_required"] = False
+    elif action == "retry":
+        refreshed_job = refresh_codex_image_job(job)
+        if str(refreshed_job.get("status") or "") in IMAGE_JOB_ACTIVE_STATUSES:
+            raise HTTPException(status_code=409, detail="Image job is still active; stop it or wait for it to become stale before retrying")
+        job.update(refreshed_job)
+        output_path = image_job_output_path(job, for_write=True)
+        if output_path.exists():
+            try:
+                output_path.unlink()
+            except OSError:
+                pass
+        for key in (
+            "error",
+            "failed_at",
+            "completed_at",
+            "stopped_at",
+            "started_at",
+            "return_code",
+        ):
+            job.pop(key, None)
+        job["job_id"] = candidate_job_id
+        job["status"] = CODEX_IMAGE_WORKER_QUEUE_STATUS
+        job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
+        job["generation_method"] = "codex_exec_image_worker"
+        job["generation_step"] = job.get("generation_step") or "anchor_replacement"
+        job["queue_kind"] = "image_generation"
+        job["progress"] = 0
+        job["note"] = "已重新排队；将通过 Windows 本地 CodexImageWorker 生成。"
+        store_candidate_image_job(record, job)
+    else:
+        raise HTTPException(status_code=400, detail="Unknown job action")
+    return {"status": action, "job_id": candidate_job_id, "task_id": job.get("task_id"), "candidate_id": record_id}
+
+
 def update_codex_image_job(job_id: str, action: str) -> dict[str, Any]:
+    user = _request_user.get()
     for path in ACCESSORY_CANDIDATES_DIR.glob("*.json"):
         with _candidate_store_lock:
             try:
                 candidate = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
+                continue
+            if user and not record_mutable_by_user(candidate, user):
                 continue
             changed = ensure_candidate_image_job_task_ids(candidate)
             jobs = candidate_image_jobs(candidate)
@@ -5910,28 +12959,35 @@ def update_codex_image_job(job_id: str, action: str) -> dict[str, Any]:
                 save_accessory_candidate(path, candidate)
             if job is None:
                 continue
-            candidate_job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
-            if action == "stop":
-                process = _image_worker_processes.get(candidate_job_id)
-                if process and process.poll() is None:
-                    try:
-                        os.killpg(process.pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                job["job_id"] = candidate_job_id
-                job["status"] = "stopped"
-                job["progress"] = 100
-                job["stopped_at"] = int(time.time())
-                job["note"] = "Stopped by user from local service queue."
-                store_candidate_image_job(candidate, job)
-            elif action == "delete":
-                remaining = [item for item in jobs if not image_job_matches(candidate, item, job_id)]
-                candidate["codex_image_jobs"] = remaining
-                candidate["codex_image_job"] = remaining[0] if remaining else None
-            else:
-                raise HTTPException(status_code=400, detail="Unknown job action")
+            result = apply_codex_image_job_action(candidate, job, job_id, action)
             save_accessory_candidate(path, candidate)
-            return {"status": action, "job_id": candidate_job_id, "task_id": job.get("task_id")}
+            if action == "retry":
+                start_image_worker()
+            return result
+    with _candidate_store_lock:
+        config = load_config()
+        config_changed = False
+        for item in config.get("accessories", []):
+            if not isinstance(item, dict):
+                continue
+            if user and not record_mutable_by_user(item, user):
+                continue
+            jobs = candidate_image_jobs(item)
+            if jobs and accessory_material_type(item) != "text":
+                config_changed = ensure_pose_collection_image_jobs(item) or config_changed
+                jobs = candidate_image_jobs(item)
+            for candidate_job in jobs:
+                config_changed = ensure_image_job_task_id(item, candidate_job) or config_changed
+            job = next((candidate_job for candidate_job in jobs if image_job_matches(item, candidate_job, job_id)), None)
+            if job is None:
+                continue
+            result = apply_codex_image_job_action(item, job, job_id, action)
+            save_config(config)
+            if action == "retry":
+                start_image_worker()
+            return result
+        if config_changed:
+            save_config(config)
     raise HTTPException(status_code=404, detail="Image job not found")
 
 
@@ -5947,7 +13003,7 @@ def stop_candidate_image_task(candidate: dict[str, Any]) -> int:
                 stopped += 1
             except ProcessLookupError:
                 pass
-        if str(job.get("status", "")) in {"queued_for_codex_image_worker", "queued", "running"}:
+        if str(job.get("status", "")) in IMAGE_JOB_ACTIVE_STATUSES:
             job["status"] = "stopped"
             job["progress"] = 100
             job["stopped_at"] = int(time.time())
@@ -5957,6 +13013,7 @@ def stop_candidate_image_task(candidate: dict[str, Any]) -> int:
 
 
 def update_codex_image_candidate(candidate_id: str, action: str) -> dict[str, Any]:
+    user = _request_user.get()
     for path in ACCESSORY_CANDIDATES_DIR.glob("*.json"):
         with _candidate_store_lock:
             try:
@@ -5965,6 +13022,8 @@ def update_codex_image_candidate(candidate_id: str, action: str) -> dict[str, An
                 continue
             if str(candidate.get("id", "")) != candidate_id:
                 continue
+            if user:
+                require_record_access(candidate, user, write=True)
             if action == "stop":
                 stopped = stop_candidate_image_task(candidate)
                 save_accessory_candidate(path, candidate)
@@ -5975,6 +13034,25 @@ def update_codex_image_candidate(candidate_id: str, action: str) -> dict[str, An
                     path.unlink()
                 except OSError as exc:
                     raise HTTPException(status_code=500, detail=f"Failed to delete image task: {exc}") from exc
+                return {"status": "deleted", "candidate_id": candidate_id, "stopped": stopped}
+            raise HTTPException(status_code=400, detail="Unknown candidate action")
+    with _candidate_store_lock:
+        config = load_config()
+        for item in config.get("accessories", []):
+            if not isinstance(item, dict) or accessory_uid(item) != candidate_id:
+                continue
+            if user:
+                require_record_access(item, user, write=True)
+            if action == "stop":
+                stopped = stop_candidate_image_task(item)
+                save_config(config)
+                return {"status": "stopped", "candidate_id": candidate_id, "stopped": stopped}
+            if action == "delete":
+                stopped = stop_candidate_image_task(item)
+                item["codex_image_jobs"] = []
+                item["codex_image_job"] = None
+                item["ai_generation_required"] = False
+                save_config(config)
                 return {"status": "deleted", "candidate_id": candidate_id, "stopped": stopped}
             raise HTTPException(status_code=400, detail="Unknown candidate action")
     raise HTTPException(status_code=404, detail="Image task not found")
@@ -6015,27 +13093,38 @@ def existing_source_image_paths(item: dict[str, Any]) -> list[Path]:
     return paths
 
 
+def first_source_ai_reference_path(item: dict[str, Any]) -> Path | None:
+    paths = existing_source_image_paths(item)
+    return paths[0] if paths else None
+
+
+def ensure_default_ai_profile_reference(item: dict[str, Any]) -> bool:
+    current_refs = [str(path) for path in ai_profile_reference_paths(item)]
+    if current_refs:
+        if item.get("ai_profile_reference_files") != current_refs:
+            item["ai_profile_reference_files"] = current_refs
+            return True
+        return False
+    first_source = first_source_ai_reference_path(item)
+    if not first_source:
+        return False
+    item["ai_profile_reference_files"] = [str(first_source)]
+    return True
+
+
 def refresh_accessory_assets_after_source_change(item: dict[str, Any], *, force_profile: bool = True) -> None:
-    normalized = normalize_accessory_assets(item)
-    item.update(normalized)
-    valid_sources = {str(path) for path in existing_source_image_paths(item)}
-    current_refs = [
-        str(path)
-        for path in item.get("ai_profile_reference_files", []) or []
-        if str(path) in valid_sources
-    ]
-    if not current_refs:
-        current_refs = [str(path) for path in existing_source_image_paths(item)[:AI_PROFILE_REFERENCE_IMAGES]]
-    item["ai_profile_reference_files"] = current_refs
+    defer_accessory_normalization(item)
+    ensure_default_ai_profile_reference(item)
     if force_profile:
         item["ai_profile"] = fallback_accessory_ai_profile(item)
         item["ai_profile_status"] = "ready"
         generate_accessory_ai_profile(item, allow_provider=True)
+        ensure_accessory_locateanything_profile(item, force=True)
 
 
 def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
     uid = accessory_uid(item)
-    gallery_dir = OUTPUT_DIR / "accessory_gallery" / uid
+    gallery_dir = output_write_dir("accessory_gallery") / uid
     gallery: list[dict[str, Any]] = []
     material_type = accessory_material_type(item)
     ai_reference_paths = {
@@ -6043,6 +13132,10 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
         for path in item.get("ai_profile_reference_files", []) or []
         if str(path).strip()
     }
+    if not ai_reference_paths:
+        default_ref = first_source_ai_reference_path(item)
+        if default_ref:
+            ai_reference_paths.add(str(default_ref))
     shown_paths: set[str] = set()
     for source_index, path in enumerate(existing_source_image_paths(item), start=1):
         preview = write_gallery_preview(path, gallery_dir / f"source_{source_index:02d}.png")
@@ -6055,6 +13148,7 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
                     "source_path": str(path),
                     "deletable": True,
                     "ai_reference": str(path) in ai_reference_paths,
+                    **record_audit_fields(item, path),
                     **preview,
                 }
             )
@@ -6075,10 +13169,11 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
                     "source_path": str(output_path),
                     "deletable": True,
                     "ai_reference": str(output_path) in ai_reference_paths,
+                    **record_audit_fields(item, output_path),
                 }
             )
     for idx, asset in enumerate(clean_sprites):
-        path = Path(str(asset.get("path", "")))
+        path = resolve_service_path(asset.get("path"))
         if str(path) in shown_paths:
             continue
         preview = write_gallery_preview(path, gallery_dir / f"clean_sprite_{idx + 1:02d}.png")
@@ -6095,6 +13190,12 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
                     "source_object_bbox_xyxy": asset.get("source_object_bbox_xyxy"),
                     "source_object_center_xy": asset.get("source_object_center_xy"),
                     "source_object_size_px": asset.get("source_object_size_px"),
+                    "source_long_side_px": asset.get("source_long_side_px"),
+                    "source_short_side_px": asset.get("source_short_side_px"),
+                    "source_long_edge_axis": asset.get("source_long_edge_axis"),
+                    "source_short_edge_axis": asset.get("source_short_edge_axis"),
+                    "source_long_short_ratio": asset.get("source_long_short_ratio"),
+                    "source_length_width_rule": asset.get("source_length_width_rule"),
                     "task_id": asset.get("task_id"),
                     "source_pose_collection_job_id": asset.get("source_pose_collection_job_id"),
                     "rotation_degrees_applied": asset.get("rotation_degrees_applied"),
@@ -6116,8 +13217,12 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
                     "render_scale_basis": asset.get("render_scale_basis"),
                     "render_footprint_mm": asset.get("render_footprint_mm"),
                     "render_footprint_px": asset.get("render_footprint_px"),
+                    "render_footprint_mm_unoriented_long_short": asset.get("render_footprint_mm_unoriented_long_short"),
+                    "render_footprint_px_unoriented_long_short": asset.get("render_footprint_px_unoriented_long_short"),
+                    "render_source_aspect_preserved": asset.get("render_source_aspect_preserved"),
                     "deletable": True,
                     "ai_reference": str(path) in ai_reference_paths,
+                    **record_audit_fields(item, path),
                     **preview,
                 }
             )
@@ -6138,6 +13243,7 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
                     "source_path": str(path),
                     "deletable": True,
                     "ai_reference": str(path) in ai_reference_paths,
+                    **record_audit_fields(item, path),
                     **preview,
                 }
             )
@@ -6175,6 +13281,90 @@ def ensure_object_clean_sprites_for_selection(config: dict[str, Any], ids: list[
     return changed
 
 
+def ensure_training_normalized_assets_for_selection(config: dict[str, Any], ids: list[str]) -> bool:
+    wanted = set(ids)
+    if not wanted:
+        raise HTTPException(status_code=400, detail="流水线任务还没有选择配件")
+    changed = False
+    found: set[str] = set()
+    for item in config.get("accessories", []):
+        uid = accessory_uid(item)
+        if uid not in wanted:
+            continue
+        found.add(uid)
+        if accessory_material_type(item) == "text":
+            text_assets = canonical_text_assets(item)
+            if item.get("normalization_deferred") or not canonical_text_assets_complete(item, text_assets):
+                item.update(normalize_accessory_assets(item))
+                changed = True
+            if not canonical_text_assets_complete(item):
+                raise HTTPException(status_code=409, detail=f"配件 {item.get('name') or uid} 的文字规范化文件生成失败")
+        else:
+            # Pose Planner Agent runs here, between material normalization and the
+            # image-generation agent: it decides the structured pose set once and
+            # caches it on the accessory so AI pose images are generated a single
+            # time and reused across tasks.
+            had_pose_plan = isinstance(item.get("agent_mcp_pose_plan"), dict)
+            ensure_accessory_pose_plan(item)
+            if not had_pose_plan and isinstance(item.get("agent_mcp_pose_plan"), dict):
+                changed = True
+            sprites = clean_sprite_assets(item)
+            # Collapse any duplicate AI pose images that earlier tasks accumulated
+            # for this accessory (one image per pose_id). When duplicates are
+            # dropped the sprites must be rebuilt from the deduplicated set.
+            deduped = dedup_agent_mcp_pose_references(item)
+            if deduped:
+                changed = True
+            # Preferred source: segment the AI-generated standard pose images
+            # (single object on a green conveyor) into clean object sprites.
+            # Also rebuild when cached sprites still carry stale grid metadata
+            # (otherwise they are unselectable and render as black boxes).
+            if agent_mcp_pose_reference_assets(item) and (
+                item.get("normalization_deferred")
+                or not sprites
+                or deduped
+                or not clean_sprites_policy_complete(item, sprites)
+                or agent_mcp_clean_sprites_need_rebuild(item)
+            ):
+                if build_clean_sprites_from_agent_mcp_poses(item, force=bool(sprites) or deduped):
+                    changed = True
+                sprites = clean_sprite_assets(item)
+            # Fallback: segment the accessory's own uploaded photos directly. The
+            # legacy anchor/grid pose-collection path is retired (no black sticks).
+            if item.get("normalization_deferred") or not sprites or not clean_sprites_policy_complete(item, sprites):
+                if preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=bool(sprites)):
+                    changed = True
+                sprites = clean_sprite_assets(item)
+            if not sprites:
+                raise HTTPException(status_code=409, detail=f"配件 {item.get('name') or uid} 的物品规范化文件生成失败")
+        if item.get("normalization_deferred"):
+            item["normalization_deferred"] = False
+            changed = True
+        item["normalized_for_training_at"] = int(time.time())
+    missing = wanted - found
+    if missing:
+        raise HTTPException(status_code=404, detail=f"配件不存在: {', '.join(sorted(missing))}")
+    return changed
+
+
+def ensure_training_assets_for_request(
+    full_config: dict[str, Any],
+    scoped_config: dict[str, Any],
+    user: dict[str, Any],
+    ids: list[str],
+) -> bool:
+    try:
+        changed = ensure_training_normalized_assets_for_selection(scoped_config, ids)
+    except HTTPException:
+        merge_scoped_accessory_updates(full_config, scoped_config, user)
+        save_config(full_config)
+        raise
+    if changed:
+        merge_scoped_accessory_updates(full_config, scoped_config, user)
+        save_config(full_config)
+    return changed
+
+
 def physical_render_size_px(item: dict[str, Any], material_type: str) -> tuple[int, int]:
     size = item.get("physical_size") or {}
     if material_type == "text":
@@ -6198,6 +13388,15 @@ def physical_render_size_for_sprite(item: dict[str, Any], material_type: str, sp
     return sprite_render_size_px(item, sprite_meta, material_type)
 
 
+def constrained_center_range(axis_min: int, axis_max: int, half_extent: int) -> tuple[int, int]:
+    low = int(axis_min) + int(half_extent)
+    high = int(axis_max) - int(half_extent)
+    if low <= high:
+        return low, high
+    center = int(round((int(axis_min) + int(axis_max)) / 2))
+    return center, center
+
+
 def random_center_inside_background(
     rng: np.random.Generator,
     target_size: tuple[int, int],
@@ -6214,9 +13413,9 @@ def random_center_inside_background(
     min_x, max_x = x1 + half_w, x2 - half_w
     min_y, max_y = y1 + half_h, y2 - half_h
     if min_x >= max_x:
-        min_x, max_x = x1 + 20, x2 - 20
+        min_x, max_x = constrained_center_range(0, PREVIEW_CANVAS_SIZE_PX[0], half_w)
     if min_y >= max_y:
-        min_y, max_y = y1 + 20, y2 - 20
+        min_y, max_y = constrained_center_range(0, PREVIEW_CANVAS_SIZE_PX[1], half_h)
     return (int(rng.integers(min_x, max_x + 1)), int(rng.integers(min_y, max_y + 1)))
 
 
@@ -6343,6 +13542,19 @@ def visible_polygon_from_mask(mask: np.ndarray, epsilon_ratio: float = 0.0035) -
     return polygons[0] if polygons else []
 
 
+def polygon_max_pair_distance_px(polygon: list[list[int]] | None) -> float:
+    if not polygon:
+        return 0.0
+    best = 0.0
+    for index, point_a in enumerate(polygon):
+        for point_b in polygon[index + 1 :]:
+            best = max(
+                best,
+                math.hypot(float(point_a[0]) - float(point_b[0]), float(point_a[1]) - float(point_b[1])),
+            )
+    return best
+
+
 def load_training_background_manifest() -> dict[str, Any]:
     manifest_path = BACKGROUND_DIR / "background_manifest.json"
     try:
@@ -6416,13 +13628,22 @@ def background_set_payload(set_id: str, meta: dict[str, Any] | None = None) -> d
     clean_id = safe_background_set_id(set_id)
     set_dir = BACKGROUND_SETS_DIR / clean_id
     images = image_file_list(set_dir)
-    meta = meta or {}
+    meta = dict(meta or {})
+    if clean_id == "green_conveyor" and not meta.get("owner_user_id"):
+        meta["owner_user_id"] = SYSTEM_OWNER_ID
+        meta["owner_username"] = "system"
+        meta["shared_with_user_ids"] = ["*"]
+    audit = record_audit_fields(meta, set_dir)
     return {
         "id": clean_id,
         "name": meta.get("name") or clean_id.replace("_", " "),
         "description": meta.get("description") or "",
         "source": meta.get("source") or "",
-        "created_at": int(meta.get("created_at") or (set_dir.stat().st_mtime if set_dir.exists() else time.time())),
+        "created_at": audit["created_at"],
+        "updated_at": audit["updated_at"],
+        "owner_user_id": audit["owner_user_id"],
+        "owner_username": audit["owner_username"],
+        "shared_with_user_ids": meta.get("shared_with_user_ids") if isinstance(meta.get("shared_with_user_ids"), list) else [],
         "generation_method": meta.get("generation_method") or "",
         "status": meta.get("status") or ("ready" if images else "empty"),
         "image_count": len(images),
@@ -6437,21 +13658,28 @@ def background_set_payload(set_id: str, meta: dict[str, Any] | None = None) -> d
     }
 
 
-def list_background_sets() -> list[dict[str, Any]]:
+def list_background_sets(user: dict[str, Any] | None = None, target_user_id: str | None = None) -> list[dict[str, Any]]:
     manifest = load_background_sets_manifest()
     meta_sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
     ids = {path.name for path in background_set_dirs()} | {safe_background_set_id(item) for item in meta_sets.keys()}
-    return [
+    items = [
         background_set_payload(set_id, meta_sets.get(set_id) or meta_sets.get(safe_background_set_id(set_id)) or {})
         for set_id in sorted(ids)
     ]
+    if user:
+        items = [item for item in items if record_visible_to_user(item, user, target_user_id)]
+    return items
 
 
-def selected_background_set_id(background_set_id: str | None) -> str | None:
+def selected_background_set_id(
+    background_set_id: str | None,
+    user: dict[str, Any] | None = None,
+    target_user_id: str | None = None,
+) -> str | None:
     requested = safe_background_set_id(background_set_id)
     available = {
         item["id"]
-        for item in list_background_sets()
+        for item in list_background_sets(user, target_user_id)
         if item.get("image_count", 0) > 0 and str(item.get("status") or "ready") == "ready"
     }
     if requested in available:
@@ -6525,7 +13753,8 @@ def run_codex_background_generation(source_path: Path, set_dir: Path, set_id: st
     command = [
         "codex",
         "exec",
-        "--dangerously-bypass-approvals-and-sandbox",
+        "--sandbox",
+        "workspace-write",
         "-C",
         str(ROOT),
         "-i",
@@ -6656,6 +13885,7 @@ def enqueue_background_set_task(set_id: str, name: str, source_path: Path) -> di
         "sample_count": 0,
         "estimated_minutes": 10,
         "note": "背景生成任务已加入队列；完成前该背景集不会进入可选列表。",
+        **current_owner_fields(),
     }
     save_training_task(task)
     thread = threading.Thread(target=run_background_set_task, args=(job_id,), daemon=True, name=f"background-set-task-{job_id}")
@@ -6859,7 +14089,7 @@ def draw_training_preview(
         size = physical_render_size_px(item, material_type)
         center = random_center_inside_background(rng, size, angle)
         loaded_asset = (
-            load_rectified_document_asset_with_metadata(item)
+            load_rectified_document_asset_with_metadata(item, rng)
             if material_type == "text"
             else load_preview_asset_with_metadata(item)
         )
@@ -6915,7 +14145,7 @@ def draw_training_preview(
                 )
                 sprite_size = physical_render_size_for_sprite(item, material_type, sprite_meta)
                 size = sprite_size
-                ignored_source_restore_rotation = float(sprite_meta.get("source_restore_rotation_degrees") or 0.0)
+                ignored_source_restore_rotation = 0.0
                 source_restore_rotation = 0.0
                 final_render_angle = perspective_rotation
                 current_source_position = sprite_meta.get("source_position") or sprite_meta.get("pose_position")
@@ -6934,7 +14164,7 @@ def draw_training_preview(
                             str(sprite_meta.get("source_pose_family") or sprite_meta.get("pose_family") or ""),
                             sprite_meta.get("source_object_size_px"),
                         )
-                        ignored_source_restore_rotation = float(sprite_meta.get("source_restore_rotation_degrees") or 0.0)
+                        ignored_source_restore_rotation = 0.0
                         source_restore_rotation = 0.0
                         final_render_angle = perspective_rotation
                         sprite_size = object_pose_render_size_hint(
@@ -6943,6 +14173,14 @@ def draw_training_preview(
                         )
                         sprite_size = physical_render_size_for_sprite(item, material_type, sprite_meta)
                         size = sprite_size
+                sprite_image, sprite_mask, source_restore_rotation, ignored_source_restore_rotation = (
+                    restore_object_sprite_source_orientation_for_render(
+                        sprite_image,
+                        sprite_mask,
+                        sprite_meta,
+                        top_view_pose=bool(top_view_pose),
+                    )
+                )
                 actual_source_position = sprite_meta.get("source_position") or sprite_meta.get("pose_position")
                 sprite_meta["target_position"] = target_position
                 sprite_meta["selected_source_position"] = selected_source_position
@@ -6964,16 +14202,28 @@ def draw_training_preview(
                 sprite_meta["upright_pose_no_rotation"] = False
                 sprite_meta["upright_pose_random_rotation"] = bool(top_view_pose)
                 sprite_meta.update(placement_meta)
+                # Size every view of an accessory to the same long-axis pixel length
+                # (physical longest dimension * scale) so the cut-outs stay
+                # size-consistent and never collapse to a tiny clamp.
+                visible_now = visible_mask_size_px(sprite_mask)
+                unified_long_px, unified_short_px = long_axis_unified_render_box(
+                    visible_now[0],
+                    visible_now[1],
+                    int(sprite_size[0]),
+                    int(sprite_size[1]),
+                )
+                sprite_meta["unified_render_box_px"] = [unified_long_px, unified_short_px]
+                sprite_meta["unified_render_long_axis_px"] = max(unified_long_px, unified_short_px)
                 sprite_meta.update(
                     paste_physical_object_asset(
                         canvas,
                         sprite_image,
                         sprite_mask,
                         center,
-                        sprite_size[0],
-                        sprite_size[1],
+                        unified_long_px,
+                        unified_short_px,
                         final_render_angle,
-                        preserve_aspect_ratio=top_view_pose and object_alpha_material_policy(item) == "transparent",
+                        preserve_aspect_ratio=True,
                     )
                 )
             else:
@@ -7062,12 +14312,25 @@ def draw_training_preview(
                 "pose_source_family": (sprite_meta.get("pose_family") or sprite_meta.get("source_pose_family")) if material_type == "object" else None,
                 "pose_source_bbox_xyxy": sprite_meta.get("source_object_bbox_xyxy") if material_type == "object" else None,
                 "pose_source_footprint_px": sprite_meta.get("source_object_size_px") if material_type == "object" else None,
+                "source_long_side_px": sprite_meta.get("source_long_side_px") if material_type == "object" else None,
+                "source_short_side_px": sprite_meta.get("source_short_side_px") if material_type == "object" else None,
+                "source_long_edge_axis": sprite_meta.get("source_long_edge_axis") if material_type == "object" else None,
+                "source_short_edge_axis": sprite_meta.get("source_short_edge_axis") if material_type == "object" else None,
+                "source_long_short_ratio": sprite_meta.get("source_long_short_ratio") if material_type == "object" else None,
+                "source_length_width_rule": sprite_meta.get("source_length_width_rule") if material_type == "object" else None,
                 "render_footprint_mm": sprite_meta.get("render_footprint_mm") if material_type == "object" else None,
                 "render_footprint_px": sprite_meta.get("render_footprint_px") if material_type == "object" else sprite_meta.get("render_visible_footprint_px"),
+                "render_footprint_mm_unoriented_long_short": sprite_meta.get("render_footprint_mm_unoriented_long_short") if material_type == "object" else None,
+                "render_footprint_px_unoriented_long_short": sprite_meta.get("render_footprint_px_unoriented_long_short") if material_type == "object" else None,
+                "render_source_aspect_preserved": sprite_meta.get("render_source_aspect_preserved") if material_type == "object" else None,
                 "render_box_px": sprite_meta.get("render_box_px"),
                 "render_visible_footprint_px": sprite_meta.get("render_visible_footprint_px"),
+                "pre_paste_visible_footprint_px": sprite_meta.get("pre_paste_visible_footprint_px") if material_type == "object" else None,
+                "final_pasted_visible_footprint_px": sprite_meta.get("final_pasted_visible_footprint_px") if material_type == "object" else None,
                 "source_visible_footprint_px": sprite_meta.get("source_visible_footprint_px"),
                 "render_resize_policy": sprite_meta.get("render_resize_policy"),
+                "render_paste_resize_policy": sprite_meta.get("render_paste_resize_policy") if material_type == "object" else None,
+                "render_paste_rescaled": sprite_meta.get("render_paste_rescaled") if material_type == "object" else None,
                 "non_uniform_scaling_applied": sprite_meta.get("non_uniform_scaling_applied"),
                 "render_scale_x": sprite_meta.get("render_scale_x"),
                 "render_scale_y": sprite_meta.get("render_scale_y"),
@@ -7097,6 +14360,9 @@ def draw_training_preview(
                 "rotation_degrees_applied": sprite_meta.get("rotation_degrees_applied") if material_type == "object" else None,
                 "source_restore_rotation_degrees": round(source_restore_rotation, 2) if material_type == "object" else None,
                 "source_rotation_correction_degrees": sprite_meta.get("source_rotation_correction_degrees") if material_type == "object" else None,
+                "source_restore_rotation_degrees_requested": sprite_meta.get("source_restore_rotation_degrees_requested") if material_type == "object" else None,
+                "ignored_source_restore_rotation_degrees": sprite_meta.get("ignored_source_restore_rotation_degrees") if material_type == "object" else None,
+                "source_orientation_restored_for_render": sprite_meta.get("source_orientation_restored_for_render") if material_type == "object" else None,
                 "upright_pose_no_rotation": sprite_meta.get("upright_pose_no_rotation") if material_type == "object" else None,
                 "upright_pose_random_rotation": sprite_meta.get("upright_pose_random_rotation") if material_type == "object" else None,
                 "canonical_asset_dimensions_px": sprite_meta.get("canonical_asset_dimensions_px"),
@@ -7104,6 +14370,10 @@ def draw_training_preview(
                 "canonical_height_px": sprite_meta.get("canonical_height_px") if material_type == "object" else (sprite_meta.get("canonical_asset_dimensions_px") or [None, None])[1],
                 "normalized_asset_dimensions_px": sprite_meta.get("normalized_asset_dimensions_px") if material_type == "object" else sprite_meta.get("canonical_asset_dimensions_px"),
                 "document_asset_path": sprite_meta.get("asset_path") if material_type == "text" else None,
+                "document_asset_index": sprite_meta.get("document_asset_index") if material_type == "text" else None,
+                "document_asset_count": sprite_meta.get("document_asset_count") if material_type == "text" else None,
+                "document_asset_selection_policy": sprite_meta.get("document_asset_selection_policy") if material_type == "text" else None,
+                "document_asset_source_index": sprite_meta.get("document_asset_source_index") if material_type == "text" else None,
                 "document_asset_source": sprite_meta.get("asset_source") if material_type == "text" else None,
                 "document_asset_method": sprite_meta.get("asset_method") if material_type == "text" else None,
                 "document_mask_crop_bypassed": sprite_meta.get("document_mask_crop_bypassed") if material_type == "text" else None,
@@ -7117,13 +14387,47 @@ def draw_training_preview(
             current_visible_mask = current_visible_mask.copy()
             for record in visible_label_records:
                 record["mask"][current_visible_mask > 24] = 0
-            visible_label_records.append({"label": label_entry, "mask": current_visible_mask})
+            # Keep the part's full footprint (before later parts are pasted over it)
+            # so its detection box stays amodal/complete under occlusion.
+            visible_label_records.append(
+                {"label": label_entry, "mask": current_visible_mask, "full_mask": current_visible_mask.copy()}
+            )
+    canvas_h, canvas_w = canvas.shape[:2]
     for record in visible_label_records:
+        final_visible_footprint = visible_mask_size_px(record["mask"])
+        record["label"]["final_visible_footprint_px"] = final_visible_footprint
+        if record["label"].get("material_type") == "object":
+            record["label"]["render_visible_footprint_px"] = final_visible_footprint
         visible_polygon = visible_polygon_from_mask(record["mask"])
         if visible_polygon:
             record["label"]["visible_polygon_xy"] = visible_polygon
             record["label"]["visible_polygons_xy"] = [visible_polygon]
             record["label"]["placement_polygon_xy"] = visible_polygon
+            record["label"]["final_visible_polygon_max_pair_px"] = round(polygon_max_pair_distance_px(visible_polygon), 2)
+        # Amodal detection box from the full footprint, clipped to the frame. This
+        # is the box written to the YOLO detection label (a part on top no longer
+        # cuts the part below in half).
+        full_mask = record.get("full_mask")
+        full_area = int(np.count_nonzero(full_mask > 24)) if isinstance(full_mask, np.ndarray) else 0
+        visible_area = int(np.count_nonzero(record["mask"] > 24))
+        occlusion_fraction = round(1.0 - (visible_area / full_area), 4) if full_area > 0 else 1.0
+        record["label"]["occlusion_fraction"] = occlusion_fraction
+        amodal_bbox = None
+        if isinstance(full_mask, np.ndarray) and full_area > 0:
+            ys, xs = np.where(full_mask > 24)
+            x1 = max(0, int(xs.min()))
+            y1 = max(0, int(ys.min()))
+            x2 = min(canvas_w, int(xs.max()) + 1)
+            y2 = min(canvas_h, int(ys.max()) + 1)
+            if x2 > x1 and y2 > y1:
+                amodal_bbox = [x1, y1, x2, y2]
+        record["label"]["amodal_bbox_xyxy"] = amodal_bbox
+        # Drop a part from the labels only when it is essentially fully hidden.
+        record["label"]["detection_dropped"] = bool(
+            amodal_bbox is None
+            or visible_area < DETECTION_MIN_VISIBLE_AREA_PX
+            or occlusion_fraction > DETECTION_MAX_OCCLUSION_FRACTION
+        )
     cv2.imwrite(str(output_path), canvas)
     return {
         "url": public_output_url(output_path),
@@ -7176,6 +14480,31 @@ def yolo_label_line(class_index: int, polygon: list[list[int]], width: int = 128
         ny = min(1.0, max(0.0, float(y) / float(height)))
         values.extend([f"{nx:.6f}", f"{ny:.6f}"])
     return " ".join(values)
+
+
+def yolo_detection_label_line(
+    class_index: int,
+    bbox_xyxy: list[float] | None,
+    width: int = 1280,
+    height: int = 900,
+) -> str | None:
+    """YOLO detection label line: `class cx cy w h` (all normalized 0-1)."""
+    if not bbox_xyxy or len(bbox_xyxy) < 4:
+        return None
+    x1, y1, x2, y2 = (float(v) for v in bbox_xyxy[:4])
+    x1, x2 = sorted((x1, x2))
+    y1, y2 = sorted((y1, y2))
+    bw = (x2 - x1) / float(width)
+    bh = (y2 - y1) / float(height)
+    if bw <= 0 or bh <= 0:
+        return None
+    cx = ((x1 + x2) / 2.0) / float(width)
+    cy = ((y1 + y2) / 2.0) / float(height)
+    cx = min(1.0, max(0.0, cx))
+    cy = min(1.0, max(0.0, cy))
+    bw = min(1.0, max(0.0, bw))
+    bh = min(1.0, max(0.0, bh))
+    return f"{class_index} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}"
 
 
 def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
@@ -7313,15 +14642,16 @@ def write_training_annotation_preview(image_path: Path, labels: list[dict[str, A
         return ""
     palette = [(0, 210, 60), (45, 125, 255), (250, 170, 35), (210, 65, 210), (60, 220, 220)]
     for idx, label in enumerate(labels):
-        polygons = label.get("visible_polygons_xy") or [label.get("visible_polygon_xy") or label.get("placement_polygon_xy") or []]
-        valid_polygons = [np.array(polygon, dtype=np.int32) for polygon in polygons if polygon and len(polygon) >= 3]
-        if not valid_polygons:
+        if label.get("detection_dropped"):
             continue
+        bbox = label.get("amodal_bbox_xyxy")
+        if not bbox or len(bbox) < 4:
+            continue
+        x1, y1, x2, y2 = (int(round(float(v))) for v in bbox[:4])
         color = palette[idx % len(palette)]
-        cv2.polylines(image, valid_polygons, True, color, 3)
-        all_points = np.concatenate(valid_polygons, axis=0)
-        x = int(np.min(all_points[:, 0]))
-        y = max(24, int(np.min(all_points[:, 1])) - 8)
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, 3)
+        x = x1
+        y = max(24, y1 - 8)
         cv2.putText(image, str(label.get("name") or label.get("id") or "part"), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
@@ -7330,13 +14660,21 @@ def write_training_annotation_preview(image_path: Path, labels: list[dict[str, A
 
 def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
     config = load_config()
-    selected = selected_accessories(config, list(task.get("selected_accessory_ids") or []))
+    selected_ids = list(task.get("selected_accessory_ids") or [])
+    try:
+        assets_changed = ensure_training_normalized_assets_for_selection(config, selected_ids)
+    except HTTPException:
+        save_config(config)
+        raise
+    if assets_changed:
+        save_config(config)
+    selected = selected_accessories(config, selected_ids)
     sample_count = max(1, min(20000, int(task.get("sample_count") or 100)))
     pose_policy = normalize_preview_pose_family_policy(task.get("preview_pose_family_policy") or "auto")
     background_set_id = selected_background_set_id(task.get("background_set_id"))
     seed_base = int(task.get("seed") or time.time() * 1000)
     sample_plan = build_training_sample_plan(selected, sample_count, seed_base, pose_policy)
-    dataset_dir = OUTPUT_DIR / "training_datasets" / str(task["job_id"])
+    dataset_dir = output_write_dir_for_owner("training_datasets", str(task.get("owner_user_id") or "")) / str(task["job_id"])
     class_names = [str(item.get("name") or item.get("id") or f"class_{idx}") for idx, item in enumerate(selected)]
     class_index = {str(item.get("id")): idx for idx, item in enumerate(selected)}
     for split in ("train", "val", "test"):
@@ -7361,14 +14699,34 @@ def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
         label_path = dataset_dir / "labels" / split / f"sample_{idx + 1:06d}.txt"
         lines = []
         for label in rendered.get("labels", []):
-            polygons = label.get("visible_polygons_xy") or [label.get("visible_polygon_xy") or label.get("placement_polygon_xy") or []]
-            for polygon in polygons:
-                line = yolo_label_line(class_index.get(str(label.get("id") or ""), 0), polygon or [])
-                if line:
-                    lines.append(line)
+            # Detection dataset: one amodal (full, occlusion-complete) bbox per
+            # part. Parts that are essentially fully hidden are skipped.
+            if label.get("detection_dropped"):
+                continue
+            line = yolo_detection_label_line(
+                class_index.get(str(label.get("id") or ""), 0),
+                label.get("amodal_bbox_xyxy"),
+            )
+            if line:
+                lines.append(line)
         label_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
         annotated_path = preview_dir / split / f"sample_{idx + 1:06d}_boxed.jpg"
         annotated_url = write_training_annotation_preview(image_path, rendered.get("labels", []), annotated_path)
+        rendered_labels = rendered.get("labels", [])
+        document_assets = [
+            {
+                "id": label.get("id"),
+                "name": label.get("name"),
+                "document_asset_path": label.get("document_asset_path"),
+                "document_asset_index": label.get("document_asset_index"),
+                "document_asset_count": label.get("document_asset_count"),
+                "document_asset_selection_policy": label.get("document_asset_selection_policy"),
+                "document_asset_source": label.get("document_asset_source"),
+                "document_asset_method": label.get("document_asset_method"),
+            }
+            for label in rendered_labels
+            if label.get("material_type") == "text"
+        ]
         samples.append(
             {
                 "image": str(image_path),
@@ -7389,6 +14747,7 @@ def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
                 "background_set_id": (rendered.get("background") or {}).get("background_set_id") or background_set_id,
                 "background_source": (rendered.get("background") or {}).get("background_source"),
                 "background": rendered.get("background") or {},
+                "document_assets": document_assets,
             }
         )
         if idx == 0 or (idx + 1) % max(1, sample_count // 40) == 0 or idx + 1 == sample_count:
@@ -7426,6 +14785,17 @@ def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
         "background_set_id_distribution": Counter(str(sample.get("background_set_id") or "unknown") for sample in samples),
         "background_id_distribution": Counter(str(sample.get("background_id") or "unknown") for sample in samples),
         "background_source_distribution": Counter(str(sample.get("background_source") or "unknown") for sample in samples),
+        "document_asset_path_distribution": Counter(
+            str(asset.get("document_asset_path") or "none")
+            for sample in samples
+            for asset in sample.get("document_assets", [])
+        ),
+        "document_asset_index_distribution": Counter(
+            str(asset.get("document_asset_index"))
+            for sample in samples
+            for asset in sample.get("document_assets", [])
+            if asset.get("document_asset_index") is not None
+        ),
         "sample_generation_policy": {
             "true_false_ratio": "1:1 per split when possible",
             "split_ratio": "train/val/test ~= 80/10/10",
@@ -7436,16 +14806,969 @@ def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
             "background_split_policy": "train/val/test use separate background pools when at least two same-environment assets are available; otherwise per-sample augmentations prevent exact duplicates",
             "training_images_are_clean": True,
             "annotated_previews": True,
-            "label_shape": "visible_object_mask_polygon",
-            "occlusion_policy": "later pasted objects subtract from earlier visible masks; each physical object keeps one primary visible contour label",
+            "model_task": "detection",
+            "label_shape": "object_bounding_box",
+            "occlusion_policy": f"detection bbox is amodal: each part keeps its full bounding box even when another part is pasted on top; a part is dropped only when >{int(DETECTION_MAX_OCCLUSION_FRACTION * 100)}% hidden or its visible area < {DETECTION_MIN_VISIBLE_AREA_PX}px",
             "rotation_policy": "objects use continuous random planar rotation sampled uniformly from -180 to 180 degrees; not limited to cardinal angles",
-            "format_reference": "Ultralytics YOLO segmentation dataset.yaml with train/val/test and per-image polygon txt labels",
+            "format_reference": "Ultralytics YOLO detection dataset.yaml with train/val/test and per-image `class cx cy w h` txt labels",
         },
         "samples": samples,
+        "owner_user_id": str(task.get("owner_user_id") or ""),
+        "owner_username": str(task.get("owner_username") or ""),
     }
     manifest_path = dataset_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"dataset_dir": str(dataset_dir), "dataset_yaml": str(yaml_path), "manifest_path": str(manifest_path)}
+
+
+def training_executor_mode() -> str:
+    mode = os.environ.get(REMOTE_TRAINING_EXECUTOR_ENV, "local").strip().lower()
+    return mode if mode in {"local", "remote", "worker"} else "local"
+
+
+def worker_local_training_fallback_enabled() -> bool:
+    return os.environ.get("INSPECTION_WORKER_LOCAL_TRAINING_FALLBACK", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def host_is_private_or_tailnet(host: str) -> bool:
+    value = str(host or "").strip().strip("[]").lower()
+    if value in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if value.endswith((".local", ".lan", ".internal")):
+        return True
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return address.is_private or address.is_loopback or address in ipaddress.ip_network("100.64.0.0/10")
+
+
+def validate_remote_training_endpoint(value: Any) -> str:
+    endpoint = str(value or "").strip()
+    if not endpoint:
+        return ""
+    parsed = urlsplit(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} must be an http(s) URL")
+    if parsed.username or parsed.password:
+        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} must not include credentials")
+    if parsed.query or parsed.fragment:
+        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} must not include query strings or fragments")
+    if parsed.scheme == "http" and not host_is_private_or_tailnet(parsed.hostname or ""):
+        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} uses http; use a private/Tailscale/reverse-tunnel host or HTTPS")
+    return endpoint.rstrip("/")
+
+
+def validate_windows_worker_base_url(value: Any) -> str:
+    endpoint = str(value or "").strip()
+    if not endpoint:
+        return ""
+    parsed = urlsplit(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} must be an http(s) URL")
+    if parsed.username or parsed.password:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} must not include credentials")
+    if parsed.query or parsed.fragment:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} must not include query strings or fragments")
+    if parsed.scheme == "http" and not host_is_private_or_tailnet(parsed.hostname or ""):
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} uses http; use a private/Tailscale/reverse-tunnel host or HTTPS")
+    return endpoint.rstrip("/")
+
+
+def remote_training_endpoint() -> str:
+    return validate_remote_training_endpoint(os.environ.get(REMOTE_TRAINING_ENDPOINT_ENV, ""))
+
+
+def windows_worker_base_url() -> str:
+    return validate_windows_worker_base_url(os.environ.get(WINDOWS_WORKER_BASE_URL_ENV, ""))
+
+
+def remote_training_timeout_seconds() -> float:
+    try:
+        return max(5.0, min(3600.0, float(os.environ.get(REMOTE_TRAINING_TIMEOUT_ENV, "") or REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS)))
+    except (TypeError, ValueError):
+        return REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS
+
+
+def windows_worker_timeout_seconds() -> float:
+    try:
+        return max(2.0, min(3600.0, float(os.environ.get(WINDOWS_WORKER_TIMEOUT_ENV, "") or WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS)))
+    except (TypeError, ValueError):
+        return WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS
+
+
+def windows_worker_image_timeout_seconds() -> float:
+    try:
+        return max(60.0, min(1800.0, float(os.environ.get("VANTALINE_WORKER_IMAGE_TIMEOUT_SECONDS", "") or 960.0)))
+    except (TypeError, ValueError):
+        return 960.0
+
+
+def windows_worker_headers() -> dict[str, str]:
+    token = os.environ.get(WINDOWS_WORKER_TOKEN_ENV, "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def windows_worker_request(method: str, path: str, *, json_body: dict[str, Any] | None = None, timeout_seconds: float | None = None) -> dict[str, Any]:
+    base_url = windows_worker_base_url()
+    if not base_url:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
+    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
+    try:
+        response = requests.request(
+            method,
+            url,
+            json=json_body,
+            headers=windows_worker_headers(),
+            timeout=timeout_seconds or windows_worker_timeout_seconds(),
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {"message": response.text[:500]}
+    if response.status_code >= 400:
+        detail = body.get("detail") if isinstance(body, dict) else body
+        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
+    if not isinstance(body, dict):
+        return {"result": body}
+    return body
+
+
+def windows_worker_form_request(
+    method: str,
+    path: str,
+    *,
+    data: dict[str, Any] | None = None,
+    files: dict[str, Any] | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    base_url = windows_worker_base_url()
+    if not base_url:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
+    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
+    try:
+        response = requests.request(
+            method,
+            url,
+            data=data,
+            files=files,
+            headers=windows_worker_headers(),
+            timeout=timeout_seconds or windows_worker_timeout_seconds(),
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {"message": response.text[:500]}
+    if response.status_code >= 400:
+        detail = body.get("detail") if isinstance(body, dict) else body
+        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
+    if not isinstance(body, dict):
+        return {"result": body}
+    return body
+
+
+def windows_worker_status(*, force: bool = False, probe: bool = True, include_services: bool = False) -> dict[str, Any]:
+    global _windows_worker_status_cache, _windows_worker_status_cache_at
+    endpoint = ""
+    endpoint_error = ""
+    try:
+        endpoint = windows_worker_base_url()
+    except RuntimeError as exc:
+        endpoint_error = str(exc)
+    result: dict[str, Any] = {
+        "configured": bool(endpoint),
+        "base_url": masked_url_for_status(endpoint),
+        "base_url_error": endpoint_error,
+        "token_present": bool(os.environ.get(WINDOWS_WORKER_TOKEN_ENV, "").strip()),
+        "required_base_url_env": WINDOWS_WORKER_BASE_URL_ENV,
+        "required_token_env": WINDOWS_WORKER_TOKEN_ENV,
+        "status": "not_configured" if not endpoint else "unknown",
+        "ok": False,
+    }
+    if not endpoint:
+        return result
+    now = time.monotonic()
+    cached: dict[str, Any] = {}
+    with _windows_worker_status_lock:
+        if _windows_worker_status_cache:
+            cached = dict(_windows_worker_status_cache)
+            cache_age = now - _windows_worker_status_cache_at
+            cache_has_services = bool(cached.get("services"))
+            if not force and (
+                not probe
+                or (cache_age < WINDOWS_WORKER_STATUS_CACHE_SECONDS and (not include_services or cache_has_services))
+            ):
+                if not probe and cache_age >= WINDOWS_WORKER_STATUS_CACHE_SECONDS:
+                    cached["stale"] = True
+                return cached
+    if not probe:
+        return {
+            **result,
+            "status": "deferred",
+            "message": "Windows worker health check is deferred for faster page load.",
+        }
+    try:
+        health = windows_worker_request("GET", "/health", timeout_seconds=min(4.0, windows_worker_timeout_seconds()))
+        payload = {
+            **result,
+            "ok": bool(health.get("ok")),
+            "status": "ready" if health.get("ok") else "unhealthy",
+            "health": health,
+        }
+        if include_services:
+            payload["services"] = windows_worker_request(
+                "GET",
+                "/services",
+                timeout_seconds=min(6.0, windows_worker_timeout_seconds()),
+            )
+        elif cached.get("services"):
+            payload["services"] = cached["services"]
+            payload["services_stale"] = True
+    except RuntimeError as exc:
+        payload = {**result, "status": "unreachable", "error": bounded_text(str(exc), 260)}
+    with _windows_worker_status_lock:
+        _windows_worker_status_cache = dict(payload)
+        _windows_worker_status_cache_at = now
+    return payload
+
+
+def training_execution_status(*, include_worker_probe: bool = False, include_worker_services: bool = False) -> dict[str, Any]:
+    endpoint = ""
+    endpoint_error = ""
+    try:
+        endpoint = remote_training_endpoint()
+    except RuntimeError as exc:
+        endpoint_error = str(exc)
+    mode = training_executor_mode()
+    return {
+        "executor": mode,
+        "remote_enabled": mode == "remote",
+        "remote_endpoint_configured": bool(endpoint),
+        "remote_endpoint": masked_url_for_status(endpoint),
+        "remote_endpoint_error": endpoint_error,
+        "remote_api_key_present": bool(os.environ.get(REMOTE_TRAINING_API_KEY_ENV, "").strip()),
+        "required_endpoint_env": REMOTE_TRAINING_ENDPOINT_ENV,
+        "required_api_key_env": REMOTE_TRAINING_API_KEY_ENV,
+        "windows_worker": windows_worker_status(
+            probe=include_worker_probe,
+            include_services=include_worker_services,
+        ),
+    }
+
+
+def package_training_dataset(dataset_dir: Path, job_id: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    if not dataset_dir.exists() or not dataset_dir.is_dir():
+        raise RuntimeError(f"Training dataset directory is missing: {dataset_dir}")
+    temp_dir = tempfile.TemporaryDirectory(prefix=f"vantaline_{safe_name(job_id)}_")
+    archive_base = Path(temp_dir.name) / "dataset"
+    archive_path = Path(shutil.make_archive(str(archive_base), "zip", root_dir=str(dataset_dir)))
+    return temp_dir, archive_path
+
+
+# Directories inside a generated dataset that the remote trainer never needs.
+# `previews/` holds UI-only annotated JPEGs; shipping them just inflates the
+# cross-region upload that has to reach the Windows worker.
+WORKER_BUNDLE_SKIP_DIRS = {"previews", "preview", "debug", "thumbnails", "thumbs"}
+WORKER_BUNDLE_JPEG_QUALITY = 90
+
+
+def build_worker_training_bundle(dataset_dir: Path, job_id: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+    """Package a *training-only* copy of the dataset for the Windows worker.
+
+    The HK->worker hop runs over a cross-region Tailscale link, so a raw 360MB+
+    archive of lossless PNG samples reliably blows past the request timeout.
+    We therefore (1) drop UI-only preview/debug folders and (2) transcode the
+    PNG training images to high-quality JPEG. YOLO matches labels by file stem,
+    so converting the extension is safe and keeps the dataset trainable while
+    cutting the payload several-fold.
+    """
+    if not dataset_dir.exists() or not dataset_dir.is_dir():
+        raise RuntimeError(f"Training dataset directory is missing: {dataset_dir}")
+    temp_dir = tempfile.TemporaryDirectory(prefix=f"vantaline_worker_{safe_name(job_id)}_")
+    staging_dir = Path(temp_dir.name) / "dataset"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    for source in sorted(item for item in dataset_dir.rglob("*") if item.is_file()):
+        rel = source.relative_to(dataset_dir)
+        if rel.parts and rel.parts[0].lower() in WORKER_BUNDLE_SKIP_DIRS:
+            continue
+        is_training_image = bool(rel.parts) and rel.parts[0].lower() == "images" and source.suffix.lower() in {".png", ".bmp", ".tiff", ".tif"}
+        if is_training_image:
+            target = (staging_dir / rel).with_suffix(".jpg")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with Image.open(source) as handle:
+                    handle.convert("RGB").save(target, format="JPEG", quality=WORKER_BUNDLE_JPEG_QUALITY)
+                continue
+            except (OSError, ValueError):
+                target = staging_dir / rel
+        else:
+            target = staging_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    archive_base = Path(temp_dir.name) / "dataset"
+    archive_path = Path(shutil.make_archive(str(archive_base), "zip", root_dir=str(staging_dir)))
+    return temp_dir, archive_path
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def dataset_file_manifest(dataset_dir: Path) -> list[dict[str, Any]]:
+    files = []
+    for path in sorted(item for item in dataset_dir.rglob("*") if item.is_file()):
+        rel = path.relative_to(dataset_dir).as_posix()
+        files.append({"path": rel, "size": path.stat().st_size, "sha256": file_sha256(path)})
+    return files
+
+
+def worker_training_bundle_metadata(job_id: str, task: dict[str, Any], dataset: dict[str, Any], dataset_dir: Path, archive_path: Path) -> dict[str, Any]:
+    return {
+        "bundle_version": 1,
+        "job_id": job_id,
+        "task_id": str(task.get("task_id") or job_id),
+        "task_type": "training",
+        "action": "train_model",
+        "owner_user_id": str(task.get("owner_user_id") or ""),
+        "owner_username": str(task.get("owner_username") or ""),
+        "source_dataset_id": str(task.get("source_dataset_id") or Path(str(dataset.get("dataset_dir") or dataset_dir)).name),
+        "selected_accessory_ids": [str(item) for item in task.get("selected_accessory_ids") or []],
+        "sample_count": max(1, min(20000, int(task.get("sample_count") or 1))),
+        "train_mode": str(task.get("train_mode") or task.get("mode") or task.get("model_variant") or "yolo_ocr"),
+        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
+        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
+        "dataset_archive": {
+            "filename": archive_path.name,
+            "size": archive_path.stat().st_size,
+            "sha256": file_sha256(archive_path),
+        },
+        "dataset_files": dataset_file_manifest(dataset_dir),
+        "callback": {
+            "import_target": "training_runs",
+            "expected_artifacts": ["model", "logs", "result_manifest"],
+        },
+    }
+
+
+def worker_training_upload_timeout_seconds() -> float:
+    # The bundle upload travels over a cross-region Tailscale link; give it a
+    # generous ceiling so a slow-but-progressing transfer is not killed.
+    return max(1800.0, remote_training_timeout_seconds())
+
+
+def windows_worker_upload_bundle_streamed(
+    path: str,
+    *,
+    metadata_json: str,
+    archive_path: Path,
+    state: dict[str, int],
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    """Stream a multipart upload to the worker while tracking sent bytes in `state`
+    (no extra deps): a generator body paced by socket back-pressure gives a real
+    upload progress bar. Content-Length is set so the request is not chunked."""
+    base_url = windows_worker_base_url()
+    if not base_url:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
+    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
+    boundary = f"----vantaline{uuid.uuid4().hex}"
+    file_size = archive_path.stat().st_size
+    preamble = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="metadata"\r\n\r\n'
+        f"{metadata_json}\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="dataset_archive"; filename="{archive_path.name}"\r\n'
+        "Content-Type: application/zip\r\n\r\n"
+    ).encode("utf-8")
+    epilogue = f"\r\n--{boundary}--\r\n".encode("utf-8")
+    content_length = len(preamble) + file_size + len(epilogue)
+    state["total"] = file_size
+    state["done"] = 0
+
+    def _body():
+        yield preamble
+        with archive_path.open("rb") as handle:
+            while True:
+                chunk = handle.read(262144)
+                if not chunk:
+                    break
+                state["done"] = int(state.get("done", 0)) + len(chunk)
+                yield chunk
+        yield epilogue
+
+    headers = {
+        **windows_worker_headers(),
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Length": str(content_length),
+    }
+    try:
+        response = requests.post(url, data=_body(), headers=headers, timeout=timeout_seconds)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {"message": response.text[:500]}
+    if response.status_code >= 400:
+        detail = body.get("detail") if isinstance(body, dict) else body
+        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
+    return body if isinstance(body, dict) else {"result": body}
+
+
+def post_worker_training_bundle(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
+    dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
+    temp_dir, archive_path = build_worker_training_bundle(dataset_dir, job_id)
+    try:
+        metadata = worker_training_bundle_metadata(job_id, task, dataset, dataset_dir, archive_path)
+        metadata_json = json.dumps(metadata, ensure_ascii=False)
+        archive_bytes = archive_path.stat().st_size
+        bundle_mb = round(archive_bytes / (1024 * 1024), 1)
+        update_training_task(
+            job_id,
+            progress=20,
+            worker_bundle_size_mb=bundle_mb,
+            worker_upload_status="running",
+            worker_upload_started_at=int(time.time()),
+            worker_upload_total_bytes=archive_bytes,
+            worker_upload_sent_bytes=0,
+            note=f"已压缩 HK 样本集（{bundle_mb}MB，仅训练所需图像），正在上传到 Windows Worker。",
+        )
+        timeout_seconds = worker_training_upload_timeout_seconds()
+        last_error: Exception | None = None
+        for attempt in range(1, 3):
+            upload_state: dict[str, int] = {"done": 0, "total": archive_bytes}
+            stop_event, progress_thread = _start_transfer_progress_thread(
+                job_id,
+                upload_state,
+                done_field="worker_upload_sent_bytes",
+                total_field="worker_upload_total_bytes",
+                status_field="worker_upload_status",
+            )
+            try:
+                if attempt == 1:
+                    body = windows_worker_upload_bundle_streamed(
+                        "/training/jobs/import",
+                        metadata_json=metadata_json,
+                        archive_path=archive_path,
+                        state=upload_state,
+                        timeout_seconds=timeout_seconds,
+                    )
+                else:
+                    # Fallback path: proven (non-streaming) form upload for reliability.
+                    with archive_path.open("rb") as handle:
+                        body = windows_worker_form_request(
+                            "POST",
+                            "/training/jobs/import",
+                            data={"metadata": metadata_json},
+                            files={"dataset_archive": (archive_path.name, handle, "application/zip")},
+                            timeout_seconds=timeout_seconds,
+                        )
+                update_training_task(
+                    job_id,
+                    worker_upload_status="completed",
+                    worker_upload_sent_bytes=archive_bytes,
+                    worker_upload_total_bytes=archive_bytes,
+                    worker_upload_completed_at=int(time.time()),
+                )
+                return body
+            except RuntimeError as exc:
+                last_error = exc
+                if attempt >= 2:
+                    update_training_task(job_id, worker_upload_status="failed")
+                    break
+                update_training_task(
+                    job_id,
+                    progress=20,
+                    worker_upload_status="running",
+                    note=f"上传到 Windows Worker 失败（第 {attempt} 次），正在重试：{str(exc)[:160]}",
+                )
+                time.sleep(5)
+            finally:
+                stop_event.set()
+                progress_thread.join(timeout=2.0)
+        raise last_error if last_error else RuntimeError("Windows worker bundle upload failed")
+    finally:
+        temp_dir.cleanup()
+
+
+def run_remote_training_task(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> None:
+    endpoint = remote_training_endpoint()
+    if not endpoint:
+        raise RuntimeError(
+            "Remote training executor is enabled but no private Windows training endpoint is configured. "
+            f"Set {REMOTE_TRAINING_ENDPOINT_ENV} to a URL reachable only over Tailscale/reverse tunnel/VPN, "
+            f"and set {REMOTE_TRAINING_API_KEY_ENV} if that service requires a bearer token."
+        )
+    dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
+    update_training_task(
+        job_id,
+        status="running",
+        progress=78,
+        note="样本已生成，正在提交到 Windows 远程训练端点。",
+        training_executor="remote",
+        remote_training_endpoint=masked_url_for_status(endpoint),
+        **dataset,
+    )
+    temp_dir, archive_path = package_training_dataset(dataset_dir, job_id)
+    headers: dict[str, str] = {}
+    api_key = os.environ.get(REMOTE_TRAINING_API_KEY_ENV, "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    metadata = {
+        "job_id": job_id,
+        "train_mode": task.get("train_mode") or task.get("mode") or "yolo_ocr",
+        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
+        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
+        "dataset_yaml": str(dataset.get("dataset_yaml") or ""),
+        "manifest_path": str(dataset.get("manifest_path") or ""),
+        "source": "vantaline_cloud",
+    }
+    try:
+        with archive_path.open("rb") as handle:
+            response = requests.post(
+                endpoint,
+                data={"metadata": json.dumps(metadata, ensure_ascii=False)},
+                files={"dataset_archive": (archive_path.name, handle, "application/zip")},
+                headers=headers,
+                timeout=remote_training_timeout_seconds(),
+            )
+        response.raise_for_status()
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"status": "submitted", "message": response.text[:300]}
+        if not isinstance(body, dict):
+            body = {"status": "submitted", "message": str(body)[:300]}
+        remote_status = str(body.get("status") or body.get("state") or "submitted").strip().lower()
+        remote_job_id = str(body.get("job_id") or body.get("id") or "").strip()
+        completed = remote_status in {"completed", "succeeded", "success", "done"}
+        update_training_task(
+            job_id,
+            status="completed" if completed else "running",
+            progress=100 if completed else 90,
+            completed_at=int(time.time()) if completed else 0,
+            remote_training_status=remote_status,
+            remote_training_job_id=remote_job_id,
+            remote_training_response={key: value for key, value in body.items() if key not in {"api_key", "token", "secret"}},
+            note="Windows 远程训练已完成。" if completed else "训练任务已提交到 Windows 远程端点，等待远程训练服务处理。",
+        )
+    finally:
+        temp_dir.cleanup()
+
+
+def worker_training_payload(task: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "selected_accessory_ids": [str(item) for item in task.get("selected_accessory_ids") or []],
+        "sample_count": max(1, min(20000, int(task.get("sample_count") or 1))),
+        "train_mode": str(task.get("train_mode") or task.get("mode") or task.get("model_variant") or "yolo_ocr"),
+        "approved_preview_id": task.get("approved_preview_id") or None,
+        "dataset_id": task.get("source_dataset_id") or task.get("dataset_id") or None,
+        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
+        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
+        "background_set_id": task.get("background_set_id") or None,
+    }
+
+
+def run_worker_dataset_generation_task(job_id: str, task: dict[str, Any]) -> None:
+    update_training_task(
+        job_id,
+        status="running",
+        progress=12,
+        training_executor="worker",
+        windows_worker_endpoint=masked_url_for_status(windows_worker_base_url()),
+        note="正在提交样本生成任务到 Windows Worker。",
+    )
+    body = windows_worker_request_with_retry("POST", "/training/datasets/generate", json_body=worker_training_payload(task))
+    worker_job_id = str(body.get("job_id") or body.get("task_id") or body.get("id") or "").strip()
+    update_training_task(
+        job_id,
+        status="running",
+        progress=30,
+        remote_training_status=str(body.get("status") or "submitted"),
+        remote_training_job_id=worker_job_id,
+        remote_training_response={key: value for key, value in body.items() if key not in {"api_key", "token", "secret"}},
+        note="样本生成任务已提交到 Windows Worker，等待远端处理。",
+    )
+
+
+def run_worker_training_task(job_id: str, task: dict[str, Any], dataset: dict[str, Any] | None = None) -> None:
+    update_training_task(
+        job_id,
+        status="running",
+        progress=12,
+        training_executor="worker",
+        windows_worker_endpoint=masked_url_for_status(windows_worker_base_url()),
+        worker_transfer_required=True,
+        note="正在提交训练任务到 Windows Worker。",
+    )
+    if dataset and dataset.get("dataset_yaml"):
+        update_training_task(
+            job_id,
+            progress=18,
+            note="正在打包 HK 样本集并传输到 Windows Worker。",
+            **dataset,
+        )
+        body = post_worker_training_bundle(job_id, task, dataset)
+    else:
+        body = windows_worker_request_with_retry("POST", "/training/jobs", json_body=worker_training_payload(task))
+    worker_job_id = str(body.get("job_id") or body.get("task_id") or body.get("id") or "").strip()
+    update_training_task(
+        job_id,
+        status="running",
+        progress=30,
+        remote_training_status=str(body.get("status") or "submitted"),
+        remote_training_job_id=worker_job_id,
+        worker_bundle_transfer=public_path_sanitized(body.get("transfer") or body.get("bundle") or {}),
+        remote_training_response={key: value for key, value in body.items() if key not in {"api_key", "token", "secret"}},
+        note="训练任务和样本集已提交到 Windows Worker，等待远端处理。" if dataset else "训练任务已提交到 Windows Worker，等待远端处理。",
+    )
+
+
+def worker_training_terminal_status(status: str) -> bool:
+    return status.lower() in {"completed", "failed", "cancelled", "canceled", "stopped"}
+
+
+def worker_training_artifact_summary(item: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "id",
+        "run_id",
+        "task_id",
+        "label",
+        "display_name",
+        "status",
+        "sample_count",
+        "selected_accessory_ids",
+        "artifact_path",
+        "dataset_yaml",
+    }
+    return {key: public_path_sanitized(value) for key, value in item.items() if key in allowed}
+
+
+def import_worker_training_artifacts(task: dict[str, Any], artifacts: dict[str, Any]) -> dict[str, Any]:
+    if task.get("worker_artifacts_imported_at"):
+        return {}
+    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
+    if not job_id:
+        return {}
+    model_artifact = next(
+        (
+            item
+            for item in artifacts.get("models", [])
+            if isinstance(item, dict) and str(item.get("artifact_b64") or "").strip()
+        ),
+        None,
+    )
+    if not model_artifact:
+        return {}
+    try:
+        payload = base64.b64decode(str(model_artifact["artifact_b64"]), validate=True)
+    except (ValueError, binascii.Error):
+        return {"worker_artifact_import_error": "Worker model artifact payload is not valid base64"}
+    expected_sha = str(model_artifact.get("artifact_sha256") or "").strip().lower()
+    actual_sha = hashlib.sha256(payload).hexdigest()
+    if expected_sha and actual_sha != expected_sha:
+        return {"worker_artifact_import_error": "Worker model artifact checksum mismatch"}
+    run_dir = output_write_dir_for_owner("training_runs", str(task.get("owner_user_id") or "")) / job_id
+    weights_dir = run_dir / "weights"
+    weights_dir.mkdir(parents=True, exist_ok=True)
+    filename = safe_name(str(model_artifact.get("artifact_filename") or "best.pt"))
+    if not filename.endswith(".pt"):
+        filename = "best.pt"
+    model_path = weights_dir / filename
+    model_path.write_bytes(payload)
+    best_path = weights_dir / "best.pt"
+    if model_path.name != "best.pt":
+        shutil.copyfile(model_path, best_path)
+    metadata = {
+        "display_name": task.get("label") or model_artifact.get("label") or job_id,
+        "note": "Imported from Windows Worker transfer result.",
+        "worker_job_id": task.get("remote_training_job_id"),
+        "worker_artifact_sha256": actual_sha,
+        "updated_at": int(time.time()),
+    }
+    (run_dir / "library_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return {
+        "worker_artifacts_imported_at": int(time.time()),
+        "worker_artifact_import_error": "",
+        "training_run_dir": str(run_dir),
+        "imported_model_path": str(best_path),
+        "worker_artifact_sha256": actual_sha,
+    }
+
+
+def _start_transfer_progress_thread(
+    job_id: str,
+    state: dict[str, int],
+    *,
+    done_field: str,
+    total_field: str,
+    status_field: str,
+    interval: float = 1.5,
+) -> tuple[threading.Event, threading.Thread]:
+    """Periodically flush an in-memory byte counter to the training task file so the
+    frontend can render a live transfer progress bar without per-chunk disk writes."""
+    stop = threading.Event()
+
+    def _loop() -> None:
+        while not stop.wait(interval):
+            try:
+                update_training_task(
+                    job_id,
+                    **{
+                        done_field: int(state.get("done", 0)),
+                        total_field: int(state.get("total", 0)),
+                        status_field: "running",
+                    },
+                )
+            except Exception:  # noqa: BLE001 - progress flushing must never break the transfer
+                pass
+
+    thread = threading.Thread(target=_loop, name=f"transfer-progress-{job_id}", daemon=True)
+    thread.start()
+    return stop, thread
+
+
+def windows_worker_get_json_streamed(path: str, *, state: dict[str, int], timeout_seconds: float) -> dict[str, Any]:
+    """GET a JSON body from the worker while tracking received bytes in `state`
+    (state['done']/state['total']) so download progress can be surfaced live."""
+    base_url = windows_worker_base_url()
+    if not base_url:
+        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
+    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
+    buffer = io.BytesIO()
+    try:
+        with requests.get(
+            url,
+            headers=windows_worker_headers(),
+            timeout=timeout_seconds,
+            stream=True,
+        ) as response:
+            if response.status_code >= 400:
+                raise RuntimeError(f"Windows worker returned HTTP {response.status_code}")
+            try:
+                state["total"] = int(response.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                state["total"] = 0
+            for chunk in response.iter_content(chunk_size=262144):
+                if chunk:
+                    buffer.write(chunk)
+                    state["done"] = buffer.tell()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
+    try:
+        return json.loads(buffer.getvalue().decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"Windows worker returned non-JSON artifacts: {exc}") from exc
+
+
+def refresh_worker_training_task(task: dict[str, Any], *, include_artifacts: bool = False) -> dict[str, Any]:
+    remote_job_id = str(task.get("remote_training_job_id") or "").strip()
+    if not remote_job_id:
+        return public_training_task(task)
+    job_id = str(task.get("job_id") or task.get("task_id") or "")
+    already_imported = bool(task.get("worker_artifacts_imported_at"))
+    updates: dict[str, Any] = {}
+    try:
+        body = windows_worker_request("GET", f"/training/jobs/{quote(remote_job_id, safe='')}", timeout_seconds=20)
+        remote_job = body.get("job") if isinstance(body.get("job"), dict) else body
+        remote_status = str(remote_job.get("status") or body.get("status") or "").strip()
+        remote_progress = remote_job.get("progress") if isinstance(remote_job, dict) else None
+        updates.update(
+            {
+                "remote_training_status": remote_status or task.get("remote_training_status") or "submitted",
+                "remote_training_job": public_path_sanitized(remote_job),
+                "remote_training_poll_error": "",
+            }
+        )
+        if isinstance(remote_progress, (int, float)):
+            updates["remote_training_progress"] = remote_progress
+        if remote_status:
+            status_l = remote_status.lower()
+            if status_l == "completed":
+                updates.update(
+                    {
+                        "status": "completed",
+                        "progress": 100,
+                        "completed_at": int(time.time()),
+                        "note": "Windows Worker 任务已完成。",
+                    }
+                )
+            elif status_l in {"failed", "cancelled", "canceled", "stopped"}:
+                updates.update(
+                    {
+                        "status": "failed",
+                        "progress": 100,
+                        "completed_at": int(time.time()),
+                        "error": str(remote_job.get("error") or remote_job.get("note") or remote_status),
+                        "note": f"Windows Worker 任务结束：{remote_status}。",
+                    }
+                )
+            elif str(task.get("status")) in IMAGE_JOB_ACTIVE_STATUSES:
+                updates.update(
+                    {
+                        "status": "running",
+                        "progress": max(int(task.get("progress") or 0), 30),
+                        "note": f"Windows Worker 任务状态：{remote_status}。",
+                    }
+                )
+        # Only fetch artifacts (a potentially large base64 model payload) once the
+        # remote job has actually completed AND the model has not been imported yet.
+        # Gating on "completed" (not merely include_artifacts) prevents pointless
+        # downloads + a misleading model-return progress bar while training runs.
+        if remote_status.lower() == "completed" and not already_imported:
+            download_state: dict[str, int] = {"done": 0, "total": 0}
+            stop_event, progress_thread = _start_transfer_progress_thread(
+                job_id,
+                download_state,
+                done_field="worker_download_received_bytes",
+                total_field="worker_download_total_bytes",
+                status_field="worker_download_status",
+            )
+            update_training_task(
+                job_id,
+                worker_download_status="running",
+                worker_download_started_at=int(time.time()),
+                worker_download_received_bytes=0,
+                note="Windows Worker 训练完成，正在回传模型到 HK 服务器。",
+            )
+            try:
+                artifacts = windows_worker_get_json_streamed(
+                    f"/training/jobs/{quote(remote_job_id, safe='')}/artifacts",
+                    state=download_state,
+                    timeout_seconds=worker_training_upload_timeout_seconds(),
+                )
+            finally:
+                stop_event.set()
+                progress_thread.join(timeout=2.0)
+            received_total = int(download_state.get("done") or 0)
+            updates["remote_training_artifacts"] = {
+                "models": [
+                    worker_training_artifact_summary(item)
+                    for item in artifacts.get("models", [])
+                    if isinstance(item, dict)
+                ],
+                "datasets": [
+                    worker_training_artifact_summary(item)
+                    for item in artifacts.get("datasets", [])
+                    if isinstance(item, dict)
+                ],
+            }
+            updates.update(
+                {
+                    "worker_download_status": "completed",
+                    "worker_download_completed_at": int(time.time()),
+                    "worker_download_received_bytes": received_total,
+                    "worker_download_total_bytes": int(download_state.get("total") or received_total),
+                }
+            )
+            if remote_status.lower() == "completed":
+                import_result = import_worker_training_artifacts(task, artifacts)
+                if import_result:
+                    updates.update(import_result)
+                elif not task.get("worker_artifacts_imported_at"):
+                    attempts = int(task.get("worker_artifact_import_attempts") or 0) + 1
+                    updates["worker_artifact_import_attempts"] = attempts
+                    if attempts >= 5:
+                        updates["worker_artifacts_imported_at"] = int(time.time())
+                        updates["worker_artifact_import_error"] = (
+                            "Worker reported completed but returned no model artifact after 5 attempts."
+                        )
+    except Exception as exc:
+        updates["remote_training_poll_error"] = str(exc)
+        if not already_imported:
+            updates["worker_download_status"] = "failed"
+    if updates:
+        task = update_training_task(str(task.get("job_id") or task.get("task_id")), **updates)
+    return public_training_task(task)
+
+
+def windows_worker_request_with_retry(
+    method: str,
+    path: str,
+    *,
+    json_body: dict[str, Any] | None = None,
+    timeout_seconds: float | None = None,
+    attempts: int = 3,
+    backoff_seconds: float = 4.0,
+) -> dict[str, Any]:
+    last_exc: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return windows_worker_request(method, path, json_body=json_body, timeout_seconds=timeout_seconds)
+        except RuntimeError as exc:
+            last_exc = exc
+            if attempt + 1 >= attempts:
+                break
+            time.sleep(backoff_seconds * (attempt + 1))
+    raise last_exc if last_exc else RuntimeError("Windows worker request failed")
+
+
+def worker_training_watcher_enabled() -> bool:
+    return os.environ.get("INSPECTION_WORKER_WATCHER", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def worker_training_watcher_interval_seconds() -> float:
+    try:
+        return max(5.0, min(600.0, float(os.environ.get("INSPECTION_WORKER_WATCHER_INTERVAL_SECONDS", "") or 20.0)))
+    except (TypeError, ValueError):
+        return 20.0
+
+
+def _worker_training_watch_once() -> int:
+    """Poll active Windows-worker training jobs and import finished models so the
+    train -> transfer-back -> library flow completes without frontend polling."""
+    try:
+        base_url = windows_worker_base_url()
+    except RuntimeError:
+        return 0
+    if not base_url or not TRAINING_TASKS_DIR.exists():
+        return 0
+    processed = 0
+    for path in sorted(TRAINING_TASKS_DIR.glob("*.json")):
+        task = load_training_task(path)
+        if not task or not training_task_uses_worker(task):
+            continue
+        if task.get("worker_artifacts_imported_at"):
+            continue
+        # NOTE: "completed" is intentionally NOT skipped here. A worker job can be
+        # marked completed locally before the model finishes importing (e.g. a
+        # transient error during artifact download); we must keep retrying the
+        # import until worker_artifacts_imported_at is set (bounded inside refresh).
+        if str(task.get("status") or "").lower() in {"failed", "stopped", "cancelled", "canceled"}:
+            continue
+        if not str(task.get("remote_training_job_id") or "").strip():
+            continue
+        try:
+            refresh_worker_training_task(task, include_artifacts=True)
+            processed += 1
+        except Exception:  # noqa: BLE001 - 单个任务刷新失败不影响其它任务
+            traceback.print_exc(file=sys.stderr)
+    return processed
+
+
+def _worker_training_watcher_loop() -> None:
+    interval = worker_training_watcher_interval_seconds()
+    while True:
+        try:
+            _worker_training_watch_once()
+        except Exception:  # noqa: BLE001 - 守护线程必须保持存活
+            traceback.print_exc(file=sys.stderr)
+        time.sleep(interval)
+
+
+@app.on_event("startup")
+def start_worker_training_watcher() -> None:
+    if worker_training_watcher_enabled():
+        threading.Thread(target=_worker_training_watcher_loop, name="worker-training-watcher", daemon=True).start()
 
 
 def run_training_task(job_id: str) -> None:
@@ -7454,10 +15777,23 @@ def run_training_task(job_id: str) -> None:
         return
     try:
         update_training_task(job_id, status="running", progress=5, started_at=int(time.time()), note="任务已启动。")
-        if task.get("dataset_yaml") and Path(str(task.get("dataset_yaml"))).exists():
+        executor_mode = training_executor_mode()
+        task_dataset_yaml = resolve_service_path(task.get("dataset_yaml", ""))
+        has_local_dataset = bool(task.get("dataset_yaml") and task_dataset_yaml.exists())
+        if executor_mode == "worker" and task.get("action") != "generate_samples" and not has_local_dataset:
+            run_worker_training_task(job_id, task)
+            return
+        if executor_mode == "worker" and task.get("action") == "generate_samples":
+            update_training_task(
+                job_id,
+                training_executor="local",
+                worker_sample_generation_bypassed=True,
+                note="样本生成使用当前账号的 HK 配件数据本地完成；模型训练仍可提交 Windows Worker。",
+            )
+        if task.get("dataset_yaml") and task_dataset_yaml.exists():
             dataset = {
-                "dataset_dir": str(task.get("dataset_dir") or Path(str(task["dataset_yaml"])).parent),
-                "dataset_yaml": str(task["dataset_yaml"]),
+                "dataset_dir": str(resolve_service_path(task.get("dataset_dir", "")) if task.get("dataset_dir") else task_dataset_yaml.parent),
+                "dataset_yaml": str(task_dataset_yaml),
                 "manifest_path": str(task.get("manifest_path") or ""),
             }
             update_training_task(job_id, status="running", progress=74, note="已选择样本集，正在启动 YOLO 训练。", **dataset)
@@ -7466,29 +15802,50 @@ def run_training_task(job_id: str) -> None:
         if task.get("action") == "generate_samples":
             update_training_task(job_id, status="completed", progress=100, completed_at=int(time.time()), note="训练样本已生成完成。", **dataset)
             return
+        if executor_mode == "worker":
+            if has_local_dataset and worker_local_training_fallback_enabled():
+                update_training_task(
+                    job_id,
+                    training_executor="local",
+                    worker_training_bypassed=True,
+                    worker_transfer_required=True,
+                    note="已启用紧急回退：HK 本地样本集将在当前服务本地训练；最终生产路径仍要求 Windows Worker 传输线路。",
+                )
+            else:
+                run_worker_training_task(job_id, task, dataset=dataset if has_local_dataset else None)
+                return
+        if training_executor_mode() == "remote":
+            run_remote_training_task(job_id, task, dataset)
+            return
         update_training_task(job_id, status="running", progress=76, note="样本已生成，正在启动 YOLO 训练。", **dataset)
-        run_dir = OUTPUT_DIR / "training_runs"
-        model_path = str(MODEL_PATH if MODEL_PATH.exists() else REPO_MODEL_PATH)
+        run_dir = output_write_dir_for_owner("training_runs", str(task.get("owner_user_id") or ""))
+        # Detection-only training: transfer-learn from a COCO-pretrained bbox
+        # detector (not the old segmentation checkpoint).
+        model_path = detect_base_model()
         epochs = max(1, min(500, int(task.get("epochs") or 1)))
         image_size = max(320, min(1280, int(task.get("image_size") or 640)))
+        training_device = yolo_inference_device()
+        training_device_text = str(training_device).strip().lower()
+        cpu_training = training_device_text == "cpu"
         command = [
-            "yolo",
-            "segment",
+            yolo_cli_command(),
+            "detect",
             "train",
             f"model={model_path}",
             f"data={dataset['dataset_yaml']}",
             f"imgsz={image_size}",
             f"epochs={epochs}",
-            "batch=0.72",
-            "device=0",
-            "cache=ram",
+            "batch=1" if cpu_training else "batch=0.72",
+            f"device={training_device}",
+            "cache=False" if cpu_training else "cache=ram",
             "workers=0",
-            "amp=True",
+            "amp=False" if cpu_training else "amp=True",
             "patience=25",
             "optimizer=auto",
             "mosaic=0.0",
             "mixup=0.0",
             "copy_paste=0.0",
+            "plots=False" if cpu_training else "plots=True",
             f"project={run_dir}",
             f"name={job_id}",
             "exist_ok=True",
@@ -7580,19 +15937,20 @@ def enqueue_training_task(
         "mode": request.train_mode,
         "epochs": epochs,
         "image_size": image_size,
-        "background_set_id": selected_background_set_id(request.background_set_id),
+        "background_set_id": selected_background_set_id(request.background_set_id, _request_user.get()),
         "approved_preview_id": request.approved_preview_id,
         "preview_pose_family_policy": "auto",
         "note": "任务已加入队列。",
+        **current_owner_fields(),
         **estimate,
     }
     if dataset:
         task.update(
             {
                 "source_dataset_id": dataset["id"],
-                "dataset_dir": dataset["dataset_dir"],
-                "dataset_yaml": dataset["dataset_yaml"],
-                "manifest_path": dataset["manifest_path"],
+                "dataset_dir": dataset.get("dataset_dir", ""),
+                "dataset_yaml": dataset.get("dataset_yaml", ""),
+                "manifest_path": dataset.get("manifest_path", ""),
                 "label": dataset.get("display_name") or task["label"],
                 "candidate_name": dataset.get("display_name") or task["candidate_name"],
             }
@@ -7604,17 +15962,18 @@ def enqueue_training_task(
     return public_training_task(task)
 
 
-def list_trained_model_specs() -> list[dict[str, Any]]:
+def list_trained_model_specs(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     models = []
-    runs_dir = OUTPUT_DIR / "training_runs"
-    if not runs_dir.exists():
-        return models
-    config = load_config()
+    config = config or load_config()
     accessories_by_id = {
         str(item.get("id") or accessory_uid(item)): serialize_accessory(item)
         for item in config.get("accessories", [])
     }
-    for run_dir in sorted([p for p in runs_dir.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True):
+    run_dirs: list[Path] = []
+    for runs_dir in training_run_roots():
+        if runs_dir.exists():
+            run_dirs.extend([p for p in runs_dir.iterdir() if p.is_dir()])
+    for run_dir in sorted(run_dirs, key=lambda p: p.stat().st_mtime, reverse=True):
         weights = run_dir / "weights" / "best.pt"
         meta_path = run_dir / "library_metadata.json"
         try:
@@ -7624,14 +15983,16 @@ def list_trained_model_specs() -> list[dict[str, Any]]:
         task = load_training_task(training_task_path(run_dir.name)) or {}
         manifest_path = OUTPUT_DIR / "training_datasets" / run_dir.name / "manifest.json"
         if task.get("manifest_path"):
-            manifest_path = Path(str(task["manifest_path"]))
+            manifest_path = resolve_service_path(task["manifest_path"])
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
         except json.JSONDecodeError:
             manifest = {}
         if task.get("action") != "train_model":
             continue
+        audit = record_audit_fields({**manifest, **task}, run_dir)
         raw_class_names = [str(name or f"class_{idx}") for idx, name in enumerate(manifest.get("class_names") or ["accessory"])]
+        task_id_value = str(task.get("task_id") or manifest.get("task_id") or run_dir.name)
         variant = str(task.get("model_variant") or task.get("mode") or manifest.get("model_variant") or manifest.get("mode") or "yolo")
         uses_ocr = variant == "yolo_ocr"
         selected_accessory_ids = list(task.get("selected_accessory_ids") or manifest.get("selected_accessory_ids") or [])
@@ -7663,7 +16024,7 @@ def list_trained_model_specs() -> list[dict[str, Any]]:
             str(item_id)
             for item_id in (task.get("ocr_accessory_ids") or manifest.get("ocr_accessory_ids") or [])
         }
-        if uses_ocr and not ocr_accessory_ids:
+        if not ocr_accessory_ids:
             ocr_accessory_ids = {
                 str(item_id)
                 for item_id in selected_accessory_ids
@@ -7672,37 +16033,56 @@ def list_trained_model_specs() -> list[dict[str, Any]]:
         ocr_model_class_ids = sorted(
             model_cls_id for model_cls_id, accessory_id in accessory_class_map.items() if str(accessory_id) in ocr_accessory_ids
         )
-        models.append(
-            {
-                "id": f"trained_{run_dir.name}__{variant}",
-                "run_id": run_dir.name,
-                "task_id": str(task.get("task_id") or manifest.get("task_id") or run_dir.name),
-                "variant": variant,
-                "label": meta.get("display_name") or f"{run_dir.name} · {variant.upper()}",
-                "description": "由训练库生成的任务模型。",
-                "note": meta.get("note") or "",
-                "path": weights,
-                "artifact_path": str(weights),
-                "metadata_path": str(manifest_path),
-                "uses_ocr": uses_ocr,
-                "is_specialized": True,
-                "selected_accessory_ids": selected_accessory_ids,
-                "required_accessory_counts": required_accessory_counts,
-                "accessory_class_map": {str(k): v for k, v in accessory_class_map.items()},
-                "class_accessory_map": {v: k for k, v in accessory_class_map.items()},
-                "ocr_accessory_ids": sorted(ocr_accessory_ids),
-                "ocr_model_class_ids": ocr_model_class_ids,
-                "accessory_names": accessory_names,
-                "accessory_labels": accessory_labels,
-                "model_class_names": class_names,
-                "model_to_business_class": {idx: idx for idx in class_names},
-                "model_to_accessory_id": accessory_class_map,
-                "rule_required_accessory_ids": list(required_accessory_counts.keys()),
-                "rule_required_classes": list(class_names.keys()),
-                "rule_min_counts": {str(idx): 1 for idx in class_names},
-                "rule_class_labels": class_names,
-            }
-        )
+        available_variants = [variant if variant in {"yolo", "yolo_ocr"} else "yolo"]
+        if ocr_accessory_ids:
+            sibling_variant = "yolo" if available_variants[0] == "yolo_ocr" else "yolo_ocr"
+            available_variants.append(sibling_variant)
+        for spec_variant in available_variants:
+            spec_uses_ocr = spec_variant == "yolo_ocr"
+            spec_ocr_accessory_ids = sorted(ocr_accessory_ids) if spec_uses_ocr else []
+            spec_ocr_model_class_ids = ocr_model_class_ids if spec_uses_ocr else []
+            spec_payload = {
+                    "id": f"trained_{run_dir.name}__{spec_variant}",
+                    "run_id": run_dir.name,
+                    "run_dir": str(run_dir),
+                    "task_id": task_id_value,
+                    "variant": spec_variant,
+                    "label": meta.get("display_name") or f"{run_dir.name} · {spec_variant.upper()}",
+                    "description": "由训练库生成的任务模型。",
+                    "note": meta.get("note") or "",
+                    "path": weights,
+                    "artifact_path": str(weights),
+                    "metadata_path": str(manifest_path),
+                    "uses_ocr": spec_uses_ocr,
+                    "is_specialized": True,
+                    "selected_accessory_ids": selected_accessory_ids,
+                    "required_accessory_counts": required_accessory_counts,
+                    "accessory_class_map": {str(k): v for k, v in accessory_class_map.items()},
+                    "class_accessory_map": {v: k for k, v in accessory_class_map.items()},
+                    "ocr_accessory_ids": spec_ocr_accessory_ids,
+                    "ocr_model_class_ids": spec_ocr_model_class_ids,
+                    "ocr_accessory_profiles": build_ocr_accessory_profiles(
+                        [accessories_by_id.get(str(item_id), {}) for item_id in spec_ocr_accessory_ids],
+                        accessory_labels,
+                    ) if spec_uses_ocr else {},
+                    "accessory_names": accessory_names,
+                    "accessory_labels": accessory_labels,
+                    "model_class_names": class_names,
+                    "model_to_business_class": {idx: idx for idx in class_names},
+                    "model_to_accessory_id": accessory_class_map,
+                    "rule_required_accessory_ids": list(required_accessory_counts.keys()),
+                    "rule_required_classes": list(class_names.keys()),
+                    "rule_min_counts": {str(idx): 1 for idx in class_names},
+                    "rule_class_labels": class_names,
+                    "created_at": audit["created_at"],
+                    "updated_at": audit["updated_at"],
+                    "owner_user_id": audit["owner_user_id"],
+                    "owner_username": audit["owner_username"],
+                }
+            models.append(apply_task_rule_override_to_spec(spec_payload, config))
+    user = _request_user.get()
+    if user:
+        models = [spec for spec in models if record_visible_to_user(spec, user)]
     return models
 
 
@@ -7710,9 +16090,269 @@ def ai_detection_task_model_id(task_id: str) -> str:
     return f"{AI_DETECTION_TASK_PREFIX}{task_id}"
 
 
+def sanitize_ai_detection_task_id(value: Any) -> str:
+    task_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value or "").strip()).strip("_").lower()
+    return task_id[:72]
+
+
+def clean_ai_detection_task_name(value: Any, fallback: str) -> str:
+    name = re.sub(r"\s+", " ", str(value or "").strip())
+    if not name:
+        name = fallback
+    return name[:96] or "AI 检测任务"
+
+
+def normalize_ai_detection_task_counts(raw_counts: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for raw_id, raw_count in raw_counts.items():
+        item_id = str(raw_id or "").strip()
+        if not item_id:
+            continue
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            count = 1
+        counts[item_id] = max(1, min(99, count))
+    return counts
+
+
+def accessory_lookup_by_id(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+    for item in config.get("accessories", []):
+        for raw_id in (item.get("id"), accessory_uid(item), accessory_legacy_uid(item)):
+            item_id = str(raw_id or "").strip()
+            if item_id and item_id not in lookup:
+                lookup[item_id] = item
+    return lookup
+
+
+def accessory_id_aliases(item: dict[str, Any]) -> list[str]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for raw_id in (item.get("id"), accessory_uid(item), accessory_legacy_uid(item)):
+        item_id = str(raw_id or "").strip()
+        if item_id and item_id not in seen:
+            seen.add(item_id)
+            aliases.append(item_id)
+    return aliases
+
+
+def resolve_accessory_id(config: dict[str, Any], accessory_id: str) -> tuple[str, dict[str, Any]] | None:
+    item = accessory_lookup_by_id(config).get(str(accessory_id or "").strip())
+    if not item:
+        return None
+    return accessory_uid(item), item
+
+
+def load_ai_detection_tasks() -> list[dict[str, Any]]:
+    ensure_dirs()
+    if not AI_DETECTION_TASKS_PATH.exists():
+        return []
+    try:
+        data = json.loads(AI_DETECTION_TASKS_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    raw_tasks = data.get("tasks") if isinstance(data, dict) else data
+    if not isinstance(raw_tasks, list):
+        return []
+    tasks: list[dict[str, Any]] = []
+    for raw in raw_tasks:
+        if not isinstance(raw, dict):
+            continue
+        task_id = sanitize_ai_detection_task_id(raw.get("id"))
+        counts = normalize_ai_detection_task_counts(raw.get("required_accessory_counts") or {})
+        selected_ids = [str(item_id) for item_id in raw.get("selected_accessory_ids") or counts.keys() if str(item_id) in counts]
+        if not task_id or not counts:
+            continue
+        now = float(raw.get("updated_at") or raw.get("created_at") or time.time())
+        task = {
+            "id": task_id,
+            "name": clean_ai_detection_task_name(raw.get("name"), "AI 检测任务"),
+            "selected_accessory_ids": selected_ids or list(counts.keys()),
+            "required_accessory_counts": counts,
+            "accessory_labels": {
+                str(k): str(v)
+                for k, v in (raw.get("accessory_labels") or {}).items()
+                if str(k) in counts and str(v).strip()
+            },
+            "created_at": float(raw.get("created_at") or now),
+            "updated_at": now,
+            "source": str(raw.get("source") or "ai_detection_workbench"),
+            "owner_user_id": str(raw.get("owner_user_id") or ""),
+            "owner_username": str(raw.get("owner_username") or ""),
+            "shared_with_user_ids": raw.get("shared_with_user_ids") if isinstance(raw.get("shared_with_user_ids"), list) else [],
+        }
+        tasks.append(task)
+    tasks.sort(key=lambda item: (float(item.get("updated_at") or 0), str(item.get("id") or "")), reverse=True)
+    return tasks
+
+
+def save_ai_detection_tasks(tasks: list[dict[str, Any]]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {"tasks": tasks}
+    tmp_path = AI_DETECTION_TASKS_PATH.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp_path.replace(AI_DETECTION_TASKS_PATH)
+
+
+def serialize_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    audit = record_audit_fields(task)
+    counts = normalize_ai_detection_task_counts(task.get("required_accessory_counts") or {})
+    selected_ids = [str(item_id) for item_id in task.get("selected_accessory_ids") or counts.keys() if str(item_id) in counts]
+    if not selected_ids:
+        selected_ids = list(counts.keys())
+    accessories_by_id = accessory_lookup_by_id(config)
+    saved_labels = {str(k): str(v) for k, v in (task.get("accessory_labels") or {}).items()}
+    accessory_names: list[str] = []
+    accessory_labels: dict[str, str] = {}
+    missing_accessory_ids: list[str] = []
+    for item_id in selected_ids:
+        item = accessories_by_id.get(item_id)
+        label = str((item or {}).get("name") or (item or {}).get("label") or saved_labels.get(item_id) or item_id)
+        accessory_names.append(label)
+        accessory_labels[item_id] = label
+        if item is None:
+            missing_accessory_ids.append(item_id)
+    fallback_name = " + ".join(accessory_names) if accessory_names else "AI 检测任务"
+    task_id = sanitize_ai_detection_task_id(task.get("id"))
+    return {
+        "id": task_id,
+        "name": clean_ai_detection_task_name(task.get("name"), fallback_name),
+        "model_id": ai_detection_task_model_id(task_id),
+        "selected_accessory_ids": selected_ids,
+        "required_accessory_counts": {item_id: counts.get(item_id, 1) for item_id in selected_ids},
+        "accessory_names": accessory_names,
+        "accessory_labels": accessory_labels,
+        "accessory_count": len(selected_ids),
+        "missing_accessory_ids": missing_accessory_ids,
+        "created_at": audit["created_at"],
+        "updated_at": audit["updated_at"],
+        "source": str(task.get("source") or "ai_detection_workbench"),
+        "owner_user_id": audit["owner_user_id"],
+        "owner_username": audit["owner_username"],
+    }
+
+
+def list_ai_detection_task_model_specs(config: dict[str, Any] | None = None, target_user_id: str | None = None) -> list[dict[str, Any]]:
+    config = config or load_config()
+    specs: list[dict[str, Any]] = []
+    user = _request_user.get()
+    for task in load_ai_detection_tasks():
+        if user and not record_visible_to_user(task, user, target_user_id):
+            continue
+        payload = serialize_ai_detection_task(task, config)
+        task_id = payload["id"]
+        if not task_id or not payload["selected_accessory_ids"]:
+            continue
+        specs.append(
+            {
+                **MODEL_REGISTRY[AI_DETECTION_MODEL_ID],
+                "id": payload["model_id"],
+                "run_id": task_id,
+                "task_id": task_id,
+                "task_label": payload["name"],
+                "task_source": "ai_detection_task_config",
+                "is_specialized": True,
+                "is_ai_detection": True,
+                "variant": "ai_detection",
+                "label": AI_DETECTION_LABEL,
+                "description": "AI检测工具台创建的无训练任务，按配件画像调用无状态 AI 检测。",
+                "selected_accessory_ids": payload["selected_accessory_ids"],
+                "required_accessory_counts": payload["required_accessory_counts"],
+                "accessory_names": payload["accessory_names"],
+                "accessory_labels": payload["accessory_labels"],
+                "artifact_path": "",
+                "metadata_path": str(AI_DETECTION_TASKS_PATH),
+                "missing_accessory_ids": payload["missing_accessory_ids"],
+                "created_at": payload["created_at"],
+                "updated_at": payload["updated_at"],
+                "owner_user_id": payload["owner_user_id"],
+                "owner_username": payload["owner_username"],
+            }
+        )
+    return specs
+
+
+def ai_detection_task_payload_from_request(request: AiDetectionTaskRequest, config: dict[str, Any]) -> dict[str, Any]:
+    raw_counts: dict[str, Any] = {}
+    for item_id, count in (request.required_accessory_counts or {}).items():
+        raw_counts[str(item_id)] = count
+    for item in request.accessories or []:
+        raw_counts[str(item.accessory_id)] = item.required_count
+    counts = normalize_ai_detection_task_counts(raw_counts)
+    if not counts:
+        raise HTTPException(status_code=400, detail="AI detection task requires at least one accessory")
+    accessories_by_id = accessory_lookup_by_id(config)
+    unknown = [item_id for item_id in counts if item_id not in accessories_by_id]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown accessory IDs: {unknown}")
+    accessory_labels = {
+        item_id: str(accessories_by_id[item_id].get("name") or accessories_by_id[item_id].get("label") or item_id)
+        for item_id in counts
+    }
+    fallback_name = " + ".join(accessory_labels.values())
+    return {
+        "name": clean_ai_detection_task_name(request.name, fallback_name),
+        "selected_accessory_ids": list(counts.keys()),
+        "required_accessory_counts": counts,
+        "accessory_labels": accessory_labels,
+        "source": "ai_detection_workbench",
+    }
+
+
+def ai_detection_tasks_response(
+    config: dict[str, Any],
+    selected_id: str | None = None,
+    *,
+    user: dict[str, Any] | None = None,
+    target_user_id: str | None = None,
+) -> dict[str, Any]:
+    user = user or _request_user.get()
+    raw_tasks = load_ai_detection_tasks()
+    if user:
+        raw_tasks = [task for task in raw_tasks if record_visible_to_user(task, user, target_user_id)]
+    tasks = [serialize_ai_detection_task(task, config) for task in raw_tasks]
+    seen_ids = {str(task.get("id") or "") for task in tasks}
+    trained_specs = [
+        spec
+        for spec in list_trained_model_specs(config)
+        if not user or record_visible_to_user(spec, user, target_user_id)
+    ]
+    for spec in list_ai_detection_specialized_model_specs(config, trained_specs, target_user_id):
+        task_id = str(spec.get("task_id") or spec.get("run_id") or "").strip()
+        if not task_id or task_id in seen_ids:
+            continue
+        names = [str(name) for name in spec.get("accessory_names") or [] if str(name).strip()]
+        tasks.append(
+            {
+                "id": task_id,
+                "name": str(spec.get("task_label") or (" + ".join(names) if names else task_id)),
+                "model_id": str(spec.get("id") or ai_detection_task_model_id(task_id)),
+                "source": str(spec.get("task_source") or "trained_model_ai_sync"),
+                "task_type": "trained_model_ai",
+                "accessory_count": len(spec.get("selected_accessory_ids") or []),
+                "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
+                "accessory_names": names,
+                "accessory_labels": spec.get("accessory_labels") or {},
+                "required_accessory_counts": spec.get("required_accessory_counts") or {},
+                "missing_accessory_ids": spec.get("missing_accessory_ids") or [],
+                "created_at": spec.get("created_at") or 0,
+                "updated_at": spec.get("updated_at") or spec.get("created_at") or 0,
+                "owner_user_id": spec.get("owner_user_id") or LEGACY_OWNER_ID,
+                "owner_username": spec.get("owner_username") or record_owner_username(spec),
+            }
+        )
+        seen_ids.add(task_id)
+    return {
+        "tasks": tasks,
+        "selected_task_id": selected_id or (tasks[0]["id"] if tasks else ""),
+    }
+
+
 def list_ai_detection_specialized_model_specs(
     config: dict[str, Any] | None = None,
     trained_specs: list[dict[str, Any]] | None = None,
+    target_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     config = config or load_config()
     trained_specs = trained_specs if trained_specs is not None else list_trained_model_specs()
@@ -7720,7 +16360,10 @@ def list_ai_detection_specialized_model_specs(
         str(item.get("id") or accessory_uid(item)): serialize_accessory(item)
         for item in config.get("accessories", [])
     }
-    grouped: dict[str, dict[str, Any]] = {}
+    grouped: dict[str, dict[str, Any]] = {
+        str(spec["task_id"]): spec
+        for spec in list_ai_detection_task_model_specs(config, target_user_id)
+    }
     for spec in trained_specs:
         task_id = str(spec.get("task_id") or spec.get("run_id") or "")
         if not task_id:
@@ -7754,6 +16397,10 @@ def list_ai_detection_specialized_model_specs(
                 "accessory_labels": {item_id: accessory_names[idx] for idx, item_id in enumerate(selected_accessory_ids)},
                 "artifact_path": "",
                 "metadata_path": "",
+                "created_at": spec.get("created_at") or 0,
+                "updated_at": spec.get("updated_at") or spec.get("created_at") or 0,
+                "owner_user_id": spec.get("owner_user_id") or LEGACY_OWNER_ID,
+                "owner_username": spec.get("owner_username") or record_owner_username(spec),
             },
         )
         for item_id in selected_accessory_ids:
@@ -7769,7 +16416,7 @@ def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = No
     for spec in list_ai_detection_specialized_model_specs(config):
         if spec["id"] == requested:
             return spec
-    for spec in list_trained_model_specs():
+    for spec in list_trained_model_specs(config):
         if spec["id"] == requested:
             return spec
     if requested not in MODEL_REGISTRY:
@@ -7781,6 +16428,8 @@ def model(model_id: str | None = None, config: dict[str, Any] | None = None) -> 
     spec = selected_model_spec(model_id, config)
     if spec.get("is_ai_detection"):
         raise RuntimeError("AI Detection does not use a local YOLO model")
+    if spec.get("is_label_sheet_match"):
+        raise RuntimeError("Label sheet matching does not use a local YOLO model")
     model_id = str(spec["id"])
     model_path = Path(spec["path"])
     if model_id not in _models:
@@ -7788,6 +16437,53 @@ def model(model_id: str | None = None, config: dict[str, Any] | None = None) -> 
             raise RuntimeError(f"Model file not found: {model_path}")
         _models[model_id] = YOLO(str(model_path))
     return _models[model_id]
+
+
+def yolo_inference_device() -> str | int:
+    configured = os.environ.get("INSPECTION_YOLO_DEVICE", "").strip()
+    if configured:
+        return configured
+    try:
+        import torch
+
+        return 0 if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
+def detect_base_model() -> str:
+    """Resolve the base checkpoint for detection-model training. Prefers an
+    explicit override or a local detector weight, falling back to a standard
+    Ultralytics detector name (auto-downloaded on first use)."""
+    if DETECT_BASE_MODEL_OVERRIDE:
+        return DETECT_BASE_MODEL_OVERRIDE
+    for candidate in (
+        ROOT / "yolo26s.pt",
+        APP_DIR / "yolo26s.pt",
+        ROOT / "yolo11s.pt",
+        ROOT / "yolov8s.pt",
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return "yolo26s.pt"
+
+
+def yolo_cli_command() -> str:
+    configured = os.environ.get("INSPECTION_YOLO_COMMAND", "").strip()
+    if configured:
+        return configured
+    discovered = shutil.which("yolo")
+    if discovered:
+        return discovered
+    candidates = []
+    virtual_env = os.environ.get("VIRTUAL_ENV", "").strip()
+    if virtual_env:
+        candidates.append(Path(virtual_env) / "bin" / "yolo")
+    candidates.append(Path(sys.executable).parent / "yolo")
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return "yolo"
 
 
 def prepare_paddle_runtime() -> None:
@@ -7810,6 +16506,8 @@ def ocr_engine() -> Any:
 
         _ocr = PaddleOCR(
             lang="en",
+            text_detection_model_name="PP-OCRv6_small_det",
+            text_recognition_model_name="PP-OCRv6_small_rec",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=True,
@@ -7886,6 +16584,144 @@ def normalize_ocr_text(text: str) -> str:
         text = text.replace(src, dst)
     text = re.sub(r"[^a-z0-9@./+ -]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE = 0.65
+OCR_ACCESSORY_MATCH_MIN_CONFIDENCE = 0.60
+OCR_ACCESSORY_MATCH_MIN_MARGIN = 0.15
+OCR_ACCESSORY_PROFILE_STOPWORDS = {
+    "accessory",
+    "document",
+    "documentation",
+    "instruction",
+    "instructions",
+    "label",
+    "manual",
+    "paper",
+    "product",
+    "text",
+    "and",
+    "back",
+    "cover",
+    "for",
+    "from",
+    "image",
+    "images",
+    "shows",
+    "the",
+    "that",
+    "this",
+    "white",
+    "with",
+}
+
+
+def ocr_keyword_terms(value: Any, *, weight: float = 1.0) -> list[dict[str, Any]]:
+    terms: list[dict[str, Any]] = []
+    if value is None:
+        return terms
+    if isinstance(value, dict):
+        for nested in value.values():
+            terms.extend(ocr_keyword_terms(nested, weight=weight))
+        return terms
+    if isinstance(value, list):
+        for nested in value:
+            terms.extend(ocr_keyword_terms(nested, weight=weight))
+        return terms
+    normalized = normalize_ocr_text(str(value))
+    if not normalized:
+        return terms
+    if len(normalized) >= 3 and normalized not in OCR_ACCESSORY_PROFILE_STOPWORDS:
+        terms.append({"text": normalized, "weight": weight})
+    for token in normalized.split():
+        if len(token) >= 3 and token not in OCR_ACCESSORY_PROFILE_STOPWORDS:
+            terms.append({"text": token, "weight": weight})
+    return terms
+
+
+def build_ocr_accessory_profiles(items: list[dict[str, Any]], accessory_labels: dict[str, str]) -> dict[str, dict[str, Any]]:
+    profiles: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not item:
+            continue
+        accessory_id = str(item.get("id") or accessory_uid(item) or "").strip()
+        if not accessory_id:
+            continue
+        profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
+        label = str(accessory_labels.get(accessory_id) or item.get("name") or item.get("label") or accessory_id)
+        raw_terms: list[dict[str, Any]] = []
+        raw_terms.extend(ocr_keyword_terms(label, weight=2.0))
+        raw_terms.extend(ocr_keyword_terms(item.get("name"), weight=2.0))
+        raw_terms.extend(ocr_keyword_terms(item.get("label"), weight=2.0))
+        raw_terms.extend(ocr_keyword_terms(profile.get("english_name"), weight=2.0))
+        raw_terms.extend(ocr_keyword_terms(profile.get("distinguishing_text"), weight=3.0))
+        raw_terms.extend(ocr_keyword_terms(profile.get("tags"), weight=1.0))
+        keywords: dict[str, float] = {}
+        for term in raw_terms:
+            text = str(term.get("text") or "").strip()
+            if not text:
+                continue
+            keywords[text] = max(float(term.get("weight") or 1.0), keywords.get(text, 0.0))
+        profiles[accessory_id] = {
+            "accessory_id": accessory_id,
+            "label": label,
+            "keywords": [{"text": text, "weight": weight} for text, weight in sorted(keywords.items())],
+        }
+    return profiles
+
+
+def match_ocr_text_accessory(texts: list[str], mean_text_score: float, spec: dict[str, Any]) -> dict[str, Any]:
+    joined = normalize_ocr_text(" ".join(texts))
+    profiles = spec.get("ocr_accessory_profiles") if isinstance(spec.get("ocr_accessory_profiles"), dict) else {}
+    if not joined or not profiles:
+        return {"accepted": False, "reason": "no_ocr_text_or_profiles", "confidence": 0.0, "margin": 0.0}
+    scores: list[dict[str, Any]] = []
+    for accessory_id, profile in profiles.items():
+        hits = []
+        score = 0.0
+        for keyword in profile.get("keywords") or []:
+            text = str(keyword.get("text") or "").strip()
+            if text and text in joined:
+                weight = float(keyword.get("weight") or 1.0)
+                score += weight
+                hits.append(text)
+        confidence = min(1.0, score / 6.0) if score > 0 else 0.0
+        scores.append(
+            {
+                "accessory_id": str(accessory_id),
+                "label": str(profile.get("label") or accessory_id),
+                "score": round(score, 4),
+                "confidence": round(confidence, 4),
+                "matched_keywords": hits[:12],
+            }
+        )
+    ranked = sorted(scores, key=lambda item: (float(item["confidence"]), float(item["score"])), reverse=True)
+    best = ranked[0] if ranked else {"confidence": 0.0, "score": 0.0}
+    second_confidence = float(ranked[1]["confidence"]) if len(ranked) > 1 else 0.0
+    margin = round(float(best.get("confidence") or 0.0) - second_confidence, 4)
+    accepted = (
+        float(mean_text_score) >= OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE
+        and float(best.get("confidence") or 0.0) >= OCR_ACCESSORY_MATCH_MIN_CONFIDENCE
+        and margin >= OCR_ACCESSORY_MATCH_MIN_MARGIN
+    )
+    reason = "accepted" if accepted else "low_ocr_confidence"
+    if float(mean_text_score) < OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE:
+        reason = "low_text_score"
+    elif float(best.get("confidence") or 0.0) < OCR_ACCESSORY_MATCH_MIN_CONFIDENCE:
+        reason = "low_match_confidence"
+    elif margin < OCR_ACCESSORY_MATCH_MIN_MARGIN:
+        reason = "low_match_margin"
+    return {
+        "accepted": accepted,
+        "reason": reason,
+        "accessory_id": best.get("accessory_id"),
+        "label": best.get("label"),
+        "confidence": best.get("confidence", 0.0),
+        "margin": margin,
+        "mean_text_score": round(float(mean_text_score), 4),
+        "matched_keywords": best.get("matched_keywords", []),
+        "candidates": ranked[:5],
+    }
 
 
 def classify_manual_text(texts: list[str]) -> dict[str, Any]:
@@ -8158,6 +16994,7 @@ def attach_ocr_results(
         ocr_result.setdefault("fallback_used", False)
         if spec.get("is_specialized"):
             classification = ocr_result["classification"]
+            accessory_match = match_ocr_text_accessory(ocr_result["texts"], float(ocr_result["mean_text_score"]), spec)
             job["det"]["ocr"] = {
                 **classification,
                 "best_rotation": ocr_result["rotation"],
@@ -8165,9 +17002,23 @@ def attach_ocr_results(
                 "fallback_used": ocr_result.get("fallback_used", False),
                 "mean_text_score": ocr_result["mean_text_score"],
                 "texts": ocr_result["texts"][:max_texts],
+                "accessory_match": accessory_match,
             }
             job["det"]["manual_type"] = classification["manual_type"]
             job["det"]["manual_label"] = classification["manual_label"]
+            job["det"].setdefault("yolo_accessory_id", job["det"].get("accessory_id"))
+            if accessory_match.get("accepted") and accessory_match.get("accessory_id"):
+                resolved_id = str(accessory_match["accessory_id"])
+                label = str(accessory_match.get("label") or spec.get("accessory_labels", {}).get(resolved_id) or resolved_id)
+                job["det"]["resolved_accessory_id"] = resolved_id
+                job["det"]["accessory_id"] = resolved_id
+                job["det"]["label"] = label
+                job["det"]["class_name"] = label
+                job["det"]["resolution_source"] = "ocr"
+            else:
+                fallback_id = str(job["det"].get("yolo_accessory_id") or job["det"].get("accessory_id") or "")
+                job["det"]["resolved_accessory_id"] = fallback_id
+                job["det"]["resolution_source"] = f"yolo_fallback_{accessory_match.get('reason') or 'ocr_rejected'}"
         else:
             finalize_ocr_detection(job["det"], ocr_result, job["orientation"], max_texts)
     return detections
@@ -8253,10 +17104,20 @@ def parse_detections(result: Any, spec: dict[str, Any]) -> list[dict[str, Any]]:
     model_to_business = spec["model_to_business_class"]
     model_class_names = spec["model_class_names"]
     model_to_accessory_id = {int(k): str(v) for k, v in (spec.get("model_to_accessory_id") or {}).items()}
-    if result.masks is not None and result.boxes is not None and len(result.boxes) > 0:
+    if result.boxes is not None and len(result.boxes) > 0:
         classes = result.boxes.cls.cpu().numpy().astype(int)
         confidences = result.boxes.conf.cpu().numpy()
-        polygons = result.masks.xy
+        if result.masks is not None:
+            polygons = list(result.masks.xy)
+        else:
+            # Detection model (boxes only, no mask): synthesise an axis-aligned
+            # rectangle polygon from each xyxy box so the downstream count / OCR /
+            # drawing pipeline keeps working unchanged.
+            xyxy = result.boxes.xyxy.cpu().numpy()
+            polygons = [
+                np.array([[bx1, by1], [bx2, by1], [bx2, by2], [bx1, by2]], dtype=np.float32)
+                for bx1, by1, bx2, by2 in xyxy
+            ]
         for model_cls_id, conf, polygon in zip(classes, confidences, polygons):
             business_cls_id = model_to_business.get(int(model_cls_id))
             if business_cls_id is None or len(polygon) < 3:
@@ -8267,6 +17128,9 @@ def parse_detections(result: Any, spec: dict[str, Any]) -> list[dict[str, Any]]:
                 {
                     "class_id": business_cls_id,
                     "accessory_id": accessory_id,
+                    "yolo_accessory_id": accessory_id,
+                    "resolved_accessory_id": accessory_id,
+                    "resolution_source": "yolo",
                     "class_name": class_name,
                     "label": label,
                     "model_class_id": int(model_cls_id),
@@ -8292,6 +17156,9 @@ def parse_detections(result: Any, spec: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "class_id": business_cls_id,
                 "accessory_id": accessory_id,
+                "yolo_accessory_id": accessory_id,
+                "resolved_accessory_id": accessory_id,
+                "resolution_source": "yolo",
                 "class_name": class_name,
                 "label": label,
                 "model_class_id": int(model_cls_id),
@@ -8304,7 +17171,7 @@ def parse_detections(result: Any, spec: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def apply_rule(detections: list[dict[str, Any]], config: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
-    threshold = float(config["confidence_threshold"])
+    threshold = float(spec.get("confidence_threshold", config["confidence_threshold"]))
     if spec.get("is_specialized"):
         required_accessory_counts = {
             str(k): max(0, int(v))
@@ -8330,7 +17197,7 @@ def apply_rule(detections: list[dict[str, Any]], config: dict[str, Any], spec: d
     for det in detections:
         conf = float(det["confidence"])
         if conf >= threshold:
-            rule_key: Any = str(det.get("accessory_id")) if spec.get("is_specialized") else int(det["class_id"])
+            rule_key: Any = str(det.get("resolved_accessory_id") or det.get("accessory_id")) if spec.get("is_specialized") else int(det["class_id"])
             if spec.get("is_specialized") and (not rule_key or rule_key == "None"):
                 continue
             count_by_rule_key[rule_key] += 1
@@ -8509,7 +17376,7 @@ def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dic
         "task": {
             "policy": "presence_by_accessory_profile",
             "expected_latency_seconds": 5,
-            "decision_rule": "passed is true only when every required accessory is present at expected_count or higher.",
+            "decision_rule": "passed is true only when every required accessory is present at exactly expected_count; undercounts and overcounts fail.",
             "output_mode": "compact",
             "required_accessories": payload_accessories,
         },
@@ -8598,9 +17465,9 @@ def ai_detection_failure_result(
 
 def write_ai_original_output(image_bgr: np.ndarray, request_id: str) -> str:
     out_name = f"{request_id}_ai_original.jpg"
-    out_path = OUTPUT_DIR / out_name
+    out_path = output_write_dir("ai_detection") / out_name
     cv2.imwrite(str(out_path), image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    return f"/outputs/{out_name}"
+    return output_url(out_path)
 
 
 def normalize_ai_box_2d(value: Any) -> list[float] | None:
@@ -8686,9 +17553,9 @@ def write_ai_annotated_output(image_bgr: np.ndarray, request_id: str, detections
     if annotated is None:
         return write_ai_original_output(image_bgr, request_id)
     out_name = f"{request_id}_ai_annotated.jpg"
-    out_path = OUTPUT_DIR / out_name
+    out_path = output_write_dir("ai_detection") / out_name
     cv2.imwrite(str(out_path), annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    return f"/outputs/{out_name}"
+    return output_url(out_path)
 
 
 def ai_model_payload(spec: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
@@ -8699,6 +17566,12 @@ def ai_model_payload(spec: dict[str, Any], settings: dict[str, Any]) -> dict[str
         "is_ai_detection": True,
         "provider_model": settings.get("model") or "",
         "uses_ocr": True,
+        "task_id": spec.get("task_id") or "",
+        "task_label": spec.get("task_label") or "",
+        "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
+        "required_accessory_counts": spec.get("required_accessory_counts") or {},
+        "accessory_names": spec.get("accessory_names") or [],
+        "accessory_labels": spec.get("accessory_labels") or {},
     }
 
 
@@ -8720,6 +17593,8 @@ def normalize_ai_detection_result(
     present_ids = []
     missing_ids = []
     counts: dict[str, int] = {}
+    count_mismatches: dict[str, dict[str, Any]] = {}
+    overcount_ids: list[str] = []
     for required in required_accessories:
         item_id = str(required.get("accessory_id") or "")
         if not item_id:
@@ -8752,10 +17627,19 @@ def normalize_ai_detection_result(
         if not present:
             count = 0
         counts[item_id] = count
-        if present and count >= expected_count:
+        if present and count == expected_count:
             present_ids.append(item_id)
         else:
             missing_ids.append(item_id)
+            if present or count != expected_count:
+                issue = "over_count" if count > expected_count else "under_count"
+                count_mismatches[item_id] = {
+                    "expected": expected_count,
+                    "found": count,
+                    "issue": issue,
+                }
+                if count > expected_count:
+                    overcount_ids.append(item_id)
         detection = {
             "accessory_id": item_id,
             "label": bounded_text(raw.get("label") if isinstance(raw, dict) else required.get("name"), 120)
@@ -8769,7 +17653,8 @@ def normalize_ai_detection_result(
             detection["count"] = count
         detections.append(detection)
     required_ids = {str(item.get("accessory_id") or "") for item in required_accessories}
-    extra = string_list([item for item in raw_rule.get("extra", []) if str(item) not in required_ids], max_items=12) if isinstance(raw_rule.get("extra"), list) else []
+    raw_extra = [item for item in raw_rule.get("extra", []) if str(item) not in required_ids] if isinstance(raw_rule.get("extra"), list) else []
+    extra = string_list([*raw_extra, *overcount_ids], max_items=12)
     passed = len(missing_ids) == 0
     provider_meta = ai_tool_provider_meta(settings)
     return {
@@ -8782,6 +17667,7 @@ def normalize_ai_detection_result(
             "missing": missing_ids,
             "extra": extra,
             "counts": counts,
+            "count_mismatches": count_mismatches,
         },
         "detections": detections,
         "ai": {
@@ -8806,13 +17692,15 @@ def analyze_bgr_ai_detection(
     required_items = ai_required_accessories(config, spec)
     if not required_items:
         annotated_url = write_ai_original_output(image_bgr, request_id)
-        return ai_detection_failure_result(
+        result = ai_detection_failure_result(
             request_id,
             spec,
             [],
             annotated_url,
             reason="AI detection task has no required accessories configured.",
         )
+        persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path)
+        return result
     changed = False
     real_ids = {accessory_uid(item) for item in config.get("accessories", [])}
     required_accessories: list[dict[str, Any]] = []
@@ -8888,7 +17776,7 @@ def analyze_bgr_ai_detection(
     rule = vision_result.get("rule") if isinstance(vision_result.get("rule"), dict) else {}
     detections = vision_result.get("detections") if isinstance(vision_result.get("detections"), list) else []
     annotated_url = write_ai_original_output(image_bgr, request_id)
-    return {
+    result = {
         "request_id": request_id,
         "passed": bool(vision_result.get("passed")),
         "model": ai_model_payload(spec, settings),
@@ -8897,21 +17785,35 @@ def analyze_bgr_ai_detection(
         "annotated_url": annotated_url,
         "ai": ai_debug,
     }
+    persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path)
+    return result
 
 
 def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = None, *, image_path: Path | None = None) -> dict[str, Any]:
-    config = load_config()
+    config = scope_config_for_user(load_config())
     spec = selected_model_spec(model_id, config)
     if spec.get("is_ai_detection"):
         return analyze_bgr_ai_detection(image_bgr, request_id, spec, config, image_path=image_path)
-    result = model(str(spec["id"]), config).predict(image_bgr, imgsz=int(config["image_size"]), device=0, verbose=False)[0]
+    if spec.get("is_label_sheet_match"):
+        return analyze_bgr_label_sheet(image_bgr, request_id, config)
+    try:
+        confidence_threshold = max(0.001, min(0.99, float(spec.get("confidence_threshold", config.get("confidence_threshold", 0.25)))))
+    except (TypeError, ValueError):
+        confidence_threshold = 0.25
+    result = model(str(spec["id"]), config).predict(
+        image_bgr,
+        imgsz=int(config["image_size"]),
+        device=yolo_inference_device(),
+        conf=confidence_threshold,
+        verbose=False,
+    )[0]
     detections = parse_detections(result, spec)
     if spec.get("uses_ocr", False):
         detections = attach_ocr_results(image_bgr, detections, config, spec)
     rule = apply_rule(detections, config, spec)
     annotated = draw_detections(image_bgr, detections, rule)
     out_name = f"{request_id}_annotated.jpg"
-    out_path = OUTPUT_DIR / out_name
+    out_path = output_write_dir("inspection") / out_name
     cv2.imwrite(str(out_path), annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
     return {
         "request_id": request_id,
@@ -8923,8 +17825,176 @@ def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = N
         },
         "rule": rule,
         "detections": detections,
-        "annotated_url": f"/outputs/{out_name}",
+        "annotated_url": output_url(out_path),
     }
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request) -> dict[str, Any]:
+    user, store, _ = authenticate_request(request)
+    setup_required = not users_exist(store)
+    return {
+        "authenticated": bool(user),
+        "setup_required": setup_required,
+        "user": user,
+        "features": FEATURE_PERMISSIONS,
+        "default_user_permissions": DEFAULT_USER_PERMISSIONS,
+        "legacy_owner_id": LEGACY_OWNER_ID,
+    }
+
+
+@app.post("/api/auth/bootstrap")
+def auth_bootstrap(request: Request, response: Response, payload: AuthBootstrapRequest) -> dict[str, Any]:
+    store = load_auth_store()
+    if users_exist(store):
+        raise HTTPException(status_code=409, detail="First admin already exists")
+    user = create_auth_user(
+        store,
+        username=payload.username,
+        password=payload.password,
+        display_name=payload.display_name,
+        role="admin",
+        permissions=sorted(FEATURE_PERMISSIONS),
+    )
+    session_id = create_session(store, user)
+    save_auth_store(store)
+    set_session_cookie(response, request, session_id)
+    return {"status": "created", "user": public_user(user), "features": FEATURE_PERMISSIONS}
+
+
+@app.post("/api/auth/login")
+def auth_login(request: Request, response: Response, payload: AuthLoginRequest) -> dict[str, Any]:
+    store = load_auth_store()
+    if bootstrap_admin_from_env(store):
+        store = load_auth_store()
+    if not users_exist(store):
+        raise HTTPException(status_code=409, detail="First admin setup required")
+    user = find_user_by_username(store, payload.username)
+    if not user or not bool(user.get("active", True)) or not verify_password(payload.password, str(user.get("password_hash") or "")):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    session_id = create_session(store, user)
+    save_auth_store(store)
+    set_session_cookie(response, request, session_id)
+    return {"status": "authenticated", "user": public_user(user), "features": FEATURE_PERMISSIONS}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request, response: Response) -> dict[str, Any]:
+    store = load_auth_store()
+    session_id = request.cookies.get(AUTH_SESSION_COOKIE, "")
+    if session_id and isinstance(store.get("sessions"), dict):
+        store["sessions"].pop(session_id, None)
+        save_auth_store(store)
+    clear_session_cookie(response, request)
+    return {"status": "logged_out"}
+
+
+@app.get("/api/auth/users")
+def list_users() -> dict[str, Any]:
+    require_admin_role()
+    store = load_auth_store()
+    return {
+        "users": [public_user(user) for user in store.get("users", []) if isinstance(user, dict)],
+        "features": FEATURE_PERMISSIONS,
+        "default_user_permissions": DEFAULT_USER_PERMISSIONS,
+    }
+
+
+@app.post("/api/auth/users")
+def create_user(payload: UserCreateRequest) -> dict[str, Any]:
+    require_admin_role()
+    store = load_auth_store()
+    user = create_auth_user(
+        store,
+        username=payload.username,
+        password=payload.password,
+        display_name=payload.display_name,
+        role=payload.role,
+        permissions=payload.permissions,
+        active=payload.active,
+    )
+    save_auth_store(store)
+    return {"status": "created", "user": public_user(user), "users": [public_user(item) for item in store.get("users", [])]}
+
+
+@app.patch("/api/auth/users/{user_id}")
+def update_user(user_id: str, payload: UserUpdateRequest, request: Request) -> dict[str, Any]:
+    actor = require_admin_role()
+    store = load_auth_store()
+    user = find_user(store, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user["id"] == actor["id"] and payload.active is False:
+        raise HTTPException(status_code=400, detail="Cannot deactivate the current session user")
+    if payload.display_name is not None:
+        user["display_name"] = clean_display_name(payload.display_name, str(user.get("username") or "user"))
+    if payload.password is not None and payload.password.strip():
+        set_user_password(user, payload.password)
+        keep_session_id = request.cookies.get(AUTH_SESSION_COOKIE, "") if user["id"] == actor["id"] else ""
+        revoke_user_sessions(store, user["id"], keep_session_id=keep_session_id)
+    if payload.role is not None:
+        user["role"] = normalize_role(payload.role)
+    if payload.permissions is not None:
+        user["permissions"] = sorted(FEATURE_PERMISSIONS) if normalize_role(user.get("role")) == "admin" else normalize_permissions(payload.permissions)
+    if payload.active is not None:
+        user["active"] = bool(payload.active)
+    user["updated_at"] = int(time.time())
+    if not any(normalize_role(item.get("role")) == "admin" and bool(item.get("active", True)) for item in store.get("users", []) if isinstance(item, dict)):
+        raise HTTPException(status_code=400, detail="At least one active admin is required")
+    save_auth_store(store)
+    return {"status": "updated", "user": public_user(user), "users": [public_user(item) for item in store.get("users", [])]}
+
+
+@app.post("/api/auth/users/{user_id}/password")
+def reset_user_password(user_id: str, payload: UserPasswordResetRequest, request: Request) -> dict[str, Any]:
+    actor = require_admin_role()
+    store = load_auth_store()
+    user = find_user(store, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    generated_password = generate_temporary_password() if payload.generate else ""
+    new_password = generated_password or str(payload.password or "")
+    if not new_password:
+        raise HTTPException(status_code=400, detail="Password is required unless generate is true")
+    set_user_password(user, new_password)
+    revoked_sessions = 0
+    if payload.revoke_sessions:
+        keep_session_id = request.cookies.get(AUTH_SESSION_COOKIE, "") if user["id"] == actor["id"] else ""
+        revoked_sessions = revoke_user_sessions(store, user["id"], keep_session_id=keep_session_id)
+    save_auth_store(store)
+    response = {
+        "status": "password_reset",
+        "user": public_user(user),
+        "users": [public_user(item) for item in store.get("users", []) if isinstance(item, dict)],
+        "revoked_sessions": revoked_sessions,
+    }
+    if generated_password:
+        response["temporary_password"] = generated_password
+    return response
+
+
+@app.delete("/api/auth/users/{user_id}")
+def delete_user(user_id: str) -> dict[str, Any]:
+    actor = require_admin_role()
+    if user_id == actor["id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete the current session user")
+    store = load_auth_store()
+    users = [user for user in store.get("users", []) if isinstance(user, dict)]
+    target = next((user for user in users if user.get("id") == user_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    remaining = [user for user in users if user.get("id") != user_id]
+    if not any(normalize_role(user.get("role")) == "admin" and bool(user.get("active", True)) for user in remaining):
+        raise HTTPException(status_code=400, detail="At least one active admin is required")
+    store["users"] = remaining
+    if isinstance(store.get("sessions"), dict):
+        store["sessions"] = {
+            session_id: session
+            for session_id, session in store["sessions"].items()
+            if not isinstance(session, dict) or session.get("user_id") != user_id
+        }
+    save_auth_store(store)
+    return {"status": "deleted", "deleted_user_id": user_id, "users": [public_user(item) for item in remaining]}
 
 
 @app.get("/")
@@ -8938,17 +18008,35 @@ def index() -> FileResponse:
     )
 
 
+@app.get("/react-preview")
+@app.get("/react-preview/")
+@app.get("/react-preview/{preview_path:path}")
+def react_preview(preview_path: str = "") -> FileResponse:
+    index_path = REACT_PREVIEW_DIST_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="React preview build is not available")
+    return FileResponse(
+        index_path,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
 @app.get("/api/status")
-def status() -> dict[str, Any]:
-    config = load_config()
+def status(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    config = scope_config_for_user(load_config(), user, target_user_id)
     active_spec = selected_model_spec(None, config)
     active_path = Path(active_spec["path"]) if active_spec.get("path") else None
     accessory_names_by_id = {
         str(item.get("id") or accessory_uid(item)): str(item.get("name") or item.get("label") or accessory_uid(item))
         for item in config.get("accessories", [])
     }
-    training_tasks = list_training_tasks()
-    trained_specs = list_trained_model_specs()
+    training_tasks = list_training_tasks(user=user, target_user_id=target_user_id)
+    trained_specs = [spec for spec in list_trained_model_specs() if record_visible_to_user(spec, user, target_user_id)]
     ai_detection_status = public_ai_detection_status()
 
     def task_accessory_names(task: dict[str, Any]) -> list[str]:
@@ -8968,24 +18056,29 @@ def status() -> dict[str, Any]:
                 "uses_ocr": bool(spec.get("uses_ocr", False)),
                 "is_legacy": bool(spec.get("is_legacy", False)),
                 "is_ai_detection": bool(spec.get("is_ai_detection", False)),
+                "is_label_sheet_match": bool(spec.get("is_label_sheet_match", False)),
                 "provider_status": ai_detection_status if spec.get("is_ai_detection") else None,
                 "path": str(path or ""),
                 "exists": exists,
             }
         )
-    specialized_specs = [*trained_specs, *list_ai_detection_specialized_model_specs(config, trained_specs)]
+    specialized_specs = [*trained_specs, *list_ai_detection_specialized_model_specs(config, trained_specs, target_user_id)]
     specialized_models = [
         {
             "id": spec["id"],
             "run_id": spec["run_id"],
             "task_id": spec["task_id"],
+            "task_label": spec.get("task_label") or "",
+            "task_source": spec.get("task_source") or "",
             "variant": spec["variant"],
             "label": spec["label"],
             "description": spec["description"],
             "uses_ocr": bool(spec.get("uses_ocr", False)),
             "is_ai_detection": bool(spec.get("is_ai_detection", False)),
             "provider_status": ai_detection_status if spec.get("is_ai_detection") else None,
+            "confidence_threshold": spec.get("confidence_threshold", config.get("confidence_threshold")),
             "required_accessory_counts": spec.get("required_accessory_counts") or {},
+            "accessory_labels": spec.get("accessory_labels") or {},
             "accessory_class_map": spec.get("accessory_class_map") or {},
             "ocr_accessory_ids": spec.get("ocr_accessory_ids") or [],
             "artifact_path": str(spec.get("artifact_path") or spec["path"]),
@@ -8994,6 +18087,11 @@ def status() -> dict[str, Any]:
             "exists": bool(spec.get("is_ai_detection")) or Path(spec["path"]).exists(),
             "accessory_names": spec.get("accessory_names") or [],
             "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
+            "missing_accessory_ids": spec.get("missing_accessory_ids") or [],
+            "created_at": spec.get("created_at") or 0,
+            "updated_at": spec.get("updated_at") or spec.get("created_at") or 0,
+            "owner_user_id": spec.get("owner_user_id") or LEGACY_OWNER_ID,
+            "owner_username": spec.get("owner_username") or record_owner_username(spec),
         }
         for spec in specialized_specs
     ]
@@ -9007,6 +18105,8 @@ def status() -> dict[str, Any]:
     }
     specialized_model_tasks: dict[str, dict[str, Any]] = {}
     for spec in specialized_models:
+        if spec.get("task_source") == "ai_detection_task_config":
+            continue
         task_id = str(spec.get("task_id") or spec.get("run_id"))
         accessory_names = task_accessories.get(task_id) or spec.get("accessory_names") or []
         task = specialized_model_tasks.setdefault(
@@ -9015,13 +18115,28 @@ def status() -> dict[str, Any]:
                 "task_id": task_id,
                 "label": " + ".join(accessory_names) if accessory_names else task_labels.get(task_id, task_id),
                 "accessory_names": accessory_names,
+                "accessory_labels": spec.get("accessory_labels") or {},
+                "required_accessory_counts": spec.get("required_accessory_counts") or {},
+                "confidence_threshold": spec.get("confidence_threshold", config.get("confidence_threshold")),
                 "models": [],
             },
         )
         if accessory_names and not task.get("accessory_names"):
             task["accessory_names"] = accessory_names
             task["label"] = " + ".join(accessory_names)
+        if spec.get("accessory_labels") and not task.get("accessory_labels"):
+            task["accessory_labels"] = spec.get("accessory_labels") or {}
+        if spec.get("required_accessory_counts") and not task.get("required_accessory_counts"):
+            task["required_accessory_counts"] = spec.get("required_accessory_counts") or {}
+        if spec.get("confidence_threshold") is not None:
+            task["confidence_threshold"] = spec.get("confidence_threshold")
         task["models"].append(spec)
+    training_execution = training_execution_status(include_worker_probe=False)
+    cursor_image2 = public_cursor_image2_status()
+    if not user_has_permission(user, "worker_settings"):
+        training_execution["windows_worker"] = {"status": "restricted", "configured": False, "ok": False}
+    if not user_has_permission(user, "ai_config"):
+        cursor_image2 = {"status": "restricted", "configured": False}
     return {
         "service": "running",
         "model_exists": bool(active_spec.get("is_ai_detection")) or bool(active_path and active_path.exists()),
@@ -9030,7 +18145,10 @@ def status() -> dict[str, Any]:
         "available_models": available_models,
         "specialized_models": specialized_models,
         "specialized_model_tasks": list(specialized_model_tasks.values()),
+        "ai_detection_tasks": ai_detection_tasks_response(config, user=user, target_user_id=target_user_id)["tasks"],
         "ai_detection": ai_detection_status,
+        "training_execution": training_execution,
+        "cursor_image2": cursor_image2,
         "classes": [{"class_id": k, "name": v, "label": CLASS_LABELS[k]} for k, v in CLASS_NAMES.items()],
         "rule": {
             "confidence_threshold": config["confidence_threshold"],
@@ -9043,7 +18161,46 @@ def status() -> dict[str, Any]:
 
 @app.get("/api/config")
 def get_config() -> dict[str, Any]:
-    return load_config()
+    return public_path_sanitized(scope_config_for_user(load_config()))
+
+
+@app.get("/api/config/summary")
+def get_config_summary(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user, user_id if user_is_admin(user) else None)
+    return public_path_sanitized(
+        {
+            "confidence_threshold": config["confidence_threshold"],
+            "required_classes": config["required_classes"],
+            "min_counts": config["min_counts"],
+            "task_rules": config.get("task_rules", {}),
+            "training": config.get("training", {}),
+            "video": config.get("video", {}),
+            "stream": config.get("stream", {}),
+            "ocr": config.get("ocr", {}),
+        }
+    )
+
+
+@app.get("/api/windows-worker/status")
+def get_windows_worker_status(force: bool = False, services: bool = False) -> dict[str, Any]:
+    return windows_worker_status(force=force, probe=True, include_services=force or services)
+
+
+@app.get("/api/windows-worker/training/jobs/{job_id}")
+def get_windows_worker_training_job(job_id: str) -> dict[str, Any]:
+    training_task = find_training_task(job_id)
+    if training_task:
+        return refresh_worker_training_task(training_task, include_artifacts=False)
+    return windows_worker_request("GET", f"/training/jobs/{quote(str(job_id), safe='')}", timeout_seconds=20)
+
+
+@app.get("/api/windows-worker/training/jobs/{job_id}/artifacts")
+def get_windows_worker_training_artifacts(job_id: str) -> dict[str, Any]:
+    training_task = find_training_task(job_id)
+    if training_task:
+        return refresh_worker_training_task(training_task, include_artifacts=True)
+    return windows_worker_request("GET", f"/training/jobs/{quote(str(job_id), safe='')}/artifacts", timeout_seconds=60)
 
 
 @app.get("/api/ai/config")
@@ -9060,6 +18217,10 @@ def update_ai_config(request: AiConfigRequest) -> dict[str, Any]:
         local["model"] = validate_ai_model(request.model)
     if request.base_url is not None:
         local["base_url"] = validate_ai_base_url(request.base_url)
+    if request.proxy_url is not None:
+        local["proxy_url"] = validate_ai_proxy_url(request.proxy_url)
+    if request.auto_local_proxy is not None:
+        local["auto_local_proxy"] = bool(request.auto_local_proxy)
     if request.api_key_env is not None:
         local["api_key_env"] = validate_ai_key_env(request.api_key_env)
     timeout_value = request.timeout_seconds if request.timeout_seconds is not None else request.timeout
@@ -9085,6 +18246,8 @@ def update_ai_config(request: AiConfigRequest) -> dict[str, Any]:
     local["provider"] = validate_ai_provider(local.get("provider"))
     local["model"] = validate_ai_model(local.get("model"))
     local["base_url"] = validate_ai_base_url(local.get("base_url") or default_ai_base_url(local["provider"]))
+    local["proxy_url"] = validate_ai_proxy_url(local.get("proxy_url"))
+    local["auto_local_proxy"] = bool(local.get("auto_local_proxy", True))
     local["timeout_seconds"] = validate_ai_timeout(local.get("timeout_seconds"))
     local["api_key_env"] = validate_ai_key_env(local.get("api_key_env"))
     local["api_keys"] = normalize_ai_key_items(local)
@@ -9093,6 +18256,596 @@ def update_ai_config(request: AiConfigRequest) -> dict[str, Any]:
     local["api_key"] = ""
     save_ai_local_config(local)
     return public_ai_detection_status()
+
+
+@app.get("/api/locateanything/config")
+def get_locateanything_config() -> dict[str, Any]:
+    return public_locateanything_config()
+
+
+@app.post("/api/locateanything/config")
+def update_locateanything_config(request: LocateAnythingConfigRequest) -> dict[str, Any]:
+    local = load_locateanything_config()
+    if request.enabled is not None:
+        local["enabled"] = bool(request.enabled)
+    if request.endpoint_url is not None:
+        local["endpoint_url"] = validate_locateanything_endpoint_url(request.endpoint_url)
+    if request.generation_mode is not None:
+        local["generation_mode"] = validate_locateanything_generation_mode(request.generation_mode)
+    if request.max_new_tokens is not None:
+        local["max_new_tokens"] = validate_locateanything_int(request.max_new_tokens, int(local["max_new_tokens"]), 64, 8192, "max_new_tokens")
+    if request.max_side is not None:
+        local["max_side"] = validate_locateanything_int(request.max_side, int(local["max_side"]), 256, 2560, "max_side")
+    if request.timeout_seconds is not None:
+        local["timeout_seconds"] = validate_locateanything_timeout(request.timeout_seconds)
+    local = normalize_locateanything_config(local)
+    save_locateanything_config(local)
+    return public_locateanything_config(local)
+
+
+@app.get("/api/locateanything/status")
+def locateanything_status(endpoint_url: str | None = None) -> dict[str, Any]:
+    require_locateanything_endpoint_override(endpoint_url)
+    config = locateanything_settings_from_request(endpoint_url=endpoint_url) if endpoint_url else load_locateanything_config()
+    public = public_locateanything_config(config)
+    if locateanything_should_use_worker(config):
+        worker = windows_worker_status()
+        locate_service = ((worker.get("services") or {}).get("services") or {}).get("locateanything") or {}
+        return {
+            **public,
+            "ok": bool(worker.get("ok")) and bool(locate_service.get("ok", True)),
+            "status": "ready" if worker.get("ok") else worker.get("status", "unreachable"),
+            "message": "Windows Worker LocateAnything route is ready." if worker.get("ok") else worker.get("error", "Windows Worker is not reachable."),
+            "worker": worker,
+            "locateanything_service": locate_service,
+        }
+    if not public["configured"]:
+        return {**public, "ok": False, "status": "not_configured", "message": "LocateAnything endpoint is not enabled."}
+    endpoint_url = str(config["endpoint_url"])
+    if locateanything_is_local_runtime_endpoint(endpoint_url):
+        health = locateanything_runtime_health_status(endpoint_url, timeout_seconds=float(config["timeout_seconds"]))
+        warmup = locateanything_runtime_warmup_status()
+        if health["status"] == "ready" and not warmup.get("ok"):
+            warmup = mark_locateanything_runtime_warmup_ready(endpoint_url, health)
+        if health["status"] == "unavailable":
+            service = locateanything_runtime_service_status()
+            if service["service_active"]:
+                return {
+                    **public,
+                    **health,
+                    **service,
+                    "ok": False,
+                    "status": "starting",
+                    "message": "本地模型服务正在启动，健康检查暂未就绪。",
+                    "warmup": warmup,
+                }
+        return {**public, **health, "warmup": warmup}
+    request = urllib.request.Request(endpoint_url, method="GET", headers={"Accept": "application/json"})
+    start = time.monotonic()
+    try:
+        with urllib.request.urlopen(request, timeout=min(float(config["timeout_seconds"]), 4.0)) as response:
+            status_code = int(getattr(response, "status", 200))
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return {**public, "ok": status_code < 500, "status": "reachable", "status_code": status_code, "latency_ms": latency_ms}
+    except urllib.error.HTTPError as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        if exc.code in {405, 422}:
+            return {
+                **public,
+                "ok": False,
+                "status": "reachable",
+                "status_code": exc.code,
+                "latency_ms": latency_ms,
+                "message": "Endpoint is reachable, but readiness is not confirmed.",
+            }
+        return {**public, "ok": False, "status": "unavailable", "status_code": exc.code, "latency_ms": latency_ms, "message": str(exc)}
+    except (OSError, TimeoutError, urllib.error.URLError) as exc:
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return {**public, "ok": False, "status": "unavailable", "latency_ms": latency_ms, "message": str(exc)}
+
+
+@app.post("/api/locateanything/runtime/start")
+def locateanything_runtime_start() -> dict[str, Any]:
+    return start_locateanything_runtime()
+
+
+@app.get("/api/locateanything/accessories")
+def locateanything_accessories() -> dict[str, Any]:
+    user = current_auth_user()
+    full_config = load_config()
+    if ensure_config_locateanything_profiles(full_config, user):
+        save_config(full_config)
+    config = scope_config_for_user(full_config, user)
+    return {
+        "items": locateanything_source_items(config),
+        "required_classes": config.get("required_classes", []),
+        "min_counts": config.get("min_counts", {}),
+    }
+
+
+@app.post("/api/locateanything/inspect")
+async def locateanything_inspect(
+    file: UploadFile = File(...),
+    rules: str = Form("[]"),
+    endpoint_url: str | None = Form(None),
+    max_side: int | None = Form(None),
+    max_new_tokens: int | None = Form(None),
+    timeout_seconds: float | None = Form(None),
+) -> dict[str, Any]:
+    ensure_dirs()
+    user = current_auth_user()
+    full_config = load_config()
+    if ensure_config_locateanything_profiles(full_config, user):
+        save_config(full_config)
+    source_items = locateanything_source_items(scope_config_for_user(full_config, user))
+    parsed_rules = parse_locateanything_inspection_rules(rules, source_items)
+    require_locateanything_endpoint_override(endpoint_url)
+    settings = locateanything_settings_from_request(
+        endpoint_url=endpoint_url,
+        generation_mode="fast",
+        max_new_tokens=max_new_tokens,
+        max_side=max_side,
+        timeout_seconds=timeout_seconds,
+    )
+    settings["generation_mode"] = "fast"
+    worker_route = locateanything_should_use_worker(settings)
+    configured = bool(settings.get("enabled") and settings.get("endpoint_url")) or worker_route
+    payload = await file.read()
+    source_size: dict[str, int] = {}
+    sent_size: dict[str, int] = {}
+    base_items = [
+        evaluate_locateanything_rule(rule, [], "LocateAnything endpoint is not configured or enabled.")
+        for rule in parsed_rules
+    ]
+    if not parsed_rules:
+        return {
+            "ok": False,
+            "configured": configured,
+            "overall_pass": False,
+            "decision": "fail",
+            "items": [],
+            "source_image_size": source_size,
+            "sent_image_size": sent_size,
+            "latency_ms": 0,
+            "overlay_url": "",
+            "diagnostic_url": "",
+            "error": "No inspection items selected.",
+        }
+    if not payload:
+        return {
+            "ok": False,
+            "configured": configured,
+            "overall_pass": False,
+            "decision": "fail",
+            "items": base_items,
+            "source_image_size": source_size,
+            "sent_image_size": sent_size,
+            "latency_ms": 0,
+            "overlay_url": "",
+            "diagnostic_url": "",
+            "error": "Image file is empty.",
+        }
+    image_bgr = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        return {
+            "ok": False,
+            "configured": configured,
+            "overall_pass": False,
+            "decision": "fail",
+            "items": base_items,
+            "source_image_size": source_size,
+            "sent_image_size": sent_size,
+            "latency_ms": 0,
+            "overlay_url": "",
+            "diagnostic_url": "",
+            "error": "Could not decode image.",
+        }
+    source_height, source_width = image_bgr.shape[:2]
+    sent_bgr = resize_bgr_max_side(image_bgr, int(settings["max_side"]))
+    sent_height, sent_width = sent_bgr.shape[:2]
+    source_size = {"width": int(source_width), "height": int(source_height)}
+    sent_size = {"width": int(sent_width), "height": int(sent_height)}
+    if not configured:
+        return {
+            "ok": False,
+            "configured": False,
+            "overall_pass": False,
+            "decision": "fail",
+            "items": base_items,
+            "source_image_size": source_size,
+            "sent_image_size": sent_size,
+            "latency_ms": 0,
+            "overlay_url": "",
+            "diagnostic_url": "",
+            "error": "LocateAnything endpoint is not configured or enabled.",
+        }
+    ok, encoded = cv2.imencode(".jpg", sent_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), LOCATEANYTHING_PROXY_IMAGE_QUALITY])
+    if not ok:
+        return {
+            "ok": False,
+            "configured": configured,
+            "overall_pass": False,
+            "decision": "fail",
+            "items": base_items,
+            "source_image_size": source_size,
+            "sent_image_size": sent_size,
+            "latency_ms": 0,
+            "overlay_url": "",
+            "diagnostic_url": "",
+            "error": "Could not encode downscaled image for LocateAnything endpoint.",
+        }
+
+    request_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}_{Path(file.filename or 'inspect').stem}"
+    started = time.monotonic()
+    encoded_bytes = encoded.tobytes()
+    result_items: list[dict[str, Any]] = []
+    all_boxes: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    batch_prompt = locateanything_batch_prompt_for_rules(parsed_rules) if len(parsed_rules) > 1 else ""
+    batch_raw_answer = ""
+    batch_error = ""
+    batch_raw_boxes: list[dict[str, Any]] = []
+    batch_latency_ms = 0
+    batch_model_latency_ms = 0
+    if batch_prompt:
+        batch_started = time.monotonic()
+        try:
+            if worker_route:
+                batch_payload = post_windows_worker_locateanything_endpoint(
+                    encoded_bytes,
+                    prompt=batch_prompt,
+                    generation_mode="fast",
+                    max_new_tokens=int(settings["max_new_tokens"]),
+                    timeout_seconds=float(settings["timeout_seconds"]),
+                )
+            else:
+                batch_payload = post_locateanything_endpoint(
+                    str(settings["endpoint_url"]),
+                    encoded_bytes,
+                    prompt=batch_prompt,
+                    generation_mode="fast",
+                    max_new_tokens=int(settings["max_new_tokens"]),
+                    timeout_seconds=float(settings["timeout_seconds"]),
+                )
+            batch_raw_answer = extract_locateanything_answer(batch_payload)
+            try:
+                batch_model_latency_ms = int(batch_payload.get("latency_ms") or 0)
+            except (TypeError, ValueError, AttributeError):
+                batch_model_latency_ms = 0
+            batch_raw_boxes = parse_locateanything_boxes(batch_raw_answer, source_width, source_height)
+        except Exception as exc:
+            batch_error = f"LocateAnything endpoint unavailable: {bounded_text(str(exc), 220)}"
+        batch_latency_ms = int((time.monotonic() - batch_started) * 1000)
+    for rule in parsed_rules:
+        prompt = batch_prompt or locateanything_prompt_for_rule(rule)
+        raw_answer = ""
+        error = ""
+        item_started = time.monotonic()
+        item_latency_ms = 0
+        model_latency_ms = 0
+        raw_boxes: list[dict[str, Any]] = []
+        filtered_out_boxes: list[dict[str, Any]] = []
+        boxes: list[dict[str, Any]] = []
+        if batch_prompt:
+            raw_answer = batch_raw_answer
+            error = batch_error
+            item_latency_ms = batch_latency_ms
+            model_latency_ms = batch_model_latency_ms
+            raw_boxes = batch_raw_boxes
+            if not error:
+                final_boxes = locateanything_final_rule_boxes(rule, raw_boxes, require_ref_match=True)
+                boxes = final_boxes["boxes"]
+                filtered_out_boxes = final_boxes["filtered_out_boxes"]
+        else:
+            try:
+                if worker_route:
+                    endpoint_payload = post_windows_worker_locateanything_endpoint(
+                        encoded_bytes,
+                        prompt=prompt,
+                        generation_mode="fast",
+                        max_new_tokens=int(settings["max_new_tokens"]),
+                        timeout_seconds=float(settings["timeout_seconds"]),
+                    )
+                else:
+                    endpoint_payload = post_locateanything_endpoint(
+                        str(settings["endpoint_url"]),
+                        encoded_bytes,
+                        prompt=prompt,
+                        generation_mode="fast",
+                        max_new_tokens=int(settings["max_new_tokens"]),
+                        timeout_seconds=float(settings["timeout_seconds"]),
+                    )
+                raw_answer = extract_locateanything_answer(endpoint_payload)
+                item_latency_ms = int((time.monotonic() - item_started) * 1000)
+                try:
+                    model_latency_ms = int(endpoint_payload.get("latency_ms") or 0)
+                except (TypeError, ValueError, AttributeError):
+                    model_latency_ms = 0
+                raw_boxes = parse_locateanything_boxes(raw_answer, source_width, source_height)
+                final_boxes = locateanything_final_rule_boxes(rule, raw_boxes)
+                boxes = final_boxes["boxes"]
+                filtered_out_boxes = final_boxes["filtered_out_boxes"]
+            except Exception as exc:
+                item_latency_ms = int((time.monotonic() - item_started) * 1000)
+                error = f"LocateAnything endpoint unavailable: {bounded_text(str(exc), 220)}"
+        item_boxes: list[dict[str, Any]] = []
+        for box in boxes:
+            next_box = dict(box)
+            next_box["index"] = len(all_boxes) + 1
+            next_box["rule_id"] = rule["id"]
+            next_box["label"] = rule["display_label"]
+            next_box["display_label"] = rule["display_label"]
+            next_box["english_name"] = rule["display_label"]
+            next_box["native_label"] = rule.get("native_label") or rule.get("label") or rule["display_label"]
+            item_boxes.append(next_box)
+            all_boxes.append(next_box)
+        evaluated_item = evaluate_locateanything_rule(rule, item_boxes, error, raw_answer)
+        evaluated_item["prompt"] = prompt
+        evaluated_item["raw_answer_snippet"] = bounded_text(raw_answer, 260)
+        evaluated_item["raw_box_count"] = len(raw_boxes)
+        evaluated_item["filtered_out_box_count"] = len(filtered_out_boxes)
+        evaluated_item["latency_ms"] = item_latency_ms
+        evaluated_item["batched"] = bool(batch_prompt)
+        if model_latency_ms:
+            evaluated_item["model_latency_ms"] = model_latency_ms
+        result_items.append(evaluated_item)
+        diagnostics.append(
+            {
+                "id": rule["id"],
+                "label": rule["display_label"],
+                "prompt": prompt,
+                "raw_answer_snippet": bounded_text(raw_answer, 500),
+                "error": error,
+                "latency_ms": item_latency_ms,
+                "model_latency_ms": model_latency_ms,
+                "batched": bool(batch_prompt),
+                "raw_box_count": len(raw_boxes),
+                "box_count": len(item_boxes),
+                "filtered_out_box_count": len(filtered_out_boxes),
+                "filtered_out_boxes": filtered_out_boxes[:20],
+            }
+        )
+    latency_ms = int((time.monotonic() - started) * 1000)
+    overall_pass = bool(result_items) and all(item["passed"] for item in result_items)
+    overlay_url = draw_locateanything_overlay(image_bgr, all_boxes, request_id, "LocateAnything inspection") if all_boxes else ""
+    result = {
+        "ok": not any(item.get("error") for item in result_items),
+        "configured": configured,
+        "overall_pass": overall_pass,
+        "decision": "pass" if overall_pass else "fail",
+        "items": result_items,
+        "source_image_size": source_size,
+        "sent_image_size": sent_size,
+        "latency_ms": latency_ms,
+        "batched": bool(batch_prompt),
+        "batch_target_count": len(parsed_rules) if batch_prompt else 0,
+        "overlay_url": overlay_url,
+        "diagnostic_url": "",
+        "diagnostics": diagnostics,
+        "error": "" if not any(item.get("error") for item in result_items) else "One or more LocateAnything requests failed.",
+    }
+    result["diagnostic_url"] = write_locateanything_diagnostic(request_id, {**result, "diagnostics": diagnostics})
+    return result
+
+
+@app.post("/api/locateanything/locate")
+async def locateanything_locate(
+    file: UploadFile = File(...),
+    prompt: str = Form(...),
+    generation_mode: str | None = Form(None),
+    max_new_tokens: int | None = Form(None),
+    max_side: int | None = Form(None),
+    endpoint_url: str | None = Form(None),
+    timeout_seconds: float | None = Form(None),
+) -> dict[str, Any]:
+    ensure_dirs()
+    require_locateanything_endpoint_override(endpoint_url)
+    settings = locateanything_settings_from_request(
+        endpoint_url=endpoint_url,
+        generation_mode=generation_mode,
+        max_new_tokens=max_new_tokens,
+        max_side=max_side,
+        timeout_seconds=timeout_seconds,
+    )
+    worker_route = locateanything_should_use_worker(settings)
+    configured = bool(settings.get("enabled") and settings.get("endpoint_url")) or worker_route
+    clean_prompt = bounded_text(str(prompt or "").strip(), 1200)
+    base_payload = {
+        "configured": configured,
+        "prompt": clean_prompt,
+        "generation_mode": str(settings.get("generation_mode") or ""),
+        "max_new_tokens": int(settings.get("max_new_tokens") or 0),
+    }
+    if not clean_prompt:
+        return locateanything_failure_payload(error="Prompt is required.", **base_payload)
+
+    payload = await file.read()
+    if not payload:
+        return locateanything_failure_payload(error="Image file is empty.", **base_payload)
+    image_bgr = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        return locateanything_failure_payload(error="Could not decode image.", **base_payload)
+
+    source_height, source_width = image_bgr.shape[:2]
+    sent_bgr = resize_bgr_max_side(image_bgr, int(settings["max_side"]))
+    sent_height, sent_width = sent_bgr.shape[:2]
+    source_size = {"width": int(source_width), "height": int(source_height)}
+    sent_size = {"width": int(sent_width), "height": int(sent_height)}
+    if not configured:
+        return locateanything_failure_payload(
+            error="LocateAnything endpoint is not configured or enabled.",
+            source_image_size=source_size,
+            sent_image_size=sent_size,
+            **base_payload,
+        )
+    ok, encoded = cv2.imencode(".jpg", sent_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), LOCATEANYTHING_PROXY_IMAGE_QUALITY])
+    if not ok:
+        return locateanything_failure_payload(
+            error="Could not encode downscaled image for LocateAnything endpoint.",
+            source_image_size=source_size,
+            sent_image_size=sent_size,
+            **base_payload,
+        )
+
+    started = time.monotonic()
+    request_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}_{Path(file.filename or 'locateanything').stem}"
+    raw_answer = ""
+    try:
+        if worker_route:
+            endpoint_payload = post_windows_worker_locateanything_endpoint(
+                encoded.tobytes(),
+                prompt=clean_prompt,
+                generation_mode=str(settings["generation_mode"]),
+                max_new_tokens=int(settings["max_new_tokens"]),
+                timeout_seconds=float(settings["timeout_seconds"]),
+            )
+        else:
+            endpoint_payload = post_locateanything_endpoint(
+                str(settings["endpoint_url"]),
+                encoded.tobytes(),
+                prompt=clean_prompt,
+                generation_mode=str(settings["generation_mode"]),
+                max_new_tokens=int(settings["max_new_tokens"]),
+                timeout_seconds=float(settings["timeout_seconds"]),
+            )
+        raw_answer = extract_locateanything_answer(endpoint_payload)
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        result = locateanything_failure_payload(
+            error=f"LocateAnything endpoint unavailable: {bounded_text(str(exc), 240)}",
+            source_image_size=source_size,
+            sent_image_size=sent_size,
+            latency_ms=latency_ms,
+            **base_payload,
+        )
+        result["diagnostic_url"] = write_locateanything_diagnostic(request_id, result)
+        return result
+
+    latency_ms = int((time.monotonic() - started) * 1000)
+    if not raw_answer:
+        result = locateanything_failure_payload(
+            error="LocateAnything response did not include text output.",
+            source_image_size=source_size,
+            sent_image_size=sent_size,
+            raw_answer="",
+            latency_ms=latency_ms,
+            **base_payload,
+        )
+        result["diagnostic_url"] = write_locateanything_diagnostic(request_id, result)
+        return result
+
+    boxes = parse_locateanything_boxes(raw_answer, source_width, source_height)
+    if not boxes:
+        result = locateanything_failure_payload(
+            error="LocateAnything response did not contain parseable <box> output.",
+            source_image_size=source_size,
+            sent_image_size=sent_size,
+            raw_answer=raw_answer,
+            latency_ms=latency_ms,
+            **base_payload,
+        )
+        result["diagnostic_url"] = write_locateanything_diagnostic(request_id, result)
+        return result
+
+    overlay_url = draw_locateanything_overlay(image_bgr, boxes, request_id, clean_prompt)
+    result = {
+        "ok": True,
+        "configured": configured,
+        "prompt": clean_prompt,
+        "generation_mode": str(settings["generation_mode"]),
+        "max_new_tokens": int(settings["max_new_tokens"]),
+        "source_image_size": source_size,
+        "sent_image_size": sent_size,
+        "raw_answer": raw_answer,
+        "boxes": boxes,
+        "latency_ms": latency_ms,
+        "overlay_url": overlay_url,
+        "diagnostic_url": "",
+        "error": "",
+    }
+    result["diagnostic_url"] = write_locateanything_diagnostic(request_id, result)
+    return result
+
+
+@app.get("/api/data-analysis/records")
+def list_data_analysis_records_api(
+    task_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    user = current_auth_user()
+    bounded_limit = max(1, min(int(limit or 100), 200))
+    bounded_offset = max(0, int(offset or 0))
+    task_records = data_analysis_records_for_user(user, target_user_id=user_id)
+    records = [
+        record
+        for record in task_records
+        if not str(task_id or "").strip() or str((record.get("task") or {}).get("id") or "") == str(task_id or "").strip()
+    ]
+    page = records[bounded_offset : bounded_offset + bounded_limit]
+    return {
+        "records": [public_data_analysis_record(record) for record in page],
+        "tasks": data_analysis_task_groups(task_records),
+        "total": len(records),
+        "limit": bounded_limit,
+        "offset": bounded_offset,
+        "batch_limit": DATA_ANALYSIS_BATCH_LIMIT,
+        "locateanything": public_locateanything_config(),
+    }
+
+
+@app.get("/api/data-analysis/records/{record_id}")
+def get_data_analysis_record_api(record_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    record = find_data_analysis_record(record_id, user)
+    return {"record": public_data_analysis_record(record, detail=True, include_debug=user_is_admin(user))}
+
+
+@app.post("/api/data-analysis/records/{record_id}/locate")
+def run_data_analysis_record_locate_api(record_id: str, request: DataAnalysisLocateRequest | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    require_permission("locate_anything", detail="LocateAnything permission required")
+    record = find_data_analysis_record(record_id, user, write=True)
+    run, comparison = run_locateanything_for_analysis_record(record, request)
+    updated = append_data_analysis_locate_run(str(record.get("record_id") or ""), user, run, comparison)
+    include_debug = user_is_admin(user)
+    return {
+        "record": public_data_analysis_record(updated, detail=True, include_debug=include_debug),
+        "run": public_data_analysis_locate_run(run, include_debug=include_debug),
+        "comparison": comparison,
+    }
+
+
+@app.post("/api/data-analysis/locate")
+def run_data_analysis_batch_locate_api(request: DataAnalysisLocateRequest) -> dict[str, Any]:
+    user = current_auth_user()
+    require_permission("locate_anything", detail="LocateAnything permission required")
+    ids = []
+    seen: set[str] = set()
+    for raw_id in request.record_ids or []:
+        record_id = sanitize_data_analysis_record_id(raw_id)
+        if record_id and record_id not in seen:
+            seen.add(record_id)
+            ids.append(record_id)
+    if not ids:
+        raise HTTPException(status_code=400, detail="At least one analysis record id is required")
+    if len(ids) > DATA_ANALYSIS_BATCH_LIMIT:
+        raise HTTPException(status_code=400, detail=f"At most {DATA_ANALYSIS_BATCH_LIMIT} records can be processed at once")
+
+    records = [find_data_analysis_record(record_id, user, write=True) for record_id in ids]
+    results = []
+    for record in records:
+        run, comparison = run_locateanything_for_analysis_record(record, request)
+        updated = append_data_analysis_locate_run(str(record.get("record_id") or ""), user, run, comparison)
+        results.append(
+            {
+                "record": public_data_analysis_record(updated),
+                "run": public_data_analysis_locate_run(run, include_debug=user_is_admin(user)),
+                "comparison": comparison,
+            }
+        )
+    return {"status": "completed", "count": len(results), "batch_limit": DATA_ANALYSIS_BATCH_LIMIT, "results": results}
 
 
 @app.delete("/api/ai/config/key")
@@ -9104,6 +18857,80 @@ def delete_ai_config_key() -> dict[str, Any]:
     local["api_key"] = ""
     save_ai_local_config(local)
     return public_ai_detection_status()
+
+
+@app.get("/api/ai/tasks")
+def get_ai_detection_tasks(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    config = scope_config_for_user(load_config(), user, target_user_id)
+    return ai_detection_tasks_response(config, user=user, target_user_id=target_user_id)
+
+
+@app.post("/api/ai/tasks")
+def create_ai_detection_task(request: AiDetectionTaskRequest) -> dict[str, Any]:
+    config = scope_config_for_user(load_config())
+    payload = ai_detection_task_payload_from_request(request, config)
+    now = time.time()
+    task = {
+        "id": f"aitask_{uuid.uuid4().hex[:10]}",
+        "created_at": now,
+        "updated_at": now,
+        **current_owner_fields(),
+        **payload,
+    }
+    tasks = load_ai_detection_tasks()
+    tasks.insert(0, task)
+    save_ai_detection_tasks(tasks)
+    response = ai_detection_tasks_response(scope_config_for_user(config), task["id"], user=current_auth_user())
+    response["status"] = "saved"
+    response["task"] = serialize_ai_detection_task(task, config)
+    return response
+
+
+@app.put("/api/ai/tasks/{task_id}")
+def update_ai_detection_task(task_id: str, request: AiDetectionTaskRequest) -> dict[str, Any]:
+    clean_task_id = sanitize_ai_detection_task_id(task_id)
+    config = scope_config_for_user(load_config())
+    payload = ai_detection_task_payload_from_request(request, config)
+    tasks = load_ai_detection_tasks()
+    for index, existing in enumerate(tasks):
+        if existing.get("id") != clean_task_id:
+            continue
+        require_record_access(existing, write=True)
+        task = {
+            **existing,
+            **payload,
+            "id": clean_task_id,
+            "created_at": float(existing.get("created_at") or time.time()),
+            "updated_at": time.time(),
+        }
+        tasks[index] = task
+        save_ai_detection_tasks(tasks)
+        response = ai_detection_tasks_response(scope_config_for_user(config), clean_task_id, user=current_auth_user())
+        response["status"] = "saved"
+        response["task"] = serialize_ai_detection_task(task, config)
+        return response
+    raise HTTPException(status_code=404, detail="AI detection task not found")
+
+
+@app.delete("/api/ai/tasks/{task_id}")
+def delete_ai_detection_task(task_id: str) -> dict[str, Any]:
+    clean_task_id = sanitize_ai_detection_task_id(task_id)
+    user = current_auth_user()
+    config = load_config()
+    tasks = load_ai_detection_tasks()
+    existing = next((task for task in tasks if task.get("id") == clean_task_id), None)
+    if existing:
+        require_record_access(existing, user, write=True)
+    remaining = [task for task in tasks if task.get("id") != clean_task_id]
+    if len(remaining) == len(tasks):
+        raise HTTPException(status_code=404, detail="AI detection task not found")
+    save_ai_detection_tasks(remaining)
+    response = ai_detection_tasks_response(scope_config_for_user(config, user), user=user)
+    response["status"] = "deleted"
+    response["deleted_task_id"] = clean_task_id
+    return response
 
 
 @app.post("/api/config/rules")
@@ -9121,27 +18948,73 @@ def update_rules(rule: RuleConfig) -> dict[str, Any]:
     return {"status": "saved", "rule": config}
 
 
+@app.post("/api/config/task-rules/{task_id}")
+def update_task_rules(task_id: str, rule: TaskRuleConfig) -> dict[str, Any]:
+    clean_task_id = task_rule_id(task_id)
+    if not clean_task_id:
+        raise HTTPException(status_code=400, detail="task_id is required")
+    if not 0.0 <= rule.confidence_threshold <= 1.0:
+        raise HTTPException(status_code=400, detail="confidence_threshold must be between 0 and 1")
+    user = current_auth_user()
+    config = load_config()
+    specs = [
+        spec
+        for spec in list_trained_model_specs(config)
+        if task_rule_id(spec.get("task_id") or spec.get("run_id") or "") == clean_task_id and record_visible_to_user(spec, user)
+    ]
+    if not specs:
+        raise HTTPException(status_code=404, detail="Detection task not found")
+    selected_ids = {str(item_id) for spec in specs for item_id in (spec.get("selected_accessory_ids") or [])}
+    counts: dict[str, int] = {}
+    for item_id, raw_count in (rule.required_accessory_counts or {}).items():
+        clean_item_id = str(item_id or "").strip()
+        if not clean_item_id or clean_item_id not in selected_ids:
+            continue
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            counts[clean_item_id] = max(1, min(99, count))
+    if not counts:
+        raise HTTPException(status_code=400, detail="At least one required accessory is needed")
+    config.setdefault("task_rules", {})[clean_task_id] = {
+        "confidence_threshold": max(0.001, min(0.99, float(rule.confidence_threshold))),
+        "required_accessory_counts": counts,
+        "updated_at": time.time(),
+    }
+    save_config(config)
+    return {"status": "saved", "task_id": clean_task_id, "rule": config["task_rules"][clean_task_id]}
+
+
 @app.get("/api/accessories")
-def get_accessories() -> dict[str, Any]:
-    return {"items": [serialize_accessory(item) for item in load_config()["accessories"]]}
+def get_accessories(view: str = "summary", summary: bool = True, user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    full_config = load_config()
+    if ensure_config_locateanything_profiles(full_config, user):
+        save_config(full_config)
+    config = scope_config_for_user(full_config, user, user_id if user_is_admin(user) else None)
+    use_summary = summary and str(view or "summary").strip().lower() not in {"full", "detail", "all"}
+    return {"items": serialize_accessory_items(config["accessories"], summary=use_summary)}
 
 
 @app.get("/api/accessories/{accessory_id}/detail")
 def get_accessory_detail(accessory_id: str) -> dict[str, Any]:
+    user = current_auth_user()
     config = load_config()
     for item in config.get("accessories", []):
         if accessory_uid(item) == accessory_id:
-            if accessory_material_type(item) != "text":
-                sprites = clean_sprite_assets(item)
-                if not sprites or not clean_sprites_policy_complete(item, sprites):
-                    if preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=bool(sprites)):
-                        save_config(config)
+            require_record_access(item, user)
+            # Do NOT generate clean sprites just for viewing an accessory. Sprite
+            # creation is deferred until a pipeline task starts (it happens during
+            # task normalization / the agent-MCP pose pipeline).
             return accessory_detail_payload(item)
     raise HTTPException(status_code=404, detail="Accessory not found")
 
 
 @app.get("/api/accessories/candidates/{candidate_id}")
 def get_accessory_candidate(candidate_id: str) -> dict[str, Any]:
+    user = current_auth_user()
     path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Accessory candidate not found")
@@ -9150,6 +19023,8 @@ def get_accessory_candidate(candidate_id: str) -> dict[str, Any]:
             candidate = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=500, detail="Accessory candidate metadata is unreadable") from exc
+        candidate = enrich_record_audit_fields(candidate, path)
+        require_record_access(candidate, user)
         changed = False
         changed = ensure_candidate_image_job_task_ids(candidate) or changed
         for job in candidate_image_jobs(candidate):
@@ -9157,31 +19032,33 @@ def get_accessory_candidate(candidate_id: str) -> dict[str, Any]:
             refreshed = refresh_codex_image_job(job)
             store_candidate_image_job(candidate, refreshed)
             changed = True
-            if refreshed.get("status") == "completed":
-                preprocess_object_clean_sprites(candidate, allow_ai_cutout=True)
-                changed = True
         if changed:
             save_accessory_candidate(path, candidate)
     return {"status": "candidate_ready", "candidate": candidate}
 
 
 @app.get("/api/image-jobs")
-def image_jobs() -> dict[str, Any]:
-    jobs = list_training_tasks() + list_codex_image_jobs()
-    active_statuses = {"queued_for_codex_image_worker", "queued", "running"}
+def image_jobs(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    jobs = list_training_tasks(user=user, target_user_id=target_user_id) + list_codex_image_jobs(user=user, target_user_id=target_user_id)
     return {
         "items": jobs,
-        "active": [job for job in jobs if job.get("status") in active_statuses],
+        "active": [job for job in jobs if job.get("status") in IMAGE_JOB_ACTIVE_STATUSES],
         "completed": [job for job in jobs if job.get("status") == "completed"],
     }
 
 
 @app.get("/api/image-jobs/{job_id}")
 def image_job(job_id: str) -> dict[str, Any]:
-    for job in list_training_tasks():
-        if job.get("job_id") == job_id or job.get("task_id") == job_id:
-            return job
-    for job in list_codex_image_jobs():
+    user = current_auth_user()
+    training_task = find_training_task(job_id)
+    if training_task:
+        require_record_access(training_task, user)
+        if training_task.get("training_executor") == "worker" or training_task.get("remote_training_job_id"):
+            return refresh_worker_training_task(training_task, include_artifacts=True)
+        return public_training_task(training_task)
+    for job in list_codex_image_jobs(user=user):
         if job.get("job_id") == job_id or job.get("task_id") == job_id:
             return job
     raise HTTPException(status_code=404, detail="Image job not found")
@@ -9189,10 +19066,12 @@ def image_job(job_id: str) -> dict[str, Any]:
 
 @app.patch("/api/training/tasks/{job_id}")
 def update_training_task_endpoint(job_id: str, request: TrainingTaskUpdateRequest) -> dict[str, Any]:
+    user = current_auth_user()
     path = training_task_path(job_id)
     task = load_training_task(path)
     if not task:
         raise HTTPException(status_code=404, detail="Training task not found")
+    require_record_access(task, user, write=True)
     if request.label is not None:
         task["label"] = request.label.strip() or task.get("label") or "训练任务"
         task["candidate_name"] = task["label"]
@@ -9205,26 +19084,19 @@ def update_training_task_endpoint(job_id: str, request: TrainingTaskUpdateReques
 
 @app.delete("/api/training/tasks/{job_id}")
 def delete_training_task_endpoint(job_id: str) -> dict[str, Any]:
-    path = training_task_path(job_id)
-    task = load_training_task(path)
-    if not task:
-        raise HTTPException(status_code=404, detail="Training task not found")
-    pid = task.get("training_pid")
-    if task.get("status") == "running" and pid:
-        try:
-            os.kill(int(pid), signal.SIGTERM)
-        except (OSError, ValueError):
-            pass
-    try:
-        path.unlink()
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to delete task: {exc}") from exc
-    return {"status": "deleted", "job_id": job_id, "items": list_training_tasks()}
+    user = current_auth_user()
+    delete_training_task_record(job_id, user)
+    return {"status": "deleted", "job_id": job_id, "items": list_training_tasks(user=user)}
 
 
 @app.post("/api/image-jobs/{job_id}/stop")
 def stop_image_job(job_id: str) -> dict[str, Any]:
     return update_codex_image_job(job_id, "stop")
+
+
+@app.post("/api/image-jobs/{job_id}/retry")
+def retry_image_job(job_id: str) -> dict[str, Any]:
+    return update_codex_image_job(job_id, "retry")
 
 
 @app.delete("/api/image-jobs/{job_id}")
@@ -9249,12 +19121,14 @@ async def add_accessory(
     material_type: str = Form("object"),
     material_alpha_policy: str = Form(""),
     training_role: str = Form("detect_and_classify"),
+    pipeline_context: str = Form(""),
     paper_preset: str = Form("A4"),
     paper_width_mm: str = Form(""),
     paper_height_mm: str = Form(""),
     object_length_mm: str = Form(""),
     object_width_mm: str = Form(""),
     object_height_mm: str = Form(""),
+    size_reference: str = Form(""),
     files: list[UploadFile] = File(default=[]),
 ) -> dict[str, Any]:
     if material_type not in {"text", "object"}:
@@ -9262,6 +19136,7 @@ async def add_accessory(
     alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
     if material_type == "object" and not alpha_policy:
         raise HTTPException(status_code=400, detail="请选择物品透明或不透明")
+    size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
     config = load_config()
     if class_id < 0:
         existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
@@ -9275,6 +19150,7 @@ async def add_accessory(
         with path.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
         saved_files.append(str(path))
+    expanded_source_files, extracted_video_frames = expand_accessory_reference_sources(accessory_id, saved_files)
 
     item = {
         "id": accessory_id,
@@ -9292,18 +19168,36 @@ async def add_accessory(
             object_height_mm,
         ),
         "status": "reference_uploaded",
-        "source_files": saved_files,
+        "source_files": expanded_source_files,
+        "original_source_files": saved_files,
+        "video_reference_frames": extracted_video_frames,
         "created_at": int(time.time()),
+        **current_owner_fields(),
     }
     if alpha_policy:
         item["material_alpha_policy"] = alpha_policy
         item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
-    normalized = normalize_accessory_assets(item)
-    item.update(normalized)
+    if material_type == "object" and size_reference_key:
+        item["size_reference"] = size_reference_key
+    defer_accessory_normalization(item)
+    ensure_default_ai_profile_reference(item)
     ensure_accessory_ai_profile(item, allow_provider=True)
+    ensure_accessory_locateanything_profile(item)
+    ensure_pose_collection_image_jobs(item)
     config["accessories"].append(item)
     save_config(config)
-    return {"status": "saved", "item": serialize_accessory(config["accessories"][-1])}
+    if candidate_has_active_image_jobs(item):
+        start_image_worker()
+    scoped_config = scope_config_for_user(config)
+    response = {
+        "status": "saved",
+        "item": serialize_accessory_summary(config["accessories"][-1]),
+        "items": serialize_accessory_items(scoped_config["accessories"]),
+    }
+    if str(pipeline_context or "").strip().lower() in {"1", "true", "yes", "pipeline"}:
+        add_pipeline_accessory_id(accessory_uid(item))
+        response["pipeline"] = pipeline_accessories_payload(scoped_config, _request_user.get())
+    return response
 
 
 @app.post("/api/accessories/preview")
@@ -9312,19 +19206,23 @@ async def preview_accessory(
     material_type: str = Form("object"),
     material_alpha_policy: str = Form(""),
     training_role: str = Form("detect_and_classify"),
+    pipeline_context: str = Form(""),
     paper_preset: str = Form("A4"),
     paper_width_mm: str = Form(""),
     paper_height_mm: str = Form(""),
     object_length_mm: str = Form(""),
     object_width_mm: str = Form(""),
     object_height_mm: str = Form(""),
+    size_reference: str = Form(""),
     files: list[UploadFile] = File(default=[]),
 ) -> dict[str, Any]:
+    user = current_auth_user()
     if material_type not in {"text", "object"}:
         raise HTTPException(status_code=400, detail="material_type must be text or object")
     alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
     if material_type == "object" and not alpha_policy:
         raise HTTPException(status_code=400, detail="请选择物品透明或不透明")
+    size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
     candidate_source_dir = UPLOAD_DIR / "accessory_candidates" / f"src_{uuid.uuid4().hex[:10]}"
     candidate_source_dir.mkdir(parents=True, exist_ok=True)
     saved_files = []
@@ -9342,14 +19240,25 @@ async def preview_accessory(
         object_width_mm,
         object_height_mm,
     )
-    candidate = create_accessory_candidate(name, material_type, training_role, saved_files, physical_size, alpha_policy)
+    candidate = create_accessory_candidate(name, material_type, training_role, saved_files, physical_size, alpha_policy, size_reference_key)
+    if str(pipeline_context or "").strip().lower() in {"1", "true", "yes", "pipeline"}:
+        candidate["pipeline_context"] = "pipeline"
+        save_accessory_candidate(ACCESSORY_CANDIDATES_DIR / f"{candidate['id']}.json", candidate)
+        add_pipeline_pending_candidate_id(str(candidate["id"]))
+        pipeline_payload = pipeline_accessories_payload(scope_config_for_user(load_config(), user), user)
+    else:
+        pipeline_payload = None
     if candidate.get("codex_image_job"):
         start_image_worker()
-    return {"status": "candidate_ready", "candidate": candidate}
+    result = {"status": "candidate_ready", "candidate": candidate}
+    if pipeline_payload is not None:
+        result["pipeline"] = pipeline_payload
+    return result
 
 
 @app.post("/api/accessories/confirm/{candidate_id}")
 def confirm_accessory(candidate_id: str) -> dict[str, Any]:
+    user = current_auth_user()
     path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Accessory candidate not found")
@@ -9358,12 +19267,37 @@ def confirm_accessory(candidate_id: str) -> dict[str, Any]:
             candidate = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=500, detail="Accessory candidate metadata is unreadable") from exc
-        if accessory_material_type(candidate) == "object" and not normalize_object_alpha_material_policy(candidate.get("material_alpha_policy")):
+        require_record_access(candidate, user, write=True)
+        confirmed_id = candidate_confirmed_accessory_id(candidate)
+        if confirmed_id:
+            config = load_config()
+            item = next((entry for entry in config.get("accessories", []) if accessory_uid(entry) == confirmed_id), None)
+            if not item:
+                for key in ("confirmed_accessory_id", "confirmed_at", "confirmed_class_id"):
+                    candidate.pop(key, None)
+                candidate["status"] = "candidate_review"
+                save_accessory_candidate(path, candidate)
+            if item and candidate.get("pipeline_context") == "pipeline":
+                add_pipeline_accessory_id(confirmed_id)
+                remove_pipeline_pending_candidate_id(candidate_id)
+            if item:
+                # Sprite generation is deferred to task start; do not build it on
+                # (re)confirmation of an already-saved accessory.
+                return {
+                    "status": "already_saved",
+                    "item": serialize_accessory_summary(item),
+                    "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
+                    "pipeline": pipeline_accessories_payload(scope_config_for_user(config, user), user),
+                }
+        material_type = accessory_material_type(candidate)
+        if material_type == "object" and not normalize_object_alpha_material_policy(candidate.get("material_alpha_policy")):
             raise HTTPException(status_code=400, detail="确认前必须选择物品透明或不透明")
-        if accessory_material_type(candidate) == "object":
+        if material_type == "object":
             candidate["material_alpha_policy"] = object_alpha_material_policy(candidate)
             candidate["object_alpha_policy_label"] = object_alpha_policy_label(candidate["material_alpha_policy"])
-        if ensure_candidate_image_job_task_ids(candidate):
+        job_plan_changed = ensure_candidate_image_job_task_ids(candidate)
+        job_plan_changed = ensure_pose_collection_image_jobs(candidate) or job_plan_changed
+        if job_plan_changed:
             save_accessory_candidate(path, candidate)
         refreshed_jobs = []
         changed = False
@@ -9374,56 +19308,67 @@ def confirm_accessory(candidate_id: str) -> dict[str, Any]:
             changed = changed or refreshed.get("status") != job.get("status") or refreshed.get("completed_at") != job.get("completed_at")
         if changed:
             save_accessory_candidate(path, candidate)
-        if any(str(job.get("status", "")) in {"queued_for_codex_image_worker", "queued", "running"} for job in refreshed_jobs):
+        if any(str(job.get("status", "")) in IMAGE_JOB_ACTIVE_STATUSES for job in refreshed_jobs):
+            start_image_worker()
             raise HTTPException(status_code=409, detail="Image generation is still running. Confirm after all pose jobs complete.")
 
-        preprocess_object_clean_sprites(candidate, allow_ai_cutout=True, force=True)
-        sprites = clean_sprite_assets(candidate)
-        expected_count = int(candidate.get("clean_sprite_expected_count") or 0)
-        actual_count = int(candidate.get("clean_sprite_count") or 0)
-        metadata_complete = clean_sprites_policy_complete(candidate, sprites)
-        extraction_incomplete = (
-            bool(expected_count and actual_count < expected_count)
-            or bool(candidate.get("clean_sprite_failed_cells"))
-            or bool(expected_count and len(sprites) < expected_count)
-            or not metadata_complete
-        )
-        if extraction_incomplete:
-            candidate["id"] = candidate_id
-            candidate["status"] = "candidate_review"
-            candidate["clean_sprite_status"] = "incomplete"
-            save_accessory_candidate(path, candidate)
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "message": "多角度素材切分未完成",
-                    "saved_count": actual_count,
-                    "expected_count": expected_count,
-                    "failed_cells": candidate.get("clean_sprite_failed_cells") or [],
-                    "metadata_complete": metadata_complete,
-                },
-            )
+        defer_accessory_normalization(candidate)
+        ensure_default_ai_profile_reference(candidate)
+        ensure_accessory_ai_profile(candidate, force=not isinstance(candidate.get("ai_profile"), dict), allow_provider=True)
+        ensure_accessory_locateanything_profile(candidate)
 
         config = load_config()
         existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
+        original_class_id = candidate.get("class_id", -1)
+        original_candidate_id = str(candidate.get("id") or candidate_id)
         candidate["class_id"] = max(existing_ids + list(CLASS_NAMES.keys())) + 1
         candidate["id"] = f"acc_{uuid.uuid4().hex[:10]}"
         candidate["status"] = candidate.get("status", "candidate_review").replace("candidate_review", "active")
         candidate["confirmed_at"] = int(time.time())
+        ensure_default_ai_profile_reference(candidate)
         ensure_accessory_ai_profile(candidate, force=True, allow_provider=True)
-        config["accessories"].append(candidate)
+        ensure_accessory_locateanything_profile(candidate, force=True)
+        confirmed_item = json.loads(json.dumps(candidate))
+        if accessory_material_type(confirmed_item) == "text":
+            # Documents: crop + deskew + normalize to the chosen paper size NOW, at
+            # creation. No image generation and no task-time sprite step — the task
+            # just reuses these canonical pages.
+            confirmed_item.update(normalize_accessory_assets(confirmed_item))
+            confirmed_item["normalization_deferred"] = False
+        else:
+            # Objects: defer sprite generation until a pipeline task starts.
+            defer_accessory_normalization(confirmed_item)
+        config["accessories"].append(confirmed_item)
         save_config(config)
-        return {"status": "saved", "item": serialize_accessory(candidate), "items": [serialize_accessory(item) for item in config["accessories"]]}
+        candidate_record = json.loads(json.dumps(confirmed_item))
+        candidate_record["id"] = original_candidate_id
+        candidate_record["class_id"] = original_class_id
+        candidate_record["status"] = "confirmed"
+        candidate_record["confirmed_accessory_id"] = accessory_uid(confirmed_item)
+        candidate_record["confirmed_at"] = confirmed_item.get("confirmed_at") or int(time.time())
+        candidate_record["confirmed_class_id"] = confirmed_item.get("class_id")
+        save_accessory_candidate(path, candidate_record)
+        if candidate_record.get("pipeline_context") == "pipeline":
+            add_pipeline_accessory_id(accessory_uid(confirmed_item))
+            remove_pipeline_pending_candidate_id(candidate_id)
+        return {
+            "status": "saved",
+            "item": serialize_accessory_summary(confirmed_item),
+            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
+            "pipeline": pipeline_accessories_payload(scope_config_for_user(config, user), user),
+        }
 
 
 @app.post("/api/accessories/{accessory_id}/files")
 async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(default=[])) -> dict[str, Any]:
+    user = current_auth_user()
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
     config = load_config()
     for item in config.get("accessories", []):
         if accessory_uid(item) != accessory_id:
             continue
+        require_record_access(item, user, write=True)
         target_dir = UPLOAD_DIR / "accessories" / accessory_id
         target_dir.mkdir(parents=True, exist_ok=True)
         saved_files: list[str] = []
@@ -9436,15 +19381,13 @@ async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(
             saved_files.append(str(path))
         item.setdefault("source_files", [])
         item["source_files"].extend(saved_files)
-        item.setdefault("ai_profile_reference_files", [])
-        item["ai_profile_reference_files"].extend(saved_files)
         refresh_accessory_assets_after_source_change(item, force_profile=True)
         save_ai_profile_cache({"entries": {}})
         save_config(config)
         return {
             "status": "saved",
-            "item": serialize_accessory(item),
-            "items": [serialize_accessory(accessory) for accessory in config.get("accessories", [])],
+            "item": serialize_accessory_summary(item),
+            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
             "detail": accessory_detail_payload(item),
         }
     raise HTTPException(status_code=404, detail="Accessory not found")
@@ -9452,6 +19395,7 @@ async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(
 
 @app.post("/api/accessories/{accessory_id}/ai-reference")
 def set_accessory_ai_reference(accessory_id: str, request: AccessoryAiReferenceRequest) -> dict[str, Any]:
+    user = current_auth_user()
     target_raw = str(request.source_path or "").strip()
     if not target_raw:
         raise HTTPException(status_code=400, detail="source_path is required")
@@ -9459,6 +19403,7 @@ def set_accessory_ai_reference(accessory_id: str, request: AccessoryAiReferenceR
     for item in config.get("accessories", []):
         if accessory_uid(item) != accessory_id:
             continue
+        require_record_access(item, user, write=True)
         allowed = {
             str(asset.get("source_path") or "")
             for asset in accessory_detail_payload(item).get("gallery", [])
@@ -9477,14 +19422,15 @@ def set_accessory_ai_reference(accessory_id: str, request: AccessoryAiReferenceR
                 "status": "fallback",
                 "message": f"AI profile provider failed; using selected local reference. {bounded_text(str(exc), 120)}",
             }
+        ensure_accessory_locateanything_profile(item, force=True)
         save_ai_profile_cache({"entries": {}})
         save_config(config)
         return {
             "status": "saved",
             "accessory_id": accessory_id,
             "source_path": target_raw,
-            "item": serialize_accessory(item),
-            "items": [serialize_accessory(accessory) for accessory in config.get("accessories", [])],
+            "item": serialize_accessory_summary(item),
+            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
             "detail": accessory_detail_payload(item),
         }
     raise HTTPException(status_code=404, detail="Accessory not found")
@@ -9492,6 +19438,7 @@ def set_accessory_ai_reference(accessory_id: str, request: AccessoryAiReferenceR
 
 @app.delete("/api/accessories/{accessory_id}/files")
 def delete_accessory_file(accessory_id: str, request: AccessoryFileDeleteRequest) -> dict[str, Any]:
+    user = current_auth_user()
     target_raw = str(request.source_path or "").strip()
     if not target_raw:
         raise HTTPException(status_code=400, detail="source_path is required")
@@ -9499,6 +19446,7 @@ def delete_accessory_file(accessory_id: str, request: AccessoryFileDeleteRequest
     for item in config.get("accessories", []):
         if accessory_uid(item) != accessory_id:
             continue
+        require_record_access(item, user, write=True)
         source_paths = {str(path) for path in existing_source_image_paths(item)}
         normalized_paths = {
             str(asset.get("path") or "")
@@ -9553,8 +19501,8 @@ def delete_accessory_file(accessory_id: str, request: AccessoryFileDeleteRequest
             "status": "deleted",
             "accessory_id": accessory_id,
             "source_path": target_raw,
-            "item": serialize_accessory(item),
-            "items": [serialize_accessory(accessory) for accessory in config.get("accessories", [])],
+            "item": serialize_accessory_summary(item),
+            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
             "detail": accessory_detail_payload(item),
         }
     raise HTTPException(status_code=404, detail="Accessory not found")
@@ -9562,7 +19510,12 @@ def delete_accessory_file(accessory_id: str, request: AccessoryFileDeleteRequest
 
 @app.delete("/api/accessories/{accessory_id}")
 def delete_accessory(accessory_id: str) -> dict[str, Any]:
+    user = current_auth_user()
     config = load_config()
+    target = next((item for item in config.get("accessories", []) if accessory_uid(item) == accessory_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Accessory not found")
+    require_record_access(target, user, write=True)
     before = len(config.get("accessories", []))
     config["accessories"] = [item for item in config.get("accessories", []) if accessory_uid(item) != accessory_id]
     if len(config["accessories"]) == before:
@@ -9570,12 +19523,132 @@ def delete_accessory(accessory_id: str) -> dict[str, Any]:
     selected = config.get("training", {}).get("selected_accessory_ids", [])
     config["training"]["selected_accessory_ids"] = [item_id for item_id in selected if item_id != accessory_id]
     save_config(config)
-    return {"status": "deleted", "accessory_id": accessory_id, "items": [serialize_accessory(item) for item in config["accessories"]]}
+    remove_pipeline_accessory_id(accessory_id)
+    return {"status": "deleted", "accessory_id": accessory_id, "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"])}
+
+
+@app.get("/api/label-sheets/references")
+def get_label_sheet_references() -> dict[str, Any]:
+    references, stats = collect_label_sheet_references(scope_config_for_user(load_config()), write_previews=True)
+    return {
+        "status": "ready",
+        "references": [public_label_sheet_reference(reference) for reference in references],
+        "doc_filter_stats": stats,
+    }
+
+
+@app.post("/api/label-sheets/references")
+async def add_label_sheet_reference(
+    annotation: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
+) -> dict[str, Any]:
+    user = current_auth_user()
+    clean_annotation = bounded_text(annotation.strip(), 160)
+    if not clean_annotation:
+        raise HTTPException(status_code=400, detail="annotation is required")
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one reference image is required")
+
+    config = load_config()
+    existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
+    class_id = max(existing_ids + list(CLASS_NAMES.keys())) + 1
+    accessory_id = f"acc_{uuid.uuid4().hex[:10]}"
+    target_dir = UPLOAD_DIR / "label_sheet_references" / accessory_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    saved_files: list[str] = []
+    for upload in files:
+        suffix = Path(upload.filename or "").suffix.lower()
+        if suffix not in IMAGE_REFERENCE_SUFFIXES:
+            raise HTTPException(status_code=400, detail="Only image files can be added as label references")
+        path = target_dir / safe_name(upload.filename or "label_reference.png")
+        with path.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
+        saved_files.append(str(path))
+
+    item = {
+        "id": accessory_id,
+        "class_id": class_id,
+        "name": clean_annotation,
+        "label_sheet_annotation": clean_annotation,
+        "material_type": "text",
+        "training_role": "label_sheet_reference",
+        "physical_size": physical_size_payload("text"),
+        "status": "reference_uploaded",
+        "source_files": saved_files,
+        "created_at": int(time.time()),
+        "label_sheet_reference": True,
+        **current_owner_fields(),
+    }
+    # Local-only normalization: do not create or refresh AI profiles here.
+    item.update(normalize_accessory_assets(item))
+    config["accessories"].append(item)
+    save_config(config)
+    scoped_config = scope_config_for_user(config, user)
+    references, stats = collect_label_sheet_references(scoped_config, write_previews=True)
+    return {
+        "status": "saved",
+        "item": serialize_accessory(item),
+        "references": [public_label_sheet_reference(reference) for reference in references],
+        "doc_filter_stats": stats,
+    }
+
+
+@app.post("/api/label-sheets/match")
+async def match_label_sheet_endpoint(file: UploadFile = File(...)) -> dict[str, Any]:
+    user = current_auth_user()
+    ensure_dirs()
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Label sheet image is empty")
+    image = cv2.imdecode(np.frombuffer(payload, np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(status_code=400, detail="Could not decode label sheet image")
+    request_id = safe_name(file.filename or "label_sheet.png").rsplit(".", 1)[0]
+    upload_path = UPLOAD_DIR / f"{request_id}{Path(file.filename or '').suffix.lower() or '.png'}"
+    upload_path.write_bytes(payload)
+    return analyze_bgr_label_sheet(image, request_id, scope_config_for_user(load_config(), user))
+
+if run_label_experiment is not None:
+
+    @app.post("/api/experimental/label-inspector/analyze")
+    async def analyze_label_experiment(
+        reference_file: UploadFile = File(...),
+        incoming_file: UploadFile = File(...),
+        sensitivity: float = Form(0.72),
+    ) -> dict[str, Any]:
+        ensure_dirs()
+        reference_payload = await reference_file.read()
+        incoming_payload = await incoming_file.read()
+        if not reference_payload:
+            raise HTTPException(status_code=400, detail="Reference image is empty")
+        if not incoming_payload:
+            raise HTTPException(status_code=400, detail="Incoming image is empty")
+        reference_image = cv2.imdecode(np.frombuffer(reference_payload, np.uint8), cv2.IMREAD_COLOR)
+        incoming_image = cv2.imdecode(np.frombuffer(incoming_payload, np.uint8), cv2.IMREAD_COLOR)
+        if reference_image is None:
+            raise HTTPException(status_code=400, detail="Could not decode reference image")
+        if incoming_image is None:
+            raise HTTPException(status_code=400, detail="Could not decode incoming image")
+
+        reference_upload_name = safe_name(reference_file.filename or "reference.png")
+        incoming_upload_name = safe_name(incoming_file.filename or "incoming.png")
+        (UPLOAD_DIR / reference_upload_name).write_bytes(reference_payload)
+        (UPLOAD_DIR / incoming_upload_name).write_bytes(incoming_payload)
+        request_id = Path(incoming_upload_name).stem
+        return run_label_experiment(
+            reference_image,
+            incoming_image,
+            OUTPUT_DIR,
+            request_id=request_id,
+            sensitivity=sensitivity,
+            output_url_prefix="/outputs",
+        )
 
 
 @app.post("/api/analyze/image")
 async def analyze_image(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
     ensure_dirs()
+    require_analyze_model_permission(model_id)
     payload = await file.read()
     arr = np.frombuffer(payload, np.uint8)
     image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -9647,6 +19720,7 @@ def video_ai_summary(frames: list[dict[str, Any]]) -> dict[str, Any] | None:
 @app.post("/api/analyze/video")
 async def analyze_video(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
     ensure_dirs()
+    require_analyze_model_permission(model_id)
     upload_name = safe_name(file.filename)
     video_path = UPLOAD_DIR / upload_name
     with video_path.open("wb") as f:
@@ -9708,7 +19782,10 @@ def update_stream(config_in: StreamConfig) -> dict[str, Any]:
 
 @app.get("/api/backgrounds/{set_id}/{image_name}")
 def background_image(set_id: str, image_name: str) -> FileResponse:
+    user = current_auth_user()
     clean_id = safe_background_set_id(set_id)
+    if not any(item.get("id") == clean_id for item in list_background_sets(user)):
+        raise HTTPException(status_code=404, detail="Background image not found")
     clean_name = Path(image_name).name
     path = BACKGROUND_SETS_DIR / clean_id / clean_name
     if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
@@ -9717,10 +19794,12 @@ def background_image(set_id: str, image_name: str) -> FileResponse:
 
 
 @app.get("/api/training/background-sets")
-def training_background_sets() -> dict[str, Any]:
-    sets = list_background_sets()
+def training_background_sets(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    sets = list_background_sets(user, target_user_id)
     manifest = load_background_sets_manifest()
-    default_id = selected_background_set_id(manifest.get("default_set_id") or None)
+    default_id = selected_background_set_id(manifest.get("default_set_id") or None, user, target_user_id)
     return {"background_sets": sets, "default_set_id": default_id}
 
 
@@ -9748,6 +19827,7 @@ async def upload_training_background_set(
         created_at=int(time.time()),
         generation_method="queued_codexcli_imgworker",
         status="queued",
+        **current_owner_fields(),
     )
     task = enqueue_background_set_task(set_id, display_name, source_path)
     return {
@@ -9761,16 +19841,36 @@ async def upload_training_background_set(
 
 @app.post("/api/training/start")
 def request_training(request: TrainingStartRequest) -> dict[str, Any]:
-    config = load_config()
+    user = current_auth_user()
+    full_config = load_config()
+    config = scope_config_for_user(full_config, user)
     dataset = None
     if request.dataset_id:
-        dataset = dataset_for_training(request.dataset_id)
-        selected = selected_accessories(config, dataset.get("selected_accessory_ids") or request.selected_accessory_ids)
+        try:
+            dataset = dataset_for_training(request.dataset_id, user=user)
+            selected = selected_accessories(config, dataset.get("selected_accessory_ids") or request.selected_accessory_ids)
+        except HTTPException as exc:
+            if training_executor_mode() != "worker" or exc.status_code != 404:
+                raise
+            clean_dataset_id = str(request.dataset_id).strip()
+            if not clean_dataset_id:
+                raise HTTPException(status_code=400, detail="dataset_id is required for worker training")
+            selected = selected_accessories(config, request.selected_accessory_ids)
+            dataset = {
+                "id": clean_dataset_id,
+                "sample_count": request.sample_count,
+                "selected_accessory_ids": [item["id"] for item in selected],
+                "background_set_id": selected_background_set_id(request.background_set_id, user),
+                "display_name": clean_dataset_id,
+            }
     else:
         selected = selected_accessories(config, request.selected_accessory_ids)
-        validate_approved_preview(config, request, selected)
+        validate_approved_preview(config, request, selected, user=user)
+        if ensure_training_assets_for_request(full_config, config, user, [item["id"] for item in selected]):
+            config = scope_config_for_user(full_config, user)
+            selected = selected_accessories(config, request.selected_accessory_ids)
     task = enqueue_training_task(request, selected, "train_model", dataset=dataset)
-    config["training"] = {
+    training_state = {
         "status": "queued",
         "last_requested_at": int(time.time()),
         "selected_accessory_ids": [item["id"] for item in selected],
@@ -9784,17 +19884,24 @@ def request_training(request: TrainingStartRequest) -> dict[str, Any]:
         "note": task["note"],
         "estimated_minutes": task["estimated_minutes"],
     }
-    save_config(config)
+    set_training_state_for_user(full_config, user, training_state)
+    merge_scoped_accessory_updates(full_config, config, user)
+    save_config(full_config)
     return task
 
 
 @app.post("/api/training/generate")
 def request_sample_generation(request: TrainingStartRequest) -> dict[str, Any]:
-    config = load_config()
+    user = current_auth_user()
+    full_config = load_config()
+    config = scope_config_for_user(full_config, user)
     selected = selected_accessories(config, request.selected_accessory_ids)
-    validate_approved_preview(config, request, selected)
+    validate_approved_preview(config, request, selected, user=user)
+    if ensure_training_assets_for_request(full_config, config, user, [item["id"] for item in selected]):
+        config = scope_config_for_user(full_config, user)
+        selected = selected_accessories(config, request.selected_accessory_ids)
     task = enqueue_training_task(request, selected, "generate_samples")
-    config["training"] = {
+    training_state = {
         "status": "queued",
         "last_requested_at": int(time.time()),
         "selected_accessory_ids": [item["id"] for item in selected],
@@ -9816,12 +19923,16 @@ def request_sample_generation(request: TrainingStartRequest) -> dict[str, Any]:
         "estimated_minutes": task["estimated_minutes"],
         "estimated_gb": task["estimated_gb"],
     }
-    save_config(config)
+    set_training_state_for_user(full_config, user, training_state)
+    merge_scoped_accessory_updates(full_config, config, user)
+    save_config(full_config)
     return task
 
 
-def dataset_for_training(dataset_id: str) -> dict[str, Any]:
-    dataset_dir = OUTPUT_DIR / "training_datasets" / re.sub(r"[^a-zA-Z0-9_.-]+", "_", dataset_id)
+def dataset_for_training(dataset_id: str, user: dict[str, Any] | None = None) -> dict[str, Any]:
+    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False)
+    if dataset_dir is None or item is None:
+        raise HTTPException(status_code=404, detail="Training dataset not found")
     manifest_path = dataset_dir / "manifest.json"
     dataset_yaml = dataset_dir / "dataset.yaml"
     if not dataset_dir.exists() or not manifest_path.exists() or not dataset_yaml.exists():
@@ -9830,7 +19941,9 @@ def dataset_for_training(dataset_id: str) -> dict[str, Any]:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail="Training dataset manifest is unreadable") from exc
-    samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
+    if user and item:
+        require_record_access(item, user)
+    samples = public_path_sanitized(manifest.get("samples") if isinstance(manifest.get("samples"), list) else [])
     sample_count = len(samples) or int(manifest.get("sample_count") or 0)
     if sample_count <= 0:
         raise HTTPException(status_code=409, detail="Training dataset has no samples")
@@ -9847,12 +19960,19 @@ def dataset_for_training(dataset_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/training/status")
-def training_status() -> dict[str, Any]:
-    config = load_config()
-    return filtered_training_state(config)
+def training_status(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    config = scope_config_for_user(load_config(), user, target_user_id)
+    return filtered_training_state(config, user, target_user_id)
 
 
-def validate_approved_preview(config: dict[str, Any], request: TrainingStartRequest, selected: list[dict[str, Any]]) -> None:
+def validate_approved_preview(
+    config: dict[str, Any],
+    request: TrainingStartRequest,
+    selected: list[dict[str, Any]],
+    user: dict[str, Any] | None = None,
+) -> None:
     if not request.approved_preview_id:
         return
     preview_path = TRAINING_JOBS_DIR / f"{request.approved_preview_id}.json"
@@ -9867,7 +19987,7 @@ def validate_approved_preview(config: dict[str, Any], request: TrainingStartRequ
     preview_ids = [item.get("id") for item in preview.get("selected_accessories", []) if isinstance(item, dict)]
     if preview_ids != selected_ids:
         raise HTTPException(status_code=409, detail="Approved preview does not match the selected accessories.")
-    requested_background_set_id = selected_background_set_id(request.background_set_id)
+    requested_background_set_id = selected_background_set_id(request.background_set_id, user)
     if preview.get("background_set_id") != requested_background_set_id:
         raise HTTPException(status_code=409, detail="Approved preview does not match the selected background set. Generate a fresh preview.")
 
@@ -9881,12 +20001,61 @@ def validate_approved_preview(config: dict[str, Any], request: TrainingStartRequ
                 "current_preview_cache_key": current_cache_key,
             }
         )
-        save_config(config)
         raise HTTPException(status_code=409, detail="Approved preview is stale. Generate a fresh preview.")
 
 
-def filtered_training_state(config: dict[str, Any]) -> dict[str, Any]:
+def filtered_training_state(
+    config: dict[str, Any],
+    user: dict[str, Any] | None = None,
+    target_user_id: str | None = None,
+) -> dict[str, Any]:
     training = config["training"]
+    def hydrate_active_task(state: dict[str, Any], scoped_target_user_id: str | None = None) -> None:
+        active_task_id = str(state.get("active_training_task_id") or "").strip()
+        if not active_task_id:
+            return
+        task = find_training_task(active_task_id)
+        task_visible = bool(task) and (user is None or record_visible_to_user(task, user, scoped_target_user_id))
+        if task and task_visible:
+            task = public_refreshed_training_task(task)
+            for key in (
+                "status",
+                "progress",
+                "note",
+                "error",
+                "current_epoch",
+                "total_epochs",
+                "completed_at",
+                "stopped_at",
+                "cancelled_at",
+                "return_code",
+                "training_executor",
+                "worker_sample_generation_bypassed",
+                "worker_training_bypassed",
+                "remote_training_status",
+                "remote_training_poll_error",
+            ):
+                if key in task:
+                    state[key] = task.get(key)
+            if task.get("dataset_dir"):
+                state["dataset_id"] = task.get("dataset_id") or task.get("source_dataset_id") or task.get("job_id")
+            if task.get("action"):
+                state["active_training_action"] = task.get("action")
+        elif state.get("status") in {"queued", "running"}:
+            state["status"] = "stopped"
+            state["progress"] = 100
+            state["note"] = "训练任务记录已删除或不可用；请重新发起任务。"
+            state["error"] = "Active training task record is missing. Start a new task."
+
+    hydrate_active_task(training, target_user_id)
+    if isinstance(training.get("training_states"), list):
+        for child in training["training_states"]:
+            if not isinstance(child, dict):
+                continue
+            child_target_user_id = target_user_id
+            if user and user_is_admin(user) and not child_target_user_id:
+                child_target_user_id = record_owner_id(child)
+            hydrate_active_task(child, child_target_user_id)
     selected = selected_accessories(config, training.get("selected_accessory_ids", []))
     current_cache_key = preview_cache_key(selected) if selected else None
     stale_reason = None
@@ -9907,7 +20076,7 @@ def filtered_training_state(config: dict[str, Any]) -> dict[str, Any]:
     return training
 
 
-def dataset_resource_item(dataset_dir: Path) -> dict[str, Any] | None:
+def dataset_resource_item(dataset_dir: Path, *, include_samples: bool = True) -> dict[str, Any] | None:
     manifest_path = dataset_dir / "manifest.json"
     if not manifest_path.exists():
         return None
@@ -9915,8 +20084,24 @@ def dataset_resource_item(dataset_dir: Path) -> dict[str, Any] | None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
-    return {
+    raw_samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
+    audit = record_audit_fields(manifest, dataset_dir)
+    samples = []
+    for sample in raw_samples:
+        if not isinstance(sample, dict):
+            continue
+        sample_path = resolve_service_path(sample.get("image")) if sample.get("image") else dataset_dir
+        sample_copy = dict(sample)
+        sample_copy.update(
+            {
+                "created_at": record_created_at(sample_copy, sample_path if sample_path.exists() else dataset_dir),
+                "updated_at": record_updated_at(sample_copy, sample_path if sample_path.exists() else dataset_dir),
+                "owner_user_id": str(sample_copy.get("owner_user_id") or audit["owner_user_id"]),
+                "owner_username": str(sample_copy.get("owner_username") or audit["owner_username"]),
+            }
+        )
+        samples.append(sample_copy)
+    item = {
         "id": dataset_dir.name,
         "kind": "dataset",
         "display_name": manifest.get("display_name") or dataset_dir.name,
@@ -9924,22 +20109,81 @@ def dataset_resource_item(dataset_dir: Path) -> dict[str, Any] | None:
         "path": str(dataset_dir),
         "manifest_path": str(manifest_path),
         "sample_count": len(samples) or manifest.get("sample_count") or 0,
-        "created_at": manifest.get("created_at") or int(dataset_dir.stat().st_mtime),
+        "created_at": audit["created_at"],
+        "updated_at": audit["updated_at"],
         "selected_accessory_ids": manifest.get("selected_accessory_ids") or [],
         "background_set_id": manifest.get("background_set_id") or "",
-        "samples": samples,
+        "owner_user_id": audit["owner_user_id"],
+        "owner_username": audit["owner_username"],
+        "samples_loaded": bool(include_samples),
     }
+    if include_samples:
+        item["samples"] = samples
+    return item
 
 
-def training_resources_payload() -> dict[str, Any]:
-    datasets_dir = OUTPUT_DIR / "training_datasets"
+def clean_training_resource_id(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value or "")).strip("._")
+
+
+def find_dataset_resource(
+    dataset_id: str,
+    user: dict[str, Any] | None = None,
+    *,
+    include_samples: bool = False,
+    write: bool = False,
+) -> tuple[Path | None, dict[str, Any] | None]:
+    clean_id = clean_training_resource_id(dataset_id)
+    if not clean_id:
+        return None, None
+    for root in training_dataset_roots():
+        candidate_dir = root / clean_id
+        if not candidate_dir.exists() or not candidate_dir.is_dir():
+            continue
+        item = dataset_resource_item(candidate_dir, include_samples=include_samples)
+        if not item:
+            continue
+        if user:
+            allowed = record_mutable_by_user(item, user) if write else record_visible_to_user(item, user)
+            if not allowed:
+                continue
+        return candidate_dir, item
+    return None, None
+
+
+def training_dataset_roots() -> list[Path]:
+    roots = [OUTPUT_DIR / "training_datasets"]
+    users_root = OUTPUT_DIR / "users"
+    if users_root.exists():
+        roots.extend(path / "training_datasets" for path in users_root.iterdir() if path.is_dir())
+    return roots
+
+
+def training_run_roots() -> list[Path]:
+    roots = [OUTPUT_DIR / "training_runs"]
+    users_root = OUTPUT_DIR / "users"
+    if users_root.exists():
+        roots.extend(path / "training_runs" for path in users_root.iterdir() if path.is_dir())
+    return roots
+
+
+def training_resources_payload(
+    *,
+    include_samples: bool = False,
+    user: dict[str, Any] | None = None,
+    target_user_id: str | None = None,
+) -> dict[str, Any]:
     datasets = []
-    if datasets_dir.exists():
+    for datasets_dir in training_dataset_roots():
+        if not datasets_dir.exists():
+            continue
         for dataset_dir in sorted([p for p in datasets_dir.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True):
-            item = dataset_resource_item(dataset_dir)
+            item = dataset_resource_item(dataset_dir, include_samples=include_samples)
             if item:
+                if user and not record_visible_to_user(item, user, target_user_id):
+                    continue
                 datasets.append(item)
-    task_items = list_training_tasks()
+    task_items = list_training_tasks(user=user, target_user_id=target_user_id)
     dataset_ids = {item["id"] for item in datasets}
     for task in task_items:
         dataset_dir_value = task.get("dataset_dir")
@@ -9960,7 +20204,10 @@ def training_resources_payload() -> dict[str, Any]:
                 "created_at": int(task.get("created_at") or 0),
                 "selected_accessory_ids": task.get("selected_accessory_ids") or [],
                 "background_set_id": task.get("background_set_id") or "",
-                "samples": [],
+                "owner_user_id": str(task.get("owner_user_id") or ""),
+                "owner_username": str(task.get("owner_username") or ""),
+                "samples": [] if include_samples else None,
+                "samples_loaded": bool(include_samples),
                 "missing_files": True,
             }
         )
@@ -9968,9 +20215,11 @@ def training_resources_payload() -> dict[str, Any]:
     specs = list_trained_model_specs()
     models = []
     for spec in specs:
+        if user and not record_visible_to_user(spec, user, target_user_id):
+            continue
         model_path = Path(spec["path"])
         run_id = str(spec["run_id"])
-        run_dir = OUTPUT_DIR / "training_runs" / run_id
+        run_dir = resolve_service_path(spec.get("run_dir") or (OUTPUT_DIR / "training_runs" / run_id))
         timestamp_path = model_path if model_path.exists() else run_dir
         models.append(
             {
@@ -9984,13 +20233,16 @@ def training_resources_payload() -> dict[str, Any]:
                 "path": str(model_path),
                 "exists": model_path.exists(),
                 "uses_ocr": bool(spec.get("uses_ocr", False)),
-                "created_at": int(timestamp_path.stat().st_mtime) if timestamp_path.exists() else 0,
+                "created_at": int(spec.get("created_at") or (timestamp_path.stat().st_mtime if timestamp_path.exists() else 0)),
+                "updated_at": int(spec.get("updated_at") or spec.get("created_at") or (timestamp_path.stat().st_mtime if timestamp_path.exists() else 0)),
                 "accessory_names": spec.get("accessory_names") or [],
                 "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
+                "owner_user_id": str(spec.get("owner_user_id") or LEGACY_OWNER_ID),
+                "owner_username": str(spec.get("owner_username") or record_owner_username(spec)),
             }
         )
     completed_tasks = []
-    for task in list_training_tasks():
+    for task in task_items:
         if task.get("action") not in {"generate_samples", "train_model"}:
             continue
         task_id = str(task.get("job_id") or "")
@@ -10001,29 +20253,57 @@ def training_resources_payload() -> dict[str, Any]:
                 "models": [item for item in models if item.get("task_id") == task_id],
             }
         )
-    return {"datasets": datasets, "models": models, "tasks": task_items, "training_tasks": completed_tasks}
+    config = scope_config_for_user(load_config(), user, target_user_id) if user else load_config()
+    ai_detection_tasks = [
+        {**serialize_ai_detection_task(task, config), "kind": "ai_detection_task", "task_type": "ai_detection"}
+        for task in load_ai_detection_tasks()
+        if not user or record_visible_to_user(task, user, target_user_id)
+    ]
+    return public_path_sanitized({
+        "datasets": datasets,
+        "models": models,
+        "tasks": task_items,
+        "training_tasks": completed_tasks,
+        "ai_detection_tasks": ai_detection_tasks,
+    })
 
 
 @app.get("/api/training/resources")
-def training_resources() -> dict[str, Any]:
-    return training_resources_payload()
+def training_resources(include_samples: bool = False, user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    return training_resources_payload(
+        include_samples=include_samples,
+        user=user,
+        target_user_id=user_id if user_is_admin(user) else None,
+    )
+
+
+@app.get("/api/training/resources/datasets/{dataset_id}/detail")
+def training_dataset_detail(dataset_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    _, item = find_dataset_resource(dataset_id, user=user, include_samples=True)
+    if not item:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return public_path_sanitized({"status": "ready", "dataset": item})
 
 
 @app.delete("/api/training/resources/datasets/{dataset_id}")
 def delete_training_dataset(dataset_id: str) -> dict[str, Any]:
-    dataset_dir = OUTPUT_DIR / "training_datasets" / re.sub(r"[^a-zA-Z0-9_.-]+", "_", dataset_id)
-    if not dataset_dir.exists() or not dataset_dir.is_dir():
+    user = current_auth_user()
+    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False, write=True)
+    if not dataset_dir or not item:
         raise HTTPException(status_code=404, detail="Dataset not found")
     shutil.rmtree(dataset_dir)
-    return {"status": "deleted", "dataset_id": dataset_id, **training_resources_payload()}
+    return {"status": "deleted", "dataset_id": dataset_id, **training_resources_payload(user=user)}
 
 
 @app.patch("/api/training/resources/datasets/{dataset_id}")
 def update_training_dataset(dataset_id: str, request: TrainingResourceUpdateRequest) -> dict[str, Any]:
-    dataset_dir = OUTPUT_DIR / "training_datasets" / re.sub(r"[^a-zA-Z0-9_.-]+", "_", dataset_id)
-    manifest_path = dataset_dir / "manifest.json"
-    if not manifest_path.exists():
+    user = current_auth_user()
+    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False, write=True)
+    if not dataset_dir or not item:
         raise HTTPException(status_code=404, detail="Dataset not found")
+    manifest_path = dataset_dir / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -10034,13 +20314,14 @@ def update_training_dataset(dataset_id: str, request: TrainingResourceUpdateRequ
         manifest["note"] = request.note.strip()
     manifest["updated_at"] = int(time.time())
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return {"status": "updated", "dataset_id": dataset_id, **training_resources_payload()}
+    return {"status": "updated", "dataset_id": dataset_id, **training_resources_payload(user=user)}
 
 
 @app.delete("/api/training/resources/datasets/{dataset_id}/samples/{sample_name}")
 def delete_training_dataset_sample(dataset_id: str, sample_name: str) -> dict[str, Any]:
-    dataset_dir = OUTPUT_DIR / "training_datasets" / re.sub(r"[^a-zA-Z0-9_.-]+", "_", dataset_id)
-    if not dataset_dir.exists() or not dataset_dir.is_dir():
+    user = current_auth_user()
+    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False, write=True)
+    if not dataset_dir or not item:
         raise HTTPException(status_code=404, detail="Dataset not found")
     sample_stem = Path(sample_name).stem
     removed = 0
@@ -10068,25 +20349,31 @@ def delete_training_dataset_sample(dataset_id: str, sample_name: str) -> dict[st
             pass
     if removed == 0:
         raise HTTPException(status_code=404, detail="Sample not found")
-    return {"status": "deleted", "dataset_id": dataset_id, "sample": sample_name, **training_resources_payload()}
+    return {"status": "deleted", "dataset_id": dataset_id, "sample": sample_name, **training_resources_payload(user=user)}
 
 
 @app.delete("/api/training/resources/models/{run_id}")
 def delete_training_model(run_id: str) -> dict[str, Any]:
+    user = current_auth_user()
     clean_id = re.sub(r"^trained_", "", run_id)
-    run_dir = OUTPUT_DIR / "training_runs" / re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)
-    if not run_dir.exists() or not run_dir.is_dir():
+    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
+    run_dir = resolve_service_path(spec.get("run_dir")) if spec else None
+    if not run_dir or not run_dir.exists() or not run_dir.is_dir() or not spec:
         raise HTTPException(status_code=404, detail="Model run not found")
+    require_record_access(spec, user, write=True)
     shutil.rmtree(run_dir)
-    return {"status": "deleted", "run_id": run_id, **training_resources_payload()}
+    return {"status": "deleted", "run_id": run_id, **training_resources_payload(user=user)}
 
 
 @app.patch("/api/training/resources/models/{run_id}")
 def update_training_model(run_id: str, request: TrainingResourceUpdateRequest) -> dict[str, Any]:
+    user = current_auth_user()
     clean_id = re.sub(r"^trained_", "", run_id)
-    run_dir = OUTPUT_DIR / "training_runs" / re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)
-    if not run_dir.exists() or not run_dir.is_dir():
+    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
+    run_dir = resolve_service_path(spec.get("run_dir")) if spec else None
+    if not run_dir or not run_dir.exists() or not run_dir.is_dir() or not spec:
         raise HTTPException(status_code=404, detail="Model run not found")
+    require_record_access(spec, user, write=True)
     meta_path = run_dir / "library_metadata.json"
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
@@ -10098,18 +20385,21 @@ def update_training_model(run_id: str, request: TrainingResourceUpdateRequest) -
         meta["note"] = request.note.strip()
     meta["updated_at"] = int(time.time())
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    return {"status": "updated", "run_id": run_id, **training_resources_payload()}
+    return {"status": "updated", "run_id": run_id, **training_resources_payload(user=user)}
 
 
 @app.get("/api/training/plan")
-def training_plan() -> dict[str, Any]:
-    config = load_config()
-    training = filtered_training_state(config)
-    return {
+def training_plan(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    config = scope_config_for_user(load_config(), user, target_user_id)
+    training = filtered_training_state(config, user, target_user_id)
+    return public_path_sanitized({
         "training": training,
-        "accessories": [serialize_accessory(item) for item in config.get("accessories", [])],
-        "background_sets": list_background_sets(),
-        "default_background_set_id": selected_background_set_id(training.get("background_set_id")),
+        "accessories": serialize_accessory_items(config.get("accessories", []), summary=True),
+        "background_sets": list_background_sets(user, target_user_id),
+        "default_background_set_id": selected_background_set_id(training.get("background_set_id"), user, target_user_id),
+        "training_execution": training_execution_status(include_worker_probe=False),
         "render_policy": {
             "sample_count_default": 4000,
             "background": "same-environment background library with per-sample crop/shift/photometric/noise/texture variation; glare ellipse disabled",
@@ -10121,17 +20411,19 @@ def training_plan() -> dict[str, Any]:
             "true_rule": "exact_count_match_required",
             "false_rule": "mostly missing_one; 10% of missing_one false bucket becomes extra_one_accessory",
         },
-    }
+    })
 
 
 @app.post("/api/training/preview")
 def training_preview(request: TrainingPreviewRequest) -> dict[str, Any]:
-    config = load_config()
-    if ensure_object_clean_sprites_for_selection(config, request.selected_accessory_ids):
-        save_config(config)
+    user = current_auth_user()
+    full_config = load_config()
+    config = scope_config_for_user(full_config, user)
+    if ensure_training_assets_for_request(full_config, config, user, request.selected_accessory_ids):
+        config = scope_config_for_user(full_config, user)
     selected = selected_accessories(config, request.selected_accessory_ids)
     pose_policy = normalize_preview_pose_family_policy(request.preview_pose_family_policy)
-    background_set_id = selected_background_set_id(request.background_set_id)
+    background_set_id = selected_background_set_id(request.background_set_id, user)
     sprite_versions = {
         accessory_uid(item): {
             "clean_sprite_preprocessed_at": item.get("clean_sprite_preprocessed_at"),
@@ -10143,7 +20435,7 @@ def training_preview(request: TrainingPreviewRequest) -> dict[str, Any]:
     }
     cache_key = preview_cache_key(selected)
     preview_id = f"preview_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    job_dir = OUTPUT_DIR / "training_previews" / preview_id
+    job_dir = output_write_dir("training_previews") / preview_id
     job_dir.mkdir(parents=True, exist_ok=True)
     previews = []
     count = max(1, min(12, int(request.preview_count)))
@@ -10191,29 +20483,4293 @@ def training_preview(request: TrainingPreviewRequest) -> dict[str, Any]:
         ],
     }
     (TRAINING_JOBS_DIR / f"{preview_id}.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
-    config["training"].update(
+    preview_training_state = {
+        "status": "preview_ready",
+        "last_preview_id": preview_id,
+        "selected_accessory_ids": [item["id"] for item in selected],
+        "sample_count": plan["sample_count"],
+        "mode": request.train_mode,
+        "background_set_id": background_set_id,
+        "preview_urls": [item["url"] for item in previews],
+        "previews": previews,
+        "preview_cache_key": cache_key,
+        "preview_sprite_versions": sprite_versions,
+        "preview_pose_family_policy": pose_policy,
+        "preview_pose_family_label": pose_sequence_label,
+        "preview_generated_at": int(time.time()),
+    }
+    set_training_state_for_user(full_config, user, preview_training_state)
+    merge_scoped_accessory_updates(full_config, config, user)
+    save_config(full_config)
+    return plan
+
+
+# ============================================================
+# Agent 化流水线编排:Agent 配置 / 参数推荐 / 看板任务
+# ============================================================
+
+AGENT_LOCAL_CONFIG_PATH = DATA_DIR / "agent_config.local.json"
+PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
+PIPELINE_STATE_PATH = DATA_DIR / "pipeline_state.json"
+_pipeline_tasks_lock = threading.Lock()
+_pipeline_state_lock = threading.RLock()
+
+AGENT_PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
+AGENT_PROVIDER_CURSOR = "cursor"
+AGENT_SUPPORTED_PROVIDERS = {AGENT_PROVIDER_OPENAI_COMPATIBLE, AGENT_PROVIDER_CURSOR}
+AGENT_CURSOR_DEFAULT_BASE_URL = "https://api.cursor.com"
+AGENT_CONNECTION_STATUSES = {"untested", "connected", "failed"}
+AGENT_CURSOR_RECOMMENDATION_MESSAGE = "Cursor 已连接；参数推荐需要 Cursor Cloud Agent run 配置，当前使用规则推荐"
+
+DEFAULT_AGENT_CONFIG: dict[str, Any] = {
+    "enabled": True,
+    "provider": AGENT_PROVIDER_OPENAI_COMPATIBLE,
+    "base_url": "",
+    "api_key": "",
+    "model": "",
+    "model_options": [],
+    "timeout_seconds": 45.0,
+    "auto_advance_default": False,
+    "connection_status": "untested",
+    "connection_message": "",
+    "last_tested_at": 0,
+    "last_model_count": 0,
+}
+
+ACCESSORY_DETECTION_ROUTES = {"yolo", "ai", "locate", "archive_only"}
+PIPELINE_DETECTION_METHODS = {"yolo", "yolo_ocr", "ai", "locate"}
+PIPELINE_TRAINING_METHODS = {"yolo", "yolo_ocr"}
+PIPELINE_STAGE_ORDER = ["draft", "samples", "training", "library"]
+PIPELINE_DASHBOARD_AI_TASK_SOURCE = "pipeline_dashboard"
+AGENT_MCP_ORCHESTRATION_VERSION = "agent-mcp-yolo-preview-v1"
+AGENT_MCP_GEMINI_IMAGE_MODEL_ENV = "VANTALINE_GEMINI_IMAGE_MODEL"
+AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV = "VANTALINE_GEMINI_IMAGE_TIMEOUT_SECONDS"
+AGENT_MCP_GEMINI_IMAGE_DEFAULT_MODEL = "gemini-3.1-flash-image"
+AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL = "gemini-3-pro-image"
+AGENT_MCP_GEMINI_IMAGE_DEFAULT_TIMEOUT_SECONDS = 120.0
+AGENT_MCP_TOOL_POSE_IMAGE = "generate_accessory_pose_image"
+AGENT_MCP_TOOL_SAMPLES = "generate_training_samples"
+AGENT_MCP_TOOL_TRAINING = "start_model_training"
+AGENT_MCP_CONVERSATION_LIMIT = 60
+AGENT_MCP_AUTO_MAX_STEPS = 12
+AGENT_PIPELINE_ACTIONS = {
+    "advance",
+    "set_params",
+    "goto_stage",
+    "retry",
+    "replan",
+    "pause_and_ask",
+    "continue_existing_assets",
+    "continue_training",
+    "cancel",
+    "reply",
+}
+AGENT_PIPELINE_STAGE_TARGETS = {"draft", "samples"}
+_pipeline_auto_agent_lock = threading.Lock()
+_pipeline_auto_agent_inflight: set[str] = set()
+_pipeline_recommendation_lock = threading.Lock()
+_pipeline_recommendation_inflight: set[str] = set()
+# Async pipeline-advance runner state. Every advance (manual endpoint, GET-list
+# auto-advance, chat/agent-feedback) is executed by a single per-task background
+# thread so heavy/bounded compute never runs under _pipeline_tasks_lock and a
+# stuck task can be cancelled. The inflight set guarantees idempotency (one
+# thread per task); the cancel map lets delete/cancel stop a running advance.
+_pipeline_advance_registry_lock = threading.Lock()
+_pipeline_advance_inflight: set[str] = set()
+_pipeline_advance_cancel: dict[str, threading.Event] = {}
+# A task left in the advancing state longer than this with no live worker thread
+# is treated as a zombie (e.g. the process restarted mid-advance) and reset.
+PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S = 600
+
+
+class PipelineAdvanceCancelled(Exception):
+    """Raised inside advance_pipeline_task when the task's cancel event fires."""
+
+
+class AgentConfigRequest(BaseModel):
+    enabled: bool | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+    timeout_seconds: float | None = None
+    auto_advance_default: bool | None = None
+
+
+class AgentRecommendRequest(BaseModel):
+    stage: str
+    accessory_ids: list[str] = []
+    sample_count: int | None = None
+
+
+class PipelineTaskCreateRequest(BaseModel):
+    name: str | None = None
+    accessory_ids: list[str] = []
+    accessory_counts: dict[str, int] | None = None
+    detection_method: str | None = None
+    auto_advance: bool | None = None
+
+
+class PipelineTaskUpdateRequest(BaseModel):
+    name: str | None = None
+    accessory_ids: list[str] | None = None
+    accessory_counts: dict[str, int] | None = None
+    detection_method: str | None = None
+    params: dict[str, Any] | None = None
+    auto_advance: bool | None = None
+
+
+class PipelineAgentFeedbackRequest(BaseModel):
+    action: str
+    decision: str | None = None
+    message: str | None = None
+    updated_plan: dict[str, Any] | None = None
+
+
+class PipelineAgentChatRequest(BaseModel):
+    message: str
+
+
+class AccessoryRouteRequest(BaseModel):
+    route: str
+    apply: bool = True
+
+
+def agent_base_url_host(base_url: str) -> str:
+    try:
+        return (urlsplit(str(base_url or "").strip()).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def is_cursor_base_url(base_url: str) -> bool:
+    return agent_base_url_host(base_url) == "api.cursor.com"
+
+
+def detect_agent_provider_from_base_url(base_url: str) -> str:
+    return AGENT_PROVIDER_CURSOR if is_cursor_base_url(base_url) else AGENT_PROVIDER_OPENAI_COMPATIBLE
+
+
+def normalize_agent_provider(provider: str | None, base_url: str = "") -> str:
+    if str(base_url or "").strip():
+        return detect_agent_provider_from_base_url(base_url)
+    value = str(provider or "").strip().lower()
+    if value == AGENT_PROVIDER_CURSOR:
+        return value
+    return AGENT_PROVIDER_OPENAI_COMPATIBLE
+
+
+def normalize_agent_model_options(value: Any) -> list[dict[str, str]]:
+    options: list[dict[str, str]] = []
+    seen: set[str] = set()
+    raw_items = value if isinstance(value, list) else []
+    for item in raw_items:
+        if isinstance(item, str):
+            model_id = item.strip()
+            label = model_id
+        elif isinstance(item, dict):
+            model_id = str(item.get("id") or item.get("value") or "").strip()
+            label = str(item.get("label") or item.get("name") or item.get("display_name") or model_id).strip()
+        else:
+            continue
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        options.append({"id": model_id, "label": label or model_id})
+        if len(options) >= 250:
+            break
+    return options
+
+
+def agent_model_options_from_items(items: Any, *, prepend: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
+    options: list[dict[str, str]] = []
+    if prepend:
+        options.extend(prepend)
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "").strip()
+            if not model_id:
+                continue
+            label_parts = [model_id]
+            display_name = str(item.get("display_name") or item.get("name") or "").strip()
+            if display_name and display_name != model_id:
+                label_parts.append(display_name)
+            aliases = [str(alias).strip() for alias in item.get("aliases") or [] if str(alias).strip()]
+            if aliases:
+                label_parts.append(f"alias: {', '.join(aliases[:3])}")
+            options.append({"id": model_id, "label": " · ".join(label_parts)})
+    return normalize_agent_model_options(options)
+
+
+def normalize_agent_config(config: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(DEFAULT_AGENT_CONFIG)
+    provider_value = config.get("provider") if "provider" in config else None
+    merged.update({key: config[key] for key in DEFAULT_AGENT_CONFIG if key in config})
+    merged["base_url"] = str(merged.get("base_url") or "").strip().rstrip("/")
+    merged["api_key"] = str(merged.get("api_key") or "").strip()
+    merged["model"] = str(merged.get("model") or "").strip()
+    merged["provider"] = normalize_agent_provider(provider_value, merged["base_url"])
+    merged["model_options"] = normalize_agent_model_options(merged.get("model_options"))
+    if merged["provider"] == AGENT_PROVIDER_CURSOR:
+        if not merged["base_url"]:
+            merged["base_url"] = AGENT_CURSOR_DEFAULT_BASE_URL
+        if not merged["model"]:
+            merged["model"] = "auto"
+    try:
+        merged["timeout_seconds"] = max(5.0, min(300.0, float(merged.get("timeout_seconds") or 45.0)))
+    except (TypeError, ValueError):
+        merged["timeout_seconds"] = 45.0
+    merged["enabled"] = bool(merged.get("enabled", True))
+    merged["auto_advance_default"] = bool(merged.get("auto_advance_default", False))
+    if str(merged.get("connection_status") or "") not in AGENT_CONNECTION_STATUSES:
+        merged["connection_status"] = "untested"
+    merged["connection_message"] = str(merged.get("connection_message") or "").strip()[:300]
+    try:
+        merged["last_tested_at"] = int(float(merged.get("last_tested_at") or 0))
+    except (TypeError, ValueError):
+        merged["last_tested_at"] = 0
+    try:
+        merged["last_model_count"] = max(0, int(merged.get("last_model_count") or 0))
+    except (TypeError, ValueError):
+        merged["last_model_count"] = 0
+    return merged
+
+
+def agent_required_fields_present(config: dict[str, Any]) -> bool:
+    if not bool(config.get("enabled", True)):
+        return False
+    provider = normalize_agent_provider(config.get("provider"), str(config.get("base_url") or ""))
+    if provider == AGENT_PROVIDER_CURSOR:
+        return bool(config.get("base_url") and config.get("api_key"))
+    return bool(config.get("base_url") and config.get("api_key") and config.get("model"))
+
+
+def agent_credentials_present(config: dict[str, Any]) -> bool:
+    if not bool(config.get("enabled", True)):
+        return False
+    return bool(config.get("base_url") and config.get("api_key"))
+
+
+def agent_connected(config: dict[str, Any]) -> bool:
+    return agent_required_fields_present(config) and str(config.get("connection_status") or "") == "connected"
+
+
+def agent_recommendation_supported(config: dict[str, Any]) -> bool:
+    return normalize_agent_provider(config.get("provider"), str(config.get("base_url") or "")) == AGENT_PROVIDER_OPENAI_COMPATIBLE and agent_connected(config)
+
+
+def load_agent_config() -> dict[str, Any]:
+    merged = dict(DEFAULT_AGENT_CONFIG)
+    provider_present = False
+    if AGENT_LOCAL_CONFIG_PATH.exists():
+        try:
+            raw = json.loads(AGENT_LOCAL_CONFIG_PATH.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                provider_present = "provider" in raw
+                merged.update({key: raw[key] for key in DEFAULT_AGENT_CONFIG if key in raw})
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not provider_present:
+        merged.pop("provider", None)
+    return normalize_agent_config(merged)
+
+
+def save_agent_config(config: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    config = normalize_agent_config(config)
+    payload = {key: config.get(key, DEFAULT_AGENT_CONFIG[key]) for key in DEFAULT_AGENT_CONFIG}
+    tmp_path = AGENT_LOCAL_CONFIG_PATH.with_name(f"{AGENT_LOCAL_CONFIG_PATH.name}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(tmp_path, AGENT_LOCAL_CONFIG_PATH)
+    try:
+        os.chmod(AGENT_LOCAL_CONFIG_PATH, 0o600)
+    except OSError:
+        pass
+
+
+def agent_configured(config: dict[str, Any] | None = None) -> bool:
+    config = config or load_agent_config()
+    return agent_required_fields_present(config)
+
+
+def public_agent_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = config or load_agent_config()
+    configured = agent_credentials_present(config)
+    recommendation_supported = agent_recommendation_supported(config)
+    return {
+        "enabled": config["enabled"],
+        "provider": config["provider"],
+        "provider_label": "Cursor" if config["provider"] == AGENT_PROVIDER_CURSOR else "OpenAI 兼容",
+        "base_url": config["base_url"],
+        "model": config["model"],
+        "model_options": config["model_options"],
+        "timeout_seconds": config["timeout_seconds"],
+        "auto_advance_default": config["auto_advance_default"],
+        "api_key_masked": mask_secret(config["api_key"]),
+        "has_api_key": bool(config["api_key"]),
+        "configured": configured,
+        "connection_status": config["connection_status"] if configured else "untested",
+        "connection_message": config["connection_message"] if configured else "",
+        "last_tested_at": config["last_tested_at"] if configured else 0,
+        "last_model_count": config["last_model_count"] if configured else 0,
+        "recommendation_supported": recommendation_supported,
+        "mode": "agent" if recommendation_supported else "rules",
+    }
+
+
+def openai_compatible_chat_url(base_url: str) -> str:
+    normalized = str(base_url or "").strip().rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    return f"{normalized}/chat/completions"
+
+
+def openai_compatible_models_url(base_url: str) -> str:
+    normalized = str(base_url or "").strip().rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        normalized = normalized[: -len("/chat/completions")]
+    return f"{normalized}/models"
+
+
+def agent_http_error_message(prefix: str, exc: urllib.error.HTTPError) -> str:
+    detail = exc.read().decode("utf-8", errors="replace").strip()
+    return f"{prefix}: HTTP {exc.code} {bounded_text(detail, 180)}"
+
+
+def agent_openai_chat_completion(
+    messages: list[dict[str, str]],
+    config: dict[str, Any] | None = None,
+    *,
+    require_connected: bool = True,
+) -> str:
+    config = config or load_agent_config()
+    if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) != AGENT_PROVIDER_OPENAI_COMPATIBLE:
+        raise RuntimeError("当前 Agent Base URL 识别为非 OpenAI 兼容接口")
+    if is_cursor_base_url(config.get("base_url", "")):
+        raise RuntimeError("检测到 Cursor Base URL；Cursor API 不是 Chat Completions 接口")
+    if not agent_required_fields_present(config):
+        raise RuntimeError("Agent API is not configured")
+    if require_connected and not agent_connected(config):
+        raise RuntimeError("Agent API 已配置但尚未测试成功")
+    payload = {
+        "model": config["model"],
+        "messages": messages,
+        "temperature": 0.2,
+    }
+    request = urllib.request.Request(
+        openai_compatible_chat_url(config["base_url"]),
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config['api_key']}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=config["timeout_seconds"]) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(agent_http_error_message("Agent API 请求失败", exc)) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Agent API 请求失败:{bounded_text(exc, 180)}") from exc
+    content = (((body.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    if not content:
+        raise RuntimeError("Agent API returned an empty response")
+    return content
+
+
+def agent_chat_completion(messages: list[dict[str, str]], config: dict[str, Any] | None = None) -> str:
+    config = config or load_agent_config()
+    if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) == AGENT_PROVIDER_CURSOR:
+        raise RuntimeError(AGENT_CURSOR_RECOMMENDATION_MESSAGE)
+    return agent_openai_chat_completion(messages, config, require_connected=True)
+
+
+def cursor_auth_headers(api_key: str) -> dict[str, str]:
+    token = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
+def cursor_api_url(base_url: str, path: str) -> str:
+    normalized = str(base_url or AGENT_CURSOR_DEFAULT_BASE_URL).strip().rstrip("/")
+    return f"{normalized}/{path.lstrip('/')}"
+
+
+def cursor_model_available(model: str, items: list[dict[str, Any]]) -> bool:
+    selected = str(model or "").strip().lower()
+    if not selected or selected in {"auto", "default"}:
+        return True
+    for item in items:
+        ids = [str(item.get("id") or "").lower()]
+        ids.extend(str(alias or "").lower() for alias in item.get("aliases") or [])
+        if selected in ids:
+            return True
+    return False
+
+
+def fetch_openai_compatible_model_options(config: dict[str, Any]) -> list[dict[str, str]]:
+    request = urllib.request.Request(
+        openai_compatible_models_url(config["base_url"]),
+        headers={"Authorization": f"Bearer {config['api_key']}"},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=config["timeout_seconds"]) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    items = body.get("data") if isinstance(body, dict) else []
+    return agent_model_options_from_items(items)
+
+
+def test_cursor_agent_connection(config: dict[str, Any]) -> dict[str, Any]:
+    request = urllib.request.Request(
+        cursor_api_url(config["base_url"], "/v1/models"),
+        headers=cursor_auth_headers(config["api_key"]),
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=config["timeout_seconds"]) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(agent_http_error_message("Cursor API 请求失败", exc)) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Cursor API 请求失败:{bounded_text(exc, 180)}") from exc
+    items = body.get("items") if isinstance(body, dict) else []
+    models = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+    model_options = agent_model_options_from_items(models, prepend=[{"id": "auto", "label": "auto · Cursor 默认模型"}])
+    model = str(config.get("model") or "auto").strip() or "auto"
+    available = cursor_model_available(model, models)
+    if model.lower() in {"auto", "default"}:
+        model_message = "auto 将使用 Cursor 默认模型"
+    elif available:
+        model_message = f"模型 {model} 在 Cursor 模型列表中"
+    else:
+        model_message = f"模型 {model} 未出现在 Cursor 模型列表中，已切换为 auto"
+        model = "auto"
+    return {
+        "message": f"Cursor 连接成功，可用模型 {len(models)} 个；{model_message}。",
+        "last_model_count": len(models),
+        "model": model,
+        "model_options": model_options,
+        "model_available": available,
+    }
+
+
+def test_openai_agent_connection(config: dict[str, Any]) -> dict[str, Any]:
+    model_options: list[dict[str, str]] = []
+    models_warning = ""
+    try:
+        model_options = fetch_openai_compatible_model_options(config)
+    except urllib.error.HTTPError as exc:
+        models_warning = agent_http_error_message("模型列表获取失败", exc)
+    except urllib.error.URLError as exc:
+        models_warning = f"模型列表获取失败:{bounded_text(exc, 180)}"
+    selected_model = str(config.get("model") or "").strip()
+    if not selected_model and model_options:
+        selected_model = model_options[0]["id"]
+    if not selected_model:
+        if models_warning:
+            raise RuntimeError(f"{models_warning}；且 Model 为空，无法测试 /chat/completions。")
+        raise RuntimeError("未获取到可用模型，且 Model 为空，无法测试 /chat/completions。")
+    test_config = {**config, "model": selected_model}
+    content = agent_openai_chat_completion(
+        [{"role": "user", "content": "回复 ok"}],
+        test_config,
+        require_connected=False,
+    )
+    suffix = f"；{models_warning}" if models_warning else ""
+    return {
+        "message": f"连接成功，模型 {selected_model} 已响应:{content[:60]}{suffix}",
+        "last_model_count": len(model_options),
+        "model": selected_model,
+        "model_options": model_options,
+    }
+
+
+def test_agent_connection(config: dict[str, Any]) -> dict[str, Any]:
+    provider = normalize_agent_provider(config.get("provider"), config.get("base_url", ""))
+    if provider == AGENT_PROVIDER_CURSOR:
+        return test_cursor_agent_connection(config)
+    return test_openai_agent_connection(config)
+
+
+def parse_agent_json(content: str) -> dict[str, Any]:
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if not match:
+        raise RuntimeError("Agent response did not contain JSON")
+    return json.loads(match.group(0))
+
+
+def rule_recommendation(stage: str, selected: list[dict[str, Any]], sample_count: int | None = None) -> dict[str, Any]:
+    accessory_count = max(1, len(selected))
+    has_text = any(accessory_material_type(item) == "text" for item in selected)
+    train_mode = "yolo_ocr" if has_text else "yolo"
+    if stage == "samples":
+        recommended_samples = max(200, min(2000, accessory_count * 200))
+        return {
+            "stage": stage,
+            "params": {
+                "sample_count": recommended_samples,
+                "train_mode": train_mode,
+                "background_set_id": selected_background_set_id(None, _request_user.get()),
+            },
+            "reason": f"{accessory_count} 个配件,按每个配件约 200 张合成样本估算,共 {recommended_samples} 张。",
+        }
+    effective_samples = max(1, int(sample_count or accessory_count * 200))
+    if effective_samples < 300:
+        epochs = 25
+    elif effective_samples < 800:
+        epochs = 40
+    else:
+        epochs = 60
+    return {
+        "stage": "training",
+        "params": {
+            "epochs": epochs,
+            "image_size": 640,
+            "train_mode": train_mode,
+        },
+        "reason": f"约 {effective_samples} 张样本,推荐 {epochs} 个 epoch、640px 分辨率{'、附带 OCR' if has_text else ''}。",
+    }
+
+
+def clamp_recommend_params(stage: str, params: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+    result = dict(fallback)
+    if stage == "samples":
+        try:
+            result["sample_count"] = max(50, min(20000, int(params.get("sample_count", result["sample_count"]))))
+        except (TypeError, ValueError):
+            pass
+    else:
+        try:
+            result["epochs"] = max(1, min(500, int(params.get("epochs", result["epochs"]))))
+        except (TypeError, ValueError):
+            pass
+        try:
+            result["image_size"] = max(320, min(1280, int(params.get("image_size", result["image_size"]))))
+        except (TypeError, ValueError):
+            pass
+    if str(params.get("train_mode") or "") in {"yolo", "yolo_ocr"}:
+        result["train_mode"] = str(params["train_mode"])
+    return result
+
+
+def agent_recommendation(stage: str, accessory_ids: list[str], sample_count: int | None = None) -> dict[str, Any]:
+    config = load_config()
+    try:
+        selected = selected_accessories(config, accessory_ids)
+    except HTTPException:
+        selected = []
+    rules = rule_recommendation(stage, selected, sample_count)
+    agent_config = load_agent_config()
+    if normalize_agent_provider(agent_config.get("provider"), agent_config.get("base_url", "")) == AGENT_PROVIDER_CURSOR:
+        if agent_connected(agent_config):
+            return {
+                **rules,
+                "source": "rules",
+                "reason": f"{AGENT_CURSOR_RECOMMENDATION_MESSAGE}。{rules['reason']}",
+                "agent_error": AGENT_CURSOR_RECOMMENDATION_MESSAGE,
+            }
+        return {**rules, "source": "rules"}
+    if not agent_recommendation_supported(agent_config):
+        return {**rules, "source": "rules"}
+    summary = [
         {
-            "status": "preview_ready",
-            "last_preview_id": preview_id,
-            "selected_accessory_ids": [item["id"] for item in selected],
-            "sample_count": plan["sample_count"],
-            "mode": request.train_mode,
-            "background_set_id": background_set_id,
-            "preview_urls": [item["url"] for item in previews],
-            "previews": previews,
-            "preview_cache_key": cache_key,
-            "preview_sprite_versions": sprite_versions,
-            "preview_pose_family_policy": pose_policy,
-            "preview_pose_family_label": pose_sequence_label,
-            "preview_generated_at": int(time.time()),
+            "name": item.get("name"),
+            "material_type": accessory_material_type(item),
+            "source_image_count": len(item.get("source_files") or []),
+        }
+        for item in selected
+    ]
+    prompt = {
+        "stage": stage,
+        "accessories": summary,
+        "sample_count": sample_count,
+        "defaults": rules["params"],
+        "constraints": {
+            "sample_count": [50, 20000],
+            "epochs": [1, 500],
+            "image_size": [320, 1280],
+            "train_mode": ["yolo", "yolo_ocr"],
+        },
+    }
+    system = (
+        "你是工业视觉质检平台的训练规划 Agent。根据配件信息推荐训练参数。"
+        "只输出一个 JSON 对象,不要输出其他文本。字段:"
+        '{"sample_count": int, "epochs": int, "image_size": int, "train_mode": "yolo"|"yolo_ocr", "reason": "一句话中文理由"}。'
+        "只需要给出与 stage 相关的字段。"
+    )
+    try:
+        content = agent_chat_completion(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            agent_config,
+        )
+        parsed = parse_agent_json(content)
+        params = clamp_recommend_params(stage, parsed, rules["params"])
+        reason = str(parsed.get("reason") or rules["reason"]).strip()[:200]
+        return {"stage": rules["stage"], "params": params, "reason": reason, "source": "agent"}
+    except Exception as exc:  # noqa: BLE001 - 外部 API 任意失败都应回退规则引擎
+        return {**rules, "source": "rules", "agent_error": str(exc)[:200]}
+
+
+@app.get("/api/agent/config")
+def get_agent_config() -> dict[str, Any]:
+    return public_agent_config()
+
+
+@app.post("/api/agent/config")
+def update_agent_config(request: AgentConfigRequest) -> dict[str, Any]:
+    config = load_agent_config()
+    reset_connection = False
+    clear_model_options = False
+    if request.enabled is not None:
+        reset_connection = reset_connection or config["enabled"] != bool(request.enabled)
+        config["enabled"] = bool(request.enabled)
+    if request.provider is not None:
+        provider = str(request.provider or "").strip().lower()
+        if provider not in AGENT_SUPPORTED_PROVIDERS:
+            raise HTTPException(status_code=400, detail="Unsupported Agent provider")
+        clear_model_options = clear_model_options or config["provider"] != provider
+        reset_connection = reset_connection or config["provider"] != provider
+        config["provider"] = provider
+    if request.base_url is not None:
+        base_url = request.base_url.strip().rstrip("/")
+        clear_model_options = clear_model_options or config["base_url"] != base_url
+        reset_connection = reset_connection or config["base_url"] != base_url
+        config["base_url"] = base_url
+    if request.api_key is not None and request.api_key.strip():
+        api_key = request.api_key.strip()
+        clear_model_options = clear_model_options or config["api_key"] != api_key
+        reset_connection = reset_connection or config["api_key"] != api_key
+        config["api_key"] = api_key
+    if request.model is not None:
+        model = request.model.strip()
+        reset_connection = reset_connection or config["model"] != model
+        config["model"] = model
+    if request.timeout_seconds is not None:
+        timeout_seconds = max(5.0, min(300.0, float(request.timeout_seconds)))
+        reset_connection = reset_connection or config["timeout_seconds"] != timeout_seconds
+        config["timeout_seconds"] = timeout_seconds
+    if request.auto_advance_default is not None:
+        config["auto_advance_default"] = bool(request.auto_advance_default)
+    if request.provider is None:
+        config.pop("provider", None)
+    config = normalize_agent_config(config)
+    if reset_connection:
+        config["connection_status"] = "untested"
+        config["connection_message"] = "已保存，尚未测试。"
+        config["last_tested_at"] = 0
+        config["last_model_count"] = 0
+        if clear_model_options:
+            config["model_options"] = []
+    save_agent_config(config)
+    return public_agent_config(config)
+
+
+@app.post("/api/agent/config/test")
+def test_agent_config() -> dict[str, Any]:
+    config = load_agent_config()
+    if not agent_credentials_present(config):
+        provider_label = "Cursor" if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) == AGENT_PROVIDER_CURSOR else "OpenAI 兼容"
+        message = f"Agent API 未配置完整。当前识别为 {provider_label}；测试连接需要 Base URL / API Key。"
+        config["connection_status"] = "failed"
+        config["connection_message"] = message
+        config["last_tested_at"] = int(time.time())
+        save_agent_config(config)
+        return {**public_agent_config(config), "ok": False, "message": message}
+    try:
+        result = test_agent_connection(config)
+        if result.get("model"):
+            config["model"] = str(result["model"]).strip()
+        config["model_options"] = normalize_agent_model_options(result.get("model_options") or [])
+        config["connection_status"] = "connected"
+        config["connection_message"] = str(result.get("message") or "连接成功。")[:300]
+        config["last_tested_at"] = int(time.time())
+        config["last_model_count"] = int(result.get("last_model_count") or len(config["model_options"]) or 0)
+        save_agent_config(config)
+        return {**public_agent_config(config), "ok": True, "message": config["connection_message"]}
+    except Exception as exc:  # noqa: BLE001
+        message = f"连接失败:{str(exc)[:200]}"
+        config["connection_status"] = "failed"
+        config["connection_message"] = message
+        config["last_tested_at"] = int(time.time())
+        save_agent_config(config)
+        return {**public_agent_config(config), "ok": False, "message": message}
+
+
+@app.post("/api/agent/recommend")
+def agent_recommend(request: AgentRecommendRequest) -> dict[str, Any]:
+    stage = request.stage if request.stage in {"samples", "training"} else "samples"
+    return agent_recommendation(stage, request.accessory_ids, request.sample_count)
+
+
+def load_pipeline_tasks() -> list[dict[str, Any]]:
+    if not PIPELINE_TASKS_PATH.exists():
+        return []
+    try:
+        raw = json.loads(PIPELINE_TASKS_PATH.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def save_pipeline_tasks(tasks: list[dict[str, Any]]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_path = PIPELINE_TASKS_PATH.with_name(f"{PIPELINE_TASKS_PATH.name}.tmp")
+    tmp_path.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp_path, PIPELINE_TASKS_PATH)
+
+
+def mark_pipeline_task_advancing(task: dict[str, Any]) -> None:
+    """Flag a task (in memory) as queued for the async advance runner. The caller
+    persists it and then schedules the worker after releasing _pipeline_tasks_lock."""
+    task["advancing"] = True
+    task["advance_started_at"] = int(time.time())
+    task["last_error"] = ""
+    task["job_note"] = "正在推进…"
+    task["updated_at"] = int(time.time())
+
+
+def persist_pipeline_task_progress(
+    task_id: str,
+    *,
+    job_note: str | None = None,
+    progress: int | None = None,
+    status: str | None = None,
+) -> None:
+    """Write live sub-step progress to the stored task record so the UI reflects
+    an in-flight advance immediately. Safe to call from the advance worker thread
+    (it briefly takes _pipeline_tasks_lock); never call while already holding it."""
+    if not task_id:
+        return
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        stored = next((item for item in tasks if item.get("id") == task_id), None)
+        if not stored:
+            return
+        if job_note is not None:
+            stored["job_note"] = job_note
+        if progress is not None:
+            stored["progress"] = int(progress)
+        if status is not None:
+            stored["status"] = status
+        stored["updated_at"] = int(time.time())
+        save_pipeline_tasks(tasks)
+
+
+def normalize_pipeline_detection_method(value: str | None) -> str:
+    method = str(value or "").strip().lower()
+    if method in {"ai_detection", "ai_inspect", "gemini"}:
+        return "ai"
+    if method in {"locate_anything", "locateanything", "open_vocab"}:
+        return "locate"
+    return method if method in PIPELINE_DETECTION_METHODS else "yolo_ocr"
+
+
+def pipeline_method_uses_training(method: str | None) -> bool:
+    return normalize_pipeline_detection_method(method) in PIPELINE_TRAINING_METHODS
+
+
+def canonical_pipeline_accessory_ids(config: dict[str, Any], raw_ids: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw_id in raw_ids or []:
+        resolved = resolve_accessory_id(config, str(raw_id))
+        if not resolved:
+            continue
+        item_id, _ = resolved
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        result.append(item_id)
+    return result
+
+
+def normalize_pipeline_state(raw: Any) -> dict[str, list[str]]:
+    data = raw if isinstance(raw, dict) else {}
+    result: dict[str, list[str]] = {"accessory_ids": [], "pending_candidate_ids": []}
+    for key in result:
+        seen: set[str] = set()
+        for value in data.get(key) or []:
+            item_id = str(value or "").strip()
+            if not item_id or item_id in seen:
+                continue
+            seen.add(item_id)
+            result[key].append(item_id)
+    return result
+
+
+def load_pipeline_state() -> dict[str, list[str]]:
+    if not PIPELINE_STATE_PATH.exists():
+        return {"accessory_ids": [], "pending_candidate_ids": []}
+    try:
+        raw = json.loads(PIPELINE_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        raw = {}
+    return normalize_pipeline_state(raw)
+
+
+def save_pipeline_state(state: dict[str, list[str]]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload = normalize_pipeline_state(state)
+    tmp_path = PIPELINE_STATE_PATH.with_name(f"{PIPELINE_STATE_PATH.name}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp_path, PIPELINE_STATE_PATH)
+
+
+def update_pipeline_state(mutator: Callable[[dict[str, list[str]]], None]) -> dict[str, list[str]]:
+    with _pipeline_state_lock:
+        state = load_pipeline_state()
+        mutator(state)
+        state = normalize_pipeline_state(state)
+        save_pipeline_state(state)
+        return state
+
+
+def add_pipeline_accessory_id(accessory_id: str) -> dict[str, list[str]]:
+    clean_id = str(accessory_id or "").strip()
+
+    def mutate(state: dict[str, list[str]]) -> None:
+        if clean_id and clean_id not in state["accessory_ids"]:
+            state["accessory_ids"].insert(0, clean_id)
+
+    return update_pipeline_state(mutate)
+
+
+def remove_pipeline_accessory_id(accessory_id: str) -> dict[str, list[str]]:
+    clean_id = str(accessory_id or "").strip()
+
+    def mutate(state: dict[str, list[str]]) -> None:
+        state["accessory_ids"] = [item_id for item_id in state["accessory_ids"] if item_id != clean_id]
+
+    return update_pipeline_state(mutate)
+
+
+def add_pipeline_pending_candidate_id(candidate_id: str) -> dict[str, list[str]]:
+    clean_id = str(candidate_id or "").strip()
+
+    def mutate(state: dict[str, list[str]]) -> None:
+        if clean_id and clean_id not in state["pending_candidate_ids"]:
+            state["pending_candidate_ids"].insert(0, clean_id)
+
+    return update_pipeline_state(mutate)
+
+
+def remove_pipeline_pending_candidate_id(candidate_id: str) -> dict[str, list[str]]:
+    clean_id = str(candidate_id or "").strip()
+
+    def mutate(state: dict[str, list[str]]) -> None:
+        state["pending_candidate_ids"] = [item_id for item_id in state["pending_candidate_ids"] if item_id != clean_id]
+
+    return update_pipeline_state(mutate)
+
+
+def candidate_confirmed_accessory_id(candidate: dict[str, Any]) -> str:
+    return str(candidate.get("confirmed_accessory_id") or "").strip()
+
+
+def pipeline_candidate_job_status(candidate: dict[str, Any]) -> tuple[str, int, str]:
+    jobs = candidate_image_jobs(candidate)
+    if not jobs:
+        return "ready", 100, "已上传，待确认"
+    statuses = [str(job.get("status") or "") for job in jobs]
+    progress = max(0, min(100, int(sum(int(job.get("progress") or 0) for job in jobs) / max(1, len(jobs)))))
+    if any(status in IMAGE_JOB_ACTIVE_STATUSES for status in statuses):
+        if any(status == "running" for status in statuses):
+            return "running", progress, "生成中"
+        return "running", progress, "排队中"
+    if any(status == "failed" for status in statuses):
+        return "failed", 100, "建档失败"
+    if all(status == "completed" for status in statuses):
+        return "ready", 100, "已生成，待确认"
+    return statuses[0] or "ready", progress, "已上传，待确认"
+
+
+def pipeline_candidate_public(candidate: dict[str, Any]) -> dict[str, Any]:
+    candidate = enrich_record_audit_fields(candidate)
+    status, progress, status_text = pipeline_candidate_job_status(candidate)
+    return {
+        "id": str(candidate.get("id") or ""),
+        "name": str(candidate.get("name") or "新配件"),
+        "material_type": accessory_material_type(candidate),
+        "status": status,
+        "status_text": status_text,
+        "progress": progress,
+        "created_at": int(candidate.get("created_at") or 0),
+        "updated_at": int(candidate.get("updated_at") or candidate.get("created_at") or 0),
+        "owner_user_id": str(candidate.get("owner_user_id") or LEGACY_OWNER_ID),
+        "owner_username": str(candidate.get("owner_username") or record_owner_username(candidate)),
+    }
+
+
+def refresh_pipeline_candidate(candidate_id: str) -> tuple[dict[str, Any] | None, bool]:
+    path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
+    if not path.exists():
+        return None, True
+    with _candidate_store_lock:
+        try:
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None, True
+        candidate = enrich_record_audit_fields(candidate, path)
+        if candidate_confirmed_accessory_id(candidate):
+            return candidate, True
+        changed = ensure_candidate_image_job_task_ids(candidate)
+        for job in candidate_image_jobs(candidate):
+            refreshed = refresh_codex_image_job(job)
+            if any(refreshed.get(key) != job.get(key) for key in ("status", "progress", "completed_at", "failed_at", "error", "output_path", "output_url", "log_path")):
+                store_candidate_image_job(candidate, refreshed)
+                changed = True
+        if changed:
+            save_accessory_candidate(path, candidate)
+        return candidate, False
+
+
+def pipeline_accessories_payload(
+    config: dict[str, Any] | None = None,
+    user: dict[str, Any] | None = None,
+    target_user_id: str | None = None,
+) -> dict[str, Any]:
+    config = config or load_config()
+    accessories_by_id = accessory_lookup_by_id(config)
+    state = load_pipeline_state()
+    accessory_ids: list[str] = []
+    seen_accessories: set[str] = set()
+    for item_id in state["accessory_ids"]:
+        resolved = resolve_accessory_id(config, item_id)
+        if not resolved:
+            continue
+        canonical_id, _ = resolved
+        if canonical_id in seen_accessories:
+            continue
+        seen_accessories.add(canonical_id)
+        accessory_ids.append(canonical_id)
+    if accessory_ids != state["accessory_ids"]:
+        def prune_accessories(latest: dict[str, list[str]]) -> None:
+            latest["accessory_ids"] = accessory_ids
+
+        update_pipeline_state(prune_accessories)
+    pending_candidates: list[dict[str, Any]] = []
+    kept_candidate_ids: list[str] = []
+    remove_candidate_ids: list[str] = []
+    migrated_accessory_ids: list[str] = []
+    for candidate_id in state["pending_candidate_ids"]:
+        candidate, remove = refresh_pipeline_candidate(candidate_id)
+        if remove:
+            confirmed_id = candidate_confirmed_accessory_id(candidate or {})
+            resolved = resolve_accessory_id(config, confirmed_id) if confirmed_id else None
+            if resolved:
+                confirmed_accessory_id, _ = resolved
+                if confirmed_accessory_id not in seen_accessories:
+                    seen_accessories.add(confirmed_accessory_id)
+                    accessory_ids.insert(0, confirmed_accessory_id)
+                migrated_accessory_ids.append(confirmed_accessory_id)
+            remove_candidate_ids.append(candidate_id)
+            continue
+        if candidate:
+            kept_candidate_ids.append(candidate_id)
+            if not user or record_visible_to_user(candidate, user, target_user_id):
+                pending_candidates.append(pipeline_candidate_public(candidate))
+    if remove_candidate_ids or migrated_accessory_ids:
+        def prune_candidates(latest: dict[str, list[str]]) -> None:
+            remove_ids = set(remove_candidate_ids)
+            latest["pending_candidate_ids"] = [item_id for item_id in latest["pending_candidate_ids"] if item_id not in remove_ids]
+            for item_id in reversed(migrated_accessory_ids):
+                if item_id and item_id not in latest["accessory_ids"]:
+                    latest["accessory_ids"].insert(0, item_id)
+            latest["accessory_ids"] = canonical_pipeline_accessory_ids(config, latest["accessory_ids"])
+
+        update_pipeline_state(prune_candidates)
+    return {
+        "accessories": [serialize_accessory(accessories_by_id[item_id]) for item_id in accessory_ids],
+        "pending_candidates": pending_candidates,
+    }
+
+
+def pipeline_task_public(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    accessories_by_id = accessory_lookup_by_id(config)
+    copy = public_path_sanitized(enrich_record_audit_fields(task))
+    params = copy.get("params") if isinstance(copy.get("params"), dict) else {}
+    copy["detection_method"] = normalize_pipeline_detection_method(str(copy.get("detection_method") or params.get("train_mode") or params.get("route") or ""))
+    copy["uses_training_flow"] = pipeline_method_uses_training(str(copy.get("detection_method") or ""))
+    copy["accessory_ids"] = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in copy.get("accessory_ids") or []])
+    copy["accessory_counts"] = normalize_pipeline_accessory_counts(config, copy["accessory_ids"], copy.get("accessory_counts"))
+    copy["accessory_names"] = [
+        str(accessories_by_id[item_id].get("name") or item_id)
+        for item_id in copy.get("accessory_ids") or []
+        if item_id in accessories_by_id
+    ]
+    copy["accessories"] = [
+        {
+            "id": item_id,
+            "name": str(accessories_by_id[item_id].get("name") or item_id),
+            "material_type": accessory_material_type(accessories_by_id[item_id]),
+            "count": int(copy["accessory_counts"].get(item_id, 1)),
+        }
+        for item_id in copy.get("accessory_ids") or []
+        if item_id in accessories_by_id
+    ]
+    return public_path_sanitized(copy)
+
+
+def normalize_pipeline_accessory_counts(config: dict[str, Any], accessory_ids: list[str], raw_counts: Any = None) -> dict[str, int]:
+    raw = raw_counts if isinstance(raw_counts, dict) else {}
+    accessories_by_id = accessory_lookup_by_id(config)
+    result: dict[str, int] = {}
+    for item_id in accessory_ids:
+        item = accessories_by_id.get(item_id)
+        aliases = accessory_id_aliases(item) if item else [item_id]
+        count_value = next((raw.get(alias) for alias in aliases if alias in raw), raw.get(item_id, 1))
+        try:
+            count = max(1, min(99, int(count_value or 1)))
+        except (TypeError, ValueError):
+            count = 1
+        result[item_id] = count
+    return result
+
+
+def agent_mcp_now() -> int:
+    return int(time.time())
+
+
+def agent_mcp_gemini_image_config() -> dict[str, Any]:
+    settings = ai_detection_settings()
+    provider = str(settings.get("provider") or "").strip().lower()
+    model = str(os.environ.get(AGENT_MCP_GEMINI_IMAGE_MODEL_ENV) or AGENT_MCP_GEMINI_IMAGE_DEFAULT_MODEL).strip()
+    try:
+        timeout_seconds = float(os.environ.get(AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV, "").strip() or AGENT_MCP_GEMINI_IMAGE_DEFAULT_TIMEOUT_SECONDS)
+    except ValueError:
+        timeout_seconds = AGENT_MCP_GEMINI_IMAGE_DEFAULT_TIMEOUT_SECONDS
+    timeout_seconds = max(10.0, min(300.0, timeout_seconds))
+    configured = bool(settings.get("configured") and provider == "gemini")
+    missing: list[str] = []
+    if provider != "gemini":
+        missing.append("INSPECTION_AI_PROVIDER=gemini")
+    if not settings.get("api_key_present"):
+        missing.append(str(settings.get("api_key_env") or "GEMINI_API_KEY"))
+    if not model:
+        missing.append(AGENT_MCP_GEMINI_IMAGE_MODEL_ENV)
+    return {
+        "provider": "gemini_native_image_generation",
+        "configured": configured and bool(model),
+        "model": model,
+        "default_model": AGENT_MCP_GEMINI_IMAGE_DEFAULT_MODEL,
+        "high_fidelity_model": AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL,
+        "model_env": AGENT_MCP_GEMINI_IMAGE_MODEL_ENV,
+        "timeout_env": AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV,
+        "timeout_seconds": timeout_seconds,
+        "base_url": settings.get("base_url") or default_ai_base_url("gemini"),
+        "api_key_env": settings.get("api_key_env") or "GEMINI_API_KEY",
+        "api_key_present": bool(settings.get("api_key_present")),
+        "proxy_configured": bool(settings.get("proxy_configured")),
+        "proxy_source_name": settings.get("proxy_source_name") or "",
+        "missing": missing,
+        "status": "ready" if configured and model else "missing_configuration",
+        "message": (
+            "Gemini native image generation is configured."
+            if configured and model
+            else f"Gemini native image generation requires existing Gemini AI settings: {', '.join(missing) or settings.get('message') or 'missing configuration'}."
+        ),
+    }
+
+
+def agent_mcp_default_stages() -> list[dict[str, Any]]:
+    return [
+        {"key": "agent_pose_planning", "label": "Agent pose planning", "status": "pending", "progress": 0},
+        {"key": "pose_image_generation", "label": "MCP pose image generation", "status": "pending", "progress": 0},
+        {"key": "sample_generation", "label": "MCP sample generation", "status": "pending", "progress": 0},
+        {"key": "model_training", "label": "MCP model training", "status": "pending", "progress": 0},
+    ]
+
+
+def agent_mcp_orchestration(task: dict[str, Any]) -> dict[str, Any]:
+    raw = task.get("agent_mcp") if isinstance(task.get("agent_mcp"), dict) else {}
+    orchestration = {
+        "version": AGENT_MCP_ORCHESTRATION_VERSION,
+        "state": raw.get("state") or "created",
+        "active_stage": raw.get("active_stage") or "created",
+        "stages": raw.get("stages") if isinstance(raw.get("stages"), list) else agent_mcp_default_stages(),
+        "pose_plan": raw.get("pose_plan") if isinstance(raw.get("pose_plan"), dict) else None,
+        "tool_calls": raw.get("tool_calls") if isinstance(raw.get("tool_calls"), list) else [],
+        "feedback": raw.get("feedback") if isinstance(raw.get("feedback"), list) else [],
+        "conversation": raw.get("conversation") if isinstance(raw.get("conversation"), list) else [],
+        "pause": raw.get("pause") if isinstance(raw.get("pause"), dict) else None,
+        "skip_pose_image_generation": bool(raw.get("skip_pose_image_generation")),
+        "training_quality_ack": bool(raw.get("training_quality_ack")),
+        "auto_steps": int(raw.get("auto_steps") or 0),
+        "last_auto_signature": str(raw.get("last_auto_signature") or ""),
+        "last_auto_step_at": int(raw.get("last_auto_step_at") or 0),
+        "created_at": int(raw.get("created_at") or agent_mcp_now()),
+        "updated_at": int(raw.get("updated_at") or agent_mcp_now()),
+        "tool_config": {
+            **(raw.get("tool_config") if isinstance(raw.get("tool_config"), dict) else {}),
+            "pose_image_generation": agent_mcp_gemini_image_config(),
+        },
+    }
+    task["agent_mcp"] = orchestration
+    return orchestration
+
+
+def set_agent_mcp_stage(orchestration: dict[str, Any], key: str, status: str, progress: int, **extra: Any) -> None:
+    stages = orchestration.setdefault("stages", agent_mcp_default_stages())
+    stage = next((item for item in stages if item.get("key") == key), None)
+    if not stage:
+        stage = {"key": key, "label": key.replace("_", " "), "status": "pending", "progress": 0}
+        stages.append(stage)
+    stage.update({"status": status, "progress": max(0, min(100, int(progress))), **extra})
+    orchestration["updated_at"] = agent_mcp_now()
+
+
+def agent_mcp_object_kind(item: dict[str, Any]) -> str:
+    text = f"{item.get('name') or ''} {item.get('label') or ''} {accessory_uid(item)}".lower()
+    if re.search(r"bottle|vial|jar|flask|瓶|罐", text):
+        return "bottle"
+    if re.search(r"cube|block|dice|方块|立方|积木", text):
+        return "cube"
+    if accessory_material_type(item) == "text" or re.search(r"thin|card|label|sheet|manual|tag|片|纸|标签|说明书|卡", text):
+        return "thin_object"
+    return "generic_object"
+
+
+def agent_mcp_pose_request() -> dict[str, Any]:
+    return {
+        "subject_count": 1,
+        "target_paper": False,
+        "grid_layout": False,
+        "background": "green_industrial_conveyor_belt_top_down",
+        "camera": "strict_vertical_top_down_90deg",
+        "output_contract": "one_accessory_per_image",
+    }
+
+
+def agent_mcp_pose_templates(base_id: str, object_kind: str) -> list[dict[str, Any]]:
+    templates: dict[str, list[tuple[str, str, str, str, str]]] = {
+        "cube": [
+            ("face_a_down", "one square face flat on conveyor", "cube rests stably on any face", "top face visible with slight side edge", "face_a_down"),
+            ("face_b_down", "adjacent square face flat on conveyor", "rotated cube exposes a different face", "alternate face visible", "face_b_down"),
+            ("face_c_down", "third square face flat on conveyor", "third axis face can contact conveyor", "third face visible", "face_c_down"),
+        ],
+        "bottle": [
+            ("upright", "base on conveyor", "flat base can stand vertically", "cap/top footprint visible", "upright_base_down"),
+            ("horizontal_side", "curved side contacts conveyor", "bottle can lie on side after falling", "long body silhouette visible", "horizontal_side_down"),
+        ],
+        "thin_object": [
+            ("face_up", "back face on conveyor", "thin object settles flat", "front face visible", "face_up"),
+            ("face_down", "front face on conveyor", "thin object may flip but remains flat", "back face visible", "face_down"),
+        ],
+        "generic_object": [
+            ("primary_rest", "largest stable surface on conveyor", "object settles on broadest support area", "primary silhouette visible", "primary_resting_pose"),
+            ("side_rest", "secondary side surface on conveyor", "secondary plausible rest pose", "side silhouette visible", "side_resting_pose"),
+        ],
+    }
+    result = []
+    for suffix, stable_contact, gravity_basis, conveyor_view, label in templates.get(object_kind, templates["generic_object"]):
+        result.append(
+            {
+                "pose_id": f"{base_id}_{suffix}",
+                "label": label,
+                "stable_contact": stable_contact,
+                "gravity_basis": gravity_basis,
+                "conveyor_view": conveyor_view,
+                "request": agent_mcp_pose_request(),
+            }
+        )
+    return result
+
+
+def accessory_pose_plan_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
+    profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
+    size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
+    length_mm, width_mm, height_mm = object_physical_size_mm(size)
+    sprites = clean_sprite_assets(item)
+    return {
+        "accessory_id": accessory_uid(item),
+        "object_name": str(item.get("name") or accessory_uid(item)),
+        "english_name": str(profile.get("english_name") or item.get("english_name") or ""),
+        "material_type": accessory_material_type(item),
+        "ai_material_hint": str(profile.get("material_type") or ""),
+        "description": bounded_text(item.get("description") or profile.get("description") or "", 240),
+        "physical_dimensions_mm": {
+            "length_mm": round(float(length_mm), 1),
+            "width_mm": round(float(width_mm), 1),
+            "height_mm": round(float(height_mm), 1),
+        },
+        "top_view_aspect_ratio": profile.get("top_view_aspect_ratio"),
+        "has_transparent_cutout": bool(sprites),
+        "conveyor_constraints": (
+            "The object rests on a flat horizontal green industrial conveyor belt. "
+            "Gravity points straight down: it cannot float, cannot be propped up by "
+            "external supports, and cannot interpenetrate the belt."
+        ),
+        "camera_constraints": (
+            "A fixed inspection camera is mounted about 700mm directly above the belt "
+            "and looks straight down (strict vertical top-down, 90 degrees). Every pose "
+            "must be renderable as that same top-down shot at a consistent scale."
+        ),
+        "single_image_inference_allowed": True,
+        "max_poses": AGENT_MCP_POSE_PLAN_MAX_POSES,
+    }
+
+
+def pose_plan_system_prompt() -> str:
+    return (
+        "You are a Pose Planner Agent for an industrial visual-inspection training "
+        "pipeline. Given one accessory (name, physical dimensions, material, and "
+        "reference images), decide the realistic set of STABLE resting poses the part "
+        "can take on a flat top-down conveyor belt, and write an explicit image-"
+        "generation instruction for each pose.\n"
+        "Think in these steps before answering:\n"
+        "1. Identify the object geometry type (e.g. rectangular_case, thin_sheet, "
+        "cylinder, bottle, irregular_part).\n"
+        "2. List the faces/edges that can naturally and stably contact the belt.\n"
+        "3. Merge poses that look almost identical from a strict top-down camera into "
+        "one.\n"
+        "4. Exclude unstable or impossible poses (balancing on a corner/tip, standing "
+        "on a knife edge, anything needing external support or that would topple).\n"
+        "5. For each remaining pose, write a concrete top-down render instruction: "
+        "which contact surface is down, which face is visible from above, orientation "
+        "of the long axis, scale, and what to avoid.\n"
+        "Rules: prefer 1 to 6 poses for a rigid part; only output poses you believe "
+        "are physically stable; set a calibrated confidence (0-1) per pose; when a "
+        "single image hides the back/side, you may make a reasonable inference but "
+        "lower the confidence and set needs_human_review.\n"
+        "Return ONLY a JSON object with this schema (no prose, no markdown):\n"
+        "{\n"
+        '  "accessory_id": string,\n'
+        '  "object_name": string,\n'
+        '  "pose_decision_source": "vision_agent",\n'
+        '  "estimated_geometry": {"kind": string, "symmetry": [string], '
+        '"visible_evidence": string, "uncertainty": "low"|"medium"|"high"},\n'
+        '  "pose_count": integer,\n'
+        '  "poses": [{"pose_id": string (unique, snake_case), "label": string, '
+        '"stable_contact_surface": string, "camera_view": "strict_vertical_top_down", '
+        '"generation_prompt": string, "negative_prompt": string, "confidence": number}],\n'
+        '  "needs_human_review": boolean,\n'
+        '  "review_reason": string\n'
+        "}"
+    )
+
+
+def fallback_accessory_pose_plan(item: dict[str, Any]) -> dict[str, Any]:
+    base_id = safe_record_id(accessory_uid(item))
+    object_kind = agent_mcp_object_kind(item)
+    poses: list[dict[str, Any]] = []
+    for tmpl in agent_mcp_pose_templates(base_id, object_kind):
+        poses.append(
+            {
+                "pose_id": str(tmpl.get("pose_id")),
+                "label": str(tmpl.get("label")),
+                "stable_contact_surface": str(tmpl.get("stable_contact")),
+                "stable_contact": str(tmpl.get("stable_contact")),
+                "camera_view": "strict_vertical_top_down",
+                "generation_prompt": "",
+                "negative_prompt": "",
+                "confidence": 0.5,
+                "request": agent_mcp_pose_request(),
+            }
+        )
+    return {
+        "schema_version": AGENT_MCP_POSE_PLAN_VERSION,
+        "accessory_id": accessory_uid(item),
+        "object_name": str(item.get("name") or accessory_uid(item)),
+        "pose_decision_source": "rules_fallback",
+        "estimated_geometry": {"kind": object_kind, "symmetry": [], "visible_evidence": "", "uncertainty": "unknown"},
+        "pose_count": len(poses),
+        "poses": poses,
+        "needs_human_review": False,
+        "review_reason": "",
+        "generated_at": agent_mcp_now(),
+    }
+
+
+def normalize_accessory_pose_plan(raw: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    """Guardrail/validation for the Pose Planner Agent output: enforce the JSON
+    schema, unique pose ids, pose-count bounds, a light physical-stability check
+    and a confidence floor. Falls back to rule templates if nothing usable
+    survives. (Agent decides; rules accept.)"""
+    fallback = fallback_accessory_pose_plan(item)
+    if not isinstance(raw, dict):
+        return fallback
+    poses_raw = raw.get("poses")
+    if not isinstance(poses_raw, list) or not poses_raw:
+        return fallback
+    base_id = safe_record_id(accessory_uid(item))
+    unstable = re.compile(r"corner|tip|point|edge[_\s-]?point|balanc|knife|尖|角立|竖立")
+    seen: set[str] = set()
+    poses: list[dict[str, Any]] = []
+    for idx, raw_pose in enumerate(poses_raw):
+        if not isinstance(raw_pose, dict):
+            continue
+        gen = bounded_text(raw_pose.get("generation_prompt") or "", 700)
+        if not gen.strip():
+            continue
+        contact = bounded_text(
+            raw_pose.get("stable_contact_surface") or raw_pose.get("stable_contact") or "largest stable surface",
+            160,
+        )
+        if unstable.search(contact.lower()):
+            continue
+        confidence = optional_float(raw_pose.get("confidence"))
+        confidence = 0.5 if confidence is None else max(0.0, min(1.0, confidence))
+        if confidence < AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE:
+            continue
+        pose_id = safe_record_id(str(raw_pose.get("pose_id") or "")) or f"pose_{idx + 1}"
+        if not pose_id.startswith(base_id):
+            pose_id = f"{base_id}_{pose_id}"
+        if pose_id in seen:
+            continue
+        seen.add(pose_id)
+        poses.append(
+            {
+                "pose_id": pose_id,
+                "label": bounded_text(raw_pose.get("label") or pose_id, 80),
+                "stable_contact_surface": contact,
+                "stable_contact": contact,
+                "camera_view": bounded_text(raw_pose.get("camera_view") or "strict_vertical_top_down", 60),
+                "generation_prompt": gen,
+                "negative_prompt": bounded_text(raw_pose.get("negative_prompt") or "", 500),
+                "confidence": round(confidence, 3),
+                "request": agent_mcp_pose_request(),
+            }
+        )
+        if len(poses) >= AGENT_MCP_POSE_PLAN_MAX_POSES:
+            break
+    if not poses:
+        return fallback
+    geometry = raw.get("estimated_geometry") if isinstance(raw.get("estimated_geometry"), dict) else {}
+    needs_review = bool(raw.get("needs_human_review")) or any(pose["confidence"] < 0.5 for pose in poses)
+    return {
+        "schema_version": AGENT_MCP_POSE_PLAN_VERSION,
+        "accessory_id": accessory_uid(item),
+        "object_name": bounded_text(raw.get("object_name") or item.get("name") or accessory_uid(item), 120),
+        "pose_decision_source": "vision_agent",
+        "estimated_geometry": {
+            "kind": bounded_text(geometry.get("kind") or agent_mcp_object_kind(item), 60),
+            "symmetry": string_list(geometry.get("symmetry"), max_items=6),
+            "visible_evidence": bounded_text(geometry.get("visible_evidence") or "", 200),
+            "uncertainty": bounded_text(geometry.get("uncertainty") or "", 40),
+        },
+        "pose_count": len(poses),
+        "poses": poses,
+        "needs_human_review": needs_review,
+        "review_reason": bounded_text(raw.get("review_reason") or "", 240),
+        "generated_at": agent_mcp_now(),
+    }
+
+
+def generate_accessory_pose_plan(item: dict[str, Any], *, allow_provider: bool = True, force: bool = False) -> dict[str, Any] | None:
+    """Run (and cache once per accessory) the Pose Planner Agent. Returns None for
+    text accessories. The cached plan is reused across tasks so the downstream AI
+    pose images are generated a single time and never re-accumulated."""
+    if accessory_material_type(item) == "text":
+        return None
+    existing = item.get("agent_mcp_pose_plan")
+    if (
+        not force
+        and isinstance(existing, dict)
+        and existing.get("accessory_id") == accessory_uid(item)
+        and existing.get("poses")
+    ):
+        return existing
+    settings = ai_detection_settings()
+    if not allow_provider or not settings.get("configured"):
+        plan = fallback_accessory_pose_plan(item)
+        item["agent_mcp_pose_plan"] = plan
+        item["agent_mcp_pose_plan_status"] = {
+            "source": "rules_fallback",
+            "status": "fallback",
+            "message": "AI provider not configured; used rule templates.",
+            "updated_at": int(time.time()),
+        }
+        return plan
+    try:
+        references = call_ai_mcp_tool(
+            "accessory.reference.collect",
+            {"accessory": item, "max_images": 4},
+        )["references"]
+    except Exception:
+        references = []
+    user_content: list[dict[str, Any]] = [
+        {"type": "text", "text": json.dumps(accessory_pose_plan_prompt_payload(item), ensure_ascii=False)},
+    ]
+    for ref in references:
+        user_content.append(
+            {
+                "type": "text",
+                "text": f"REFERENCE_IMAGE (raw photo) for accessory_id={ref['accessory_id']}.",
+            }
+        )
+        user_content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
+    for sprite in clean_sprite_assets(item)[:1]:
+        data_url = image_path_data_url(Path(sprite["path"]), max_side=AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=AI_PROFILE_REFERENCE_IMAGE_QUALITY)
+        if data_url:
+            user_content.append({"type": "text", "text": "TRANSPARENT_CUTOUT of the same part (background already removed)."})
+            user_content.append({"type": "image_url", "image_url": {"url": data_url, "detail": "low"}})
+    result = call_ai_mcp_tool(
+        "provider.gemini.generate_json",
+        {
+            "provider_config": settings,
+            "system_prompt": pose_plan_system_prompt(),
+            "user_content": user_content,
+            "max_tokens": 1400,
+        },
+    )
+    if result.get("ok"):
+        plan = normalize_accessory_pose_plan(result.get("parsed") or {}, item)
+        item["agent_mcp_pose_plan"] = plan
+        item["agent_mcp_pose_plan_status"] = {
+            "source": plan.get("pose_decision_source"),
+            "status": "generated",
+            "latency_ms": result.get("latency_ms", 0),
+            "needs_human_review": plan.get("needs_human_review"),
+            "updated_at": int(time.time()),
+        }
+        return plan
+    plan = fallback_accessory_pose_plan(item)
+    item["agent_mcp_pose_plan"] = plan
+    item["agent_mcp_pose_plan_status"] = {
+        "source": "rules_fallback",
+        "status": "timeout" if result.get("timed_out") else "provider_error",
+        "message": bounded_text(result.get("error") or "Pose planner agent failed.", 240),
+        "updated_at": int(time.time()),
+    }
+    return plan
+
+
+def ensure_accessory_pose_plan(item: dict[str, Any], *, force: bool = False) -> dict[str, Any] | None:
+    if accessory_material_type(item) == "text":
+        return None
+    return generate_accessory_pose_plan(item, force=force)
+
+
+def build_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    accessories_by_id = accessory_lookup_by_id(config)
+    counts = normalize_pipeline_accessory_counts(config, [str(item_id) for item_id in task.get("accessory_ids") or []], task.get("accessory_counts"))
+    plans = []
+    for item_id in canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []]):
+        item = accessories_by_id.get(item_id)
+        if not item:
+            continue
+        # Documents never go through pose-image generation: their canonical pages
+        # are produced (crop + deskew + paper-size normalize) when the accessory is
+        # created, so they are excluded from the pose plan entirely.
+        if accessory_material_type(item) == "text":
+            continue
+        object_kind = agent_mcp_object_kind(item)
+        base_id = safe_record_id(item_id)
+        pose_plan = ensure_accessory_pose_plan(item)
+        if isinstance(pose_plan, dict) and pose_plan.get("poses"):
+            poses = [
+                {
+                    "pose_id": str(pose.get("pose_id")),
+                    "label": pose.get("label"),
+                    "stable_contact": pose.get("stable_contact_surface") or pose.get("stable_contact"),
+                    "gravity_basis": "object rests under gravity on its stable contact surface",
+                    "conveyor_view": pose.get("camera_view") or "strict_vertical_top_down",
+                    "generation_prompt": pose.get("generation_prompt") or "",
+                    "negative_prompt": pose.get("negative_prompt") or "",
+                    "confidence": pose.get("confidence"),
+                    "request": pose.get("request") or agent_mcp_pose_request(),
+                }
+                for pose in pose_plan.get("poses") or []
+            ]
+            plan_source = pose_plan.get("pose_decision_source") or "vision_agent"
+            object_kind = (pose_plan.get("estimated_geometry") or {}).get("kind") or object_kind
+            needs_review = bool(pose_plan.get("needs_human_review"))
+        else:
+            poses = agent_mcp_pose_templates(base_id, object_kind)
+            plan_source = "preview_agent_rules"
+            needs_review = False
+        plans.append(
+            {
+                "accessory_id": item_id,
+                "accessory_name": str(item.get("name") or item_id),
+                "count": int(counts.get(item_id, 1)),
+                "object_kind": object_kind,
+                "plan_source": plan_source,
+                "pose_decision_source": plan_source,
+                "needs_human_review": needs_review,
+                "image_contract": "one_accessory_per_image",
+                "poses": poses,
+            }
+        )
+    pose_count = sum(len(plan.get("poses") or []) for plan in plans)
+    return {
+        "task_id": task.get("id"),
+        "generated_at": agent_mcp_now(),
+        "agent": "pose_planner_agent",
+        "accessories": plans,
+        "pose_count": pose_count,
+    }
+
+
+def agent_mcp_tool_call_id(task_id: str, tool_name: str, accessory_id: str = "", pose_id: str = "") -> str:
+    return safe_record_id("__".join(part for part in [str(task_id), tool_name, accessory_id, pose_id] if part))
+
+
+def upsert_agent_mcp_tool_call(orchestration: dict[str, Any], call: dict[str, Any]) -> dict[str, Any]:
+    calls = orchestration.setdefault("tool_calls", [])
+    call_id = str(call.get("call_id") or "")
+    existing = next((item for item in calls if str(item.get("call_id") or "") == call_id), None)
+    now = agent_mcp_now()
+    if existing:
+        existing.update({**call, "updated_at": now})
+        return existing
+    call.setdefault("created_at", now)
+    call.setdefault("updated_at", now)
+    calls.append(call)
+    orchestration["updated_at"] = now
+    return call
+
+
+def agent_mcp_pose_reference_content(item: dict[str, Any], *, max_images: int = 3) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    content: list[dict[str, Any]] = []
+    refs: list[dict[str, Any]] = []
+    for ref in accessory_reference_image_contexts(item, max_images=max_images):
+        if not isinstance(ref, dict):
+            continue
+        path = resolve_service_path(ref.get("source_path"))
+        if not path.exists():
+            continue
+        mime_type = str(ref.get("mime_type") or mimetypes.guess_type(path.name)[0] or "image/png")
+        data_url = f"data:{mime_type};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
+        content.append({"type": "image_url", "image_url": {"url": data_url}})
+        refs.append(
+            {
+                "source_path": str(path),
+                "source_url": public_output_url_for_existing(path),
+                "sha256": ref.get("sha256") or file_sha256(path),
+                "mime_type": mime_type,
+                "width": ref.get("width"),
+                "height": ref.get("height"),
+                "ordinal": ref.get("ordinal"),
+            }
+        )
+    return content, refs
+
+
+def agent_mcp_pose_prompt(task: dict[str, Any], plan: dict[str, Any], pose: dict[str, Any]) -> str:
+    request = pose.get("request") if isinstance(pose.get("request"), dict) else {}
+    generation_prompt = str(pose.get("generation_prompt") or "").strip()
+    negative_prompt = str(pose.get("negative_prompt") or "").strip()
+    parts = [
+        "Generate one realistic product-training image for VantaLine visual inspection.",
+        f"Accessory: {plan.get('accessory_name') or plan.get('accessory_id')}.",
+        f"Object kind: {plan.get('object_kind') or 'generic_object'}.",
+        f"Pose id: {pose.get('pose_id')}; label: {pose.get('label')}.",
+        f"Stable contact: {pose.get('stable_contact')}.",
+    ]
+    if generation_prompt:
+        # The pose-planner agent already decided the contact surface, visible face
+        # and orientation for this pose; render exactly that.
+        parts.append(f"Pose plan (decided by the pose-planner agent): {generation_prompt}")
+    else:
+        parts.append(f"Gravity basis: {pose.get('gravity_basis')}.")
+        parts.append(f"Conveyor view: {pose.get('conveyor_view')}.")
+    parts.append(f"Task: {task.get('name') or task.get('id')}.")
+    parts.extend(
+        [
+            # Fixed scene + camera contract (user requirement): one item resting on a
+            # green industrial conveyor belt, shot strictly straight down.
+            "Scene: place the single accessory on a green industrial conveyor belt (solid matte green PVC belt surface).",
+            "Camera: STRICTLY vertical top-down (bird's-eye), lens pointing straight down at 90 degrees, optical axis perpendicular to the belt. No tilt, no perspective, no oblique angle.",
+            "The accessory must lie flat on the belt obeying gravity in the requested stable rest pose; show only the face that is naturally visible from directly above.",
+            "Even, diffuse lighting with soft shadows directly under the object; no glare, no hotspots, no harsh reflections.",
+            "Show exactly one accessory instance, centered, fully inside the frame, on the green conveyor background.",
+            # Keep scale comparable across every pose so the cut-out sprites stay a
+            # consistent size for the same accessory.
+            "Frame the object so its longest dimension spans roughly 65-75% of the image width; keep this scale consistent across all poses of this accessory.",
+            "Do not create a grid, collage, calibration target, target paper, labels, captions, rulers, perspective view, side view, or multiple accessories.",
+        ]
+    )
+    if negative_prompt:
+        parts.append(f"Avoid (negative constraints): {negative_prompt}")
+    if request.get("background"):
+        parts.append(f"Background style: {request['background']}.")
+    if request.get("output_contract"):
+        parts.append(f"Output contract: {request['output_contract']}.")
+    return "\n".join(str(part) for part in parts if str(part or "").strip())
+
+
+def agent_mcp_pose_output_path(task: dict[str, Any], accessory_id: str, pose_id: str, mime_type: str) -> Path:
+    extension = ".jpg" if "jpeg" in str(mime_type or "").lower() else ".png"
+    owner_id = str(task.get("owner_user_id") or "")
+    output_dir = output_write_dir_for_owner("agent_mcp_pose_images", owner_id) / safe_record_id(str(task.get("id") or "task"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir / f"{safe_record_id(accessory_id)}__{safe_record_id(pose_id)}{extension}"
+
+
+def write_agent_mcp_pose_artifact(
+    task: dict[str, Any],
+    call: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    prompt: str,
+    reference_assets: list[dict[str, Any]],
+) -> dict[str, Any]:
+    mime_type = str(result.get("mime_type") or "image/png")
+    output_path = agent_mcp_pose_output_path(task, str(call.get("accessory_id") or ""), str(call.get("pose_id") or ""), mime_type)
+    output_path.write_bytes(result["bytes"])
+    digest = file_sha256(output_path)
+    metadata = {
+        "provider": "gemini_native_image_generation",
+        "model": result.get("model") or "",
+        "prompt": prompt,
+        "task_id": task.get("id"),
+        "call_id": call.get("call_id"),
+        "accessory_id": call.get("accessory_id"),
+        "pose_id": call.get("pose_id"),
+        "source_reference_assets": reference_assets,
+        "output_path": str(output_path),
+        "output_url": public_output_url(output_path),
+        "mime_type": mime_type,
+        "sha256": digest,
+        "latency_ms": int(result.get("latency_ms") or 0),
+        "usage_metadata": result.get("usage_metadata") if isinstance(result.get("usage_metadata"), dict) else {},
+        "proxy": {
+            "used": bool(result.get("proxy_used")),
+            "source_name": str(result.get("proxy_source_name") or ""),
+            "url": str(result.get("proxy_url") or ""),
+            "auto_local": bool(result.get("proxy_auto_local")),
+        },
+        "generated_source_metadata": {
+            "native_provider": "gemini",
+            "generated_by": "Nano Banana",
+            "synthid_watermark_expected": True,
+        },
+        "provider_text": bounded_text(result.get("text") or "", 600),
+        "created_at": agent_mcp_now(),
+    }
+    metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {**metadata, "metadata_path": str(metadata_path), "metadata_url": public_output_url(metadata_path)}
+
+
+def suppress_green_spill(image_bgr: np.ndarray) -> np.ndarray:
+    """Green-spill decontamination: where the green channel exceeds both red and
+    blue (a green-tinted boundary/halo pixel), pull green down to max(red,blue).
+    This neutralises the green fringe around a dark object cut from a green plate
+    without removing or shrinking the silhouette. Neutral/grey/silver/black object
+    pixels (green ~= red ~= blue) are untouched."""
+    if image_bgr is None or image_bgr.ndim != 3:
+        return image_bgr
+    blue, green, red = cv2.split(image_bgr)
+    limit = np.maximum(red, blue)
+    spill = green > limit
+    green = green.copy()
+    green[spill] = limit[spill]
+    return cv2.merge([blue, green, red])
+
+
+def bright_green_conveyor_mask(image_bgr: np.ndarray) -> np.ndarray:
+    """Boolean mask of UNAMBIGUOUS bright conveyor-green pixels. Tuned to catch the
+    saturated, well-lit green plate while sparing dark/olive object pixels (e.g.
+    carbon-fibre) and dark anti-aliased object edges, so it can trim a green halo
+    without biting into the object."""
+    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    blue, green, red = cv2.split(image_bgr.astype(np.int16))
+    return (
+        (hue >= 35)
+        & (hue <= 95)
+        & (sat >= 70)
+        & (val >= 80)
+        & ((green - np.maximum(red, blue)) > 25)
+    )
+
+
+def precise_green_plate_cutout(
+    image_bgr: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
+    """High-precision cut-out of the single object on an AI green-conveyor plate
+    using the local AI matte (rembg/u2net). Keeps the FULL silhouette (thin ends,
+    corrugations, caps — no erosion) and only trims unambiguous bright-green halo
+    pixels. Falls back to None when rembg is unavailable so callers can use the
+    chroma-key path."""
+    if image_bgr is None or image_bgr.ndim != 3:
+        return None
+    session = rembg_session()
+    if session is None:
+        return None
+    try:
+        from PIL import Image
+        from rembg import remove
+
+        rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        with _rembg_lock:
+            result = remove(
+                Image.fromarray(rgb),
+                session=session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=240,
+                alpha_matting_background_threshold=10,
+                alpha_matting_erode_size=0,
+            )
+        alpha = np.array(result.convert("RGBA"))[:, :, 3]
+    except Exception:
+        return None
+    if alpha is None or alpha.ndim != 2:
+        return None
+    # Drop only unambiguous bright conveyor-green pixels (halo), never the object.
+    alpha = alpha.copy()
+    alpha[bright_green_conveyor_mask(image_bgr)] = 0
+    binary = (alpha > 16).astype(np.uint8)
+    if int(binary.sum()) < 240:
+        return None
+    # Keep the largest connected component, then fill interior holes so surface
+    # texture/holes inside the object don't punch through the matte.
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    if num <= 1:
+        return None
+    idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    height, width = image_bgr.shape[:2]
+    if int(stats[idx, cv2.CC_STAT_AREA]) < max(400, int(height * width * 0.0015)):
+        return None
+    component = (labels == idx).astype(np.uint8)
+    contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    solid = np.zeros((height, width), dtype=np.uint8)
+    cv2.drawContours(solid, contours, -1, 255, thickness=cv2.FILLED)
+    # Combine the soft matte alpha (precise edges) with the solid silhouette so we
+    # keep crisp anti-aliased boundaries without any erosion of the object.
+    refined = np.where(solid > 0, alpha, 0).astype(np.uint8)
+    ys, xs = np.where(refined > 8)
+    if len(xs) < 240:
+        return None
+    x1, x2 = int(xs.min()), int(xs.max()) + 1
+    y1, y2 = int(ys.min()), int(ys.max()) + 1
+    # Neutralise any residual green fringe on the kept boundary pixels.
+    crop_bgr = suppress_green_spill(image_bgr[y1:y2, x1:x2].copy())
+    return crop_bgr, refined[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
+
+
+def green_conveyor_object_cutout(
+    image_bgr: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
+    """Chroma-key a single object off an AI-generated green-conveyor plate.
+    Removes green (and green-tinted cast-shadow) pixels, keeps the largest
+    non-green blob, fills interior holes. Used as the fallback when the AI matte
+    is unavailable; tuned to avoid biting into dark object edges or thin features
+    (no aggressive open/erode that would shave a thin part's silhouette)."""
+    if image_bgr is None or image_bgr.ndim != 3:
+        return None
+    height, width = image_bgr.shape[:2]
+    blue, green, red = cv2.split(image_bgr.astype(np.int16))
+    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    # Only treat reasonably bright, saturated green as background so dark, low-value
+    # object-edge pixels (which read slightly green from background bleed) survive.
+    green_hue = (hue >= 35) & (hue <= 95) & (sat >= 45) & (val >= 60)
+    green_dominant = ((green - np.maximum(red, blue)) > 22) & (sat >= 35) & (val >= 60)
+    background = green_hue | green_dominant
+    foreground = (~background).astype(np.uint8) * 255
+    # Gentle cleanup only: a small open removes specks; close bridges the matte.
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, np.ones((13, 13), np.uint8), iterations=2)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(foreground, connectivity=8)
+    if num <= 1:
+        return None
+    idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    if int(stats[idx, cv2.CC_STAT_AREA]) < max(400, int(height * width * 0.0015)):
+        return None
+    mask = (labels == idx).astype(np.uint8) * 255
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    filled = np.zeros_like(mask)
+    cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
+    # No erosion (keep the full silhouette); a tiny blur anti-aliases the contour.
+    filled = cv2.GaussianBlur(filled, (3, 3), 0)
+    ys, xs = np.where(filled > 8)
+    if len(xs) < 240:
+        return None
+    x1, x2 = int(xs.min()), int(xs.max()) + 1
+    y1, y2 = int(ys.min()), int(ys.max()) + 1
+    crop_bgr = suppress_green_spill(image_bgr[y1:y2, x1:x2].copy())
+    return crop_bgr, filled[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
+
+
+def segment_agent_mcp_pose_object(
+    image_bgr: np.ndarray,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
+    """Cut the single foreground accessory out of an AI-generated top-down pose
+    image (object resting on a green conveyor/table). A dedicated green
+    chroma-key runs first (cleanest for these plates), then rembg, then the
+    generic green-aware heuristics."""
+    if image_bgr is None or image_bgr.ndim != 3:
+        return None
+    source_shape = image_bgr.shape
+    # 0) Precise AI matte (rembg/u2net) + bright-green halo trim — keeps the FULL
+    #    silhouette including thin ends and corrugations (no erosion). Best edges.
+    precise = precise_green_plate_cutout(image_bgr)
+    if precise:
+        usable = usable_object_cutout((precise[0], precise[1]), source_shape)
+        if usable:
+            return usable[0], usable[1], precise[2]
+    # 1) Green chroma-key tuned for the AI green-conveyor plate (matte fallback).
+    keyed = green_conveyor_object_cutout(image_bgr)
+    if keyed:
+        usable = usable_object_cutout((keyed[0], keyed[1]), source_shape)
+        if usable:
+            return usable[0], usable[1], keyed[2]
+    # 2) generic rembg path (padded bbox) when available.
+    rembg_result = ai_background_cutout_with_bbox(image_bgr)
+    if rembg_result:
+        usable = usable_object_cutout((rembg_result[0], rembg_result[1]), source_shape)
+        if usable:
+            return usable[0], usable[1], rembg_result[2]
+    # 2) Green-aware foreground heuristic — removes the green conveyor and keeps
+    #    the largest non-green component (works for arbitrary object colors).
+    fallback = object_cutout_from_image(image_bgr, rng)
+    if fallback:
+        usable = usable_object_cutout(fallback, source_shape)
+        if usable:
+            return usable[0], usable[1], (0, 0, int(source_shape[1]), int(source_shape[0]))
+    # 3) Green-screen key (anchor-oriented) as last resort.
+    green_result = green_screen_object_cutout_with_bbox(image_bgr, rng)
+    if green_result:
+        usable = usable_object_cutout((green_result[0], green_result[1]), source_shape)
+        if usable:
+            return usable[0], usable[1], green_result[2]
+    return None
+
+
+def build_clean_sprites_from_agent_mcp_poses(item: dict[str, Any], *, force: bool = False) -> bool:
+    """Segment every cached AI-generated standard pose image into a clean,
+    background-free object sprite. These sprites are what the sample compositor
+    pastes (with rotation/scale/position variety) onto the task background."""
+    if accessory_material_type(item) == "text":
+        return False
+    if dedup_agent_mcp_pose_references(item):
+        force = True
+    references = agent_mcp_pose_reference_assets(item)
+    if not references:
+        return False
+    existing = clean_sprite_assets(item)
+    # Only reuse existing sprites when they were actually cut from the AI pose
+    # images. Raw-photo fallback sprites (no agent_mcp provenance) must be
+    # replaced once the AI standard images exist, otherwise the training set
+    # would keep using the fallback cut-outs instead of the planned poses.
+    existing_from_ai_poses = bool(existing) and all(
+        bool(asset.get("agent_mcp_pose_reference_path") or asset.get("agent_mcp_pose_call_id"))
+        for asset in existing
+    )
+    if existing and not force and existing_from_ai_poses and clean_sprites_policy_complete(item, existing):
+        return False
+    item["material_alpha_policy"] = object_alpha_material_policy(item)
+    physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
+    alpha_policy = object_alpha_material_policy(item)
+    uid = accessory_uid(item)
+    sprite_dir = NORMALIZED_DIR / uid / "clean_sprites"
+    rng = np.random.default_rng(int(item.get("created_at") or time.time()))
+    generated: list[dict[str, Any]] = []
+    for ref in references:
+        path = resolve_service_path(ref.get("path"))
+        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if image is None:
+            continue
+        seg = segment_agent_mcp_pose_object(image, rng)
+        if not seg:
+            continue
+        cut_bgr, cut_mask, source_bbox = seg
+        bbox = [int(source_bbox[0]), int(source_bbox[1]), int(source_bbox[2]), int(source_bbox[3])]
+        source_size_px = [max(1, bbox[2] - bbox[0]), max(1, bbox[3] - bbox[1])]
+        pose_id = str(ref.get("pose_id") or "")
+        # AI standard pose images are a single object shot strictly straight
+        # top-down on a green surface. Every one is a top-view sprite, so the
+        # compositor must place it at any location with free planar rotation
+        # (no grid/parallax remap). canonical_pose_family_name returns the raw
+        # pose id for these names, which would break top-view detection, so we
+        # pin the family explicitly.
+        pose_family = "upright"
+        # The unique token only drives the on-disk sprite filename. The grid
+        # position id is forced to the non-grid "legacy_clean_sprite" sentinel so
+        # load_object_preview_sprite never rejects the sprite for a missing grid
+        # cell — that rejection is exactly what produced the black placeholder
+        # boxes the compositor draws when no sprite is selectable.
+        unique_token = str(ref.get("call_id") or pose_id or f"agent_mcp_{safe_record_id(str(path))}")
+        metadata = {
+            "task_id": str(ref.get("task_id") or "agent_mcp_pose_reference"),
+            "source_pose_collection_job_id": "legacy_clean_sprite",
+            "agent_mcp_pose_call_id": unique_token,
+            "agent_mcp_sprite_build": AGENT_MCP_SPRITE_BUILD_VERSION,
+            "source_pose_collection": str(path),
+            "source_path": str(path),
+            "pose_family": pose_family,
+            "source_pose_family": pose_family,
+            "pose_id": pose_id,
+            "pose_position": "center",
+            "source_position": "center",
+            "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
+            "source_image_width": int(image.shape[1]),
+            "source_image_height": int(image.shape[0]),
+            "source_region_bbox_xyxy": [0, 0, int(image.shape[1]), int(image.shape[0])],
+            "source_object_bbox_xyxy": bbox,
+            "source_object_center_xy": [int(round((bbox[0] + bbox[2]) / 2)), int(round((bbox[1] + bbox[3]) / 2))],
+            "source_object_size_px": source_size_px,
+            "physical_size_mm": physical_size,
+            "material_alpha_policy": alpha_policy,
+            "agent_mcp_pose_reference_path": str(path),
+        }
+        metadata.update(pose_render_footprint_metadata(pose_family, source_size_px, physical_size))
+        out_path = sprite_dir / f"agent_mcp_{safe_record_id(unique_token)}.png"
+        sprite_asset = write_clean_sprite(out_path, cut_bgr, cut_mask, metadata)
+        if sprite_asset:
+            sprite_asset["method"] = "agent_mcp_pose_segmented_sprite"
+            generated.append(sprite_asset)
+    if not generated:
+        return False
+    generated = generated[:18]
+    normalize_sprite_family_canvases(generated)
+    apply_upright_scale_correction_metadata(generated, physical_size)
+    apply_laying_standard_render_size_hints(generated)
+    retained = [
+        asset
+        for asset in item.get("normalized_assets", [])
+        if asset.get("kind") != "clean_object_sprite"
+    ]
+    item["normalized_assets"] = retained + generated
+    item["clean_sprite_status"] = "ready" if clean_sprites_policy_complete(item, generated) else "partial"
+    item["clean_sprite_count"] = len(generated)
+    item["clean_sprite_expected_count"] = len(references)
+    item["clean_sprite_failed_cells"] = []
+    item["clean_sprite_preprocessed_at"] = int(time.time())
+    item["preprocess"] = "系统已从 AI 生成的标准姿态图中分割出无背景单体素材；训练样本直接复用。"
+    return True
+
+
+def materialize_agent_mcp_pose_assets(task: dict[str, Any], config: dict[str, Any]) -> bool:
+    orchestration = agent_mcp_orchestration(task)
+    completed_calls = [
+        call
+        for call in orchestration.get("tool_calls") or []
+        if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE and call.get("status") == "completed"
+    ]
+    if not completed_calls:
+        return False
+    accessories_by_id = accessory_lookup_by_id(config)
+    changed = False
+    touched_items: dict[str, dict[str, Any]] = {}
+    now = agent_mcp_now()
+    for call in completed_calls:
+        accessory_id = str(call.get("accessory_id") or "")
+        item = accessories_by_id.get(accessory_id)
+        if not item:
+            continue
+        output_path = resolve_service_path(call.get("output_path"))
+        if not output_path.exists() or output_path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
+            continue
+        normalized_assets = item.setdefault("normalized_assets", [])
+        if not any(
+            isinstance(asset, dict)
+            and asset.get("kind") == "agent_mcp_pose_reference"
+            and resolve_service_path(asset.get("path")) == output_path
+            for asset in normalized_assets
+        ):
+            normalized_assets.append(
+                {
+                    "kind": "agent_mcp_pose_reference",
+                    "path": str(output_path),
+                    "url": public_output_url(output_path),
+                    "method": "gemini_native_pose_image",
+                    "task_id": task.get("id"),
+                    "call_id": call.get("call_id"),
+                    "pose_id": call.get("pose_id"),
+                    "provider": call.get("provider") or "gemini_native_image_generation",
+                    "model": call.get("model") or "",
+                    "sha256": call.get("sha256") or file_sha256(output_path),
+                    "metadata_path": call.get("metadata_path") or "",
+                    "created_at": now,
+                }
+            )
+            changed = True
+        touched_items[accessory_id] = item
+    # Segment the freshly stored standard pose images into clean object sprites
+    # (idempotent: rebuilds only when sprites are missing or incomplete).
+    for item in touched_items.values():
+        if build_clean_sprites_from_agent_mcp_poses(item, force=False):
+            changed = True
+    if changed:
+        orchestration["materialized_pose_assets_at"] = now
+        orchestration["updated_at"] = now
+    return changed
+
+
+def agent_mcp_accessory_has_existing_or_pose_asset(item: dict[str, Any], orchestration: dict[str, Any]) -> bool:
+    if accessory_material_type(item) == "text":
+        return canonical_text_assets_complete(item)
+    if clean_sprite_assets(item):
+        return True
+    accessory_id = accessory_uid(item)
+    for call in orchestration.get("tool_calls") or []:
+        if call.get("tool") != AGENT_MCP_TOOL_POSE_IMAGE or call.get("status") != "completed":
+            continue
+        if str(call.get("accessory_id") or "") != accessory_id:
+            continue
+        output_path = resolve_service_path(call.get("output_path"))
+        if output_path.exists() and output_path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
+            return True
+    return False
+
+
+def agent_mcp_missing_existing_asset_names(task: dict[str, Any], config: dict[str, Any], orchestration: dict[str, Any]) -> list[str]:
+    accessories_by_id = accessory_lookup_by_id(config)
+    missing: list[str] = []
+    for item_id in canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []]):
+        item = accessories_by_id.get(item_id)
+        if not item:
+            continue
+        if not agent_mcp_accessory_has_existing_or_pose_asset(item, orchestration):
+            missing.append(str(item.get("name") or item_id))
+    return missing
+
+
+def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> bool:
+    orchestration = ensure_agent_mcp_pose_plan(task, config)
+    tool_config = agent_mcp_gemini_image_config()
+    orchestration.setdefault("tool_config", {})["pose_image_generation"] = tool_config
+    if not tool_config.get("configured"):
+        return False
+    settings = ai_detection_settings()
+    settings["model"] = tool_config["model"]
+    settings["timeout_seconds"] = tool_config["timeout_seconds"]
+    provider = ai_provider_from_settings(settings)
+    if not isinstance(provider, GeminiAiProvider):
+        return False
+    accessories_by_id = accessory_lookup_by_id(config)
+    calls = [
+        call
+        for call in orchestration.get("tool_calls") or []
+        if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE and call.get("status") not in {"completed", "skipped"}
+    ]
+    if not calls:
+        return True
+    completed = 0
+    total = len(calls)
+    set_agent_mcp_stage(orchestration, "pose_image_generation", "running", 5, detail=f"Generating {total} pose images with Gemini native image generation.")
+    for call in calls:
+        accessory_id = str(call.get("accessory_id") or "")
+        item = accessories_by_id.get(accessory_id)
+        plan = next(
+            (plan for plan in (orchestration.get("pose_plan") or {}).get("accessories") or [] if str(plan.get("accessory_id") or "") == accessory_id),
+            {},
+        )
+        pose = next((pose for pose in plan.get("poses") or [] if str(pose.get("pose_id") or "") == str(call.get("pose_id") or "")), {})
+        reference_content, reference_assets = agent_mcp_pose_reference_content(item or {}, max_images=3)
+        prompt = agent_mcp_pose_prompt(task, plan, pose)
+        call.update(
+            {
+                "status": "running",
+                "provider": "gemini_native_image_generation",
+                "model": tool_config["model"],
+                "prompt": prompt,
+                "source_reference_assets": reference_assets,
+                "updated_at": agent_mcp_now(),
+                "error": "",
+            }
+        )
+        try:
+            result = provider.generate_image(prompt, reference_content, model=tool_config["model"])
+            artifact = write_agent_mcp_pose_artifact(task, call, result, prompt=prompt, reference_assets=reference_assets)
+        except AiProviderError as exc:
+            call.update({"status": "failed", "error": bounded_text(str(exc), 240), "updated_at": agent_mcp_now()})
+            pause_agent_mcp_task(
+                task,
+                orchestration,
+                stage="pose_image_generation",
+                reason=f"Gemini native image generation failed: {bounded_text(exc, 200)}",
+                suggested_actions=["retry_pose_image_generation", "continue_existing_assets", "replan", "cancel"],
+            )
+            set_agent_mcp_stage(orchestration, "pose_image_generation", "failed", max(5, int(completed * 100 / max(total, 1))), detail=str(exc)[:220])
+            return False
+        call.update(
+            {
+                "status": "completed",
+                "output_path": artifact["output_path"],
+                "output_url": artifact["output_url"],
+                "metadata_path": artifact["metadata_path"],
+                "metadata_url": artifact["metadata_url"],
+                "artifact_refs": [artifact["output_url"], artifact["metadata_url"]],
+                "sha256": artifact["sha256"],
+                "latency_ms": artifact["latency_ms"],
+                "usage_metadata": artifact["usage_metadata"],
+                "proxy_used": bool((artifact.get("proxy") or {}).get("used")),
+                "proxy_source_name": (artifact.get("proxy") or {}).get("source_name") or "",
+                "proxy_url": (artifact.get("proxy") or {}).get("url") or "",
+                "proxy_auto_local": bool((artifact.get("proxy") or {}).get("auto_local")),
+                "generated_source_metadata": artifact["generated_source_metadata"],
+                "updated_at": agent_mcp_now(),
+                "error": "",
+            }
+        )
+        completed += 1
+        set_agent_mcp_stage(orchestration, "pose_image_generation", "running", min(99, int(completed * 100 / max(total, 1))), detail=f"{completed}/{total} pose images generated.")
+    orchestration["state"] = "pose_image_generation_completed"
+    orchestration["active_stage"] = "sample_generation"
+    orchestration["pause"] = None
+    set_agent_mcp_stage(orchestration, "pose_image_generation", "completed", 100, detail=f"{completed} Gemini native pose images generated.")
+    return True
+
+
+def ensure_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    orchestration = agent_mcp_orchestration(task)
+    if force or not isinstance(orchestration.get("pose_plan"), dict):
+        orchestration["pose_plan"] = build_agent_mcp_pose_plan(task, config)
+        orchestration["state"] = "agent_pose_planning"
+        orchestration["active_stage"] = "agent_pose_planning"
+        set_agent_mcp_stage(orchestration, "agent_pose_planning", "completed", 100, detail="Structured pose plan persisted.")
+    return orchestration
+
+
+def ensure_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    orchestration = ensure_agent_mcp_pose_plan(task, config)
+    tool_config = agent_mcp_gemini_image_config()
+    status = "pending" if tool_config["configured"] else "missing_configuration"
+    accessories_by_id = accessory_lookup_by_id(config)
+    for plan in (orchestration.get("pose_plan") or {}).get("accessories") or []:
+        accessory_id = str(plan.get("accessory_id") or "")
+        # One-set policy: if an accessory already has its AI pose images (from any
+        # earlier task) we never generate them again — even when the local clean
+        # sprites still need a (cheap, offline) rebuild. This is what stops the
+        # same accessory from re-generating AI images on every task.
+        cached_item = accessories_by_id.get(accessory_id)
+        if cached_item is not None and agent_mcp_accessory_pose_images_exist(cached_item):
+            continue
+        for pose in plan.get("poses") or []:
+            pose_id = str(pose.get("pose_id") or "")
+            call_id = agent_mcp_tool_call_id(str(task.get("id") or ""), AGENT_MCP_TOOL_POSE_IMAGE, accessory_id, pose_id)
+            existing = next(
+                (
+                    item
+                    for item in orchestration.get("tool_calls") or []
+                    if str(item.get("call_id") or "") == call_id and item.get("status") in {"completed", "running"}
+                ),
+                None,
+            )
+            if existing:
+                continue
+            upsert_agent_mcp_tool_call(
+                orchestration,
+                {
+                    "call_id": call_id,
+                    "tool": AGENT_MCP_TOOL_POSE_IMAGE,
+                    "task_id": task.get("id"),
+                    "accessory_id": accessory_id,
+                    "pose_id": pose_id,
+                    "request": pose.get("request") or {},
+                    "status": status,
+                    "provider": tool_config["provider"],
+                    "model": tool_config.get("model") or "",
+                    "prompt": "",
+                    "source_reference_assets": [],
+                    "output_path": "",
+                    "output_url": "",
+                    "metadata_path": "",
+                    "metadata_url": "",
+                    "artifact_refs": [],
+                    "error": "" if tool_config["configured"] else tool_config["message"],
+                },
+            )
+    pose_count = int((orchestration.get("pose_plan") or {}).get("pose_count") or 0)
+    set_agent_mcp_stage(
+        orchestration,
+        "pose_image_generation",
+        "pending" if tool_config["configured"] else "needs_user_action" if not orchestration.get("skip_pose_image_generation") else "skipped",
+        0 if not orchestration.get("skip_pose_image_generation") else 100,
+        detail=f"{pose_count} pose-image calls logged as {status}.",
+    )
+    return orchestration
+
+
+def pause_agent_mcp_task(task: dict[str, Any], orchestration: dict[str, Any], *, stage: str, reason: str, suggested_actions: list[str]) -> None:
+    now = agent_mcp_now()
+    orchestration.update(
+        {
+            "state": "needs_user_action",
+            "active_stage": stage,
+            "pause": {
+                "stage": stage,
+                "reason": reason,
+                "suggested_actions": suggested_actions,
+                "created_at": now,
+            },
+            "updated_at": now,
         }
     )
-    save_config(config)
-    return plan
+    task.update(
+        {
+            "status": "needs_user_action",
+            "progress": 20 if stage == "pose_image_generation" else 80,
+            "last_error": reason[:240],
+            "job_note": reason[:240],
+            "updated_at": now,
+        }
+    )
+
+
+def pipeline_background_plate_prompt(item: dict[str, Any]) -> str:
+    name = str(item.get("name") or item.get("id") or "the item")
+    return "\n".join(
+        [
+            "Generate ONE empty work-surface background plate for VantaLine training-sample synthesis.",
+            f"Reference context: the original capture environment of accessory '{name}'.",
+            "Reproduce the SAME work surface / environment shown in the reference photo, but completely EMPTY — remove every product or object so only the bare surface remains.",
+            "Scene: a green industrial conveyor belt (solid matte green PVC belt surface) consistent with the reference lighting and surface texture.",
+            "Camera: STRICTLY vertical top-down (bird's-eye) at 90 degrees, optical axis perpendicular to the belt. No tilt, no perspective, no oblique angle.",
+            "The belt surface must fill the entire frame edge to edge. Even, diffuse lighting; no glare, no objects, no people, no text, no rulers, no grid.",
+        ]
+    )
+
+
+def derive_background_plate_from_accessory(item: dict[str, Any], out_path: Path) -> Path | None:
+    """Build an empty background plate from the first accessory's own capture
+    environment by segmenting out every foreground object and inpainting the
+    holes, leaving only the bare work surface. This guarantees a
+    first-accessory-derived task background even when the image model declines to
+    synthesize an empty surface. Returns the written plate path or None."""
+    candidates: list[Path] = []
+    for asset in agent_mcp_pose_reference_assets(item):
+        path = resolve_service_path(asset.get("path"))
+        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
+            candidates.append(path)
+    for ref in accessory_reference_image_contexts(item, max_images=4):
+        path = resolve_service_path(ref.get("source_path"))
+        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
+            candidates.append(path)
+    def longest_clean_run(occupied: np.ndarray) -> tuple[int, int]:
+        best_start = best_len = run_start = run_len = 0
+        for i, taken in enumerate(occupied):
+            if taken:
+                run_len = 0
+                run_start = i + 1
+            else:
+                run_len += 1
+                if run_len > best_len:
+                    best_len, best_start = run_len, run_start
+        return best_start, best_len
+
+    deadline = time.monotonic() + PIPELINE_BG_PLATE_TIME_BUDGET_S
+    for path in candidates:
+        if time.monotonic() > deadline:
+            print("[pipeline.bg_plate] time budget exceeded; aborting plate derivation", flush=True)
+            break
+        full = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if full is None:
+            continue
+        orig_h, orig_w = full.shape[:2]
+        # Downscale large captures to a bounded working resolution BEFORE any mask
+        # or inpaint work so cost is bounded regardless of the source megapixels.
+        long_side = max(orig_h, orig_w)
+        if long_side > PIPELINE_BG_PLATE_MAX_SIDE:
+            scale = PIPELINE_BG_PLATE_MAX_SIDE / float(long_side)
+            image = cv2.resize(
+                full,
+                (max(1, int(round(orig_w * scale))), max(1, int(round(orig_h * scale)))),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            image = full
+        height, width = image.shape[:2]
+        image_area = height * width
+        t0 = time.monotonic()
+        mask = foreground_mask(image)
+        num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        object_mask = np.zeros((height, width), dtype=np.uint8)
+        covered = 0
+        for idx in range(1, num):
+            area = int(stats[idx, cv2.CC_STAT_AREA])
+            if area < max(500, int(image_area * 0.001)) or area > int(image_area * 0.75):
+                continue
+            object_mask[labels == idx] = 255
+            covered += area
+        # Need some bare surface left, and an actual object to remove.
+        if covered <= 0 or covered > int(image_area * 0.8):
+            continue
+        margin = cv2.dilate(object_mask, np.ones((11, 11), np.uint8), iterations=1)
+        col_taken = margin.max(axis=0) > 0
+        row_taken = margin.max(axis=1) > 0
+        # Preferred: crop the largest fully object-free strip of the SAME belt and
+        # scale it to the full frame. This keeps the first accessory's real
+        # surface/lighting with no inpaint artifacts.
+        plate: np.ndarray | None = None
+        plate_method = ""
+        col_start, col_len = longest_clean_run(col_taken)
+        row_start, row_len = longest_clean_run(row_taken)
+        if col_len >= int(width * 0.18) and col_len * height >= row_len * width:
+            strip = image[:, col_start : col_start + col_len]
+            plate = cv2.resize(strip, (width, height), interpolation=cv2.INTER_LINEAR)
+            plate_method = "strip_col"
+        elif row_len >= int(height * 0.18):
+            strip = image[row_start : row_start + row_len, :]
+            plate = cv2.resize(strip, (width, height), interpolation=cv2.INTER_LINEAR)
+            plate_method = "strip_row"
+        # Fallback: remove the object and blend the hole toward the belt's own
+        # median colour + matched noise. Inpaint only when the hole is small enough
+        # and we are within budget; otherwise skip the costly TELEA call and rely
+        # on the cheap median+noise fill below.
+        if plate is None:
+            inpaint_mask = cv2.dilate(object_mask, np.ones((17, 17), np.uint8), iterations=1)
+            mask_frac = float(int((inpaint_mask > 0).sum())) / float(max(1, image_area))
+            radius = min(PIPELINE_BG_PLATE_MAX_INPAINT_RADIUS, max(6, int(0.02 * max(height, width))))
+            background_pixels = image[inpaint_mask == 0].reshape(-1, 3)
+            if mask_frac <= PIPELINE_BG_PLATE_INPAINT_MAX_MASK_FRAC and time.monotonic() <= deadline:
+                plate = cv2.inpaint(image, inpaint_mask, radius, cv2.INPAINT_TELEA)
+                plate_method = f"inpaint_r{radius}"
+            else:
+                plate = image.copy()
+                plate_method = "median_fill"
+            if background_pixels.size:
+                median = np.median(background_pixels, axis=0)
+                spread = np.maximum(background_pixels.std(axis=0) * 0.5, 3.0)
+                noise = np.random.default_rng(7).normal(0.0, spread, plate.shape)
+                fill = np.clip(median + noise, 0, 255).astype(np.uint8)
+                weight = cv2.GaussianBlur((inpaint_mask > 0).astype(np.float32), (0, 0), max(1, radius))[..., None] * 0.9
+                plate = (plate.astype(np.float32) * (1.0 - weight) + fill.astype(np.float32) * weight).astype(np.uint8)
+        # Upscale the bounded plate back to the source resolution so downstream
+        # consumers still receive a full-size background.
+        if plate is not None and (plate.shape[0] != orig_h or plate.shape[1] != orig_w):
+            plate = cv2.resize(plate, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if plate is not None and cv2.imwrite(str(out_path), plate):
+            print(
+                f"[pipeline.bg_plate] plate ok src={orig_w}x{orig_h} work={width}x{height} "
+                f"method={plate_method} covered_px={covered} elapsed_ms={int((time.monotonic() - t0) * 1000)}",
+                flush=True,
+            )
+            return out_path
+    return None
+
+
+def ensure_pipeline_background_plate(task: dict[str, Any], config: dict[str, Any]) -> str | None:
+    """Generate a single strict top-down "empty green conveyor" background plate
+    derived from the task's first accessory capture environment, register it as a
+    per-task background set, and reuse it for BOTH pose-image generation and the
+    sample-generation backgrounds. Returns the background_set_id, or None when the
+    plate cannot be produced (falls back to the existing green_conveyor set)."""
+    orchestration = agent_mcp_orchestration(task)
+    existing = orchestration.get("background_plate") if isinstance(orchestration.get("background_plate"), dict) else None
+    if existing:
+        set_id = str(existing.get("background_set_id") or "")
+        if set_id and image_file_list(BACKGROUND_SETS_DIR / set_id):
+            task["background_set_id"] = set_id
+            return set_id
+    tool_config = agent_mcp_gemini_image_config()
+    if not tool_config.get("configured"):
+        return None
+    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
+    if not accessory_ids:
+        return None
+    item = accessory_lookup_by_id(config).get(accessory_ids[0])
+    if not item:
+        return None
+    reference_content, _reference_assets = agent_mcp_pose_reference_content(item, max_images=2)
+    settings = ai_detection_settings()
+    settings["model"] = tool_config["model"]
+    settings["timeout_seconds"] = tool_config["timeout_seconds"]
+    provider = ai_provider_from_settings(settings)
+    prompt = pipeline_background_plate_prompt(item)
+    owner_id = str(task.get("owner_user_id") or "")
+    plate_dir = output_write_dir_for_owner("agent_mcp_background_plates", owner_id) / safe_record_id(str(task.get("id") or "task"))
+    plate_dir.mkdir(parents=True, exist_ok=True)
+    plate_path: Path | None = None
+    plate_method = ""
+    # 1) PRIMARY: derive the plate directly from the first accessory's own photo
+    #    so the task background faithfully reproduces its REAL surface. The image
+    #    model is unreliable here — it tends to hallucinate an unrelated surface
+    #    (e.g. a wooden table) instead of the green conveyor in the reference.
+    derived = derive_background_plate_from_accessory(item, plate_dir / "plate.png")
+    if derived is not None:
+        plate_path = derived
+        plate_method = "accessory_photo_surface"
+        orchestration["background_plate_error"] = ""
+    # 2) FALLBACK: ask the image model to reproduce an empty surface only when the
+    #    photo cannot yield a clean plate.
+    if plate_path is None and reference_content and isinstance(provider, GeminiAiProvider):
+        try:
+            result = provider.generate_image(prompt, reference_content, model=tool_config["model"])
+            payload = result.get("bytes")
+            mime_type = str(result.get("mime_type") or "image/png")
+        except AiProviderError as exc:
+            orchestration["background_plate_error"] = bounded_text(str(exc), 240)
+            payload = None
+            mime_type = "image/png"
+        if payload:
+            extension = ".jpg" if "jpeg" in mime_type.lower() else ".png"
+            plate_path = plate_dir / f"plate{extension}"
+            plate_path.write_bytes(payload)
+            plate_method = "agent_gemini_empty_surface"
+    if plate_path is None or not plate_path.exists():
+        if not orchestration.get("background_plate_error"):
+            orchestration["background_plate_error"] = "无法从首个配件环境生成背景底板。"
+        return None
+    set_id = safe_background_set_id(f"task_plate_{safe_record_id(str(task.get('id') or 'task'))}")
+    set_dir = BACKGROUND_SETS_DIR / set_id
+    if set_dir.exists():
+        shutil.rmtree(set_dir, ignore_errors=True)
+    set_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with Image.open(plate_path) as handle:
+            handle.convert("RGB").save(set_dir / "plate.png", format="PNG")
+    except (OSError, ValueError):
+        pass
+    create_background_variants_from_source(plate_path, set_dir, count=6)
+    if not image_file_list(set_dir):
+        return None
+    manifest = load_background_sets_manifest()
+    sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
+    sets[set_id] = {
+        "id": set_id,
+        "name": f"流水线背景 · {str(task.get('name') or task.get('id') or '')}".strip(),
+        "description": "Agent 根据首个配件环境生成的垂直俯拍绿色流水线背景集",
+        "source": str(plate_path),
+        "created_at": int(time.time()),
+        "owner_user_id": owner_id or LEGACY_OWNER_ID,
+        "owner_username": str(task.get("owner_username") or ""),
+        "shared_with_user_ids": [],
+        "generation_method": plate_method or "agent_task_background_plate",
+    }
+    manifest["sets"] = sets
+    write_background_sets_manifest(manifest)
+    orchestration["background_plate"] = {
+        "background_set_id": set_id,
+        "accessory_id": accessory_ids[0],
+        "plate_path": str(plate_path),
+        "plate_url": public_output_url_for_existing(plate_path),
+        "prompt": prompt,
+        "method": plate_method or "agent_task_background_plate",
+        "sha256": file_sha256(plate_path),
+        "created_at": agent_mcp_now(),
+    }
+    orchestration["background_plate_error"] = ""
+    task["background_set_id"] = set_id
+    return set_id
+
+
+def prepare_agent_mcp_before_sample_generation(task: dict[str, Any], config: dict[str, Any]) -> bool:
+    orchestration = ensure_agent_mcp_pose_tool_calls(task, config)
+    # Derive a fixed top-down green-conveyor background plate from the first
+    # accessory's environment and reuse it for pose + sample backgrounds.
+    try:
+        ensure_pipeline_background_plate(task, config)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+    if orchestration.get("skip_pose_image_generation"):
+        materialize_agent_mcp_pose_assets(task, config)
+        missing_assets = agent_mcp_missing_existing_asset_names(task, config, orchestration)
+        if missing_assets:
+            orchestration["skip_pose_image_generation"] = False
+            if execute_agent_mcp_pose_tool_calls(task, config):
+                materialize_agent_mcp_pose_assets(task, config)
+                missing_assets = agent_mcp_missing_existing_asset_names(task, config, orchestration)
+                if not missing_assets:
+                    orchestration["state"] = "sample_generation"
+                    orchestration["active_stage"] = "sample_generation"
+                    orchestration["pause"] = None
+                    return True
+            if not (orchestration.get("pause") or {}).get("stage") == "pose_image_generation":
+                reason = "继续沿用素材失败：缺少可用于样本生成的规范化/参考素材：" + "、".join(missing_assets[:4])
+                pause_agent_mcp_task(
+                    task,
+                    orchestration,
+                    stage="pose_image_generation",
+                    reason=reason,
+                    suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
+                )
+                set_agent_mcp_stage(orchestration, "pose_image_generation", "needs_user_action", 0, detail=reason)
+            return False
+        orchestration["state"] = "sample_generation"
+        orchestration["active_stage"] = "sample_generation"
+        orchestration["pause"] = None
+        set_agent_mcp_stage(orchestration, "pose_image_generation", "skipped", 100, detail="User chose to continue with existing assets.")
+        return True
+    if execute_agent_mcp_pose_tool_calls(task, config):
+        materialize_agent_mcp_pose_assets(task, config)
+        orchestration["state"] = "sample_generation"
+        orchestration["active_stage"] = "sample_generation"
+        orchestration["pause"] = None
+        return True
+    if (orchestration.get("pause") or {}).get("stage") == "pose_image_generation":
+        return False
+    tool_config = agent_mcp_gemini_image_config()
+    reason = tool_config.get("message") or "Gemini native image generation is not configured; pose-image tool calls are logged but not executed."
+    pause_agent_mcp_task(
+        task,
+        orchestration,
+        stage="pose_image_generation",
+        reason=reason,
+        suggested_actions=["configure_gemini_api", "continue_existing_assets", "replan", "cancel"],
+    )
+    return False
+
+
+def log_agent_mcp_sample_tool_call(task: dict[str, Any], job: dict[str, Any]) -> None:
+    orchestration = agent_mcp_orchestration(task)
+    upsert_agent_mcp_tool_call(
+        orchestration,
+        {
+            "call_id": agent_mcp_tool_call_id(str(task.get("id") or ""), AGENT_MCP_TOOL_SAMPLES),
+            "tool": AGENT_MCP_TOOL_SAMPLES,
+            "task_id": task.get("id"),
+            "request": {
+                "accessory_ids": task.get("accessory_ids") or [],
+                "sample_count": (task.get("params") or {}).get("sample_count"),
+                "train_mode": (task.get("params") or {}).get("train_mode"),
+            },
+            "status": "running",
+            "output_path": "",
+            "artifact_refs": [job.get("job_id")],
+            "error": "",
+        },
+    )
+    orchestration["state"] = "sample_generation"
+    orchestration["active_stage"] = "sample_generation"
+    set_agent_mcp_stage(orchestration, "sample_generation", "running", 0, detail=f"Sample generation job {job.get('job_id')} started.")
+
+
+def log_agent_mcp_training_tool_call(task: dict[str, Any], job: dict[str, Any]) -> None:
+    orchestration = agent_mcp_orchestration(task)
+    upsert_agent_mcp_tool_call(
+        orchestration,
+        {
+            "call_id": agent_mcp_tool_call_id(str(task.get("id") or ""), AGENT_MCP_TOOL_TRAINING),
+            "tool": AGENT_MCP_TOOL_TRAINING,
+            "task_id": task.get("id"),
+            "request": {
+                "accessory_ids": task.get("accessory_ids") or [],
+                "dataset_id": task.get("dataset_id"),
+                "epochs": (task.get("params") or {}).get("epochs"),
+                "image_size": (task.get("params") or {}).get("image_size"),
+                "train_mode": (task.get("params") or {}).get("train_mode"),
+            },
+            "status": "running",
+            "output_path": "",
+            "artifact_refs": [job.get("job_id")],
+            "error": "",
+        },
+    )
+    orchestration["state"] = "model_training"
+    orchestration["active_stage"] = "model_training"
+    set_agent_mcp_stage(orchestration, "model_training", "running", 0, detail=f"Training job {job.get('job_id')} started.")
+
+
+def agent_mcp_training_quality_gate(task: dict[str, Any]) -> bool:
+    orchestration = agent_mcp_orchestration(task)
+    if orchestration.get("training_quality_ack"):
+        return True
+    if orchestration.get("skip_pose_image_generation"):
+        reason = "Pose images were skipped because the image API is not configured; confirm before model training."
+        pause_agent_mcp_task(
+            task,
+            orchestration,
+            stage="model_training",
+            reason=reason,
+            suggested_actions=["continue_training", "replan", "cancel"],
+        )
+        set_agent_mcp_stage(orchestration, "model_training", "needs_user_action", 0, detail=reason)
+        return False
+    return True
+
+
+def upsert_pipeline_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
+    if not accessory_ids:
+        raise HTTPException(status_code=400, detail="AI 检测任务还没有选择配件")
+    accessories_by_id = accessory_lookup_by_id(config)
+    counts = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
+    labels = {item_id: str(accessories_by_id[item_id].get("name") or item_id) for item_id in accessory_ids}
+    payload = {
+        "name": clean_ai_detection_task_name(task.get("name"), "流水线 AI 检测任务"),
+        "selected_accessory_ids": accessory_ids,
+        "required_accessory_counts": counts,
+        "accessory_labels": labels,
+        "source": "pipeline",
+    }
+    tasks = load_ai_detection_tasks()
+    task_id = sanitize_ai_detection_task_id(task.get("ai_task_id"))
+    now = time.time()
+    owner_fields = current_owner_fields()
+    for index, existing in enumerate(tasks):
+        if task_id and existing.get("id") == task_id:
+            updated = {**existing, **payload, "id": task_id, "created_at": float(existing.get("created_at") or now), "updated_at": now}
+            if owner_fields:
+                updated["owner_user_id"] = updated.get("owner_user_id") or owner_fields["owner_user_id"]
+                updated["owner_username"] = updated.get("owner_username") or owner_fields.get("owner_username", "")
+            tasks[index] = updated
+            save_ai_detection_tasks(tasks)
+            return serialize_ai_detection_task(updated, config)
+    created = {"id": f"aitask_{uuid.uuid4().hex[:10]}", "created_at": now, "updated_at": now, **owner_fields, **payload}
+    tasks.insert(0, created)
+    save_ai_detection_tasks(tasks)
+    return serialize_ai_detection_task(created, config)
+
+
+def linked_training_job(task: dict[str, Any]) -> dict[str, Any] | None:
+    job_id = task.get("training_task_id") if task.get("stage") == "training" else task.get("samples_task_id")
+    if not job_id:
+        return None
+    job = load_training_task(training_task_path(str(job_id)))
+    # Cached read only: the worker watcher refreshes remote jobs in the background.
+    return public_refreshed_training_task(job) if job else None
+
+
+def sync_pipeline_task(task: dict[str, Any]) -> bool:
+    if task.get("stage") not in {"samples", "training"}:
+        return False
+    if task.get("status") in {"completed", "failed", "stopped"}:
+        return False
+    job = linked_training_job(task)
+    if not job:
+        return False
+    changed = False
+    status = str(job.get("status") or "")
+    mapped = "completed" if status == "completed" else "failed" if status == "failed" else "stopped" if status == "stopped" else "running"
+    progress = int(job.get("progress") or 0)
+    transfer_fields = (
+        "worker_bundle_size_mb",
+        "worker_upload_status",
+        "worker_upload_started_at",
+        "worker_upload_completed_at",
+        "worker_upload_total_bytes",
+        "worker_upload_sent_bytes",
+        "worker_download_status",
+        "worker_download_started_at",
+        "worker_download_completed_at",
+        "worker_download_total_bytes",
+        "worker_download_received_bytes",
+    )
+    transfer_changed = any(task.get(field) != job.get(field) for field in transfer_fields if job.get(field) is not None)
+    if transfer_changed:
+        for field in transfer_fields:
+            if job.get(field) is not None:
+                task[field] = job.get(field)
+    if task.get("status") != mapped or task.get("progress") != progress or transfer_changed:
+        task["status"] = mapped
+        task["progress"] = progress
+        task["job_note"] = str(job.get("note") or "")[:200]
+        if job.get("current_epoch") is not None:
+            task["current_epoch"] = job.get("current_epoch")
+            task["total_epochs"] = job.get("total_epochs") or job.get("epochs") or 0
+        if task.get("agent_mcp"):
+            orchestration = agent_mcp_orchestration(task)
+            if task.get("stage") == "samples":
+                set_agent_mcp_stage(orchestration, "sample_generation", mapped, 100 if mapped in {"completed", "failed", "stopped"} else progress)
+                if mapped == "completed":
+                    orchestration["state"] = "sample_generation_completed"
+            elif task.get("stage") == "training":
+                set_agent_mcp_stage(orchestration, "model_training", mapped, 100 if mapped in {"completed", "failed", "stopped"} else progress)
+                if mapped == "completed":
+                    orchestration["state"] = "completed"
+        changed = True
+    return changed
+
+
+def link_pipeline_trained_model(task: dict[str, Any]) -> dict[str, Any] | None:
+    """Link the freshly trained model to the pipeline task so the model library and
+    detection workbench can use it immediately (transfer-back deployment path)."""
+    run_id = str(task.get("training_task_id") or "").strip()
+    if not run_id:
+        return None
+    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id")) == run_id), None)
+    if not spec:
+        # The model artifact may still be importing (e.g. Windows worker transfer);
+        # fall back to the conventional spec id so the UI shows the linkage.
+        variant = str((task.get("params") or {}).get("train_mode") or task.get("detection_method") or "yolo")
+        task.update(
+            {
+                "model_run_id": run_id,
+                "ai_model_id": f"trained_{run_id}__{variant}",
+                "linked_view": "inspect",
+            }
+        )
+        return None
+    task.update(
+        {
+            "model_run_id": run_id,
+            "ai_model_id": str(spec.get("id") or ""),
+            "model_label": str(spec.get("label") or ""),
+            "model_exists": bool(spec.get("path")),
+            "linked_view": "inspect",
+        }
+    )
+    return spec
+
+
+def advance_pipeline_task(task: dict[str, Any], cancel_event: "threading.Event | None" = None) -> None:
+    task_id = str(task.get("id") or "")
+
+    def _check_cancel() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise PipelineAdvanceCancelled()
+
+    def _step(note: str, pct: int) -> None:
+        """Record a sub-step on the snapshot and mirror it to the stored record so
+        the UI shows live advance progress; also a cancellation checkpoint."""
+        _check_cancel()
+        task["job_note"] = note
+        task["progress"] = int(pct)
+        persist_pipeline_task_progress(task_id, job_note=note, progress=int(pct), status="running")
+
+    stage = str(task.get("stage") or "draft")
+    accessory_ids = list(task.get("accessory_ids") or [])
+    params = dict(task.get("params") or {})
+    advance_t0 = time.monotonic()
+    print(f"[pipeline.advance] task={task_id} stage={stage} begin", flush=True)
+    _check_cancel()
+    if stage == "draft":
+        if not accessory_ids:
+            raise HTTPException(status_code=400, detail="流水线任务还没有选择配件")
+        detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or params.get("train_mode") or ""))
+        task["detection_method"] = detection_method
+        if detection_method == "ai":
+            config = load_config()
+            ai_task = upsert_pipeline_ai_detection_task(task, config)
+            params["route"] = "ai"
+            params.pop("train_mode", None)
+            task.update(
+                {
+                    "stage": "library",
+                    "status": "completed",
+                    "progress": 100,
+                    "params": params,
+                    "ai_task_id": ai_task["id"],
+                    "ai_model_id": ai_task["model_id"],
+                    "linked_view": "aiInspect",
+                    "last_error": "",
+                }
+            )
+            task["updated_at"] = int(time.time())
+            return
+        if detection_method == "locate":
+            params["route"] = "locate"
+            params.pop("train_mode", None)
+            task.update(
+                {
+                    "stage": "library",
+                    "status": "completed",
+                    "progress": 100,
+                    "params": params,
+                    "linked_view": "locateAnything",
+                    "last_error": "",
+                }
+            )
+            task["updated_at"] = int(time.time())
+            return
+        if "sample_count" not in params:
+            pregenerated = consume_pipeline_recommendation(task, "samples")
+            if pregenerated is not None:
+                params.update(pregenerated)
+            else:
+                recommendation = agent_recommendation("samples", accessory_ids)
+                params.update(recommendation["params"])
+                task["agent_reason"] = recommendation["reason"]
+                task["agent_source"] = recommendation["source"]
+        params["train_mode"] = detection_method
+        config = load_config()
+        accessory_ids = canonical_pipeline_accessory_ids(config, accessory_ids)
+        task["accessory_ids"] = accessory_ids
+        _step("规划姿态与背景底板…", 10)
+        if not prepare_agent_mcp_before_sample_generation(task, config):
+            task["params"] = params
+            orchestration = agent_mcp_orchestration(task)
+            if task.get("status") == "needs_user_action" and not isinstance(orchestration.get("pause"), dict):
+                reason = str(task.get("last_error") or task.get("job_note") or "Agent/MCP requires user action before sample generation.")
+                pause_agent_mcp_task(
+                    task,
+                    orchestration,
+                    stage=str(orchestration.get("active_stage") or "pose_image_generation"),
+                    reason=reason,
+                    suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
+                )
+                task["params"] = params
+            return
+        _step("生成姿态素材…", 35)
+        pose_assets_changed = materialize_agent_mcp_pose_assets(task, config)
+        _step("规范化训练素材…", 55)
+        try:
+            assets_changed = ensure_training_normalized_assets_for_selection(config, accessory_ids)
+        except HTTPException as exc:
+            save_config(config)
+            if exc.status_code == 409:
+                detail = str(exc.detail)[:240]
+                task.update(
+                    {
+                        "stage": "draft",
+                        "status": "pending",
+                        "progress": 0,
+                        "params": params,
+                        "last_error": detail,
+                        "job_note": "规范化/参考图生成中，完成后再次生成样本。",
+                        "updated_at": int(time.time()),
+                    }
+                )
+                return
+            raise
+        if assets_changed or pose_assets_changed:
+            save_config(config)
+        _step("创建样本生成任务…", 80)
+        job = request_sample_generation(
+            TrainingStartRequest(
+                selected_accessory_ids=accessory_ids,
+                sample_count=int(params.get("sample_count") or 200),
+                train_mode=str(params.get("train_mode") or "yolo_ocr"),
+                background_set_id=params.get("background_set_id") or task.get("background_set_id"),
+            )
+        )
+        task.update(
+            {
+                "stage": "samples",
+                "status": "running",
+                "progress": 0,
+                "params": params,
+                "samples_task_id": job["job_id"],
+                "dataset_id": job["job_id"],
+                "last_error": "",
+                "job_note": "",
+            }
+        )
+        log_agent_mcp_sample_tool_call(task, job)
+        print(f"[pipeline.advance] task={task_id} draft->samples ok elapsed_ms={int((time.monotonic() - advance_t0) * 1000)}", flush=True)
+    elif stage == "samples":
+        if task.get("status") != "completed":
+            raise HTTPException(status_code=409, detail="样本还没有生成完成,暂时不能进入训练")
+        if not agent_mcp_training_quality_gate(task):
+            return
+        if "epochs" not in params:
+            pregenerated = consume_pipeline_recommendation(task, "training")
+            if pregenerated is not None:
+                params.update(pregenerated)
+            else:
+                recommendation = agent_recommendation("training", accessory_ids, int(params.get("sample_count") or 0) or None)
+                params.update(recommendation["params"])
+                task["agent_reason"] = recommendation["reason"]
+                task["agent_source"] = recommendation["source"]
+        _step("启动模型训练任务…", 80)
+        job = request_training(
+            TrainingStartRequest(
+                selected_accessory_ids=accessory_ids,
+                dataset_id=str(task.get("dataset_id") or ""),
+                epochs=int(params.get("epochs") or 40),
+                image_size=int(params.get("image_size") or 640),
+                train_mode=str(params.get("train_mode") or "yolo_ocr"),
+            )
+        )
+        task.update(
+            {
+                "stage": "training",
+                "status": "running",
+                "progress": 0,
+                "params": params,
+                "training_task_id": job["job_id"],
+                "last_error": "",
+            }
+        )
+        log_agent_mcp_training_tool_call(task, job)
+    elif stage == "training":
+        if task.get("status") != "completed":
+            raise HTTPException(status_code=409, detail="模型还没有训练完成,暂时不能进入模型库")
+        _step("登记训练模型…", 90)
+        task.update({"stage": "library", "status": "completed", "last_error": "", "job_note": ""})
+        link_pipeline_trained_model(task)
+    else:
+        raise HTTPException(status_code=409, detail="任务已经在模型库阶段")
+    task["updated_at"] = int(time.time())
+    print(f"[pipeline.advance] task={task_id} stage={stage}->{task.get('stage')} done elapsed_ms={int((time.monotonic() - advance_t0) * 1000)}", flush=True)
+
+
+def agent_mcp_append_conversation(
+    task: dict[str, Any],
+    role: str,
+    message: str,
+    *,
+    action: str = "",
+    reason: str = "",
+    target_stage: str = "",
+    source: str = "",
+    needs_user: bool = False,
+    agent_error: str = "",
+) -> dict[str, Any]:
+    orchestration = agent_mcp_orchestration(task)
+    conversation = orchestration.setdefault("conversation", [])
+    entry: dict[str, Any] = {
+        "id": f"msg_{uuid.uuid4().hex[:10]}",
+        "role": role,
+        "message": bounded_text(message, 800),
+        "created_at": agent_mcp_now(),
+    }
+    if action:
+        entry["action"] = action
+    if reason:
+        entry["reason"] = bounded_text(reason, 400)
+    if target_stage:
+        entry["target_stage"] = target_stage
+    if source:
+        entry["source"] = source
+    if needs_user:
+        entry["needs_user"] = True
+    if agent_error:
+        entry["agent_error"] = bounded_text(agent_error, 200)
+    conversation.append(entry)
+    if len(conversation) > AGENT_MCP_CONVERSATION_LIMIT:
+        del conversation[: len(conversation) - AGENT_MCP_CONVERSATION_LIMIT]
+    orchestration["updated_at"] = agent_mcp_now()
+    return entry
+
+
+def agent_pipeline_quality_signals(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    orchestration = agent_mcp_orchestration(task)
+    params = task.get("params") if isinstance(task.get("params"), dict) else {}
+    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
+    counts = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
+    accessory_total = sum(counts.values()) or len(accessory_ids)
+    sample_count = int(params.get("sample_count") or 0)
+    signals: dict[str, Any] = {
+        "accessory_count": len(accessory_ids),
+        "accessory_unit_total": accessory_total,
+        "sample_count": sample_count,
+    }
+    if accessory_total and sample_count:
+        signals["samples_per_accessory_unit"] = round(sample_count / max(1, accessory_total), 1)
+    pose_calls = [call for call in orchestration.get("tool_calls") or [] if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE]
+    signals["pose_images_total"] = len(pose_calls)
+    signals["pose_images_completed"] = len([call for call in pose_calls if call.get("status") == "completed"])
+    signals["pose_images_failed"] = len([call for call in pose_calls if call.get("status") == "failed"])
+    signals["skip_pose_image_generation"] = bool(orchestration.get("skip_pose_image_generation"))
+    gemini = agent_mcp_gemini_image_config()
+    signals["image_generation_configured"] = bool(gemini.get("configured"))
+    try:
+        signals["missing_assets"] = agent_mcp_missing_existing_asset_names(task, config, orchestration)[:6]
+    except Exception:  # noqa: BLE001 - 质量信号收集失败不应阻塞决策
+        signals["missing_assets"] = []
+    try:
+        job = linked_training_job(task)
+    except Exception:  # noqa: BLE001
+        job = None
+    if job:
+        signals["linked_job_status"] = str(job.get("status") or "")
+        signals["linked_job_note"] = bounded_text(job.get("note"), 200)
+        if job.get("current_epoch") is not None:
+            signals["current_epoch"] = job.get("current_epoch")
+            signals["total_epochs"] = job.get("total_epochs") or job.get("epochs") or 0
+        for key in ("map50", "map", "precision", "recall"):
+            if job.get(key) is not None:
+                signals[key] = job.get(key)
+    if task.get("last_error"):
+        signals["last_error"] = bounded_text(task.get("last_error"), 200)
+    return signals
+
+
+def agent_pipeline_context(task: dict[str, Any], config: dict[str, Any], user_message: str | None, trigger: str) -> dict[str, Any]:
+    orchestration = agent_mcp_orchestration(task)
+    accessories_by_id = accessory_lookup_by_id(config)
+    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
+    counts = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
+    accessories = [
+        {
+            "name": str(accessories_by_id[item_id].get("name") or item_id),
+            "material_type": accessory_material_type(accessories_by_id[item_id]),
+            "count": int(counts.get(item_id, 1)),
+        }
+        for item_id in accessory_ids
+        if item_id in accessories_by_id
+    ]
+    pause = orchestration.get("pause") if isinstance(orchestration.get("pause"), dict) else None
+    stages = [
+        {"key": stage.get("key"), "status": stage.get("status"), "progress": stage.get("progress")}
+        for stage in orchestration.get("stages") or []
+    ]
+    recent = [
+        {"role": entry.get("role"), "message": entry.get("message"), "action": entry.get("action")}
+        for entry in (orchestration.get("conversation") or [])[-8:]
+    ]
+    params = task.get("params") if isinstance(task.get("params"), dict) else {}
+    return {
+        "trigger": trigger,
+        "task": {
+            "id": task.get("id"),
+            "name": task.get("name"),
+            "stage": task.get("stage"),
+            "status": task.get("status"),
+            "progress": task.get("progress"),
+            "detection_method": normalize_pipeline_detection_method(str(task.get("detection_method") or params.get("train_mode") or "")),
+            "auto_advance": bool(task.get("auto_advance")),
+            "params": {key: params.get(key) for key in ("sample_count", "epochs", "image_size", "train_mode", "background_set_id")},
+        },
+        "accessories": accessories,
+        "orchestration": {
+            "state": orchestration.get("state"),
+            "active_stage": orchestration.get("active_stage"),
+            "stages": stages,
+            "pause": ({"reason": pause.get("reason"), "suggested_actions": pause.get("suggested_actions")} if pause else None),
+            "training_quality_ack": bool(orchestration.get("training_quality_ack")),
+            "skip_pose_image_generation": bool(orchestration.get("skip_pose_image_generation")),
+        },
+        "quality_signals": agent_pipeline_quality_signals(task, config),
+        "recent_conversation": recent,
+        "user_message": user_message or "",
+        "stage_order": PIPELINE_STAGE_ORDER,
+        "constraints": {
+            "sample_count": [50, 20000],
+            "epochs": [1, 500],
+            "image_size": [320, 1280],
+            "train_mode": ["yolo", "yolo_ocr"],
+        },
+    }
+
+
+def normalize_agent_pipeline_decision(parsed: dict[str, Any]) -> dict[str, Any]:
+    action = str(parsed.get("action") or "reply").strip().lower()
+    if action not in AGENT_PIPELINE_ACTIONS:
+        action = "reply"
+    decision: dict[str, Any] = {
+        "action": action,
+        "params": {},
+        "advance_after": bool(parsed.get("advance_after")),
+        "target_stage": "",
+        "needs_user": bool(parsed.get("needs_user")) or action == "pause_and_ask",
+        "message_to_user": bounded_text(parsed.get("message_to_user"), 600),
+        "reason": bounded_text(parsed.get("reason"), 300),
+        "suggested_actions": [bounded_text(item, 40) for item in (parsed.get("suggested_actions") or []) if str(item).strip()][:6],
+        "source": "agent",
+    }
+    raw_params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
+    for key in ("sample_count", "epochs", "image_size"):
+        if key in raw_params:
+            try:
+                decision["params"][key] = int(raw_params[key])
+            except (TypeError, ValueError):
+                pass
+    if str(raw_params.get("train_mode") or "") in {"yolo", "yolo_ocr"}:
+        decision["params"]["train_mode"] = str(raw_params["train_mode"])
+    if "sample_count" in decision["params"]:
+        decision["params"]["sample_count"] = max(50, min(20000, decision["params"]["sample_count"]))
+    if "epochs" in decision["params"]:
+        decision["params"]["epochs"] = max(1, min(500, decision["params"]["epochs"]))
+    if "image_size" in decision["params"]:
+        decision["params"]["image_size"] = max(320, min(1280, decision["params"]["image_size"]))
+    target = str(parsed.get("target_stage") or "").strip().lower()
+    if target in AGENT_PIPELINE_STAGE_TARGETS:
+        decision["target_stage"] = target
+    if not decision["message_to_user"]:
+        decision["message_to_user"] = decision["reason"] or "已处理你的请求。"
+    return decision
+
+
+def _rule_rerun_failed_stage(stage: str) -> tuple[str, str]:
+    """Map a 'rerun the failed stage' intent to a concrete action/target.
+
+    Re-running samples (or a later stage) goes through goto_stage->samples so the
+    stale failed job is cleared and sample generation runs again while reusing
+    the pose images already on disk (the existence guard prevents duplicate AI
+    image generation). A failed draft stage simply advances again.
+    """
+    if stage in {"samples", "training", "library"}:
+        return "goto_stage", "samples"
+    return "advance", ""
+
+
+def agent_pipeline_rule_decision(task: dict[str, Any], user_message: str | None, trigger: str) -> dict[str, Any]:
+    stage = str(task.get("stage") or "")
+    status = str(task.get("status") or "")
+    text = (user_message or "").lower().strip()
+
+    def has(*keywords: str) -> bool:
+        return any(keyword in text for keyword in keywords)
+
+    if user_message:
+        action = "reply"
+        target_stage = ""
+        if has("取消", "cancel", "停止", "stop", "abort"):
+            action = "cancel"
+        elif has(
+            "从头", "重新开始", "重头", "推倒重来", "start over", "start-over",
+            "startover", "restart", "from scratch", "reset",
+        ):
+            action, target_stage = "goto_stage", "draft"
+        elif has("沿用", "现有素材", "继续素材", "reuse", "existing asset", "skip pose", "skip generation"):
+            action = "continue_existing_assets"
+        elif has(
+            "重规划", "重新规划", "replan", "re-plan", "重做姿态", "换姿态",
+            "调整方案", "换个角度", "换个方案",
+        ):
+            action = "replan"
+        elif has("改配件", "重新选", "改参数", "回到草稿", "go back", "回退", "goto", "回到"):
+            action, target_stage = "goto_stage", "draft"
+        elif has("训练", "train") and stage == "samples" and status != "failed":
+            action = "continue_training"
+        elif has(
+            "重试", "retry", "再试", "try again", "again", "重跑", "重新运行", "重新跑",
+            "rerun", "re-run", "run again", "再生成", "重新生成", "重来",
+            "continue", "继续", "推进", "下一步", "advance", "proceed", "resume",
+            "go ahead", "go on", "keep going", "next", "go",
+        ):
+            # Forward / retry intent. On a failed task this means "re-run the
+            # stage that failed"; otherwise advance to the next stage.
+            if status == "failed":
+                action, target_stage = _rule_rerun_failed_stage(stage)
+            elif has("重试", "retry", "再试", "rerun", "re-run", "again", "重跑", "重新生成图"):
+                action = "retry"
+            else:
+                action = "advance"
+        elif status == "failed":
+            # Any other affirmative reply on a failed task -> re-run failed stage.
+            action, target_stage = _rule_rerun_failed_stage(stage)
+        else:
+            action = "reply"
+
+        if action == "goto_stage" and target_stage == "samples":
+            message = "好的，正在重新生成训练样本（复用已生成的姿态图，不会重复生成 AI 图片）。"
+        elif action == "goto_stage":
+            message = "好的，已回退到草稿阶段，便于你调整配件或参数。"
+        else:
+            message = {
+                "cancel": "好的，已为你取消本次流程。",
+                "retry": "好的，正在重试姿态图片生成。",
+                "continue_training": "好的，确认样本质量后进入训练。",
+                "continue_existing_assets": "好的，将沿用现有素材继续。",
+                "replan": "好的，正在按当前任务重新规划姿态方案。",
+                "advance": "好的，正在推进到下一阶段。",
+                "reply": "已收到你的消息。我可以重试当前阶段、推进到下一步、重新规划姿态，或回退到草稿阶段（也可以直接说“取消”）。",
+            }[action]
+
+        return {
+            **normalize_agent_pipeline_decision(
+                {
+                    "action": action,
+                    "target_stage": target_stage,
+                    "message_to_user": message,
+                    "reason": "规则解析（Agent 未连接或解析失败）",
+                }
+            ),
+            "source": "rules",
+        }
+    if status == "completed" and stage in {"samples", "training"}:
+        return {
+            **normalize_agent_pipeline_decision(
+                {
+                    "action": "advance",
+                    "message_to_user": "上一阶段已完成，自动推进到下一阶段。",
+                    "reason": "规则自动推进",
+                }
+            ),
+            "source": "rules",
+        }
+    if status == "failed":
+        return {
+            **normalize_agent_pipeline_decision(
+                {
+                    "action": "pause_and_ask",
+                    "message_to_user": "当前阶段执行失败，请确认是重试、重规划还是取消。",
+                    "reason": "规则自动升级：执行失败",
+                    "suggested_actions": ["retry", "replan", "cancel"],
+                }
+            ),
+            "source": "rules",
+        }
+    return {
+        **normalize_agent_pipeline_decision(
+            {"action": "reply", "message_to_user": "当前没有需要处理的事项。", "reason": "无动作"}
+        ),
+        "source": "rules",
+    }
+
+
+AGENT_PIPELINE_SYSTEM_PROMPT = (
+    "你是工业视觉质检平台的训练流水线主导 Agent。目标：除上传素材与指定任务外，让用户尽量不手动调参，"
+    "由你自主推动 draft→samples→training→library 全流程，并在合适时机用自然语言与用户沟通。"
+    "你会收到任务当前状态、配件信息、编排阶段、质量信号、最近对话以及用户最新消息（可能为空，表示自动巡检触发）。"
+    "请只输出一个 JSON 对象，不要输出多余文本。可用 action 含义："
+    "advance=推进到下一阶段（仅当前阶段已完成）；"
+    "set_params=调整训练参数(sample_count/epochs/image_size/train_mode)，可带 advance_after=true 立即推进；"
+    "goto_stage=回退到更早阶段重做(target_stage 取 draft 改配件/参数, samples 重新生成样本)；"
+    "retry=重试姿态图片生成；replan=重新规划姿态方案；"
+    "pause_and_ask=暂停并主动联系用户(仅当任务复杂、有风险或质量存疑时使用，必须给出 message_to_user 与 suggested_actions)；"
+    "continue_existing_assets=跳过姿态图生成、沿用现有素材继续；continue_training=确认样本质量进入训练；"
+    "cancel=取消任务；reply=仅回答用户、不改变状态。"
+    "尽量自主决策、保持流程推进；只有真正需要用户决定时才 pause_and_ask。"
+    "JSON 字段："
+    '{"action": str, "params": {"sample_count": int, "epochs": int, "image_size": int, "train_mode": "yolo"|"yolo_ocr"}, '
+    '"advance_after": bool, "target_stage": "draft"|"samples", "needs_user": bool, '
+    '"message_to_user": "面向用户的中文回复", "reason": "一句话中文决策理由", "suggested_actions": [str]}。'
+    "message_to_user 与 reason 必填，参数需落在给定 constraints 范围内。"
+)
+
+
+def agent_pipeline_decide(
+    task: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    user_message: str | None = None,
+    trigger: str = "chat",
+) -> dict[str, Any]:
+    agent_config = load_agent_config()
+    if not agent_recommendation_supported(agent_config):
+        return agent_pipeline_rule_decision(task, user_message, trigger)
+    context = agent_pipeline_context(task, config, user_message, trigger)
+    try:
+        content = agent_chat_completion(
+            [
+                {"role": "system", "content": AGENT_PIPELINE_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+            ],
+            agent_config,
+        )
+        parsed = parse_agent_json(content)
+        return normalize_agent_pipeline_decision(parsed)
+    except Exception as exc:  # noqa: BLE001 - 任意 Agent 失败都回退规则引擎
+        fallback = agent_pipeline_rule_decision(task, user_message, trigger)
+        fallback["agent_error"] = str(exc)[:200]
+        return fallback
+
+
+def agent_safe_advance(
+    task: dict[str, Any], config: dict[str, Any], pending_advances: list[str] | None = None
+) -> None:
+    """Request an advance for a task driven by an Agent decision. The actual work
+    is handed to the async per-task runner so it never runs under
+    _pipeline_tasks_lock; the caller schedules `pending_advances` after the lock
+    is released. (A None collector keeps the old inline behavior as a fallback.)"""
+    if pending_advances is not None:
+        mark_pipeline_task_advancing(task)
+        task_id = str(task.get("id") or "")
+        if task_id and task_id not in pending_advances:
+            pending_advances.append(task_id)
+        return
+    try:
+        sync_pipeline_task(task)
+        advance_pipeline_task(task)
+    except HTTPException as exc:
+        orchestration = agent_mcp_orchestration(task)
+        pause_agent_mcp_task(
+            task,
+            orchestration,
+            stage=str(orchestration.get("active_stage") or task.get("stage") or "pose_image_generation"),
+            reason=bounded_text(exc.detail, 240),
+            suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
+        )
+
+
+def reset_pipeline_task_to_stage(task: dict[str, Any], target: str, user: dict[str, Any] | None) -> None:
+    linked_job_ids = [
+        str(item_id)
+        for item_id in (task.get("samples_task_id"), task.get("training_task_id"))
+        if str(item_id or "").strip()
+    ]
+    if user:
+        for job_id in linked_job_ids:
+            try:
+                delete_training_task_record(job_id, user, missing_ok=True)
+            except Exception:  # noqa: BLE001 - 清理失败不应阻塞回退
+                pass
+    task.update(
+        {
+            "stage": "draft",
+            "status": "ready",
+            "progress": 0,
+            "last_error": "",
+            "job_note": "",
+            "updated_at": agent_mcp_now(),
+        }
+    )
+    for key in ("samples_task_id", "training_task_id", "dataset_id"):
+        task.pop(key, None)
+    orchestration = agent_mcp_orchestration(task)
+    orchestration.update(
+        {
+            "pause": None,
+            "state": "created",
+            "active_stage": "created",
+            "training_quality_ack": False,
+            "last_auto_signature": "",
+            "updated_at": agent_mcp_now(),
+        }
+    )
+
+
+def apply_agent_pipeline_decision(
+    task: dict[str, Any],
+    config: dict[str, Any],
+    decision: dict[str, Any],
+    user: dict[str, Any] | None,
+    *,
+    trigger: str = "chat",
+    pending_advances: list[str] | None = None,
+) -> None:
+    action = str(decision.get("action") or "reply")
+    detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
+    if not pipeline_method_uses_training(detection_method) or action == "reply":
+        return
+    orchestration = agent_mcp_orchestration(task)
+    now = agent_mcp_now()
+    if action == "cancel":
+        orchestration.update({"state": "cancelled", "active_stage": "cancelled", "pause": None, "updated_at": now})
+        task.update({"status": "stopped", "progress": 100, "last_error": "", "job_note": "Agent 取消了本次流程。", "updated_at": now})
+        return
+    if action == "pause_and_ask":
+        pause_agent_mcp_task(
+            task,
+            orchestration,
+            stage=str(orchestration.get("active_stage") or task.get("stage") or "pose_image_generation"),
+            reason=decision.get("message_to_user") or decision.get("reason") or "需要你确认后再继续。",
+            suggested_actions=decision.get("suggested_actions") or ["continue_existing_assets", "replan", "cancel"],
+        )
+        return
+    if action == "set_params":
+        params = dict(task.get("params") or {})
+        params.update(decision.get("params") or {})
+        task["params"] = params
+        task["updated_at"] = now
+        if decision.get("advance_after"):
+            agent_safe_advance(task, config, pending_advances)
+        return
+    if action == "goto_stage":
+        target = decision.get("target_stage") or "draft"
+        reset_pipeline_task_to_stage(task, target, user)
+        if decision.get("params"):
+            params = dict(task.get("params") or {})
+            params.update(decision.get("params") or {})
+            task["params"] = params
+        if target == "samples":
+            agent_safe_advance(task, config, pending_advances)
+        return
+    if action == "replan":
+        orchestration = ensure_agent_mcp_pose_plan(task, config, force=True)
+        task["agent_mcp"] = orchestration
+        ensure_agent_mcp_pose_tool_calls(task, config)
+        tool_config = agent_mcp_gemini_image_config()
+        if tool_config.get("configured") and execute_agent_mcp_pose_tool_calls(task, config):
+            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
+        else:
+            pause_agent_mcp_task(
+                task,
+                orchestration,
+                stage="pose_image_generation",
+                reason="姿态方案已重规划；" + str(tool_config.get("message") or "Gemini 原生图像生成未配置。"),
+                suggested_actions=["configure_gemini_api", "continue_existing_assets", "replan", "cancel"],
+            )
+        return
+    if action == "retry":
+        orchestration["skip_pose_image_generation"] = False
+        orchestration["pause"] = None
+        if execute_agent_mcp_pose_tool_calls(task, config):
+            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
+        elif not orchestration.get("pause"):
+            tool_config = agent_mcp_gemini_image_config()
+            pause_agent_mcp_task(
+                task,
+                orchestration,
+                stage="pose_image_generation",
+                reason=str(tool_config.get("message") or "Gemini 原生图像生成未配置。"),
+                suggested_actions=["configure_gemini_api", "continue_existing_assets", "replan", "cancel"],
+            )
+        return
+    if action == "continue_existing_assets":
+        orchestration["skip_pose_image_generation"] = True
+        orchestration["pause"] = None
+        orchestration["updated_at"] = now
+        if task.get("stage") == "samples" or orchestration.get("active_stage") == "model_training":
+            orchestration["training_quality_ack"] = True
+            if task.get("stage") == "samples":
+                task["status"] = "completed"
+            agent_safe_advance(task, config, pending_advances)
+        else:
+            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
+            agent_safe_advance(task, config, pending_advances)
+        return
+    if action == "continue_training":
+        orchestration["training_quality_ack"] = True
+        orchestration["pause"] = None
+        if task.get("stage") == "samples":
+            task["status"] = "completed"
+            agent_safe_advance(task, config, pending_advances)
+        return
+    if action == "advance":
+        agent_safe_advance(task, config, pending_advances)
+        return
+
+
+def commit_pipeline_agent_turn(
+    task: dict[str, Any],
+    config: dict[str, Any],
+    user: dict[str, Any] | None,
+    user_message: str | None,
+    decision: dict[str, Any],
+    trigger: str,
+    pending_advances: list[str] | None = None,
+) -> dict[str, Any]:
+    """Apply a pre-computed Agent decision under the pipeline tasks lock.
+
+    The LLM call (`agent_pipeline_decide`) must run *before* this, outside the
+    lock, so a slow provider request never blocks pipeline polling. Any advance
+    the decision triggers is collected into `pending_advances` and scheduled by
+    the caller after the lock is released (heavy work runs in the async runner).
+    """
+    if user_message:
+        agent_mcp_append_conversation(task, "user", user_message)
+    apply_agent_pipeline_decision(task, config, decision, user, trigger=trigger, pending_advances=pending_advances)
+    agent_mcp_append_conversation(
+        task,
+        "agent",
+        decision.get("message_to_user") or decision.get("reason") or "已处理。",
+        action=str(decision.get("action") or ""),
+        reason=str(decision.get("reason") or ""),
+        target_stage=str(decision.get("target_stage") or ""),
+        source=str(decision.get("source") or ""),
+        needs_user=bool(decision.get("needs_user")),
+        agent_error=str(decision.get("agent_error") or ""),
+    )
+    return decision
+
+
+def pipeline_task_decision_signature(task: dict[str, Any]) -> str:
+    return f"{task.get('stage')}|{task.get('status')}|{int(task.get('progress') or 0)}"
+
+
+def pipeline_task_needs_auto_agent(task: dict[str, Any]) -> bool:
+    if not task.get("auto_advance"):
+        return False
+    detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
+    if not pipeline_method_uses_training(detection_method):
+        return False
+    stage = str(task.get("stage") or "")
+    status = str(task.get("status") or "")
+    if status == "completed" and stage in {"samples", "training"}:
+        return True
+    if status == "failed" and stage in {"draft", "samples", "training"}:
+        return True
+    return False
+
+
+def _run_pipeline_auto_agent_step(task_id: str, user: dict[str, Any] | None) -> None:
+    token = _request_user.set(user) if user else None
+    try:
+        # Phase 1: snapshot the task under the lock and enforce guardrails.
+        with _pipeline_tasks_lock:
+            tasks = load_pipeline_tasks()
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if not task or not pipeline_task_needs_auto_agent(task):
+                return
+            orchestration = agent_mcp_orchestration(task)
+            signature = pipeline_task_decision_signature(task)
+            if orchestration.get("last_auto_signature") == signature:
+                return
+            if int(orchestration.get("auto_steps") or 0) >= AGENT_MCP_AUTO_MAX_STEPS:
+                pause_agent_mcp_task(
+                    task,
+                    orchestration,
+                    stage=str(task.get("stage") or "model_training"),
+                    reason="自动编排已达到步数上限，请人工确认后再继续。",
+                    suggested_actions=["continue_training", "replan", "cancel"],
+                )
+                orchestration["last_auto_signature"] = signature
+                agent_mcp_append_conversation(
+                    task,
+                    "agent",
+                    "自动编排步数已达上限，已暂停等待人工确认。",
+                    action="pause_and_ask",
+                    source="rules",
+                    needs_user=True,
+                )
+                save_pipeline_tasks(tasks)
+                return
+            snapshot = copy.deepcopy(task)
+        # Phase 2: run the (potentially slow) decision without holding the lock.
+        config = scope_config_for_user(load_config(), user)
+        decision = agent_pipeline_decide(snapshot, config, user_message=None, trigger="auto")
+        # Phase 3: re-acquire the lock and apply the decision to the live task.
+        pending_advances: list[str] = []
+        with _pipeline_tasks_lock:
+            tasks = load_pipeline_tasks()
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if not task or not pipeline_task_needs_auto_agent(task):
+                return
+            orchestration = agent_mcp_orchestration(task)
+            if orchestration.get("last_auto_signature") == signature:
+                return
+            commit_pipeline_agent_turn(task, config, user, None, decision, "auto", pending_advances=pending_advances)
+            orchestration = agent_mcp_orchestration(task)
+            orchestration["last_auto_signature"] = signature
+            orchestration["auto_steps"] = int(orchestration.get("auto_steps") or 0) + 1
+            orchestration["last_auto_step_at"] = agent_mcp_now()
+            save_pipeline_tasks(tasks)
+        for advance_id in pending_advances:
+            schedule_pipeline_advance(advance_id, user)
+    except Exception:  # noqa: BLE001 - 后台自动编排失败仅记录，不影响主流程
+        traceback.print_exc(file=sys.stderr)
+    finally:
+        if token is not None:
+            _request_user.reset(token)
+        with _pipeline_auto_agent_lock:
+            _pipeline_auto_agent_inflight.discard(task_id)
+
+
+def schedule_pipeline_auto_agent(task_ids: list[str], user: dict[str, Any] | None) -> None:
+    for task_id in task_ids:
+        if not task_id:
+            continue
+        with _pipeline_auto_agent_lock:
+            if task_id in _pipeline_auto_agent_inflight:
+                continue
+            _pipeline_auto_agent_inflight.add(task_id)
+        threading.Thread(target=_run_pipeline_auto_agent_step, args=(task_id, user), daemon=True).start()
+
+
+def advance_pipeline_task_guarded(
+    task: dict[str, Any], config: dict[str, Any], cancel_event: "threading.Event | None" = None
+) -> None:
+    """Advance one stage, converting precondition/runtime failures into a paused
+    state with a clear reason (mirrors the previous agent_safe_advance UX) so the
+    async runner never crashes and the user always sees why a task stopped."""
+    try:
+        sync_pipeline_task(task)
+        advance_pipeline_task(task, cancel_event=cancel_event)
+    except PipelineAdvanceCancelled:
+        raise
+    except HTTPException as exc:
+        orchestration = agent_mcp_orchestration(task)
+        pause_agent_mcp_task(
+            task,
+            orchestration,
+            stage=str(orchestration.get("active_stage") or task.get("stage") or "pose_image_generation"),
+            reason=bounded_text(exc.detail, 240),
+            suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
+        )
+
+
+def _run_pipeline_advance(task_id: str, user: dict[str, Any] | None) -> None:
+    token = _request_user.set(user) if user else None
+    try:
+        with _pipeline_advance_registry_lock:
+            cancel_event = _pipeline_advance_cancel.get(task_id) or threading.Event()
+        # Snapshot under the lock; all heavy/bounded compute runs WITHOUT the lock.
+        with _pipeline_tasks_lock:
+            tasks = load_pipeline_tasks()
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if not task:
+                return
+            sync_pipeline_task(task)
+            task["advancing"] = True
+            if not task.get("advance_started_at"):
+                task["advance_started_at"] = int(time.time())
+            snapshot = copy.deepcopy(task)
+            save_pipeline_tasks(tasks)
+        config = scope_config_for_user(load_config(), user)
+        try:
+            advance_pipeline_task_guarded(snapshot, config, cancel_event)
+        except PipelineAdvanceCancelled:
+            print(f"[pipeline.advance] task={task_id} cancelled mid-advance", flush=True)
+            return
+        except Exception:  # noqa: BLE001 - 推进失败仅记录,任务保留可重试
+            traceback.print_exc(file=sys.stderr)
+            snapshot["last_error"] = "推进任务时发生内部错误，请稍后重试。"
+            snapshot["updated_at"] = int(time.time())
+        snapshot.pop("advancing", None)
+        snapshot.pop("advance_started_at", None)
+        if cancel_event.is_set():
+            return
+        # Write back only if the task still exists (deleted -> drop, no ghost).
+        with _pipeline_tasks_lock:
+            tasks = load_pipeline_tasks()
+            stored = next((item for item in tasks if item.get("id") == task_id), None)
+            if not stored:
+                return
+            stored.clear()
+            stored.update(snapshot)
+            save_pipeline_tasks(tasks)
+    except Exception:  # noqa: BLE001 - 后台推进失败仅记录,不影响主流程
+        traceback.print_exc(file=sys.stderr)
+    finally:
+        if token is not None:
+            _request_user.reset(token)
+        with _pipeline_advance_registry_lock:
+            _pipeline_advance_inflight.discard(task_id)
+            _pipeline_advance_cancel.pop(task_id, None)
+
+
+def schedule_pipeline_advance(task_id: str, user: dict[str, Any] | None) -> bool:
+    """Enqueue an async advance for a task. Idempotent: if a thread is already
+    advancing this task, returns False without stacking a second one."""
+    if not task_id:
+        return False
+    with _pipeline_advance_registry_lock:
+        if task_id in _pipeline_advance_inflight:
+            return False
+        _pipeline_advance_inflight.add(task_id)
+        _pipeline_advance_cancel[task_id] = threading.Event()
+    threading.Thread(target=_run_pipeline_advance, args=(task_id, user), daemon=True).start()
+    return True
+
+
+def cancel_pipeline_advance(task_id: str) -> bool:
+    """Signal a running advance worker to stop at the next checkpoint. Returns True
+    if a worker was inflight."""
+    if not task_id:
+        return False
+    with _pipeline_advance_registry_lock:
+        event = _pipeline_advance_cancel.get(task_id)
+        inflight = task_id in _pipeline_advance_inflight
+        if event is not None:
+            event.set()
+    return inflight
+
+
+def pipeline_recommendation_signature(task: dict[str, Any], stage: str) -> str:
+    accessory_ids = ",".join(str(item) for item in task.get("accessory_ids") or [])
+    params = task.get("params") if isinstance(task.get("params"), dict) else {}
+    sample_count = int(params.get("sample_count") or 0) if stage == "training" else 0
+    return f"{stage}|{accessory_ids}|{sample_count}"
+
+
+def pipeline_next_recommendation_stage(task: dict[str, Any]) -> str:
+    """Which stage's params should be pre-computed so the next step is ready."""
+    detection_method = normalize_pipeline_detection_method(
+        str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or "")
+    )
+    if not pipeline_method_uses_training(detection_method):
+        return ""
+    params = task.get("params") if isinstance(task.get("params"), dict) else {}
+    stage = str(task.get("stage") or "")
+    status = str(task.get("status") or "")
+    if stage == "draft" and "sample_count" not in params:
+        return "samples"
+    if stage == "samples" and status == "completed" and "epochs" not in params:
+        return "training"
+    return ""
+
+
+def pipeline_recommendation_ready(task: dict[str, Any], stage: str) -> bool:
+    rec = task.get("recommended_params")
+    return (
+        isinstance(rec, dict)
+        and rec.get("stage") == stage
+        and rec.get("signature") == pipeline_recommendation_signature(task, stage)
+        and isinstance(rec.get("params"), dict)
+    )
+
+
+def consume_pipeline_recommendation(task: dict[str, Any], stage: str) -> dict[str, Any] | None:
+    """Return (and clear) the pre-generated params for a stage if present."""
+    rec = task.get("recommended_params")
+    if isinstance(rec, dict) and rec.get("stage") == stage and isinstance(rec.get("params"), dict):
+        if rec.get("reason"):
+            task["agent_reason"] = rec.get("reason")
+        if rec.get("source"):
+            task["agent_source"] = rec.get("source")
+        params = dict(rec["params"])
+        task.pop("recommended_params", None)
+        return params
+    return None
+
+
+def _run_pipeline_recommendation_pregen(task_id: str, stage: str, user: dict[str, Any] | None) -> None:
+    token = _request_user.set(user) if user else None
+    try:
+        with _pipeline_tasks_lock:
+            tasks = load_pipeline_tasks()
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if not task or pipeline_next_recommendation_stage(task) != stage:
+                return
+            if pipeline_recommendation_ready(task, stage):
+                return
+            accessory_ids = [str(item) for item in task.get("accessory_ids") or []]
+            params = task.get("params") if isinstance(task.get("params"), dict) else {}
+            sample_count = int(params.get("sample_count") or 0) or None
+            signature = pipeline_recommendation_signature(task, stage)
+        # The recommendation may call a (slow) LLM; keep it off the lock.
+        recommendation = agent_recommendation(stage, accessory_ids, sample_count)
+        with _pipeline_tasks_lock:
+            tasks = load_pipeline_tasks()
+            task = next((item for item in tasks if item.get("id") == task_id), None)
+            if not task or pipeline_next_recommendation_stage(task) != stage:
+                return
+            if pipeline_recommendation_signature(task, stage) != signature:
+                return
+            task["recommended_params"] = {
+                "stage": stage,
+                "params": recommendation.get("params") or {},
+                "reason": recommendation.get("reason") or "",
+                "source": recommendation.get("source") or "rules",
+                "signature": signature,
+                "created_at": int(time.time()),
+            }
+            task["updated_at"] = int(time.time())
+            save_pipeline_tasks(tasks)
+    except Exception:  # noqa: BLE001 - 后台预生成失败仅记录，不影响主流程
+        traceback.print_exc(file=sys.stderr)
+    finally:
+        if token is not None:
+            _request_user.reset(token)
+        with _pipeline_recommendation_lock:
+            _pipeline_recommendation_inflight.discard(f"{task_id}|{stage}")
+
+
+def schedule_pipeline_recommendation_pregen(items: list[tuple[str, str]], user: dict[str, Any] | None) -> None:
+    for task_id, stage in items:
+        if not task_id or not stage:
+            continue
+        key = f"{task_id}|{stage}"
+        with _pipeline_recommendation_lock:
+            if key in _pipeline_recommendation_inflight:
+                continue
+            _pipeline_recommendation_inflight.add(key)
+        threading.Thread(
+            target=_run_pipeline_recommendation_pregen, args=(task_id, stage, user), daemon=True
+        ).start()
+
+
+def collect_pipeline_recommendation_pregen(tasks: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    items: list[tuple[str, str]] = []
+    for task in tasks:
+        stage = pipeline_next_recommendation_stage(task)
+        if not stage or pipeline_recommendation_ready(task, stage):
+            continue
+        items.append((str(task.get("id")), stage))
+    return items
+
+
+def reap_pipeline_advance_zombie(task: dict[str, Any]) -> bool:
+    """Reset a task left in the advancing state with no live worker thread (e.g.
+    the process restarted mid-advance) so the UI can distinguish working from
+    timed-out and the user can retry. Returns True if the task was modified."""
+    if not task.get("advancing"):
+        return False
+    task_id = str(task.get("id") or "")
+    with _pipeline_advance_registry_lock:
+        if task_id in _pipeline_advance_inflight:
+            return False
+    started = int(task.get("advance_started_at") or 0)
+    if started and (int(time.time()) - started) < PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S:
+        return False
+    task.pop("advancing", None)
+    task.pop("advance_started_at", None)
+    task["last_error"] = "推进任务超时或中断，已自动终止，请重试。"
+    task["job_note"] = "推进已中断，请重试。"
+    task["updated_at"] = int(time.time())
+    return True
+
+
+def sync_and_auto_advance_pipeline(tasks: list[dict[str, Any]]) -> tuple[bool, list[str], list[str]]:
+    agent_config = load_agent_config()
+    llm_driven = agent_recommendation_supported(agent_config)
+    changed = False
+    auto_agent_ids: list[str] = []
+    advance_ids: list[str] = []
+    for task in tasks:
+        if reap_pipeline_advance_zombie(task):
+            changed = True
+        if sync_pipeline_task(task):
+            changed = True
+        if not pipeline_task_needs_auto_agent(task):
+            continue
+        if llm_driven:
+            orchestration = agent_mcp_orchestration(task)
+            if orchestration.get("last_auto_signature") != pipeline_task_decision_signature(task):
+                auto_agent_ids.append(str(task.get("id")))
+            continue
+        if task.get("status") == "completed" and task.get("stage") in {"samples", "training"}:
+            # Route auto-advance through the async runner: no heavy work (incl. the
+            # worker upload) runs in the polling path or under _pipeline_tasks_lock.
+            advance_ids.append(str(task.get("id")))
+    return changed, auto_agent_ids, advance_ids
+
+
+@app.get("/api/pipeline/tasks")
+def get_pipeline_tasks(user_id: str | None = None) -> dict[str, Any]:
+    user = current_auth_user()
+    target_user_id = user_id if user_is_admin(user) else None
+    config = scope_config_for_user(load_config(), user, target_user_id)
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        changed, auto_agent_ids, advance_ids = sync_and_auto_advance_pipeline(tasks)
+        if changed:
+            save_pipeline_tasks(tasks)
+        visible_tasks = [task for task in tasks if record_visible_to_user(task, user, target_user_id)]
+        recommendation_pregen = collect_pipeline_recommendation_pregen(visible_tasks)
+    if auto_agent_ids:
+        schedule_pipeline_auto_agent(auto_agent_ids, user)
+    for advance_id in advance_ids:
+        schedule_pipeline_advance(advance_id, user)
+    if recommendation_pregen:
+        schedule_pipeline_recommendation_pregen(recommendation_pregen, user)
+    return public_path_sanitized({
+        "items": [pipeline_task_public(task, config) for task in visible_tasks],
+        "agent": public_agent_config(),
+        **pipeline_accessories_payload(config, user, target_user_id),
+    })
+
+
+@app.post("/api/pipeline/tasks")
+def create_pipeline_task(request: PipelineTaskCreateRequest) -> dict[str, Any]:
+    config = scope_config_for_user(load_config())
+    accessories_by_id = accessory_lookup_by_id(config)
+    accessory_ids = canonical_pipeline_accessory_ids(config, request.accessory_ids)
+    names = [str(accessories_by_id[item_id].get("name") or item_id) for item_id in accessory_ids]
+    agent_config = load_agent_config()
+    detection_method = normalize_pipeline_detection_method(request.detection_method)
+    task = {
+        "id": f"pipe_{uuid.uuid4().hex[:10]}",
+        "name": (request.name or "").strip() or (" + ".join(names) if names else "新流水线任务"),
+        "accessory_ids": accessory_ids,
+        "accessory_counts": normalize_pipeline_accessory_counts(config, accessory_ids, request.accessory_counts),
+        "detection_method": detection_method,
+        "stage": "draft",
+        "status": "ready",
+        "progress": 0,
+        "params": {"train_mode": detection_method} if pipeline_method_uses_training(detection_method) else {"route": detection_method},
+        "auto_advance": bool(request.auto_advance if request.auto_advance is not None else agent_config["auto_advance_default"]),
+        "created_at": int(time.time()),
+        "updated_at": int(time.time()),
+        **current_owner_fields(),
+    }
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        tasks.insert(0, task)
+        save_pipeline_tasks(tasks)
+    pregen_stage = pipeline_next_recommendation_stage(task)
+    if pregen_stage:
+        schedule_pipeline_recommendation_pregen([(str(task.get("id")), pregen_stage)], _request_user.get())
+    return pipeline_task_public(task, config)
+
+
+@app.patch("/api/pipeline/tasks/{task_id}")
+def update_pipeline_task(task_id: str, request: PipelineTaskUpdateRequest) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        require_record_access(task, user, write=True)
+        if request.name is not None and request.name.strip():
+            task["name"] = request.name.strip()
+        if request.accessory_ids is not None:
+            if task.get("stage") != "draft":
+                raise HTTPException(status_code=409, detail="任务已经开始执行,不能再修改配件")
+            accessory_ids = canonical_pipeline_accessory_ids(config, request.accessory_ids)
+            task["accessory_ids"] = accessory_ids
+            task["accessory_counts"] = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
+            task.pop("agent_mcp", None)
+        if request.accessory_counts is not None:
+            if task.get("stage") != "draft":
+                raise HTTPException(status_code=409, detail="任务已经开始执行,不能再修改配件数量")
+            accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
+            task["accessory_counts"] = normalize_pipeline_accessory_counts(config, accessory_ids, request.accessory_counts)
+            task.pop("agent_mcp", None)
+        if request.detection_method is not None:
+            if task.get("stage") != "draft":
+                raise HTTPException(status_code=409, detail="任务已经开始执行,不能再修改检测方法")
+            detection_method = normalize_pipeline_detection_method(request.detection_method)
+            task["detection_method"] = detection_method
+            params = dict(task.get("params") or {})
+            if pipeline_method_uses_training(detection_method):
+                params["train_mode"] = detection_method
+                params.pop("route", None)
+            else:
+                params["route"] = detection_method
+                params.pop("train_mode", None)
+            task["params"] = params
+            task.pop("agent_mcp", None)
+        if request.params is not None:
+            params = dict(task.get("params") or {})
+            for key in ("sample_count", "epochs", "image_size"):
+                if key in request.params:
+                    try:
+                        params[key] = int(request.params[key])
+                    except (TypeError, ValueError):
+                        pass
+            requested_method = normalize_pipeline_detection_method(str(request.params.get("train_mode") or request.params.get("route") or ""))
+            if requested_method in PIPELINE_DETECTION_METHODS:
+                task["detection_method"] = requested_method
+                if pipeline_method_uses_training(requested_method):
+                    params["train_mode"] = requested_method
+                    params.pop("route", None)
+                else:
+                    params["route"] = requested_method
+                    params.pop("train_mode", None)
+            if "background_set_id" in request.params:
+                params["background_set_id"] = request.params["background_set_id"] or None
+            if "sample_count" in params:
+                params["sample_count"] = max(50, min(20000, int(params["sample_count"])))
+            if "epochs" in params:
+                params["epochs"] = max(1, min(500, int(params["epochs"])))
+            if "image_size" in params:
+                params["image_size"] = max(320, min(1280, int(params["image_size"])))
+            task["params"] = params
+        if request.auto_advance is not None:
+            task["auto_advance"] = bool(request.auto_advance)
+        task["updated_at"] = int(time.time())
+        save_pipeline_tasks(tasks)
+    return pipeline_task_public(task, config)
+
+
+@app.post("/api/pipeline/accessories/{accessory_id}")
+def add_pipeline_accessory(accessory_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    resolved = resolve_accessory_id(config, accessory_id)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="配件不存在")
+    canonical_id, _ = resolved
+    add_pipeline_accessory_id(canonical_id)
+    return {"status": "added", "accessory_id": canonical_id, **pipeline_accessories_payload(config, user)}
+
+
+@app.delete("/api/pipeline/accessories/{accessory_id}")
+def remove_pipeline_accessory(accessory_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    resolved = resolve_accessory_id(config, accessory_id)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="配件不存在")
+    canonical_id, item = resolved
+    for item_id in accessory_id_aliases(item):
+        remove_pipeline_accessory_id(item_id)
+    return {"status": "removed", "accessory_id": canonical_id, **pipeline_accessories_payload(config, user)}
+
+
+@app.delete("/api/pipeline/tasks/{task_id}")
+def delete_pipeline_task(task_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    linked_job_ids: list[str] = []
+    # Stop any in-flight advance worker first so it self-cleans and doesn't keep
+    # burning CPU or re-create a ghost record after we delete it.
+    cancel_pipeline_advance(task_id)
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if task:
+            require_record_access(task, user, write=True)
+            linked_job_ids = [
+                str(item_id)
+                for item_id in (task.get("samples_task_id"), task.get("training_task_id"))
+                if str(item_id or "").strip()
+            ]
+        remaining = [item for item in tasks if item.get("id") != task_id]
+        if len(remaining) == len(tasks):
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        save_pipeline_tasks(remaining)
+    deleted_training_jobs = []
+    for job_id in linked_job_ids:
+        deleted = delete_training_task_record(job_id, user, missing_ok=True)
+        if deleted:
+            deleted_training_jobs.append(job_id)
+    return {"status": "deleted", "deleted_task_id": task_id, "deleted_training_jobs": deleted_training_jobs}
+
+
+@app.post("/api/pipeline/tasks/{task_id}/agent-feedback")
+def pipeline_agent_feedback(task_id: str, request: PipelineAgentFeedbackRequest) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    action = str(request.action or "").strip().lower()
+    decision = str(request.decision or action).strip().lower()
+    pending_advances: list[str] = []
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        require_record_access(task, user, write=True)
+        detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
+        if not pipeline_method_uses_training(detection_method):
+            raise HTTPException(status_code=409, detail="Only YOLO/YOLO+OCR tasks use Agent/MCP orchestration")
+        orchestration = ensure_agent_mcp_pose_plan(task, config)
+        feedback_entry = {
+            "action": action,
+            "decision": decision,
+            "message": str(request.message or "").strip()[:500],
+            "created_at": agent_mcp_now(),
+        }
+        orchestration.setdefault("feedback", []).append(feedback_entry)
+        if action in {"cancel", "cancelled"} or decision in {"cancel", "cancelled"}:
+            orchestration.update({"state": "cancelled", "active_stage": "cancelled", "pause": None, "updated_at": agent_mcp_now()})
+            task.update({"status": "stopped", "progress": 100, "last_error": "", "job_note": "Agent/MCP preview flow cancelled.", "updated_at": agent_mcp_now()})
+        elif action == "replan" or decision == "replan":
+            orchestration = ensure_agent_mcp_pose_plan(task, config, force=True)
+            task["agent_mcp"] = orchestration
+            orchestration = ensure_agent_mcp_pose_tool_calls(task, config)
+            tool_config = agent_mcp_gemini_image_config()
+            if tool_config.get("configured") and execute_agent_mcp_pose_tool_calls(task, config):
+                task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
+            else:
+                pause_agent_mcp_task(
+                    task,
+                    orchestration,
+                    stage="pose_image_generation",
+                    reason="Pose plan regenerated; " + str(tool_config.get("message") or "Gemini native image generation is not configured."),
+                    suggested_actions=["configure_gemini_api", "continue_existing_assets", "replan", "cancel"],
+                )
+        elif action in {"update_plan", "update"}:
+            if not isinstance(request.updated_plan, dict):
+                raise HTTPException(status_code=400, detail="updated_plan is required")
+            orchestration["pose_plan"] = request.updated_plan
+            orchestration["state"] = "needs_user_action"
+            orchestration["active_stage"] = "pose_image_generation"
+            orchestration["updated_at"] = agent_mcp_now()
+            pause_agent_mcp_task(
+                task,
+                orchestration,
+                stage="pose_image_generation",
+                reason="Pose plan updated by user; confirm how to proceed.",
+                suggested_actions=["continue_existing_assets", "replan", "cancel"],
+            )
+        elif action in {"retry_pose_image_generation", "retry"} or decision == "retry_pose_image_generation":
+            orchestration["skip_pose_image_generation"] = False
+            orchestration["pause"] = None
+            if execute_agent_mcp_pose_tool_calls(task, config):
+                task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
+            elif not orchestration.get("pause"):
+                tool_config = agent_mcp_gemini_image_config()
+                pause_agent_mcp_task(
+                    task,
+                    orchestration,
+                    stage="pose_image_generation",
+                    reason=str(tool_config.get("message") or "Gemini native image generation is not configured."),
+                    suggested_actions=["configure_gemini_api", "continue_existing_assets", "replan", "cancel"],
+                )
+        elif action in {"resume", "continue", "continue_existing_assets"} or decision in {"continue_existing_assets", "use_existing_assets"}:
+            orchestration["skip_pose_image_generation"] = True
+            orchestration["pause"] = None
+            orchestration["updated_at"] = agent_mcp_now()
+            if task.get("stage") == "samples" or orchestration.get("active_stage") == "model_training" or decision == "continue_training":
+                orchestration["training_quality_ack"] = True
+                if task.get("stage") == "samples":
+                    task["status"] = "completed"
+                mark_pipeline_task_advancing(task)
+                pending_advances.append(task_id)
+            else:
+                task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
+                mark_pipeline_task_advancing(task)
+                pending_advances.append(task_id)
+        elif action in {"continue_training", "resume_training"} or decision == "continue_training":
+            orchestration["training_quality_ack"] = True
+            orchestration["pause"] = None
+            if task.get("stage") != "samples":
+                raise HTTPException(status_code=409, detail="Task is not waiting at model training gate")
+            task["status"] = "completed"
+            mark_pipeline_task_advancing(task)
+            pending_advances.append(task_id)
+        else:
+            raise HTTPException(status_code=400, detail="Unknown Agent/MCP feedback action")
+        save_pipeline_tasks(tasks)
+        result = pipeline_task_public(task, config)
+    for advance_id in pending_advances:
+        schedule_pipeline_advance(advance_id, user)
+    return result
+
+
+@app.post("/api/pipeline/tasks/{task_id}/chat")
+def pipeline_agent_chat(task_id: str, request: PipelineAgentChatRequest) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    message = bounded_text(request.message, 1000)
+    if not message:
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+    # Validate access/method and snapshot the task without holding the lock during the Agent call.
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        require_record_access(task, user, write=True)
+        detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
+        if not pipeline_method_uses_training(detection_method):
+            raise HTTPException(status_code=409, detail="该任务使用 AI/开放定位检测，建档完成即可直接使用，无需 Agent 训练编排。")
+        snapshot = copy.deepcopy(task)
+    decision = agent_pipeline_decide(snapshot, config, user_message=message, trigger="chat")
+    pending_advances: list[str] = []
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        require_record_access(task, user, write=True)
+        commit_pipeline_agent_turn(task, config, user, message, decision, "chat", pending_advances=pending_advances)
+        save_pipeline_tasks(tasks)
+        result = pipeline_task_public(task, config)
+    for advance_id in pending_advances:
+        schedule_pipeline_advance(advance_id, user)
+    return result
+
+
+@app.post("/api/pipeline/tasks/{task_id}/advance")
+def advance_pipeline_task_endpoint(task_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    # Validate + mark the task as advancing, then hand the heavy/bounded work to
+    # the async per-task runner so this request returns immediately (no global
+    # lock, no 504). The runner persists sub-step progress; the UI polls for it.
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        require_record_access(task, user, write=True)
+        sync_pipeline_task(task)
+        already = False
+        with _pipeline_advance_registry_lock:
+            already = task_id in _pipeline_advance_inflight
+        if not already:
+            task["advancing"] = True
+            task["advance_started_at"] = int(time.time())
+            task["job_note"] = "正在推进…"
+            task["last_error"] = ""
+            task["updated_at"] = int(time.time())
+            save_pipeline_tasks(tasks)
+        result = pipeline_task_public(task, config)
+    if not already:
+        schedule_pipeline_advance(task_id, user)
+    return result
+
+
+@app.post("/api/pipeline/tasks/{task_id}/cancel-advance")
+def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
+    user = current_auth_user()
+    config = scope_config_for_user(load_config(), user)
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        require_record_access(task, user, write=True)
+    cancel_pipeline_advance(task_id)
+    with _pipeline_tasks_lock:
+        tasks = load_pipeline_tasks()
+        task = next((item for item in tasks if item.get("id") == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="流水线任务不存在")
+        task.pop("advancing", None)
+        task.pop("advance_started_at", None)
+        task["job_note"] = "已取消推进。"
+        task["updated_at"] = int(time.time())
+        save_pipeline_tasks(tasks)
+        result = pipeline_task_public(task, config)
+    return result
+
+
+DASHBOARD_AI_TASK_NAME = "Dashboard 快捷 AI 检测"
+
+
+def upsert_dashboard_ai_task(accessory_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    accessories_by_id = accessory_lookup_by_id(config)
+    tasks = load_ai_detection_tasks()
+    # load_ai_detection_tasks 会把 source 归一化成 workbench,所以用固定名称识别看板任务。
+    task = next((item for item in tasks if item.get("name") == DASHBOARD_AI_TASK_NAME), None)
+    selected_ids = list(dict.fromkeys((task.get("selected_accessory_ids") if task else []) + [accessory_id]))
+    selected_ids = [item_id for item_id in selected_ids if item_id in accessories_by_id]
+    counts = {item_id: int((task or {}).get("required_accessory_counts", {}).get(item_id, 1) or 1) for item_id in selected_ids}
+    labels = {item_id: str(accessories_by_id[item_id].get("name") or item_id) for item_id in selected_ids}
+    payload = {
+        "name": DASHBOARD_AI_TASK_NAME,
+        "selected_accessory_ids": selected_ids,
+        "required_accessory_counts": counts,
+        "accessory_labels": labels,
+        "source": PIPELINE_DASHBOARD_AI_TASK_SOURCE,
+    }
+    now = time.time()
+    if task:
+        task.update({**payload, "updated_at": now})
+    else:
+        task = {"id": f"aitask_{uuid.uuid4().hex[:10]}", "created_at": now, "updated_at": now, **current_owner_fields(), **payload}
+        tasks.insert(0, task)
+    save_ai_detection_tasks(tasks)
+    return serialize_ai_detection_task(task, config)
+
+
+@app.post("/api/accessories/{accessory_id}/route")
+def set_accessory_route(accessory_id: str, request: AccessoryRouteRequest) -> dict[str, Any]:
+    user = current_auth_user()
+    route = str(request.route or "").strip()
+    if route not in ACCESSORY_DETECTION_ROUTES:
+        raise HTTPException(status_code=400, detail=f"未知的检测路线:{route}")
+    config = load_config()
+    item = next((entry for entry in config.get("accessories", []) if accessory_uid(entry) == accessory_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="配件不存在")
+    require_record_access(item, user, write=True)
+    item["detection_route"] = route
+    result: dict[str, Any] = {"accessory_id": accessory_id, "route": route}
+    if route == "ai" and request.apply:
+        try:
+            ensure_accessory_ai_profile(item)
+            result["profile_status"] = "ready"
+        except Exception as exc:  # noqa: BLE001 - 画像生成失败不应阻塞路线切换
+            result["profile_status"] = "failed"
+            result["profile_error"] = str(exc)[:200]
+        save_config(config)
+        result["ai_task"] = upsert_dashboard_ai_task(accessory_id, config)
+    elif route == "locate" and request.apply:
+        ensure_accessory_locateanything_profile(item)
+        result["profile_status"] = "ready"
+        save_config(config)
+    else:
+        save_config(config)
+    if route == "locate":
+        result["locate_item_id"] = f"accessory:{accessory_id}"
+    result["accessory"] = serialize_accessory(item)
+    return result
+
+
+REACT_PRODUCTION_ROUTE_SEGMENTS = {
+    "status",
+    "inspect",
+    "ai-inspect",
+    "label-sheet",
+    "locate-anything",
+    "accessories",
+    "training-library",
+    "pipeline",
+    "rules",
+    "users",
+    "data-analysis",
+}
+REACT_PRODUCTION_BLOCKED_PREFIXES = (
+    "/api/",
+    "/static/",
+    "/outputs/",
+    "/react-preview",
+    "/favicon",
+    "/apple-touch-icon",
+    "/site.webmanifest",
+)
+
+
+def react_production_spa_enabled() -> bool:
+    return os.environ.get("VANTALINE_REACT_PRODUCTION_SPA") == "1"
+
+
+@app.get("/{react_path:path}")
+def react_production_spa(react_path: str) -> FileResponse:
+    if not react_production_spa_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    normalized = f"/{react_path.strip('/')}" if react_path else "/"
+    if normalized == "/" or normalized.startswith(REACT_PRODUCTION_BLOCKED_PREFIXES):
+        raise HTTPException(status_code=404, detail="Not found")
+    first_segment = normalized.strip("/").split("/", 1)[0]
+    if first_segment not in REACT_PRODUCTION_ROUTE_SEGMENTS:
+        raise HTTPException(status_code=404, detail="Not found")
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Production React build is not available")
+    return FileResponse(
+        index_path,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.on_event("startup")
 def resume_image_worker_queue() -> None:
+    list_codex_image_jobs()
     if os.environ.get("LOCAL_INSPECTION_AUTO_RESUME_WORKER") == "1":
         start_image_worker()
 

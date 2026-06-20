@@ -1,7 +1,9 @@
 fastapi
 uvicorn[standard]
+python-multipart
 opencv-python
 numpy
+Pillow
 pydantic
 ultralytics
 paddleocr
