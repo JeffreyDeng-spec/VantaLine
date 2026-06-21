@@ -39,6 +39,7 @@ import {
   advancePipelineTask,
   createAccessory,
   createPipelineTask,
+  deleteAccessory,
   deletePipelineTask,
   getAccessories,
   getAgentRecommendation,
@@ -66,6 +67,7 @@ import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { recordAuditText, statusLabel, toneForStatus } from "../../utils/format";
+import { AccessoryTextCropModal } from "../accessories/AccessoryTextCropModal";
 import { useAuth } from "../auth/auth-context";
 
 type PipelineMethod = "yolo_ocr" | "yolo" | "ai" | "locate";
@@ -74,6 +76,7 @@ type DropKind = "lane" | "task" | "library" | "remove-accessory";
 type DragKind = "accessory" | "task";
 type AgentMcpDecision = "pending" | "continue_existing_assets" | "continue_training" | "replan_requested" | "cancelled";
 type AgentMcpStageKey = "agent_pose_planning" | "pose_image_generation" | "sample_generation" | "model_training";
+const TEXT_ACCESSORY_MAX_IMAGES = 2;
 
 interface AgentPosePlan {
   accessory_id: string;
@@ -232,6 +235,22 @@ function appendPipelineFormValue(form: FormData, key: string, value: string | nu
   form.append(key, String(value));
 }
 
+function fileLooksLikeImage(file: File) {
+  return file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp)$/i.test(file.name);
+}
+
+function validateTextAccessoryFiles(files: File[], notify: ReturnType<typeof useToast>["notify"]) {
+  if (!files.every(fileLooksLikeImage)) {
+    notify({ title: "文字类只能上传图片", description: "请移除视频或其它文件。", tone: "error" });
+    return false;
+  }
+  if (files.length > TEXT_ACCESSORY_MAX_IMAGES) {
+    notify({ title: `文字类最多 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片`, tone: "error" });
+    return false;
+  }
+  return true;
+}
+
 function normalizePipelineMethod(value: PipelineDetectionMethod | undefined): PipelineMethod {
   const method = String(value || "").trim().toLowerCase();
   if (["ai_detection", "ai_inspect", "gemini", "ai"].includes(method)) return "ai";
@@ -281,6 +300,10 @@ function materialLabel(value: string | undefined) {
 function accessoryReady(item: AccessorySummary | PipelineCandidate) {
   const status = String(item.status || "active").trim().toLowerCase();
   return !ACCESSORY_PENDING_STATUSES.has(status);
+}
+
+function accessoryNeedsTextCrop(item: AccessorySummary | null | undefined) {
+  return item?.material_type === "text" && (item.manual_crop_required || item.status === "needs_crop");
 }
 
 function taskAccessoryCount(task: PipelineTask, accessoryId: string) {
@@ -1804,6 +1827,7 @@ function AddAccessoryModal({
       notify({ title: "请先选择物品透明或不透明", tone: "error" });
       return;
     }
+    if (draft.material_type === "text" && !validateTextAccessoryFiles(draftFiles, notify)) return;
     const form = new FormData();
     appendPipelineFormValue(form, "name", name);
     appendPipelineFormValue(form, "material_type", draft.material_type);
@@ -1924,7 +1948,7 @@ function AddAccessoryModal({
               <input
                 type="file"
                 multiple
-                accept="image/*,video/*"
+                accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"}
                 onChange={(event) => setDraftFiles(Array.from(event.currentTarget.files || []))}
                 required
               />
@@ -1934,7 +1958,13 @@ function AddAccessoryModal({
                 {creating ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
                 创建并加入流水线
               </button>
-              <span className="hint-line">{draftFiles.length ? `${draftFiles.length} 个文件已选择` : "支持图片或视频素材"}</span>
+              <span className="hint-line">
+                {draftFiles.length
+                  ? `${draftFiles.length} 个文件已选择`
+                  : draft.material_type === "text"
+                    ? `文字类最多 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片，创建后逐张裁剪`
+                    : "支持图片或视频素材"}
+              </span>
             </div>
           </form>
           <div className="section-title pipeline-library-title">
@@ -1979,6 +2009,7 @@ export function TrainingPipelinePage() {
   const { notify } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [cropAccessory, setCropAccessory] = useState<AccessorySummary | null>(null);
   const [detailTaskId, setDetailTaskId] = useState("");
   const [paramsTarget, setParamsTarget] = useState<ParamsTarget | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
@@ -2069,8 +2100,13 @@ export function TrainingPipelinePage() {
   async function createAccessoryInFlow(form: FormData) {
     setBusy("create-accessory");
     try {
-      await createAccessory(form);
-      notify({ title: "配件已创建并加入当前流水线", description: "可直接拖入任务。", tone: "success" });
+      const result = await createAccessory(form);
+      if (accessoryNeedsTextCrop(result.item)) {
+        setCropAccessory(result.item || null);
+        notify({ title: "配件已创建，等待裁剪", description: "请截取完整文字区域后再用于训练。", tone: "info" });
+      } else {
+        notify({ title: "配件已创建并加入当前流水线", description: "可直接拖入任务。", tone: "success" });
+      }
       setAddOpen(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
@@ -2410,6 +2446,27 @@ export function TrainingPipelinePage() {
           onClose={() => setAddOpen(false)}
           onCreate={createAccessoryInFlow}
           onRetry={() => accessoriesQuery.refetch()}
+        />
+      ) : null}
+      {cropAccessory ? (
+        <AccessoryTextCropModal
+          accessory={cropAccessory}
+          onClose={() => setCropAccessory(null)}
+          onCancel={async () => {
+            await deleteAccessory(cropAccessory.id);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) })
+            ]);
+          }}
+          onSaved={async () => {
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) })
+            ]);
+          }}
         />
       ) : null}
       {detailTask ? (

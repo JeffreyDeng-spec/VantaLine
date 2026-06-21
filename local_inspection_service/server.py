@@ -1287,6 +1287,7 @@ IMAGE_WORKER_LOG_TAIL_BYTES = 64000
 WINDOWS_WORKER_STATUS_CACHE_SECONDS = max(2.0, float(os.environ.get("VANTALINE_WORKER_STATUS_CACHE_SECONDS", "15")))
 IMAGE_REFERENCE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 VIDEO_REFERENCE_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
+MAX_TEXT_ACCESSORY_IMAGES = 2
 MAX_IMAGE_WORKER_INPUTS = 10
 MAX_VIDEO_REFERENCE_FRAMES = 6
 PREVIEW_CACHE_SCHEMA_VERSION = "preview-cache-v4-object-overlap-material-alpha-scale"
@@ -1492,6 +1493,11 @@ class AccessoryAiReferenceRequest(BaseModel):
     source_path: str
 
 
+class AccessoryTextCropRequest(BaseModel):
+    source_path: str
+    corners: list[dict[str, float]]
+
+
 class AuthBootstrapRequest(BaseModel):
     username: str
     password: str
@@ -1585,7 +1591,13 @@ POSE_COLLECTION_GRID_ENABLED = False
 # Bump when the agent-MCP sprite build pipeline changes (segmentation method,
 # render scale, metadata) so cached sprites on existing accessories are rebuilt
 # on the next task instead of being reused stale.
-AGENT_MCP_SPRITE_BUILD_VERSION = 3
+AGENT_MCP_SPRITE_BUILD_VERSION = 4
+CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD = 0.05
+CHROMA_SCREEN_OPTIONS: dict[str, dict[str, Any]] = {
+    "green": {"name": "green", "rgb": (0, 255, 0), "hex": "#00FF00", "label": "pure green"},
+    "blue": {"name": "blue", "rgb": (0, 0, 255), "hex": "#0000FF", "label": "pure blue"},
+    "red": {"name": "red", "rgb": (255, 0, 0), "hex": "#FF0000", "label": "pure red"},
+}
 # Pose Planner Agent: a multimodal agent analyses each accessory's material and
 # decides the structured pose set (count + per-pose generation instructions) as
 # strict JSON. Rules only act as guardrail/validation (schema, bounds, physics,
@@ -1889,6 +1901,10 @@ def serialize_accessory(item: dict[str, Any]) -> dict[str, Any]:
 def serialize_accessory_summary(item: dict[str, Any]) -> dict[str, Any]:
     full = serialize_accessory(item)
     source_files = full.get("source_files") if isinstance(full.get("source_files"), list) else []
+    is_text = str(full.get("material_type")) == "text"
+    source_preview_limit = MAX_TEXT_ACCESSORY_IMAGES if is_text else 4
+    source_file_count = text_accessory_source_count(full) if is_text else len(source_files)
+    original_source_files = full.get("original_source_files") if isinstance(full.get("original_source_files"), list) else []
     thumbnails = full.get("thumbnails") if isinstance(full.get("thumbnails"), list) else []
     ai_status = full.get("ai_profile_status") if isinstance(full.get("ai_profile_status"), dict) else {}
     locate_status = full.get("locateanything_profile_status") if isinstance(full.get("locateanything_profile_status"), dict) else {}
@@ -1906,8 +1922,12 @@ def serialize_accessory_summary(item: dict[str, Any]) -> dict[str, Any]:
         "size_reference": full.get("size_reference"),
         "size_reference_label": (size_reference_payload(full.get("size_reference")) or {}).get("label"),
         "status": full.get("status"),
-        "source_files": source_files[:4],
-        "source_file_count": len(source_files),
+        "manual_crop_required": full.get("manual_crop_required"),
+        "manual_crop_reason": full.get("manual_crop_reason"),
+        "preprocess": full.get("preprocess"),
+        "source_files": source_files[:source_preview_limit],
+        "original_source_files": original_source_files[:source_preview_limit],
+        "source_file_count": source_file_count,
         "normalized_asset_count": len(full.get("normalized_assets") or []),
         "clean_sprite_status": full.get("clean_sprite_status"),
         "clean_sprite_count": full.get("clean_sprite_count"),
@@ -2322,15 +2342,80 @@ def letterbox_document_onto_paper(
     return canvas
 
 
+def resize_document_to_paper(image: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
+    """Resize a document image directly to the chosen paper pixel size."""
+    target_w = max(1, int(target_w))
+    target_h = max(1, int(target_h))
+    h, w = image.shape[:2]
+    scale = max(target_w / max(1, w), target_h / max(1, h))
+    return cv2.resize(
+        image,
+        (target_w, target_h),
+        interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
+    )
+
+
+def is_text_rectified_path(path: Path | str) -> bool:
+    stem = Path(str(path)).stem.lower()
+    return stem.endswith("_rectified") or "_rectified_" in stem or "_manual_rectified" in stem
+
+
+def stable_text_crop_stem(path: Path | str) -> str:
+    stem = Path(str(path)).stem.replace(" ", "_")[:80] or "document"
+    stem = re.sub(r"[^a-zA-Z0-9_.-]+", "_", stem).strip("._-")
+    return stem or "document"
+
+
+def text_raw_crop_prefix(path: Path | str) -> str:
+    return f"{stable_text_crop_stem(path).lower()}_manual_rectified"
+
+
+def text_raw_has_rectified(raw_path: Path | str, rectified_sources: list[Path]) -> bool:
+    raw_stem = stable_text_crop_stem(raw_path).lower()
+    prefix = text_raw_crop_prefix(raw_path)
+    for rectified in rectified_sources:
+        stem = rectified.stem.lower()
+        if stem == prefix or stem.startswith(f"{prefix}_"):
+            return True
+        if stem.endswith(f"_{raw_stem}.bin_manual_rectified") or stem.startswith(f"{raw_stem}.bin_manual_rectified_"):
+            return True
+    return False
+
+
+def text_image_paths_for_upload_limit(item: dict[str, Any]) -> list[Path]:
+    original = item.get("original_source_files") if isinstance(item.get("original_source_files"), list) else []
+    source = item.get("source_files") if isinstance(item.get("source_files"), list) else []
+    paths = [Path(str(path)) for path in (original or source)]
+    images = [path for path in paths if path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES]
+    if original:
+        return images
+    raw_images = [path for path in images if not is_text_rectified_path(path)]
+    return raw_images or images
+
+
+def text_accessory_source_count(item: dict[str, Any]) -> int:
+    return len(text_image_paths_for_upload_limit(item))
+
+
+def validate_text_accessory_uploads(files: list[UploadFile], *, existing_count: int = 0) -> None:
+    image_count = 0
+    for upload in files:
+        suffix = Path(upload.filename or "").suffix.lower()
+        if suffix not in IMAGE_REFERENCE_SUFFIXES:
+            raise HTTPException(status_code=400, detail="文字类配件只能上传图片，不能上传视频或其它文件")
+        image_count += 1
+    if existing_count + image_count > MAX_TEXT_ACCESSORY_IMAGES:
+        raise HTTPException(status_code=400, detail=f"文字类配件最多上传 {MAX_TEXT_ACCESSORY_IMAGES} 张图片")
+
+
 def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Lightweight document pipeline (no image generation): auto-crop the document
     body, deskew/perspective-correct any tilt, then normalize onto the chosen paper
-    page (A4/A5/...). The output is always exactly the paper pixel size at the paper
-    aspect ratio, with the content never non-uniformly stretched."""
+    page (A4/A5/...). The output is always exactly the paper pixel size."""
     image = cv2.imread(str(src))
     if image is None:
         return None
-    is_manual_rectified = src.stem.endswith("_rectified")
+    is_manual_rectified = is_text_rectified_path(src)
     target_w, target_h = target_paper_pixel_size(physical_size)
     target_aspect = target_w / max(1, target_h)
     quad = None if is_manual_rectified else detect_document_quad(image, target_aspect)
@@ -2344,19 +2429,21 @@ def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, A
             warped = cv2.warpPerspective(image, cv2.getPerspectiveTransform(quad.astype("float32"), dst), (target_w, target_h))
             method = "paper_quad_perspective"
         else:
-            # Deskew to the document's own true aspect, then letterbox onto the page
-            # so the content keeps its real proportions instead of being stretched.
+            # Deskew to the document's own true aspect, then resize to the page so
+            # custom paper targets do not introduce white letterbox borders.
             rect_w = max(1, int(round(mean_w)))
             rect_h = max(1, int(round(mean_h)))
             dst = np.array([[0, 0], [rect_w - 1, 0], [rect_w - 1, rect_h - 1], [0, rect_h - 1]], dtype="float32")
             deskewed = cv2.warpPerspective(image, cv2.getPerspectiveTransform(quad.astype("float32"), dst), (rect_w, rect_h))
-            warped = letterbox_document_onto_paper(deskewed, target_w, target_h)
-            method = "paper_quad_deskew_letterbox"
+            warped = resize_document_to_paper(deskewed, target_w, target_h)
+            method = "paper_quad_deskew_resize"
     else:
-        # Already-rectified manual, or no reliable crop: letterbox the whole image
-        # onto the page. Crucially, we never stretch to the paper aspect.
-        warped = letterbox_document_onto_paper(image, target_w, target_h)
-        method = "manual_rectified_letterbox" if is_manual_rectified else "paper_letterbox_fallback"
+        if not is_manual_rectified:
+            return None
+        # Already-rectified manual crop: stretch the whole crop to the requested
+        # paper size instead of adding letterbox borders.
+        warped = resize_document_to_paper(image, target_w, target_h)
+        method = "manual_rectified_resize"
     out = target_dir / f"{src.stem}_canonical.png"
     cv2.imwrite(str(out), warped)
     return {
@@ -3575,6 +3662,58 @@ def accessory_reference_image_contexts(item: dict[str, Any], *, max_images: int 
         if len(contexts) >= max_images:
             break
     return contexts
+
+
+def normalize_chroma_screen(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        name = str(value.get("name") or "").strip().lower()
+    else:
+        name = str(value or "").strip().lower()
+    return dict(CHROMA_SCREEN_OPTIONS.get(name) or CHROMA_SCREEN_OPTIONS["green"])
+
+
+def saturated_chroma_mask(image_bgr: np.ndarray, screen: dict[str, Any]) -> np.ndarray:
+    if image_bgr is None or image_bgr.ndim != 3:
+        return np.zeros((0, 0), dtype=bool)
+    name = str(screen.get("name") or "green")
+    blue, green, red = cv2.split(image_bgr.astype(np.int16))
+    if name == "blue":
+        return (blue >= 160) & (red <= 110) & (green <= 140) & ((blue - np.maximum(red, green)) >= 50)
+    if name == "red":
+        return (red >= 160) & (blue <= 120) & (green <= 120) & ((red - np.maximum(blue, green)) >= 50)
+    return (green >= 160) & (red <= 110) & (blue <= 110) & ((green - np.maximum(red, blue)) >= 50)
+
+
+def accessory_reference_chroma_fraction(item: dict[str, Any], screen_name: str, *, max_images: int = 3) -> float:
+    screen = normalize_chroma_screen(screen_name)
+    best = 0.0
+    for ref in accessory_reference_image_contexts(item, max_images=max_images):
+        path = resolve_service_path(ref.get("source_path"))
+        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if image is None or image.size == 0:
+            continue
+        mask = saturated_chroma_mask(image, screen)
+        if mask.size:
+            best = max(best, float(mask.mean()))
+    return best
+
+
+def choose_agent_mcp_chroma_screen(item: dict[str, Any]) -> dict[str, Any]:
+    green_fraction = accessory_reference_chroma_fraction(item, "green")
+    if green_fraction <= CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD:
+        screen = normalize_chroma_screen("green")
+        screen["reference_chroma_fraction"] = round(float(green_fraction), 6)
+        return screen
+    blue_fraction = accessory_reference_chroma_fraction(item, "blue")
+    red_fraction = accessory_reference_chroma_fraction(item, "red")
+    chosen = "blue" if blue_fraction <= CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD else "red"
+    if chosen == "red" and red_fraction > CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD:
+        chosen = "blue"
+    screen = normalize_chroma_screen(chosen)
+    screen["reference_green_fraction"] = round(float(green_fraction), 6)
+    screen["reference_blue_fraction"] = round(float(blue_fraction), 6)
+    screen["reference_red_fraction"] = round(float(red_fraction), 6)
+    return screen
 
 
 def fallback_accessory_ai_profile(item: dict[str, Any], reference_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -8458,6 +8597,8 @@ def canonical_text_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def canonical_text_assets_complete(item: dict[str, Any], assets: list[dict[str, Any]] | None = None) -> bool:
+    if item.get("manual_crop_required"):
+        return False
     text_assets = assets if assets is not None else canonical_text_assets(item)
     return bool(text_assets) and all(asset.get("width") and asset.get("height") for asset in text_assets)
 
@@ -10672,13 +10813,37 @@ def normalize_accessory_assets(item: dict[str, Any]) -> dict[str, Any]:
     if material_type == "text":
         assets = []
         physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
-        for src in image_sources[:4]:
+        skipped_for_manual_crop = False
+        rectified_sources = [path for path in image_sources if is_text_rectified_path(path)]
+        raw_sources = [path for path in image_sources if not is_text_rectified_path(path)]
+        text_sources = rectified_sources + raw_sources
+        original_sources = [
+            Path(str(path))
+            for path in (item.get("original_source_files") or [])
+            if Path(str(path)).suffix.lower() in IMAGE_REFERENCE_SUFFIXES and not is_text_rectified_path(path)
+        ]
+        crop_required_sources = original_sources or raw_sources
+        all_required_sources_cropped = all(text_raw_has_rectified(path, rectified_sources) for path in crop_required_sources)
+        for src in text_sources[:MAX_TEXT_ACCESSORY_IMAGES]:
+            if not is_text_rectified_path(src):
+                skipped_for_manual_crop = True
+                continue
             normalized = normalize_text_image(src, normalized_dir, physical_size)
             if normalized:
                 assets.append(normalized)
+            else:
+                skipped_for_manual_crop = True
+        manual_crop_required = bool(crop_required_sources) and not all_required_sources_cropped
+        manual_crop_reason = ""
+        if manual_crop_required:
+            manual_crop_reason = "manual_crop_required"
+        elif not assets and skipped_for_manual_crop:
+            manual_crop_reason = "manual_crop_required"
         return {
-            "status": "normalized_text_ready" if assets else "needs_crop",
+            "status": "normalized_text_ready" if assets and not manual_crop_required else "needs_crop",
             "normalized_assets": assets,
+            "manual_crop_required": manual_crop_required or (not assets and skipped_for_manual_crop),
+            "manual_crop_reason": manual_crop_reason,
             "preprocess": "用户裁剪包含完整文字的文档图像，系统进行透视校正并生成规整说明书图。",
         }
     prompt = (
@@ -13113,7 +13278,11 @@ def ensure_default_ai_profile_reference(item: dict[str, Any]) -> bool:
 
 
 def refresh_accessory_assets_after_source_change(item: dict[str, Any], *, force_profile: bool = True) -> None:
-    defer_accessory_normalization(item)
+    if accessory_material_type(item) == "text":
+        item.update(normalize_accessory_assets(item))
+        item["normalization_deferred"] = False
+    else:
+        defer_accessory_normalization(item)
     ensure_default_ai_profile_reference(item)
     if force_profile:
         item["ai_profile"] = fallback_accessory_ai_profile(item)
@@ -19136,6 +19305,8 @@ async def add_accessory(
     alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
     if material_type == "object" and not alpha_policy:
         raise HTTPException(status_code=400, detail="请选择物品透明或不透明")
+    if material_type == "text":
+        validate_text_accessory_uploads(files)
     size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
     config = load_config()
     if class_id < 0:
@@ -19179,11 +19350,16 @@ async def add_accessory(
         item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
     if material_type == "object" and size_reference_key:
         item["size_reference"] = size_reference_key
-    defer_accessory_normalization(item)
+    if material_type == "text":
+        item.update(normalize_accessory_assets(item))
+        item["normalization_deferred"] = False
+    else:
+        defer_accessory_normalization(item)
     ensure_default_ai_profile_reference(item)
     ensure_accessory_ai_profile(item, allow_provider=True)
     ensure_accessory_locateanything_profile(item)
-    ensure_pose_collection_image_jobs(item)
+    if material_type != "text":
+        ensure_pose_collection_image_jobs(item)
     config["accessories"].append(item)
     save_config(config)
     if candidate_has_active_image_jobs(item):
@@ -19222,6 +19398,8 @@ async def preview_accessory(
     alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
     if material_type == "object" and not alpha_policy:
         raise HTTPException(status_code=400, detail="请选择物品透明或不透明")
+    if material_type == "text":
+        validate_text_accessory_uploads(files)
     size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
     candidate_source_dir = UPLOAD_DIR / "accessory_candidates" / f"src_{uuid.uuid4().hex[:10]}"
     candidate_source_dir.mkdir(parents=True, exist_ok=True)
@@ -19369,6 +19547,8 @@ async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(
         if accessory_uid(item) != accessory_id:
             continue
         require_record_access(item, user, write=True)
+        if accessory_material_type(item) == "text":
+            validate_text_accessory_uploads(files, existing_count=text_accessory_source_count(item))
         target_dir = UPLOAD_DIR / "accessories" / accessory_id
         target_dir.mkdir(parents=True, exist_ok=True)
         saved_files: list[str] = []
@@ -19381,11 +19561,81 @@ async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(
             saved_files.append(str(path))
         item.setdefault("source_files", [])
         item["source_files"].extend(saved_files)
+        if accessory_material_type(item) == "text":
+            item.setdefault("original_source_files", [])
+            item["original_source_files"].extend(saved_files)
         refresh_accessory_assets_after_source_change(item, force_profile=True)
         save_ai_profile_cache({"entries": {}})
         save_config(config)
         return {
             "status": "saved",
+            "item": serialize_accessory_summary(item),
+            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
+            "detail": accessory_detail_payload(item),
+        }
+    raise HTTPException(status_code=404, detail="Accessory not found")
+
+
+@app.post("/api/accessories/{accessory_id}/text-crop")
+def crop_accessory_text_image(accessory_id: str, request: AccessoryTextCropRequest) -> dict[str, Any]:
+    user = current_auth_user()
+    target_raw = str(request.source_path or "").strip()
+    if not target_raw:
+        raise HTTPException(status_code=400, detail="source_path is required")
+    if len(request.corners or []) != 4:
+        raise HTTPException(status_code=400, detail="corners must contain tl,tr,br,bl")
+    config = load_config()
+    for item in config.get("accessories", []):
+        if accessory_uid(item) != accessory_id:
+            continue
+        require_record_access(item, user, write=True)
+        if accessory_material_type(item) != "text":
+            raise HTTPException(status_code=400, detail="Only text accessories can be cropped")
+        source_paths = {str(path): path for path in existing_source_image_paths(item)}
+        if target_raw not in source_paths:
+            raise HTTPException(status_code=404, detail="Photo is not registered on this accessory")
+        source_path = source_paths[target_raw]
+        if is_text_rectified_path(source_path):
+            raise HTTPException(status_code=400, detail="This text image is already manually cropped")
+        image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+        if image is None:
+            raise HTTPException(status_code=400, detail="Source image is unreadable")
+        height, width = image.shape[:2]
+        points: list[list[float]] = []
+        for corner in request.corners:
+            x = max(0.0, min(100.0, float(corner.get("x", 0.0)))) * width / 100.0
+            y = max(0.0, min(100.0, float(corner.get("y", 0.0)))) * height / 100.0
+            points.append([x, y])
+        src = np.array(points, dtype="float32")
+        tl, tr, br, bl = src
+        target_w = int(round(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl))))
+        target_h = int(round(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl))))
+        if target_w < 8 or target_h < 8:
+            raise HTTPException(status_code=400, detail="Crop area is too small")
+        dst = np.array(
+            [[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]],
+            dtype="float32",
+        )
+        warped = cv2.warpPerspective(image, cv2.getPerspectiveTransform(src, dst), (target_w, target_h))
+        target_dir = UPLOAD_DIR / "accessories" / accessory_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        base = stable_text_crop_stem(source_path)
+        out_path = target_dir / f"{base}_manual_rectified.png"
+        suffix = 1
+        while out_path.exists():
+            out_path = target_dir / f"{base}_manual_rectified_{suffix}.png"
+            suffix += 1
+        if not cv2.imwrite(str(out_path), warped):
+            raise HTTPException(status_code=500, detail="Failed to save cropped image")
+        item.setdefault("source_files", [])
+        item["source_files"].append(str(out_path))
+        refresh_accessory_assets_after_source_change(item, force_profile=True)
+        save_ai_profile_cache({"entries": {}})
+        save_config(config)
+        return {
+            "status": "saved",
+            "accessory_id": accessory_id,
+            "source_path": str(out_path),
             "item": serialize_accessory_summary(item),
             "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
             "detail": accessory_detail_payload(item),
@@ -21642,7 +21892,7 @@ def agent_mcp_pose_request() -> dict[str, Any]:
         "subject_count": 1,
         "target_paper": False,
         "grid_layout": False,
-        "background": "green_industrial_conveyor_belt_top_down",
+        "background": "solid_chroma_key_tabletop_top_down",
         "camera": "strict_vertical_top_down_90deg",
         "output_contract": "one_accessory_per_image",
     }
@@ -21651,21 +21901,21 @@ def agent_mcp_pose_request() -> dict[str, Any]:
 def agent_mcp_pose_templates(base_id: str, object_kind: str) -> list[dict[str, Any]]:
     templates: dict[str, list[tuple[str, str, str, str, str]]] = {
         "cube": [
-            ("face_a_down", "one square face flat on conveyor", "cube rests stably on any face", "top face visible with slight side edge", "face_a_down"),
-            ("face_b_down", "adjacent square face flat on conveyor", "rotated cube exposes a different face", "alternate face visible", "face_b_down"),
-            ("face_c_down", "third square face flat on conveyor", "third axis face can contact conveyor", "third face visible", "face_c_down"),
+            ("face_a_down", "one square face flat on tabletop", "cube rests stably on any face", "top face visible with slight side edge", "face_a_down"),
+            ("face_b_down", "adjacent square face flat on tabletop", "rotated cube exposes a different face", "alternate face visible", "face_b_down"),
+            ("face_c_down", "third square face flat on tabletop", "third axis face can contact tabletop", "third face visible", "face_c_down"),
         ],
         "bottle": [
-            ("upright", "base on conveyor", "flat base can stand vertically", "cap/top footprint visible", "upright_base_down"),
-            ("horizontal_side", "curved side contacts conveyor", "bottle can lie on side after falling", "long body silhouette visible", "horizontal_side_down"),
+            ("upright", "base on tabletop", "flat base can stand vertically", "cap/top footprint visible", "upright_base_down"),
+            ("horizontal_side", "curved side contacts tabletop", "bottle can lie on side after falling", "long body silhouette visible", "horizontal_side_down"),
         ],
         "thin_object": [
-            ("face_up", "back face on conveyor", "thin object settles flat", "front face visible", "face_up"),
-            ("face_down", "front face on conveyor", "thin object may flip but remains flat", "back face visible", "face_down"),
+            ("face_up", "back face on tabletop", "thin object settles flat", "front face visible", "face_up"),
+            ("face_down", "front face on tabletop", "thin object may flip but remains flat", "back face visible", "face_down"),
         ],
         "generic_object": [
-            ("primary_rest", "largest stable surface on conveyor", "object settles on broadest support area", "primary silhouette visible", "primary_resting_pose"),
-            ("side_rest", "secondary side surface on conveyor", "secondary plausible rest pose", "side silhouette visible", "side_resting_pose"),
+            ("primary_rest", "largest stable surface on tabletop", "object settles on broadest support area", "primary silhouette visible", "primary_resting_pose"),
+            ("side_rest", "secondary side surface on tabletop", "secondary plausible rest pose", "side silhouette visible", "side_resting_pose"),
         ],
     }
     result = []
@@ -21703,12 +21953,12 @@ def accessory_pose_plan_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
         "top_view_aspect_ratio": profile.get("top_view_aspect_ratio"),
         "has_transparent_cutout": bool(sprites),
         "conveyor_constraints": (
-            "The object rests on a flat horizontal green industrial conveyor belt. "
+            "The object rests on a flat horizontal solid chroma-key tabletop. "
             "Gravity points straight down: it cannot float, cannot be propped up by "
-            "external supports, and cannot interpenetrate the belt."
+            "external supports, and cannot interpenetrate the tabletop."
         ),
         "camera_constraints": (
-            "A fixed inspection camera is mounted about 700mm directly above the belt "
+            "A fixed inspection camera is mounted about 700mm directly above the tabletop "
             "and looks straight down (strict vertical top-down, 90 degrees). Every pose "
             "must be renderable as that same top-down shot at a consistent scale."
         ),
@@ -21722,12 +21972,12 @@ def pose_plan_system_prompt() -> str:
         "You are a Pose Planner Agent for an industrial visual-inspection training "
         "pipeline. Given one accessory (name, physical dimensions, material, and "
         "reference images), decide the realistic set of STABLE resting poses the part "
-        "can take on a flat top-down conveyor belt, and write an explicit image-"
+        "can take on a flat top-down tabletop, and write an explicit image-"
         "generation instruction for each pose.\n"
         "Think in these steps before answering:\n"
         "1. Identify the object geometry type (e.g. rectangular_case, thin_sheet, "
         "cylinder, bottle, irregular_part).\n"
-        "2. List the faces/edges that can naturally and stably contact the belt.\n"
+        "2. List the faces/edges that can naturally and stably contact the tabletop.\n"
         "3. Merge poses that look almost identical from a strict top-down camera into "
         "one.\n"
         "4. Exclude unstable or impossible poses (balancing on a corner/tip, standing "
@@ -22054,8 +22304,12 @@ def agent_mcp_pose_reference_content(item: dict[str, Any], *, max_images: int = 
     return content, refs
 
 
-def agent_mcp_pose_prompt(task: dict[str, Any], plan: dict[str, Any], pose: dict[str, Any]) -> str:
+def agent_mcp_pose_prompt(task: dict[str, Any], plan: dict[str, Any], pose: dict[str, Any], chroma_screen: dict[str, Any] | None = None) -> str:
     request = pose.get("request") if isinstance(pose.get("request"), dict) else {}
+    screen = normalize_chroma_screen(chroma_screen)
+    screen_rgb = screen["rgb"]
+    screen_hex = str(screen["hex"])
+    screen_label = str(screen.get("label") or screen.get("name") or "pure green")
     generation_prompt = str(pose.get("generation_prompt") or "").strip()
     negative_prompt = str(pose.get("negative_prompt") or "").strip()
     parts = [
@@ -22071,21 +22325,21 @@ def agent_mcp_pose_prompt(task: dict[str, Any], plan: dict[str, Any], pose: dict
         parts.append(f"Pose plan (decided by the pose-planner agent): {generation_prompt}")
     else:
         parts.append(f"Gravity basis: {pose.get('gravity_basis')}.")
-        parts.append(f"Conveyor view: {pose.get('conveyor_view')}.")
+        parts.append(f"Top-down view: {pose.get('conveyor_view')}.")
     parts.append(f"Task: {task.get('name') or task.get('id')}.")
     parts.extend(
         [
-            # Fixed scene + camera contract (user requirement): one item resting on a
-            # green industrial conveyor belt, shot strictly straight down.
-            "Scene: place the single accessory on a green industrial conveyor belt (solid matte green PVC belt surface).",
-            "Camera: STRICTLY vertical top-down (bird's-eye), lens pointing straight down at 90 degrees, optical axis perpendicular to the belt. No tilt, no perspective, no oblique angle.",
-            "The accessory must lie flat on the belt obeying gravity in the requested stable rest pose; show only the face that is naturally visible from directly above.",
-            "Even, diffuse lighting with soft shadows directly under the object; no glare, no hotspots, no harsh reflections.",
-            "Show exactly one accessory instance, centered, fully inside the frame, on the green conveyor background.",
+            "Scene: place the single accessory on a flat solid chroma-key tabletop with the same solid chroma color filling the entire background.",
+            f"Chroma color: exact {screen_label} RGB{tuple(screen_rgb)} / {screen_hex}. The tabletop and all visible background pixels must use this same flat color.",
+            "Camera: STRICTLY vertical top-down (bird's-eye), lens pointing straight down at 90 degrees, optical axis perpendicular to the tabletop. No tilt, no perspective, no oblique angle.",
+            "The accessory must lie flat on the tabletop obeying gravity in the requested stable rest pose; show only the face that is naturally visible from directly above.",
+            "Even, diffuse lighting on the object only. Do not add cast shadows, contact shadows, reflections, gradients, texture, seams, belts, rollers, props, or environment details on the chroma tabletop/background.",
+            f"Show exactly one accessory instance, centered, fully inside the frame, on the solid {screen_hex} chroma background.",
             # Keep scale comparable across every pose so the cut-out sprites stay a
             # consistent size for the same accessory.
             "Frame the object so its longest dimension spans roughly 65-75% of the image width; keep this scale consistent across all poses of this accessory.",
             "Do not create a grid, collage, calibration target, target paper, labels, captions, rulers, perspective view, side view, or multiple accessories.",
+            "Exclude all movable or detachable secondary components: straps, cords, strings, lanyards, loose cables, tags, labels, packaging ties, and detachable accessories. Render only the main rigid product body.",
         ]
     )
     if negative_prompt:
@@ -22126,6 +22380,7 @@ def write_agent_mcp_pose_artifact(
         "accessory_id": call.get("accessory_id"),
         "pose_id": call.get("pose_id"),
         "source_reference_assets": reference_assets,
+        "chroma_screen": normalize_chroma_screen(call.get("chroma_screen")),
         "output_path": str(output_path),
         "output_url": public_output_url(output_path),
         "mime_type": mime_type,
@@ -22165,6 +22420,126 @@ def suppress_green_spill(image_bgr: np.ndarray) -> np.ndarray:
     green = green.copy()
     green[spill] = limit[spill]
     return cv2.merge([blue, green, red])
+
+
+def suppress_chroma_spill(image_bgr: np.ndarray, screen: dict[str, Any] | None = None) -> np.ndarray:
+    if image_bgr is None or image_bgr.ndim != 3:
+        return image_bgr
+    name = str(normalize_chroma_screen(screen).get("name") or "green")
+    if name == "green":
+        return suppress_green_spill(image_bgr)
+    blue, green, red = cv2.split(image_bgr)
+    if name == "blue":
+        limit = np.maximum(red, green)
+        spill = blue > limit
+        blue = blue.copy()
+        blue[spill] = limit[spill]
+        return cv2.merge([blue, green, red])
+    if name == "red":
+        limit = np.maximum(blue, green)
+        spill = red > limit
+        red = red.copy()
+        red[spill] = limit[spill]
+        return cv2.merge([blue, green, red])
+    return image_bgr
+
+
+def chroma_background_mask(image_bgr: np.ndarray, screen: dict[str, Any] | None = None) -> np.ndarray:
+    screen = normalize_chroma_screen(screen)
+    name = str(screen.get("name") or "green")
+    target_bgr = np.array([screen["rgb"][2], screen["rgb"][1], screen["rgb"][0]], dtype=np.int16)
+    image_i16 = image_bgr.astype(np.int16)
+    diff = np.abs(image_i16 - target_bgr.reshape(1, 1, 3))
+    near_exact = (np.max(diff, axis=2) <= 42) | ((np.max(diff, axis=2) <= 70) & (np.sum(diff, axis=2) <= 120))
+    blue, green, red = cv2.split(image_i16)
+    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    if name == "blue":
+        chroma_shadow = (
+            (hue >= 96)
+            & (hue <= 135)
+            & (sat >= 28)
+            & (val >= 28)
+            & (blue >= 90)
+            & ((blue - np.maximum(red, green)) >= 28)
+            & (red <= 150)
+            & (green <= 150)
+        )
+    elif name == "red":
+        chroma_shadow = (
+            ((hue <= 12) | (hue >= 168))
+            & (sat >= 28)
+            & (val >= 28)
+            & (red >= 90)
+            & ((red - np.maximum(blue, green)) >= 28)
+            & (blue <= 150)
+            & (green <= 150)
+        )
+    else:
+        chroma_shadow = (
+            (hue >= 35)
+            & (hue <= 95)
+            & (sat >= 28)
+            & (val >= 28)
+            & (green >= 90)
+            & ((green - np.maximum(red, blue)) >= 28)
+            & (red <= 150)
+            & (blue <= 150)
+        )
+    return near_exact | saturated_chroma_mask(image_bgr, screen) | chroma_shadow
+
+
+def chroma_distance_alpha(image_bgr: np.ndarray, screen: dict[str, Any] | None = None) -> np.ndarray:
+    screen = normalize_chroma_screen(screen)
+    target_bgr = np.array([screen["rgb"][2], screen["rgb"][1], screen["rgb"][0]], dtype=np.float32)
+    diff = image_bgr.astype(np.float32) - target_bgr.reshape(1, 1, 3)
+    distance = np.linalg.norm(diff, axis=2)
+    alpha = np.clip((distance - 24.0) * (255.0 / 96.0), 0, 255)
+    return alpha.astype(np.uint8)
+
+
+def chroma_screen_object_cutout(
+    image_bgr: np.ndarray,
+    screen: dict[str, Any] | None = None,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
+    """Remove a fixed solid chroma tabletop/background and keep the largest object."""
+    if image_bgr is None or image_bgr.ndim != 3:
+        return None
+    height, width = image_bgr.shape[:2]
+    background = chroma_background_mask(image_bgr, screen)
+    if float(background.mean()) < 0.20:
+        return None
+    foreground = (~background).astype(np.uint8) * 255
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=2)
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(foreground, connectivity=8)
+    if num <= 1:
+        return None
+    idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    if int(stats[idx, cv2.CC_STAT_AREA]) < max(400, int(height * width * 0.0015)):
+        return None
+    mask = (labels == idx).astype(np.uint8) * 255
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    filled = np.zeros_like(mask)
+    cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
+    inside_distance = cv2.distanceTransform((filled > 0).astype(np.uint8), cv2.DIST_L2, 3)
+    core = inside_distance >= 3.0
+    edge_band = (filled > 0) & ~core
+    shape_alpha = np.clip(inside_distance * (255.0 / 3.0), 0, 255).astype(np.uint8)
+    color_alpha = chroma_distance_alpha(image_bgr, screen)
+    alpha = np.zeros_like(filled, dtype=np.uint8)
+    alpha[core] = 255
+    alpha[edge_band] = np.minimum(shape_alpha[edge_band], np.maximum(color_alpha[edge_band], 48))
+    alpha = cv2.GaussianBlur(alpha, (3, 3), 0)
+    ys, xs = np.where(alpha > 8)
+    if len(xs) < 240:
+        return None
+    x1, x2 = int(xs.min()), int(xs.max()) + 1
+    y1, y2 = int(ys.min()), int(ys.max()) + 1
+    crop_bgr = suppress_chroma_spill(image_bgr[y1:y2, x1:x2].copy(), screen)
+    return crop_bgr, alpha[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
 
 
 def bright_green_conveyor_mask(image_bgr: np.ndarray) -> np.ndarray:
@@ -22299,41 +22674,47 @@ def green_conveyor_object_cutout(
 def segment_agent_mcp_pose_object(
     image_bgr: np.ndarray,
     rng: np.random.Generator,
+    chroma_screen: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
     """Cut the single foreground accessory out of an AI-generated top-down pose
-    image (object resting on a green conveyor/table). A dedicated green
-    chroma-key runs first (cleanest for these plates), then rembg, then the
-    generic green-aware heuristics."""
+    image (object resting on a solid chroma tabletop). The fixed chroma-key path
+    runs first, then legacy green/rembg fallbacks handle older generated plates."""
     if image_bgr is None or image_bgr.ndim != 3:
         return None
     source_shape = image_bgr.shape
-    # 0) Precise AI matte (rembg/u2net) + bright-green halo trim — keeps the FULL
+    # 0) Fixed chroma key for the new solid tabletop contract.
+    keyed_chroma = chroma_screen_object_cutout(image_bgr, chroma_screen)
+    if keyed_chroma:
+        usable = usable_object_cutout((keyed_chroma[0], keyed_chroma[1]), source_shape)
+        if usable:
+            return usable[0], usable[1], keyed_chroma[2]
+    # 1) Precise AI matte (rembg/u2net) + bright-green halo trim — keeps the FULL
     #    silhouette including thin ends and corrugations (no erosion). Best edges.
     precise = precise_green_plate_cutout(image_bgr)
     if precise:
         usable = usable_object_cutout((precise[0], precise[1]), source_shape)
         if usable:
             return usable[0], usable[1], precise[2]
-    # 1) Green chroma-key tuned for the AI green-conveyor plate (matte fallback).
+    # 2) Green chroma-key tuned for old AI green-conveyor plates.
     keyed = green_conveyor_object_cutout(image_bgr)
     if keyed:
         usable = usable_object_cutout((keyed[0], keyed[1]), source_shape)
         if usable:
             return usable[0], usable[1], keyed[2]
-    # 2) generic rembg path (padded bbox) when available.
+    # 3) generic rembg path (padded bbox) when available.
     rembg_result = ai_background_cutout_with_bbox(image_bgr)
     if rembg_result:
         usable = usable_object_cutout((rembg_result[0], rembg_result[1]), source_shape)
         if usable:
             return usable[0], usable[1], rembg_result[2]
-    # 2) Green-aware foreground heuristic — removes the green conveyor and keeps
+    # 4) Green-aware foreground heuristic — removes the green conveyor and keeps
     #    the largest non-green component (works for arbitrary object colors).
     fallback = object_cutout_from_image(image_bgr, rng)
     if fallback:
         usable = usable_object_cutout(fallback, source_shape)
         if usable:
             return usable[0], usable[1], (0, 0, int(source_shape[1]), int(source_shape[0]))
-    # 3) Green-screen key (anchor-oriented) as last resort.
+    # 5) Green-screen key (anchor-oriented) as last resort.
     green_result = green_screen_object_cutout_with_bbox(image_bgr, rng)
     if green_result:
         usable = usable_object_cutout((green_result[0], green_result[1]), source_shape)
@@ -22376,7 +22757,8 @@ def build_clean_sprites_from_agent_mcp_poses(item: dict[str, Any], *, force: boo
         image = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if image is None:
             continue
-        seg = segment_agent_mcp_pose_object(image, rng)
+        chroma_screen = normalize_chroma_screen(ref.get("chroma_screen"))
+        seg = segment_agent_mcp_pose_object(image, rng, chroma_screen)
         if not seg:
             continue
         cut_bgr, cut_mask, source_bbox = seg
@@ -22418,6 +22800,7 @@ def build_clean_sprites_from_agent_mcp_poses(item: dict[str, Any], *, force: boo
             "physical_size_mm": physical_size,
             "material_alpha_policy": alpha_policy,
             "agent_mcp_pose_reference_path": str(path),
+            "chroma_screen": chroma_screen,
         }
         metadata.update(pose_render_footprint_metadata(pose_family, source_size_px, physical_size))
         out_path = sprite_dir / f"agent_mcp_{safe_record_id(unique_token)}.png"
@@ -22483,6 +22866,7 @@ def materialize_agent_mcp_pose_assets(task: dict[str, Any], config: dict[str, An
                     "task_id": task.get("id"),
                     "call_id": call.get("call_id"),
                     "pose_id": call.get("pose_id"),
+                    "chroma_screen": normalize_chroma_screen(call.get("chroma_screen")),
                     "provider": call.get("provider") or "gemini_native_image_generation",
                     "model": call.get("model") or "",
                     "sha256": call.get("sha256") or file_sha256(output_path),
@@ -22564,13 +22948,15 @@ def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, An
         )
         pose = next((pose for pose in plan.get("poses") or [] if str(pose.get("pose_id") or "") == str(call.get("pose_id") or "")), {})
         reference_content, reference_assets = agent_mcp_pose_reference_content(item or {}, max_images=3)
-        prompt = agent_mcp_pose_prompt(task, plan, pose)
+        chroma_screen = choose_agent_mcp_chroma_screen(item or {})
+        prompt = agent_mcp_pose_prompt(task, plan, pose, chroma_screen)
         call.update(
             {
                 "status": "running",
                 "provider": "gemini_native_image_generation",
                 "model": tool_config["model"],
                 "prompt": prompt,
+                "chroma_screen": chroma_screen,
                 "source_reference_assets": reference_assets,
                 "updated_at": agent_mcp_now(),
                 "error": "",
@@ -22601,6 +22987,7 @@ def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, An
                 "sha256": artifact["sha256"],
                 "latency_ms": artifact["latency_ms"],
                 "usage_metadata": artifact["usage_metadata"],
+                "chroma_screen": artifact.get("chroma_screen") or chroma_screen,
                 "proxy_used": bool((artifact.get("proxy") or {}).get("used")),
                 "proxy_source_name": (artifact.get("proxy") or {}).get("source_name") or "",
                 "proxy_url": (artifact.get("proxy") or {}).get("url") or "",

@@ -26,6 +26,7 @@ import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { formatRecordTime, recordAuditText, statusLabel, toneForStatus } from "../../utils/format";
 import { useAuth } from "../auth/auth-context";
+import { AccessoryTextCropModal } from "./AccessoryTextCropModal";
 
 type MaterialFilter = "all" | "object" | "text";
 type StatusFilter = "all" | "active" | "pending" | "failed";
@@ -38,6 +39,7 @@ const ROUTE_OPTIONS = [
 ];
 
 const ACTIVE_JOB_STATUSES = new Set(["queued_for_codex_image_worker", "queued", "running", "pending"]);
+const TEXT_ACCESSORY_MAX_IMAGES = 2;
 
 function profileStatusText(value: AccessoryProfileStatus | string | undefined, ready?: boolean) {
   if (typeof value === "string") return value || (ready ? "ready" : "pending");
@@ -79,6 +81,43 @@ function candidateHasActiveJobs(candidate: AccessoryCandidate | undefined) {
   return candidateJobs(candidate).some((job) => ACTIVE_JOB_STATUSES.has(String(job.status || "")));
 }
 
+function accessoryNeedsTextCrop(item: AccessorySummary | null | undefined) {
+  return item?.material_type === "text" && (item.manual_crop_required || item.status === "needs_crop");
+}
+
+function fileLooksLikeImage(file: File) {
+  return file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp)$/i.test(file.name);
+}
+
+function pathLooksLikeImage(path = "") {
+  return /\.(png|jpe?g|webp|bmp)$/i.test(path.split(/[?#]/, 1)[0] || "");
+}
+
+function isRectifiedTextPath(path = "") {
+  const name = (path.split(/[\\/]/).pop() || path).replace(/\.[^.]+$/, "").toLowerCase();
+  return name.endsWith("_rectified") || name.includes("_rectified_") || name.includes("_manual_rectified");
+}
+
+function textSourceCount(item: AccessorySummary | null | undefined) {
+  const original = Array.isArray(item?.original_source_files) ? item.original_source_files : [];
+  if (original.length) return original.filter((path) => pathLooksLikeImage(String(path))).length;
+  const sources = Array.isArray(item?.source_files) ? item.source_files : [];
+  const rawSources = sources.filter((path) => pathLooksLikeImage(String(path)) && !isRectifiedTextPath(String(path)));
+  return rawSources.length || Number(item?.source_file_count || 0);
+}
+
+function validateTextFiles(files: File[], existingCount: number, notify: ReturnType<typeof useToast>["notify"]) {
+  if (!files.every(fileLooksLikeImage)) {
+    notify({ title: "文字类只能上传图片", description: "请移除视频或其它文件。", tone: "error" });
+    return false;
+  }
+  if (existingCount + files.length > TEXT_ACCESSORY_MAX_IMAGES) {
+    notify({ title: `文字类最多 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片`, description: `当前还可上传 ${Math.max(0, TEXT_ACCESSORY_MAX_IMAGES - existingCount)} 张。`, tone: "error" });
+    return false;
+  }
+  return true;
+}
+
 function appendFormValue(form: FormData, key: string, value: string | number | boolean | undefined) {
   if (value === undefined || value === "") return;
   form.append(key, String(value));
@@ -93,11 +132,13 @@ function useAccessoryRefresh() {
 function AccessoryDetailModal({
   accessoryId,
   onClose,
-  onChanged
+  onChanged,
+  onTextCrop
 }: {
   accessoryId: string;
   onClose: () => void;
   onChanged: () => void;
+  onTextCrop: (item: AccessorySummary) => void;
 }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
@@ -127,14 +168,22 @@ function AccessoryDetailModal({
       notify({ title: "请选择图片", tone: "error" });
       return;
     }
+    if (item?.material_type === "text" && !validateTextFiles(files, textSourceCount(item), notify)) return;
     const form = new FormData();
     files.forEach((file) => form.append("files", file, file.name));
     setBusy("upload");
     try {
-      await addAccessoryFiles(accessoryId, form);
+      const result = await addAccessoryFiles(accessoryId, form);
       setFiles([]);
-      notify({ title: "素材已添加", tone: "success" });
+      notify({
+        title: item?.material_type === "text" ? "素材已上传，继续裁剪" : "素材已添加",
+        description: item?.material_type === "text" ? "文字类素材需要逐张手动裁剪。" : undefined,
+        tone: "success"
+      });
       await refreshDetail();
+      if (item?.material_type === "text" && result.item) {
+        onTextCrop(result.item);
+      }
     } catch (error) {
       notify({ title: "添加素材失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
     } finally {
@@ -269,6 +318,7 @@ function AccessoryDetailModal({
                   <Upload size={16} aria-hidden="true" />
                   上传 {files.length ? files.length : ""}
                 </button>
+                {item.material_type === "text" ? <span className="hint-line">文字类最多 {TEXT_ACCESSORY_MAX_IMAGES} 张图片，上传后必须逐张裁剪。</span> : null}
               </section>
 
               <section className="gallery-grid">
@@ -326,6 +376,8 @@ export function AccessoriesPage() {
   const [detailId, setDetailId] = useState("");
   const [candidateId, setCandidateId] = useState("");
   const [candidateSeed, setCandidateSeed] = useState<AccessoryCandidateResponse | null>(null);
+  const [cropAccessory, setCropAccessory] = useState<AccessorySummary | null>(null);
+  const [deleteCropAccessoryOnCancel, setDeleteCropAccessoryOnCancel] = useState(true);
   const [busy, setBusy] = useState("");
   const [draft, setDraft] = useState({
     name: "",
@@ -389,6 +441,7 @@ export function AccessoriesPage() {
       notify({ title: "请输入配件名称", tone: "error" });
       return;
     }
+    if (draft.material_type === "text" && !validateTextFiles(draftFiles, 0, notify)) return;
     const form = new FormData();
     Object.entries(draft).forEach(([key, value]) => appendFormValue(form, key, value));
     draftFiles.forEach((file) => form.append("files", file, file.name));
@@ -410,8 +463,14 @@ export function AccessoriesPage() {
     if (!candidate?.id) return;
     setBusy("confirm");
     try {
-      await confirmAccessory(candidate.id);
-      notify({ title: "候选已确认入库", tone: "success" });
+      const result = await confirmAccessory(candidate.id);
+      if (accessoryNeedsTextCrop(result.item)) {
+        setDeleteCropAccessoryOnCancel(true);
+        setCropAccessory(result.item || null);
+        notify({ title: "候选已确认，等待裁剪", description: "请截取完整文字区域后再用于训练。", tone: "info" });
+      } else {
+        notify({ title: "候选已确认入库", tone: "success" });
+      }
       setCandidateId("");
       setCandidateSeed(null);
       setDraftFiles([]);
@@ -526,7 +585,7 @@ export function AccessoriesPage() {
               <input
                 type="file"
                 multiple
-                accept="image/*,video/*"
+                accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"}
                 onChange={(event) => setDraftFiles(Array.from(event.currentTarget.files || []))}
               />
             </label>
@@ -536,7 +595,13 @@ export function AccessoriesPage() {
               <ImagePlus size={16} aria-hidden="true" />
               创建候选
             </button>
-            <span className="hint-line">{draftFiles.length ? `${draftFiles.length} 个文件已选择` : "可先无文件建档，稍后在详情中补充素材"}</span>
+            <span className="hint-line">
+              {draftFiles.length
+                ? `${draftFiles.length} 个文件已选择`
+                : draft.material_type === "text"
+                  ? `文字类最多 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片，确认入库后逐张裁剪`
+                  : "可先无文件建档，稍后在详情中补充素材"}
+            </span>
           </div>
         </form>
         {candidate ? (
@@ -646,7 +711,34 @@ export function AccessoriesPage() {
         </div>
       </section>
 
-      {detailId ? <AccessoryDetailModal accessoryId={detailId} onClose={() => setDetailId("")} onChanged={refreshAccessories} /> : null}
+      {detailId ? (
+        <AccessoryDetailModal
+          accessoryId={detailId}
+          onClose={() => setDetailId("")}
+          onChanged={refreshAccessories}
+          onTextCrop={(item) => {
+            setDeleteCropAccessoryOnCancel(false);
+            setCropAccessory(item);
+          }}
+        />
+      ) : null}
+      {cropAccessory ? (
+        <AccessoryTextCropModal
+          accessory={cropAccessory}
+          onClose={() => setCropAccessory(null)}
+          onCancel={async () => {
+            if (deleteCropAccessoryOnCancel) {
+              await deleteAccessory(cropAccessory.id);
+            }
+            await refreshAccessories();
+          }}
+          cancelLabel={deleteCropAccessoryOnCancel ? "取消并删除" : "稍后裁剪"}
+          cancelSuccessTitle={deleteCropAccessoryOnCancel ? "已取消裁剪并删除配件" : "已保留配件，可稍后继续裁剪"}
+          onSaved={async () => {
+            await refreshAccessories();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

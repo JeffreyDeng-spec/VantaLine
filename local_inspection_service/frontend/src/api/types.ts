@@ -827,7 +827,11 @@ export interface AccessorySummary {
   detection_route?: string;
   physical_size?: AccessoryPhysicalSize;
   status?: string;
+  manual_crop_required?: boolean;
+  manual_crop_reason?: string;
+  preprocess?: string;
   source_files?: string[];
+  original_source_files?: string[];
   source_file_count?: number;
   normalized_asset_count?: number;
   clean_sprite_status?: string;
@@ -927,6 +931,11 @@ export interface AccessoryMutationResponse extends AccessoriesResponse {
   profile_status?: string;
   candidate?: AccessoryCandidate;
   pipeline?: PipelineAccessoryMutationResponse;
+}
+
+export interface AccessoryTextCropPayload {
+  source_path: string;
+  corners: Array<{ x: number; y: number }>;
 }
 
 export interface ApiRequestOptions extends RequestInit {

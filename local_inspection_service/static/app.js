@@ -122,6 +122,7 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+const TEXT_ACCESSORY_MAX_IMAGES = 2;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -3488,6 +3489,7 @@ async function uploadAccessoryDetailFiles() {
     const form = new FormData();
     let uploadFiles = state.accessoryDetailPendingFiles;
     if (item.material_type === "text") {
+      if (!validateTextAccessoryFileBatch(state.accessoryDetailPendingFiles, item.source_file_count || item.source_files?.length || 0)) return;
       restorePaperSize = applyDetailPaperSizeForCrop(item);
       uploadFiles = await prepareTextAccessoryFiles(state.accessoryDetailPendingFiles);
     }
@@ -5403,6 +5405,23 @@ async function prepareTextAccessoryFiles(files) {
   return prepared;
 }
 
+function fileLooksLikeImage(file) {
+  return file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp)$/i.test(file.name || "");
+}
+
+function validateTextAccessoryFileBatch(files, existingCount = 0) {
+  const list = Array.from(files || []);
+  if (!list.every(fileLooksLikeImage)) {
+    toast("文字类配件只能上传图片，不能上传视频或其它文件。");
+    return false;
+  }
+  if (existingCount + list.length > TEXT_ACCESSORY_MAX_IMAGES) {
+    toast(`文字类配件最多上传 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片。`);
+    return false;
+  }
+  return true;
+}
+
 function finishCropPointer(event) {
   const crop = state.crop;
   if (!crop) return;
@@ -6524,6 +6543,7 @@ function bindActions() {
     const button = $("addAccessory");
     setBusy(button, true);
     try {
+      if (materialType === "text" && !validateTextAccessoryFileBatch(pendingFiles)) return;
       const uploadFiles = materialType === "text" ? await prepareTextAccessoryFiles(pendingFiles) : pendingFiles;
       for (const file of uploadFiles) form.append("files", file);
       const result = await api("/api/accessories", { method: "POST", body: form });
@@ -7307,6 +7327,7 @@ async function startPipelineAccessoryAdd(button) {
   }
   setBusy(button, true);
   try {
+    if (materialType === "text" && !validateTextAccessoryFileBatch(pendingFiles)) return;
     const uploadFiles = materialType === "text" ? await prepareTextAccessoryFiles(pendingFiles) : pendingFiles;
     for (const file of uploadFiles) form.append("files", file);
     const result = await api("/api/accessories", { method: "POST", body: form });

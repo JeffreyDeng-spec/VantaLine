@@ -7,6 +7,7 @@ import type {
   AccessoryCandidateResponse,
   AccessoryDetailResponse,
   AccessoryMutationResponse,
+  AccessoryTextCropPayload,
   AuthStatusResponse,
   ConfigSummaryResponse,
   DataAnalysisLocateRequest,
@@ -194,6 +195,10 @@ export function confirmAccessory(candidateId: string) {
 
 export function addAccessoryFiles(accessoryId: string, form: FormData) {
   return apiClient.upload<AccessoryMutationResponse>(`/api/accessories/${encodeURIComponent(accessoryId)}/files`, form);
+}
+
+export function cropAccessoryTextImage(accessoryId: string, payload: AccessoryTextCropPayload) {
+  return apiClient.post<AccessoryMutationResponse>(`/api/accessories/${encodeURIComponent(accessoryId)}/text-crop`, payload);
 }
 
 export function setAccessoryAiReference(accessoryId: string, sourcePath: string) {
