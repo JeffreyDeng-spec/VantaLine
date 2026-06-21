@@ -115,12 +115,16 @@ export function AccessoryTextCropModal({
   const [points, setPoints] = useState<CropPoints>(DEFAULT_POINTS);
   const [activeCorner, setActiveCorner] = useState<CornerKey | null>(null);
   const [sourceIndex, setSourceIndex] = useState(0);
-  const [busy, setBusy] = useState<"save" | "cancel" | "">("");
+  const [sessionSources, setSessionSources] = useState<SourceAsset[] | null>(null);
+  const [completedPaths, setCompletedPaths] = useState<Set<string>>(new Set());
+  const [completeResult, setCompleteResult] = useState<AccessoryMutationResponse | null>(null);
+  const [busy, setBusy] = useState<"save" | "cancel" | "finish" | "">("");
   const detailQuery = useQuery({
     queryKey: queryKeys.accessoryDetail(accessory.id),
     queryFn: () => getAccessoryDetail(accessory.id)
   });
-  const sources = useMemo(() => cropSourceAssets(detailQuery.data?.gallery), [detailQuery.data?.gallery]);
+  const availableSources = useMemo(() => cropSourceAssets(detailQuery.data?.gallery), [detailQuery.data?.gallery]);
+  const sources = sessionSources ?? availableSources;
   const source = sources[Math.min(sourceIndex, Math.max(0, sources.length - 1))] || null;
   const previewUrl = useMemo(
     () => cacheUrl(source?.url || "", `${accessory.updated_at || accessory.created_at || Date.now()}-${sourceIndex}`),
@@ -131,7 +135,15 @@ export function AccessoryTextCropModal({
     setPoints(DEFAULT_POINTS);
     setActiveCorner(null);
     setSourceIndex(0);
+    setSessionSources(null);
+    setCompletedPaths(new Set());
+    setCompleteResult(null);
   }, [accessory.id]);
+
+  useEffect(() => {
+    if (!detailQuery.data || sessionSources !== null) return;
+    setSessionSources(availableSources);
+  }, [availableSources, detailQuery.data, sessionSources]);
 
   function resetCropState(nextIndex: number) {
     setPoints(DEFAULT_POINTS);
@@ -180,21 +192,23 @@ export function AccessoryTextCropModal({
   }
 
   async function submitCrop() {
-    if (!source?.sourcePath) return;
+    if (!source?.sourcePath || completeResult) return;
     setBusy("save");
     try {
       const result = await cropAccessoryTextImage(accessory.id, {
         source_path: source.sourcePath,
         corners: pointList(points).map((point) => ({ x: Number(point.x.toFixed(3)), y: Number(point.y.toFixed(3)) }))
       });
+      const nextCompleted = new Set(completedPaths);
+      nextCompleted.add(source.sourcePath);
+      setCompletedPaths(nextCompleted);
       const nextIndex = sourceIndex + 1;
       if (nextIndex < sources.length) {
-        notify({ title: `第 ${nextIndex}/${sources.length} 张已保存`, description: "继续裁剪下一张文字素材。", tone: "success" });
+        notify({ title: `第 ${sourceIndex + 1}/${sources.length} 张已保存`, description: "继续裁剪下一张文字素材。", tone: "success" });
         resetCropState(nextIndex);
       } else {
-        notify({ title: "裁剪图已全部保存", description: "文字配件已透视矫正并重新规范化。", tone: "success" });
-        await onSaved(result);
-        onClose();
+        setCompleteResult(result);
+        notify({ title: "裁剪图已全部保存", description: "现在可以进入下一步。", tone: "success" });
       }
     } catch (error) {
       notify({ title: "保存裁剪图失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
@@ -203,16 +217,31 @@ export function AccessoryTextCropModal({
     }
   }
 
+  async function finishSession() {
+    if (!completeResult) return;
+    setBusy("finish");
+    try {
+      await onSaved(completeResult);
+      onClose();
+    } catch (error) {
+      notify({ title: "进入下一步失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+    } finally {
+      setBusy("");
+    }
+  }
+
   const disabled = Boolean(busy);
   const currentNumber = sources.length ? Math.min(sourceIndex + 1, sources.length) : 0;
+  const allCropped = Boolean(completeResult);
+  const primaryLabel = allCropped ? "下一步" : sourceIndex + 1 < sources.length ? "保存本张，继续下一张" : "保存本张";
 
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="modal-panel wide text-crop-modal" role="dialog" aria-modal="true" aria-label="裁剪文字配件">
         <header className="modal-head">
           <div>
-            <h3>裁剪文字配件{sources.length ? ` ${currentNumber}/${sources.length}` : ""}</h3>
-            <span>{accessory.name || accessory.id} 需要按顺序拖拽四角截取完整文本区域。</span>
+            <h3>{allCropped ? "文字配件裁剪完成" : `裁剪文字配件${sources.length ? ` ${currentNumber}/${sources.length}` : ""}`}</h3>
+            <span>{accessory.name || accessory.id} 本会话需要按顺序截取全部图片，全部完成后才能进入下一步。</span>
           </div>
           <button className="icon-only" type="button" aria-label={cancelLabel} disabled={disabled} onClick={cancelCrop}>
             <X size={18} aria-hidden="true" />
@@ -267,9 +296,9 @@ export function AccessoryTextCropModal({
             {busy === "cancel" ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
             {cancelLabel}
           </button>
-          <button className="primary compact-action" type="button" disabled={disabled || !source?.sourcePath} onClick={submitCrop}>
-            {busy === "save" ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Crop size={16} aria-hidden="true" />}
-            保存并继续
+          <button className="primary compact-action" type="button" disabled={disabled || (!allCropped && !source?.sourcePath)} onClick={allCropped ? finishSession : submitCrop}>
+            {busy === "save" || busy === "finish" ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Crop size={16} aria-hidden="true" />}
+            {primaryLabel}
           </button>
         </footer>
       </section>
