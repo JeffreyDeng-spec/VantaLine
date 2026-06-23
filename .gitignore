@@ -29,24 +29,32 @@ local_inspection_service/*.diff.gz
 .tmp/
 test-results/
 
-# Generated image batches and temporary production folders
+# Generated training assets and temporary production folders
 /synthetic_*/
 /image2_*/
 /tmp_rework/
-backgrounds/sets/[0-9]*/
+backgrounds/
+generated_3d_models/
+generated_*_pose_collection/
+standardized_manuals/
+manuals_from_individual_sources_precise/
+/scripts/
 *.tar.gz
 
 # Large YOLO datasets, run outputs, and caches.
-# Generation scripts and the selected deployable model are tracked instead.
 yolo26_*_trial/
 *.cache
 runs/
 logs/
 
-# Keep root-level base checkpoints out of Git. The deployable model is copied
-# into models/current_2class_yolo26s_seg_best.pt.
+# Keep model weights out of Git. Runtime deployments and training jobs provide
+# task-specific artifacts through local_inspection_service/data or external
+# artifact storage.
 yolo26*.pt
-!models/current_2class_yolo26s_seg_best.pt
+models/**/*.pt
+models/**/*.onnx
+models/**/*.engine
+models/**/*.torchscript
 
 # OS/editor noise
 .DS_Store

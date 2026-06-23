@@ -5,9 +5,8 @@ operator turn a changing set of physical accessories into an inspectable task:
 collect references, build profiles, generate training samples, train or select a
 model, run inspection, and feed the results back into the next training cycle.
 
-The project is not a single bottle/manual detector. The bundled bottle and
-manual assets are reference data used to validate the workflow. The product
-boundary is the repeatable workflow for new inspection tasks.
+The project is not a single detector or a repository of task samples. The
+product boundary is the repeatable workflow for new inspection tasks.
 
 ## Why It Matters
 
@@ -119,25 +118,22 @@ local_inspection_service/
 local_inspection_service/frontend/
   React source for the current web application.
 
-scripts/
-  Utility scripts for dataset preparation and workflow maintenance.
-
-tests/
-  Focused regression and workflow tests.
-
-backgrounds/
-  Small reference background assets and metadata used by the bundled workflow.
-
-standardized_manuals/
-  Reference manual assets for the included validation task.
+local_inspection_service/scripts/
+  Runtime smoke checks, deployment helpers, dataset generation, LocateAnything
+  support, and workflow maintenance scripts used by the service.
 
 models/
-  Selected deployable reference model artifacts and model notes.
+  Notes for model artifact handling. Actual trained weights are runtime
+  artifacts and are not committed.
+
+requirements.txt
+  Python dependency entry point for the service runtime.
 ```
 
 Runtime data is intentionally not part of the repository. Uploads, generated
 outputs, auth data, provider secrets, training job state, QA reports, handoff
-notes, and temporary plans are ignored by Git.
+notes, temporary plans, generated backgrounds, synthetic datasets, and model
+weights are ignored by Git.
 
 ## Quick Start
 
@@ -179,19 +175,22 @@ INSPECTION_AI_TIMEOUT_SECONDS=10
 Image generation and agent routes use their own provider settings and active key
 selection. A key belongs to one provider; a provider can have many keys.
 
-## Reference Task
+## Workflow Shape
 
-The repository includes a small reference configuration around one object and
-several manual-like text accessories. It exists to exercise the workflow:
+A deployment normally exercises the workflow like this:
 
-1. add mixed object/text accessories,
-2. create normalized references and profiles,
-3. generate training samples,
-4. train or select a model,
-5. inspect against task-level rules.
+1. create object or text-like accessories,
+2. upload real reference images and crop text assets where required,
+3. build AI and LocateAnything profiles from the uploaded evidence,
+4. compose a task from selected accessories and expected counts,
+5. generate task-specific samples into runtime storage,
+6. train or select a model artifact for that task,
+7. inspect images, video, or camera frames against task-level rules,
+8. compare evidence and promote the best route into the active workflow.
 
-New deployments should define their own accessories, counts, sample policy,
-route, and model artifacts instead of copying the reference task assumptions.
+Task-specific sample folders, generated backgrounds, hand-edited reference
+assets, and trained weights should live in runtime storage or external artifact
+storage, not in the GitHub source tree.
 
 ## Development Checks
 
@@ -211,9 +210,9 @@ support.
 
 ## Repository Hygiene
 
-The GitHub repository should contain durable source, selected reference assets,
-tests, and documentation. It should not contain runtime state or team-local
-execution records.
+The GitHub repository should contain durable source, documentation, and small
+configuration templates. It should not contain runtime state, team-local
+execution records, or assets that only belong to one inspection task.
 
 Ignored by design:
 
@@ -221,12 +220,18 @@ Ignored by design:
 - `agent_handoffs/`
 - `qa_reports/`
 - `plans/`
-- generated training runs and temporary image batches
+- `backgrounds/`
+- `generated_3d_models/`
+- `generated_*_pose_collection/`
+- `standardized_manuals/`
+- root-level legacy experiment `scripts/`
+- generated training runs, generated backgrounds, and temporary image batches
+- model weight binaries
 - frontend build outputs and dependency folders
 - provider keys, auth stores, logs, and process files
 
 This keeps the repository focused on the reusable VantaLine workflow instead of
-one machine's active runtime state.
+one machine's active runtime state or one task's sample assets.
 
 ## Status
 
