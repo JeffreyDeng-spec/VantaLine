@@ -1,7 +1,0 @@
-event,timestamp_local,timestamp_utc,source,task_id,note
-STOP_RECEIVED,2026-05-20 18:26:26 +0800,,Mandy,,"T J. canceled current Book/Kevin repair workflow; no more repair tickets, no Kevin repair acceptance as final, no further review unless reassigned."
-LAST_BOOK_REPAIR_TICKET_BEFORE_STOP,,2026-05-20T10:25:41Z,,img2-0190,Asset-rule retry ticket was sent before the stop email timestamp; do not evaluate or accept resulting Kevin output as final.
-KEVIN_RECEIPT_NONFINAL,,2026-05-20T10:25:49Z,,img2-0190,Kevin receipt arrived before stop email timestamp; left non-final because workflow is canceled.
-KEVIN_RECEIPT_AFTER_STOP_NONFINAL,,2026-05-20T10:31:59Z,Kevin,img2-0190,"Post-cancellation receipt marked non-final. No Book recheck, no acceptance, no further repair action."
-KEVIN_RECEIPT_AFTER_STOP_NONFINAL,,2026-05-20T10:39:40Z,Kevin,img2-0182,"Post-cancellation receipt marked non-final. No Book recheck, no acceptance, no further repair action."
-KEVIN_RECEIPT_AFTER_STOP_NONFINAL,,2026-05-20T10:41:22Z,Kevin,img2-0188,"Post-cancellation receipt marked non-final. No Book recheck, no acceptance, no further repair action."

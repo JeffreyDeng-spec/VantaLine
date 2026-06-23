@@ -1,223 +1,236 @@
 # VantaLine
 
-VantaLine is a visual inspection workflow for building inspection tasks from
-user-defined accessories, generating training datasets, training or selecting
-detection models, and checking images or videos against the selected task rule.
+VantaLine is a training workflow platform for visual inspection. It helps an
+operator turn a changing set of physical accessories into an inspectable task:
+collect references, build profiles, generate training samples, train or select a
+model, run inspection, and feed the results back into the next training cycle.
 
-The original bottle plus four manuals setup is now treated as the included
-reference task. It remains useful for validation and examples, but it is not the
-product boundary: VantaLine is intended to support arbitrary inspection
-accessories and multiple detection methods.
+The project is not a single bottle/manual detector. The bundled bottle and
+manual assets are reference data used to validate the workflow. The product
+boundary is the repeatable workflow for new inspection tasks.
 
-## What VantaLine Does
+## Why It Matters
 
-- Maintains an accessory library with object and text/manual-like items.
-- Stores reference images, normalized assets, AI profiles, and task metadata for
-  each accessory.
-- Builds task-specific training datasets from selected accessories, production
-  backgrounds, pass/fail rules, and generated previews.
-- Trains or loads task models for inspection.
-- Runs image and video inspection through the selected task and model.
-- Exposes a web UI for accessory management, dataset generation, model training,
-  training-library cleanup, AI detection settings, and inspection.
+Most inspection tools start from a fixed model and ask users to adapt their work
+to it. VantaLine starts from the workflow:
 
-The core rule is task-centric: an inspection task defines the required
-accessories and expected counts. The active detector then reports whether the
-current image satisfies that task.
+- define the accessories that matter for a task,
+- preserve the real reference evidence for each accessory,
+- choose the right detection route per task,
+- generate samples and train task-specific models,
+- compare AI/API routes with trained YOLO routes,
+- promote the best model into the inspection library.
 
-## Detection Methods
+That makes the system useful when the target changes frequently, when text-like
+parts are visually similar, or when a production team needs an explicit path from
+prototype AI detection to fast trained inspection.
 
-VantaLine supports several detection paths through the same inspection flow:
+## Innovation Points
 
-| Method | Purpose | Notes |
+| Area | What VantaLine Adds |
+| --- | --- |
+| Accessory-first task design | Tasks are composed from user-defined accessories and expected counts, not hard-coded classes. |
+| Evidence-backed profiles | Each accessory can keep real photos, manual crops, AI profile text, LocateAnything profile data, and route metadata. |
+| Multi-route inspection | A task can move between AI detection, LocateAnything, YOLO, and YOLO + OCR without changing the task concept. |
+| Training workflow UI | Sample generation, training, model intake, and model library management are treated as one workflow. |
+| Provider isolation | AI/API keys are scoped by provider, so Gemini, Agnes, OpenAI-compatible, Cursor, and other routes do not share an unsafe global key pool. |
+| Iterative promotion | The workflow supports comparing candidate model behavior before making a trained model the active route. |
+
+## Workflow
+
+```mermaid
+flowchart LR
+    A[Accessory Library] --> B[Reference Evidence]
+    B --> C[Task Definition]
+    C --> D[Sample Generation]
+    D --> E[Training Run]
+    E --> F[Model Library]
+    F --> G[Inspection]
+    G --> H[Result Evidence]
+    H --> C
+
+    B --> B1[Real photos]
+    B --> B2[Manual/text crops]
+    B --> B3[AI profile]
+    B --> B4[Locate profile]
+
+    C --> C1[Required accessories]
+    C --> C2[Expected counts]
+    C --> C3[Detection route]
+
+    F --> F1[YOLO]
+    F --> F2[YOLO + OCR]
+    F --> F3[AI/API route]
+```
+
+## Platform Design
+
+```mermaid
+flowchart TB
+    UI[Web UI] --> Accessories[Accessory Management]
+    UI --> Pipeline[Training Pipeline]
+    UI --> Detection[Detection Workbench]
+    UI --> Analysis[Data Analysis]
+    UI --> Settings[Provider Settings]
+
+    Accessories --> Profiles[Profiles and References]
+    Pipeline --> Samples[Generated Samples]
+    Pipeline --> Training[Training Jobs]
+    Training --> Library[Model Library]
+    Library --> Detection
+    Settings --> Providers[Gemini / Agnes / OpenAI-compatible / Cursor]
+    Detection --> Evidence[Counts, boxes, masks, OCR, pass/fail evidence]
+    Evidence --> Analysis
+```
+
+## Detection Routes
+
+| Route | Best For | Notes |
 | --- | --- | --- |
-| YOLO | Fast object or accessory detection from a trained task model. | Best when visual classes are sufficiently distinct or enough training data is available. |
-| YOLO + OCR | YOLO localizes candidate accessory classes while OCR supplies text evidence. | The current OCR runtime is proven for the bundled manual reference path. Task-trained `yolo_ocr` variants still rely on YOLO class/accessory IDs for pass/fail unless the task also implements OCR/profile-to-accessory resolution. |
-| AI Detection API | A stateless multimodal API checks the image against structured accessory profiles. | Useful as an API-backed option or fallback when a trained model is not available yet. |
+| AI Detection | Early task validation and low-volume flexible checks. | Uses structured accessory profiles and provider-scoped keys. |
+| LocateAnything | Open vocabulary localization and analysis workflows. | Useful when target selection is dynamic. |
+| YOLO | Fast production inspection for trained visual targets. | Uses task-specific trained weights. |
+| YOLO + OCR | Text-heavy accessories with similar shapes. | Combines localization with text evidence where a task supports OCR resolution. |
 
-These are model choices for the same task model selector, not separate products.
-A task may expose only the model variants that exist for that task.
-For new text-heavy tasks, treat OCR as an evidence source or extension point
-until the task manifest and runtime explicitly map OCR/profile output back to
-accessory IDs.
+The same task can evolve across routes. A team can start with an API-backed
+route, collect enough evidence, train a task model, and then promote the trained
+model for faster repeated inspection.
 
-## Typical Toolflow
+## Product Surfaces
 
-1. Add accessories.
-   - Upload source photos or documents.
-   - Mark each accessory as an object-like or text-like item.
-   - Let the service normalize assets and generate a structured AI profile.
-
-2. Build a training dataset.
-   - Select one or more accessories for a task.
-   - Choose same-environment backgrounds and sample counts.
-   - Preview generated pass/fail samples before creating the full dataset.
-   - The current false-sample policy emphasizes missing-one cases and includes
-     controlled extra-accessory negatives.
-
-3. Train or select a model.
-   - Train a YOLO task model from a generated dataset.
-   - Use a YOLO + OCR task variant only where the task supports OCR evidence or
-     explicit OCR-to-accessory resolution.
-   - Reuse completed training runs from the training library.
-   - Keep the old built-in bottle/manual models as reference models.
-
-4. Inspect images or videos.
-   - Select a task and one available model method.
-   - Upload an image or video.
-   - Receive pass/fail status, detections, counts, rule evidence, and output
-     imagery from the same API shape.
-
-5. Iterate.
-   - Add more accessory evidence.
-   - Generate richer datasets.
-   - Retrain task models.
-   - Compare YOLO, YOLO + OCR, and AI Detection behavior.
+- Accessory library: create object or text-like accessories, upload references,
+  crop text assets, and choose detection routes.
+- Training pipeline: move accessories through task setup, sample generation,
+  training, and model intake.
+- Training library: keep trained model artifacts organized by task and route.
+- Detection workbench: run image, video, or camera checks against the selected
+  task.
+- Data analysis: review inspection records and open localization runs.
+- Settings: configure provider-specific keys and models for AI detection, image
+  generation, and agent-assisted workflows.
 
 ## Repository Layout
 
 ```text
 local_inspection_service/
-  FastAPI service, Chinese web UI, accessory management, dataset generation,
-  model training, AI detection config, and inspection APIs.
+  FastAPI application, inspection APIs, pipeline orchestration, React frontend,
+  provider configuration, and task/runtime services.
 
-models/
-  Small deployable reference weights for the bundled reference task.
+local_inspection_service/frontend/
+  React source for the current web application.
 
 scripts/
-  Dataset-generation and asset-preparation scripts used by the reference task.
+  Utility scripts for dataset preparation and workflow maintenance.
 
-standardized_manuals/
-  Canonical manual assets from the original reference task.
+tests/
+  Focused regression and workflow tests.
 
 backgrounds/
-  Same-environment conveyor/background assets and background-set metadata.
+  Small reference background assets and metadata used by the bundled workflow.
 
-generated_bottle_pose_collection/
-  Bottle pose reference images used by the historical reference dataset.
+standardized_manuals/
+  Reference manual assets for the included validation task.
 
-agent_handoffs/ and qa_reports/
-  Historical implementation, review, and QA artifacts.
+models/
+  Selected deployable reference model artifacts and model notes.
 ```
 
-Generated datasets, uploads, training runs, temporary outputs, and full YOLO run
-folders are intentionally ignored by Git.
+Runtime data is intentionally not part of the repository. Uploads, generated
+outputs, auth data, provider secrets, training job state, QA reports, handoff
+notes, and temporary plans are ignored by Git.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/JeffreyDeng-spec/VantaLine.git
 cd VantaLine
-python3 -m pip install -r requirements.txt
-python3 -m uvicorn local_inspection_service.server:app --host <host> --port <port>
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m uvicorn local_inspection_service.server:app --host 0.0.0.0 --port 8765
 ```
 
-Open the service URL configured by the operator:
+Then open the endpoint configured by your deployment environment.
 
-```text
-http://<service-host>:<port>
+For the React frontend:
+
+```bash
+cd local_inspection_service/frontend
+npm install
+npm run build
 ```
 
-For remote access, bind the service through the chosen deployment environment,
-reverse proxy, container platform, or network policy. Configure explicit trusted
-origins when browser clients call the API from another origin.
+## Configuration
 
-## Current Reference Configuration
+Provider configuration is environment-backed. The application stores references
+to environment variable names, while secrets stay in the runtime environment or
+the private runtime secret file.
 
-The default committed reference task contains five historical accessories:
-
-1. Bottle
-2. Warranty Service Manual
-3. Battery Instruction Manual
-4. Download Service Manual
-5. Service QR Manual
-
-This setup demonstrates two important patterns:
-
-- Object accessories, such as the bottle, can be detected directly.
-- Text-heavy accessories, such as similar manuals, may need direct trained
-  classes, scoped OCR resolution, or AI profile evidence because their shape and
-  size are almost identical.
-
-Reference model artifacts include:
-
-- `models/current_2class_yolo26s_seg_best.pt`
-  - Detects bottle and generic manual geometry.
-  - The bundled reference flow can use OCR to map manual crops into business
-    manual classes.
-- `models/current_5class_yolo26s_seg_best.pt`
-  - Detects the five reference classes directly.
-
-New tasks should not copy the five-class assumption. They should define their
-own selected accessories, expected counts, generated dataset, model variant, and
-inspection rule metadata.
-
-## AI Detection Configuration
-
-AI Detection has two configuration layers:
-
-- The current web UI exposes Gemini configuration.
-- The backend also supports provider modes through environment or service
-  settings:
-
-- `gemini`
-- `openai`
-- `openai_compatible`
-
-Useful environment variables:
+Common provider variables:
 
 ```bash
 INSPECTION_AI_PROVIDER=gemini
 INSPECTION_AI_MODEL=gemini-2.5-flash
 INSPECTION_AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
-INSPECTION_AI_API_KEY=...
 INSPECTION_AI_API_KEY_ENV=GEMINI_API_KEY
 INSPECTION_AI_TIMEOUT_SECONDS=10
 ```
 
-When no provider key is configured, accessory profile generation falls back to a
-deterministic profile so the rest of the toolflow can still run. Live AI
-inspection requires a configured provider key.
+Image generation and agent routes use their own provider settings and active key
+selection. A key belongs to one provider; a provider can have many keys.
+
+## Reference Task
+
+The repository includes a small reference configuration around one object and
+several manual-like text accessories. It exists to exercise the workflow:
+
+1. add mixed object/text accessories,
+2. create normalized references and profiles,
+3. generate training samples,
+4. train or select a model,
+5. inspect against task-level rules.
+
+New deployments should define their own accessories, counts, sample policy,
+route, and model artifacts instead of copying the reference task assumptions.
 
 ## Development Checks
 
-Use the targeted checks that match the files changed:
+Use checks that match the files changed:
 
 ```bash
-python3 -m py_compile local_inspection_service/server.py local_inspection_service/scripts/*.py
-node --check local_inspection_service/static/app.js
-python3 local_inspection_service/scripts/smoke_ai_detection.py
-python3 local_inspection_service/scripts/verify_task_pipeline.py
-python3 local_inspection_service/scripts/smoke_cross_device_upload.py --host <host> --port <port>
+python -m py_compile local_inspection_service/server.py
+python -m py_compile local_inspection_service/scripts/*.py
+npm --prefix local_inspection_service/frontend run typecheck
+python local_inspection_service/scripts/verify_task_pipeline.py
+python local_inspection_service/scripts/smoke_ai_detection.py
 git diff --check
 ```
 
-Some checks may require model weights, PaddleOCR runtime compatibility, or an
-available AI provider key.
+Some checks require configured provider keys, model artifacts, or OCR runtime
+support.
 
-## Runtime Notes
+## Repository Hygiene
 
-- Python 3.12 is the current runtime.
-- Core server dependencies are FastAPI, Uvicorn, OpenCV, NumPy, Ultralytics,
-  PaddleOCR, PaddlePaddle, Pydantic, and Requests.
-- PaddleOCR is sensitive to PaddlePaddle runtime versions in this environment;
-  `paddlepaddle==3.2.2` is the known working version.
-- The service stores uploads and outputs under `local_inspection_service/data/`.
-- Large generated artifacts should stay out of Git and be reproduced through the
-  tracked scripts or the service UI.
+The GitHub repository should contain durable source, selected reference assets,
+tests, and documentation. It should not contain runtime state or team-local
+execution records.
 
-## Project Status
+Ignored by design:
 
-VantaLine is an active visual inspection workflow project. The strongest current
-use case is rapid development and validation of inspection workflows:
+- `local_inspection_service/data/`
+- `agent_handoffs/`
+- `qa_reports/`
+- `plans/`
+- generated training runs and temporary image batches
+- frontend build outputs and dependency folders
+- provider keys, auth stores, logs, and process files
 
-- define accessories,
-- generate task datasets,
-- train or select a detector,
-- inspect images/videos,
-- collect evidence,
-- iterate on the task.
+This keeps the repository focused on the reusable VantaLine workflow instead of
+one machine's active runtime state.
 
-Production deployment still needs environment-specific validation for camera
-calibration, lighting, real-photo datasets, model accuracy, AI provider
-latency, and artifact packaging.
+## Status
+
+VantaLine is under active development. The current direction is to make the
+training workflow more explicit and reliable: accessory evidence first, task
+definition second, then sample generation, model training, inspection, and
+measured promotion.
