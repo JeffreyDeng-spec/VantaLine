@@ -4,8 +4,6 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  deploy_react_preview.sh preview [--skip-install]
-  deploy_react_preview.sh rollback-preview [--backup <remote-backup-dir>]
   deploy_react_preview.sh cutover --confirm-production-cutover [--skip-install]
   deploy_react_preview.sh rollback-production [--backup <remote-backup-dir>]
 
@@ -16,17 +14,17 @@ Environment:
   VANTALINE_REMOTE_BACKUP_ROOT  Remote backup root, default /opt/vantaline/backups/react-deploy
 
 Notes:
-  - preview is the safe default and only replaces frontend/dist for /react-preview/.
   - cutover is gated and requires explicit T J. approval before use.
-  - cutover builds React with root router basename and /static/ asset URLs,
-    backs up legacy static, enables the root SPA fallback, then replaces
-    static/index.html and static/assets.
+  - preview deployment is retired because the server redirects /react-preview to /.
+  - cutover and rollback both stage first, retain the previous release, verify
+    HTML/API/hashed JS health, and automatically restore on failure.
 EOF
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../.." && pwd)"
 frontend_dir="${repo_root}/local_inspection_service/frontend"
+transaction_helper="${repo_root}/local_inspection_service/scripts/react_release_transaction.sh"
 
 remote="${VANTALINE_REMOTE:-ubuntu@43.161.199.130}"
 remote_app_root="${VANTALINE_REMOTE_APP_ROOT:-/opt/vantaline/app}"
@@ -39,7 +37,7 @@ if [[ -n "${ssh_key}" ]]; then
 fi
 rsync_ssh="${ssh_base[*]}"
 
-mode="${1:-preview}"
+mode="${1:-}"
 shift || true
 
 skip_install=0
@@ -84,6 +82,30 @@ remote_run() {
   "${ssh_base[@]}" "${remote}" "$@"
 }
 
+release_lock_active=0
+release_lock_dir="${remote_backup_root}/.production-release.lock"
+release_lock_owner=""
+release_lock_helper=""
+
+acquire_release_lock() {
+  release_lock_owner="$1"
+  release_lock_helper="$2"
+  remote_run "sudo mkdir -p $(remote_shell_quote "$(dirname "${release_lock_dir}")")
+chmod 700 $(remote_shell_quote "${release_lock_helper}")
+bash $(remote_shell_quote "${release_lock_helper}") acquire-lock $(remote_shell_quote "${release_lock_dir}") $(remote_shell_quote "${release_lock_owner}")"
+  release_lock_active=1
+}
+
+release_release_lock() {
+  if [[ "${release_lock_active}" -eq 1 ]]; then
+    remote_run "bash $(remote_shell_quote "${release_lock_helper}") release-lock $(remote_shell_quote "${release_lock_dir}") $(remote_shell_quote "${release_lock_owner}")"
+    release_lock_active=0
+  fi
+  if [[ -n "${release_lock_helper}" ]]; then
+    remote_run "rm -f $(remote_shell_quote "${release_lock_helper}")" || true
+  fi
+}
+
 require_frontend() {
   if [[ ! -f "${frontend_dir}/package-lock.json" ]]; then
     echo "Missing ${frontend_dir}/package-lock.json" >&2
@@ -97,13 +119,6 @@ install_frontend() {
   fi
 }
 
-build_preview() {
-  require_frontend
-  install_frontend
-  (cd "${frontend_dir}" && npm run build)
-  test -f "${frontend_dir}/dist/index.html"
-}
-
 build_production_cutover() {
   require_frontend
   install_frontend
@@ -111,55 +126,41 @@ build_production_cutover() {
   test -f "${frontend_dir}/dist-production/index.html"
 }
 
+new_release_nonce() {
+  od -An -N12 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+verify_remote_http() {
+  local page_path="$1"
+  local asset_prefix="$2"
+  remote_run "set -euo pipefail
+for attempt in \$(seq 1 30); do
+  if curl -fsS --max-time 3 $(remote_shell_quote "http://127.0.0.1:8765${page_path}") >/tmp/vantaline-deploy-page.html \
+    && curl -fsS --max-time 3 http://127.0.0.1:8765/api/auth/status >/tmp/vantaline-deploy-auth.json; then
+    asset_path=\$(grep -oE $(remote_shell_quote "${asset_prefix}[^\"' ]+\\.js") /tmp/vantaline-deploy-page.html | head -n 1 || true)
+    if [ -n \"\${asset_path}\" ] && curl -fsS --max-time 5 \"http://127.0.0.1:8765\${asset_path}\" >/dev/null; then
+      exit 0
+    fi
+  fi
+  sleep 1
+done
+echo 'Deployment health check failed after 30 attempts' >&2
+exit 1"
+}
+
 latest_backup() {
   local category="$1"
-  remote_run "set -euo pipefail; if [ -d $(remote_shell_quote "${remote_backup_root}/${category}") ]; then find $(remote_shell_quote "${remote_backup_root}/${category}") -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1; fi"
-}
-
-deploy_preview() {
-  build_preview
-
-  local ts release_dir backup_dir
-  ts="$(remote_run 'date +%Y%m%d%H%M%S')"
-  release_dir="${remote_app_root}/local_inspection_service/frontend/dist"
-  backup_dir="${remote_backup_root}/preview-dist/${ts}"
-
+  local required="dist-production"
   remote_run "set -euo pipefail
-sudo mkdir -p $(remote_shell_quote "${backup_dir}") $(remote_shell_quote "$(dirname "${release_dir}")")
-if [ -e $(remote_shell_quote "${release_dir}") ]; then
-sudo cp -a $(remote_shell_quote "${release_dir}") $(remote_shell_quote "${backup_dir}/dist")
-fi
-sudo mkdir -p $(remote_shell_quote "${release_dir}")
-sudo chmod -R ugo+rwX $(remote_shell_quote "${release_dir}")"
-
-  rsync -rtz --delete --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "${frontend_dir}/dist/" "${remote}:${release_dir}/"
-
-  remote_run "set -euo pipefail
-sudo chown -R vantaline:vantaline $(remote_shell_quote "${release_dir}")
-sudo find $(remote_shell_quote "${release_dir}") -type d -exec chmod 755 {} +
-sudo find $(remote_shell_quote "${release_dir}") -type f -exec chmod 644 {} +
-printf 'preview_release=%s\npreview_backup=%s\n' $(remote_shell_quote "${release_dir}") $(remote_shell_quote "${backup_dir}")"
-}
-
-rollback_preview() {
-  local release_dir="${remote_app_root}/local_inspection_service/frontend/dist"
-  local selected_backup="${backup_path}"
-  if [[ -z "${selected_backup}" ]]; then
-    selected_backup="$(latest_backup preview-dist)"
-  fi
-  if [[ -z "${selected_backup}" ]]; then
-    echo "No preview backup found under ${remote_backup_root}/preview-dist" >&2
-    exit 1
-  fi
-
-  remote_run "set -euo pipefail
-test -d $(remote_shell_quote "${selected_backup}/dist")
-sudo rm -rf $(remote_shell_quote "${release_dir}")
-sudo cp -a $(remote_shell_quote "${selected_backup}/dist") $(remote_shell_quote "${release_dir}")
-sudo chown -R vantaline:vantaline $(remote_shell_quote "${release_dir}")
-sudo find $(remote_shell_quote "${release_dir}") -type d -exec chmod 755 {} +
-sudo find $(remote_shell_quote "${release_dir}") -type f -exec chmod 644 {} +
-printf 'restored_preview=%s\nfrom_backup=%s\n' $(remote_shell_quote "${release_dir}") $(remote_shell_quote "${selected_backup}")"
+root=$(remote_shell_quote "${remote_backup_root}/${category}")
+if [ -d \"\${root}\" ]; then
+  for candidate in \"\${root}\"/*; do
+    [ -d \"\${candidate}\" ] || continue
+    [ -f \"\${candidate}/COMPLETED\" ] || continue
+    [ -d \"\${candidate}/$(remote_shell_quote "${required}")\" ] || continue
+    printf '%s\n' \"\${candidate}\"
+  done | sort | tail -n 1
+fi"
 }
 
 cutover_production() {
@@ -169,77 +170,125 @@ cutover_production() {
     exit 3
   fi
 
+  local ts release_id production_dir backup_dir staging_dir previous_dir remote_helper dropin dropin_backup lock_owner
+  ts="$(remote_run 'date +%Y%m%d%H%M%S')"
+  release_id="${ts}-$(new_release_nonce)"
+  production_dir="${remote_app_root}/local_inspection_service/frontend/dist-production"
+  backup_dir="${remote_backup_root}/production-dist/${release_id}"
+  staging_dir="${remote_app_root}/local_inspection_service/frontend/.dist-production.staging-${release_id}"
+  previous_dir="${remote_app_root}/local_inspection_service/frontend/.dist-production.previous-${release_id}"
+  remote_helper="/tmp/vantaline-react-release-transaction-${release_id}.sh"
+  dropin="/etc/systemd/system/vantaline.service.d/30-react-production.conf"
+  dropin_backup="${backup_dir}/30-react-production.conf"
+  lock_owner="cutover-${release_id}"
+
+  rsync -rtz --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "${transaction_helper}" "${remote}:${remote_helper}"
+  trap release_release_lock EXIT
+  trap 'release_release_lock; exit 130' INT TERM
+  acquire_release_lock "${lock_owner}" "${remote_helper}"
+
   build_production_cutover
 
-  local ts static_dir backup_dir archive_name remote_archive remote_extract
-  ts="$(remote_run 'date +%Y%m%d%H%M%S')"
-  static_dir="${remote_app_root}/local_inspection_service/static"
-  backup_dir="${remote_backup_root}/production-static/${ts}"
-  archive_name="vantaline-react-production-${ts}.tar.gz"
-  remote_archive="/tmp/${archive_name}"
-  remote_extract="/tmp/vantaline-react-production-${ts}"
-
-  (cd "${frontend_dir}/dist-production" && tar -czf "/tmp/${archive_name}" .)
-
   remote_run "set -euo pipefail
-sudo mkdir -p $(remote_shell_quote "${backup_dir}")
-sudo cp -a $(remote_shell_quote "${static_dir}") $(remote_shell_quote "${backup_dir}/static")"
+test ! -e $(remote_shell_quote "${staging_dir}")
+test ! -e $(remote_shell_quote "${previous_dir}")
+sudo mkdir -p $(remote_shell_quote "${backup_dir}") $(remote_shell_quote "${staging_dir}")
+sudo chmod -R ugo+rwX $(remote_shell_quote "${staging_dir}")"
 
-  rsync -rtz --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "/tmp/${archive_name}" "${remote}:${remote_archive}"
-  rm -f "/tmp/${archive_name}"
-
+  rsync -rtz --delete --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "${frontend_dir}/dist-production/" "${remote}:${staging_dir}/"
   remote_run "set -euo pipefail
-rm -rf $(remote_shell_quote "${remote_extract}")
-mkdir -p $(remote_shell_quote "${remote_extract}")
-tar -xzf $(remote_shell_quote "${remote_archive}") -C $(remote_shell_quote "${remote_extract}")
-test -f $(remote_shell_quote "${remote_extract}/index.html")
-test -d $(remote_shell_quote "${remote_extract}/assets")
-sudo rm -rf $(remote_shell_quote "${static_dir}/assets")
-sudo mkdir -p $(remote_shell_quote "${static_dir}/assets")
-sudo cp $(remote_shell_quote "${remote_extract}/index.html") $(remote_shell_quote "${static_dir}/index.html")
-sudo cp -a $(remote_shell_quote "${remote_extract}/assets/.") $(remote_shell_quote "${static_dir}/assets/")
-sudo chown -R vantaline:vantaline $(remote_shell_quote "${static_dir}")
-sudo find $(remote_shell_quote "${static_dir}") -type d -exec chmod 755 {} +
-sudo find $(remote_shell_quote "${static_dir}") -type f -exec chmod 644 {} +
-sudo mkdir -p /etc/systemd/system/vantaline.service.d
-printf '%s\n' '[Service]' 'Environment=VANTALINE_REACT_PRODUCTION_SPA=1' | sudo tee /etc/systemd/system/vantaline.service.d/30-react-production.conf >/dev/null
-sudo systemctl daemon-reload
-sudo systemctl restart vantaline
-rm -rf $(remote_shell_quote "${remote_extract}") $(remote_shell_quote "${remote_archive}")
-printf 'production_static=%s\nproduction_backup=%s\n' $(remote_shell_quote "${static_dir}") $(remote_shell_quote "${backup_dir}")"
-}
+test -f $(remote_shell_quote "${staging_dir}/index.html")
+test -d $(remote_shell_quote "${staging_dir}/assets")
+sudo chown -R vantaline:vantaline $(remote_shell_quote "${staging_dir}")
+sudo find $(remote_shell_quote "${staging_dir}") -type d -exec chmod 755 {} +
+sudo find $(remote_shell_quote "${staging_dir}") -type f -exec chmod 644 {} +
+chmod 700 $(remote_shell_quote "${remote_helper}")
+bash $(remote_shell_quote "${remote_helper}") activate-production $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${staging_dir}") $(remote_shell_quote "${previous_dir}") $(remote_shell_quote "${dropin}") $(remote_shell_quote "${dropin_backup}") vantaline CONFIRM_PRODUCTION_RELEASE_TRANSACTION ABSENT"
 
-rollback_production() {
-  local static_dir="${remote_app_root}/local_inspection_service/static"
-  local selected_backup="${backup_path}"
-  if [[ -z "${selected_backup}" ]]; then
-    selected_backup="$(latest_backup production-static)"
-  fi
-  if [[ -z "${selected_backup}" ]]; then
-    echo "No production backup found under ${remote_backup_root}/production-static" >&2
+  if ! verify_remote_http "/" "/static/assets/"; then
+    remote_run "bash $(remote_shell_quote "${remote_helper}") rollback-production $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${previous_dir}") $(remote_shell_quote "${dropin}") $(remote_shell_quote "${dropin_backup}") vantaline"
+    verify_remote_http "/" "/static/assets/" || true
+    echo "Production cutover failed health checks and was rolled back." >&2
     exit 1
   fi
 
   remote_run "set -euo pipefail
-test -d $(remote_shell_quote "${selected_backup}/static")
-sudo rm -rf $(remote_shell_quote "${static_dir}")
-sudo cp -a $(remote_shell_quote "${selected_backup}/static") $(remote_shell_quote "${static_dir}")
-sudo chown -R vantaline:vantaline $(remote_shell_quote "${static_dir}")
-sudo find $(remote_shell_quote "${static_dir}") -type d -exec chmod 755 {} +
-sudo find $(remote_shell_quote "${static_dir}") -type f -exec chmod 644 {} +
-sudo rm -f /etc/systemd/system/vantaline.service.d/30-react-production.conf
-sudo systemctl daemon-reload
-sudo systemctl restart vantaline
-printf 'restored_static=%s\nfrom_backup=%s\n' $(remote_shell_quote "${static_dir}") $(remote_shell_quote "${selected_backup}")"
+if [ -e $(remote_shell_quote "${previous_dir}") ]; then sudo mv $(remote_shell_quote "${previous_dir}") $(remote_shell_quote "${backup_dir}/dist-production"); fi
+sudo rm -f $(remote_shell_quote "${previous_dir}.absent")
+sudo touch $(remote_shell_quote "${backup_dir}/COMPLETED")
+printf 'production_dist=%s\nproduction_backup=%s\n' $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${backup_dir}")"
+  release_release_lock
+  trap - EXIT INT TERM
+}
+
+rollback_production() {
+  local production_dir="${remote_app_root}/local_inspection_service/frontend/dist-production"
+  local selected_backup="${backup_path}"
+  if [[ -z "${selected_backup}" ]]; then
+    selected_backup="$(latest_backup production-dist)"
+  fi
+  if [[ -z "${selected_backup}" ]]; then
+    echo "No production backup found under ${remote_backup_root}/production-dist" >&2
+    exit 1
+  fi
+
+  local ts release_id staging_dir previous_dir operation_backup remote_helper dropin dropin_backup target_dropin lock_owner
+  ts="$(remote_run 'date +%Y%m%d%H%M%S')"
+  release_id="${ts}-$(new_release_nonce)"
+  staging_dir="${remote_app_root}/local_inspection_service/frontend/.dist-production.rollback-staging-${release_id}"
+  previous_dir="${remote_app_root}/local_inspection_service/frontend/.dist-production.rollback-previous-${release_id}"
+  operation_backup="${remote_backup_root}/production-dist/${release_id}-rollback"
+  remote_helper="/tmp/vantaline-react-release-transaction-${release_id}-rollback.sh"
+  dropin="/etc/systemd/system/vantaline.service.d/30-react-production.conf"
+  dropin_backup="${operation_backup}/30-react-production.conf"
+  lock_owner="rollback-${release_id}"
+
+  rsync -rtz --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "${transaction_helper}" "${remote}:${remote_helper}"
+  trap release_release_lock EXIT
+  trap 'release_release_lock; exit 130' INT TERM
+  acquire_release_lock "${lock_owner}" "${remote_helper}"
+
+  if remote_run "test -f $(remote_shell_quote "${selected_backup}/30-react-production.conf")"; then
+    target_dropin="${selected_backup}/30-react-production.conf"
+  elif remote_run "test -f $(remote_shell_quote "${selected_backup}/30-react-production.conf.absent")"; then
+    target_dropin="ABSENT"
+  else
+    echo "Selected backup has no recorded systemd drop-in state: ${selected_backup}" >&2
+    exit 1
+  fi
+
+  remote_run "set -euo pipefail
+test -f $(remote_shell_quote "${selected_backup}/COMPLETED")
+test -d $(remote_shell_quote "${selected_backup}/dist-production")
+test ! -e $(remote_shell_quote "${staging_dir}")
+test ! -e $(remote_shell_quote "${previous_dir}")
+sudo mkdir -p $(remote_shell_quote "${operation_backup}")
+sudo cp -a $(remote_shell_quote "${selected_backup}/dist-production") $(remote_shell_quote "${staging_dir}")
+sudo chown -R vantaline:vantaline $(remote_shell_quote "${staging_dir}")
+sudo find $(remote_shell_quote "${staging_dir}") -type d -exec chmod 755 {} +
+sudo find $(remote_shell_quote "${staging_dir}") -type f -exec chmod 644 {} +"
+
+  remote_run "set -euo pipefail
+chmod 700 $(remote_shell_quote "${remote_helper}")
+bash $(remote_shell_quote "${remote_helper}") activate-production $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${staging_dir}") $(remote_shell_quote "${previous_dir}") $(remote_shell_quote "${dropin}") $(remote_shell_quote "${dropin_backup}") vantaline CONFIRM_PRODUCTION_RELEASE_TRANSACTION $(remote_shell_quote "${target_dropin}")"
+
+  if ! verify_remote_http "/" "/static/assets/"; then
+    remote_run "bash $(remote_shell_quote "${remote_helper}") rollback-production $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${previous_dir}") $(remote_shell_quote "${dropin}") $(remote_shell_quote "${dropin_backup}") vantaline"
+    verify_remote_http "/" "/static/assets/" || true
+    echo "Production rollback failed health checks and the pre-rollback release was restored." >&2
+    exit 1
+  fi
+
+  remote_run "set -euo pipefail
+if [ -e $(remote_shell_quote "${previous_dir}") ]; then sudo mv $(remote_shell_quote "${previous_dir}") $(remote_shell_quote "${operation_backup}/dist-production"); fi
+sudo rm -f $(remote_shell_quote "${previous_dir}.absent")
+sudo touch $(remote_shell_quote "${operation_backup}/COMPLETED")
+printf 'restored_production_dist=%s\nfrom_backup=%s\nrollback_backup=%s\n' $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${selected_backup}") $(remote_shell_quote "${operation_backup}")"
+  release_release_lock
+  trap - EXIT INT TERM
 }
 
 case "${mode}" in
-  preview)
-    deploy_preview
-    ;;
-  rollback-preview)
-    rollback_preview
-    ;;
   cutover)
     cutover_production
     ;;
