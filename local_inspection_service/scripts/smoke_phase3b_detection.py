@@ -14,8 +14,15 @@ sys.path.insert(0, str(REPO_ROOT))
 ROOT = Path(tempfile.mkdtemp(prefix="vantaline_phase3b_detection_"))
 (ROOT / "local_inspection_service" / "static").mkdir(parents=True, exist_ok=True)
 os.environ["LOCAL_INSPECTION_ROOT"] = str(ROOT)
+os.environ["VANTALINE_YOLO_PREWARM"] = "0"
+os.environ["INSPECTION_WORKER_WATCHER"] = "0"
+os.environ["LOCAL_INSPECTION_AUTO_RESUME_WORKER"] = "0"
 
-from fastapi.testclient import TestClient  # noqa: E402
+from local_inspection_service.scripts import testclient_threadpool_shim  # noqa: E402
+
+testclient_threadpool_shim.install()
+
+TestClient = testclient_threadpool_shim.SmokeASGIClient
 
 from local_inspection_service import server  # noqa: E402
 
@@ -80,8 +87,8 @@ def assert_react_detection_routes() -> None:
     if missing_shell:
         raise AssertionError("React detection route wiring missing: " + ", ".join(missing_shell))
     expected_page = {
-        "image analyze upload": "analyzeImage(form)",
-        "video analyze upload": "analyzeVideo(form)",
+        "image analyze upload": "analyzeImage(form, { signal:",
+        "video analyze upload": "analyzeVideo(form, { signal:",
         "AI task query": "getAiTasks(auth)",
         "camera runtime": "navigator.mediaDevices?.getUserMedia",
         "result metrics": "DetectionMetrics",

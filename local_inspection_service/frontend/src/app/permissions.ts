@@ -16,8 +16,6 @@ export function permissionForView(view: string) {
       inspect: "inspection",
       aiInspect: "ai_detection",
       dataAnalysis: "ai_detection",
-      labelSheet: "label_sheet",
-      locateAnything: "locate_anything",
       accessories: "accessory_library",
       pipeline: "training_pipeline",
       trainingLibrary: "model_library",

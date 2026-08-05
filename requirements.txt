@@ -5,6 +5,7 @@ opencv-python
 numpy
 Pillow
 pydantic
+psycopg[binary]==3.3.4
 ultralytics
 paddleocr
 paddlepaddle==3.2.2

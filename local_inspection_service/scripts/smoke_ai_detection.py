@@ -41,6 +41,7 @@ class Patch:
     def __init__(self) -> None:
         self._attrs: list[tuple[Any, str, Any]] = []
         self._env: dict[str, str | None] = {}
+        self._request_user_tokens: list[Any] = []
 
     def attr(self, obj: Any, name: str, value: Any) -> None:
         self._attrs.append((obj, name, getattr(obj, name)))
@@ -54,7 +55,12 @@ class Patch:
         else:
             os.environ[name] = value
 
+    def request_user(self, user: dict[str, Any]) -> None:
+        self._request_user_tokens.append(server._request_user.set(user))
+
     def restore(self) -> None:
+        for token in reversed(self._request_user_tokens):
+            server._request_user.reset(token)
         for obj, name, value in reversed(self._attrs):
             setattr(obj, name, value)
         for name, value in self._env.items():
@@ -62,6 +68,16 @@ class Patch:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+
+
+def smoke_admin_user() -> dict[str, Any]:
+    return {
+        "id": "smoke_admin",
+        "username": "smoke_admin",
+        "display_name": "Smoke Admin",
+        "role": "admin",
+        "permissions": [],
+    }
 
 
 def base_config() -> dict[str, Any]:
@@ -102,18 +118,25 @@ def base_config() -> dict[str, Any]:
 def patch_common(patch: Patch, tmpdir: Path, config: dict[str, Any]) -> None:
     output_dir = tmpdir / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
+    patch.request_user(smoke_admin_user())
     patch.env("INSPECTION_AI_MCP_RUNTIME", None)
     patch.env("INSPECTION_AI_MCP_ENABLED", None)
+    patch.env("INSPECTION_AI_PROXY_URL", None)
+    patch.env("AI_PROVIDER_PROXY_URL", None)
+    patch.env("HTTPS_PROXY", None)
+    patch.env("ALL_PROXY", None)
+    patch.env("INSPECTION_AI_AUTO_LOCAL_PROXY", "0")
     patch.attr(server, "OUTPUT_DIR", output_dir)
     patch.attr(server, "AI_LOCAL_CONFIG_PATH", tmpdir / "ai_config.local.json")
+    patch.attr(server, "LOCAL_SECRET_ENV_PATH", tmpdir / "runtime_secrets.local.env")
     patch.attr(server, "AI_PROFILE_CACHE_PATH", tmpdir / "ai_profile_cache.local.json")
     patch.attr(server, "AI_DETECTION_TASKS_PATH", tmpdir / "ai_detection_tasks.json")
     patch.attr(server, "AI_PROVIDER_MAX_ATTEMPTS", 2)
     patch.attr(server, "AI_PROVIDER_RETRY_BACKOFF_SECONDS", 0.0)
     patch.attr(server, "load_config", lambda: config)
     patch.attr(server, "save_config", lambda _config: None)
-    patch.attr(server, "list_trained_model_specs", lambda: [])
-    patch.attr(server, "list_training_tasks", lambda: [])
+    patch.attr(server, "list_trained_model_specs", lambda *args, **kwargs: [])
+    patch.attr(server, "list_training_tasks", lambda *args, **kwargs: [])
 
 
 def disable_ai_env(patch: Patch) -> None:
@@ -153,8 +176,13 @@ def verify_status_and_ui_ai_option() -> None:
             status = server.status()
             ids = [item["id"] for item in status["available_models"]]
             assert_true(server.AI_DETECTION_MODEL_ID in ids, "AI Detection must appear in /api/status available_models")
-            app_js = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
-            assert_true("AI 检测" in app_js and "ai_detection" in app_js, "UI model menu must handle the AI Detection option")
+            react_sources = "\n".join(
+                [
+                    (ROOT / "frontend" / "src" / "app" / "navigation.tsx").read_text(encoding="utf-8"),
+                    (ROOT / "frontend" / "src" / "features" / "training" / "TrainingLibraryPage.tsx").read_text(encoding="utf-8"),
+                ]
+            )
+            assert_true("AI 检测" in react_sources and "ai_detection" in react_sources, "React UI must handle the AI Detection option")
     finally:
         patch.restore()
 
@@ -179,7 +207,7 @@ def verify_ai_key_config_smoke() -> None:
             )
             saved_text = json.dumps(saved, sort_keys=True)
             assert_true(saved["key_present"], "saved local key should be present")
-            assert_true(saved["key_source"] == "local", "saved key should resolve from local config")
+            assert_true(saved["local_key_present"], "saved key should be tracked as a local secret item")
             assert_true(saved["provider"] == "gemini", "AI provider should be Gemini in public config")
             assert_true(saved["api_keys"] and saved["api_keys"][0]["masked_key"], "AI key should be listed as a masked local key")
             assert_true(saved["masked_key"] and saved["masked_key"] != local_key, "saved key should be masked")
@@ -1068,8 +1096,18 @@ def verify_ai_video_preserves_frame_debug_metadata() -> None:
             assert_true(frame["model"]["is_ai_detection"], "video frame should preserve AI model metadata")
             assert_true(frame["rule"]["match_policy"] == "ai_presence", "video frame should preserve AI rule metadata")
             assert_true(frame["detections"] == 1 and len(frame["detection_items"]) == 1, "video frame should keep compact and detailed detections")
-            app_js = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
-            assert_true("video_frames" in app_js and "detection_items" in app_js, "AI debug modal should include video frame summaries")
+            react_sources = "\n".join(
+                [
+                    (ROOT / "frontend" / "src" / "features" / "detection" / "DetectionWorkbenchPage.tsx").read_text(
+                        encoding="utf-8"
+                    ),
+                    (ROOT / "frontend" / "src" / "api" / "types.ts").read_text(encoding="utf-8"),
+                ]
+            )
+            assert_true(
+                "resultDebugPayload" in react_sources and "frames" in react_sources and "detection_items" in react_sources,
+                "AI debug modal should include video frame summaries",
+            )
     finally:
         patch.restore()
 
@@ -1330,12 +1368,13 @@ def verify_accessory_confirm_material_gates() -> None:
     patch = Patch()
     try:
         with tempfile.TemporaryDirectory() as tmp:
+            patch.request_user(smoke_admin_user())
             tmpdir = Path(tmp)
             candidate_dir = tmpdir / "candidates"
             candidate_dir.mkdir(parents=True, exist_ok=True)
             asset_dir = tmpdir / "assets"
             asset_dir.mkdir(parents=True, exist_ok=True)
-            canonical_path = asset_dir / "manual_canonical.png"
+            canonical_path = asset_dir / "manual_manual_rectified.png"
             cv2.imwrite(str(canonical_path), np.full((96, 64, 3), 240, dtype=np.uint8))
             config = {
                 "accessories": [],
@@ -1359,7 +1398,6 @@ def verify_accessory_confirm_material_gates() -> None:
             patch.attr(server, "load_config", lambda: config)
             patch.attr(server, "save_config", lambda _config: None)
             patch.attr(server, "ensure_accessory_ai_profile", fake_ensure_profile)
-            patch.attr(server, "preprocess_object_clean_sprites", lambda *_args, **_kwargs: False)
 
             text_candidate = {
                 "id": "cand_text_gate",
@@ -1403,14 +1441,13 @@ def verify_accessory_confirm_material_gates() -> None:
                 "created_at": 1,
             }
             (candidate_dir / "cand_object_gate.json").write_text(json.dumps(object_candidate), encoding="utf-8")
-            try:
-                server.confirm_accessory("cand_object_gate")
-            except server.HTTPException as exc:
-                assert_true(exc.status_code == 422, "object confirm without clean sprites should keep failing with 422")
-                detail = exc.detail if isinstance(exc.detail, dict) else {}
-                assert_true(detail.get("message") == "多角度素材切分未完成", "object confirm should keep the multi-angle gate")
-            else:
-                raise AssertionError("object confirm should not bypass the clean-sprite gate")
+            object_result = server.confirm_accessory("cand_object_gate")
+            assert_true(object_result["status"] == "saved", "object accessory confirm should save with normalization deferred")
+            assert_true(len(config["accessories"]) == 2, "object confirm should append the accessory to config")
+            saved_object = config["accessories"][-1]
+            assert_true(saved_object["material_type"] == "object", "object accessory confirm should preserve material type")
+            assert_true(saved_object.get("normalization_deferred") is True, "object confirm should defer clean-sprite generation")
+            assert_true(not saved_object.get("normalized_assets"), "object confirm should not invent clean sprites")
     finally:
         patch.restore()
 
@@ -1419,6 +1456,7 @@ def verify_accessory_confirm_rejects_fallback_profiles() -> None:
     patch = Patch()
     try:
         with tempfile.TemporaryDirectory() as tmp:
+            patch.request_user(smoke_admin_user())
             tmpdir = Path(tmp)
             candidate_dir = tmpdir / "candidates"
             candidate_dir.mkdir(parents=True, exist_ok=True)
@@ -1513,101 +1551,6 @@ def verify_accessory_confirm_rejects_fallback_profiles() -> None:
         patch.restore()
 
 
-def make_label_sheet_smoke_label() -> np.ndarray:
-    image = np.full((82, 164, 3), 255, dtype=np.uint8)
-    cv2.rectangle(image, (3, 3), (160, 78), (20, 20, 20), 2)
-    cv2.putText(image, "A42", (16, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (5, 5, 5), 2, cv2.LINE_AA)
-    cv2.putText(image, "LABEL", (16, 64), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 2, cv2.LINE_AA)
-    cv2.circle(image, (136, 51), 12, (40, 120, 220), -1)
-    return image
-
-
-def make_label_sheet_smoke_box() -> np.ndarray:
-    image = np.full((82, 164, 3), (229, 218, 198), dtype=np.uint8)
-    cv2.rectangle(image, (5, 5), (158, 76), (120, 80, 30), 4)
-    cv2.putText(image, "BOX", (40, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.95, (35, 35, 35), 3, cv2.LINE_AA)
-    return image
-
-
-def write_smoke_image(path: Path, image: np.ndarray) -> Path:
-    ok = cv2.imwrite(str(path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-    assert_true(ok, f"failed to write smoke image: {path}")
-    return path
-
-
-def verify_label_sheet_local_reference_filter_and_match() -> None:
-    patch = Patch()
-    try:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
-            config = base_config()
-            patch_common(patch, tmpdir, config)
-            disable_ai_env(patch)
-
-            label_path = write_smoke_image(tmpdir / "model_label_sticker.jpg", make_label_sheet_smoke_label())
-            box_path = write_smoke_image(tmpdir / "shipping_box_carton.jpg", make_label_sheet_smoke_box())
-            loaded_label = cv2.imread(str(label_path), cv2.IMREAD_COLOR)
-            assert_true(loaded_label is not None, "label smoke reference should decode")
-            sheet = np.full((140, 230, 3), 255, dtype=np.uint8)
-            sheet[28 : 28 + loaded_label.shape[0], 32 : 32 + loaded_label.shape[1]] = loaded_label
-
-            config["accessories"] = [
-                {
-                    "id": "acc_label",
-                    "class_id": 100,
-                    "name": "Model 标签 label sticker",
-                    "material_type": "text",
-                    "source_files": [str(label_path)],
-                    "normalized_assets": [],
-                },
-                {
-                    "id": "acc_box",
-                    "class_id": 101,
-                    "name": "包装盒 shipping box carton",
-                    "material_type": "text",
-                    "source_files": [str(box_path)],
-                    "normalized_assets": [],
-                },
-            ]
-
-            refs, stats = server.collect_label_sheet_references(config, write_previews=False)
-            assert_true(len(refs) == 1, "label sheet filter should keep only label-like references")
-            assert_true(refs[0]["accessory_id"] == "acc_label", "label reference should survive filtering")
-            assert_true(stats["kept_count"] == 1, "filter stats should count kept label references")
-            assert_true(stats["filtered_count"] == 1, "filter stats should count filtered non-label references")
-            filtered_ids = {item.get("accessory_id") for item in stats.get("filtered", [])}
-            assert_true("acc_box" in filtered_ids, "packaging/box annotations should be filtered from label references")
-
-            status = server.status()
-            label_specs = [item for item in status["available_models"] if item["id"] == server.LABEL_SHEET_MODEL_ID]
-            assert_true(label_specs and label_specs[0]["exists"], "local label sheet model should appear in /api/status")
-            assert_true(label_specs[0]["is_label_sheet_match"], "status model spec should identify local label matching")
-            assert_true(not label_specs[0]["is_ai_detection"], "label sheet model must not be marked as AI detection")
-
-            result = server.analyze_bgr_label_sheet(sheet, "label_sheet_smoke", config)
-            assert_true(result["model"]["id"] == server.LABEL_SHEET_MODEL_ID, "label sheet analysis should report the local model id")
-            assert_true("ai" not in result, "label sheet analysis must not attach AI provider metadata")
-            assert_true(result["rule"]["match_policy"] == "label_sheet_local_match", "label sheet rule policy should be explicit")
-            assert_true(result["status"] == "matched", f"synthetic label sheet should match, got {result['status']}")
-            assert_true(result["passed"], "matched label sheet should pass")
-            assert_true(result["matched_reference_id"].startswith("acc_label"), "matched reference should come from the label reference")
-            assert_true(float(result["score"]) >= server.LABEL_SHEET_MATCH_THRESHOLD, "matched label score should clear the local threshold")
-            assert_true(bool(result["matched_reference_image_url"]), "match response should include matched reference image URL")
-            assert_true(bool(result["input_crop_image_url"]), "match response should include input crop image URL")
-            assert_true(bool(result["annotated_url"]), "match response should include an annotated overlay URL")
-            assert_true(result["doc_filter_stats"]["filtered_count"] == 1, "match response should include document filter stats")
-
-            no_ref_config = dict(config)
-            no_ref_config["accessories"] = []
-            no_ref = server.analyze_bgr_label_sheet(sheet, "label_sheet_no_reference", no_ref_config)
-            assert_true(no_ref["status"] == "no_label_reference", "empty reference set should be explicit")
-            assert_true(not no_ref["passed"], "empty reference set must fail closed")
-            assert_true(bool(no_ref["annotated_url"]), "no-reference response should still include a usable overlay")
-            assert_true(bool(no_ref["input_crop_image_url"]), "no-reference response should still include a representative crop")
-    finally:
-        patch.restore()
-
-
 def verify_yolo_path_still_runs_with_existing_shape() -> None:
     class FakeModel:
         def predict(self, *_args: Any, **_kwargs: Any) -> list[object]:
@@ -1660,7 +1603,6 @@ def main() -> int:
         verify_missing_required_class_fails_closed,
         verify_accessory_confirm_material_gates,
         verify_accessory_confirm_rejects_fallback_profiles,
-        verify_label_sheet_local_reference_filter_and_match,
         verify_yolo_path_still_runs_with_existing_shape,
     ]
     for check in checks:

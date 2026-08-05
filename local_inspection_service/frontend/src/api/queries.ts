@@ -1,33 +1,32 @@
 import { apiClient, withAuthScope } from "./client";
 import type {
   AgentConfigResponse,
+  AiAutoOptimizeStatus,
   AiConfigResponse,
+  ApiCostLedgerResponse,
   AiTasksResponse,
   AccessoriesResponse,
   AccessoryCandidateResponse,
   AccessoryDetailResponse,
   AccessoryMutationResponse,
   AccessoryTextCropPayload,
+  ApiRequestOptions,
   AuthStatusResponse,
   ConfigSummaryResponse,
-  DataAnalysisLocateRequest,
-  DataAnalysisLocateResponse,
   DataAnalysisRecordResponse,
   DataAnalysisRecordsResponse,
   DetectionResult,
-  LabelSheetMatchResult,
-  LabelSheetReferencesResponse,
-  LocateAccessoriesResponse,
-  LocateConfigResponse,
-  LocateInspectResult,
   AgentRecommendationResponse,
   PipelineAccessoryMutationResponse,
   PipelineResponse,
   PipelineTask,
   PipelineTaskMutationResponse,
   PipelineTaskPayload,
+  PlcConfig,
+  PlcConfigResponse,
   RuleConfigPayload,
   ServiceStatusResponse,
+  TaskNavigationPreferences,
   TaskRuleConfig,
   TaskRuleConfigPayload,
   TrainingDatasetDetailResponse,
@@ -46,17 +45,17 @@ export const queryKeys = {
   configSummary: (scope: string) => ["config", "summary", scope] as const,
   agentConfig: ["agent", "config"] as const,
   aiConfig: ["ai", "config"] as const,
+  plcConfig: ["plc", "config"] as const,
+  apiCostLedger: ["admin", "apiCostLedger"] as const,
   aiTasks: (scope: string) => ["ai", "tasks", scope] as const,
+  aiAutoOptimize: (scope: string, taskId: string) => ["ai", "autoOptimize", scope, taskId] as const,
   accessories: (scope: string) => ["accessories", scope] as const,
   accessoryDetail: (accessoryId: string) => ["accessories", "detail", accessoryId] as const,
   accessoryCandidate: (candidateId: string) => ["accessories", "candidate", candidateId] as const,
   trainingResources: (scope: string) => ["training", "resources", scope] as const,
   trainingDatasetDetail: (datasetId: string) => ["training", "dataset", datasetId] as const,
   pipeline: (scope: string) => ["pipeline", "tasks", scope] as const,
-  labelSheetReferences: (scope: string) => ["labelSheet", "references", scope] as const,
-  locateConfig: ["locateAnything", "config"] as const,
-  locateStatus: (endpointUrl: string) => ["locateAnything", "status", endpointUrl] as const,
-  locateAccessories: (scope: string) => ["locateAnything", "accessories", scope] as const,
+  taskNavigationPreferences: (userId: string) => ["user", "preferences", "tasks", userId] as const,
   dataAnalysisRecords: (scope: string, taskId: string) => ["dataAnalysis", "records", scope, taskId] as const,
   dataAnalysisRecord: (recordId: string) => ["dataAnalysis", "record", recordId] as const
 };
@@ -69,8 +68,20 @@ export function getUsers() {
   return apiClient.get<UsersResponse>("/api/auth/users");
 }
 
+export function getTaskNavigationPreferences() {
+  return apiClient.get<TaskNavigationPreferences>("/api/user/preferences/tasks");
+}
+
+export function saveTaskNavigationPreferences(payload: Pick<TaskNavigationPreferences, "pinned_task_ids" | "archived_task_ids">) {
+  return apiClient.post<TaskNavigationPreferences>("/api/user/preferences/tasks", payload);
+}
+
 export function getServiceStatus(auth: AuthContextValue) {
   return apiClient.get<ServiceStatusResponse>(withAuthScope("/api/status", auth.user, auth.dataUserId));
+}
+
+export function warmupYoloModel(modelId: string) {
+  return apiClient.post<ServiceStatusResponse["yolo_warmup"]>("/api/models/warmup", { model_id: modelId });
 }
 
 export function getConfigSummary(auth: AuthContextValue) {
@@ -92,7 +103,7 @@ export function getAgentConfig() {
   return apiClient.get<AgentConfigResponse>("/api/agent/config");
 }
 
-export function saveAgentConfig(payload: Partial<AgentConfigResponse> & { api_key?: string }) {
+export function saveAgentConfig(payload: Partial<AgentConfigResponse> & { api_key?: string; api_key_env?: string; active_key_id?: string }) {
   return apiClient.post<AgentConfigResponse>("/api/agent/config", payload);
 }
 
@@ -104,11 +115,84 @@ export function getAiConfig() {
   return apiClient.get<AiConfigResponse>("/api/ai/config");
 }
 
+export function getPlcConfig() {
+  return apiClient.get<PlcConfigResponse>("/api/plc/config");
+}
+
+export function savePlcConfig(payload: Partial<PlcConfig>) {
+  return apiClient.post<PlcConfigResponse>("/api/plc/config", payload);
+}
+
+export function getApiCostLedger() {
+  return apiClient.get<ApiCostLedgerResponse>("/api/admin/api-cost-ledger");
+}
+
 export function getAiTasks(auth: AuthContextValue) {
   return apiClient.get<AiTasksResponse>(withAuthScope("/api/ai/tasks", auth.user, auth.dataUserId));
 }
 
-export function saveAiConfig(payload: Partial<AiConfigResponse> & { api_key?: string }) {
+export function getAiTaskAutoOptimize(auth: AuthContextValue, taskId: string) {
+  return apiClient.get<AiAutoOptimizeStatus>(
+    withAuthScope(`/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize`, auth.user, auth.dataUserId)
+  );
+}
+
+export function updateAiTaskAutoOptimize(
+  taskId: string,
+  payload: {
+    enabled?: boolean;
+    samples_per_real_image?: number;
+    negative_samples_per_real_image?: number;
+    training_epochs?: number;
+    training_image_size?: number;
+    min_trainable_samples?: number;
+    min_positive_samples?: number;
+    min_negative_samples?: number;
+    max_label_jobs_per_cycle?: number;
+    mask_compare_min_score?: number;
+    shadow_min_samples?: number;
+    shadow_min_agreement?: number;
+    auto_promote?: boolean;
+  }
+) {
+  return apiClient.patch<AiAutoOptimizeStatus>(`/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize`, payload);
+}
+
+export function uploadAiTaskEnvironmentBackground(taskId: string, form: FormData, options?: ApiRequestOptions) {
+  return apiClient.upload<AiAutoOptimizeStatus>(`/api/ai/tasks/${encodeURIComponent(taskId)}/environment-background`, form, options);
+}
+
+export function deleteAiTaskAutoOptimizeSample(taskId: string, sampleId: string) {
+  return apiClient.delete<AiAutoOptimizeStatus>(
+    `/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize/samples/${encodeURIComponent(sampleId)}`
+  );
+}
+
+export function retryAiTaskAutoOptimizeSample(taskId: string, sampleId: string) {
+  return apiClient.post<AiAutoOptimizeStatus>(
+    `/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize/samples/${encodeURIComponent(sampleId)}/retry`
+  );
+}
+
+export function approveAiTaskAutoOptimizeSample(taskId: string, sampleId: string, mode: "sprite" | "bbox_only" = "sprite") {
+  return apiClient.post<AiAutoOptimizeStatus>(
+    `/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize/samples/${encodeURIComponent(sampleId)}/approve`,
+    { mode }
+  );
+}
+
+export function saveAiConfig(
+  payload: Partial<AiConfigResponse> & {
+    api_key?: string;
+    image_provider?: string;
+    image_model?: string;
+    image_base_url?: string;
+    image_timeout_seconds?: number;
+    image_api_key?: string;
+    image_active_key_id?: string;
+    image_api_key_env?: string;
+  }
+) {
   return apiClient.post<AiConfigResponse>("/api/ai/config", payload);
 }
 
@@ -126,8 +210,11 @@ export function getPipeline(auth: AuthContextValue) {
   return apiClient.get<PipelineResponse>(withAuthScope("/api/pipeline/tasks", auth.user, auth.dataUserId));
 }
 
-export function createPipelineTask(payload: PipelineTaskPayload) {
-  return apiClient.post<PipelineTask>("/api/pipeline/tasks", payload);
+export function createPipelineTask(payload: PipelineTaskPayload, auth?: AuthContextValue) {
+  return apiClient.post<PipelineTask>(
+    auth ? withAuthScope("/api/pipeline/tasks", auth.user, auth.dataUserId) : "/api/pipeline/tasks",
+    payload
+  );
 }
 
 export function updatePipelineTask(taskId: string, payload: PipelineTaskPayload) {
@@ -140,6 +227,10 @@ export function deletePipelineTask(taskId: string) {
 
 export function advancePipelineTask(taskId: string) {
   return apiClient.post<PipelineTask>(`/api/pipeline/tasks/${encodeURIComponent(taskId)}/advance`);
+}
+
+export function pausePipelineTask(taskId: string) {
+  return apiClient.post<PipelineTask>(`/api/pipeline/tasks/${encodeURIComponent(taskId)}/cancel-advance`);
 }
 
 export function sendPipelineAgentFeedback(
@@ -222,57 +313,12 @@ export function setAccessoryRoute(accessoryId: string, payload: { route: string;
   return apiClient.post<AccessoryMutationResponse>(`/api/accessories/${encodeURIComponent(accessoryId)}/route`, payload);
 }
 
-export function analyzeImage(form: FormData) {
-  return apiClient.upload<DetectionResult>("/api/analyze/image", form);
+export function analyzeImage(form: FormData, options?: ApiRequestOptions) {
+  return apiClient.upload<DetectionResult>("/api/analyze/image", form, options);
 }
 
-export function analyzeVideo(form: FormData) {
-  return apiClient.upload<DetectionResult>("/api/analyze/video", form);
-}
-
-export function getLabelSheetReferences(auth: AuthContextValue) {
-  return apiClient.get<LabelSheetReferencesResponse>(
-    withAuthScope("/api/label-sheets/references", auth.user, auth.dataUserId)
-  );
-}
-
-export function addLabelSheetReferences(form: FormData) {
-  return apiClient.upload<LabelSheetReferencesResponse>("/api/label-sheets/references", form);
-}
-
-export function matchLabelSheet(form: FormData) {
-  return apiClient.upload<LabelSheetMatchResult>("/api/label-sheets/match", form);
-}
-
-export function getLocateConfig() {
-  return apiClient.get<LocateConfigResponse>("/api/locateanything/config");
-}
-
-export function saveLocateConfig(payload: Partial<LocateConfigResponse>) {
-  return apiClient.post<LocateConfigResponse>("/api/locateanything/config", payload);
-}
-
-export function getLocateStatus(endpointUrl = "") {
-  const suffix = endpointUrl ? `?endpoint_url=${encodeURIComponent(endpointUrl)}` : "";
-  return apiClient.get<LocateConfigResponse>(`/api/locateanything/status${suffix}`);
-}
-
-export function startLocateRuntime() {
-  return apiClient.post<LocateConfigResponse>("/api/locateanything/runtime/start");
-}
-
-export function getLocateAccessories(auth: AuthContextValue) {
-  return apiClient.get<LocateAccessoriesResponse>(
-    withAuthScope("/api/locateanything/accessories", auth.user, auth.dataUserId)
-  );
-}
-
-export function inspectLocateAnything(form: FormData) {
-  return apiClient.upload<LocateInspectResult>("/api/locateanything/inspect", form);
-}
-
-export function locateAnythingPrompt(form: FormData) {
-  return apiClient.upload<LocateInspectResult>("/api/locateanything/locate", form);
+export function analyzeVideo(form: FormData, options?: ApiRequestOptions) {
+  return apiClient.upload<DetectionResult>("/api/analyze/video", form, options);
 }
 
 export function getDataAnalysisRecords(
@@ -293,17 +339,6 @@ export function getDataAnalysisRecord(recordId: string) {
   return apiClient.get<DataAnalysisRecordResponse>(
     `/api/data-analysis/records/${encodeURIComponent(recordId)}`
   );
-}
-
-export function locateDataAnalysisRecord(recordId: string, payload: DataAnalysisLocateRequest = {}) {
-  return apiClient.post<DataAnalysisLocateResponse>(
-    `/api/data-analysis/records/${encodeURIComponent(recordId)}/locate`,
-    payload
-  );
-}
-
-export function locateDataAnalysisRecords(payload: DataAnalysisLocateRequest) {
-  return apiClient.post<DataAnalysisLocateResponse>("/api/data-analysis/locate", payload);
 }
 
 export function getTrainingDatasetDetail(datasetId: string) {
