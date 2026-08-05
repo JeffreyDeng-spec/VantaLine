@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
@@ -197,7 +198,10 @@ def verify_text_document_asset_multi_image_selection() -> None:
         rendered_indexes = set()
         rendered_paths = set()
         for seed in range(64):
-            rendered = server.draw_training_preview([item], tmp_dir / f"preview_{seed}.png", seed=seed)
+            output_path = tmp_dir / f"preview_{seed}.png"
+            rendered = server.draw_training_preview([item], output_path, seed=seed)
+            rendered_image = cv2.imread(str(output_path), cv2.IMREAD_UNCHANGED)
+            assert_true(output_path.is_file() and rendered_image is not None and rendered_image.size > 0, "real preview renderer should write a readable image artifact")
             label = next((entry for entry in rendered.get("labels", []) if entry.get("material_type") == "text"), None)
             assert_true(label is not None, "training preview should include the text accessory label")
             rendered_indexes.add(label.get("document_asset_index"))
@@ -212,14 +216,23 @@ def verify_text_document_asset_multi_image_selection() -> None:
 
 
 def verify_accessory_long_short_aspect_rule() -> None:
+    # Production-baseline preview scale: a 1280px frame represents 600mm.
+    # Keep this oracle independent from server.MM_TO_PREVIEW_PX so a runtime
+    # calibration change cannot silently rewrite the expected fixture values.
+    calibrated_px_per_mm = 1280.0 / 600.0
+    assert_true(server.MM_TO_PREVIEW_PX == calibrated_px_per_mm, "inspection preview scale changed from the production 1280px / 600mm baseline")
     physical_size = {"kind": "object", "length_mm": 100.0, "width_mm": 42.0, "height_mm": 32.0}
     metadata = server.pose_render_footprint_metadata("upright", [72, 181], physical_size)
+    expected_watch_footprint = [
+        round((physical_size["length_mm"] / (181 / 72)) * calibrated_px_per_mm),
+        round(physical_size["length_mm"] * calibrated_px_per_mm),
+    ]
     assert_true(metadata["source_long_side_px"] == 181, "source long side should come from the visible long side")
     assert_true(metadata["source_short_side_px"] == 72, "source short side should come from the visible short side")
     assert_true(metadata["source_long_edge_axis"] == "height", "source long edge axis should stay observable")
     assert_true(metadata["source_length_width_rule"] == "source_visible_long_side_is_length_short_side_is_width", "dimension rule should be explicit")
     assert_true(metadata["render_scale_basis"] == "source_visible_long_short_aspect", "elongated objects should use source long:short aspect")
-    assert_true(metadata["render_footprint_px"] == [57, 143], f"watch-like source should render as long, not square: {metadata['render_footprint_px']}")
+    assert_true(metadata["render_footprint_px"] == expected_watch_footprint, f"watch-like source should follow calibrated physical scale: {metadata['render_footprint_px']}")
     assert_true(metadata["render_source_aspect_preserved"], "metadata should mark source aspect preservation")
 
     asset = np.zeros((300, 120, 3), dtype=np.uint8)
@@ -230,10 +243,11 @@ def verify_accessory_long_short_aspect_rule() -> None:
     assert_true(resize_meta["render_visible_footprint_px"][1] > resize_meta["render_visible_footprint_px"][0], "long source must remain long after fitting")
 
     physical_bottle = {"kind": "object", "length_mm": 180.0, "width_mm": 45.0, "height_mm": 45.0}
+    expected_cap_footprint = [round(45.0 * calibrated_px_per_mm)] * 2
     for source_size in ([80, 87], [80, 90], [90, 100]):
         top_view = server.pose_render_footprint_metadata("upright", source_size, physical_bottle)
         assert_true(top_view["render_scale_basis"] == "cap_outer_edge_diameter_mm", f"square-ish upright top view should stay on cap path: {source_size} -> {top_view}")
-        assert_true(top_view["render_footprint_px"] == [64, 64], f"square-ish upright top view should keep cap footprint: {source_size} -> {top_view['render_footprint_px']}")
+        assert_true(top_view["render_footprint_px"] == expected_cap_footprint, f"square-ish upright top view should keep calibrated cap footprint: {source_size} -> {top_view['render_footprint_px']}")
 
     upright_asset = {
         "source_pose_family": "upright",
@@ -251,7 +265,7 @@ def verify_accessory_long_short_aspect_rule() -> None:
     assert_true(upright_asset["render_scale_basis"] == "source_visible_long_short_aspect", "source-aspect basis should remain intact after laying-standard pass")
     assert_true(upright_asset["source_long_edge_axis"] == "height", "upright watch source long edge should remain height")
     assert_true(upright_asset["render_long_edge_axis"] == "height", "laying-standard pass must preserve source long-edge axis for source-aspect assets")
-    assert_true(upright_asset["render_footprint_px"] == [57, 143], f"upright watch footprint must not flip to lying median axis: {upright_asset['render_footprint_px']}")
+    assert_true(upright_asset["render_footprint_px"] == expected_watch_footprint, f"upright watch footprint must not flip to lying median axis: {upright_asset['render_footprint_px']}")
     assert_true(
         upright_asset["render_long_short_orientation_basis"] == "source_visible_long_short_aspect_preserve_source_axis",
         "source-aspect orientation basis should document why the global lying axis was skipped",
@@ -261,7 +275,12 @@ def verify_accessory_long_short_aspect_rule() -> None:
     source_mask = np.zeros((420, 140), dtype=np.uint8)
     source_asset[40:395, 40:97] = (180, 180, 180)
     source_mask[40:395, 40:97] = 255
-    physical_render_target = (1001, 156)
+    pipe_length_mm = 700.0
+    pipe_source_ratio = 355 / 58
+    physical_render_target = (
+        round(pipe_length_mm * calibrated_px_per_mm),
+        round((pipe_length_mm / pipe_source_ratio) * calibrated_px_per_mm),
+    )
     _, _, collapsed_meta = server.resize_masked_asset_to_visible_footprint(
         source_asset,
         source_mask,
@@ -318,7 +337,7 @@ def verify_accessory_long_short_aspect_rule() -> None:
         )
     )
     pipe_to_a4_ratio = pipe_long_px / a4_long_px
-    expected_pipe_to_a4_ratio = 700.0 / 297.0
+    expected_pipe_to_a4_ratio = pipe_length_mm / 297.0
     assert_true(
         abs(pipe_to_a4_ratio - expected_pipe_to_a4_ratio) < 0.25,
         f"final pasted pipe pixels should preserve 700mm:A4-long ratio, got {pipe_to_a4_ratio:.3f} from {paste_meta}",
@@ -471,14 +490,7 @@ def verify_pipeline_detection_methods_and_ai_handoff() -> None:
             assert_true(server.normalize_pipeline_detection_method("yolo") == "yolo", "YOLO method should persist")
             assert_true(server.normalize_pipeline_detection_method("yolo_ocr") == "yolo_ocr", "YOLO+OCR method should persist")
             assert_true(server.normalize_pipeline_detection_method("ai_detection") == "ai", "AI aliases should normalize to ai")
-            assert_true(server.normalize_pipeline_detection_method("locate_anything") == "locate", "Locate aliases should normalize to locate")
-
-            public_locate = server.pipeline_task_public(
-                {"id": "pipe_locate", "name": "locate", "stage": "draft", "status": "ready", "params": {"route": "locate"}, "accessory_ids": ["acc_ready"]},
-                config,
-            )
-            assert_true(public_locate["detection_method"] == "locate", "route-only legacy tasks should serialize as Locate Anything")
-            assert_true(public_locate["uses_training_flow"] is False, "Locate Anything should not use YOLO training flow")
+            assert_true(server.normalize_pipeline_detection_method("locate_anything") == "yolo_ocr", "removed Locate aliases should fall back to the YOLO+OCR default")
             public_yolo = server.pipeline_task_public(
                 {"id": "pipe_yolo", "name": "yolo", "stage": "draft", "status": "ready", "detection_method": "yolo", "accessory_ids": ["acc_ready"]},
                 config,
@@ -501,37 +513,19 @@ def verify_pipeline_detection_methods_and_ai_handoff() -> None:
             assert_true(saved_ai_tasks[0]["source"] == "pipeline", "pipeline-created AI task should be tagged as pipeline source")
             assert_true(saved_ai_tasks[0]["selected_accessory_ids"] == ["acc_ready"], "pipeline AI task should preserve selected accessory ids")
 
-            locate_task = {
-                "id": "pipe_locate",
-                "name": "Locate direct",
-                "stage": "draft",
-                "status": "ready",
-                "detection_method": "locate",
-                "accessory_ids": ["acc_ready"],
-                "params": {"route": "locate"},
-            }
-            server.advance_pipeline_task(locate_task)
-            assert_true(locate_task["stage"] == "library" and locate_task["status"] == "completed", "Locate pipeline task should complete into library")
-            assert_true(locate_task["params"].get("route") == "locate" and "train_mode" not in locate_task["params"], "Locate task must not enter YOLO training flow")
     finally:
         server.AI_DETECTION_TASKS_PATH = original_ai_path
         server.load_config = original_load_config
 
 
 def verify_frontend_pipeline_method_coverage() -> None:
-    app_js = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
-    index_html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    styles_css = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
-    assert_true("PIPELINE_METHOD_META" in app_js and "Locate Anything" in app_js, "frontend should render all pipeline detection methods")
-    assert_true("function pipelineTaskUsesTraining" in app_js, "frontend should separate training and non-training pipeline methods")
-    assert_true("function pipelineAccessoryReady" in app_js, "frontend should classify ready library accessories explicitly")
-    helper_body = app_js[app_js.index("function pipelineAccessoryReady"): app_js.index("function setAccessoryRoute")]
-    assert_true("reference_uploaded" not in helper_body, "reference-uploaded library accessories should not render as建档中")
-    assert_true('$("newAiTask")?.addEventListener' not in app_js, "AI 检测 workbench should not wire manual create action")
-    assert_true('value="ai">AI 检测' in index_html and 'value="locate">Locate Anything' in index_html, "pipeline task modal should expose AI and Locate methods")
-    assert_true("toggleAiFullscreen" in index_html and "toggleLocateFullscreen" in index_html, "AI and Locate workbenches should expose fullscreen controls")
-    assert_true("data-training-library-tab=\"datasets\"" in index_html and "data-training-library-tab=\"models\"" in index_html, "training library should be split into tabs")
-    assert_true(".training-library-pane.active" in styles_css, "training library tab panes should be mutually visible")
+    pipeline_page = (ROOT / "frontend" / "src" / "features" / "pipeline" / "TrainingPipelinePage.tsx").read_text(encoding="utf-8")
+    app_shell = (ROOT / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
+    global_css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
+    assert_true("PIPELINE_METHODS" in pipeline_page and "AI 检测" in pipeline_page, "frontend should render supported pipeline methods")
+    assert_true("Locate Anything" not in pipeline_page and '"locate"' not in pipeline_page, "frontend should not render removed LocateAnything method")
+    assert_true("LabelSheetPage" not in app_shell and "LocateAnythingPage" not in app_shell, "removed pages should not be routed")
+    assert_true("training-library-pane" in global_css, "training library tab styles should remain present")
 
 
 def main() -> int:

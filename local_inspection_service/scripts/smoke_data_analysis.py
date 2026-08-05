@@ -49,7 +49,7 @@ def create_user(admin: TestClient, username: str) -> dict[str, Any]:
             "password": "password-12345",
             "display_name": username.title(),
             "role": "user",
-            "permissions": ["inspection", "ai_detection", "locate_anything", "accessory_library"],
+            "permissions": ["inspection", "ai_detection", "accessory_library"],
         },
     )
     assert_status(response, 200, f"create {username}")
@@ -209,114 +209,24 @@ def main() -> None:
     if filtered_ids != {record_a}:
         raise AssertionError(f"admin user filter failed: {filtered.json()}")
 
-    unauthorized = client_b.post("/api/data-analysis/locate", json={"record_ids": [record_a]})
-    assert_status(unauthorized, 404, "batch rejects unauthorized record")
-
-    server.save_locateanything_config(
-        server.normalize_locateanything_config(
-            {"enabled": True, "endpoint_url": "http://127.0.0.1:9999/locate", "generation_mode": "fast", "max_side": 640, "max_new_tokens": 128, "timeout_seconds": 5}
-        )
-    )
-    original_post = server.post_locateanything_endpoint
-    original_worker = server.locateanything_should_use_worker
-    try:
-        server.locateanything_should_use_worker = lambda _settings: False
-        server.post_locateanything_endpoint = lambda *args, **kwargs: {
-            "answer": (
-                "<ref>operator_b smoke part</ref><box><10><10><120><120></box>\n"
-                "<ref>operator_a smoke part</ref><box><100><100><650><700></box>"
-            )
-        }
-        located = client_a.post(f"/api/data-analysis/records/{record_a}/locate", json={})
-        assert_status(located, 200, "run LocateAnything")
-    finally:
-        server.post_locateanything_endpoint = original_post
-        server.locateanything_should_use_worker = original_worker
+    removed_batch = client_b.post("/api/data-analysis/locate", json={"record_ids": [record_a]})
+    assert_status(removed_batch, 410, "removed data-analysis LocateAnything batch returns gone")
+    removed_record = client_a.post(f"/api/data-analysis/records/{record_a}/locate", json={})
+    assert_status(removed_record, 410, "removed data-analysis LocateAnything record returns gone")
 
     detail = client_a.get(f"/api/data-analysis/records/{record_a}")
-    assert_status(detail, 200, "detail after locate")
+    assert_status(detail, 200, "detail after removed locate")
     record = detail.json()["record"]
-    if record["locateanything_run_count"] != 1:
-        raise AssertionError(f"LocateAnything run was not stored: {record}")
-    if not record["comparison_summary"].get("latest_run_id"):
-        raise AssertionError(f"comparison summary missing latest run id: {record}")
     serialized_normal_detail = json.dumps(record, ensure_ascii=False)
     for forbidden in ("diagnostic_url", "diagnostics", "raw_answer", "raw_answer_snippet", "prompt"):
         if forbidden in serialized_normal_detail:
             raise AssertionError(f"normal user detail leaked debug field {forbidden}: {record}")
-    latest_run = record["locateanything_runs"][-1]
-    if latest_run["box_count"] != 1:
-        raise AssertionError(f"non-required LocateAnything box affected final overlay count: {latest_run}")
-    if record["comparison_summary"].get("difference_count") != 0 or record["comparison_summary"].get("status") != "same":
-        raise AssertionError(f"non-required LocateAnything box affected comparison: {record['comparison_summary']}")
+    if "locateanything_run_count" in record or "locateanything_runs" in record or "latest_locateanything_run" in record:
+        raise AssertionError(f"removed LocateAnything fields leaked in data-analysis detail: {record}")
     scope = record.get("required_accessory_scope", {}).get("required_accessories", [])
     if [item["accessory_id"] for item in scope] != ["acc_operator_a"]:
         raise AssertionError(f"data analysis scope should only include operator A required accessory: {scope}")
 
-    admin_detail = admin.get(f"/api/data-analysis/records/{record_a}")
-    assert_status(admin_detail, 200, "admin detail after locate")
-    admin_record = admin_detail.json()["record"]
-    admin_latest_run = admin_record["locateanything_runs"][-1]
-    if not admin_latest_run.get("diagnostic_url"):
-        raise AssertionError(f"admin detail should preserve diagnostic URL: {admin_latest_run}")
-    if admin_latest_run["items"][0].get("raw_box_count") != 2 or admin_latest_run["items"][0].get("filtered_out_box_count") != 1:
-        raise AssertionError(f"admin LocateAnything diagnostic raw/filter counts missing: {admin_latest_run['items'][0]}")
-    if admin_latest_run["items"][0].get("label") != "Operator Alpha":
-        raise AssertionError(f"LocateAnything result detail should reuse profile English label: {admin_latest_run['items'][0]}")
-    boxes = admin_latest_run["items"][0].get("boxes") or []
-    if (
-        not boxes
-        or boxes[0].get("label") != "Operator Alpha"
-        or boxes[0].get("display_label") != "Operator Alpha"
-        or boxes[0].get("english_name") != "Operator Alpha"
-        or boxes[0].get("native_label") != "operator_a smoke part"
-    ):
-        raise AssertionError(f"LocateAnything visible box labels should use required accessory names: {admin_latest_run['items'][0]}")
-
-    request_token = server._request_user.set(user_a)
-    try:
-        rules = server.data_analysis_locate_rules(admin_record)
-        rule_ids = {item["id"] for item in rules}
-        if rule_ids != {"analysis:acc_operator_a"}:
-            raise AssertionError(f"LocateAnything rules must stay scoped to required accessories: {rules}")
-        if rules[0].get("expected_count") != 1 or rules[0].get("ai_detection_count") != 1:
-            raise AssertionError(f"LocateAnything required/AI counts diverged from task scope: {rules}")
-        if rules[0].get("display_label") != "Operator Alpha" or rules[0].get("label") != "operator_a smoke part":
-            raise AssertionError(f"LocateAnything data-analysis labels should reuse profile English names: {rules}")
-
-        polluted_record = json.loads(json.dumps(admin_record))
-        polluted_rule = polluted_record["ai_detection_result"].setdefault("rule", {})
-        polluted_rule.setdefault("counts", {})["acc_operator_b"] = 7
-        polluted_record["ai_detection_result"].setdefault("detections", []).append(
-            {
-                "accessory_id": "acc_operator_b",
-                "label": "operator_b smoke part",
-                "present": True,
-                "confidence": 0.99,
-                "count": 7,
-                "evidence": "synthetic unrelated LocateAnything-style class",
-            }
-        )
-        polluted_rules = server.data_analysis_locate_rules(polluted_record)
-        if {item["id"] for item in polluted_rules} != {"analysis:acc_operator_a"}:
-            raise AssertionError(f"non-required AI/LA classes leaked into locate rules: {polluted_rules}")
-
-        synthetic_extra_run = {
-            "run_id": "synthetic_extra",
-            "status": "completed",
-            "overall_pass": False,
-            "items": [
-                {"id": "analysis:acc_operator_a", "label": "Operator Alpha", "box_count": 1, "status": "comparison_same_count", "passed": True},
-                {"id": "analysis:acc_operator_b", "label": "Operator Beta", "box_count": 7, "status": "comparison_extra", "passed": False},
-            ],
-        }
-        synthetic_comparison = server.compare_ai_and_locateanything(admin_record, synthetic_extra_run)
-        if synthetic_comparison["status"] != "same" or synthetic_comparison["difference_count"] != 0:
-            raise AssertionError(f"non-required LocateAnything item affected final comparison: {synthetic_comparison}")
-        if set(synthetic_comparison["locateanything_counts"]) != {"acc_operator_a"}:
-            raise AssertionError(f"non-required LocateAnything count was exposed as final count: {synthetic_comparison}")
-    finally:
-        server._request_user.reset(request_token)
     if client_b.get(f"/api/data-analysis/records/{record_b}").json()["record"]["record_id"] != record_b:
         raise AssertionError("operator B could not read own data analysis record")
     print("data analysis smoke ok")
