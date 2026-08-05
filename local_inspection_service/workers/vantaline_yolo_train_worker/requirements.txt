@@ -1,0 +1,5 @@
+runpod==1.11.0
+# Keep the worker aligned with the version exercised by the VantaLine runtime
+# contract environment; upgrades require a real image build and inference smoke.
+ultralytics==8.4.66
+requests==2.34.2
