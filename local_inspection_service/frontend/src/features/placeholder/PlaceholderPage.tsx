@@ -4,20 +4,13 @@ import type { NavItem } from "../../app/navigation";
 const endpointGroups: Record<string, string[]> = {
   inspect: ["/api/status", "/api/analyze/image", "/api/analyze/video", "/api/stream/config"],
   aiInspect: ["/api/ai/config", "/api/ai/tasks", "/api/analyze/image", "/api/analyze/video"],
-  labelSheet: ["/api/label-sheets/references", "/api/label-sheets/match"],
-  locateAnything: [
-    "/api/locateanything/config",
-    "/api/locateanything/status",
-    "/api/locateanything/accessories",
-    "/api/locateanything/inspect"
-  ],
   accessories: [
     "/api/accessories",
     "/api/accessories/preview",
     "/api/accessories/confirm/{candidate_id}",
     "/api/accessories/{accessory_id}/files"
   ],
-  dataAnalysis: ["/api/data-analysis/records", "/api/data-analysis/records/{record_id}", "/api/data-analysis/locate"],
+  dataAnalysis: ["/api/data-analysis/records", "/api/data-analysis/records/{record_id}"],
   pipeline: ["/api/pipeline/tasks", "/api/pipeline/accessories/{accessory_id}", "/api/pipeline/tasks/{task_id}/advance"],
   trainingLibrary: [
     "/api/training/resources",
@@ -46,7 +39,7 @@ export function PlaceholderPage({ item }: { item: NavItem }) {
         <Icon size={24} aria-hidden="true" />
         <div>
           <strong>Parity pending</strong>
-          <p>此页面保留当前 legacy 行为作为来源；React 迁移将在后续阶段按清单逐项替换。</p>
+          <p>此页面尚未接入主线工作流，将在后续收口阶段替换为真实功能。</p>
         </div>
       </section>
 

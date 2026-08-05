@@ -3,13 +3,11 @@ import {
   BarChart3,
   Box,
   Columns3,
-  Crosshair,
   Database,
   LayoutDashboard,
   ScanLine,
   Settings,
   Sparkles,
-  Tags,
   Users
 } from "lucide-react";
 
@@ -27,113 +25,119 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export const navGroups: NavGroup[] = [
+export const overviewNavItem: NavItem = {
+  label: "总览",
+  path: "/",
+  view: "home",
+  icon: LayoutDashboard,
+  phase: "phase-1"
+};
+
+export const detectionCenterNavItem: NavItem = {
+  label: "检测中心",
+  path: "/inspect",
+  view: "inspect",
+  permission: "inspection",
+  icon: ScanLine,
+  phase: "phase-3"
+};
+
+export const dataAnalysisNavItem: NavItem = {
+  label: "数据分析",
+  path: "/data-analysis",
+  view: "dataAnalysis",
+  permission: "ai_detection",
+  icon: BarChart3,
+  phase: "phase-3"
+};
+
+export const systemNavItems: NavItem[] = [
   {
-    items: [
-      {
-        label: "总览",
-        path: "/",
-        view: "home",
-        icon: LayoutDashboard,
-        phase: "phase-1"
-      }
-    ]
+    label: "设置",
+    path: "/rules",
+    view: "rules",
+    permission: "system_settings",
+    icon: Settings,
+    phase: "phase-2"
   },
   {
-    label: "检测中心",
-    items: [
-      {
-        label: "检测工作台",
-        path: "/inspect",
-        view: "inspect",
-        permission: "inspection",
-        icon: ScanLine,
-        phase: "phase-3"
-      },
-      {
-        label: "AI 检测",
-        path: "/ai-inspect",
-        view: "aiInspect",
-        permission: "ai_detection",
-        icon: Sparkles,
-        phase: "phase-3"
-      },
-      {
-        label: "标签匹配",
-        path: "/label-sheet",
-        view: "labelSheet",
-        permission: "label_sheet",
-        icon: Tags,
-        phase: "phase-3"
-      },
-      {
-        label: "开放定位",
-        path: "/locate-anything",
-        view: "locateAnything",
-        permission: "locate_anything",
-        icon: Crosshair,
-        phase: "phase-3"
-      }
-    ]
-  },
-  {
-    label: "资产与训练",
-    items: [
-      {
-        label: "配件库",
-        path: "/accessories",
-        view: "accessories",
-        permission: "accessory_library",
-        icon: Box,
-        phase: "phase-3"
-      },
-      {
-        label: "数据分析",
-        path: "/data-analysis",
-        view: "dataAnalysis",
-        permission: "ai_detection",
-        icon: BarChart3,
-        phase: "phase-3"
-      },
-      {
-        label: "训练流水线",
-        path: "/pipeline",
-        view: "pipeline",
-        permission: "training_pipeline",
-        icon: Columns3,
-        phase: "phase-3"
-      },
-      {
-        label: "训练库",
-        path: "/training-library",
-        view: "trainingLibrary",
-        permission: "model_library",
-        icon: Database,
-        phase: "phase-2"
-      }
-    ]
-  },
-  {
-    label: "系统",
-    items: [
-      {
-        label: "设置",
-        path: "/rules",
-        view: "rules",
-        permission: "system_settings",
-        icon: Settings,
-        phase: "phase-2"
-      },
-      {
-        label: "用户管理",
-        path: "/users",
-        view: "userManagement",
-        permission: "user_management",
-        icon: Users,
-        phase: "phase-2"
-      }
-    ]
+    label: "用户管理",
+    path: "/users",
+    view: "userManagement",
+    permission: "user_management",
+    icon: Users,
+    phase: "phase-2"
   }
 ];
 
-export const navItems = navGroups.flatMap((group) => group.items);
+export const trainingAssetNavItems: NavItem[] = [
+  {
+    label: "配件库",
+    path: "/accessories",
+    view: "accessories",
+    permission: "accessory_library",
+    icon: Box,
+    phase: "phase-3"
+  },
+  {
+    label: "任务库",
+    path: "/training-library?tab=tasks",
+    view: "taskLibrary",
+    permission: "model_library",
+    icon: Database,
+    phase: "phase-2"
+  },
+  {
+    label: "样本与数据集",
+    path: "/training-library?tab=datasets",
+    view: "trainingDatasets",
+    permission: "model_library",
+    icon: Database,
+    phase: "phase-2"
+  },
+  {
+    label: "模型库",
+    path: "/training-library?tab=models",
+    view: "trainingLibrary",
+    permission: "model_library",
+    icon: Database,
+    phase: "phase-2"
+  },
+  {
+    label: "任务流水线",
+    path: "/pipeline",
+    view: "pipeline",
+    permission: "training_pipeline",
+    icon: Columns3,
+    phase: "phase-3"
+  }
+];
+
+export const hiddenToolNavItems: NavItem[] = [
+  {
+    label: "AI 检测",
+    path: "/ai-inspect",
+    view: "aiInspect",
+    permission: "ai_detection",
+    icon: Sparkles,
+    phase: "phase-3"
+  }
+];
+
+export const fixedNavItems = [overviewNavItem, detectionCenterNavItem, dataAnalysisNavItem, ...systemNavItems];
+
+export const navGroups: NavGroup[] = [
+  { items: [overviewNavItem, detectionCenterNavItem] },
+  { label: "训练与资产", items: trainingAssetNavItems },
+  { items: [dataAnalysisNavItem] },
+  { label: "系统", items: systemNavItems }
+];
+
+export const navItems = [
+  overviewNavItem,
+  detectionCenterNavItem,
+  dataAnalysisNavItem,
+  ...systemNavItems,
+  ...trainingAssetNavItems,
+  ...hiddenToolNavItems
+];
