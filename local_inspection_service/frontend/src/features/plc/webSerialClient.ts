@@ -1,13 +1,17 @@
 import {
   activatePlcWorkstationConnection,
   claimPlcWorkstationConnection,
+  confirmPlcWebSerialDiagnostic,
   declarePlcWebSerialAttempt,
   disconnectPlcWorkstationConnection,
+  finishPlcWebSerialDiagnostic,
+  getPlcWebSerialDiagnosticPlan,
   heartbeatPlcWorkstationConnection,
   sendPlcWebSerialReceipt
 } from "../../api/queries";
 import type {
   PlcSyncStatus,
+  PlcWebSerialDiagnosticResult,
   PlcWebSerialFrame,
   PlcWebSerialOperation,
   PlcWorkstationLease
@@ -24,6 +28,22 @@ function bytesFromHex(value: string) {
 
 function hexFromBytes(value: Uint8Array) {
   return Array.from(value, (item) => item.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+function parseDiagnosticWordResponse(response: Uint8Array) {
+  if (response.length !== 8 || response[0] !== 0x02 || response[5] !== 0x03) {
+    throw new Error("PLC 读取返回帧格式错误");
+  }
+  const dataText = String.fromCharCode(...response.slice(1, 5)).toUpperCase();
+  if (!/^[0-9A-F]{4}$/.test(dataText)) throw new Error("PLC 读取返回值不是十六进制");
+  const expectedChecksum = Array.from(response.slice(1, 6)).reduce((sum, item) => (sum + item) & 0xff, 0);
+  const checksumText = String.fromCharCode(...response.slice(6, 8)).toUpperCase();
+  if (checksumText !== expectedChecksum.toString(16).padStart(2, "0").toUpperCase()) {
+    throw new Error("PLC 读取返回校验和错误");
+  }
+  const lowByte = Number.parseInt(dataText.slice(0, 2), 16);
+  const highByte = Number.parseInt(dataText.slice(2, 4), 16);
+  return lowByte | (highByte << 8);
 }
 
 function clientInstanceId() {
@@ -201,6 +221,31 @@ export class PlcWebSerialClient {
     }
   }
 
+  private async readExact(length: number, timeoutMs: number) {
+    const chunks: number[] = [];
+    const deadline = performance.now() + timeoutMs;
+    while (chunks.length < length) {
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new DOMException("PLC response timeout", "TimeoutError");
+      const read = this.armRead();
+      let timer = 0;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = window.setTimeout(() => reject(new DOMException("PLC response timeout", "TimeoutError")), remaining);
+      });
+      try {
+        const result = await Promise.race([read, timeout]);
+        this.pendingRead = null;
+        this.pendingReadResolved = false;
+        if (result.done || !result.value?.length) throw new Error("PLC 串口读取已结束");
+        chunks.push(...result.value);
+        if (chunks.length > length) throw new Error("PLC 返回了超出预期长度的数据");
+      } finally {
+        window.clearTimeout(timer);
+      }
+    }
+    return new Uint8Array(chunks);
+  }
+
   private async transact(frame: PlcWebSerialFrame, timeoutMs: number, deadline: number): Promise<PlcWebSerialOperation> {
     const base = { target: frame.target, frame_sha256: frame.frame_sha256, response_hex: "", completed_at: Date.now() };
     if (!this.writer || this.stopped || this.pendingReadResolved || document.visibilityState !== "visible" || performance.now() >= deadline) {
@@ -263,6 +308,84 @@ export class PlcWebSerialClient {
       } catch (error) {
         if (this.state()) await this.failClosed("PLC 控制链路中断，端口已关闭；请人工重连", onFatal);
         throw error;
+      }
+    };
+    const next = this.queue.then(operation, operation);
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  diagnoseD206(onFatal: (message: string) => void): Promise<PlcWebSerialDiagnosticResult> {
+    const operation = async (): Promise<PlcWebSerialDiagnosticResult> => {
+      const state = this.state();
+      if (!state) throw new Error("请先连接本机 PLC");
+      const plan = await getPlcWebSerialDiagnosticPlan({
+        session_id: state.sessionId,
+        lease_epoch: state.leaseEpoch,
+        config_generation: state.configGeneration
+      });
+      const [writeFrame, readFrame] = plan.frames;
+      const result: PlcWebSerialDiagnosticResult = {
+        status: "failed",
+        conclusion: "通讯未完成",
+        write_frame_hex: writeFrame.frame_hex,
+        write_response_hex: "",
+        read_frame_hex: readFrame.frame_hex,
+        read_response_hex: "",
+        read_value: null
+      };
+      let outcome: "success" | "failed" | "uncertain" = "uncertain";
+      try {
+        const remainingMs = Math.min(plan.execution_window_ms, plan.deadline_at_ms - Date.now());
+        if (remainingMs <= 0) throw new Error("PLC 诊断计划已过期，请重试");
+        const deadline = performance.now() + remainingMs;
+        const writeResult = await this.transact(writeFrame, plan.ack_timeout_ms, deadline);
+        result.write_response_hex = writeResult.response_hex;
+        if (writeResult.status !== "acknowledged") {
+          result.conclusion = `写入 D206=6 未收到 ACK（${writeResult.status}）`;
+          outcome = "failed";
+          await this.failClosed("PLC 诊断写入失败，串口已关闭，请检查后重新连接", onFatal);
+          return result;
+        }
+        await confirmPlcWebSerialDiagnostic({
+          session_id: state.sessionId,
+          lease_epoch: state.leaseEpoch,
+          diagnostic_id: plan.diagnostic_id,
+          attempt_token: plan.attempt_token
+        });
+        if (!this.writer || this.stopped || performance.now() >= deadline) throw new Error("PLC 诊断执行窗口已过期");
+        this.armRead();
+        await Promise.resolve();
+        if (this.pendingReadResolved) throw new Error("读取前发现串口残留数据");
+        await this.writer.write(bytesFromHex(readFrame.frame_hex));
+        const response = await this.readExact(8, Math.min(plan.read_timeout_ms, Math.max(1, deadline - performance.now())));
+        result.read_response_hex = hexFromBytes(response);
+        result.read_value = parseDiagnosticWordResponse(response);
+        result.status = result.read_value === 6 ? "success" : "failed";
+        outcome = result.status;
+        result.conclusion = result.read_value === 6
+          ? "通讯成功：写入 6 后读取 D206 得到 6"
+          : `通讯异常：写入 6 后读取 D206 得到 ${result.read_value}`;
+        if (result.status !== "success") {
+          await this.failClosed("PLC 诊断读取值异常，串口已关闭，请检查后重新连接", onFatal);
+        }
+        return result;
+      } catch (error) {
+        result.conclusion = error instanceof Error ? error.message : String(error);
+        if (this.state()) await this.failClosed("PLC 诊断读取失败，串口已关闭，请检查后重新连接", onFatal);
+        return result;
+      } finally {
+        try {
+          await finishPlcWebSerialDiagnostic({
+            session_id: state.sessionId,
+            lease_epoch: state.leaseEpoch,
+            diagnostic_id: plan.diagnostic_id,
+            attempt_token: plan.attempt_token,
+            outcome
+          });
+        } catch {
+          if (this.state()) await this.failClosed("PLC 诊断状态无法确认，串口已关闭，请人工重连", onFatal);
+        }
       }
     };
     const next = this.queue.then(operation, operation);

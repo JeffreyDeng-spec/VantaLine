@@ -21,6 +21,7 @@ try:
         PROTOCOL_ID,
         PlcConfigError,
         build_d206_frame,
+        build_d_register_read_frame,
         build_d_register_write_frame,
         build_y04_frame,
         build_y_force_frame,
@@ -36,6 +37,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct script imports
         PROTOCOL_ID,
         PlcConfigError,
         build_d206_frame,
+        build_d_register_read_frame,
         build_d_register_write_frame,
         build_y04_frame,
         build_y_force_frame,
@@ -247,6 +249,26 @@ def build_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[
             )
         )
     return frames
+
+
+def build_web_serial_diagnostic_plan() -> list[dict[str, Any]]:
+    """Return the fixed, administrator-only D206=6 write/read diagnostic."""
+    register = "D206"
+    address = logical_device_address(register)
+    write = _frame_item(
+        register,
+        build_d_register_write_frame(address, 6, CHECKSUM_INCLUDE_ETX),
+        "diagnostic_write",
+    )
+    read_frame = build_d_register_read_frame(address, CHECKSUM_INCLUDE_ETX)
+    read = {
+        "target": register,
+        "operation": "diagnostic_read",
+        "frame_hex": read_frame.hex().upper(),
+        "frame_sha256": hashlib.sha256(read_frame).hexdigest(),
+        "expected_response_hex": "02 + 4 ASCII HEX + 03 + SUM",
+    }
+    return [write, read]
 
 
 def build_legacy_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[str, Any]]:

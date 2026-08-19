@@ -144,7 +144,7 @@ def test_config_migration_and_dynamic_targets() -> None:
 
 def test_read_frame_and_response_contract() -> None:
     assert build_d_register_read_frame("119C").startswith(b"\x020119C02\x03")
-    body = b"0001\x03"
+    body = b"0100\x03"
     assert parse_d_register_read_response(b"\x02" + body + checksum(body)) == 1
     for invalid in (b"", b"\x020001\x03FF", b"\x02ZZZZ\x0300"):
         try:

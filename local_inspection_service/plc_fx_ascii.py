@@ -473,9 +473,11 @@ def build_y_force_frame(
 
 def build_d_register_read_frame(
     address: str,
-    checksum_mode: str = CHECKSUM_EXCLUDE_ETX_LEGACY_VB,
+    checksum_mode: str = CHECKSUM_INCLUDE_ETX,
 ) -> bytes:
-    """Build the one-word FX read shape; production use is gated by onsite profile verification."""
+    """Build a documented one-word DEVICE READ frame."""
+    if checksum_mode != CHECKSUM_INCLUDE_ETX:
+        raise ValueError("documented DEVICE READ requires a checksum that includes ETX")
     address_text = str(address).strip().upper()
     if not _HEX_ADDRESS_RE.fullmatch(address_text):
         raise ValueError("address must contain exactly four hexadecimal characters")
@@ -485,8 +487,10 @@ def build_d_register_read_frame(
 
 def parse_d_register_read_response(
     response: bytes,
-    checksum_mode: str = CHECKSUM_EXCLUDE_ETX_LEGACY_VB,
+    checksum_mode: str = CHECKSUM_INCLUDE_ETX,
 ) -> int:
+    if checksum_mode != CHECKSUM_INCLUDE_ETX:
+        raise ValueError("documented DEVICE READ response requires a checksum that includes ETX")
     if not isinstance(response, bytes) or len(response) != 8:
         raise PlcTransportError(
             PlcTerminalResultCode.SHORT_RESPONSE,
@@ -503,7 +507,8 @@ def parse_d_register_read_response(
         )
     data = response[1:5]
     try:
-        value = int(data.decode("ascii"), 16)
+        raw_word = bytes.fromhex(data.decode("ascii"))
+        value = int.from_bytes(raw_word, byteorder="little", signed=False)
     except (UnicodeDecodeError, ValueError) as exc:
         raise PlcTransportError(
             PlcTerminalResultCode.UNEXPECTED_RESPONSE,

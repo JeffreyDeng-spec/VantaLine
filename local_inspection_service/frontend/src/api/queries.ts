@@ -26,6 +26,7 @@ import type {
   PlcConfigResponse,
   PlcSyncStatus,
   PlcWebSerialAttempt,
+  PlcWebSerialDiagnosticPlan,
   PlcWebSerialConfig,
   PlcWebSerialOperation,
   PlcWorkstationLease,
@@ -223,6 +224,33 @@ export function sendPlcWebSerialReceipt(
     `/api/plc/workstation/dispatches/${encodeURIComponent(dispatchId)}/receipt`,
     payload
   );
+}
+
+export function getPlcWebSerialDiagnosticPlan(payload: {
+  session_id: string;
+  lease_epoch: number;
+  config_generation: number;
+}) {
+  return apiClient.post<PlcWebSerialDiagnosticPlan>("/api/plc/workstation/diagnostic-plan", payload);
+}
+
+export function finishPlcWebSerialDiagnostic(payload: {
+  session_id: string;
+  lease_epoch: number;
+  diagnostic_id: string;
+  attempt_token: string;
+  outcome: "success" | "failed" | "uncertain";
+}) {
+  return apiClient.post<{ released: boolean; diagnostic_id: string }>("/api/plc/workstation/diagnostic-receipt", payload);
+}
+
+export function confirmPlcWebSerialDiagnostic(payload: {
+  session_id: string;
+  lease_epoch: number;
+  diagnostic_id: string;
+  attempt_token: string;
+}) {
+  return apiClient.post<{ confirmed: boolean; diagnostic_id: string }>("/api/plc/workstation/diagnostic-confirm", payload);
 }
 
 export function getApiCostLedger() {

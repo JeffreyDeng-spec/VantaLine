@@ -922,10 +922,34 @@ export interface PlcWorkstationResponse {
 
 export interface PlcWebSerialFrame {
   target: string;
-  operation: "write_result" | "set_output_on" | "set_output_off";
+  operation: "write_result" | "set_output_on" | "set_output_off" | "diagnostic_write" | "diagnostic_read";
   frame_hex: string;
   frame_sha256: string;
-  expected_response_hex: "06";
+  expected_response_hex: string;
+}
+
+export interface PlcWebSerialDiagnosticPlan {
+  diagnostic_id: string;
+  attempt_token: string;
+  protocol_version: "plc-web-serial-v4";
+  register: "D206";
+  write_value: 6;
+  issued_at: number;
+  deadline_at_ms: number;
+  execution_window_ms: number;
+  ack_timeout_ms: number;
+  read_timeout_ms: number;
+  frames: [PlcWebSerialFrame, PlcWebSerialFrame];
+}
+
+export interface PlcWebSerialDiagnosticResult {
+  status: "success" | "failed";
+  conclusion: string;
+  write_frame_hex: string;
+  write_response_hex: string;
+  read_frame_hex: string;
+  read_response_hex: string;
+  read_value: number | null;
 }
 
 export interface PlcWebSerialAttempt extends Omit<PlcSyncStatus, "frames"> {
