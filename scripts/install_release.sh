@@ -57,7 +57,7 @@ PY
   echo "release=$release already-installed=true"
   exit 0
 fi
-preflight="$(sudo -u vantaline psql "$db_url" -tAc "select (select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint)||'|'||(select count(*) from vantaline.plc_web_serial_dispatches where status not in ('acknowledged','failed','partial_success','uncertain'));")"
+preflight="$(sudo -u vantaline psql "$db_url" -tAc "select (select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint)||'|'||(select count(*) from vantaline.plc_web_serial_dispatches where status = 'browser_attempt_declared');")"
 [[ "$preflight" == "0|0" ]] || { echo "PLC activity preflight failed: $preflight" >&2; exit 1; }
 
 install -d -o vantaline -g vantaline -m 755 "$target"
@@ -97,7 +97,7 @@ for _ in $(seq 1 25); do
   active="$(sudo -u vantaline psql "$db_url" -tAc "select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint;")"
   [[ "$active" == "0" ]] && break; sleep 1
 done
-final_gate="$(sudo -u vantaline psql "$db_url" -tAc "select (select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint)||'|'||(select count(*) from vantaline.plc_web_serial_dispatches where status not in ('acknowledged','failed','partial_success','uncertain'));")"
+final_gate="$(sudo -u vantaline psql "$db_url" -tAc "select (select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint)||'|'||(select count(*) from vantaline.plc_web_serial_dispatches where status = 'browser_attempt_declared');")"
 [[ "$final_gate" == "0|0" ]] || { echo "PLC fenced gate failed: $final_gate" >&2; exit 1; }
 
 backup="$base/backups/db-schema-$release.sql"

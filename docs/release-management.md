@@ -32,5 +32,6 @@ frontend bundle.
 - Fresh clone passes CI and builds the same v4 contract.
 - Release artifact checksum and `/api/version` agree with the tag commit.
 - Install and forced-failure rollback rehearsal pass.
-- Production PLC remains commissioning with zero leases and dispatches during
-  the rehearsal.
+- Production PLC has zero active leases and zero `browser_attempt_declared`
+  records during the rehearsal. Pre-attempt `detecting`/`planned` audit rows
+  cannot have touched the serial port and do not permanently block a release.
