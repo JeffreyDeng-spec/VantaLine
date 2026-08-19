@@ -20,6 +20,7 @@ available_kb="$(df -Pk /opt/vantaline | awk 'NR==2 {print $4}')"
 [[ "$available_kb" =~ ^[0-9]+$ && "$available_kb" -ge 2097152 ]] || { echo "less than 2 GiB free on /opt/vantaline" >&2; exit 1; }
 
 base=/opt/vantaline; releases="$base/releases"; target="$releases/$release"; current="$base/current"
+staged_archive="$base/.staged-$release.tar.gz"
 lock="$base/backups/.production-release.lock"
 db_url='postgresql:///vantaline?host=/var/run/postgresql&user=vantaline'
 previous=""; switched=0; lock_owned=0; service_stopped=0; target_created=0
@@ -37,6 +38,7 @@ cleanup() {
     if [[ "$target_created" -eq 1 && "$(readlink -f "$current" 2>/dev/null || true)" != "$target" ]]; then rm -rf --one-file-system "$target"; fi
   fi
   if [[ "$lock_owned" -eq 1 ]]; then rm -f "$lock"; fi
+  rm -f "$staged_archive"
   exit $status
 }
 trap cleanup EXIT INT TERM
@@ -62,7 +64,8 @@ preflight="$(sudo -u vantaline psql "$db_url" -tAc "select (select count(*) from
 
 install -d -o vantaline -g vantaline -m 755 "$target"
 target_created=1
-sudo -u vantaline python3 - "$archive" "$target" <<'PY'
+install -o vantaline -g vantaline -m 0400 "$archive" "$staged_archive"
+sudo -u vantaline python3 - "$staged_archive" "$target" <<'PY'
 import pathlib, sys, tarfile
 archive, target = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]).resolve()
 with tarfile.open(archive, "r:gz") as handle:
@@ -78,6 +81,7 @@ with tarfile.open(archive, "r:gz") as handle:
         if destination != target and target not in destination.parents: raise SystemExit(f"archive traversal: {member.name}")
         member.name = relative.as_posix(); handle.extract(member, target)
 PY
+rm -f "$staged_archive"
 rm -rf "$target/local_inspection_service/data" "$target/models"
 ln -s /opt/vantaline/shared/data "$target/local_inspection_service/data"
 ln -s /opt/vantaline/shared/models "$target/models"
