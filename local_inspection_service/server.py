@@ -3425,7 +3425,9 @@ PIPELINE_BG_MATCH_MAX_SOURCE_PATCHES = 12
 PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES = 48
 PIPELINE_BG_MATCH_DISTANCE_THRESHOLD = 0.22
 BACKGROUND_ROI_PX = (70, 100, 1210, 800)
-BACKGROUND_DIR = ROOT / "backgrounds"
+# Background sets are mutable runtime data.  Keep them below DATA_DIR so an
+# immutable release never needs write access to its own source tree.
+BACKGROUND_DIR = DATA_DIR / "backgrounds"
 BACKGROUND_SETS_DIR = BACKGROUND_DIR / "sets"
 BACKGROUND_SETS_MANIFEST = BACKGROUND_DIR / "background_sets.json"
 DEFAULT_BACKGROUND_IMAGE = BACKGROUND_DIR / "conveyor_surface_topdown_ai_reference5.png"

@@ -27,6 +27,12 @@ jobs:
         run: python scripts/verify_release_contract.py
       - name: Validate release shell syntax
         run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
+      - name: Keep mutable backgrounds outside immutable releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'BACKGROUND_DIR = DATA_DIR / "backgrounds"' local_inspection_service/server.py
+          grep -F 'shared_backgrounds="$base/shared/data/backgrounds"' scripts/install_release.sh
 
   frontend:
     runs-on: ubuntu-latest

@@ -24,10 +24,23 @@ staged_archive="$base/.staged-$release.tar.gz"
 lock="$base/backups/.production-release.lock"
 db_url='postgresql:///vantaline?host=/var/run/postgresql&user=vantaline'
 previous=""; switched=0; lock_owned=0; service_stopped=0; target_created=0
+shared_backgrounds=""; legacy_backgrounds=""
 rollback() {
   set +e
   if [[ "$switched" -eq 1 && -n "$previous" ]]; then
     ln -sfn "$previous" "$current.rollback"; mv -Tf "$current.rollback" "$current"
+  fi
+  if [[ "$service_stopped" -eq 1 && -n "$shared_backgrounds" && -n "$legacy_backgrounds" ]]; then
+    # The previous release still uses <repo>/backgrounds.  Repair that path
+    # before restarting it.  If a compatibility link cannot be created, move
+    # the directory back so rollback remains self-contained.
+    if [[ -d "$shared_backgrounds" && ! -L "$shared_backgrounds" && ! -e "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
+      ln -s "$shared_backgrounds" "$legacy_backgrounds" || mv "$shared_backgrounds" "$legacy_backgrounds"
+    fi
+    if [[ ! -d "$legacy_backgrounds" ]]; then
+      echo "rollback stopped: previous backgrounds path is not accessible" >&2
+      return
+    fi
   fi
   if [[ "$service_stopped" -eq 1 ]]; then systemctl restart vantaline; fi
 }
@@ -96,7 +109,41 @@ ln -s /opt/vantaline/shared/models "$target/models"
 ln -s /opt/vantaline/venv "$target/.venv"
 
 previous="$(readlink -f "$current")"
-systemctl stop vantaline; service_stopped=1
+service_stopped=1
+systemctl stop vantaline
+
+# Background sets used to live at <repo>/backgrounds.  They are mutable runtime
+# data and must live under the shared data tree before an immutable release is
+# started.  The move is same-filesystem and happens while the service is stopped.
+shared_backgrounds="$base/shared/data/backgrounds"
+legacy_backgrounds="$previous/backgrounds"
+if [[ -d "$shared_backgrounds" && ! -L "$shared_backgrounds" ]]; then
+  if [[ -d "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
+    echo "background directory conflict: both shared and legacy directories exist" >&2
+    exit 1
+  fi
+elif [[ -e "$shared_backgrounds" || -L "$shared_backgrounds" ]]; then
+  echo "shared backgrounds must be a real directory" >&2
+  exit 1
+else
+  if [[ -d "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
+    mv "$legacy_backgrounds" "$shared_backgrounds"
+  elif [[ -e "$legacy_backgrounds" || -L "$legacy_backgrounds" ]]; then
+    echo "legacy backgrounds has an unexpected type" >&2
+    exit 1
+  else
+    install -d -o vantaline -g vantaline -m 755 "$shared_backgrounds"
+  fi
+fi
+[[ -d "$shared_backgrounds" && ! -L "$shared_backgrounds" ]]
+chown vantaline:vantaline "$shared_backgrounds"
+sudo -u vantaline test -w "$shared_backgrounds"
+# Keep the immediately previous version rollback-safe: its old code still
+# resolves <repo>/backgrounds until the new release has passed health checks.
+if [[ ! -e "$legacy_backgrounds" ]]; then
+  ln -s "$shared_backgrounds" "$legacy_backgrounds"
+fi
+[[ -L "$legacy_backgrounds" && "$(readlink -f "$legacy_backgrounds")" == "$shared_backgrounds" ]]
 for _ in $(seq 1 25); do
   active="$(sudo -u vantaline psql "$db_url" -tAc "select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint;")"
   [[ "$active" == "0" ]] && break; sleep 1
