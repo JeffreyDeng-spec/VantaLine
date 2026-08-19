@@ -109,7 +109,8 @@ ln -s /opt/vantaline/shared/models "$target/models"
 ln -s /opt/vantaline/venv "$target/.venv"
 
 previous="$(readlink -f "$current")"
-systemctl stop vantaline; service_stopped=1
+service_stopped=1
+systemctl stop vantaline
 
 # Background sets used to live at <repo>/backgrounds.  They are mutable runtime
 # data and must live under the shared data tree before an immutable release is
