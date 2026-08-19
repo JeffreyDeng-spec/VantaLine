@@ -66,7 +66,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart vantaline
 systemctl is-active --quiet vantaline
 [[ "$(systemctl show vantaline -p WorkingDirectory --value)" == "/opt/vantaline/current" ]]
-curl -fsS http://127.0.0.1:8765/ >/dev/null
+curl --max-time 5 --retry 30 --retry-delay 1 --retry-all-errors -fsS http://127.0.0.1:8765/ >/dev/null
 rollback_needed=0
 sudo sh -c "printf '%s\n' complete > '$backup/COMPLETED'"
 echo "immutable release host bootstrap complete"
