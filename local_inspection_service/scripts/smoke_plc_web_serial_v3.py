@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import sys
 import tempfile
@@ -14,6 +15,20 @@ if str(REPO_ROOT) not in sys.path:
 
 ROOT = Path(tempfile.mkdtemp(prefix="vantaline_plc_web_serial_v3_"))
 (ROOT / "local_inspection_service" / "static").mkdir(parents=True, exist_ok=True)
+(ROOT / "VERSION.json").write_text(
+    json.dumps(
+        {
+            "release": "development",
+            "git_commit": "test",
+            "built_at": "test",
+            "backend_protocol": "plc-web-serial-v4",
+            "frontend_protocol": "plc-web-serial-v4",
+            "frontend_bundle": "",
+            "frontend_bundle_sha256": "",
+        }
+    ),
+    encoding="utf-8",
+)
 os.environ["LOCAL_INSPECTION_ROOT"] = str(ROOT)
 os.environ["VANTALINE_YOLO_PREWARM"] = "0"
 os.environ["INSPECTION_WORKER_WATCHER"] = "0"
