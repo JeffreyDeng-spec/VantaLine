@@ -69,8 +69,9 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py
-      - run: python local_inspection_service/scripts/smoke_plc_phase1.py
-      - run: python local_inspection_service/scripts/smoke_plc_phase1_hardening.py
+      # Phase 1/1-hardening exercise the retired server-side pyserial dispatcher.
+      # Production v4 is browser-owned Web Serial and the server must perform 0
+      # serial I/O, so only the frozen-history verifier remains in source.
       - run: python local_inspection_service/scripts/smoke_plc_web_serial_v3.py
       - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
       - run: python local_inspection_service/scripts/smoke_release_version.py
