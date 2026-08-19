@@ -67,7 +67,7 @@ jobs:
             test "$(gh release view "$RELEASE_ID" --json targetCommitish --jq .targetCommitish)" = "$RELEASE_SHA"
             rm -f release-output/*
             gh release download "$RELEASE_ID" --pattern "$RELEASE_ID.tar.gz" --pattern ARTIFACT_SHA256SUMS --dir release-output
-            (cd release-output && sha256sum -c ARTIFACT_SHA256SUMS)
+            sha256sum -c release-output/ARTIFACT_SHA256SUMS
           else
             gh release create "$RELEASE_ID" \
             release-output/"$RELEASE_ID".tar.gz \
