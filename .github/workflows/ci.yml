@@ -75,6 +75,7 @@ jobs:
       - run: python scripts/verify_production_dependencies.py requirements-production.lock
       - name: Verify additive-only migrations
         run: python scripts/verify_migration_safety.py
+      - run: python scripts/smoke_migration_safety.py
       - run: python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py
       # Phase 1/1-hardening exercise the retired server-side pyserial dispatcher.
       # Production v4 is browser-owned Web Serial and the server must perform 0
