@@ -2786,7 +2786,7 @@ async def reject_untrusted_cross_origin_writes(request: Request, call_next):
     path = request.url.path
     auth_user: dict[str, Any] | None = None
     token = None
-    public_auth_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout"}
+    public_auth_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout", "/api/version"}
     public_runpod_training_transfer = (
         request.method in {"GET", "HEAD"}
         and re.match(r"^/api/training/runpod/datasets/[^/]+/[^/]+/dataset\.zip$", path) is not None
