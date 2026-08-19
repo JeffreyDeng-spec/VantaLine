@@ -24,10 +24,19 @@ staged_archive="$base/.staged-$release.tar.gz"
 lock="$base/backups/.production-release.lock"
 db_url='postgresql:///vantaline?host=/var/run/postgresql&user=vantaline'
 previous=""; switched=0; lock_owned=0; service_stopped=0; target_created=0
+backgrounds_moved=0; shared_backgrounds=""; legacy_backgrounds=""
 rollback() {
   set +e
   if [[ "$switched" -eq 1 && -n "$previous" ]]; then
     ln -sfn "$previous" "$current.rollback"; mv -Tf "$current.rollback" "$current"
+  fi
+  if [[ "$backgrounds_moved" -eq 1 && -n "$shared_backgrounds" && -n "$legacy_backgrounds" ]]; then
+    # The previous release still uses <repo>/backgrounds.  Repair that path
+    # before restarting it.  If a compatibility link cannot be created, move
+    # the directory back so rollback remains self-contained.
+    if [[ ! -e "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
+      ln -s "$shared_backgrounds" "$legacy_backgrounds" || mv "$shared_backgrounds" "$legacy_backgrounds"
+    fi
   fi
   if [[ "$service_stopped" -eq 1 ]]; then systemctl restart vantaline; fi
 }
@@ -103,9 +112,21 @@ systemctl stop vantaline; service_stopped=1
 # started.  The move is same-filesystem and happens while the service is stopped.
 shared_backgrounds="$base/shared/data/backgrounds"
 legacy_backgrounds="$previous/backgrounds"
-if [[ ! -e "$shared_backgrounds" ]]; then
+if [[ -d "$shared_backgrounds" && ! -L "$shared_backgrounds" ]]; then
+  if [[ -d "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
+    echo "background directory conflict: both shared and legacy directories exist" >&2
+    exit 1
+  fi
+elif [[ -e "$shared_backgrounds" || -L "$shared_backgrounds" ]]; then
+  echo "shared backgrounds must be a real directory" >&2
+  exit 1
+else
   if [[ -d "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
     mv "$legacy_backgrounds" "$shared_backgrounds"
+    backgrounds_moved=1
+  elif [[ -e "$legacy_backgrounds" || -L "$legacy_backgrounds" ]]; then
+    echo "legacy backgrounds has an unexpected type" >&2
+    exit 1
   else
     install -d -o vantaline -g vantaline -m 755 "$shared_backgrounds"
   fi
@@ -118,6 +139,7 @@ sudo -u vantaline test -w "$shared_backgrounds"
 if [[ ! -e "$legacy_backgrounds" ]]; then
   ln -s "$shared_backgrounds" "$legacy_backgrounds"
 fi
+[[ -L "$legacy_backgrounds" && "$(readlink -f "$legacy_backgrounds")" == "$shared_backgrounds" ]]
 for _ in $(seq 1 25); do
   active="$(sudo -u vantaline psql "$db_url" -tAc "select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint;")"
   [[ "$active" == "0" ]] && break; sleep 1
