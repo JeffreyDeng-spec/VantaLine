@@ -9,11 +9,11 @@ frontend bundle.
 1. Create `feature/*`, `fix/*`, or `hotfix/*` from current `origin/main`.
 2. Open a pull request using the production change template.
 3. Merge only after every required CI job passes.
-4. The `Build release candidate` workflow creates one artifact from the merged
-   commit. Source, backend, frontend bundle, `VERSION.json`, and checksums stay
-   together.
-5. Production deployment remains disabled until the baseline tag and rollback
-   rehearsal are accepted.
+4. A successful `CI` run for a push to `main` triggers `Release and deploy
+   production`; no manual deployment approval or button is required.
+5. That workflow builds one immutable artifact, creates a draft release,
+   deploys it through the restricted production account, verifies the exact
+   Git SHA, and publishes the GitHub Release only after production acceptance.
 
 ## Invariants
 
