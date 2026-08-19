@@ -49,6 +49,7 @@ def main() -> None:
             "explicit connect": "connectPlc",
             "camera-only upload": "analyzeCamera",
             "browser execution": "plcClientRef.current.execute",
+            "manual D206 diagnostic": "写入 6 并读取 D206",
         },
     )
     require(
@@ -58,6 +59,7 @@ def main() -> None:
             "GET workstation": 'apiClient.get<PlcWorkstationResponse>("/api/plc/workstation")',
             "POST config": 'apiClient.post<PlcWorkstationResponse>("/api/plc/workstation/config", payload)',
             "camera endpoint": 'apiClient.upload<DetectionResult>("/api/analyze/camera"',
+            "diagnostic endpoint": 'apiClient.post<PlcWebSerialDiagnosticPlan>("/api/plc/workstation/diagnostic-plan"',
         },
     )
     require(
@@ -93,6 +95,7 @@ def main() -> None:
             "no retry": "端口已关闭；检查线路后人工重连",
             "D ACK gates Y": 'dResult.status === "acknowledged" && attempt.frames[1]',
             "heartbeat": "heartbeatPlcWorkstationConnection",
+            "diagnostic read parser": "parseDiagnosticWordResponse",
         },
     )
 

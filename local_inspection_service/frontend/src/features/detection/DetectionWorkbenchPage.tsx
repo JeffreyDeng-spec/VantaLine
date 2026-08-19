@@ -25,6 +25,7 @@ import type {
   DetectionResult,
   DetectionRuleItem,
   DetectionVideoFrame,
+  PlcWebSerialDiagnosticResult,
   PlcWorkstationResponse,
   ServiceStatusResponse,
   SpecializedModelTask,
@@ -653,6 +654,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [environmentCaptureStatus, setEnvironmentCaptureStatus] = useState("首次检测前需要拍摄一张空白生产环境。");
   const [cameraStatus, setCameraStatus] = useState("支持本机摄像头和已连接的 USB / 外接摄像头。");
   const [plcConnected, setPlcConnected] = useState(false);
+  const [plcDiagnosticBusy, setPlcDiagnosticBusy] = useState(false);
+  const [plcDiagnostic, setPlcDiagnostic] = useState<PlcWebSerialDiagnosticResult | null>(null);
   const [plcConnectionStatus, setPlcConnectionStatus] = useState(
     PlcWebSerialClient.supported() ? "PLC 尚未连接。" : "当前浏览器不支持 Web Serial。"
   );
@@ -1433,6 +1436,10 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }
 
   async function runCamera(videoElement: HTMLVideoElement | null = videoRef.current) {
+    if (plcDiagnosticBusy) {
+      notify({ title: "PLC 通讯诊断正在执行", description: "请等待诊断结束后再拍照检测", tone: "info" });
+      return;
+    }
     try {
       if (!(await ensureEnvironmentBackground())) return;
       if (!stream) await startCamera();
@@ -1474,6 +1481,39 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     setPlcConnected(false);
     setPlcConnectionStatus(message);
     await plcWorkstationQuery.refetch();
+  }
+
+  async function runPlcDiagnostic() {
+    if (!plcConnected) return notify({ title: "请先连接本机 PLC", tone: "error" });
+    if (!window.confirm("该测试会把 D206 临时写成 6，并立即读取 D206。请确认 D206 当前可以安全覆盖。")) return;
+    setPlcDiagnosticBusy(true);
+    setPlcDiagnostic(null);
+    try {
+      const diagnostic = await plcClientRef.current.diagnoseD206((message) => {
+        setPlcConnected(false);
+        setPlcConnectionStatus(message);
+      });
+      setPlcDiagnostic(diagnostic);
+      notify({
+        title: diagnostic.status === "success" ? "PLC 通讯成功" : "PLC 通讯诊断未通过",
+        description: diagnostic.conclusion,
+        tone: diagnostic.status === "success" ? "success" : "error"
+      });
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : String(nextError);
+      setPlcDiagnostic({
+        status: "failed",
+        conclusion: message,
+        write_frame_hex: "",
+        write_response_hex: "",
+        read_frame_hex: "",
+        read_response_hex: "",
+        read_value: null
+      });
+      notify({ title: "PLC 通讯诊断失败", description: message, tone: "error" });
+    } finally {
+      setPlcDiagnosticBusy(false);
+    }
   }
 
   async function openFullscreenCamera() {
@@ -1697,7 +1737,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                   <RefreshCw size={15} aria-hidden="true" />
                   检测摄像头
                 </button>
-                <button className="primary compact-action" type="button" disabled={Boolean(busy)} onClick={() => runCamera()}>
+                <button className="primary compact-action" type="button" disabled={Boolean(busy) || plcDiagnosticBusy} onClick={() => runCamera()}>
                   <Camera size={15} aria-hidden="true" />
                   拍照 {activeDetectionLabel}
                 </button>
@@ -1721,6 +1761,52 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                 {plcWorkstationQuery.data?.station ? `工作站：${plcWorkstationQuery.data.station.name}。` : "本机尚未绑定工作站。"} {plcConnectionStatus}
               </p>
               <p className="hint-line">仅本页摄像头拍照检测会写 PLC；图片上传和视频分析永远不会写串口。页面隐藏、刷新、拔线或租约失效会立即停止新写入。</p>
+              {canViewDiagnostics ? (
+                <section className="plc-communication-diagnostic" aria-label="PLC 通讯诊断">
+                  <div className="section-title title-with-action">
+                    <div>
+                      <h3>PLC 通讯诊断</h3>
+                      <p className="hint-line">手动写入 D206=6，再读取 D206；不会控制任何 Y 点。</p>
+                    </div>
+                    <button
+                      className="secondary compact-action"
+                      type="button"
+                      disabled={!plcConnected || plcDiagnosticBusy || Boolean(busy)}
+                      onClick={() => void runPlcDiagnostic()}
+                    >
+                      {plcDiagnosticBusy ? "诊断中…" : "写入 6 并读取 D206"}
+                    </button>
+                  </div>
+                  <div className="plc-diagnostic-labels" aria-live="polite">
+                    <label>
+                      通讯结论
+                      <output className={plcDiagnostic?.status === "success" ? "success-text" : plcDiagnostic ? "danger-text" : ""}>
+                        {plcDiagnostic?.conclusion || "尚未执行"}
+                      </output>
+                    </label>
+                    <label>
+                      D206 读取值
+                      <output>{plcDiagnostic?.read_value ?? "—"}</output>
+                    </label>
+                    <label>
+                      写入指令（D206=6）
+                      <code>{plcDiagnostic?.write_frame_hex || "—"}</code>
+                    </label>
+                    <label>
+                      写入返回（应为 06 ACK）
+                      <code>{plcDiagnostic?.write_response_hex || "—"}</code>
+                    </label>
+                    <label>
+                      读取指令（D206）
+                      <code>{plcDiagnostic?.read_frame_hex || "—"}</code>
+                    </label>
+                    <label>
+                      PLC 读取原始返回
+                      <code>{plcDiagnostic?.read_response_hex || "—"}</code>
+                    </label>
+                  </div>
+                </section>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -1913,7 +1999,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <span className={`result-badge ${result ? (result.passed ? "pass" : "fail") : "waiting"}`}>
                 {result ? (result.passed ? "通过" : "不通过") : "等待拍照"}
               </span>
-              <button className="secondary compact-action" type="button" disabled={Boolean(busy)} onClick={() => runCamera(fullscreenVideoRef.current)}>
+              <button className="secondary compact-action" type="button" disabled={Boolean(busy) || plcDiagnosticBusy} onClick={() => runCamera(fullscreenVideoRef.current)}>
                 <Camera size={15} aria-hidden="true" />
                 拍照 {activeDetectionLabel}
               </button>

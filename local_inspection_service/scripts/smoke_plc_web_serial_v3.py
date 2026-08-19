@@ -36,14 +36,19 @@ os.environ["LOCAL_INSPECTION_AUTO_RESUME_WORKER"] = "0"
 os.environ["VANTALINE_PLC_WEB_SERIAL_ALLOW_JSON_TEST"] = "1"
 
 from local_inspection_service.plc_fx_ascii import (  # noqa: E402
+    CHECKSUM_INCLUDE_ETX,
     PlcConfigError,
+    build_d_register_read_frame,
     build_d_register_write_frame,
     build_y_force_frame,
+    checksum,
     encode_fx_word,
     logical_device_address,
+    parse_d_register_read_response,
 )
 from local_inspection_service.plc_web_serial import (  # noqa: E402
     DEFAULT_WEB_SERIAL_CONFIG,
+    build_web_serial_diagnostic_plan,
     build_web_serial_plan,
     normalize_web_serial_config,
     web_serial_resolved_addresses,
@@ -110,6 +115,21 @@ def test_address_and_plan_contract() -> None:
     for (device, value), frame_hex in expected_y.items():
         assert build_y_force_frame(device, value).hex().upper() == frame_hex
 
+    diagnostic = build_web_serial_diagnostic_plan()
+    assert [item["operation"] for item in diagnostic] == ["diagnostic_write", "diagnostic_read"]
+    assert diagnostic[0]["frame_hex"] == "023131313943303230363030033341"
+    assert diagnostic[1]["frame_hex"] == "0230313139433032033733"
+    response_body = b"0600\x03"
+    response = b"\x02" + response_body + checksum(response_body, CHECKSUM_INCLUDE_ETX)
+    assert response.hex().upper() == "0230363030034339"
+    assert parse_d_register_read_response(response) == 6
+    try:
+        build_d_register_read_frame("119C", "exclude_etx_legacy_vb")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("diagnostic read accepted the obsolete checksum contract")
+
 
 def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     client = TestClient(server.app, base_url="https://testserver")
@@ -172,6 +192,18 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         json={"session_id": lease_payload["session_id"], "lease_epoch": lease_payload["lease_epoch"]},
     )
     assert_status(active, 200, "activate lease")
+    assert_status(
+        client.post(
+            "/api/plc/workstation/diagnostic-plan",
+            json={
+                "session_id": lease_payload["session_id"],
+                "lease_epoch": lease_payload["lease_epoch"],
+                "config_generation": reloaded.json()["config_generation"],
+            },
+        ),
+        403,
+        "diagnostic requires system settings permission",
+    )
 
     original_analyze = server.analyze_bgr
     server.analyze_bgr = lambda _image, request_id, _model_id=None, **_kwargs: {
@@ -212,8 +244,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         )
     finally:
         server.analyze_bgr = original_analyze
-    assert_status(second_camera, 200, "second camera plan")
-    second_plan = second_camera.json()["plc_sync"]
+    assert_status(second_camera, 409, "second camera rejected while station is reserved")
 
     attempt = client.post(
         f"/api/plc/workstation/dispatches/{plan['dispatch_id']}/attempt",
@@ -226,15 +257,6 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert_status(attempt, 200, "declare attempt")
     attempt_payload = attempt.json()
     assert len(attempt_payload["frames"]) == 1
-    second_attempt = client.post(
-        f"/api/plc/workstation/dispatches/{second_plan['dispatch_id']}/attempt",
-        json={
-            "session_id": lease_payload["session_id"],
-            "lease_epoch": lease_payload["lease_epoch"],
-            "config_generation": reloaded.json()["config_generation"],
-        },
-    )
-    assert_status(second_attempt, 409, "one in-flight attempt per lease")
     draining = client.post(
         "/api/plc/workstation/lease/disconnect",
         json={"session_id": lease_payload["session_id"], "lease_epoch": lease_payload["lease_epoch"]},

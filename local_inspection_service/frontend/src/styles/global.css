@@ -1154,6 +1154,45 @@ textarea:disabled {
   display: none;
 }
 
+.plc-communication-diagnostic {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.plc-diagnostic-labels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.plc-diagnostic-labels label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #526173;
+  font-size: 12px;
+}
+
+.plc-diagnostic-labels output,
+.plc-diagnostic-labels code {
+  min-height: 38px;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #182230;
+  font: 600 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (max-width: 760px) {
+  .plc-diagnostic-labels { grid-template-columns: 1fr; }
+}
+
 .json-panel {
   max-height: 520px;
   margin: 0;

@@ -92,6 +92,7 @@ try:
         WEB_SERIAL_PROFILE_ID,
         WEB_SERIAL_PROTOCOL_VERSION,
         build_legacy_web_serial_plan,
+        build_web_serial_diagnostic_plan,
         build_web_serial_plan,
         legacy_web_serial_config_fingerprint,
         migrate_web_serial_config,
@@ -146,6 +147,7 @@ except ModuleNotFoundError as exc:
         WEB_SERIAL_PROFILE_ID,
         WEB_SERIAL_PROTOCOL_VERSION,
         build_legacy_web_serial_plan,
+        build_web_serial_diagnostic_plan,
         build_web_serial_plan,
         legacy_web_serial_config_fingerprint,
         migrate_web_serial_config,
@@ -3152,6 +3154,27 @@ class PlcWebSerialAttemptRequest(BaseModel):
     config_generation: StrictInt
 
 
+class PlcWebSerialDiagnosticReceiptRequest(BaseModel):
+    class Config:
+        extra = "forbid"
+
+    session_id: StrictStr
+    lease_epoch: StrictInt
+    diagnostic_id: StrictStr
+    attempt_token: StrictStr
+    outcome: StrictStr
+
+
+class PlcWebSerialDiagnosticConfirmRequest(BaseModel):
+    class Config:
+        extra = "forbid"
+
+    session_id: StrictStr
+    lease_epoch: StrictInt
+    diagnostic_id: StrictStr
+    attempt_token: StrictStr
+
+
 class PlcWebSerialReceiptOperation(BaseModel):
     class Config:
         extra = "forbid"
@@ -4138,6 +4161,8 @@ def plc_web_serial_heartbeat(station_id: str, request: PlcWorkstationLeaseHeartb
             raise PlcConfigError("plc_workstation_lease_fenced")
         lease["heartbeat_at"] = now
         lease["expires_at"] = now + WEB_SERIAL_ACTIVE_LEASE_SECONDS
+        if str(lease.get("in_flight_dispatch_id") or "").startswith("plcweb_"):
+            lease["in_flight_deadline_at"] = lease["expires_at"]
         state["lease"] = _plc_workstation_lease_row(lease)
 
     state = _plc_web_serial_mutate(station_id, None, mutate)
@@ -4192,6 +4217,104 @@ def _plc_web_serial_require_active_lease(
     return station, lease, now
 
 
+def plc_web_serial_diagnostic_plan(
+    station_id: str,
+    request: PlcWebSerialAttemptRequest,
+) -> dict[str, Any]:
+    plan: dict[str, Any] = {}
+    diagnostic_id = "plcdiag_" + secrets.token_hex(16)
+    attempt_token = secrets.token_urlsafe(32)
+
+    def validate(state: dict[str, dict[str, Any] | None]) -> None:
+        nonlocal plan
+        station, lease, now = _plc_web_serial_require_active_lease(
+            state, request.session_id, request.lease_epoch
+        )
+        if int(station.get("config_generation") or 0) != int(request.config_generation):
+            raise PlcConfigError("plc_workstation_generation_changed")
+        in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
+        in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
+        if in_flight_id and in_flight_deadline > now:
+            raise PlcConfigError("plc_workstation_dispatch_in_flight")
+        issued_at_ms = int(time.time() * 1000)
+        deadline_at_ms = issued_at_ms + 2000
+        deadline_at = int(math.ceil(deadline_at_ms / 1000))
+        lease["in_flight_dispatch_id"] = diagnostic_id
+        lease["in_flight_deadline_at"] = deadline_at
+        lease["diagnostic_token_hash"] = _plc_web_serial_token_hash(attempt_token)
+        state["lease"] = _plc_workstation_lease_row(lease)
+        plan = {
+            "diagnostic_id": diagnostic_id,
+            "attempt_token": attempt_token,
+            "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
+            "register": "D206",
+            "write_value": 6,
+            "issued_at": now,
+            "deadline_at_ms": deadline_at_ms,
+            "execution_window_ms": 2000,
+            "ack_timeout_ms": 500,
+            "read_timeout_ms": 500,
+            "frames": build_web_serial_diagnostic_plan(),
+        }
+
+    _plc_web_serial_mutate(station_id, None, validate)
+    return plan
+
+
+def plc_web_serial_confirm_diagnostic(
+    station_id: str,
+    request: PlcWebSerialDiagnosticConfirmRequest,
+) -> dict[str, Any]:
+    def validate(state: dict[str, dict[str, Any] | None]) -> None:
+        _, lease, now = _plc_web_serial_require_active_lease(
+            state, request.session_id, request.lease_epoch
+        )
+        if lease.get("in_flight_dispatch_id") != request.diagnostic_id:
+            raise PlcConfigError("plc_diagnostic_not_in_flight")
+        if int(lease.get("in_flight_deadline_at") or 0) <= now:
+            raise PlcConfigError("plc_diagnostic_deadline_expired")
+        expected_hash = str(lease.get("diagnostic_token_hash") or "")
+        if not expected_hash or not hmac.compare_digest(
+            expected_hash, _plc_web_serial_token_hash(request.attempt_token)
+        ):
+            raise PlcConfigError("plc_diagnostic_token_invalid")
+
+    _plc_web_serial_mutate(station_id, None, validate)
+    return {"confirmed": True, "diagnostic_id": request.diagnostic_id}
+
+
+def plc_web_serial_finish_diagnostic(
+    station_id: str,
+    request: PlcWebSerialDiagnosticReceiptRequest,
+) -> dict[str, Any]:
+    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
+        lease = _plc_web_serial_record(state.get("lease"))
+        user_id = str((current_auth_user() or {}).get("id") or "")
+        if not lease or not (
+            lease.get("session_id") == request.session_id
+            and int(lease.get("lease_epoch") or -1) == int(request.lease_epoch)
+            and lease.get("owner_user_id") == user_id
+            and lease.get("state") in {"active", "draining"}
+        ):
+            raise PlcConfigError("plc_workstation_lease_fenced")
+        if lease.get("in_flight_dispatch_id") != request.diagnostic_id:
+            raise PlcConfigError("plc_diagnostic_not_in_flight")
+        expected_hash = str(lease.get("diagnostic_token_hash") or "")
+        if not expected_hash or not hmac.compare_digest(
+            expected_hash, _plc_web_serial_token_hash(request.attempt_token)
+        ):
+            raise PlcConfigError("plc_diagnostic_token_invalid")
+        if request.outcome not in {"success", "failed", "uncertain"}:
+            raise PlcConfigError("plc_diagnostic_outcome_invalid")
+        lease.pop("in_flight_dispatch_id", None)
+        lease.pop("in_flight_deadline_at", None)
+        lease.pop("diagnostic_token_hash", None)
+        state["lease"] = _plc_workstation_lease_row(lease)
+
+    _plc_web_serial_mutate(station_id, None, mutate)
+    return {"released": True, "diagnostic_id": request.diagnostic_id}
+
+
 def plc_web_serial_begin_camera_detection(
     station_id: str,
     session_id: str,
@@ -4208,6 +4331,10 @@ def plc_web_serial_begin_camera_detection(
     def mutate(state: dict[str, dict[str, Any] | None]) -> None:
         nonlocal created
         station, lease, now = _plc_web_serial_require_active_lease(state, session_id)
+        in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
+        in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
+        if in_flight_id and in_flight_id != dispatch_id and in_flight_deadline > now:
+            raise PlcConfigError("plc_workstation_attempt_in_flight")
         if str(lease.get("model_id") or "") != str(model_id or ""):
             raise PlcConfigError("plc_workstation_model_changed")
         existing = _plc_web_serial_record(state.get("dispatch"))
@@ -4245,6 +4372,9 @@ def plc_web_serial_begin_camera_detection(
             "evidence_source": "browser_workstation",
         }
         state["dispatch"] = _plc_web_serial_dispatch_row(record)
+        lease["in_flight_dispatch_id"] = dispatch_id
+        lease["in_flight_deadline_at"] = int(lease.get("expires_at") or now)
+        state["lease"] = _plc_workstation_lease_row(lease)
         created = True
 
     state = _plc_web_serial_mutate(station_id, dispatch_id, mutate)
@@ -4272,6 +4402,11 @@ def plc_web_serial_finish_camera_detection(
         if error or not isinstance(result, dict):
             record["status"] = "detection_failed"
             record["error_code"] = str(error or "detection_failed")[:120]
+            if lease := _plc_web_serial_record(state.get("lease")):
+                if lease.get("in_flight_dispatch_id") == dispatch_id:
+                    lease.pop("in_flight_dispatch_id", None)
+                    lease.pop("in_flight_deadline_at", None)
+                    state["lease"] = _plc_workstation_lease_row(lease)
         else:
             passed = bool(result.get("passed"))
             frames = build_web_serial_plan(record.get("config_snapshot") or {}, passed)
@@ -28259,6 +28394,45 @@ def declare_plc_web_serial_attempt(
     station = require_plc_web_serial_station(request)
     try:
         return plc_web_serial_declare_attempt(str(station["id"]), dispatch_id, payload)
+    except PlcConfigError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/plc/workstation/diagnostic-plan")
+def create_plc_web_serial_diagnostic_plan(
+    request: Request,
+    payload: PlcWebSerialAttemptRequest,
+) -> dict[str, Any]:
+    require_permission("system_settings")
+    station = require_plc_web_serial_station(request)
+    try:
+        return plc_web_serial_diagnostic_plan(str(station["id"]), payload)
+    except PlcConfigError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/plc/workstation/diagnostic-receipt")
+def finish_plc_web_serial_diagnostic(
+    request: Request,
+    payload: PlcWebSerialDiagnosticReceiptRequest,
+) -> dict[str, Any]:
+    require_permission("system_settings")
+    station = require_plc_web_serial_station(request)
+    try:
+        return plc_web_serial_finish_diagnostic(str(station["id"]), payload)
+    except PlcConfigError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/plc/workstation/diagnostic-confirm")
+def confirm_plc_web_serial_diagnostic(
+    request: Request,
+    payload: PlcWebSerialDiagnosticConfirmRequest,
+) -> dict[str, Any]:
+    require_permission("system_settings")
+    station = require_plc_web_serial_station(request)
+    try:
+        return plc_web_serial_confirm_diagnostic(str(station["id"]), payload)
     except PlcConfigError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
