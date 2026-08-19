@@ -44,9 +44,19 @@ trap cleanup EXIT INT TERM
 sh -c "set -o noclobber; printf '%s\n' '$$' > '$lock'"; lock_owned=1
 systemctl is-active --quiet vantaline
 [[ "$(systemctl show vantaline -p WorkingDirectory --value)" == "$current" ]]
-[[ ! -e "$target" ]]
 [[ "$(stat -c '%U:%G' "$archive")" == "vantaline-deploy:vantaline-deploy" ]]
 echo "$archive_sha256  $archive" | sha256sum -c -
+if [[ -d "$target" ]]; then
+  python3 - "$target/VERSION.json" "$release" "$commit" <<'PY'
+import json, sys
+doc=json.load(open(sys.argv[1],encoding="utf-8"))
+assert doc["release"]==sys.argv[2] and doc["git_commit"]==sys.argv[3]
+PY
+  [[ "$(readlink -f "$current")" == "$target" ]] || { echo "release target exists but is not current" >&2; exit 1; }
+  rm -f "$archive"
+  echo "release=$release already-installed=true"
+  exit 0
+fi
 preflight="$(sudo -u vantaline psql "$db_url" -tAc "select (select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint)||'|'||(select count(*) from vantaline.plc_web_serial_dispatches where status not in ('acknowledged','failed','partial_success','uncertain'));")"
 [[ "$preflight" == "0|0" ]] || { echo "PLC activity preflight failed: $preflight" >&2; exit 1; }
 
@@ -78,9 +88,20 @@ doc=json.load(open(sys.argv[1],encoding="utf-8"))
 assert doc["release"]==sys.argv[2] and doc["git_commit"]==sys.argv[3]
 assert doc["backend_protocol"]==doc["frontend_protocol"]=="plc-web-serial-v4"
 PY
-sudo -u vantaline python3 -m venv --system-site-packages "$target/.venv"
-sudo -u vantaline "$target/.venv/bin/python" -m pip install --disable-pip-version-check --no-deps --extra-index-url https://download.pytorch.org/whl/cpu --requirement "$target/requirements-production.lock"
-sudo -u vantaline "$target/.venv/bin/python" -m pip check
+sudo -u vantaline /opt/vantaline/venv/bin/python - "$target/requirements-production.lock" <<'PY'
+import importlib.metadata as metadata, pathlib, re, sys
+lock=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+for line in lock:
+    line=line.strip()
+    if not line or line.startswith("#"): continue
+    match=re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s]+)", line)
+    if not match: raise SystemExit(f"unsupported lock entry: {line}")
+    name, expected=match.groups()
+    try: actual=metadata.version(name)
+    except metadata.PackageNotFoundError: raise SystemExit(f"missing production dependency: {name}")
+    if actual != expected: raise SystemExit(f"production dependency mismatch: {name} expected={expected} actual={actual}")
+PY
+ln -s /opt/vantaline/venv "$target/.venv"
 
 previous="$(readlink -f "$current")"
 systemctl stop vantaline; service_stopped=1
@@ -101,8 +122,18 @@ for migration in "$target"/local_inspection_service/storage/migrations/*.sql; do
   stored="$(sudo -u vantaline psql "$db_url" -tAc "select sha256 from vantaline.release_migration_checksums where version = '$version';")"
   [[ -z "$stored" || "$stored" == "$migration_sha" ]] || { echo "migration checksum changed: $version" >&2; exit 1; }
   if [[ -z "$stored" ]]; then
-    sudo -u vantaline psql "$db_url" -v ON_ERROR_STOP=1 -f "$migration"
-    sudo -u vantaline psql "$db_url" -v ON_ERROR_STOP=1 -c "insert into vantaline.release_migration_checksums(version,sha256,applied_at) values ('$version','$migration_sha',extract(epoch from now())::bigint);"
+    combined="$(mktemp)"
+    python3 - "$migration" "$combined" "$version" "$migration_sha" <<'PY'
+import pathlib, sys
+source=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").strip()
+lines=source.splitlines()
+if lines[0].strip().upper() != "BEGIN;" or lines[-1].strip().upper() != "COMMIT;": raise SystemExit("migration transaction wrapper missing")
+body="\n".join(lines[1:-1])
+version=sys.argv[3].replace("'", "''"); digest=sys.argv[4]
+pathlib.Path(sys.argv[2]).write_text("BEGIN;\nSELECT pg_advisory_xact_lock(1448236621);\n"+body+f"\nINSERT INTO vantaline.release_migration_checksums(version,sha256,applied_at) VALUES ('{version}','{digest}',extract(epoch from now())::bigint);\nCOMMIT;\n",encoding="utf-8")
+PY
+    if ! sudo -u vantaline psql "$db_url" -v ON_ERROR_STOP=1 -f "$combined"; then rm -f "$combined"; exit 1; fi
+    rm -f "$combined"
   fi
 done
 

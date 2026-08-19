@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 migrations=sorted((root/"local_inspection_service/storage/migrations").glob("*.sql"))
-forbidden=re.compile(r"\b(DROP|TRUNCATE)\b|\bALTER\s+TABLE\b[^;]*\b(DROP|RENAME)\b",re.I|re.S)
+forbidden=re.compile(r"\b(DROP|TRUNCATE|ALTER|REVOKE|GRANT|CALL|EXECUTE)\b|\bDO\s+\$|\bDELETE\s+FROM\b|\bUPDATE\s+[A-Za-z_]\b|\bCREATE\s+OR\s+REPLACE\b",re.I|re.S)
 if not migrations: raise SystemExit("no PostgreSQL migrations found")
 for path in migrations:
     sql=path.read_text(encoding="utf-8"); compact=sql.strip().upper()
