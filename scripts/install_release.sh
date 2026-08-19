@@ -82,9 +82,6 @@ with tarfile.open(archive, "r:gz") as handle:
         member.name = relative.as_posix(); handle.extract(member, target)
 PY
 rm -f "$staged_archive"
-rm -rf "$target/local_inspection_service/data" "$target/models"
-ln -s /opt/vantaline/shared/data "$target/local_inspection_service/data"
-ln -s /opt/vantaline/shared/models "$target/models"
 (cd "$target" && sha256sum -c SHA256SUMS)
 python3 - "$target/VERSION.json" "$release" "$commit" <<'PY'
 import json, sys
@@ -93,6 +90,9 @@ assert doc["release"]==sys.argv[2] and doc["git_commit"]==sys.argv[3]
 assert doc["backend_protocol"]==doc["frontend_protocol"]=="plc-web-serial-v4"
 PY
 sudo -u vantaline /opt/vantaline/venv/bin/python "$target/scripts/verify_production_dependencies.py" "$target/requirements-production.lock"
+rm -rf "$target/local_inspection_service/data" "$target/models"
+ln -s /opt/vantaline/shared/data "$target/local_inspection_service/data"
+ln -s /opt/vantaline/shared/models "$target/models"
 ln -s /opt/vantaline/venv "$target/.venv"
 
 previous="$(readlink -f "$current")"
