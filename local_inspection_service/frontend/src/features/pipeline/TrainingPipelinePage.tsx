@@ -24,6 +24,7 @@ import {
   Library,
   Loader2,
   Minus,
+  PauseCircle,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -46,6 +47,7 @@ import {
   getPipeline,
   getTrainingDatasetDetail,
   getTrainingResources,
+  pausePipelineTask,
   queryKeys,
   removePipelineAccessory,
   sendPipelineAgentChat,
@@ -70,7 +72,7 @@ import { recordAuditText, statusLabel, toneForStatus } from "../../utils/format"
 import { AccessoryTextCropModal } from "../accessories/AccessoryTextCropModal";
 import { useAuth } from "../auth/auth-context";
 
-type PipelineMethod = "yolo_ocr" | "yolo" | "ai" | "locate";
+type PipelineMethod = "yolo_ocr" | "yolo" | "ai";
 type LaneStage = "draft" | "samples" | "training";
 type DropKind = "lane" | "task" | "library" | "remove-accessory";
 type DragKind = "accessory" | "task";
@@ -188,28 +190,27 @@ interface ParamsTarget {
 const PIPELINE_METHODS: Array<{ value: PipelineMethod; label: string; usesTraining: boolean }> = [
   { value: "yolo_ocr", label: "YOLO + OCR", usesTraining: true },
   { value: "yolo", label: "YOLO", usesTraining: true },
-  { value: "ai", label: "AI 检测", usesTraining: false },
-  { value: "locate", label: "Locate Anything", usesTraining: false }
+  { value: "ai", label: "AI 检测", usesTraining: false }
 ];
 
 const PIPELINE_LANES: Array<{ stage: LaneStage; step: string; title: string; hint: string }> = [
   {
     stage: "draft",
     step: "2",
-    title: "任务创建",
-    hint: "先新建任务，再把第 1 栏配件拖入任务卡片。"
+    title: "任务定义",
+    hint: "新建任务、选择检测路线并把配件拖入任务卡片。"
   },
   {
     stage: "samples",
     step: "3",
-    title: "生成样本",
-    hint: "把任务卡片拖入这里开始生成样本，完成后再拖入训练。"
+    title: "样本与数据集",
+    hint: "旧的生成样本流程压缩在这里；任务完成后进入模型训练。"
   },
   {
     stage: "training",
     step: "4",
     title: "模型训练",
-    hint: "训练完成后拖入模型库，即可在工作台切换使用。"
+    hint: "训练完成后进入模型验证与上线。"
   }
 ];
 
@@ -254,7 +255,6 @@ function validateTextAccessoryFiles(files: File[], notify: ReturnType<typeof use
 function normalizePipelineMethod(value: PipelineDetectionMethod | undefined): PipelineMethod {
   const method = String(value || "").trim().toLowerCase();
   if (["ai_detection", "ai_inspect", "gemini", "ai"].includes(method)) return "ai";
-  if (["locate_anything", "locateanything", "open_vocab", "locate"].includes(method)) return "locate";
   return method === "yolo" ? "yolo" : "yolo_ocr";
 }
 
@@ -275,12 +275,19 @@ function pipelineTaskUsesTraining(task: PipelineTask | null | undefined) {
   return methodMeta(pipelineTaskMethod(task)).usesTraining;
 }
 
+function pipelineTaskRecommendedRoute(task: PipelineTask | null | undefined) {
+  const route = String(task?.optimization_route || task?.params?.recommended_train_mode || task?.params?.train_mode || "").trim();
+  if (route === "yolo") return "纯 YOLO";
+  if (route === "yolo_ocr") return "YOLO + OCR";
+  return pipelineTaskMethod(task) === "ai" ? "自动判断" : methodMeta(pipelineTaskMethod(task)).label;
+}
+
 function stageLabel(stage: PipelineStage | undefined) {
-  if (stage === "draft") return "任务创建";
-  if (stage === "samples") return "生成样本";
+  if (stage === "draft") return "任务定义";
+  if (stage === "samples") return "样本与数据集";
   if (stage === "training") return "模型训练";
-  if (stage === "library") return "模型库";
-  return stage || "任务创建";
+  if (stage === "library") return "模型验证与上线";
+  return stage || "任务定义";
 }
 
 function pipelineStatusLabel(value: string | undefined) {
@@ -290,6 +297,7 @@ function pipelineStatusLabel(value: string | undefined) {
   if (value === "completed") return "已完成";
   if (value === "failed") return "失败";
   if (value === "stopped") return "已停止";
+  if (value === "paused") return "已暂停";
   return statusLabel(value);
 }
 
@@ -917,7 +925,7 @@ function numberParam(value: unknown, fallback: number) {
 function paramsSummary(task: PipelineTask) {
   const method = pipelineTaskMethod(task);
   if (!methodMeta(method).usesTraining) {
-    return method === "ai" ? "AI 检测工作台" : "Locate Anything 工作台";
+    return "AI 检测工作台";
   }
   const params = task.params || {};
   const parts = [];
@@ -1183,8 +1191,10 @@ function PipelineTaskCard({
   onDelete,
   onDetail,
   onParams,
+  onPause,
   onToggleAuto,
   onAgentDecision,
+  staticCard = false,
   busyKey
 }: {
   task: PipelineTask;
@@ -1194,24 +1204,26 @@ function PipelineTaskCard({
   onDelete: (task: PipelineTask) => void;
   onDetail: (task: PipelineTask) => void;
   onParams: (task: PipelineTask) => void;
+  onPause: (task: PipelineTask) => void;
   onToggleAuto: (task: PipelineTask, checked: boolean) => void;
   onAgentDecision: (task: PipelineTask, decision: AgentMcpDecision) => void;
+  staticCard?: boolean;
   busyKey: string;
 }) {
   const method = pipelineTaskMethod(task);
   const rows = taskAccessoryRows(task, inFlowAccessories, libraryAccessories);
   const agentPreview = buildAgentMcpPreview(task, rows);
   const accessorySummary = rows.map((item) => `${item.name || item.id}x${taskAccessoryCount(task, item.id)}`).join("、");
-  const draggable = canDragTask(task);
+  const draggable = !staticCard && canDragTask(task);
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
-    id: `task:${task.id}`,
+    id: `${staticCard ? "active-task" : "task"}:${task.id}`,
     disabled: !draggable,
     data: { type: "task", id: task.id, label: task.name || task.id }
   });
   const dragProps = draggable ? { ...attributes, ...listeners } : {};
   const { isOver, setNodeRef: setDropRef } = useDroppable({
-    id: `task-drop:${task.id}`,
-    disabled: task.stage !== "draft",
+    id: `${staticCard ? "active-task-drop" : "task-drop"}:${task.id}`,
+    disabled: staticCard || task.stage !== "draft",
     data: { type: "task", taskId: task.id }
   });
   const setRefs = useCallback(
@@ -1224,11 +1236,13 @@ function PipelineTaskCard({
   const epochInfo = task.stage === "training" && task.total_epochs ? ` · Epoch ${task.current_epoch || 0}/${task.total_epochs}` : "";
   const showProgress = task.stage === "samples" || task.stage === "training" || Boolean(task.advancing);
   const aiReady = method === "ai" && Boolean((task.accessory_ids || []).length);
+  const paused = !task.auto_advance && !task.advancing && task.status === "stopped";
+  const pauseAvailable = Boolean(task.auto_advance || task.advancing || task.status === "running" || task.pause_requested);
 
   return (
     <article
       ref={setRefs}
-      className={`pipeline-card pipeline-task-card status-${task.status || "ready"} ${isDragging ? "dragging" : ""} ${isOver ? "drop-target" : ""}`}
+      className={`pipeline-card pipeline-task-card status-${task.status || "ready"} ${task.pause_requested ? "pause-requested" : ""} ${isDragging ? "dragging" : ""} ${isOver ? "drop-target" : ""}`}
       style={{ opacity: isDragging ? 0.45 : undefined }}
       onPointerDownCapture={draggable ? stopCardDragFromInteractive : undefined}
       {...dragProps}
@@ -1242,6 +1256,10 @@ function PipelineTaskCard({
               <CircleAlert size={12} aria-hidden="true" />
               需要你确认
             </span>
+          ) : task.pause_requested ? (
+            <span className="pill warn">暂停待生效</span>
+          ) : paused ? (
+            <span className="pill neutral">已暂停</span>
           ) : (
             <span className={`pill ${toneForStatus(task.status)}`}>{pipelineStatusLabel(task.status)}</span>
           )}
@@ -1250,6 +1268,10 @@ function PipelineTaskCard({
       <p className="pipeline-card-meta">
         {methodMeta(method).label} · {accessorySummary || task.accessory_names?.join("、") || "未选择配件"}
         {epochInfo}
+      </p>
+      <p className="pipeline-card-meta">
+        推荐训练路线：{pipelineTaskRecommendedRoute(task)}
+        {method === "ai" ? " · VLM 优先采集，后台逐步训练 YOLO" : ""}
       </p>
       <p className="pipeline-card-meta">{recordAuditText(task, { includeUpdated: true })}</p>
       {showProgress ? (
@@ -1273,6 +1295,12 @@ function PipelineTaskCard({
           <Eye size={14} aria-hidden="true" />
           详情
         </button>
+        {pauseAvailable ? (
+          <button className="secondary compact-action" type="button" onClick={() => onPause(task)} disabled={busyKey === `pause:${task.id}`}>
+            {busyKey === `pause:${task.id}` ? <Loader2 size={14} aria-hidden="true" className="spin" /> : <PauseCircle size={14} aria-hidden="true" />}
+            暂停
+          </button>
+        ) : null}
         {canAdvanceTask(task) ? (
           <button className="secondary compact-action" type="button" onClick={() => onAdvance(task)}>
             <ChevronRight size={14} aria-hidden="true" />
@@ -1284,14 +1312,16 @@ function PipelineTaskCard({
             推进中…
           </button>
         ) : null}
-        <label className="pipeline-auto-mini" title="阶段完成后自动进入下一步">
-          <input
-            type="checkbox"
-            checked={Boolean(task.auto_advance)}
-            onChange={(event) => onToggleAuto(task, event.currentTarget.checked)}
-          />
-          自动
-        </label>
+        {pipelineTaskUsesTraining(task) ? (
+          <label className="pipeline-auto-mini" title="默认自动推进；关闭或暂停后会停在当前任务阶段">
+            <input
+              type="checkbox"
+              checked={Boolean(task.auto_advance)}
+              onChange={(event) => onToggleAuto(task, event.currentTarget.checked)}
+            />
+            自动
+          </label>
+        ) : null}
         {draggable ? (
           <span className="pipeline-drag-hint">
             <GripVertical size={14} aria-hidden="true" />
@@ -1316,13 +1346,24 @@ function CreateTaskModal({
 }) {
   const [name, setName] = useState("");
   const [method, setMethod] = useState<PipelineMethod>("yolo_ocr");
+  const [expectedProductionCount, setExpectedProductionCount] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     try {
-      await onCreate({ name: name.trim(), detection_method: method });
+      const expectedCount = Math.max(0, Math.round(Number(expectedProductionCount || 0)));
+      if (method === "ai" && (!Number.isFinite(expectedCount) || expectedCount <= 0)) {
+        window.alert("创建 AI 任务需要填写预计产量。");
+        return;
+      }
+      await onCreate({
+        name: name.trim(),
+        detection_method: method,
+        auto_advance: method === "ai" ? false : true,
+        expected_production_count: expectedCount || undefined
+      });
       onClose();
     } finally {
       setBusy(false);
@@ -1331,11 +1372,11 @@ function CreateTaskModal({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <form className="modal-panel pipeline-task-modal" role="dialog" aria-modal="true" aria-label="新建训练任务" onSubmit={submit}>
+      <form className="modal-panel pipeline-task-modal" role="dialog" aria-modal="true" aria-label="新建任务" onSubmit={submit}>
         <header className="modal-head">
           <div>
-            <h3>新建训练任务</h3>
-            <span>创建后可拖入配件并调整数量。</span>
+            <h3>新建任务</h3>
+            <span>默认自动推进；必要时可在任务卡片上暂停。</span>
           </div>
           <button className="icon-only" type="button" aria-label="关闭" onClick={onClose}>
             <X size={18} aria-hidden="true" />
@@ -1356,9 +1397,22 @@ function CreateTaskModal({
             任务名称
             <input value={name} placeholder="例如：说明书齐套训练" onChange={(event) => setName(event.currentTarget.value)} />
           </label>
+          <label className="field">
+            预计产量
+            <input
+              type="number"
+              min="1"
+              max="1000000"
+              step="1"
+              value={expectedProductionCount}
+              placeholder={method === "ai" ? "AI 任务必填，例如：3000" : "可选"}
+              onChange={(event) => setExpectedProductionCount(event.currentTarget.value)}
+              required={method === "ai"}
+            />
+          </label>
           <div className="pipeline-task-detail-entry">
             <span>详情</span>
-            <strong>任务卡片会显示已选配件、执行进度和训练参数。</strong>
+            <strong>任务卡片会显示已选配件、当前阶段、推荐路线和暂停状态。</strong>
           </div>
         </div>
         <footer className="modal-footer">
@@ -1797,7 +1851,6 @@ function AddAccessoryModal({
   const [draft, setDraft] = useState({
     name: "",
     material_type: "object",
-    material_alpha_policy: "",
     paper_preset: "A4",
     paper_width_mm: "",
     paper_height_mm: "",
@@ -1823,10 +1876,6 @@ function AddAccessoryModal({
       notify({ title: "请先添加至少一张照片或一段视频", tone: "error" });
       return;
     }
-    if (draft.material_type === "object" && !draft.material_alpha_policy) {
-      notify({ title: "请先选择物品透明或不透明", tone: "error" });
-      return;
-    }
     if (draft.material_type === "text" && !validateTextAccessoryFiles(draftFiles, notify)) return;
     const form = new FormData();
     appendPipelineFormValue(form, "name", name);
@@ -1838,7 +1887,7 @@ function AddAccessoryModal({
       appendPipelineFormValue(form, "paper_width_mm", draft.paper_width_mm);
       appendPipelineFormValue(form, "paper_height_mm", draft.paper_height_mm);
     } else {
-      appendPipelineFormValue(form, "material_alpha_policy", draft.material_alpha_policy);
+      appendPipelineFormValue(form, "material_alpha_policy", "opaque");
       appendPipelineFormValue(form, "size_reference", draft.size_reference);
     }
     draftFiles.forEach((file) => form.append("files", file, file.name));
@@ -1883,33 +1932,19 @@ function AddAccessoryModal({
                 </select>
               </label>
               {draft.material_type === "object" ? (
-                <>
-                  <label>
-                    透明策略
-                    <select
-                      value={draft.material_alpha_policy}
-                      onChange={(event) => setDraftField("material_alpha_policy", event.currentTarget.value)}
-                      required
-                    >
-                      <option value="">请选择</option>
-                      <option value="opaque">不透明</option>
-                      <option value="transparent">透明/玻璃</option>
-                    </select>
-                  </label>
-                  <label>
-                    尺寸参照物
-                    <select
-                      value={draft.size_reference}
-                      onChange={(event) => setDraftField("size_reference", event.currentTarget.value)}
-                    >
-                      <option value="a4">A4 纸 (297×210mm)</option>
-                      <option value="a5">A5 纸 (210×148mm)</option>
-                      <option value="b5">B5 纸 (250×176mm)</option>
-                      <option value="ruler">直尺/卷尺（读刻度）</option>
-                    </select>
-                    <span className="hint-line">请在素材里包含一张「配件 + 该参照物」同框照片，Agent 会据此推断真实尺寸，无需手填。</span>
-                  </label>
-                </>
+                <label>
+                  尺寸参照物
+                  <select
+                    value={draft.size_reference}
+                    onChange={(event) => setDraftField("size_reference", event.currentTarget.value)}
+                  >
+                    <option value="a4">A4 纸 (297×210mm)</option>
+                    <option value="a5">A5 纸 (210×148mm)</option>
+                    <option value="b5">B5 纸 (250×176mm)</option>
+                    <option value="ruler">直尺/卷尺（读刻度）</option>
+                  </select>
+                  <span className="hint-line">请在素材里包含一张「配件 + 该参照物」同框照片，Agent 会据此推断真实尺寸，无需手填。</span>
+                </label>
               ) : (
                 <>
                   <label>
@@ -1956,7 +1991,7 @@ function AddAccessoryModal({
             <div className="button-row">
               <button className="primary compact-action" type="submit" disabled={creating}>
                 {creating ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
-                创建并加入流水线
+                创建配件
               </button>
               <span className="hint-line">
                 {draftFiles.length
@@ -2014,16 +2049,30 @@ export function TrainingPipelinePage() {
   const [paramsTarget, setParamsTarget] = useState<ParamsTarget | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [busy, setBusy] = useState("");
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    accessories: false,
+    draft: false,
+    samples: false,
+    training: false
+  });
 
+  // Poll quickly only while some task is actually progressing in the background;
+  // otherwise fall back to a slow refresh (mutations invalidate the queries anyway).
   const pipelineQuery = useQuery({
     queryKey: queryKeys.pipeline(auth.dataUserId),
     queryFn: () => getPipeline(auth),
-    refetchInterval: 6000
+    refetchInterval: (query) =>
+      (query.state.data?.items || []).some((task) => ["running", "queued", "pending"].includes(String(task.status || "")))
+        ? 6_000
+        : 30_000
   });
   const resourcesQuery = useQuery({
     queryKey: queryKeys.trainingResources(auth.dataUserId),
     queryFn: () => getTrainingResources(auth),
-    refetchInterval: 20_000
+    refetchInterval: (query) =>
+      (query.state.data?.tasks || []).some((task) => ["running", "queued", "pending"].includes(String(task.status || "")))
+        ? 20_000
+        : 60_000
   });
   const accessoriesQuery = useQuery({
     queryKey: queryKeys.accessories(auth.dataUserId),
@@ -2049,9 +2098,8 @@ export function TrainingPipelinePage() {
   });
   const detailDataset = detailDatasetQuery.data?.dataset || detailDatasetSummary || null;
   const paramsTask = paramsTarget ? tasks.find((task) => task.id === paramsTarget.taskId) || null : null;
-  const activeTasks = tasks.filter((task) => task.stage !== "library").length;
+  const totalTasks = tasks.length;
   const archivedTasks = tasks.filter((task) => task.stage === "library").length;
-  const runningTasks = tasks.filter((task) => task.status === "running").length;
   const datasets = resourcesQuery.data?.datasets?.length || 0;
   const models = resourcesQuery.data?.models?.length || 0;
   const collisionDetection = useCallback<CollisionDetection>((args) => {
@@ -2068,15 +2116,18 @@ export function TrainingPipelinePage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.locateAccessories(auth.dataUserId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) })
     ]);
+  }
+
+  function toggleSection(section: string) {
+    setExpandedSections((current) => ({ ...current, [section]: !current[section] }));
   }
 
   async function createTask(payload: PipelineTaskPayload) {
     try {
-      await createPipelineTask(payload);
-      notify({ title: "任务已创建", description: "拖入配件后即可确认参数。", tone: "success" });
+      await createPipelineTask(payload, auth);
+      notify({ title: "任务已创建", description: "默认自动推进，拖入配件后即可进入下一步。", tone: "success" });
       await refreshPipeline();
     } catch (error) {
       notify({ title: "创建任务失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
@@ -2174,10 +2225,8 @@ export function TrainingPipelinePage() {
           ? "已开始推进"
           : advanced.status === "pending"
             ? "参考图生成中"
-            : !usesTraining && task.stage === "draft"
-              ? method === "ai"
-                ? "AI 检测任务已创建"
-                : "Locate Anything 任务已启用"
+          : !usesTraining && task.stage === "draft"
+              ? "AI 检测任务已创建"
               : task.stage === "training"
                 ? "模型已入库"
                 : "已进入下一阶段",
@@ -2218,6 +2267,24 @@ export function TrainingPipelinePage() {
     } catch (error) {
       notify({ title: "设置失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
       await refreshPipeline();
+    }
+  }
+
+  async function pauseTask(task: PipelineTask) {
+    if (!window.confirm(`暂停任务 ${task.name || task.id}？\n\n系统会关闭自动推进；如果当前步骤无法立即中断，会在当前步骤完成后的检查点停止。`)) return;
+    setBusy(`pause:${task.id}`);
+    try {
+      const result = await pausePipelineTask(task.id);
+      notify({
+        title: result.pause_requested ? "暂停请求已记录" : "任务已暂停",
+        description: result.job_note || "自动推进已关闭。",
+        tone: result.pause_requested ? "info" : "success"
+      });
+      await refreshAdjacent();
+    } catch (error) {
+      notify({ title: "暂停失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+    } finally {
+      setBusy("");
     }
   }
 
@@ -2306,7 +2373,7 @@ export function TrainingPipelinePage() {
     await runAdvance(task);
   }
 
-  if (pipelineQuery.isLoading) return <LoadingState label="正在加载训练流水线" />;
+  if (pipelineQuery.isLoading) return <LoadingState label="正在加载任务流水线" />;
   if (pipelineQuery.isError) {
     return <ErrorState error={pipelineQuery.error} action={<button onClick={() => pipelineQuery.refetch()}>重试</button>} />;
   }
@@ -2315,8 +2382,8 @@ export function TrainingPipelinePage() {
     <section className="view active pipeline-view">
       <header className="page-head">
         <div>
-          <h2>训练流水线</h2>
-          <p className="page-desc">从配件建档到模型投产的看板视图。完成的卡片可拖入下一阶段。</p>
+          <h2>任务流水线</h2>
+          <p className="page-desc">以任务为中心管理配件、样本、训练、验证和模型上线。</p>
         </div>
         <div className="page-head-actions">
           <span className={`pill ${pipeline?.agent?.configured ? "ok" : "neutral"}`}>
@@ -2331,7 +2398,7 @@ export function TrainingPipelinePage() {
 
       <section className="metric-grid four">
         <MetricCard label="当前配件" value={inFlowAccessories.length} detail="流水线内" />
-        <MetricCard label="执行任务" value={activeTasks} detail={runningTasks ? `${runningTasks} 个运行中` : "等待推进"} />
+        <MetricCard label="任务总数" value={totalTasks} detail="当前数据范围" />
         <MetricCard label="样本库" value={datasets} detail="当前数据范围" />
         <MetricCard label="模型库" value={models + archivedTasks} detail={archivedTasks ? `${archivedTasks} 个流水线入库` : "训练产物"} />
       </section>
@@ -2342,11 +2409,15 @@ export function TrainingPipelinePage() {
             <header className="lane-head">
               <div className="lane-title">
                 <span className="lane-step">1</span>
-                <h3>配件管理</h3>
+                <h3>配件与任务定义</h3>
               </div>
+              <button className="secondary compact-action" type="button" onClick={() => toggleSection("accessories")}>
+                <ChevronRight className={expandedSections.accessories ? "rotate-90" : ""} size={15} aria-hidden="true" />
+                {expandedSections.accessories ? "收起" : "展开"}
+              </button>
             </header>
             <p className="lane-hint">仅显示当前流水线使用的配件和待确认候选。拖到移出区可退回配件库。</p>
-            <div className="lane-body">
+            {expandedSections.accessories ? <div className="lane-body">
               {(pipeline?.pending_candidates || []).map((candidate) => (
                 <CandidateCard candidate={candidate} key={candidate.id} />
               ))}
@@ -2358,11 +2429,11 @@ export function TrainingPipelinePage() {
                   {assignedIds.size ? "当前配件都已分配到任务。" : "当前流水线还没有配件。"}
                 </div>
               ) : null}
-            </div>
-            <DroppableZone id="pipeline-remove-accessory" kind="remove-accessory" className="pipeline-remove-zone">
+            </div> : <div className="pipeline-lane-summary">{visibleAccessories.length + (pipeline?.pending_candidates || []).length} 个配件/候选，展开后查看全部。</div>}
+            {expandedSections.accessories ? <DroppableZone id="pipeline-remove-accessory" kind="remove-accessory" className="pipeline-remove-zone">
               <Library size={16} aria-hidden="true" />
               <span>拖到这里移出当前流</span>
-            </DroppableZone>
+            </DroppableZone> : null}
             <button className="pipeline-add-button" type="button" onClick={() => setAddOpen(true)}>
               <Plus size={16} aria-hidden="true" />
               添加配件
@@ -2378,6 +2449,10 @@ export function TrainingPipelinePage() {
                     <span className="lane-step">{lane.step}</span>
                     <h3>{lane.title}</h3>
                   </div>
+                  <button className="secondary compact-action" type="button" onClick={() => toggleSection(lane.stage)}>
+                    <ChevronRight className={expandedSections[lane.stage] ? "rotate-90" : ""} size={15} aria-hidden="true" />
+                    {expandedSections[lane.stage] ? "收起" : "展开"}
+                  </button>
                   {lane.stage === "draft" ? (
                     <button className="secondary compact-action" type="button" onClick={() => setCreateOpen(true)}>
                       <Plus size={15} aria-hidden="true" />
@@ -2386,7 +2461,7 @@ export function TrainingPipelinePage() {
                   ) : null}
                 </header>
                 <p className="lane-hint">{lane.hint}</p>
-                <DroppableZone id={`lane:${lane.stage}`} kind="lane" stage={lane.stage} className="lane-body">
+                {expandedSections[lane.stage] ? <DroppableZone id={`lane:${lane.stage}`} kind="lane" stage={lane.stage} className="lane-body">
                   {laneTasks.length ? (
                     laneTasks.map((task) => (
                       <PipelineTaskCard
@@ -2397,6 +2472,7 @@ export function TrainingPipelinePage() {
                         onDelete={removeTask}
                         onDetail={(nextTask) => setDetailTaskId(nextTask.id)}
                         onParams={(nextTask) => openParams(nextTask)}
+                        onPause={pauseTask}
                         onToggleAuto={toggleAuto}
                         onAgentDecision={setAgentDecision}
                         busyKey={busy}
@@ -2412,8 +2488,8 @@ export function TrainingPipelinePage() {
                           : "样本完成后拖到这里开始训练。"}
                     </div>
                   )}
-                </DroppableZone>
-                {lane.stage === "training" ? (
+                </DroppableZone> : <div className="pipeline-lane-summary">{laneTasks.length} 个任务，展开后查看全部。</div>}
+                {lane.stage === "training" && expandedSections[lane.stage] ? (
                   <DroppableZone id="pipeline-library-zone" kind="library" stage="library" className="pipeline-library-zone">
                     <Archive size={18} aria-hidden="true" />
                     <strong>模型库</strong>

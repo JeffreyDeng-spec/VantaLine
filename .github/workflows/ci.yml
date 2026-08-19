@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject tracked runtime and secret files
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden='(^|/)(\.env($|\.)|uploads|outputs|logs|backups|node_modules|dist-production|__pycache__)(/|$)|\.(pem|key|sqlite3?|db|dump)$|server\.py\.bak'
+          if git ls-files | grep -E "$forbidden"; then
+            echo 'Forbidden generated, runtime, backup, database, or secret file is tracked.' >&2
+            exit 1
+          fi
+      - name: Verify PLC release contract
+        run: python scripts/verify_release_contract.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: local_inspection_service/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: local_inspection_service/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:production-cutover
+      - name: Verify built protocol
+        working-directory: .
+        run: python scripts/verify_release_contract.py
+
+  backend-plc:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vantaline"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py
+      - run: python local_inspection_service/scripts/smoke_plc_phase1.py
+      - run: python local_inspection_service/scripts/smoke_plc_phase1_hardening.py
+      - run: python local_inspection_service/scripts/smoke_plc_web_serial_v3.py
+      - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
+      - run: python local_inspection_service/scripts/smoke_release_version.py
+      - run: python local_inspection_service/scripts/smoke_postgres_runtime_repository.py
+      - name: Validate generated schema with PostgreSQL 16
+        run: python local_inspection_service/scripts/smoke_postgres_schema_real_engine.py --postgres-bin-dir /usr/lib/postgresql/16/bin

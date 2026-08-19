@@ -38,6 +38,8 @@ def assert_api_route_permissions() -> None:
     authenticated_allowlist = {
         ("GET", "/api/status"),
         ("GET", "/api/config/summary"),
+        ("GET", "/api/user/preferences/tasks"),
+        ("POST", "/api/user/preferences/tasks"),
     }
     missing: list[str] = []
     invalid: list[str] = []
@@ -86,21 +88,19 @@ def assert_no_password_secrets(payload, label: str, *, allow_temporary: bool = F
 
 
 def assert_timestamp_ui_hooks() -> None:
-    app_js = (REPO_ROOT / "local_inspection_service" / "static" / "app.js").read_text(encoding="utf-8")
+    frontend_src = REPO_ROOT / "local_inspection_service" / "frontend" / "src"
+    app_js = "\n".join(path.read_text(encoding="utf-8") for path in frontend_src.rglob("*.ts*"))
     expected = {
         "admin user list": "recordAuditText(user, { owner: false, includeUpdated: true })",
-        "label reference cards": "<small>${escapeHtml(recordAuditText(item))}</small>",
-        "accessory list cards": "<span>${escapeHtml(recordAuditText(item))}</span>",
         "accessory detail summary": "recordAuditText(item, { includeUpdated: true })",
         "asset file thumbnails": "recordAuditText(asset, { owner: false })",
         "dataset library cards": "recordAuditText(dataset)",
-        "model library cards": "recordAuditText(auditRecord)",
+        "model library cards": "recordAuditText(modelGroupAuditRecord(group))",
         "AI task library cards": "recordAuditText(task, { includeUpdated: true })",
-        "image job rows": "recordAuditText(summary, { includeUpdated: true })",
         "pipeline task cards": "recordAuditText(task, { includeUpdated: true })",
         "localized login error": "用户名或密码不正确。",
-        "parsed API error body": "function apiErrorMessage(response, body = \"\", path = \"\")",
-        "login 401 keeps login form": "!String(path).startsWith(\"/api/auth/login\")",
+        "parsed API error body": "function apiErrorMessage(response: Response, body = \"\", path = \"\")",
+        "localized auth-required body": "if (response.status === 401 && /authentication required/i.test(raw))",
     }
     missing = [label for label, snippet in expected.items() if snippet not in app_js]
     if missing:
@@ -369,6 +369,24 @@ def install_fake_training_enqueue() -> None:
     server.enqueue_training_task = fake_enqueue_training_task
 
 
+def install_fake_training_preview_assets() -> None:
+    def fake_draw_training_preview(selected, output_path, **_kwargs):
+        return {
+            "path": str(output_path),
+            "url": server.public_output_url(output_path),
+            "labels": [
+                {
+                    "accessory_id": str(item.get("id") or ""),
+                    "material_type": str(item.get("material_type") or "object"),
+                }
+                for item in selected
+            ],
+        }
+
+    server.ensure_training_assets_for_request = lambda *_args, **_kwargs: False
+    server.draw_training_preview = fake_draw_training_preview
+
+
 def seed_dataset(dataset_id: str, owner: dict[str, str] | None) -> None:
     if owner:
         dataset_dir = server.OUTPUT_DIR / "users" / owner["id"] / "training_datasets" / dataset_id
@@ -494,6 +512,15 @@ def main() -> None:
     response = client.get("/api/auth/status")
     assert_status(response, 200, "initial auth status")
     assert response.json()["setup_required"] is True
+    assert response.json()["features"] == {}
+    assert response.json()["default_user_permissions"] == []
+    assert response.json()["legacy_owner_id"] == ""
+
+    response = client.get("/docs")
+    assert_status(response, 404, "anonymous docs hidden")
+
+    response = client.get("/openapi.json")
+    assert_status(response, 404, "anonymous openapi hidden")
 
     response = client.get("/api/status")
     assert_status(response, 503, "protected API before first admin")
@@ -510,10 +537,9 @@ def main() -> None:
 
     created_users: dict[str, dict[str, str]] = {}
     user_specs = {
-        "operator_a": ["accessory_library", "training_pipeline", "label_sheet"],
-        "operator_b": ["accessory_library", "training_pipeline", "label_sheet"],
+        "operator_a": ["accessory_library", "training_pipeline"],
+        "operator_b": ["accessory_library", "training_pipeline"],
         "zero_user": [],
-        "locater": ["locate_anything"],
         "manager": ["user_management"],
     }
     for username, permissions in user_specs.items():
@@ -535,6 +561,87 @@ def main() -> None:
 
     users_payload = client.get("/api/auth/users").json()
     assert_no_password_secrets(users_payload, "admin user list response")
+
+    response = client.post(
+        "/api/user/preferences/tasks",
+        json={
+            "pinned_task_ids": ["task_admin", "task_admin", ""],
+            "archived_task_ids": ["task_archived"],
+        },
+    )
+    assert_status(response, 200, "admin task preferences update")
+    if response.json().get("pinned_task_ids") != ["task_admin"]:
+        raise AssertionError(f"task preference ids must be normalized: {response.json()}")
+
+    logout(client, "admin preferences session logout")
+    login(client, "operator_a", "operator_a-password-1")
+    response = client.get("/api/user/preferences/tasks")
+    assert_status(response, 200, "operator task preferences initial read")
+    if response.json().get("pinned_task_ids") or response.json().get("archived_task_ids"):
+        raise AssertionError(f"task preferences must be isolated per user: {response.json()}")
+    response = client.post(
+        "/api/user/preferences/tasks",
+        json={"pinned_task_ids": ["task_operator"], "archived_task_ids": ["task_old"]},
+    )
+    assert_status(response, 200, "operator task preferences update")
+    logout(client, "operator preferences session logout")
+    login(client, "operator_a", "operator_a-password-1")
+    response = client.get("/api/user/preferences/tasks")
+    assert_status(response, 200, "operator task preferences persisted read")
+    if response.json().get("pinned_task_ids") != ["task_operator"] or response.json().get("archived_task_ids") != ["task_old"]:
+        raise AssertionError(f"task preferences did not persist across sessions: {response.json()}")
+    logout(client, "operator persisted preferences logout")
+    login(client, "admin", "admin-password-1")
+    response = client.get("/api/user/preferences/tasks")
+    assert_status(response, 200, "admin task preferences isolated read")
+    if response.json().get("pinned_task_ids") != ["task_admin"] or response.json().get("archived_task_ids") != ["task_archived"]:
+        raise AssertionError(f"admin task preferences were overwritten by another user: {response.json()}")
+    logout(client, "admin preference verification logout")
+
+    operator_first_device = TestClient(server.app, base_url="https://testserver")
+    operator_second_device = TestClient(server.app, base_url="https://testserver")
+    response = operator_first_device.post("/api/auth/login", json={"username": "operator_a", "password": "operator_a-password-1"})
+    assert_status(response, 200, "operator_a first device login")
+    if response.json().get("revoked_sessions") != 0:
+        raise AssertionError(f"operator_a first login should not revoke sessions: {response.json()}")
+    response = operator_second_device.post("/api/auth/login", json={"username": "operator_a", "password": "operator_a-password-1"})
+    assert_status(response, 200, "operator_a second device login")
+    if response.json().get("revoked_sessions") != 1:
+        raise AssertionError(f"operator_a second login should revoke first session: {response.json()}")
+    response = operator_first_device.get("/api/auth/status")
+    assert_status(response, 200, "operator_a first device status after second login")
+    if response.json().get("authenticated") is not False:
+        raise AssertionError("operator_a first device should be kicked after second login")
+    response = operator_first_device.get("/api/status")
+    assert_status(response, 401, "operator_a first device protected API after second login")
+    response = operator_second_device.get("/api/auth/status")
+    assert_status(response, 200, "operator_a second device status after login")
+    if response.json().get("authenticated") is not True:
+        raise AssertionError("operator_a second device should remain authenticated")
+    logout(operator_second_device, "operator_a second device logout")
+
+    admin_first_device = TestClient(server.app, base_url="https://testserver")
+    admin_second_device = TestClient(server.app, base_url="https://testserver")
+    response = admin_first_device.post("/api/auth/login", json={"username": "admin", "password": "admin-password-1"})
+    assert_status(response, 200, "admin first device login")
+    if response.json().get("revoked_sessions") != 0:
+        raise AssertionError(f"admin first login should not revoke sessions: {response.json()}")
+    response = admin_second_device.post("/api/auth/login", json={"username": "admin", "password": "admin-password-1"})
+    assert_status(response, 200, "admin second device login")
+    if response.json().get("revoked_sessions") != 1:
+        raise AssertionError(f"admin second login should revoke the first session: {response.json()}")
+    response = admin_first_device.get("/api/auth/status")
+    assert_status(response, 200, "admin first device status after second login")
+    if response.json().get("authenticated") is not False:
+        raise AssertionError("admin first device should be kicked after second login")
+    response = admin_first_device.get("/api/status")
+    assert_status(response, 401, "admin first device protected API after second login")
+    response = admin_second_device.get("/api/auth/status")
+    assert_status(response, 200, "admin second device stays authenticated")
+    if response.json().get("authenticated") is not True:
+        raise AssertionError("admin second device should remain authenticated")
+    logout(admin_first_device, "admin first device logout")
+    logout(admin_second_device, "admin second device logout")
 
     seed_training_task("job_train_a", created_users["operator_a"])
     seed_training_task("job_train_b", created_users["operator_b"])
@@ -572,30 +679,40 @@ def main() -> None:
     response = client.get("/api/backgrounds/not-a-set/not-an-image.png")
     assert_status(response, 403, "zero-permission user direct background image denied")
 
-    logout(client, "zero_user logout")
-    login(client, "locater", "locater-password-1")
-
     response = client.get("/api/locateanything/status")
-    assert_status(response, 200, "locate user persisted status allowed")
+    assert_status(response, 403, "zero-permission user removed LocateAnything status denied")
 
-    response = client.get("/api/locateanything/status?endpoint_url=http://127.0.0.1:1/secret")
-    assert_status(response, 403, "locate user endpoint override status denied")
+    response = client.get("/api/status")
+    assert_status(response, 200, "zero user status allowed")
+    status_payload = response.json()
+    if status_payload.get("model_path"):
+        raise AssertionError("service status leaked model_path to non-privileged user")
+    ai_detection = status_payload.get("ai_detection") if isinstance(status_payload.get("ai_detection"), dict) else {}
+    if ai_detection.get("model") or ai_detection.get("api_keys") or ai_detection.get("base_url"):
+        raise AssertionError("service status leaked ai_detection runtime details to non-privileged user")
+
+    response = client.get("/api/config/summary")
+    assert_status(response, 200, "zero user config summary allowed")
+    config_summary = response.json()
+    for key in ("task_rules", "training", "video", "stream", "ocr"):
+        if key in config_summary:
+            raise AssertionError(f"config summary leaked {key} to non-privileged user")
 
     response = client.post(
         "/api/locateanything/inspect",
         data={"rules": "[]", "endpoint_url": "http://127.0.0.1:1/secret"},
         files={"file": ("part.png", TINY_PNG, "image/png")},
     )
-    assert_status(response, 403, "locate user endpoint override inspect denied")
+    assert_status(response, 403, "zero-permission user removed LocateAnything inspect denied")
 
     response = client.post(
         "/api/locateanything/locate",
         data={"prompt": "part", "endpoint_url": "http://127.0.0.1:1/secret"},
         files={"file": ("part.png", TINY_PNG, "image/png")},
     )
-    assert_status(response, 403, "locate user endpoint override locate denied")
+    assert_status(response, 403, "zero-permission user removed LocateAnything locate denied")
 
-    logout(client, "locater logout")
+    logout(client, "zero_user logout")
     login(client, "manager", "manager-password-1")
 
     response = client.get("/api/auth/status")
@@ -681,8 +798,12 @@ def main() -> None:
 
     response = client.post(
         "/api/accessories",
-        data={"name": "A owned label", "material_type": "text", "training_role": "detect_and_classify"},
-        files=[],
+        data={"name": "A owned accessory", "material_type": "object", "material_alpha_policy": "opaque", "training_role": "detect_and_classify"},
+        files=[
+            ("files", ("operator_a_accessory_1.png", TINY_PNG, "image/png")),
+            ("files", ("operator_a_accessory_2.png", TINY_PNG, "image/png")),
+            ("files", ("operator_a_accessory_3.png", TINY_PNG, "image/png")),
+        ],
     )
     assert_status(response, 200, "operator_a create accessory")
     accessory_id = response.json()["item"]["id"]
@@ -692,11 +813,8 @@ def main() -> None:
         data={"annotation": "operator a label"},
         files=[("files", ("operator_a_label.png", TINY_PNG, "image/png"))],
     )
-    assert_status(response, 200, "operator_a create label reference")
-    label_item = response.json()["item"]
-    label_reference_id = label_item["id"]
-    assert label_item["owner_user_id"] == created_users["operator_a"]["id"]
-    assert all(reference["accessory_id"] == label_reference_id for reference in response.json()["references"])
+    assert_status(response, 403, "operator_a removed label reference endpoint denied")
+    label_reference_id = accessory_id
 
     seed_training_status_for_owner(created_users["operator_b"], "acc_b_private", "B private")
     assert_operator_a_training_hides_b(client, created_users["operator_b"], "operator_a training status hides operator_b state")
@@ -709,6 +827,7 @@ def main() -> None:
 
     before_ids = persisted_accessory_ids()
     assert "acc_b_private" in before_ids
+    install_fake_training_preview_assets()
     response = client.post(
         "/api/training/preview",
         json={"selected_accessory_ids": [label_reference_id], "sample_count": 1, "preview_count": 1},
@@ -752,7 +871,7 @@ def main() -> None:
 
     response = client.get("/api/accessories")
     assert_status(response, 200, "operator_a list own accessories")
-    assert {item["id"] for item in response.json()["items"]} == {accessory_id, label_reference_id}
+    assert {item["id"] for item in response.json()["items"]} == {accessory_id}
 
     response = client.get("/api/training/resources")
     assert_status(response, 200, "operator_a training resources")
@@ -799,8 +918,7 @@ def main() -> None:
     assert {item["id"] for item in response.json()["items"]} == {"acc_b_private"}
 
     response = client.get("/api/label-sheets/references")
-    assert_status(response, 200, "operator_b label references isolated")
-    assert response.json()["references"] == []
+    assert_status(response, 403, "operator_b removed label references endpoint denied")
 
     response = client.get("/api/training/resources")
     assert_status(response, 200, "operator_b training resources")

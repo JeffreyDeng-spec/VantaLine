@@ -242,9 +242,7 @@ def main() -> None:
     assert_status(response, 200, "operator_a set accessory AI reference")
 
     response = client.post("/api/accessories/acc_a/route", json={"route": "locate", "apply": False})
-    assert_status(response, 200, "operator_a set accessory route")
-    if response.json()["route"] != "locate":
-        raise AssertionError("route update did not persist locate")
+    assert_status(response, 410, "removed LocateAnything accessory route returns gone")
 
     response = client.get("/api/training/resources")
     assert_status(response, 200, "operator_a training resources")

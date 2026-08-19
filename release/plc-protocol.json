@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "web_serial_protocol": "plc-web-serial-v4",
+  "web_serial_config_schema": 4,
+  "web_serial_profile": "fx_ascii_16x16_spec_v1"
+}

@@ -7,6 +7,8 @@ import { useUiStore } from "../../store/uiStore";
 import { AppShell } from "../../components/AppShell";
 import { AuthContext } from "./auth-context";
 import { AuthForms } from "./AuthForms";
+import { Route, Routes } from "react-router-dom";
+import { PublicLandingPage } from "../public/PublicLandingPage";
 
 export function AuthGate() {
   const queryClient = useQueryClient();
@@ -34,7 +36,7 @@ export function AuthGate() {
         <div className="brand-mark" aria-hidden="true">
           <img src="/static/brand-logo.png?v=20260614-logo" alt="" width="36" height="36" decoding="async" />
         </div>
-        <LoadingState label="正在检查登录状态" />
+        <LoadingState label="Checking workspace access" />
       </main>
     );
   }
@@ -42,14 +44,21 @@ export function AuthGate() {
   if (authQuery.isError) {
     return (
       <main className="auth-shell">
-        <ErrorState error={authQuery.error} action={<button onClick={() => authQuery.refetch()}>重试</button>} />
+        <ErrorState error={authQuery.error} action={<button onClick={() => authQuery.refetch()}>Try again</button>} />
       </main>
     );
   }
 
   const auth = authQuery.data;
   if (!auth || auth.setup_required) return <AuthForms mode="setup" />;
-  if (!auth.authenticated || !auth.user) return <AuthForms mode="login" />;
+  if (!auth.authenticated || !auth.user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<AuthForms mode="login" />} />
+        <Route path="*" element={<PublicLandingPage />} />
+      </Routes>
+    );
+  }
 
   return (
     <AuthContext.Provider

@@ -19,8 +19,7 @@ Notes:
   - preview is the safe default and only replaces frontend/dist for /react-preview/.
   - cutover is gated and requires explicit T J. approval before use.
   - cutover builds React with root router basename and /static/ asset URLs,
-    backs up legacy static, enables the root SPA fallback, then replaces
-    static/index.html and static/assets.
+    backs up frontend/dist-production, replaces it, then restarts the service.
 EOF
 }
 
@@ -171,66 +170,55 @@ cutover_production() {
 
   build_production_cutover
 
-  local ts static_dir backup_dir archive_name remote_archive remote_extract
+  local ts production_dir backup_dir
   ts="$(remote_run 'date +%Y%m%d%H%M%S')"
-  static_dir="${remote_app_root}/local_inspection_service/static"
-  backup_dir="${remote_backup_root}/production-static/${ts}"
-  archive_name="vantaline-react-production-${ts}.tar.gz"
-  remote_archive="/tmp/${archive_name}"
-  remote_extract="/tmp/vantaline-react-production-${ts}"
-
-  (cd "${frontend_dir}/dist-production" && tar -czf "/tmp/${archive_name}" .)
+  production_dir="${remote_app_root}/local_inspection_service/frontend/dist-production"
+  backup_dir="${remote_backup_root}/production-dist/${ts}"
 
   remote_run "set -euo pipefail
-sudo mkdir -p $(remote_shell_quote "${backup_dir}")
-sudo cp -a $(remote_shell_quote "${static_dir}") $(remote_shell_quote "${backup_dir}/static")"
+sudo mkdir -p $(remote_shell_quote "${backup_dir}") $(remote_shell_quote "$(dirname "${production_dir}")")
+if [ -e $(remote_shell_quote "${production_dir}") ]; then
+sudo cp -a $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${backup_dir}/dist-production")
+fi
+sudo mkdir -p $(remote_shell_quote "${production_dir}")
+sudo chmod -R ugo+rwX $(remote_shell_quote "${production_dir}")"
 
-  rsync -rtz --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "/tmp/${archive_name}" "${remote}:${remote_archive}"
-  rm -f "/tmp/${archive_name}"
+  rsync -rtz --delete --omit-dir-times --no-owner --no-group --no-perms -e "${rsync_ssh}" "${frontend_dir}/dist-production/" "${remote}:${production_dir}/"
 
   remote_run "set -euo pipefail
-rm -rf $(remote_shell_quote "${remote_extract}")
-mkdir -p $(remote_shell_quote "${remote_extract}")
-tar -xzf $(remote_shell_quote "${remote_archive}") -C $(remote_shell_quote "${remote_extract}")
-test -f $(remote_shell_quote "${remote_extract}/index.html")
-test -d $(remote_shell_quote "${remote_extract}/assets")
-sudo rm -rf $(remote_shell_quote "${static_dir}/assets")
-sudo mkdir -p $(remote_shell_quote "${static_dir}/assets")
-sudo cp $(remote_shell_quote "${remote_extract}/index.html") $(remote_shell_quote "${static_dir}/index.html")
-sudo cp -a $(remote_shell_quote "${remote_extract}/assets/.") $(remote_shell_quote "${static_dir}/assets/")
-sudo chown -R vantaline:vantaline $(remote_shell_quote "${static_dir}")
-sudo find $(remote_shell_quote "${static_dir}") -type d -exec chmod 755 {} +
-sudo find $(remote_shell_quote "${static_dir}") -type f -exec chmod 644 {} +
-sudo mkdir -p /etc/systemd/system/vantaline.service.d
-printf '%s\n' '[Service]' 'Environment=VANTALINE_REACT_PRODUCTION_SPA=1' | sudo tee /etc/systemd/system/vantaline.service.d/30-react-production.conf >/dev/null
+test -f $(remote_shell_quote "${production_dir}/index.html")
+test -d $(remote_shell_quote "${production_dir}/assets")
+sudo chown -R vantaline:vantaline $(remote_shell_quote "${production_dir}")
+sudo find $(remote_shell_quote "${production_dir}") -type d -exec chmod 755 {} +
+sudo find $(remote_shell_quote "${production_dir}") -type f -exec chmod 644 {} +
+sudo rm -f /etc/systemd/system/vantaline.service.d/30-react-production.conf
 sudo systemctl daemon-reload
 sudo systemctl restart vantaline
-rm -rf $(remote_shell_quote "${remote_extract}") $(remote_shell_quote "${remote_archive}")
-printf 'production_static=%s\nproduction_backup=%s\n' $(remote_shell_quote "${static_dir}") $(remote_shell_quote "${backup_dir}")"
+printf 'production_dist=%s\nproduction_backup=%s\n' $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${backup_dir}")"
 }
 
 rollback_production() {
-  local static_dir="${remote_app_root}/local_inspection_service/static"
+  local production_dir="${remote_app_root}/local_inspection_service/frontend/dist-production"
   local selected_backup="${backup_path}"
   if [[ -z "${selected_backup}" ]]; then
-    selected_backup="$(latest_backup production-static)"
+    selected_backup="$(latest_backup production-dist)"
   fi
   if [[ -z "${selected_backup}" ]]; then
-    echo "No production backup found under ${remote_backup_root}/production-static" >&2
+    echo "No production backup found under ${remote_backup_root}/production-dist" >&2
     exit 1
   fi
 
   remote_run "set -euo pipefail
-test -d $(remote_shell_quote "${selected_backup}/static")
-sudo rm -rf $(remote_shell_quote "${static_dir}")
-sudo cp -a $(remote_shell_quote "${selected_backup}/static") $(remote_shell_quote "${static_dir}")
-sudo chown -R vantaline:vantaline $(remote_shell_quote "${static_dir}")
-sudo find $(remote_shell_quote "${static_dir}") -type d -exec chmod 755 {} +
-sudo find $(remote_shell_quote "${static_dir}") -type f -exec chmod 644 {} +
+test -d $(remote_shell_quote "${selected_backup}/dist-production")
+sudo rm -rf $(remote_shell_quote "${production_dir}")
+sudo cp -a $(remote_shell_quote "${selected_backup}/dist-production") $(remote_shell_quote "${production_dir}")
+sudo chown -R vantaline:vantaline $(remote_shell_quote "${production_dir}")
+sudo find $(remote_shell_quote "${production_dir}") -type d -exec chmod 755 {} +
+sudo find $(remote_shell_quote "${production_dir}") -type f -exec chmod 644 {} +
 sudo rm -f /etc/systemd/system/vantaline.service.d/30-react-production.conf
 sudo systemctl daemon-reload
 sudo systemctl restart vantaline
-printf 'restored_static=%s\nfrom_backup=%s\n' $(remote_shell_quote "${static_dir}") $(remote_shell_quote "${selected_backup}")"
+printf 'restored_production_dist=%s\nfrom_backup=%s\n' $(remote_shell_quote "${production_dir}") $(remote_shell_quote "${selected_backup}")"
 }
 
 case "${mode}" in

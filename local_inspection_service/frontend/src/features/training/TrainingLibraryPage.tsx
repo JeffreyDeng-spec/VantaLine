@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, RefreshCw, Save, Trash2, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Archive, Eye, Pin, Play, RefreshCw, RotateCcw, Save, Trash2, X } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deleteAiTask,
+  deletePipelineTask,
   deleteTrainingDataset,
   deleteTrainingDatasetSample,
   deleteTrainingModel,
+  getPipeline,
   getTrainingDatasetDetail,
   getTrainingResources,
   queryKeys,
@@ -15,6 +18,8 @@ import {
 } from "../../api/queries";
 import type {
   AiDetectionLibraryTask,
+  AiTasksResponse,
+  PipelineResponse,
   TrainingDataset,
   TrainingModel,
   TrainingResourcesResponse,
@@ -22,13 +27,17 @@ import type {
   TrainingTask
 } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { LibrarySearchBox } from "../../components/LibrarySearchBox";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { hasPermission } from "../../app/permissions";
 import { modelVariantLabel, recordAuditText, statusLabel } from "../../utils/format";
+import { candidateMatches, type SearchCandidate } from "../../utils/search";
+import { taskEntriesFromTrainingResources, taskStatusTone } from "../../utils/taskNavigation";
 import { useAuth } from "../auth/auth-context";
+import { useTaskNavigationPreferences } from "../tasks/useTaskNavigationPreferences";
 
-type LibraryTab = "datasets" | "models";
+type LibraryTab = "tasks" | "datasets" | "models";
 type ModelFilter = "all" | "trained" | "yolo_ocr" | "yolo" | "ai_detection" | "other";
 type SortMode = "time_desc" | "time_asc" | "name_asc" | "name_desc";
 type ResourceDetailTarget = { kind: "dataset" | "modelRun" | "aiTask"; id: string };
@@ -483,14 +492,29 @@ function TrainingResourceModal({
 export function TrainingLibraryPage() {
   const auth = useAuth();
   const { notify } = useToast();
-  const [tab, setTab] = useState<LibraryTab>("datasets");
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<LibraryTab>(() => {
+    const requested = searchParams.get("tab");
+    return requested === "datasets" || requested === "models" || requested === "tasks" ? requested : "tasks";
+  });
   const [filter, setFilter] = useState<ModelFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("time_desc");
+  const [taskSearch, setTaskSearch] = useState("");
+  const [datasetSearch, setDatasetSearch] = useState("");
+  const [modelSearch, setModelSearch] = useState("");
   const [detail, setDetail] = useState<ResourceDetailTarget | null>(null);
   const [busy, setBusy] = useState("");
+  const { pinnedTaskIds, archivedTaskIds, persistTaskPreferences } = useTaskNavigationPreferences(auth.user.id, (error) => {
+    notify({ title: "保存任务偏好失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+  });
   const resourcesQuery = useQuery({
     queryKey: queryKeys.trainingResources(auth.dataUserId),
     queryFn: () => getTrainingResources(auth)
+  });
+  const pipelineQuery = useQuery({
+    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryFn: () => getPipeline(auth)
   });
 
   const resources = resourcesQuery.data;
@@ -499,15 +523,131 @@ export function TrainingLibraryPage() {
   const tasks = resources?.training_tasks || resources?.tasks || [];
   const modelGroups = useMemo(() => modelRunGroups(models, tasks), [models, tasks]);
   const aiTasks = useMemo(() => aiDetectionLibraryTasks(resources), [resources]);
+  const taskEntries = useMemo(() => taskEntriesFromTrainingResources(resources, pipelineQuery.data), [pipelineQuery.data, resources]);
   const filterOptions = useMemo(() => presentFilterOptions(modelGroups, aiTasks), [modelGroups, aiTasks]);
   const canDeleteAiTasks = hasPermission(auth.user, "ai_detection");
+  const taskSearchCandidates = useMemo<SearchCandidate[]>(
+    () =>
+      taskEntries.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        keywords: [
+          entry.sourceId,
+          entry.meta,
+          entry.status,
+          entry.detectionMethod || "",
+          entry.optimizationRoute || "",
+          ...(entry.accessoryNames || []),
+          ...(entry.accessoryIds || [])
+        ]
+      })),
+    [taskEntries]
+  );
+  const datasetSearchCandidates = useMemo<SearchCandidate[]>(
+    () =>
+      datasets.map((dataset) => ({
+        id: dataset.id,
+        label: dataset.display_name || dataset.id,
+        keywords: [
+          dataset.id,
+          dataset.note || "",
+          dataset.background_set_id || "",
+          ...(dataset.selected_accessory_ids || [])
+        ]
+      })),
+    [datasets]
+  );
+  const modelSearchCandidates = useMemo<SearchCandidate[]>(
+    () => [
+      ...modelGroups.map((group) => ({
+        id: `model:${group.id}`,
+        label: modelRunLabel(group),
+        keywords: [
+          group.id,
+          modelRunAccessoryText(group),
+          group.task?.status || "",
+          ...(group.models || []).map((model) => modelVariantLabel(model))
+        ]
+      })),
+      ...aiTasks.map((task) => ({
+        id: `ai:${task.id}`,
+        label: task.name || "AI 检测任务",
+        keywords: [task.id, task.model_id || "", aiTaskAccessoryText(task), ...(task.accessory_names || [])]
+      }))
+    ],
+    [aiTasks, modelGroups]
+  );
+
+  useEffect(() => {
+    const requested = searchParams.get("tab");
+    if ((requested === "datasets" || requested === "models" || requested === "tasks") && requested !== tab) {
+      setTab(requested);
+    }
+  }, [searchParams, tab]);
 
   useEffect(() => {
     if (!filterOptions.some((item) => item.value === filter)) setFilter("all");
   }, [filter, filterOptions]);
 
+  function selectTab(nextTab: LibraryTab) {
+    setTab(nextTab);
+    setSearchParams({ tab: nextTab });
+  }
+
+  function pinTask(taskId: string) {
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: [...current.pinnedTaskIds.filter((id) => id !== taskId), taskId],
+      archivedTaskIds: current.archivedTaskIds.filter((id) => id !== taskId)
+    }));
+  }
+
+  function unpinTask(taskId: string) {
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: current.pinnedTaskIds.filter((id) => id !== taskId),
+      archivedTaskIds: current.archivedTaskIds
+    }));
+  }
+
+  function archiveTask(taskId: string) {
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: current.pinnedTaskIds.filter((id) => id !== taskId),
+      archivedTaskIds: current.archivedTaskIds.includes(taskId)
+        ? current.archivedTaskIds
+        : [...current.archivedTaskIds, taskId]
+    }));
+  }
+
+  function restoreTask(taskId: string) {
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: current.pinnedTaskIds,
+      archivedTaskIds: current.archivedTaskIds.filter((id) => id !== taskId)
+    }));
+  }
+
   async function refreshResources() {
-    await resourcesQuery.refetch();
+    await Promise.all([resourcesQuery.refetch(), pipelineQuery.refetch()]);
+  }
+
+  function removePipelineTaskFromCache(taskId: string) {
+    queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId), (current) =>
+      current ? { ...current, items: (current.items || []).filter((task) => task.id !== taskId) } : current
+    );
+  }
+
+  function removeAiTaskFromCache(taskId: string) {
+    queryClient.setQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId), (current) =>
+      current ? { ...current, ai_detection_tasks: (current.ai_detection_tasks || []).filter((task) => task.id !== taskId) } : current
+    );
+    queryClient.setQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId), (current) =>
+      current
+        ? {
+            ...current,
+            selected_task_id: current.selected_task_id === taskId ? undefined : current.selected_task_id,
+            task: current.task?.id === taskId ? undefined : current.task,
+            tasks: (current.tasks || []).filter((task) => task.id !== taskId)
+          }
+        : current
+    );
   }
 
   async function quickDeleteDataset(dataset: TrainingDataset) {
@@ -541,30 +681,129 @@ export function TrainingLibraryPage() {
   async function quickDeleteAiTask(taskId: string) {
     if (!window.confirm(`删除 AI 检测任务 ${taskId}？`)) return;
     setBusy(`ai:${taskId}`);
+    const previousResources = queryClient.getQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId));
+    const previousAiTasks = queryClient.getQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId));
+    const previousPinned = pinnedTaskIds;
+    const previousArchived = archivedTaskIds;
+    const storedId = `ai:${taskId}`;
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: current.pinnedTaskIds.filter((id) => id !== storedId),
+      archivedTaskIds: current.archivedTaskIds.filter((id) => id !== storedId)
+    }));
+    removeAiTaskFromCache(taskId);
     try {
       await deleteAiTask(taskId);
       notify({ title: "AI 检测任务已删除", tone: "success" });
       await refreshResources();
     } catch (error) {
+      queryClient.setQueryData(queryKeys.trainingResources(auth.dataUserId), previousResources);
+      queryClient.setQueryData(queryKeys.aiTasks(auth.dataUserId), previousAiTasks);
+      persistTaskPreferences((current) => ({
+        pinnedTaskIds: previousPinned.includes(storedId)
+          ? [...current.pinnedTaskIds.filter((id) => id !== storedId), storedId]
+          : current.pinnedTaskIds.filter((id) => id !== storedId),
+        archivedTaskIds: previousArchived.includes(storedId)
+          ? [...current.archivedTaskIds.filter((id) => id !== storedId), storedId]
+          : current.archivedTaskIds.filter((id) => id !== storedId)
+      }));
       notify({ title: "删除 AI 任务失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
     } finally {
       setBusy("");
     }
   }
 
-  if (resourcesQuery.isLoading) return <LoadingState label="正在加载训练库" />;
-  if (resourcesQuery.isError) return <ErrorState error={resourcesQuery.error} action={<button onClick={() => resourcesQuery.refetch()}>重试</button>} />;
+  async function quickDeletePipelineTask(taskId: string) {
+    if (!window.confirm(`删除任务 ${taskId}？`)) return;
+    setBusy(`pipeline:${taskId}`);
+    const previousPipeline = queryClient.getQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId));
+    const previousPinned = pinnedTaskIds;
+    const previousArchived = archivedTaskIds;
+    const storedId = `pipeline:${taskId}`;
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: current.pinnedTaskIds.filter((id) => id !== storedId),
+      archivedTaskIds: current.archivedTaskIds.filter((id) => id !== storedId)
+    }));
+    removePipelineTaskFromCache(taskId);
+    try {
+      await deletePipelineTask(taskId);
+      notify({ title: "任务已删除", tone: "success" });
+      await Promise.all([refreshResources(), pipelineQuery.refetch()]);
+    } catch (error) {
+      queryClient.setQueryData(queryKeys.pipeline(auth.dataUserId), previousPipeline);
+      persistTaskPreferences((current) => ({
+        pinnedTaskIds: previousPinned.includes(storedId)
+          ? [...current.pinnedTaskIds.filter((id) => id !== storedId), storedId]
+          : current.pinnedTaskIds.filter((id) => id !== storedId),
+        archivedTaskIds: previousArchived.includes(storedId)
+          ? [...current.archivedTaskIds.filter((id) => id !== storedId), storedId]
+          : current.archivedTaskIds.filter((id) => id !== storedId)
+      }));
+      notify({ title: "删除任务失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+    } finally {
+      setBusy("");
+    }
+  }
 
+  if (resourcesQuery.isLoading || pipelineQuery.isLoading) return <LoadingState label="正在加载训练库" />;
+  if (resourcesQuery.isError) return <ErrorState error={resourcesQuery.error} action={<button onClick={() => resourcesQuery.refetch()}>重试</button>} />;
+  if (pipelineQuery.isError) return <ErrorState error={pipelineQuery.error} action={<button onClick={() => pipelineQuery.refetch()}>重试</button>} />;
+
+  const sortedTaskEntries = sortByMode(
+    taskEntries.filter((entry) =>
+      candidateMatches(
+        {
+          id: entry.id,
+          label: entry.label,
+          keywords: [
+            entry.sourceId,
+            entry.meta,
+            entry.status,
+            entry.detectionMethod || "",
+            entry.optimizationRoute || "",
+            ...(entry.accessoryNames || []),
+            ...(entry.accessoryIds || [])
+          ]
+        },
+        taskSearch
+      )
+    ),
+    sortMode,
+    (item) => item.label,
+    (item) => item.createdAt
+  );
   const sortedDatasets = sortByMode(
-    datasets,
+    datasets.filter((dataset) =>
+      candidateMatches(
+        {
+          id: dataset.id,
+          label: dataset.display_name || dataset.id,
+          keywords: [dataset.note || "", dataset.background_set_id || "", ...(dataset.selected_accessory_ids || [])]
+        },
+        datasetSearch
+      )
+    ),
     sortMode,
     (item) => String(item.display_name || item.id || ""),
     (item) => Number(item.created_at || item.updated_at || 0)
   );
   const visibleModelGroups = sortByMode(
     modelGroups.filter((group) => {
-      if (filter === "all" || filter === "trained") return true;
-      return modelLibraryTypeForGroup(group) === filter;
+      const typeOk = filter === "all" || filter === "trained" || modelLibraryTypeForGroup(group) === filter;
+      return (
+        typeOk &&
+        candidateMatches(
+          {
+            id: group.id,
+            label: modelRunLabel(group),
+            keywords: [
+              modelRunAccessoryText(group),
+              group.task?.status || "",
+              ...(group.models || []).map((model) => modelVariantLabel(model))
+            ]
+          },
+          modelSearch
+        )
+      );
     }),
     sortMode,
     (group) => modelRunLabel(group),
@@ -573,7 +812,16 @@ export function TrainingLibraryPage() {
   const visibleAiTasks =
     filter === "all" || filter === "ai_detection"
       ? sortByMode(
-          aiTasks,
+          aiTasks.filter((task) =>
+            candidateMatches(
+              {
+                id: task.id,
+                label: task.name || "AI 检测任务",
+                keywords: [task.model_id || "", aiTaskAccessoryText(task), ...(task.accessory_names || [])]
+              },
+              modelSearch
+            )
+          ),
           sortMode,
           (item) => String(item.name || item.id || ""),
           (item) => Number(item.updated_at || item.created_at || 0)
@@ -597,8 +845,8 @@ export function TrainingLibraryPage() {
     <section className="view active">
       <header className="page-head">
         <div>
-          <h2>训练库</h2>
-          <p className="page-desc">管理已归档样本库、训练模型和 AI 检测任务资源。</p>
+          <h2>训练与资产</h2>
+          <p className="page-desc">集中管理任务库、样本与数据集、训练模型和 AI 检测任务资源。</p>
         </div>
         <button className="secondary compact-action" type="button" onClick={() => resourcesQuery.refetch()}>
           <RefreshCw size={16} aria-hidden="true" />
@@ -607,6 +855,7 @@ export function TrainingLibraryPage() {
       </header>
 
       <section className="metric-grid">
+        <MetricCard label="任务库" value={taskEntries.length} detail="全部检测任务" />
         <MetricCard label="样本库" value={datasets.length} detail="已归档数据集" />
         <MetricCard label="模型组" value={modelGroups.length} detail={`${models.length} 个模型变体`} />
         <MetricCard label="AI 任务" value={aiTasks.length} detail="AI 检测模型入口" />
@@ -614,30 +863,125 @@ export function TrainingLibraryPage() {
 
       <div className="tabbar training-library-tabs" role="tablist" aria-label="训练库">
         <button
+          className={`mode-tab ${tab === "tasks" ? "active" : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === "tasks"}
+          onClick={() => selectTab("tasks")}
+        >
+          任务库
+        </button>
+        <button
           className={`mode-tab ${tab === "datasets" ? "active" : ""}`}
           type="button"
           role="tab"
           aria-selected={tab === "datasets"}
-          onClick={() => setTab("datasets")}
+          onClick={() => selectTab("datasets")}
         >
-          样本库
+          样本与数据集
         </button>
         <button
           className={`mode-tab ${tab === "models" ? "active" : ""}`}
           type="button"
           role="tab"
           aria-selected={tab === "models"}
-          onClick={() => setTab("models")}
+          onClick={() => selectTab("models")}
         >
           模型库
         </button>
       </div>
 
-      {tab === "datasets" ? (
+      {tab === "tasks" ? (
         <section className="panel page-panel training-library-pane">
           <div className="section-title model-library-head">
-            <h3>样本库</h3>
+            <h3>任务库</h3>
+            <span className="pill neutral">{taskEntries.length}</span>
+            <LibrarySearchBox
+              value={taskSearch}
+              onChange={setTaskSearch}
+              candidates={taskSearchCandidates}
+              placeholder="搜索任务名称或配件"
+            />
+            {sortControl}
+          </div>
+          <div className="resource-list">
+            {sortedTaskEntries.length ? (
+              sortedTaskEntries.map((entry) => {
+                const isPinned = pinnedTaskIds.includes(entry.id);
+                const isArchived = archivedTaskIds.includes(entry.id);
+                return (
+                  <article className={`resource-card task-library-card ${isArchived ? "archived" : ""}`} key={entry.id}>
+                    <div>
+                      <Link className="task-library-title" to={entry.detailPath}>{entry.label}</Link>
+                      <span className="record-meta">{entry.kind === "ai" ? "AI 检测任务" : "配件组合任务"}</span>
+                      <span>{entry.meta}</span>
+                      <span>Sidebar：{isPinned ? "已 Pin" : "未 Pin"} · {isArchived ? "已存档" : "可用"}</span>
+                    </div>
+                    <div className="resource-status-column">
+                      <span className={`pill ${taskStatusTone(entry.status)}`}>{entry.status}</span>
+                    </div>
+                    <div className="card-action-row vertical task-library-actions">
+                      <Link className="secondary compact-action" to={entry.path}>
+                        <Play size={15} aria-hidden="true" />
+                        开始检测
+                      </Link>
+                      <Link className="secondary compact-action" to={entry.detailPath}>
+                        <Eye size={15} aria-hidden="true" />
+                        详情
+                      </Link>
+                      {isArchived ? (
+                        <button className="secondary compact-action" type="button" onClick={() => restoreTask(entry.id)}>
+                          <RotateCcw size={15} aria-hidden="true" />
+                          恢复
+                        </button>
+                      ) : isPinned ? (
+                        <button className="secondary compact-action" type="button" onClick={() => unpinTask(entry.id)}>
+                          <Pin size={15} aria-hidden="true" />
+                          取消 Pin
+                        </button>
+                      ) : (
+                        <button className="secondary compact-action" type="button" onClick={() => pinTask(entry.id)}>
+                          <Pin size={15} aria-hidden="true" />
+                          Pin 到侧栏
+                        </button>
+                      )}
+                      {!isArchived ? (
+                        <button className="secondary compact-action" type="button" onClick={() => archiveTask(entry.id)}>
+                          <Archive size={15} aria-hidden="true" />
+                          存档
+                        </button>
+                      ) : null}
+                      {entry.canDelete ? (
+                        <button
+                          className="secondary compact-action danger"
+                          type="button"
+                          disabled={busy === `${entry.kind}:${entry.sourceId}` || (entry.kind === "ai" && !canDeleteAiTasks)}
+                          onClick={() => entry.kind === "pipeline" ? quickDeletePipelineTask(entry.sourceId) : quickDeleteAiTask(entry.sourceId)}
+                        >
+                          <Trash2 size={15} aria-hidden="true" />
+                          删除
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="empty-panel">暂无检测任务。AI 任务或训练模型生成后会出现在这里。</div>
+            )}
+          </div>
+        </section>
+      ) : tab === "datasets" ? (
+        <section className="panel page-panel training-library-pane">
+          <div className="section-title model-library-head">
+            <h3>样本与数据集</h3>
             <span className="pill neutral">{datasets.length}</span>
+            <LibrarySearchBox
+              value={datasetSearch}
+              onChange={setDatasetSearch}
+              candidates={datasetSearchCandidates}
+              placeholder="搜索样本集名称或配件"
+            />
             {sortControl}
           </div>
           <div className="resource-list">
@@ -685,6 +1029,12 @@ export function TrainingLibraryPage() {
         <section className="panel page-panel training-library-pane">
           <div className="section-title model-library-head">
             <h3>模型库</h3>
+            <LibrarySearchBox
+              value={modelSearch}
+              onChange={setModelSearch}
+              candidates={modelSearchCandidates}
+              placeholder="搜索模型名称或配件"
+            />
             <label className="toolbar-field">
               任务类型
               <select value={filter} onChange={(event) => setFilter(event.currentTarget.value as ModelFilter)}>

@@ -1,21 +1,45 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { LogOut, ShieldCheck } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { navGroups, navItems } from "../app/navigation";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Archive, ChevronDown, ChevronRight, Database, LogOut, Minus, MoreHorizontal, Pin, Play, Plus, ShieldCheck, Trash2, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  dataAnalysisNavItem,
+  detectionCenterNavItem,
+  navItems,
+  overviewNavItem,
+  systemNavItems,
+  trainingAssetNavItems
+} from "../app/navigation";
 import { hasPermission } from "../app/permissions";
-import { getServiceStatus, getUsers, queryKeys } from "../api/queries";
+import {
+  createPipelineTask,
+  deleteAiTask,
+  deletePipelineTask,
+  getAccessories,
+  getPipeline,
+  getTrainingResources,
+  getUsers,
+  queryKeys,
+  uploadIncomingTextReference
+} from "../api/queries";
+import type { AccessorySummary, AiTasksResponse, PipelineResponse, PipelineTaskPayload, TrainingResourcesResponse } from "../api/types";
 import { useAuth } from "../features/auth/auth-context";
 import { Dashboard } from "../features/dashboard/Dashboard";
 import { DetectionWorkbenchPage } from "../features/detection/DetectionWorkbenchPage";
-import { LabelSheetPage } from "../features/label/LabelSheetPage";
-import { LocateAnythingPage } from "../features/locate/LocateAnythingPage";
 import { PlaceholderPage } from "../features/placeholder/PlaceholderPage";
 import { TrainingPipelinePage } from "../features/pipeline/TrainingPipelinePage";
 import { AccessoriesPage } from "../features/accessories/AccessoriesPage";
 import { DataAnalysisPage } from "../features/data-analysis/DataAnalysisPage";
 import { RulesPage } from "../features/rules/RulesPage";
+import { TaskDetailRoute, TaskInspectionRoute } from "../features/incoming-text/IncomingTextRoutes";
+import { useTaskNavigationPreferences } from "../features/tasks/useTaskNavigationPreferences";
 import { TrainingLibraryPage } from "../features/training/TrainingLibraryPage";
 import { UsersPage } from "../features/users/UsersPage";
+import {
+  taskEntriesFromTrainingResources,
+  taskStatusTone,
+  type TaskEntry
+} from "../utils/taskNavigation";
 
 function PermissionRoute({ permission, children }: { permission?: string; children: React.ReactNode }) {
   const auth = useAuth();
@@ -32,25 +56,476 @@ function PermissionRoute({ permission, children }: { permission?: string; childr
   return <>{children}</>;
 }
 
+function AnyPermissionRoute({ permissions, children }: { permissions: string[]; children: React.ReactNode }) {
+  const auth = useAuth();
+  if (!permissions.some((permission) => hasPermission(auth.user, permission))) {
+    return <section className="view active"><div className="empty-panel"><ShieldCheck size={22} /><strong>没有权限访问此页面</strong></div></section>;
+  }
+  return <>{children}</>;
+}
+
+function taskNavActive(path: string, location: ReturnType<typeof useLocation>) {
+  const [pathname, search = ""] = path.split("?");
+  if (pathname === "/inspect" && /^\/tasks\/[^/]+\/inspect$/.test(location.pathname)) return true;
+  if (location.pathname !== pathname) return false;
+  if (!search) return true;
+  const expected = new URLSearchParams(search);
+  const current = new URLSearchParams(location.search);
+  return Array.from(expected.entries()).every(([key, value]) => current.get(key) === value);
+}
+
+function SidebarLink({ item, indent = false }: { item: (typeof navItems)[number]; indent?: boolean }) {
+  const location = useLocation();
+  const Icon = item.icon;
+  return (
+    <Link className={`nav-item ${indent ? "nav-item-child" : ""} ${taskNavActive(item.path, location) ? "active" : ""}`} to={item.path}>
+      <Icon size={18} aria-hidden="true" />
+      <span>{item.label}</span>
+    </Link>
+  );
+}
+
+const USER_AVATAR_COLORS = ["#2563eb", "#7c3aed", "#059669", "#dc2626", "#ea580c", "#0891b2", "#4f46e5", "#be123c"];
+
+function userAvatarColor(username: string) {
+  const seed = username || "user";
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) % USER_AVATAR_COLORS.length;
+  }
+  return USER_AVATAR_COLORS[Math.abs(hash) % USER_AVATAR_COLORS.length];
+}
+
+function userAvatarInitial(username: string) {
+  return (Array.from(username.trim())[0] || "U").toUpperCase();
+}
+
+function taskNameKey(value = "") {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function SidebarCreateTaskModal({
+  accessories,
+  existingTasks,
+  busy,
+  onClose,
+  onCreate
+}: {
+  accessories: AccessorySummary[];
+  existingTasks: TaskEntry[];
+  busy: boolean;
+  onClose: () => void;
+  onCreate: (payload: PipelineTaskPayload, standard?: { file: File; versionLabel: string }) => Promise<unknown>;
+}) {
+  const [taskType, setTaskType] = useState<"product" | "incoming">("product");
+  const [name, setName] = useState("");
+  const [formError, setFormError] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [expectedProductionCount, setExpectedProductionCount] = useState("");
+  const [materialCode, setMaterialCode] = useState("");
+  const [materialName, setMaterialName] = useState("");
+  const [standardVersion, setStandardVersion] = useState("");
+  const [standardFile, setStandardFile] = useState<File | null>(null);
+
+  function addAccessory(accessoryId: string) {
+    setSelectedIds((current) => current.includes(accessoryId) ? current : [...current, accessoryId]);
+    setCounts((current) => ({ ...current, [accessoryId]: current[accessoryId] || 1 }));
+  }
+
+  function removeAccessory(accessoryId: string) {
+    setSelectedIds((current) => current.filter((id) => id !== accessoryId));
+  }
+
+  function setAccessoryCount(accessoryId: string, nextValue: number) {
+    setCounts((current) => ({ ...current, [accessoryId]: Math.max(1, Math.min(99, Math.round(nextValue || 1))) }));
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (taskType === "incoming") {
+      const taskName = name.trim() || materialName.trim() || "包材文字检验";
+      if (!materialCode.trim() || !materialName.trim() || !standardVersion.trim() || !standardFile) {
+        setFormError("请填写包材信息并上传标准稿。");
+        return;
+      }
+      if (existingTasks.some((task) => taskNameKey(task.label) === taskNameKey(taskName))) {
+        setFormError(`已经存在名为「${taskName}」的任务，请换一个名称。`);
+        return;
+      }
+      await onCreate(
+        { name: taskName, task_kind: "incoming_material_text", detection_method: "label_text_compare", material_code: materialCode.trim(), material_name: materialName.trim(), auto_advance: false },
+        { file: standardFile, versionLabel: standardVersion.trim() }
+      ).then(onClose).catch((error: Error) => setFormError(error.message || "创建任务失败"));
+      return;
+    }
+    const selectedAccessories = accessories.filter((item) => selectedIds.includes(item.id));
+    const fallbackName = selectedAccessories.map((item) => item.name || item.id).join(" + ");
+    const taskName = name.trim() || fallbackName || "新检测任务";
+    const key = taskNameKey(taskName);
+    if (existingTasks.some((task) => taskNameKey(task.label) === key)) {
+      setFormError(`已经存在名为「${taskName}」的任务，请换一个名称。`);
+      return;
+    }
+    const expectedCount = Math.max(0, Math.round(Number(expectedProductionCount || 0)));
+    if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
+      setFormError("请填写这个任务的预计产量。");
+      return;
+    }
+    await onCreate({
+      name: taskName,
+      detection_method: "ai",
+      auto_advance: false,
+      expected_production_count: expectedCount,
+      accessory_ids: selectedIds,
+      accessory_counts: Object.fromEntries(selectedIds.map((id) => [id, Math.max(1, Number(counts[id] || 1))]))
+    }).then(onClose).catch((error: Error) => {
+      setFormError(error.message || "创建任务失败");
+    });
+  }
+
+  return (
+    <>
+      <div className="modal-backdrop" role="presentation">
+        <form className="modal-panel sidebar-task-modal" role="dialog" aria-modal="true" aria-label="添加任务" onSubmit={submit}>
+          <header className="modal-head">
+            <div>
+              <h3>添加任务</h3>
+              <span>{taskType === "incoming" ? "创建包材文字专项任务并上传电子标准稿。" : "创建产品/配件检测任务。"}</span>
+            </div>
+            <button className="icon-only" type="button" aria-label="关闭" onClick={onClose}>
+              <X size={18} aria-hidden="true" />
+            </button>
+          </header>
+          <div className="modal-body sidebar-task-modal-body">
+            <div className="sidebar-task-type-switch" role="group" aria-label="任务类型">
+              <button className={taskType === "product" ? "active" : ""} type="button" onClick={() => setTaskType("product")}>产品/配件检测</button>
+              <button className={taskType === "incoming" ? "active" : ""} type="button" onClick={() => setTaskType("incoming")}>包材文字检验</button>
+            </div>
+            <label className="field">
+              任务名称
+              <input
+                value={name}
+                placeholder={taskType === "incoming" ? "例如：电池包底部标签" : "例如：数据分析测试"}
+                onChange={(event) => {
+                  setName(event.currentTarget.value);
+                  setFormError("");
+                }}
+              />
+            </label>
+            {formError ? <div className="form-error compact-form-error">{formError}</div> : null}
+            {taskType === "incoming" ? (
+              <div className="incoming-task-create-fields">
+                <label className="field">物料编码<input value={materialCode} onChange={(event) => setMaterialCode(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" required /></label>
+                <label className="field">包材名称<input value={materialName} onChange={(event) => setMaterialName(event.currentTarget.value)} placeholder="例如：电池包底部标签" required /></label>
+                <label className="field">标准版本号<input value={standardVersion} onChange={(event) => setStandardVersion(event.currentTarget.value)} placeholder="例如：V3" required /></label>
+                <label className="field">电子标准稿<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={(event) => setStandardFile(event.currentTarget.files?.[0] || null)} required /></label>
+                <div className="incoming-task-boundary-note"><ShieldCheck size={16} /><span>任务会自动保存到当前登录账号，无需分配给其他账号。</span></div>
+                <div className="incoming-task-boundary-note"><ShieldCheck size={16} /><span>首期仅检测已配置文字；色差、材质、膜面、污渍和图标不在自动判定范围。</span></div>
+              </div>
+            ) : (
+              <>
+            <label className="field">
+              预计产量
+              <input
+                type="number"
+                min="1"
+                max="1000000"
+                step="1"
+                value={expectedProductionCount}
+                placeholder="例如：3000"
+                onChange={(event) => {
+                  setExpectedProductionCount(event.currentTarget.value);
+                  setFormError("");
+                }}
+                required
+              />
+            </label>
+            <section className="sidebar-task-accessory-picker">
+              <div className="sidebar-task-picker-head">
+                <strong>检测配件与数量</strong>
+                <button className="secondary compact-action" type="button" onClick={() => setPickerOpen(true)}>
+                  <Plus size={15} aria-hidden="true" />
+                  添加配件
+                </button>
+              </div>
+              <div className="sidebar-task-selected-list">
+                {selectedIds.length ? (
+                  selectedIds.map((id) => {
+                    const accessory = accessories.find((item) => item.id === id);
+                    return (
+                      <div className="sidebar-task-selected-row" key={id}>
+                        <span>
+                          <strong>{accessory?.name || id}</strong>
+                          <small>{accessory?.material_type || id}</small>
+                        </span>
+                        <div className="sidebar-task-count-stepper" aria-label={`${accessory?.name || id} 数量`}>
+                          <button type="button" disabled={(counts[id] || 1) <= 1} onClick={() => setAccessoryCount(id, (counts[id] || 1) - 1)}>
+                            <Minus size={14} aria-hidden="true" />
+                          </button>
+                          <strong>{counts[id] || 1}</strong>
+                          <button type="button" onClick={() => setAccessoryCount(id, (counts[id] || 1) + 1)}>
+                            <Plus size={14} aria-hidden="true" />
+                          </button>
+                        </div>
+                        <button className="icon-button light" type="button" aria-label={`移除 ${accessory?.name || id}`} onClick={() => removeAccessory(id)}>
+                          <X size={15} aria-hidden="true" />
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="empty-panel compact-empty">点击加号从库存中选择这个任务需要检测的配件。</div>
+                )}
+              </div>
+            </section>
+              </>
+            )}
+          </div>
+          <footer className="modal-footer">
+            <button className="secondary compact-action" type="button" onClick={onClose}>
+              取消
+            </button>
+            <button className="primary compact-action" type="submit" disabled={busy || (taskType === "product" ? !selectedIds.length : !standardFile)}>
+              <Plus size={16} aria-hidden="true" />
+              创建并 Pin
+            </button>
+          </footer>
+        </form>
+      </div>
+
+      {pickerOpen ? (
+        <div className="modal-backdrop stacked" role="presentation">
+          <section className="modal-panel sidebar-accessory-picker-modal" role="dialog" aria-modal="true" aria-label="选择配件">
+            <header className="modal-head">
+              <div>
+                <h3>选择库存配件</h3>
+                <span>从库存中选择这个任务需要检测的配件。</span>
+              </div>
+              <button className="icon-only" type="button" aria-label="关闭" onClick={() => setPickerOpen(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="modal-body sidebar-task-modal-body">
+              <section className="sidebar-inventory-list">
+                {accessories.length ? (
+                  accessories.map((accessory) => {
+                    const selected = selectedIds.includes(accessory.id);
+                    return (
+                      <button
+                        className={`sidebar-inventory-row ${selected ? "selected" : ""}`}
+                        type="button"
+                        onClick={() => addAccessory(accessory.id)}
+                        key={accessory.id}
+                      >
+                        <span>
+                          <strong>{accessory.name || accessory.id}</strong>
+                          <small>{accessory.material_type || accessory.id}</small>
+                        </span>
+                        <em>{selected ? "已添加" : "添加"}</em>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="empty-panel compact-empty">库存中还没有配件。</div>
+                )}
+              </section>
+              <Link className="sidebar-create-accessory-link" to="/accessories" onClick={onClose}>
+                需要创建新配件？跳转到创建配件页面
+              </Link>
+            </div>
+            <footer className="modal-footer">
+              <button className="primary compact-action" type="button" onClick={() => setPickerOpen(false)}>
+                完成选择
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function AppShell() {
   const auth = useAuth();
-  const statusQuery = useQuery({
-    queryKey: queryKeys.serviceStatus(auth.dataUserId),
-    queryFn: () => getServiceStatus(auth),
-    refetchInterval: 30_000
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const [assetsExpanded, setAssetsExpanded] = useState(() => ["/training-library", "/pipeline"].includes(window.location.pathname));
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const canReadTaskResources = ["ai_detection", "model_library", "training_pipeline"].some((permission) => hasPermission(auth.user, permission));
+  const canReadPipelineTasks = ["training_pipeline", "incoming_material_config", "inspection"].some((permission) => hasPermission(auth.user, permission));
+  const { pinnedTaskIds, archivedTaskIds, preferencesExist, persistTaskPreferences } = useTaskNavigationPreferences(auth.user.id, (error) => {
+    window.alert(error instanceof Error ? error.message : "保存侧边栏任务偏好失败");
+  });
+  const trainingResourcesQuery = useQuery({
+    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryFn: () => getTrainingResources(auth),
+    enabled: canReadTaskResources,
+    refetchInterval: 60_000
+  });
+  const pipelineQuery = useQuery({
+    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryFn: () => getPipeline(auth),
+    enabled: canReadPipelineTasks,
+    refetchInterval: 60_000
+  });
+  const accessoriesQuery = useQuery({
+    queryKey: queryKeys.accessories(auth.dataUserId),
+    queryFn: () => getAccessories(auth),
+    enabled: hasPermission(auth.user, "accessory_library"),
+    // Accessory data is only shown inside the create-task modal, so it does not
+    // need background polling while the modal is closed.
+    refetchInterval: createTaskOpen ? 60_000 : false
   });
   const usersQuery = useQuery({
     queryKey: queryKeys.users,
     queryFn: getUsers,
     enabled: auth.user.role === "admin"
   });
+  const deleteAiTaskMutation = useMutation({
+    mutationFn: deleteAiTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) });
+    }
+  });
+  const deletePipelineTaskMutation = useMutation({
+    mutationFn: deletePipelineTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+    }
+  });
 
-  const visibleNavGroups = navGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => hasPermission(auth.user, item.permission))
-    }))
-    .filter((group) => group.items.length > 0);
+  function removeTaskFromQueryCache(entry: TaskEntry) {
+    if (entry.kind === "pipeline") {
+      queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId), (current) =>
+        current ? { ...current, items: (current.items || []).filter((task) => task.id !== entry.sourceId) } : current
+      );
+      return;
+    }
+    queryClient.setQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId), (current) =>
+      current ? { ...current, ai_detection_tasks: (current.ai_detection_tasks || []).filter((task) => task.id !== entry.sourceId) } : current
+    );
+    queryClient.setQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId), (current) =>
+      current
+        ? {
+            ...current,
+            selected_task_id: current.selected_task_id === entry.sourceId ? undefined : current.selected_task_id,
+            task: current.task?.id === entry.sourceId ? undefined : current.task,
+            tasks: (current.tasks || []).filter((task) => task.id !== entry.sourceId)
+          }
+        : current
+    );
+  }
+  const createPipelineTaskMutation = useMutation({
+    mutationFn: (payload: PipelineTaskPayload) => createPipelineTask(payload, auth),
+    onSuccess: (task) => {
+      queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId), (current) =>
+        current
+          ? {
+              ...current,
+              items: [task, ...(current.items || []).filter((item) => item.id !== task.id)]
+            }
+          : { items: [task], accessories: [] }
+      );
+      const taskKey = `pipeline:${task.id}`;
+      persistTaskPreferences((current) => {
+        const currentPinned = current.pinnedTaskIds.length ? current.pinnedTaskIds : effectivePinnedTaskIds;
+        return {
+          pinnedTaskIds: [taskKey, ...currentPinned.filter((id) => id !== taskKey)],
+          archivedTaskIds: current.archivedTaskIds.filter((id) => id !== taskKey)
+        };
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+    }
+  });
+
+  useEffect(() => {
+    if (["/training-library", "/pipeline"].includes(location.pathname)) setAssetsExpanded(true);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, location.search]);
+
+  const taskEntries = useMemo(
+    () => taskEntriesFromTrainingResources(trainingResourcesQuery.data, pipelineQuery.data),
+    [pipelineQuery.data, trainingResourcesQuery.data]
+  );
+  const entryById = useMemo(() => new Map(taskEntries.map((entry) => [entry.id, entry])), [taskEntries]);
+  const defaultPinnedIds = useMemo(
+    () => taskEntries.filter((entry) => !archivedTaskIds.includes(entry.id)).slice(0, 3).map((entry) => entry.id),
+    [archivedTaskIds, taskEntries]
+  );
+  const effectivePinnedTaskIds = pinnedTaskIds.length || preferencesExist ? pinnedTaskIds : defaultPinnedIds;
+  const pinnedTasks = effectivePinnedTaskIds
+    .map((id) => entryById.get(id))
+    .filter((entry): entry is TaskEntry => Boolean(entry))
+    .filter((entry) => !archivedTaskIds.includes(entry.id));
+
+  function unpinTask(entry: TaskEntry) {
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: (current.pinnedTaskIds.length ? current.pinnedTaskIds : effectivePinnedTaskIds).filter((id) => id !== entry.id),
+      archivedTaskIds: current.archivedTaskIds
+    }));
+  }
+
+  function archiveTask(entry: TaskEntry) {
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: (current.pinnedTaskIds.length ? current.pinnedTaskIds : effectivePinnedTaskIds).filter((id) => id !== entry.id),
+      archivedTaskIds: current.archivedTaskIds.includes(entry.id)
+        ? current.archivedTaskIds
+        : [...current.archivedTaskIds, entry.id]
+    }));
+  }
+
+  async function deleteTask(entry: TaskEntry) {
+    if (!entry.canDelete) return;
+    if (!window.confirm(`删除任务 ${entry.label}？`)) return;
+    const previousPipeline = queryClient.getQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId));
+    const previousResources = queryClient.getQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId));
+    const previousAiTasks = queryClient.getQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId));
+    const previousPinned = pinnedTaskIds;
+    const previousArchived = archivedTaskIds;
+    persistTaskPreferences((current) => ({
+      pinnedTaskIds: (current.pinnedTaskIds.length ? current.pinnedTaskIds : effectivePinnedTaskIds).filter((id) => id !== entry.id),
+      archivedTaskIds: current.archivedTaskIds.filter((id) => id !== entry.id)
+    }));
+    removeTaskFromQueryCache(entry);
+    try {
+      if (entry.kind === "pipeline") {
+        await deletePipelineTaskMutation.mutateAsync(entry.sourceId);
+      } else {
+        await deleteAiTaskMutation.mutateAsync(entry.sourceId);
+      }
+    } catch (error) {
+      queryClient.setQueryData(queryKeys.pipeline(auth.dataUserId), previousPipeline);
+      queryClient.setQueryData(queryKeys.trainingResources(auth.dataUserId), previousResources);
+      queryClient.setQueryData(queryKeys.aiTasks(auth.dataUserId), previousAiTasks);
+      persistTaskPreferences((current) => ({
+        pinnedTaskIds: previousPinned.includes(entry.id)
+          ? [entry.id, ...current.pinnedTaskIds.filter((id) => id !== entry.id)]
+          : current.pinnedTaskIds.filter((id) => id !== entry.id),
+        archivedTaskIds: previousArchived.includes(entry.id)
+          ? [...current.archivedTaskIds.filter((id) => id !== entry.id), entry.id]
+          : current.archivedTaskIds.filter((id) => id !== entry.id)
+      }));
+      window.alert(error instanceof Error ? error.message : "删除任务失败");
+    }
+  }
+
+  const visibleTrainingAssetItems = trainingAssetNavItems.filter((item) => hasPermission(auth.user, item.permission));
+  const visibleSystemItems = systemNavItems.filter((item) => hasPermission(auth.user, item.permission));
+  const visibleFixedItems = [overviewNavItem, detectionCenterNavItem, dataAnalysisNavItem].filter((item) =>
+    item.view === "dataAnalysis"
+      ? ["ai_detection", "inspection"].some((permission) => hasPermission(auth.user, permission))
+      : hasPermission(auth.user, item.permission)
+  );
+  const visibleTrainingChildren = assetsExpanded ? visibleTrainingAssetItems : [];
+  const accountDisplayName = auth.user.display_name || auth.user.username;
 
   return (
     <div className="app-shell">
@@ -65,44 +540,141 @@ export function AppShell() {
           </div>
         </div>
 
-        <div className="account-card">
-          <div>
-            <span>{auth.user.role === "admin" ? "Admin" : "普通用户"}</span>
-            <strong>{auth.user.display_name || auth.user.username}</strong>
-          </div>
-          <button className="icon-button" type="button" title="退出登录" aria-label="退出登录" onClick={auth.logout}>
-            <LogOut size={18} aria-hidden="true" />
-          </button>
-        </div>
-
         <nav className="side-nav" aria-label="主导航">
-          {visibleNavGroups.map((group) => (
-            <div className="nav-group" key={group.label || "root"}>
-              {group.label ? <p className="nav-group-label">{group.label}</p> : null}
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink className="nav-item" key={item.path} to={item.path} end={item.path === "/"}>
-                    <Icon size={18} aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+          <div className="nav-group">
+            {visibleFixedItems.slice(0, 2).map((item) => (
+              <SidebarLink item={item} key={item.path} />
+            ))}
+          </div>
 
-        <div className="system-card">
-          <span>服务</span>
-          <strong className={`pill ${statusQuery.data?.service === "running" ? "ok" : "neutral"}`}>
-            {statusQuery.data?.service === "running" ? "运行中" : "检查中"}
-          </strong>
-          <span>模型</span>
-          <strong className={`pill ${statusQuery.data?.model_exists ? "ok" : "neutral"}`}>
-            {statusQuery.data?.model_exists ? "模型已加载" : "模型"}
-          </strong>
-        </div>
+          {visibleTrainingAssetItems.length ? (
+            <div className="nav-group">
+              <button
+                className="nav-item nav-item-button"
+                type="button"
+                onClick={() => setAssetsExpanded((value) => !value)}
+                aria-expanded={assetsExpanded}
+              >
+                <Database size={18} aria-hidden="true" />
+                <span>训练与资产</span>
+                {assetsExpanded ? <ChevronDown className="nav-chevron" size={18} aria-hidden="true" /> : <ChevronRight className="nav-chevron" size={18} aria-hidden="true" />}
+              </button>
+              {visibleTrainingChildren.map((item) => (
+                <SidebarLink item={item} indent key={item.path} />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="nav-group">
+            {visibleFixedItems.slice(2).map((item) => (
+              <SidebarLink item={item} key={item.path} />
+            ))}
+          </div>
+
+          <div className="nav-group pinned-task-group">
+            <p className="nav-group-label">Pinned Tasks</p>
+            {pinnedTasks.length ? (
+              pinnedTasks.map((entry) => (
+                <div className="pinned-task-row" key={entry.id}>
+                  <Link className="pinned-task-link" to={entry.detailPath}>
+                    <Pin size={14} aria-hidden="true" />
+                    <span>
+                      <strong>{entry.label}</strong>
+                      <small>{entry.meta}</small>
+                    </span>
+                    <em className={`pill ${taskStatusTone(entry.status)}`}>{entry.status}</em>
+                  </Link>
+                  <details className="pinned-task-menu">
+                    <summary aria-label={`${entry.label} 操作`}>
+                      <MoreHorizontal size={16} aria-hidden="true" />
+                    </summary>
+                    <div className="pinned-task-menu-panel">
+                      <Link to={entry.path}>
+                        <Play size={14} aria-hidden="true" />
+                        开始检测
+                      </Link>
+                      <button type="button" onClick={() => unpinTask(entry)}>
+                        <Pin size={14} aria-hidden="true" />
+                        取消 Pin
+                      </button>
+                      <button type="button" onClick={() => archiveTask(entry)}>
+                        <Archive size={14} aria-hidden="true" />
+                        存档
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!entry.canDelete || deleteAiTaskMutation.isPending || deletePipelineTaskMutation.isPending}
+                        onClick={() => deleteTask(entry)}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        删除
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              ))
+            ) : (
+              <div className="pinned-task-empty">在训练与资产 / 任务库中 Pin 常用任务。</div>
+            )}
+          </div>
+
+          {hasPermission(auth.user, "training_pipeline") || hasPermission(auth.user, "incoming_material_config") ? (
+            <div className="nav-group sidebar-task-create">
+              <button className="sidebar-create-task-button" type="button" onClick={() => setCreateTaskOpen(true)}>
+                <Plus size={16} aria-hidden="true" />
+                添加任务
+              </button>
+            </div>
+          ) : null}
+
+          {visibleSystemItems.length ? (
+            <div className="nav-group sidebar-bottom-nav">
+              {visibleSystemItems.map((item) => (
+                <SidebarLink item={item} key={item.path} />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="account-card compact-account-card" title={accountDisplayName}>
+            <span className="account-avatar" style={{ backgroundColor: userAvatarColor(accountDisplayName) }} aria-hidden="true">
+              {userAvatarInitial(accountDisplayName)}
+            </span>
+            <div>
+              <strong>{accountDisplayName}</strong>
+              <span>{auth.user.role === "admin" ? "Admin" : "普通用户"}</span>
+            </div>
+            <button className="icon-button account-logout" type="button" title="退出登录" aria-label="退出登录" onClick={auth.logout}>
+              <LogOut size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </nav>
       </aside>
+
+      {createTaskOpen ? (
+          <SidebarCreateTaskModal
+          accessories={accessoriesQuery.data?.items || []}
+          existingTasks={taskEntries}
+          busy={createPipelineTaskMutation.isPending}
+          onClose={() => setCreateTaskOpen(false)}
+          onCreate={async (payload, standard) => {
+            const task = await createPipelineTaskMutation.mutateAsync(payload);
+            if (standard) {
+              const form = new FormData();
+              form.set("file", standard.file);
+              form.set("version_label", standard.versionLabel);
+              try {
+                await uploadIncomingTextReference(task.id, form);
+              } catch (error) {
+                await queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+                const detail = error instanceof Error ? error.message : "未知错误";
+                throw new Error(`任务已创建并固定，但标准稿上传失败（${detail}）。请关闭窗口，从任务配置页重新上传。`);
+              }
+              await queryClient.invalidateQueries({ queryKey: queryKeys.incomingTextTask(task.id) });
+            }
+            return task;
+          }}
+        />
+      ) : null}
 
       <main className="workspace">
         {auth.user.role === "admin" ? (
@@ -134,26 +706,14 @@ export function AppShell() {
             }
           />
           <Route
+            path="/tasks/:taskId/inspect"
+            element={<TaskInspectionRoute />}
+          />
+          <Route
             path="/ai-inspect"
             element={
               <PermissionRoute permission="ai_detection">
                 <DetectionWorkbenchPage mode="ai" />
-              </PermissionRoute>
-            }
-          />
-          <Route
-            path="/label-sheet"
-            element={
-              <PermissionRoute permission="label_sheet">
-                <LabelSheetPage />
-              </PermissionRoute>
-            }
-          />
-          <Route
-            path="/locate-anything"
-            element={
-              <PermissionRoute permission="locate_anything">
-                <LocateAnythingPage />
               </PermissionRoute>
             }
           />
@@ -168,9 +728,9 @@ export function AppShell() {
           <Route
             path="/data-analysis"
             element={
-              <PermissionRoute permission="ai_detection">
+              <AnyPermissionRoute permissions={["ai_detection", "inspection"]}>
                 <DataAnalysisPage />
-              </PermissionRoute>
+              </AnyPermissionRoute>
             }
           />
           <Route
@@ -180,6 +740,10 @@ export function AppShell() {
                 <TrainingLibraryPage />
               </PermissionRoute>
             }
+          />
+          <Route
+            path="/tasks/:taskId"
+            element={<TaskDetailRoute />}
           />
           <Route
             path="/pipeline"
@@ -206,7 +770,7 @@ export function AppShell() {
             }
           />
           {navItems
-            .filter((item) => !["home", "inspect", "aiInspect", "labelSheet", "locateAnything", "accessories", "dataAnalysis", "trainingLibrary", "pipeline", "rules", "userManagement"].includes(item.view))
+            .filter((item) => !["home", "inspect", "aiInspect", "accessories", "dataAnalysis", "trainingLibrary", "pipeline", "rules", "userManagement"].includes(item.view))
             .map((item) => (
               <Route
                 key={item.path}

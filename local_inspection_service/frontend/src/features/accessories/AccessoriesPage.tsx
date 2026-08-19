@@ -1,29 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Eye, ImagePlus, RefreshCw, Route, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Eye, ImagePlus, RefreshCw, Route, Sparkles, Trash2, Upload, UploadCloud, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addAccessoryFiles,
-  confirmAccessory,
+  createAccessory,
   deleteAccessory,
   deleteAccessoryFile,
   getAccessories,
-  getAccessoryCandidate,
   getAccessoryDetail,
-  previewAccessory,
   queryKeys,
   setAccessoryAiReference,
   setAccessoryRoute
 } from "../../api/queries";
 import type {
-  AccessoryCandidate,
-  AccessoryCandidateResponse,
   AccessoryGalleryAsset,
   AccessoryProfileStatus,
   AccessorySummary
 } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { LibrarySearchBox } from "../../components/LibrarySearchBox";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
+import { candidateMatches, type SearchCandidate } from "../../utils/search";
 import { formatRecordTime, recordAuditText, statusLabel, toneForStatus } from "../../utils/format";
 import { useAuth } from "../auth/auth-context";
 import { AccessoryTextCropModal } from "./AccessoryTextCropModal";
@@ -34,11 +33,9 @@ type StatusFilter = "all" | "active" | "pending" | "failed";
 const ROUTE_OPTIONS = [
   { value: "yolo", label: "YOLO" },
   { value: "ai", label: "AI 检测" },
-  { value: "locate", label: "LocateAnything" },
   { value: "archive_only", label: "仅归档" }
 ];
 
-const ACTIVE_JOB_STATUSES = new Set(["queued_for_codex_image_worker", "queued", "running", "pending"]);
 const TEXT_ACCESSORY_MAX_IMAGES = 2;
 
 function profileStatusText(value: AccessoryProfileStatus | string | undefined, ready?: boolean) {
@@ -47,12 +44,6 @@ function profileStatusText(value: AccessoryProfileStatus | string | undefined, r
   if (value?.message) return value.message;
   if (value?.status) return statusLabel(value.status);
   return ready ? "ready" : "pending";
-}
-
-function alphaPolicyLabel(policy: string | undefined) {
-  if (policy === "transparent") return "透明";
-  if (policy === "opaque") return "不透明";
-  return "未选择";
 }
 
 function materialLabel(value: string | undefined) {
@@ -69,16 +60,6 @@ function formatPhysicalSize(item: AccessorySummary) {
   if (size.kind === "paper") return `${size.preset || "custom"} ${size.width_mm || "-"}x${size.height_mm || "-"}mm`;
   if (size.kind === "object") return `${size.length_mm || "-"}x${size.width_mm || "-"}x${size.height_mm || "-"}mm`;
   return "尺寸未设置";
-}
-
-function candidateJobs(candidate: AccessoryCandidate | undefined) {
-  if (!candidate) return [];
-  if (Array.isArray(candidate.codex_image_jobs) && candidate.codex_image_jobs.length) return candidate.codex_image_jobs;
-  return candidate.codex_image_job ? [candidate.codex_image_job] : [];
-}
-
-function candidateHasActiveJobs(candidate: AccessoryCandidate | undefined) {
-  return candidateJobs(candidate).some((job) => ACTIVE_JOB_STATUSES.has(String(job.status || "")));
 }
 
 function accessoryNeedsTextCrop(item: AccessorySummary | null | undefined) {
@@ -129,7 +110,7 @@ function useAccessoryRefresh() {
   return () => queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) });
 }
 
-function AccessoryDetailModal({
+export function AccessoryDetailModal({
   accessoryId,
   onClose,
   onChanged,
@@ -273,10 +254,6 @@ function AccessoryDetailModal({
                   <label>AI 画像</label>
                   <strong>{profileStatusText(item.ai_profile_status, item.ai_profile_ready)}</strong>
                 </div>
-                <div>
-                  <label>Locate</label>
-                  <strong>{profileStatusText(item.locateanything_profile_status, item.locateanything_profile_ready)}</strong>
-                </div>
               </section>
 
               <section className="resource-edit-row route-edit-row">
@@ -370,19 +347,19 @@ export function AccessoriesPage() {
   const auth = useAuth();
   const refreshAccessories = useAccessoryRefresh();
   const { notify } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [materialFilter, setMaterialFilter] = useState<MaterialFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [detailId, setDetailId] = useState("");
-  const [candidateId, setCandidateId] = useState("");
-  const [candidateSeed, setCandidateSeed] = useState<AccessoryCandidateResponse | null>(null);
   const [cropAccessory, setCropAccessory] = useState<AccessorySummary | null>(null);
   const [deleteCropAccessoryOnCancel, setDeleteCropAccessoryOnCancel] = useState(true);
   const [busy, setBusy] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const draftFileInputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState({
     name: "",
     material_type: "object",
-    material_alpha_policy: "opaque",
     training_role: "detect_and_classify",
     paper_preset: "A4",
     paper_width_mm: "",
@@ -393,9 +370,35 @@ export function AccessoriesPage() {
     size_reference: "a4"
   });
   const [draftFiles, setDraftFiles] = useState<File[]>([]);
+  const routeAccessoryId = searchParams.get("accessory_id") || "";
+
+  useEffect(() => {
+    if (routeAccessoryId) setDetailId(routeAccessoryId);
+  }, [routeAccessoryId]);
+
+  function closeDetail() {
+    setDetailId("");
+    if (routeAccessoryId) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("accessory_id");
+      setSearchParams(next, { replace: true });
+    }
+  }
 
   function setDraftField(key: keyof typeof draft, value: string) {
     setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setDraftFileSelection(files: File[]) {
+    setDraftFiles(files);
+    if (draftFileInputRef.current) draftFileInputRef.current.value = "";
+  }
+
+  function handleDraftDrop(event: React.DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    const files = Array.from(event.dataTransfer.files || []);
+    if (files.length) setDraftFileSelection(files);
   }
 
   const accessoriesQuery = useQuery({
@@ -403,27 +406,36 @@ export function AccessoriesPage() {
     queryFn: () => getAccessories(auth)
   });
 
-  const candidateQuery = useQuery({
-    queryKey: queryKeys.accessoryCandidate(candidateId),
-    queryFn: () => getAccessoryCandidate(candidateId),
-    enabled: Boolean(candidateId),
-    initialData: candidateSeed?.candidate.id === candidateId ? candidateSeed : undefined,
-    refetchInterval: (query) =>
-      candidateHasActiveJobs((query.state.data as AccessoryCandidateResponse | undefined)?.candidate) ? 5000 : false
-  });
-
   const items = accessoriesQuery.data?.items || [];
+  const accessorySearchCandidates = useMemo<SearchCandidate[]>(
+    () =>
+      items.map((item) => ({
+        id: item.id,
+        label: item.name || item.label || item.id,
+        keywords: [item.id, item.label || "", materialLabel(item.material_type), routeLabel(item.detection_route)]
+      })),
+    [items]
+  );
   const filteredItems = useMemo(() => {
-    const term = search.trim().toLowerCase();
     return items.filter((item) => {
-      const text = `${item.name || ""} ${item.id || ""} ${item.label || ""}`.toLowerCase();
       const materialOk = materialFilter === "all" || item.material_type === materialFilter;
       const statusOk =
         statusFilter === "all" ||
         (statusFilter === "active" && item.status === "active") ||
         (statusFilter === "failed" && String(item.status || "").includes("fail")) ||
         (statusFilter === "pending" && !["active", "completed"].includes(String(item.status || "")));
-      return (!term || text.includes(term)) && materialOk && statusOk;
+      return (
+        candidateMatches(
+          {
+            id: item.id,
+            label: item.name || item.label || item.id,
+            keywords: [item.label || "", materialLabel(item.material_type), routeLabel(item.detection_route)]
+          },
+          search
+        ) &&
+        materialOk &&
+        statusOk
+      );
     });
   }, [items, materialFilter, search, statusFilter]);
 
@@ -435,7 +447,7 @@ export function AccessoriesPage() {
     [items]
   );
 
-  async function createCandidate(event: React.FormEvent<HTMLFormElement>) {
+  async function createAccessoryDirect(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.name.trim()) {
       notify({ title: "请输入配件名称", tone: "error" });
@@ -444,39 +456,23 @@ export function AccessoriesPage() {
     if (draft.material_type === "text" && !validateTextFiles(draftFiles, 0, notify)) return;
     const form = new FormData();
     Object.entries(draft).forEach(([key, value]) => appendFormValue(form, key, value));
+    if (draft.material_type === "object") appendFormValue(form, "material_alpha_policy", "opaque");
     draftFiles.forEach((file) => form.append("files", file, file.name));
-    setBusy("preview");
+    setBusy("create");
     try {
-      const result = await previewAccessory(form);
-      setCandidateSeed(result);
-      setCandidateId(result.candidate.id);
-      notify({ title: "候选配件已创建", tone: "success" });
-    } catch (error) {
-      notify({ title: "创建候选失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function confirmCandidate() {
-    const candidate = candidateQuery.data?.candidate || candidateSeed?.candidate;
-    if (!candidate?.id) return;
-    setBusy("confirm");
-    try {
-      const result = await confirmAccessory(candidate.id);
+      const result = await createAccessory(form);
       if (accessoryNeedsTextCrop(result.item)) {
         setDeleteCropAccessoryOnCancel(true);
         setCropAccessory(result.item || null);
-        notify({ title: "候选已确认，等待裁剪", description: "请截取完整文字区域后再用于训练。", tone: "info" });
+        notify({ title: "配件已创建，等待裁剪", description: "请截取完整文字区域后再用于训练。", tone: "info" });
       } else {
-        notify({ title: "候选已确认入库", tone: "success" });
+        notify({ title: "配件已创建并入库", tone: "success" });
       }
-      setCandidateId("");
-      setCandidateSeed(null);
+      setDraft((prev) => ({ ...prev, name: "" }));
       setDraftFiles([]);
       await refreshAccessories();
     } catch (error) {
-      notify({ title: "确认候选失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+      notify({ title: "创建配件失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
     } finally {
       setBusy("");
     }
@@ -501,9 +497,6 @@ export function AccessoriesPage() {
     return <ErrorState error={accessoriesQuery.error} action={<button onClick={() => accessoriesQuery.refetch()}>重试</button>} />;
   }
 
-  const candidate = candidateQuery.data?.candidate || candidateSeed?.candidate;
-  const jobs = candidateJobs(candidate);
-
   return (
     <section className="view active">
       <header className="page-head">
@@ -525,10 +518,10 @@ export function AccessoriesPage() {
 
       <section className="panel page-panel">
         <div className="section-title">
-          <h3>新增候选</h3>
+          <h3>添加配件</h3>
         </div>
-        <form className="accessory-create-form" onSubmit={createCandidate}>
-          <div className="form-grid">
+        <form className="accessory-create-form" onSubmit={createAccessoryDirect}>
+          <div className="form-grid accessory-create-grid">
             <label>
               名称
               <input value={draft.name} onChange={(event) => setDraftField("name", event.currentTarget.value)} />
@@ -544,31 +537,19 @@ export function AccessoriesPage() {
               </select>
             </label>
             {draft.material_type === "object" ? (
-              <>
-                <label>
-                  透明策略
-                  <select
-                    value={draft.material_alpha_policy}
-                    onChange={(event) => setDraftField("material_alpha_policy", event.currentTarget.value)}
-                  >
-                    <option value="opaque">不透明</option>
-                    <option value="transparent">透明/玻璃</option>
-                  </select>
-                </label>
-                <label>
-                  尺寸参照物
-                  <select
-                    value={draft.size_reference}
-                    onChange={(event) => setDraftField("size_reference", event.currentTarget.value)}
-                  >
-                    <option value="a4">A4 纸 (297×210mm)</option>
-                    <option value="a5">A5 纸 (210×148mm)</option>
-                    <option value="b5">B5 纸 (250×176mm)</option>
-                    <option value="ruler">直尺/卷尺（读刻度）</option>
-                  </select>
-                  <span className="hint-line">请上传一张「配件 + 参照物」同框照片，由 Agent 推断真实尺寸。</span>
-                </label>
-              </>
+              <label>
+                尺寸参照物
+                <select
+                  value={draft.size_reference}
+                  onChange={(event) => setDraftField("size_reference", event.currentTarget.value)}
+                >
+                  <option value="a4">A4 纸 (297×210mm)</option>
+                  <option value="a5">A5 纸 (210×148mm)</option>
+                  <option value="b5">B5 纸 (250×176mm)</option>
+                  <option value="ruler">直尺/卷尺（读刻度）</option>
+                </select>
+                <span className="hint-line">请上传一张「配件 + 参照物」同框照片，由 Agent 推断真实尺寸。</span>
+              </label>
             ) : (
               <label>
                 纸张
@@ -580,60 +561,53 @@ export function AccessoriesPage() {
                 </select>
               </label>
             )}
-            <label>
-              素材
+            <div className="file-drop-field">
+              <span>素材</span>
+              <button
+                className={`file-drop-zone ${dragActive ? "dragging" : ""}`}
+                type="button"
+                onClick={() => draftFileInputRef.current?.click()}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleDraftDrop}
+              >
+                <UploadCloud size={20} aria-hidden="true" />
+                <span>
+                  <strong>{draftFiles.length ? `${draftFiles.length} 个文件已选择` : "拖拽文件到这里，或点击选择"}</strong>
+                  <small>{draft.material_type === "text" ? "图片，最多 2 张" : "图片或视频，可稍后补充"}</small>
+                </span>
+              </button>
               <input
+                ref={draftFileInputRef}
+                className="visually-hidden-file"
                 type="file"
                 multiple
                 accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"}
-                onChange={(event) => setDraftFiles(Array.from(event.currentTarget.files || []))}
+                onChange={(event) => setDraftFileSelection(Array.from(event.currentTarget.files || []))}
               />
-            </label>
+            </div>
           </div>
-          <div className="button-row">
-            <button className="primary compact-action" type="submit" disabled={busy === "preview"}>
-              <ImagePlus size={16} aria-hidden="true" />
-              创建候选
-            </button>
+          <div className="button-row accessory-create-actions">
             <span className="hint-line">
               {draftFiles.length
                 ? `${draftFiles.length} 个文件已选择`
                 : draft.material_type === "text"
-                  ? `文字类最多 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片，确认入库后逐张裁剪`
+                  ? `文字类最多 ${TEXT_ACCESSORY_MAX_IMAGES} 张图片，创建后逐张裁剪`
                   : "可先无文件建档，稍后在详情中补充素材"}
             </span>
+            <button className="primary compact-action" type="submit" disabled={busy === "create"}>
+              <ImagePlus size={16} aria-hidden="true" />
+              创建配件
+            </button>
           </div>
         </form>
-        {candidate ? (
-          <div className="candidate-panel">
-            <div>
-              <strong>{candidate.name || candidate.id}</strong>
-              <span>{materialLabel(candidate.material_type)} · {alphaPolicyLabel(candidate.material_alpha_policy)} · {statusLabel(candidate.status)}</span>
-              <span>{recordAuditText(candidate, { includeUpdated: true })}</span>
-            </div>
-            <div className="job-chip-list">
-              {jobs.length ? (
-                jobs.map((job) => (
-                  <span className={`pill ${toneForStatus(job.status)}`} key={job.job_id || job.task_id || job.label}>
-                    {job.label || job.job_id || "生成任务"} · {statusLabel(job.status)} {job.progress !== undefined ? `${job.progress}%` : ""}
-                  </span>
-                ))
-              ) : (
-                <span className="pill neutral">无生成任务</span>
-              )}
-            </div>
-            <div className="card-action-row">
-              <button className="secondary compact-action" type="button" onClick={() => candidateQuery.refetch()}>
-                <RefreshCw size={16} aria-hidden="true" />
-                更新
-              </button>
-              <button className="primary compact-action" type="button" disabled={busy === "confirm"} onClick={confirmCandidate}>
-                <CheckCircle2 size={16} aria-hidden="true" />
-                确认入库
-              </button>
-            </div>
-          </div>
-        ) : null}
       </section>
 
       <section className="panel page-panel">
@@ -641,10 +615,12 @@ export function AccessoriesPage() {
           <h3>配件列表</h3>
         </div>
         <div className="filter-grid">
-          <label className="search-field">
-            <Search size={16} aria-hidden="true" />
-            <input placeholder="搜索名称或 ID" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
-          </label>
+          <LibrarySearchBox
+            value={search}
+            onChange={setSearch}
+            candidates={accessorySearchCandidates}
+            placeholder="搜索配件名称或 ID"
+          />
           <label>
             类型
             <select value={materialFilter} onChange={(event) => setMaterialFilter(event.currentTarget.value as MaterialFilter)}>
@@ -678,8 +654,7 @@ export function AccessoriesPage() {
                     {materialLabel(item.material_type)} · 类别 {item.class_id ?? "-"} · {item.source_file_count ?? item.source_files?.length ?? 0} 个素材 · {formatPhysicalSize(item)}
                   </span>
                   <span>
-                    路线：{routeLabel(item.detection_route)} · AI：{profileStatusText(item.ai_profile_status, item.ai_profile_ready)} · Locate：
-                    {profileStatusText(item.locateanything_profile_status, item.locateanything_profile_ready)}
+                    路线：{routeLabel(item.detection_route)} · AI：{profileStatusText(item.ai_profile_status, item.ai_profile_ready)}
                   </span>
                 </div>
                 <div className="resource-status-column">
@@ -714,7 +689,7 @@ export function AccessoriesPage() {
       {detailId ? (
         <AccessoryDetailModal
           accessoryId={detailId}
-          onClose={() => setDetailId("")}
+          onClose={closeDetail}
           onChanged={refreshAccessories}
           onTextCrop={(item) => {
             setDeleteCropAccessoryOnCancel(false);

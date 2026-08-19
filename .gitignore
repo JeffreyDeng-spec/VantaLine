@@ -15,12 +15,44 @@ local_inspection_service/frontend/test-results/
 
 # Local service runtime data
 agent_handoffs/
-qa_reports/
-plans/
 review_artifacts/
 local_inspection_service/backups/
 local_inspection_service/static/_backup_*/
-local_inspection_service/data/
+local_inspection_service/data/uploads/
+local_inspection_service/data/outputs/
+local_inspection_service/data/accessories/
+local_inspection_service/data/normalized_assets/
+local_inspection_service/data/training_jobs/
+local_inspection_service/data/training_tasks/
+local_inspection_service/data/accessory_candidates/
+local_inspection_service/data/image_worker_logs/
+local_inspection_service/data/backups/
+local_inspection_service/data/auth.json
+local_inspection_service/data/config.last_good.json
+local_inspection_service/data/cu126wheels/
+local_inspection_service/data/*.ps1
+local_inspection_service/data/*.bat
+local_inspection_service/data/*.py
+local_inspection_service/data/*.log
+local_inspection_service/data/ai_config.local.json*
+local_inspection_service/data/ai_config.local.*.json.tmp
+local_inspection_service/data/ai_profile_cache.local.json*
+local_inspection_service/data/ai_detection_tasks.json*
+local_inspection_service/data/runtime_secrets.local.env*
+local_inspection_service/data/data_analysis_records.json*
+local_inspection_service/data/agent_config.local.json*
+local_inspection_service/data/locateanything_config.local.json*
+local_inspection_service/data/vantaline.sqlite3*
+local_inspection_service/data/db_migration_reports/
+local_inspection_service/data/db_migration_backups/
+local_inspection_service/data/*migration_report*.json
+local_inspection_service/data/pipeline_state.json
+local_inspection_service/data/pipeline_tasks.json
+local_inspection_service/data/worker_image_jobs/
+local_inspection_service/data/worker_training_transfers/
+local_inspection_service/data/windows_worker_gateway.*.log
+local_inspection_service/data/local_server_*.log
+local_inspection_service/data/local_server_*.pid
 local_inspection_service/tmp_*.png
 local_inspection_service/tmp_*.jpg
 local_inspection_service/*.diff.gz
@@ -29,32 +61,23 @@ local_inspection_service/*.diff.gz
 .tmp/
 test-results/
 
-# Generated training assets and temporary production folders
+# Generated image batches and temporary production folders
 /synthetic_*/
 /image2_*/
 /tmp_rework/
-backgrounds/
-generated_3d_models/
-generated_*_pose_collection/
-standardized_manuals/
-manuals_from_individual_sources_precise/
-/scripts/
 *.tar.gz
 
 # Large YOLO datasets, run outputs, and caches.
+# Generation scripts and the selected deployable model are tracked instead.
 yolo26_*_trial/
 *.cache
 runs/
 logs/
 
-# Keep model weights out of Git. Runtime deployments and training jobs provide
-# task-specific artifacts through local_inspection_service/data or external
-# artifact storage.
+# Keep root-level base checkpoints out of Git. The deployable model is copied
+# into models/current_2class_yolo26s_seg_best.pt.
 yolo26*.pt
-models/**/*.pt
-models/**/*.onnx
-models/**/*.engine
-models/**/*.torchscript
+!models/current_2class_yolo26s_seg_best.pt
 
 # OS/editor noise
 .DS_Store

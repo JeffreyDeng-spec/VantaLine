@@ -471,14 +471,7 @@ def verify_pipeline_detection_methods_and_ai_handoff() -> None:
             assert_true(server.normalize_pipeline_detection_method("yolo") == "yolo", "YOLO method should persist")
             assert_true(server.normalize_pipeline_detection_method("yolo_ocr") == "yolo_ocr", "YOLO+OCR method should persist")
             assert_true(server.normalize_pipeline_detection_method("ai_detection") == "ai", "AI aliases should normalize to ai")
-            assert_true(server.normalize_pipeline_detection_method("locate_anything") == "locate", "Locate aliases should normalize to locate")
-
-            public_locate = server.pipeline_task_public(
-                {"id": "pipe_locate", "name": "locate", "stage": "draft", "status": "ready", "params": {"route": "locate"}, "accessory_ids": ["acc_ready"]},
-                config,
-            )
-            assert_true(public_locate["detection_method"] == "locate", "route-only legacy tasks should serialize as Locate Anything")
-            assert_true(public_locate["uses_training_flow"] is False, "Locate Anything should not use YOLO training flow")
+            assert_true(server.normalize_pipeline_detection_method("locate_anything") == "yolo_ocr", "removed Locate aliases should fall back to the YOLO+OCR default")
             public_yolo = server.pipeline_task_public(
                 {"id": "pipe_yolo", "name": "yolo", "stage": "draft", "status": "ready", "detection_method": "yolo", "accessory_ids": ["acc_ready"]},
                 config,
@@ -501,37 +494,19 @@ def verify_pipeline_detection_methods_and_ai_handoff() -> None:
             assert_true(saved_ai_tasks[0]["source"] == "pipeline", "pipeline-created AI task should be tagged as pipeline source")
             assert_true(saved_ai_tasks[0]["selected_accessory_ids"] == ["acc_ready"], "pipeline AI task should preserve selected accessory ids")
 
-            locate_task = {
-                "id": "pipe_locate",
-                "name": "Locate direct",
-                "stage": "draft",
-                "status": "ready",
-                "detection_method": "locate",
-                "accessory_ids": ["acc_ready"],
-                "params": {"route": "locate"},
-            }
-            server.advance_pipeline_task(locate_task)
-            assert_true(locate_task["stage"] == "library" and locate_task["status"] == "completed", "Locate pipeline task should complete into library")
-            assert_true(locate_task["params"].get("route") == "locate" and "train_mode" not in locate_task["params"], "Locate task must not enter YOLO training flow")
     finally:
         server.AI_DETECTION_TASKS_PATH = original_ai_path
         server.load_config = original_load_config
 
 
 def verify_frontend_pipeline_method_coverage() -> None:
-    app_js = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
-    index_html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    styles_css = (ROOT / "static" / "styles.css").read_text(encoding="utf-8")
-    assert_true("PIPELINE_METHOD_META" in app_js and "Locate Anything" in app_js, "frontend should render all pipeline detection methods")
-    assert_true("function pipelineTaskUsesTraining" in app_js, "frontend should separate training and non-training pipeline methods")
-    assert_true("function pipelineAccessoryReady" in app_js, "frontend should classify ready library accessories explicitly")
-    helper_body = app_js[app_js.index("function pipelineAccessoryReady"): app_js.index("function setAccessoryRoute")]
-    assert_true("reference_uploaded" not in helper_body, "reference-uploaded library accessories should not render as建档中")
-    assert_true('$("newAiTask")?.addEventListener' not in app_js, "AI 检测 workbench should not wire manual create action")
-    assert_true('value="ai">AI 检测' in index_html and 'value="locate">Locate Anything' in index_html, "pipeline task modal should expose AI and Locate methods")
-    assert_true("toggleAiFullscreen" in index_html and "toggleLocateFullscreen" in index_html, "AI and Locate workbenches should expose fullscreen controls")
-    assert_true("data-training-library-tab=\"datasets\"" in index_html and "data-training-library-tab=\"models\"" in index_html, "training library should be split into tabs")
-    assert_true(".training-library-pane.active" in styles_css, "training library tab panes should be mutually visible")
+    pipeline_page = (ROOT / "frontend" / "src" / "features" / "pipeline" / "TrainingPipelinePage.tsx").read_text(encoding="utf-8")
+    app_shell = (ROOT / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
+    global_css = (ROOT / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
+    assert_true("PIPELINE_METHODS" in pipeline_page and "AI 检测" in pipeline_page, "frontend should render supported pipeline methods")
+    assert_true("Locate Anything" not in pipeline_page and '"locate"' not in pipeline_page, "frontend should not render removed LocateAnything method")
+    assert_true("LabelSheetPage" not in app_shell and "LocateAnythingPage" not in app_shell, "removed pages should not be routed")
+    assert_true("training-library-pane" in global_css, "training library tab styles should remain present")
 
 
 def main() -> int:
