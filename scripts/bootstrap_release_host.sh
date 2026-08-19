@@ -38,16 +38,11 @@ sudo install -d -m 755 /opt/vantaline/releases /opt/vantaline/shared
 sudo install -d -o vantaline-deploy -g vantaline-deploy -m 700 /opt/vantaline/incoming
 for item in data models; do
   source="/opt/vantaline/app/$item"; [[ "$item" == "data" ]] && source="/opt/vantaline/app/local_inspection_service/data"
-  destination="/opt/vantaline/shared/$item"; if [[ ! -e "$destination" ]]; then sudo cp -a "$source" "$destination"; fi
+  destination="/opt/vantaline/shared/$item"
+  if [[ ! -e "$destination" ]]; then sudo mv "$source" "$destination"; fi
+  if [[ -e "$source" && ! -L "$source" ]]; then echo "refusing to merge two runtime $item directories" >&2; exit 1; fi
+  if [[ ! -L "$source" ]]; then sudo ln -s "$destination" "$source"; fi
 done
-if [[ ! -L /opt/vantaline/app/local_inspection_service/data ]]; then
-  sudo mv /opt/vantaline/app/local_inspection_service/data /opt/vantaline/app/local_inspection_service/data.pre-release-backup
-  sudo ln -s /opt/vantaline/shared/data /opt/vantaline/app/local_inspection_service/data
-fi
-if [[ ! -L /opt/vantaline/app/models ]]; then
-  sudo mv /opt/vantaline/app/models /opt/vantaline/app/models.pre-release-backup
-  sudo ln -s /opt/vantaline/shared/models /opt/vantaline/app/models
-fi
 sudo ln -sfn /opt/vantaline/venv /opt/vantaline/app/.venv
 sudo ln -sfn /opt/vantaline/app /opt/vantaline/current
 
