@@ -114,6 +114,13 @@ for migration in "$target"/local_inspection_service/storage/migrations/*.sql; do
   stored="$(sudo -u vantaline psql "$db_url" -tAc "select sha256 from vantaline.release_migration_checksums where version = '$version';")"
   [[ -z "$stored" || "$stored" == "$migration_sha" ]] || { echo "migration checksum changed: $version" >&2; exit 1; }
   if [[ -z "$stored" ]]; then
+    feature_applied="$(sudo -u vantaline psql "$db_url" -tAc "select count(*) from vantaline.feature_migrations where version = '$version';")"
+    if [[ "$feature_applied" == "1" ]]; then
+      sudo -u vantaline psql "$db_url" -v ON_ERROR_STOP=1 -c "BEGIN; SELECT pg_advisory_xact_lock(1448236621); INSERT INTO vantaline.release_migration_checksums(version,sha256,applied_at) VALUES ('$version','$migration_sha',extract(epoch from now())::bigint); COMMIT;"
+      stored="$migration_sha"
+    fi
+  fi
+  if [[ -z "$stored" ]]; then
     combined="$(mktemp)"
     python3 - "$migration" "$combined" "$version" "$migration_sha" <<'PY'
 import pathlib, sys
