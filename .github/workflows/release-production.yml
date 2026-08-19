@@ -64,8 +64,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$RELEASE_ID" >/dev/null 2>&1; then
-            git fetch --force origin "refs/tags/$RELEASE_ID:refs/tags/$RELEASE_ID"
-            test "$(git rev-list -n 1 "$RELEASE_ID")" = "$RELEASE_SHA"
+            test "$(gh release view "$RELEASE_ID" --json targetCommitish --jq .targetCommitish)" = "$RELEASE_SHA"
             rm -f release-output/*
             gh release download "$RELEASE_ID" --pattern "$RELEASE_ID.tar.gz" --pattern ARTIFACT_SHA256SUMS --dir release-output
             (cd release-output && sha256sum -c ARTIFACT_SHA256SUMS)
