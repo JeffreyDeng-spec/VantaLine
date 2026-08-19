@@ -97,6 +97,27 @@ ln -s /opt/vantaline/venv "$target/.venv"
 
 previous="$(readlink -f "$current")"
 systemctl stop vantaline; service_stopped=1
+
+# Background sets used to live at <repo>/backgrounds.  They are mutable runtime
+# data and must live under the shared data tree before an immutable release is
+# started.  The move is same-filesystem and happens while the service is stopped.
+shared_backgrounds="$base/shared/data/backgrounds"
+legacy_backgrounds="$previous/backgrounds"
+if [[ ! -e "$shared_backgrounds" ]]; then
+  if [[ -d "$legacy_backgrounds" && ! -L "$legacy_backgrounds" ]]; then
+    mv "$legacy_backgrounds" "$shared_backgrounds"
+  else
+    install -d -o vantaline -g vantaline -m 755 "$shared_backgrounds"
+  fi
+fi
+[[ -d "$shared_backgrounds" && ! -L "$shared_backgrounds" ]]
+chown vantaline:vantaline "$shared_backgrounds"
+sudo -u vantaline test -w "$shared_backgrounds"
+# Keep the immediately previous version rollback-safe: its old code still
+# resolves <repo>/backgrounds until the new release has passed health checks.
+if [[ ! -e "$legacy_backgrounds" ]]; then
+  ln -s "$shared_backgrounds" "$legacy_backgrounds"
+fi
 for _ in $(seq 1 25); do
   active="$(sudo -u vantaline psql "$db_url" -tAc "select count(*) from vantaline.plc_workstation_leases where state in ('connecting','active','draining') and expires_at >= extract(epoch from clock_timestamp())::bigint;")"
   [[ "$active" == "0" ]] && break; sleep 1
