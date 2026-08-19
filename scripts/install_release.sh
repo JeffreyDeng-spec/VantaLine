@@ -192,5 +192,10 @@ printf '%s' "$version_json" | python3 -c 'import json,sys; d=json.load(sys.stdin
 index="$(curl --max-time 5 -fsS http://127.0.0.1:8765/)"
 while read -r asset; do curl --max-time 5 -fsS "http://127.0.0.1:8765$asset" >/dev/null; done < <(printf '%s' "$index" | grep -oE '/static/assets/[^" ]+\.(js|css)' | sort -u)
 pid="$(systemctl show vantaline -p MainPID --value)"; ! journalctl _PID="$pid" --no-pager | grep -E 'Traceback|ERROR|CRITICAL'
+# The installer is part of the already checksummed release.  Promote it only
+# after the new application has passed every health check, so subsequent
+# releases cannot keep executing a stale bootstrap copy.
+install -o root -g root -m 0755 "$target/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
+cmp -s "$target/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
 rm -f "$archive"; service_stopped=0; target_created=0
 echo "release=$release previous=$previous"

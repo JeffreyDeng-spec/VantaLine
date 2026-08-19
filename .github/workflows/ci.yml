@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           grep -F 'BACKGROUND_DIR = DATA_DIR / "backgrounds"' local_inspection_service/server.py
           grep -F 'shared_backgrounds="$base/shared/data/backgrounds"' scripts/install_release.sh
+          grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release' scripts/install_release.sh
 
   frontend:
     runs-on: ubuntu-latest
