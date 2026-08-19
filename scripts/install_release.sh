@@ -88,19 +88,7 @@ doc=json.load(open(sys.argv[1],encoding="utf-8"))
 assert doc["release"]==sys.argv[2] and doc["git_commit"]==sys.argv[3]
 assert doc["backend_protocol"]==doc["frontend_protocol"]=="plc-web-serial-v4"
 PY
-sudo -u vantaline /opt/vantaline/venv/bin/python - "$target/requirements-production.lock" <<'PY'
-import importlib.metadata as metadata, pathlib, re, sys
-lock=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
-for line in lock:
-    line=line.strip()
-    if not line or line.startswith("#"): continue
-    match=re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s]+)", line)
-    if not match: raise SystemExit(f"unsupported lock entry: {line}")
-    name, expected=match.groups()
-    try: actual=metadata.version(name)
-    except metadata.PackageNotFoundError: raise SystemExit(f"missing production dependency: {name}")
-    if actual != expected: raise SystemExit(f"production dependency mismatch: {name} expected={expected} actual={actual}")
-PY
+sudo -u vantaline /opt/vantaline/venv/bin/python "$target/scripts/verify_production_dependencies.py" "$target/requirements-production.lock"
 ln -s /opt/vantaline/venv "$target/.venv"
 
 previous="$(readlink -f "$current")"

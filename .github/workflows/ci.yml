@@ -25,6 +25,8 @@ jobs:
           fi
       - name: Verify PLC release contract
         run: python scripts/verify_release_contract.py
+      - name: Validate release shell syntax
+        run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
 
   frontend:
     runs-on: ubuntu-latest
@@ -70,6 +72,7 @@ jobs:
           python-version: '3.10'
           cache: pip
       - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
+      - run: python scripts/verify_production_dependencies.py requirements-production.lock
       - name: Verify additive-only migrations
         run: python scripts/verify_migration_safety.py
       - run: python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py
