@@ -20,7 +20,13 @@ os.environ["INSPECTION_WORKER_WATCHER"] = "0"
 os.environ["LOCAL_INSPECTION_AUTO_RESUME_WORKER"] = "0"
 os.environ["VANTALINE_PLC_WEB_SERIAL_ALLOW_JSON_TEST"] = "1"
 
-from local_inspection_service.plc_fx_ascii import PlcConfigError  # noqa: E402
+from local_inspection_service.plc_fx_ascii import (  # noqa: E402
+    PlcConfigError,
+    build_d_register_write_frame,
+    build_y_force_frame,
+    encode_fx_word,
+    logical_device_address,
+)
 from local_inspection_service.plc_web_serial import (  # noqa: E402
     DEFAULT_WEB_SERIAL_CONFIG,
     build_web_serial_plan,
@@ -48,7 +54,7 @@ def test_address_and_plan_contract() -> None:
     assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "result_register": "D0"})["result_register"] == "1000"
     assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "result_register": "D110"})["result_register"] == "10DC"
     assert web_serial_resolved_addresses(DEFAULT_WEB_SERIAL_CONFIG)["result_register"] == "119C"
-    assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": "Y10"})["output_control_point"] == "0110"
+    assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": "Y10"})["output_control_point"] == "0805"
     assert [item["target"] for item in build_web_serial_plan({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": ""}, True)] == ["D206"]
     assert [item["target"] for item in build_web_serial_plan(DEFAULT_WEB_SERIAL_CONFIG, False)] == ["D206", "Y04"]
     for value in ("119C", "D256", "M1"):
@@ -65,6 +71,29 @@ def test_address_and_plan_contract() -> None:
             pass
         else:
             raise AssertionError(f"invalid Y address accepted: {value}")
+    assert encode_fx_word(0x1234) == "3412"
+    expected_d = {
+        ("D0", True): "023131303030303230313030033138",
+        ("D0", False): "023131303030303230303030033137",
+        ("D110", True): "023131304443303230313030033346",
+        ("D110", False): "023131304443303230303030033345",
+        ("D206", True): "023131313943303230313030033335",
+        ("D206", False): "023131313943303230303030033334",
+    }
+    for (device, value), frame_hex in expected_d.items():
+        assert build_d_register_write_frame(logical_device_address(device), int(value)).hex().upper() == frame_hex
+    expected_y = {
+        ("Y00", True): "023730303035034646",
+        ("Y00", False): "023830303035033030",
+        ("Y04", True): "023730343035033033",
+        ("Y04", False): "023830343035033034",
+        ("Y10", True): "023730383035033037",
+        ("Y10", False): "023830383035033038",
+        ("Y17", True): "023730463035033135",
+        ("Y17", False): "023830463035033136",
+    }
+    for (device, value), frame_hex in expected_y.items():
+        assert build_y_force_frame(device, value).hex().upper() == frame_hex
 
 
 def test_workstation_api_rbac_persistence_and_dispatch() -> None:
@@ -112,9 +141,14 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert_status(client.post("/api/plc/workstation/config", json=enabled), 403, "inspector cannot configure")
     assert_status(outsider.get("/api/plc/workstation"), 401, "unauthenticated read")
 
-    lease = client.post(
+    obsolete = client.post(
         "/api/plc/workstation/connect",
         json={"client_instance_id": "tab_12345678", "model_id": "", "bundle_version": "plc-web-serial-v3"},
+    )
+    assert_status(obsolete, 409, "obsolete v3 bundle rejected")
+    lease = client.post(
+        "/api/plc/workstation/connect",
+        json={"client_instance_id": "tab_12345678", "model_id": "", "bundle_version": "plc-web-serial-v4"},
     )
     assert_status(lease, 200, "claim lease")
     lease_payload = lease.json()
@@ -194,7 +228,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert draining.json()["state"] == "draining"
     takeover = client.post(
         "/api/plc/workstation/connect",
-        json={"client_instance_id": "tab_87654321", "model_id": "", "bundle_version": "plc-web-serial-v3"},
+        json={"client_instance_id": "tab_87654321", "model_id": "", "bundle_version": "plc-web-serial-v4"},
     )
     assert_status(takeover, 409, "takeover waits for in-flight deadline")
     operation = {
@@ -265,7 +299,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
 def main() -> int:
     test_address_and_plan_contract()
     test_workstation_api_rbac_persistence_and_dispatch()
-    print("PLC Web Serial v3 smoke tests passed")
+    print("PLC Web Serial v4 smoke tests passed")
     return 0
 
 
