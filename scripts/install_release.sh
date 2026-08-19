@@ -124,6 +124,7 @@ body="\n".join(lines[1:-1])
 version=sys.argv[3].replace("'", "''"); digest=sys.argv[4]
 pathlib.Path(sys.argv[2]).write_text("BEGIN;\nSELECT pg_advisory_xact_lock(1448236621);\n"+body+f"\nINSERT INTO vantaline.release_migration_checksums(version,sha256,applied_at) VALUES ('{version}','{digest}',extract(epoch from now())::bigint);\nCOMMIT;\n",encoding="utf-8")
 PY
+    chown vantaline:vantaline "$combined"; chmod 0400 "$combined"
     if ! sudo -u vantaline psql "$db_url" -v ON_ERROR_STOP=1 -f "$combined"; then rm -f "$combined"; exit 1; fi
     rm -f "$combined"
   fi
