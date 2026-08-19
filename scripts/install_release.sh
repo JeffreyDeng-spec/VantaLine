@@ -24,7 +24,17 @@ staged_archive="$base/.staged-$release.tar.gz"
 lock="$base/backups/.production-release.lock"
 db_url='postgresql:///vantaline?host=/var/run/postgresql&user=vantaline'
 previous=""; switched=0; lock_owned=0; service_stopped=0; target_created=0
+deployment_committed=0
 shared_backgrounds=""; legacy_backgrounds=""
+installer_path=/usr/local/sbin/vantaline-install-release
+installer_tmp="/usr/local/sbin/.vantaline-install-release.$$"
+promote_installer() {
+  install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"
+  cmp -s "$target/scripts/install_release.sh" "$installer_tmp"
+  [[ "$(stat -c '%U:%G %a' "$installer_tmp")" == "root:root 755" ]]
+  mv -Tf "$installer_tmp" "$installer_path"
+  cmp -s "$target/scripts/install_release.sh" "$installer_path"
+}
 rollback() {
   set +e
   if [[ "$switched" -eq 1 && -n "$previous" ]]; then
@@ -46,12 +56,12 @@ rollback() {
 }
 cleanup() {
   status=$?
-  if [[ $status -ne 0 ]]; then
+  if [[ $status -ne 0 && "$deployment_committed" -eq 0 ]]; then
     rollback
     if [[ "$target_created" -eq 1 && "$(readlink -f "$current" 2>/dev/null || true)" != "$target" ]]; then rm -rf --one-file-system "$target"; fi
   fi
   if [[ "$lock_owned" -eq 1 ]]; then rm -f "$lock"; fi
-  rm -f "$staged_archive"
+  rm -f "$staged_archive" "$installer_tmp"
   exit $status
 }
 trap cleanup EXIT INT TERM
@@ -68,6 +78,8 @@ doc=json.load(open(sys.argv[1],encoding="utf-8"))
 assert doc["release"]==sys.argv[2] and doc["git_commit"]==sys.argv[3]
 PY
   [[ "$(readlink -f "$current")" == "$target" ]] || { echo "release target exists but is not current" >&2; exit 1; }
+  (cd "$target" && sha256sum -c SHA256SUMS)
+  promote_installer
   rm -f "$archive"
   echo "release=$release already-installed=true"
   exit 0
@@ -192,5 +204,10 @@ printf '%s' "$version_json" | python3 -c 'import json,sys; d=json.load(sys.stdin
 index="$(curl --max-time 5 -fsS http://127.0.0.1:8765/)"
 while read -r asset; do curl --max-time 5 -fsS "http://127.0.0.1:8765$asset" >/dev/null; done < <(printf '%s' "$index" | grep -oE '/static/assets/[^" ]+\.(js|css)' | sort -u)
 pid="$(systemctl show vantaline -p MainPID --value)"; ! journalctl _PID="$pid" --no-pager | grep -E 'Traceback|ERROR|CRITICAL'
-rm -f "$archive"; service_stopped=0; target_created=0
+# A single state transition commits the healthy application.  Before this
+# assignment any signal performs a complete rollback; after it, cleanup must
+# preserve the verified target and installer promotion can be rerun safely.
+deployment_committed=1
+rm -f "$archive"
+promote_installer
 echo "release=$release previous=$previous"
