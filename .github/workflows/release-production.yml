@@ -19,6 +19,7 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -38,7 +39,7 @@ jobs:
           cache-dependency-path: local_inspection_service/frontend/package-lock.json
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
       - name: Build production frontend
         working-directory: local_inspection_service/frontend
         run: npm ci && npm run build:production-cutover
@@ -62,13 +63,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$RELEASE_ID" \
+          if gh release view "$RELEASE_ID" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$RELEASE_ID:refs/tags/$RELEASE_ID"
+            test "$(git rev-list -n 1 "$RELEASE_ID")" = "$RELEASE_SHA"
+            rm -f release-output/*
+            gh release download "$RELEASE_ID" --pattern "$RELEASE_ID.tar.gz" --pattern ARTIFACT_SHA256SUMS --dir release-output
+            (cd release-output && sha256sum -c ARTIFACT_SHA256SUMS)
+          else
+            gh release create "$RELEASE_ID" \
             release-output/"$RELEASE_ID".tar.gz \
             release-output/ARTIFACT_SHA256SUMS \
             --target "$RELEASE_SHA" \
             --title "$RELEASE_ID" \
             --notes "Automated production release for $RELEASE_SHA" \
             --draft
+          fi
       - name: Configure pinned SSH identity
         run: |
           install -m 700 -d ~/.ssh
@@ -80,9 +89,9 @@ jobs:
         run: |
           artifact="release-output/$RELEASE_ID.tar.gz"
           artifact_sha="$(sha256sum "$artifact" | awk '{print $1}')"
-          scp -i ~/.ssh/vantaline_deploy -o BatchMode=yes \
+          scp -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 \
             "$artifact" "$PROD_USER@$PROD_HOST:/opt/vantaline/incoming/$RELEASE_ID.tar.gz"
-          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes "$PROD_USER@$PROD_HOST" \
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
             sudo /usr/local/sbin/vantaline-install-release \
               --archive "/opt/vantaline/incoming/$RELEASE_ID.tar.gz" \
               --archive-sha256 "$artifact_sha" \
