@@ -312,7 +312,8 @@ export function UsersPage() {
                       <button
                         className="secondary compact-action"
                         type="button"
-                        disabled={busy}
+                        disabled={busy || isSelf}
+                        title={isSelf ? "当前登录账号不能生成临时密码；需要改密时请直接设置新密码。" : undefined}
                         onClick={() =>
                           passwordMutation.mutate({
                             userId: user.id,
@@ -333,6 +334,7 @@ export function UsersPage() {
                       </button>
                     </div>
                     {temporaryPassword ? <code className="user-temp-password">{temporaryPassword}</code> : null}
+                    {isSelf ? <p className="hint-line">当前登录账号不能生成临时密码；需要改密时请直接设置新密码。</p> : null}
                   </form>
                 </article>
               );

@@ -3,9 +3,11 @@ uvicorn[standard]
 python-multipart
 opencv-python
 numpy
-Pillow
 pydantic
+psycopg[binary]==3.3.4
 ultralytics
-paddleocr
+paddleocr==3.7.0
+paddlex[ocr-core]==3.7.1
 paddlepaddle==3.2.2
+PyMuPDF==1.28.0
 requests

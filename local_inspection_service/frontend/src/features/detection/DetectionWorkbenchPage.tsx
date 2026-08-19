@@ -1,28 +1,51 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, FileImage, Play, RefreshCw, Save, Settings, Video, X } from "lucide-react";
+import { Camera, ChevronRight, FileImage, Maximize2, Play, RefreshCw, Save, Settings, Video, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { analyzeImage, analyzeVideo, getAiTasks, getServiceStatus, queryKeys, updateRules, updateTaskRules } from "../../api/queries";
+import {
+  analyzeCamera,
+  analyzeImage,
+  analyzeVideo,
+  getAiTaskAutoOptimize,
+  getAiTasks,
+  getPipeline,
+  getPlcWorkstation,
+  getServiceStatus,
+  getTrainingResources,
+  queryKeys,
+  updateRules,
+  updateTaskRules,
+  uploadAiTaskEnvironmentBackground,
+  warmupYoloModel
+} from "../../api/queries";
 import type {
   AiDetectionLibraryTask,
   DetectionItem,
   DetectionResult,
   DetectionRuleItem,
   DetectionVideoFrame,
+  PlcWorkstationResponse,
   ServiceStatusResponse,
   SpecializedModelTask,
   StatusModel
 } from "../../api/types";
+import { PlcWebSerialClient } from "../plc/webSerialClient";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { modelVariantLabel } from "../../utils/format";
+import { taskEntriesFromTrainingResources, taskStatusTone, type TaskEntry } from "../../utils/taskNavigation";
 import { useAuth } from "../auth/auth-context";
 
 type WorkbenchMode = "inspect" | "ai";
 type SourceMode = "image" | "video" | "camera";
 
 const AI_TASK_MODEL_PREFIX = "ai_detection__task_";
+const DETECTION_UPLOAD_MAX_BYTES = 1_500_000;
+const DETECTION_UPLOAD_MAX_SIDE = 1920;
+const DETECTION_UPLOAD_JPEG_QUALITY = 0.88;
+const ENVIRONMENT_UPLOAD_OPTION = "__upload_background__";
 const SOURCE_TABS: Array<{ value: SourceMode; label: string; Icon: LucideIcon }> = [
   { value: "image", label: "图片", Icon: FileImage },
   { value: "video", label: "视频", Icon: Video },
@@ -31,6 +54,52 @@ const SOURCE_TABS: Array<{ value: SourceMode; label: string; Icon: LucideIcon }>
 
 function isAiModel(model: StatusModel | Record<string, unknown> | null | undefined) {
   return Boolean(model?.is_ai_detection || model?.variant === "ai_detection" || String(model?.id || "").startsWith(AI_TASK_MODEL_PREFIX));
+}
+
+function isWarmableYoloModel(model: StatusModel | null | undefined) {
+  if (!model || isAiModel(model)) return false;
+  return Boolean(model.id && (model.exists || model.variant === "yolo" || model.variant === "yolo_ocr" || model.uses_ocr));
+}
+
+function warmupFailedForModel(failed: unknown, modelId: string) {
+  if (!Array.isArray(failed) || !modelId) return false;
+  return failed.some((item) => (typeof item === "string" ? item === modelId : String((item as { model_id?: string }).model_id || "") === modelId));
+}
+
+function warmupReadyForModel(warmup: ServiceStatusResponse["yolo_warmup"] | undefined, modelId: string) {
+  if (!modelId) return false;
+  const loaded = warmup?.loaded_model_ids || [];
+  const completed = warmup?.completed_model_ids || [];
+  return loaded.includes(modelId) || completed.includes(modelId);
+}
+
+function environmentBackgroundSetId(
+  record:
+    | {
+        background_set_id?: string;
+        environment_background?: Record<string, unknown>;
+        background_set?: Record<string, unknown>;
+      }
+    | null
+    | undefined
+) {
+  const environment = record?.environment_background || {};
+  const backgroundSet = record?.background_set || {};
+  return String(record?.background_set_id || environment.background_set_id || backgroundSet.id || "");
+}
+
+function hasTaskEnvironmentBackground(
+  record:
+    | {
+        background_set_id?: string;
+        environment_background?: Record<string, unknown>;
+        background_set?: Record<string, unknown>;
+      }
+    | null
+    | undefined
+) {
+  const setId = environmentBackgroundSetId(record).trim();
+  return Boolean(setId && setId !== "green_conveyor");
 }
 
 function aiTaskModelId(task: AiDetectionLibraryTask | null | undefined) {
@@ -69,6 +138,22 @@ function modelOptionMeta(model: StatusModel) {
   return `${model.label || model.description || ""} 文件缺失`.trim() || "文件缺失";
 }
 
+function modelDetectionLabel(model: StatusModel | null | undefined, fallbackAi: boolean) {
+  if (model && !isAiModel(model)) {
+    const label = modelVariantLabel(model);
+    return label && label !== "模型" ? `${label} 检测` : "检测";
+  }
+  return fallbackAi ? "AI 检测" : "检测";
+}
+
+function modelResultLabel(model: StatusModel | null | undefined, fallbackAi: boolean) {
+  if (model && !isAiModel(model)) {
+    const label = modelVariantLabel(model);
+    return label && label !== "模型" ? label : "模型";
+  }
+  return fallbackAi ? "AI" : "模型";
+}
+
 function classLabel(item: { class_id: number; label?: string; name?: string }) {
   return item.label || item.name || `Class ${item.class_id}`;
 }
@@ -83,6 +168,133 @@ function defaultTaskLabel(status: ServiceStatusResponse | undefined) {
     .map((classId) => status?.classes?.find((item) => Number(item.class_id) === Number(classId))?.label)
     .filter(Boolean);
   return requiredNames.length ? requiredNames.join(" + ") : "通用配件合集";
+}
+
+function isTaskEntryAi(task: TaskEntry | null | undefined) {
+  return Boolean(task && (task.kind === "ai" || task.detectionMethod === "ai" || task.aiTaskId || task.aiModelId));
+}
+
+function taskHasAiBaseline(task: TaskEntry | null | undefined) {
+  return Boolean(task && (isTaskEntryAi(task) || task.aiBaselineTaskId || task.aiBaselineModelId || task.autoOptimizeTaskId));
+}
+
+function sameAccessoryCounts(a: Record<string, number> | undefined, b: Record<string, number> | undefined) {
+  const left = a || {};
+  const right = b || {};
+  const keys = Array.from(new Set([...Object.keys(left), ...Object.keys(right)]));
+  return keys.every((key) => Number(left[key] || 1) === Number(right[key] || 1));
+}
+
+function aiTaskMatchesEntry(task: AiDetectionLibraryTask, entry: TaskEntry | null | undefined) {
+  if (!entry?.accessoryIds.length) return false;
+  const taskIds = task.selected_accessory_ids || [];
+  if (taskIds.length !== entry.accessoryIds.length) return false;
+  const taskSet = new Set(taskIds);
+  if (!entry.accessoryIds.every((id) => taskSet.has(id))) return false;
+  return sameAccessoryCounts(task.required_accessory_counts, entry.accessoryCounts);
+}
+
+function taskInspectPath(task: TaskEntry) {
+  return `/tasks/${encodeURIComponent(task.id)}/inspect`;
+}
+
+function taskAccessoryText(task: TaskEntry | null | undefined) {
+  if (!task) return "-";
+  const names = task.accessoryNames.length ? task.accessoryNames : task.accessoryIds;
+  return names.length ? names.join("、") : "-";
+}
+
+function modelIdCandidatesForTask(task: TaskEntry | null | undefined) {
+  if (!task) return new Set<string>();
+  const autoOptimizeLink = task.autoOptimizeLink || {};
+  return new Set(
+    [
+      task.sourceId,
+      task.aiTaskId || "",
+      task.aiModelId || "",
+      task.aiBaselineTaskId || "",
+      task.aiBaselineModelId || "",
+      task.autoOptimizeTaskId || "",
+      String(autoOptimizeLink.active_model_id || ""),
+      String(autoOptimizeLink.completed_model_id || ""),
+      task.modelRunId || "",
+      task.trainingTaskId || "",
+      task.sampleTaskId || "",
+      task.datasetId || ""
+    ].filter(Boolean)
+  );
+}
+
+function statusModelMatchesTask(model: StatusModel, task: TaskEntry | null | undefined) {
+  if (!task) return false;
+  const record = model as StatusModel & Record<string, unknown>;
+  const candidates = modelIdCandidatesForTask(task);
+  const modelValues = [
+    model.id,
+    model.task_id,
+    record.run_id,
+    record.model_run_id,
+    record.training_task_id,
+    record.job_id,
+    record.source_task_id,
+    record.pipeline_task_id
+  ]
+    .filter(Boolean)
+    .map(String);
+  if (modelValues.some((value) => candidates.has(value))) return true;
+  if (taskHasAiBaseline(task)) return false;
+  const modelAccessoryIds = model.selected_accessory_ids || [];
+  return Boolean(task.accessoryIds.length && modelAccessoryIds.length && task.accessoryIds.every((id) => modelAccessoryIds.includes(id)));
+}
+
+function uniqueModels(models: StatusModel[]) {
+  const seen = new Set<string>();
+  return models.filter((model) => {
+    if (!model.id || seen.has(model.id)) return false;
+    seen.add(model.id);
+    return true;
+  });
+}
+
+function optimizedUploadName(name: string) {
+  const stem = name.replace(/\.[^.]+$/, "");
+  return `${stem || "detection_image"}.jpg`;
+}
+
+function imageElementFromFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("图片预处理失败"));
+    };
+    image.src = url;
+  });
+}
+
+async function optimizeImageUpload(file: File) {
+  if (!file.type.startsWith("image/") || file.size <= DETECTION_UPLOAD_MAX_BYTES) return file;
+  const image = await imageElementFromFile(file);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) return file;
+  const scale = Math.min(1, DETECTION_UPLOAD_MAX_SIDE / Math.max(width, height));
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return file;
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", DETECTION_UPLOAD_JPEG_QUALITY));
+  if (!blob || blob.size >= file.size) return file;
+  return new File([blob], optimizedUploadName(file.name), { type: "image/jpeg", lastModified: file.lastModified });
 }
 
 function uniqueRows<T>(items: T[], keyFor: (item: T) => string) {
@@ -166,9 +378,19 @@ function videoMissingRows(result: DetectionResult | null, requiredCounts?: Recor
   }));
 }
 
+function detectionRowTone(row: { found: string }) {
+  const value = String(row.found || "").trim().toLowerCase();
+  return value === "否" || value === "0" || value === "false" || value === "missing" ? "fail" : "pass";
+}
+
 function aiMetaText(result: DetectionResult | null) {
   const ai = result?.ai || {};
   if (ai.timed_out) return `AI 超时：${String(ai.error || "超过检测时间")}`;
+  if (ai.overloaded) {
+    const attempts = Number(ai.attempts || 0);
+    const retryText = attempts > 1 ? `，已自动重试 ${attempts} 次` : "";
+    return `AI 供应商繁忙${retryText}后仍失败，请稍后重试或切换备用模型/Key`;
+  }
   if (ai.error) return `AI 错误：${String(ai.error)}`;
   if (ai.frame_count !== undefined) {
     const pieces = [`${ai.frame_count} 帧`];
@@ -197,6 +419,7 @@ function resultDebugPayload(result: DetectionResult | null) {
     passed: result.passed,
     model: result.model,
     ai: result.ai || null,
+    plc_sync: result.plc_sync || null,
     rule: result.rule || null,
     detections: result.detections || [],
     annotated_url: result.annotated_url || result.preview_url || "",
@@ -209,6 +432,37 @@ function resultDebugPayload(result: DetectionResult | null) {
         }
       : null
   };
+}
+
+function plcSyncLabel(result: DetectionResult | null) {
+  const sync = result?.plc_sync;
+  if (!sync) return "PLC 同步状态未返回";
+  if (sync.status === "disabled") return "PLC 同步已关闭（未打开串口）";
+  if (sync.status === "acknowledged") return `PLC 已确认${sync.targets?.length ? `：${sync.targets.join(" + ")}` : ""}`;
+  if (sync.status === "failed") return `PLC 同步失败：${sync.message || sync.error_code || "未知错误"}`;
+  if (sync.status === "sent") return "PLC 已发送，等待确认";
+  if (sync.status === "attempting") return "PLC 正在尝试打开串口并写入";
+  if (sync.status === "queued") return "PLC 同步排队中";
+  return `PLC：${sync.status}`;
+}
+
+function plcSyncTone(result: DetectionResult | null) {
+  if (result?.plc_sync?.status === "acknowledged") return "ok";
+  if (result?.plc_sync?.status === "failed") return "fail";
+  return "neutral";
+}
+
+function detectionTimeoutMs(kind: SourceMode) {
+  return kind === "video" ? 300_000 : 120_000;
+}
+
+function detectionTimeoutText(kind: SourceMode, timeoutMs: number) {
+  const seconds = Math.round(timeoutMs / 1000);
+  return kind === "video" ? `视频分析超过 ${seconds} 秒没有返回，请重试。` : `检测超过 ${seconds} 秒没有返回，请重试。`;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 async function captureVideoFrame(video: HTMLVideoElement | null, prefix: string) {
@@ -232,12 +486,14 @@ function DetectionMetrics({
   result,
   mode,
   source,
-  requiredCounts
+  requiredCounts,
+  compact = false
 }: {
   result: DetectionResult | null;
   mode: WorkbenchMode;
   source: SourceMode;
   requiredCounts?: Record<string, number>;
+  compact?: boolean;
 }) {
   const rows = source === "video" ? videoMissingRows(result, requiredCounts) : detectionRows(result, requiredCounts);
   const detectionCount = result?.frames?.length
@@ -245,12 +501,22 @@ function DetectionMetrics({
     : result?.detections?.length ?? "-";
   const passRate = result?.frames?.length ? formatPercent(result.pass_rate) : mode === "ai" ? aiMetaText(result) : "-";
   return (
-    <section className="panel page-panel detection-metrics-panel">
+    <section className={`panel page-panel detection-metrics-panel ${compact ? "compact-detection-metrics" : ""}`}>
       <div className="metric-grid">
         <MetricCard label="结论" value={result ? (result.passed ? "通过" : "不通过") : "-"} tone={result ? (result.passed ? "ok" : "fail") : "neutral"} />
-        <MetricCard label="检测数量" value={detectionCount} detail={source === "video" ? "采样帧" : "检测项"} />
+        {compact ? null : <MetricCard label="检测数量" value={detectionCount} detail={source === "video" ? "采样帧" : "检测项"} />}
         <MetricCard label={mode === "ai" ? "AI 响应" : "通过率"} value={passRate} />
       </div>
+
+      {result?.plc_sync ? (
+        <div className="settings-subhead" aria-live="polite">
+          <div>
+            <h4>PLC 同步</h4>
+            <p>{plcSyncLabel(result)}</p>
+          </div>
+          <span className={`pill ${plcSyncTone(result)}`}>{result.plc_sync.status}</span>
+        </div>
+      ) : null}
 
       <div className="table-wrap">
         <table>
@@ -265,7 +531,7 @@ function DetectionMetrics({
           <tbody>
             {rows.length ? (
               rows.map((row) => (
-                <tr key={row.key}>
+                <tr className={compact ? `detection-result-row ${detectionRowTone(row)}` : undefined} key={row.key}>
                   <td>{row.label}</td>
                   <td>{row.found}</td>
                   <td>{row.required}</td>
@@ -294,38 +560,149 @@ function DetectionMetrics({
   );
 }
 
+function TaskDetectionEntryPage({
+  tasks,
+  loading,
+  error,
+  onRetry
+}: {
+  tasks: TaskEntry[];
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  const visibleTasks = tasks.filter((task) => !["失败", "已暂停"].includes(task.status));
+
+  if (loading) return <LoadingState label="正在加载可检测任务" />;
+  if (error) return <ErrorState error={error} action={<button onClick={onRetry}>重试</button>} />;
+
+  return (
+    <section className="view active detection-workbench">
+      <header className="page-head">
+        <div>
+          <h2>检测中心</h2>
+          <p className="page-desc">先选择一个任务，再进入该任务自己的检测页面。检测页面内只切换当前任务可用的模型。</p>
+        </div>
+      </header>
+
+      <section className="panel page-panel task-detection-entry-panel">
+        <div className="section-title">
+          <div>
+            <h3>选择检测任务</h3>
+            <p>每个任务都有独立的检测中心、样本集和模型集。</p>
+          </div>
+          <Link className="secondary compact-action" to="/training-library?tab=tasks">
+            打开任务库
+          </Link>
+        </div>
+
+        {visibleTasks.length ? (
+          <div className="task-detection-entry-grid">
+            {visibleTasks.map((task) => (
+              <Link className="task-detection-entry-card" to={taskInspectPath(task)} key={task.id}>
+                <span className={`pill ${taskStatusTone(task.status)}`}>{task.status}</span>
+                <strong>{task.label}</strong>
+                <small>{task.meta}</small>
+                <p>配件：{taskAccessoryText(task)}</p>
+                <em>
+                  进入检测
+                  <ChevronRight size={14} aria-hidden="true" />
+                </em>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-panel compact-empty">
+            还没有可检测任务。可以先在任务库或任务流水线里创建任务。
+          </div>
+        )}
+      </section>
+    </section>
+  );
+}
+
 export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const { notify } = useToast();
+  const { taskId: routeTaskId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const decodedRouteTaskId = routeTaskId ? decodeURIComponent(routeTaskId) : "";
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const environmentVideoRef = useRef<HTMLVideoElement | null>(null);
+  const fullscreenVideoRef = useRef<HTMLVideoElement | null>(null);
+  const fullscreenShellRef = useRef<HTMLDivElement | null>(null);
+  const requestedWarmupsRef = useRef<Set<string>>(new Set());
+  const detectionAudioRef = useRef<AudioContext | null>(null);
+  const plcClientRef = useRef(new PlcWebSerialClient());
+  const busyRef = useRef("");
   const [source, setSource] = useState<SourceMode>("image");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("__default__");
   const [selectedModelId, setSelectedModelId] = useState("");
+  const [pendingModelId, setPendingModelId] = useState("");
   const [selectedAiTaskId, setSelectedAiTaskId] = useState("");
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [environmentStream, setEnvironmentStream] = useState<MediaStream | null>(null);
+  const [environmentCaptureOpen, setEnvironmentCaptureOpen] = useState(false);
+  const [environmentInputMode, setEnvironmentInputMode] = useState<"camera" | "upload">("camera");
+  const [environmentUploadFile, setEnvironmentUploadFile] = useState<File | null>(null);
+  const [environmentCaptureStatus, setEnvironmentCaptureStatus] = useState("首次检测前需要拍摄一张空白生产环境。");
   const [cameraStatus, setCameraStatus] = useState("支持本机摄像头和已连接的 USB / 外接摄像头。");
+  const [plcConnected, setPlcConnected] = useState(false);
+  const [plcConnectionStatus, setPlcConnectionStatus] = useState(
+    PlcWebSerialClient.supported() ? "PLC 尚未连接。" : "当前浏览器不支持 Web Serial。"
+  );
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [error, setError] = useState("");
   const [debugOpen, setDebugOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const isAi = mode === "ai";
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const requestedTaskId = searchParams.get("task_id") || "";
   const canViewDiagnostics = auth.user.role === "admin";
+  const shouldLoadTaskEntries = Boolean(decodedRouteTaskId) || !requestedTaskId;
 
   const statusQuery = useQuery({
     queryKey: queryKeys.serviceStatus(auth.dataUserId),
     queryFn: () => getServiceStatus(auth),
     refetchInterval: 30_000
   });
+  const plcWorkstationQuery = useQuery<PlcWorkstationResponse>({
+    queryKey: queryKeys.plcWorkstation,
+    queryFn: getPlcWorkstation,
+    refetchOnWindowFocus: false
+  });
+  const trainingResourcesQuery = useQuery({
+    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryFn: () => getTrainingResources(auth),
+    enabled: shouldLoadTaskEntries,
+    refetchInterval: 60_000
+  });
+  const pipelineQuery = useQuery({
+    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryFn: () => getPipeline(auth),
+    enabled: shouldLoadTaskEntries,
+    refetchInterval: 60_000
+  });
+  const taskEntries = useMemo(
+    () => taskEntriesFromTrainingResources(trainingResourcesQuery.data, pipelineQuery.data),
+    [pipelineQuery.data, trainingResourcesQuery.data]
+  );
+  const routeTask = useMemo(
+    () => taskEntries.find((entry) => entry.id === decodedRouteTaskId) || null,
+    [decodedRouteTaskId, taskEntries]
+  );
+  const routeHasAiBaseline = taskHasAiBaseline(routeTask);
+  const isAi = isTaskEntryAi(routeTask) || mode === "ai" || searchParams.get("mode") === "ai";
+  const shouldLoadAiTasks = routeHasAiBaseline || isAi;
   const aiTasksQuery = useQuery({
     queryKey: queryKeys.aiTasks(auth.dataUserId),
     queryFn: () => getAiTasks(auth),
-    enabled: isAi
+    enabled: shouldLoadAiTasks
   });
   const globalRuleMutation = useMutation({
     mutationFn: updateRules,
@@ -345,6 +722,34 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       setRulesOpen(false);
     },
     onError: (nextError: Error) => notify({ title: "任务规则保存失败", description: nextError.message, tone: "error" })
+  });
+  const modelWarmupMutation = useMutation({
+    mutationFn: (modelId: string) => warmupYoloModel(modelId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.dataUserId) });
+    },
+    onError: (nextError: Error) => notify({ title: "模型预热失败", description: nextError.message, tone: "error" })
+  });
+  const environmentBackgroundMutation = useMutation({
+    mutationFn: ({ taskId, file }: { taskId: string; file: File }) => {
+      const form = new FormData();
+      form.append("file", file);
+      return uploadAiTaskEnvironmentBackground(taskId, form);
+    },
+    onSuccess: async (nextStatus) => {
+      queryClient.setQueryData(queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId), nextStatus);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+      setEnvironmentCaptureOpen(false);
+      setEnvironmentCaptureStatus("空场景背景已保存。");
+      notify({ title: "空场景背景已保存", description: "后续 sprite 合成训练图会使用这张生产环境背景。", tone: "success" });
+    },
+    onError: (nextError: Error) => {
+      const message = nextError.message || "保存空场景背景失败";
+      setEnvironmentCaptureStatus(message);
+      notify({ title: "保存空场景背景失败", description: message, tone: "error" });
+    }
   });
 
   const status = statusQuery.data;
@@ -374,33 +779,126 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     ];
   }, [status]);
   const currentTask = taskOptions.find((task) => task.id === selectedTaskId) || taskOptions[0];
-  const modelOptions = currentTask?.models || [];
   const aiTasks = aiTasksQuery.data?.tasks || status?.ai_detection_tasks || [];
-  const selectedAiTask = aiTasks.find((task) => task.id === selectedAiTaskId) || null;
-  const selectedModel = modelOptions.find((model) => model.id === selectedModelId) || null;
+  const routeAiTask = routeTask
+    ? aiTasks.find((task) =>
+        [task.id, task.model_id].filter(Boolean).some((candidate) =>
+          [routeTask.sourceId, routeTask.aiTaskId, routeTask.aiModelId, routeTask.aiBaselineTaskId, routeTask.aiBaselineModelId, routeTask.autoOptimizeTaskId]
+            .filter(Boolean)
+            .includes(String(candidate))
+        )
+      ) || aiTasks.find((task) => aiTaskMatchesEntry(task, routeTask)) || null
+    : null;
+  const selectedAiTask = routeAiTask || aiTasks.find((task) => task.id === selectedAiTaskId) || null;
+  const environmentBackgroundTaskId =
+    selectedAiTask?.id ||
+    routeTask?.autoOptimizeTaskId ||
+    routeTask?.aiBaselineTaskId ||
+    routeTask?.aiTaskId ||
+    "";
+  const environmentBackgroundQuery = useQuery({
+    queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId),
+    queryFn: () => getAiTaskAutoOptimize(auth, environmentBackgroundTaskId),
+    enabled: Boolean(environmentBackgroundTaskId)
+  });
+  const routeTaskEnvironmentBackground = routeTask
+    ? {
+        background_set_id: routeTask.backgroundSetId,
+        environment_background: routeTask.environmentBackground
+      }
+    : null;
+  const environmentBackgroundReady =
+    hasTaskEnvironmentBackground(environmentBackgroundQuery.data) ||
+    hasTaskEnvironmentBackground(selectedAiTask) ||
+    hasTaskEnvironmentBackground(routeTaskEnvironmentBackground);
+  const environmentBackgroundRequired = Boolean(environmentBackgroundTaskId);
   const selectedAiModelId = aiTaskModelId(selectedAiTask);
-  const activeModelId = isAi ? selectedAiModelId : selectedModelId;
-  const requiredCounts = isAi ? selectedAiTask?.required_accessory_counts : undefined;
+  const allStatusModels = useMemo(() => {
+    const specializedTaskModels = (status?.specialized_model_tasks || []).flatMap((task) => task.models || []);
+    return uniqueModels([...(status?.available_models || []), ...(status?.specialized_models || []), ...specializedTaskModels]);
+  }, [status]);
+  const routeTaskModelOptions = useMemo(() => {
+    if (!routeTask) return [];
+    const hasAiBaseline = taskHasAiBaseline(routeTask);
+    const related = allStatusModels.filter((model) => statusModelMatchesTask(model, routeTask) && (!hasAiBaseline || !isAiModel(model)));
+    if (!hasAiBaseline) return related;
+    const aiTaskId = routeAiTask?.id || routeTask.aiBaselineTaskId || routeTask.autoOptimizeTaskId || routeTask.aiTaskId || "";
+    const aiModelId = routeAiTask ? aiTaskModelId(routeAiTask) : routeTask.aiBaselineModelId || selectedAiModelId || (aiTaskId ? `${AI_TASK_MODEL_PREFIX}${aiTaskId}` : "");
+    const aiBaseline = aiModelId
+      ? [{
+          id: aiModelId,
+          label: "AI / VLM baseline",
+          description: "生产初始检测与样本采集",
+          exists: true,
+          variant: "ai_detection",
+          is_ai_detection: true,
+          task_id: aiTaskId || routeTask.sourceId,
+          task_label: routeTask.label,
+          required_accessory_counts: routeTask.accessoryCounts,
+          selected_accessory_ids: routeTask.accessoryIds,
+          accessory_names: routeTask.accessoryNames
+        } as StatusModel]
+      : [];
+    return uniqueModels([...related, ...aiBaseline]);
+  }, [allStatusModels, routeAiTask, routeTask, selectedAiModelId]);
+  const legacyAiModelOptions: StatusModel[] = !routeTask && isAi && selectedAiModelId
+    ? [{
+        id: selectedAiModelId,
+        label: "AI / VLM baseline",
+        description: "生产初始检测与样本采集",
+        exists: true,
+        variant: "ai_detection",
+        is_ai_detection: true,
+        task_id: selectedAiTask?.id,
+        task_label: selectedAiTask?.name,
+        required_accessory_counts: selectedAiTask?.required_accessory_counts,
+        selected_accessory_ids: selectedAiTask?.selected_accessory_ids,
+        accessory_names: selectedAiTask?.accessory_names
+      }]
+    : [];
+  const modelOptions = routeTask ? routeTaskModelOptions : isAi ? legacyAiModelOptions : currentTask?.models || [];
+  const selectedModel = modelOptions.find((model) => model.id === selectedModelId) || null;
+  const activeModelId = selectedModelId || (isAi ? selectedAiModelId : "");
+  const activeModelIsAi = selectedModel ? isAiModel(selectedModel) : isAi;
+  const activeDetectionLabel = modelDetectionLabel(selectedModel, activeModelIsAi);
+  const activeResultLabel = modelResultLabel(selectedModel, activeModelIsAi);
+  const warmupStatus = status?.yolo_warmup;
+  const loadedModelIds = warmupStatus?.loaded_model_ids || [];
+  const completedWarmupIds = warmupStatus?.completed_model_ids || [];
+  const pendingModel = pendingModelId ? modelOptions.find((model) => model.id === pendingModelId) || null : null;
+  const displayedModelId = pendingModelId || selectedModelId;
+  const warmupDisplayModel = pendingModel || selectedModel;
+  const warmupDisplayModelId = warmupDisplayModel?.id || "";
+  const selectedModelWarmable = isWarmableYoloModel(selectedModel);
+  const selectedModelWarmupFailed = selectedModelWarmable && warmupFailedForModel(warmupStatus?.failed_model_ids, selectedModelId);
+  const selectedModelReady = !selectedModelWarmable || warmupReadyForModel(warmupStatus, selectedModelId);
+  const selectedModelWarming = selectedModelWarmable && !selectedModelReady && !selectedModelWarmupFailed;
+  const displayedModelWarmable = isWarmableYoloModel(warmupDisplayModel);
+  const displayedModelWarmupFailed = displayedModelWarmable && warmupFailedForModel(warmupStatus?.failed_model_ids, warmupDisplayModelId);
+  const displayedModelReady = !displayedModelWarmable || warmupReadyForModel(warmupStatus, warmupDisplayModelId);
+  const displayedModelWarming = displayedModelWarmable && !displayedModelReady && !displayedModelWarmupFailed;
+  const requiredCounts = routeTask?.accessoryCounts || (isAi ? selectedAiTask?.required_accessory_counts : undefined);
   const resultImage = previewUrl(result);
-  const title = isAi ? "AI 检测" : "检测工作台";
-  const statusBadge = isAi
+  const title = routeTask?.label || (isAi ? "AI 检测" : "检测工作台");
+  const statusBadge = activeModelIsAi
     ? formatAiStatus(status?.ai_detection && typeof status.ai_detection === "object" ? status.ai_detection.status : "")
     : status?.model_exists
       ? "模型已加载"
       : "模型未就绪";
   const rulesBusy = globalRuleMutation.isPending || taskRuleMutation.isPending;
-  const isDefaultTask = !isAi && selectedTaskId === "__default__";
+  const isDefaultTask = !routeTask && !isAi && selectedTaskId === "__default__";
   const defaultRequiredClasses = new Set((status?.rule?.required_classes || []).map(Number));
   const defaultMinCounts = status?.rule?.min_counts || {};
-  const taskRequiredCounts = currentTask?.required_accessory_counts || selectedModel?.required_accessory_counts || {};
-  const taskAccessoryLabels = currentTask?.accessory_labels || selectedModel?.accessory_labels || {};
+  const taskRequiredCounts = routeTask?.accessoryCounts || currentTask?.required_accessory_counts || selectedModel?.required_accessory_counts || {};
+  const taskAccessoryLabels = selectedModel?.accessory_labels || {};
   const taskAccessoryIds = Object.keys(taskRequiredCounts).length
     ? Object.keys(taskRequiredCounts)
-    : (selectedModel?.selected_accessory_ids || []);
+    : (routeTask?.accessoryIds || selectedModel?.selected_accessory_ids || []);
   const taskRuleRows = taskAccessoryIds.map((accessoryId, index) => ({
     id: accessoryId,
     label:
       taskAccessoryLabels[accessoryId] ||
+      routeTask?.accessoryNames?.[index] ||
       currentTask?.accessory_names?.[index] ||
       selectedModel?.accessory_names?.[index] ||
       accessoryId,
@@ -411,9 +909,130 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       ? status?.rule?.confidence_threshold
       : currentTask?.confidence_threshold ?? selectedModel?.confidence_threshold ?? status?.rule?.confidence_threshold ?? 0.25
   ) || 0.25;
+  const warmupLabel = pendingModelId
+    ? displayedModelWarmupFailed
+      ? "后台预热失败"
+      : displayedModelReady
+        ? "已预热"
+        : "后台预热中"
+    : selectedModelWarmupFailed
+      ? "预热失败"
+      : selectedModelReady
+        ? "已预热"
+        : "预热中";
+  const warmupTone = (pendingModelId ? displayedModelWarmupFailed : selectedModelWarmupFailed)
+    ? "failed"
+    : (pendingModelId ? displayedModelReady : selectedModelReady)
+      ? "ready"
+      : "warming";
+  const environmentSourceValue = environmentInputMode === "upload" ? ENVIRONMENT_UPLOAD_OPTION : selectedDeviceId;
+  const environmentBackgroundCanSave = environmentInputMode === "upload" ? Boolean(environmentUploadFile) : Boolean(environmentStream);
+
+  function modelMatchesRequest(model: StatusModel, value: string) {
+    if (!value) return false;
+    const record = model as StatusModel & Record<string, unknown>;
+    return [
+      model.id,
+      model.task_id,
+      record.run_id,
+      record.model_run_id,
+      record.training_task_id,
+      record.job_id
+    ]
+      .filter(Boolean)
+      .some((candidate) => String(candidate) === value);
+  }
+
+  function requestedTaskSelection(value: string) {
+    if (!value) return null;
+    for (const task of taskOptions) {
+      const matchingModel = (task.models || []).find((model) => modelMatchesRequest(model, value));
+      if (task.id === value || matchingModel) return { task, model: matchingModel || null };
+    }
+    return null;
+  }
+
+  function modelIsReady(model: StatusModel | null | undefined) {
+    if (!model || !isWarmableYoloModel(model)) return true;
+    return warmupReadyForModel(warmupStatus, model.id);
+  }
+
+  function requestModelWarmup(modelId: string) {
+    if (!modelId || requestedWarmupsRef.current.has(modelId)) return;
+    requestedWarmupsRef.current.add(modelId);
+    modelWarmupMutation.mutate(modelId);
+  }
+
+  function handleModelSelection(nextModelId: string) {
+    const nextModel = modelOptions.find((model) => model.id === nextModelId) || null;
+    if (!nextModel) {
+      setPendingModelId("");
+      setSelectedModelId(nextModelId);
+      return;
+    }
+    if (isWarmableYoloModel(nextModel) && !modelIsReady(nextModel)) {
+      setPendingModelId(nextModel.id);
+      requestModelWarmup(nextModel.id);
+      statusQuery.refetch();
+      notify({
+        title: "模型后台预热中",
+        description: selectedModel ? `预热完成前继续使用 ${modelOptionLabel(selectedModel)} 检测。` : "预热完成后会自动切换。",
+        tone: "info"
+      });
+      return;
+    }
+    setPendingModelId("");
+    setSelectedModelId(nextModel.id);
+  }
 
   useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  useEffect(() => {
+    if (!plcConnected) return;
+    void disconnectPlc("检测模型已切换，PLC 已断开，请重新连接。");
+  }, [activeModelId]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible" && plcClientRef.current.state()) {
+        void disconnectPlc("页面已离开前台，PLC 已安全断开。");
+      }
+    };
+    const handleUnload = () => { void plcClientRef.current.disconnect(false); };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleUnload);
+      void plcClientRef.current.disconnect(true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (routeTask && !isAi) {
+      const fallback = modelOptions.find((model) => model.exists || isAiModel(model));
+      if (!selectedModelId || !modelOptions.some((model) => model.id === selectedModelId && (model.exists || isAiModel(model)))) {
+        setSelectedModelId(fallback?.id || "");
+      }
+      return;
+    }
+    if (routeTask) return;
     if (!taskOptions.length) return;
+    const requestedSelection = !isAi ? requestedTaskSelection(requestedTaskId) : null;
+    if (requestedSelection) {
+      if (selectedTaskId !== requestedSelection.task.id) {
+        setSelectedTaskId(requestedSelection.task.id);
+        setSelectedModelId(requestedSelection.model?.id || "");
+        return;
+      }
+      if (requestedSelection.model?.id && selectedModelId !== requestedSelection.model.id) {
+        setSelectedModelId(requestedSelection.model.id);
+        return;
+      }
+      return;
+    }
     if (!taskOptions.some((task) => task.id === selectedTaskId)) {
       setSelectedTaskId("__default__");
       return;
@@ -425,20 +1044,184 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         : options.find((model) => model.exists || isAiModel(model));
       setSelectedModelId(fallback?.id || "");
     }
-  }, [selectedModelId, selectedTaskId, status?.active_model_id, taskOptions]);
+  }, [isAi, modelOptions, requestedTaskId, routeTask, selectedModelId, selectedTaskId, status?.active_model_id, taskOptions]);
 
   useEffect(() => {
+    if (routeTask && isAi) {
+      if (selectedAiTask && selectedAiTaskId !== selectedAiTask.id) {
+        setSelectedAiTaskId(selectedAiTask.id);
+        return;
+      }
+      const fallback = modelOptions.find((model) => model.exists || isAiModel(model));
+      if (!selectedModelId || !modelOptions.some((model) => model.id === selectedModelId && (model.exists || isAiModel(model)))) {
+        setSelectedModelId(fallback?.id || selectedAiModelId || "");
+      }
+      return;
+    }
     if (!isAi || !aiTasks.length) return;
+    const requestedAiTask = requestedTaskId
+      ? aiTasks.find((task) => [task.id, task.model_id].filter(Boolean).some((candidate) => String(candidate) === requestedTaskId))
+      : null;
+    if (requestedAiTask && selectedAiTaskId !== requestedAiTask.id) {
+      setSelectedAiTaskId(requestedAiTask.id);
+      return;
+    }
     if (!aiTasks.some((task) => task.id === selectedAiTaskId)) {
       setSelectedAiTaskId(aiTasks[0]?.id || "");
+      return;
     }
-  }, [aiTasks, isAi, selectedAiTaskId]);
+    if (selectedAiModelId && selectedModelId !== selectedAiModelId) {
+      setSelectedModelId(selectedAiModelId);
+    }
+  }, [aiTasks, isAi, modelOptions, requestedTaskId, routeTask, selectedAiModelId, selectedAiTask, selectedAiTaskId, selectedModelId]);
 
   useEffect(() => {
     return () => {
       stream?.getTracks().forEach((track) => track.stop());
     };
   }, [stream]);
+
+  useEffect(() => {
+    return () => {
+      environmentStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [environmentStream]);
+
+  useEffect(() => {
+    if (!fullscreenOpen || !fullscreenVideoRef.current || !stream) return;
+    fullscreenVideoRef.current.srcObject = stream;
+    fullscreenVideoRef.current.play().catch(() => undefined);
+  }, [fullscreenOpen, stream]);
+
+  useEffect(() => {
+    if (!fullscreenOpen) return;
+    window.requestAnimationFrame(() => fullscreenShellRef.current?.focus());
+  }, [fullscreenOpen]);
+
+  useEffect(() => {
+    if (!selectedModelWarmable || selectedModelReady || selectedModelWarmupFailed || !selectedModelId) return;
+    requestModelWarmup(selectedModelId);
+  }, [selectedModelId, selectedModelReady, selectedModelWarmable, selectedModelWarmupFailed]);
+
+  useEffect(() => {
+    if (!selectedModelWarming && !displayedModelWarming) return;
+    statusQuery.refetch();
+    const timer = window.setInterval(() => {
+      statusQuery.refetch();
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [displayedModelWarming, selectedModelWarming, statusQuery.refetch]);
+
+  useEffect(() => {
+    if (!pendingModelId) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function pollPendingWarmup() {
+      try {
+        const nextStatus = await getServiceStatus(auth);
+        queryClient.setQueryData(queryKeys.serviceStatus(auth.dataUserId), nextStatus);
+        if (cancelled) return;
+        if (warmupFailedForModel(nextStatus.yolo_warmup?.failed_model_ids, pendingModelId)) {
+          setPendingModelId("");
+          notify({ title: "模型预热失败", description: "已继续保持当前检测模型。", tone: "error" });
+          return;
+        }
+        if (warmupReadyForModel(nextStatus.yolo_warmup, pendingModelId)) {
+          const nextModel = modelOptions.find((model) => model.id === pendingModelId) || null;
+          if (nextModel) {
+            setSelectedModelId(nextModel.id);
+            setPendingModelId("");
+            notify({ title: "模型已预热", description: `已切换到 ${modelOptionLabel(nextModel)}。`, tone: "success" });
+            return;
+          }
+        }
+      } catch {
+        // Keep the current AI model active and retry status polling.
+      }
+      if (!cancelled) timer = window.setTimeout(pollPendingWarmup, 1500);
+    }
+
+    pollPendingWarmup();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [auth, modelOptions, notify, pendingModelId, queryClient]);
+
+  useEffect(() => {
+    if (!pendingModelId) return;
+    const nextModel = modelOptions.find((model) => model.id === pendingModelId) || null;
+    if (!nextModel) {
+      setPendingModelId("");
+      return;
+    }
+    if (displayedModelWarmupFailed) {
+      setPendingModelId("");
+      notify({ title: "模型预热失败", description: "已继续保持当前检测模型。", tone: "error" });
+      return;
+    }
+    if (modelIsReady(nextModel)) {
+      setSelectedModelId(nextModel.id);
+      setPendingModelId("");
+      notify({ title: "模型已预热", description: `已切换到 ${modelOptionLabel(nextModel)}。`, tone: "success" });
+    }
+  }, [completedWarmupIds, displayedModelWarmupFailed, loadedModelIds, modelOptions, pendingModelId]);
+
+  useEffect(() => {
+    if (!fullscreenOpen) return;
+    function handleFullscreenKeydown(event: KeyboardEvent) {
+      const isEnter = event.key === "Enter" || event.code === "Enter" || event.keyCode === 13;
+      if (!isEnter || busy) return;
+      event.preventDefault();
+      event.stopPropagation();
+      runCamera(fullscreenVideoRef.current);
+    }
+    document.addEventListener("keydown", handleFullscreenKeydown, true);
+    return () => document.removeEventListener("keydown", handleFullscreenKeydown, true);
+  }, [busy, fullscreenOpen, stream, activeModelId, activeModelIsAi, selectedAiTaskId]);
+
+  function detectionAudioContext() {
+    if (typeof window === "undefined") return null;
+    if (!detectionAudioRef.current) {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return null;
+      detectionAudioRef.current = new AudioContextCtor();
+    }
+    const context = detectionAudioRef.current;
+    if (context.state === "suspended") {
+      context.resume().catch(() => undefined);
+    }
+    return context;
+  }
+
+  function playDetectionBeep(context: AudioContext, frequency: number, start: number, duration: number, type: OscillatorType, gainValue: number) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(gainValue, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+  }
+
+  function playDetectionSound(passed: boolean) {
+    const context = detectionAudioContext();
+    if (!context) return;
+    const now = context.currentTime + 0.025;
+    if (passed) {
+      playDetectionBeep(context, 659.25, now, 0.09, "sine", 0.08);
+      playDetectionBeep(context, 987.77, now + 0.085, 0.16, "sine", 0.07);
+      return;
+    }
+    playDetectionBeep(context, 392.0, now, 0.08, "square", 0.055);
+    playDetectionBeep(context, 261.63, now + 0.095, 0.08, "square", 0.055);
+    playDetectionBeep(context, 196.0, now + 0.19, 0.1, "square", 0.05);
+  }
 
   async function refreshCameras() {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -486,40 +1269,218 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     }
   }
 
-  async function runAnalysis(kind: SourceMode, file: File) {
-    if (!activeModelId) {
-      notify({ title: isAi ? "请选择 AI 检测任务" : "请选择可用模型", tone: "error" });
+  function stopEnvironmentCamera() {
+    environmentStream?.getTracks().forEach((track) => track.stop());
+    setEnvironmentStream(null);
+    if (environmentVideoRef.current) environmentVideoRef.current.srcObject = null;
+  }
+
+  async function startEnvironmentCamera(deviceId = selectedDeviceId) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setEnvironmentCaptureStatus("当前浏览器不支持摄像头预览。");
       return;
     }
-    setBusy(kind);
-    setError("");
+    setEnvironmentInputMode("camera");
+    setEnvironmentUploadFile(null);
+    setEnvironmentCaptureStatus("正在打开摄像头。");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("model_id", activeModelId);
-      const next = kind === "video" ? await analyzeVideo(form) : await analyzeImage(form);
-      setResult(next);
-      setSource(kind);
-      notify({ title: kind === "video" ? "视频分析完成" : isAi ? "AI 图片检测完成" : "图片检测完成", tone: "success" });
+      environmentStream?.getTracks().forEach((track) => track.stop());
+      const nextStream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+        audio: false
+      });
+      setEnvironmentStream(nextStream);
+      if (environmentVideoRef.current) {
+        environmentVideoRef.current.srcObject = nextStream;
+        await environmentVideoRef.current.play();
+      }
+      const track = nextStream.getVideoTracks()[0];
+      const settings = track?.getSettings?.() || {};
+      if (settings.deviceId) setSelectedDeviceId(settings.deviceId);
+      await refreshCameras();
+      setEnvironmentCaptureStatus(`摄像头已连接：${track?.label || "当前摄像头"}。请确认流水线为空，再拍摄背景。`);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
+      setEnvironmentCaptureStatus(`摄像头不可用：${message}`);
+      notify({ title: "摄像头不可用", description: message, tone: "error" });
+    }
+  }
+
+  async function openEnvironmentCapture() {
+    setSource("camera");
+    setFullscreenOpen(false);
+    setEnvironmentCaptureOpen(true);
+    setEnvironmentInputMode("camera");
+    setEnvironmentUploadFile(null);
+    setEnvironmentCaptureStatus("首次检测前需要拍摄空白生产环境。");
+    await refreshCameras();
+    await startEnvironmentCamera();
+  }
+
+  async function ensureEnvironmentBackground() {
+    if (!environmentBackgroundRequired || environmentBackgroundReady) return true;
+    if (environmentBackgroundQuery.isLoading) {
+      notify({ title: "正在检查空场景背景", tone: "info" });
+      return false;
+    }
+    await openEnvironmentCapture();
+    return false;
+  }
+
+  function closeEnvironmentCapture() {
+    setEnvironmentCaptureOpen(false);
+    setEnvironmentInputMode("camera");
+    setEnvironmentUploadFile(null);
+    stopEnvironmentCamera();
+  }
+
+  function handleEnvironmentSourceChange(value: string) {
+    if (value === ENVIRONMENT_UPLOAD_OPTION) {
+      setEnvironmentInputMode("upload");
+      stopEnvironmentCamera();
+      setEnvironmentCaptureStatus("请选择一张空白生产环境照片。");
+      return;
+    }
+    setEnvironmentInputMode("camera");
+    setEnvironmentUploadFile(null);
+    setSelectedDeviceId(value);
+    void startEnvironmentCamera(value);
+  }
+
+  function handleEnvironmentUploadChange(file: File | null | undefined) {
+    if (!file) {
+      setEnvironmentUploadFile(null);
+      setEnvironmentCaptureStatus("请选择一张空白生产环境照片。");
+      return;
+    }
+    setEnvironmentUploadFile(file);
+    setEnvironmentCaptureStatus(`已选择：${file.name}`);
+  }
+
+  async function saveEnvironmentBackground() {
+    if (!environmentBackgroundTaskId) {
+      notify({ title: "当前任务没有可绑定的 AI 任务", tone: "error" });
+      return;
+    }
+    try {
+      const file =
+        environmentInputMode === "upload"
+          ? environmentUploadFile
+          : await captureVideoFrame(environmentVideoRef.current, "environment_background");
+      if (!file) {
+        setEnvironmentCaptureStatus("请先选择一张空白生产环境照片。");
+        return;
+      }
+      await environmentBackgroundMutation.mutateAsync({ taskId: environmentBackgroundTaskId, file });
+      stopEnvironmentCamera();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : String(nextError);
+      setEnvironmentCaptureStatus(message);
+      notify({ title: "拍摄空场景失败", description: message, tone: "error" });
+    }
+  }
+
+  async function runAnalysis(kind: SourceMode, file: File) {
+    if (!(await ensureEnvironmentBackground())) return;
+    if (!activeModelId) {
+      notify({ title: "当前任务暂无可用模型", tone: "error" });
+      return;
+    }
+    detectionAudioContext();
+    setBusy(kind);
+    setError("");
+    const controller = new AbortController();
+    const timeoutMs = detectionTimeoutMs(kind);
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const form = new FormData();
+      const uploadFile = kind === "video" || activeModelIsAi ? file : await optimizeImageUpload(file);
+      form.append("file", uploadFile);
+      form.append("model_id", activeModelId);
+      const plcState = kind === "camera" ? plcClientRef.current.state() : null;
+      if (plcState) {
+        form.append("plc_session_id", plcState.sessionId);
+        form.append("camera_request_id", `camera_${crypto.randomUUID()}`);
+      }
+      let next = kind === "video"
+        ? await analyzeVideo(form, { signal: controller.signal })
+        : plcState
+          ? await analyzeCamera(form, { signal: controller.signal })
+          : await analyzeImage(form, { signal: controller.signal });
+      if (plcState && next.plc_sync?.status === "planned") {
+        next = {
+          ...next,
+          plc_sync: await plcClientRef.current.execute(next.plc_sync, (message) => {
+            setPlcConnected(false);
+            setPlcConnectionStatus(message);
+          })
+        };
+        await plcWorkstationQuery.refetch();
+      }
+      setResult(next);
+      setSource(kind);
+      playDetectionSound(Boolean(next.passed));
+      notify({ title: kind === "video" ? "视频分析完成" : `${activeDetectionLabel}完成`, tone: "success" });
+    } catch (nextError) {
+      const message = isAbortError(nextError) ? detectionTimeoutText(kind, timeoutMs) : nextError instanceof Error ? nextError.message : String(nextError);
       setError(message);
+      playDetectionSound(false);
       notify({ title: "检测失败", description: message, tone: "error" });
     } finally {
+      window.clearTimeout(timeout);
       setBusy("");
     }
   }
 
-  async function runCamera() {
+  async function runCamera(videoElement: HTMLVideoElement | null = videoRef.current) {
     try {
+      if (!(await ensureEnvironmentBackground())) return;
       if (!stream) await startCamera();
-      const file = await captureVideoFrame(videoRef.current, isAi ? "ai_camera_capture" : "camera_capture");
+      const file = await captureVideoFrame(videoElement, activeModelIsAi ? "ai_camera_capture" : "camera_capture");
       await runAnalysis("camera", file);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
       setError(message);
       notify({ title: "摄像头检测失败", description: message, tone: "error" });
     }
+  }
+
+  async function connectPlc() {
+    if (!activeModelId) {
+      notify({ title: "请先选择检测模型", tone: "error" });
+      return;
+    }
+    const workstation = plcWorkstationQuery.data;
+    if (!workstation?.paired || !workstation.station) return notify({ title: "请让管理员先在 PLC 设置中绑定本机工作站", tone: "error" });
+    if (!workstation.config?.enabled) return notify({ title: "管理员尚未允许这台工作站启用 PLC 联动", tone: "error" });
+    try {
+      await plcClientRef.current.connect(workstation.station.id, activeModelId, (message) => {
+        setPlcConnected(false);
+        setPlcConnectionStatus(message);
+      });
+      setPlcConnected(true);
+      setPlcConnectionStatus(`已连接 ${workstation.station.name}；配置 generation ${workstation.config_generation}。`);
+      await plcWorkstationQuery.refetch();
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : String(nextError);
+      setPlcConnected(false);
+      setPlcConnectionStatus(`PLC 连接失败：${message}`);
+      notify({ title: "PLC 连接失败", description: message, tone: "error" });
+    }
+  }
+
+  async function disconnectPlc(message = "PLC 已断开。") {
+    await plcClientRef.current.disconnect(true);
+    setPlcConnected(false);
+    setPlcConnectionStatus(message);
+    await plcWorkstationQuery.refetch();
+  }
+
+  async function openFullscreenCamera() {
+    setSource("camera");
+    setFullscreenOpen(true);
+    await refreshCameras();
+    await startCamera();
   }
 
   function handleRulesSubmit(event: FormEvent<HTMLFormElement>) {
@@ -553,28 +1514,63 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       notify({ title: "至少保留一个必检配件", tone: "error" });
       return;
     }
+    const taskRuleId = routeTask ? selectedModel?.task_id || routeTask.sourceId : selectedTaskId;
     taskRuleMutation.mutate({
-      taskId: selectedTaskId,
+      taskId: taskRuleId,
       payload: { confidence_threshold, required_accessory_counts }
     });
   }
 
-  if (statusQuery.isLoading || (isAi && aiTasksQuery.isLoading)) return <LoadingState label="正在加载检测工作台" />;
+  if (!decodedRouteTaskId && !requestedTaskId) {
+    return (
+      <TaskDetectionEntryPage
+        tasks={taskEntries}
+        loading={trainingResourcesQuery.isLoading || pipelineQuery.isLoading}
+        error={trainingResourcesQuery.error || pipelineQuery.error}
+        onRetry={() => {
+          trainingResourcesQuery.refetch();
+          pipelineQuery.refetch();
+        }}
+      />
+    );
+  }
+
+  if (decodedRouteTaskId && (trainingResourcesQuery.isLoading || pipelineQuery.isLoading)) {
+    return <LoadingState label="正在加载任务检测中心" />;
+  }
+  if (decodedRouteTaskId && (trainingResourcesQuery.isError || pipelineQuery.isError)) {
+    return (
+      <ErrorState
+        error={trainingResourcesQuery.error || pipelineQuery.error}
+        action={<button onClick={() => {
+          trainingResourcesQuery.refetch();
+          pipelineQuery.refetch();
+        }}>重试</button>}
+      />
+    );
+  }
+  if (decodedRouteTaskId && !routeTask) return <Navigate to="/inspect" replace />;
+
+  if (statusQuery.isLoading || (shouldLoadAiTasks && aiTasksQuery.isLoading)) return <LoadingState label="正在加载检测工作台" />;
   if (statusQuery.isError) return <ErrorState error={statusQuery.error} action={<button onClick={() => statusQuery.refetch()}>重试</button>} />;
-  if (isAi && aiTasksQuery.isError) return <ErrorState error={aiTasksQuery.error} action={<button onClick={() => aiTasksQuery.refetch()}>重试</button>} />;
+  if (shouldLoadAiTasks && aiTasksQuery.isError) return <ErrorState error={aiTasksQuery.error} action={<button onClick={() => aiTasksQuery.refetch()}>重试</button>} />;
 
   return (
     <section className="view active detection-workbench">
       <header className="page-head">
         <div>
-          <h2>{title}</h2>
+          <h2>{routeTask?.label || "检测中心"}</h2>
           <p className="page-desc">
-            {isAi ? "基于配件画像调用 AI 检测任务，输出结构化存在性判断。" : "上传图片、视频或使用摄像头，按当前任务规则输出通过 / 不通过。"}
+            当前页面已绑定任务，只能切换这个任务下的可用模型；上传图片、视频或使用摄像头输出通过 / 不通过。
           </p>
         </div>
         <div className="page-head-actions detection-head-actions">
           <strong className={`pill ${statusBadge.includes("就绪") || statusBadge.includes("加载") ? "ok" : "neutral"}`}>{statusBadge}</strong>
-          {!isAi ? (
+          <button className="secondary compact-action" type="button" disabled={Boolean(busy)} onClick={openFullscreenCamera}>
+            <Maximize2 size={16} aria-hidden="true" />
+            全屏检测
+          </button>
+          {!activeModelIsAi ? (
             <button className="secondary compact-action" type="button" onClick={() => setRulesOpen(true)}>
               <Settings size={16} aria-hidden="true" />
               设置规则
@@ -586,59 +1582,38 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </div>
       </header>
 
-      {isAi ? (
-        <section className="panel page-panel detection-toolbar">
-          <label className="toolbar-field">
-            任务
-            <select value={selectedAiTaskId} onChange={(event) => setSelectedAiTaskId(event.currentTarget.value)}>
-              {aiTasks.length ? (
-                aiTasks.map((task) => (
-                  <option value={task.id} key={task.id}>
-                    {task.name || task.accessory_names?.join(" + ") || task.id}
-                  </option>
-                ))
-              ) : (
-                <option value="">暂无 AI 检测任务</option>
-              )}
-            </select>
-          </label>
-          <div className="selected-task-card">
-            <strong>{selectedAiTask?.name || "未选择任务"}</strong>
-            <span>{selectedAiTask ? `模型 ID：${selectedAiModelId}` : "请先在训练流水线创建 AI 检测任务。"}</span>
-            <span>配件：{selectedAiTask?.accessory_names?.length ? selectedAiTask.accessory_names.join("、") : selectedAiTask?.selected_accessory_ids?.join(", ") || "-"}</span>
-          </div>
-        </section>
-      ) : (
-        <section className="panel page-panel detection-toolbar">
-          <label className="toolbar-field">
-            检测任务
-            <select value={selectedTaskId} onChange={(event) => {
-              setSelectedTaskId(event.currentTarget.value);
-              setSelectedModelId("");
-            }}>
-              {taskOptions.map((task) => (
-                <option value={task.id} key={task.id}>
-                  {task.label}
+      <section className="panel page-panel detection-toolbar task-bound-toolbar">
+        <div className="selected-task-card compact-selected-task-card">
+          <strong>{routeTask?.label || selectedAiTask?.name || currentTask?.label || "当前任务"}</strong>
+          <span>{routeTask ? routeTask.meta : isAi ? "AI 检测任务" : currentTask?.meta}</span>
+          <span>配件：{routeTask ? taskAccessoryText(routeTask) : selectedAiTask?.accessory_names?.join("、") || currentTask?.accessory_names?.join("、") || "-"}</span>
+        </div>
+        <label className="toolbar-field task-bound-model-field">
+          <span className="toolbar-field-label">当前模型</span>
+          <select value={displayedModelId} onChange={(event) => handleModelSelection(event.currentTarget.value)}>
+            {modelOptions.length ? (
+              modelOptions.map((model) => (
+                <option value={model.id} key={model.id} disabled={!model.exists && !isAiModel(model)}>
+                  {modelOptionLabel(model)} · {modelOptionMeta(model)}
                 </option>
-              ))}
-            </select>
-          </label>
-          <label className="toolbar-field">
-            使用模型
-            <select value={selectedModelId} onChange={(event) => setSelectedModelId(event.currentTarget.value)}>
-              {modelOptions.length ? (
-                modelOptions.map((model) => (
-                  <option value={model.id} key={model.id} disabled={!model.exists && !isAiModel(model)}>
-                    {modelOptionLabel(model)} · {modelOptionMeta(model)}
-                  </option>
-                ))
-              ) : (
-                <option value="">暂无可用模型</option>
-              )}
-            </select>
-          </label>
-        </section>
-      )}
+              ))
+            ) : (
+              <option value="">暂无可用模型</option>
+            )}
+          </select>
+          {displayedModelWarmable ? (
+            <span className={`model-warmup-status ${warmupTone}`} aria-live="polite">
+              <span aria-hidden="true" />
+              {warmupLabel}
+            </span>
+          ) : null}
+          {pendingModel ? (
+            <span className="record-meta">
+              {modelOptionLabel(pendingModel)} 后台预热中，当前生效：{selectedModel ? modelOptionLabel(selectedModel) : "AI 检测"}
+            </span>
+          ) : null}
+        </label>
+      </section>
 
       <div className="inspect-grid">
         <section className="panel page-panel input-panel">
@@ -666,12 +1641,12 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <label className="dropzone">
                 <input type="file" accept="image/*" onChange={(event) => setImageFile(event.currentTarget.files?.[0] || null)} />
                 <span className="dropzone-file-action">选择图片</span>
-                <strong>{isAi ? "上传 AI 检测图片" : "上传检测图片"}</strong>
+                <strong>上传 {activeDetectionLabel}图片</strong>
                 <span className="dropzone-file-name">{imageFile?.name || "支持 PNG / JPG / JPEG"}</span>
               </label>
               <button className="primary icon-label" type="button" disabled={!imageFile || Boolean(busy)} onClick={() => imageFile && runAnalysis("image", imageFile)}>
                 <Play size={16} aria-hidden="true" />
-                {isAi ? "开始 AI 检测" : "开始检测"}
+                开始 {activeDetectionLabel}
               </button>
             </div>
           ) : null}
@@ -681,12 +1656,12 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <label className="dropzone">
                 <input type="file" accept="video/*" onChange={(event) => setVideoFile(event.currentTarget.files?.[0] || null)} />
                 <span className="dropzone-file-action">选择视频</span>
-                <strong>{isAi ? "上传 AI 检测视频" : "上传检测视频"}</strong>
+                <strong>上传 {activeDetectionLabel}视频</strong>
                 <span className="dropzone-file-name">{videoFile?.name || "抽帧检测并应用同一套通过规则"}</span>
               </label>
               <button className="primary icon-label" type="button" disabled={!videoFile || Boolean(busy)} onClick={() => videoFile && runAnalysis("video", videoFile)}>
                 <Play size={16} aria-hidden="true" />
-                {isAi ? "AI 分析视频" : "分析视频"}
+                分析视频
               </button>
             </div>
           ) : null}
@@ -722,19 +1697,37 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                   <RefreshCw size={15} aria-hidden="true" />
                   检测摄像头
                 </button>
-                <button className="primary compact-action" type="button" disabled={Boolean(busy)} onClick={runCamera}>
+                <button className="primary compact-action" type="button" disabled={Boolean(busy)} onClick={() => runCamera()}>
                   <Camera size={15} aria-hidden="true" />
-                  {isAi ? "拍照 AI 检测" : "拍照检测"}
+                  拍照 {activeDetectionLabel}
                 </button>
+                {plcConnected ? (
+                  <button className="secondary compact-action" type="button" onClick={() => void disconnectPlc()}>
+                    断开 PLC
+                  </button>
+                ) : (
+                  <button
+                    className="secondary compact-action"
+                    type="button"
+                    disabled={Boolean(busy) || !PlcWebSerialClient.supported() || !plcWorkstationQuery.data?.paired}
+                    onClick={() => void connectPlc()}
+                  >
+                    连接本机 PLC
+                  </button>
+                )}
               </div>
               <p className={`hint-line ${error ? "danger-text" : ""}`}>{error || cameraStatus}</p>
+              <p className={`hint-line ${plcConnected ? "success-text" : ""}`}>
+                {plcWorkstationQuery.data?.station ? `工作站：${plcWorkstationQuery.data.station.name}。` : "本机尚未绑定工作站。"} {plcConnectionStatus}
+              </p>
+              <p className="hint-line">仅本页摄像头拍照检测会写 PLC；图片上传和视频分析永远不会写串口。页面隐藏、刷新、拔线或租约失效会立即停止新写入。</p>
             </div>
           ) : null}
         </section>
 
         <section className="panel page-panel result-panel">
           <div className="section-title title-with-action">
-            <h3>{isAi ? "AI 结果预览" : "结果预览"}</h3>
+            <h3>{activeResultLabel} 结果预览</h3>
             {canViewDiagnostics ? (
               <button className="secondary compact-action" type="button" onClick={() => setDebugOpen(true)}>
                 开发诊断
@@ -747,18 +1740,82 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <span>{busy ? "处理中" : "0%"}</span>
             </div>
             <progress className="native-progress" value={busy ? 72 : 0} max={100} />
-            <p>{busy ? "文件已提交，等待服务返回检测结果。" : "上传图片或视频后开始检测。"}</p>
+            <p>{busy ? "文件已提交，等待服务返回检测结果；超时会提示重试。" : "上传图片或视频后开始检测。"}</p>
           </div>
           <div className="preview-frame">
-            {resultImage ? <img src={resultImage} alt={isAi ? "AI 检测结果" : "带标注的检测结果"} /> : <div className="empty-state">检测标注图会显示在这里</div>}
+            {resultImage ? <img src={resultImage} alt={`${activeDetectionLabel}结果`} /> : <div className="empty-state">检测标注图会显示在这里</div>}
           </div>
           {error && source !== "camera" ? <p className="hint-line danger-text">{error}</p> : null}
         </section>
       </div>
 
-      <DetectionMetrics result={result} mode={mode} source={source} requiredCounts={requiredCounts} />
+      <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source={source} requiredCounts={requiredCounts} />
 
-      {rulesOpen && !isAi ? (
+      {environmentCaptureOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal-panel wide task-rule-modal" role="dialog" aria-modal="true" aria-label="拍摄空场景背景">
+            <header className="modal-head">
+              <div>
+                <h3>拍摄空场景背景</h3>
+                <span>{routeTask?.label || selectedAiTask?.name || "当前检测任务"}</span>
+              </div>
+              <button className="icon-only" type="button" aria-label="关闭" onClick={closeEnvironmentCapture}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="modal-body settings-form">
+              <p className="hint-line">请保持流水线为空，不要放配件。保存后，后续训练集会把 sprite 叠加到这张真实生产环境背景上。</p>
+              <label className="toolbar-field">
+                背景来源
+                <select value={environmentSourceValue} onChange={(event) => handleEnvironmentSourceChange(event.currentTarget.value)}>
+                  <option value="">自动选择摄像头</option>
+                  <option value={ENVIRONMENT_UPLOAD_OPTION}>上传照片</option>
+                  {devices.length ? (
+                    devices.map((device, index) => (
+                      <option value={device.deviceId} key={device.deviceId || index}>
+                        {device.label || `摄像头 ${index + 1}`}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">未检测到摄像头</option>
+                  )}
+                </select>
+              </label>
+              {environmentInputMode === "upload" ? (
+                <label className="dropzone compact-dropzone">
+                  <input type="file" accept="image/*" onChange={(event) => handleEnvironmentUploadChange(event.currentTarget.files?.[0])} />
+                  <span className="dropzone-file-action">选择照片</span>
+                  <strong>上传空白生产环境照片</strong>
+                  <span className="dropzone-file-name">{environmentUploadFile?.name || "支持 PNG / JPG / JPEG"}</span>
+                </label>
+              ) : (
+                <div className="camera-preview">
+                  <video ref={environmentVideoRef} autoPlay playsInline muted />
+                  {!environmentStream ? <div className="camera-empty">正在打开摄像头</div> : null}
+                </div>
+              )}
+              <p className={`hint-line ${environmentCaptureStatus.includes("失败") || environmentCaptureStatus.includes("不可用") ? "danger-text" : ""}`}>{environmentCaptureStatus}</p>
+            </div>
+            <footer className="modal-footer">
+              <button className="secondary compact-action" type="button" onClick={closeEnvironmentCapture}>
+                稍后
+              </button>
+              {environmentInputMode === "camera" ? (
+                <button className="secondary compact-action" type="button" disabled={environmentBackgroundMutation.isPending} onClick={() => startEnvironmentCamera()}>
+                  <RefreshCw size={15} aria-hidden="true" />
+                  重新连接
+                </button>
+              ) : null}
+              <button className="primary compact-action" type="button" disabled={!environmentBackgroundCanSave || environmentBackgroundMutation.isPending} onClick={saveEnvironmentBackground}>
+                <Camera size={15} aria-hidden="true" />
+                {environmentBackgroundMutation.isPending ? "保存中" : environmentInputMode === "upload" ? "保存上传背景" : "拍摄并保存背景"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+
+      {rulesOpen && !activeModelIsAi ? (
         <div className="modal-backdrop" role="presentation">
           <section className="modal-panel wide task-rule-modal" role="dialog" aria-modal="true" aria-label="设置检测通过规则">
             <header className="modal-head">
@@ -835,6 +1892,51 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               </div>
             </form>
           </section>
+        </div>
+      ) : null}
+
+      {fullscreenOpen ? (
+        <div
+          className="inspection-fullscreen"
+          role="dialog"
+          aria-modal="true"
+          aria-label="全屏检测"
+          ref={fullscreenShellRef}
+          tabIndex={-1}
+        >
+          <header className="inspection-fullscreen-head">
+            <div>
+              <strong>{selectedAiTask?.name || currentTask?.label || "当前检测任务"}</strong>
+              <span>{`${activeDetectionLabel} · 摄像头输入`}</span>
+            </div>
+            <div className="inspection-fullscreen-actions">
+              <span className={`result-badge ${result ? (result.passed ? "pass" : "fail") : "waiting"}`}>
+                {result ? (result.passed ? "通过" : "不通过") : "等待拍照"}
+              </span>
+              <button className="secondary compact-action" type="button" disabled={Boolean(busy)} onClick={() => runCamera(fullscreenVideoRef.current)}>
+                <Camera size={15} aria-hidden="true" />
+                拍照 {activeDetectionLabel}
+              </button>
+              <button className="icon-only" type="button" aria-label="退出全屏" onClick={() => setFullscreenOpen(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+          </header>
+          <main className="inspection-fullscreen-stage">
+            <aside className="inspection-fullscreen-result">
+              <div className="preview-frame compact">
+                {resultImage ? <img src={resultImage} alt="检测结果" /> : <div className="empty-state">按 Enter 或点击拍照检测</div>}
+              </div>
+            </aside>
+            <aside className={`inspection-fullscreen-sidebar ${result ? (result.passed ? "result-pass" : "result-fail") : "result-waiting"}`}>
+              <section className="inspection-fullscreen-video">
+                <video ref={fullscreenVideoRef} autoPlay playsInline muted />
+                {!stream ? <div className="camera-empty">正在打开摄像头</div> : null}
+              </section>
+              <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source="camera" requiredCounts={requiredCounts} compact />
+              <p className={`hint-line ${error ? "danger-text" : ""}`}>{error || cameraStatus || "按 Enter 拍照。"}</p>
+            </aside>
+          </main>
         </div>
       ) : null}
 

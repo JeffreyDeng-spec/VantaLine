@@ -1,0 +1,3 @@
+runpod
+ultralytics
+requests

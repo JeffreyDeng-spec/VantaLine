@@ -41,7 +41,7 @@ export function Dashboard() {
       <header className="page-head">
         <div>
           <h2>总览</h2>
-          <p className="page-desc">React/Vite 预览入口，生产根路径仍由 legacy static 前端提供。</p>
+          <p className="page-desc">React/Vite 已作为生产入口，根路径由 production bundle 提供。</p>
         </div>
         <button className="secondary compact-action" type="button" onClick={refresh}>
           <RefreshCw size={16} aria-hidden="true" />

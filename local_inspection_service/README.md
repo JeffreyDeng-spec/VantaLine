@@ -164,7 +164,9 @@ Run the checks that match the changed area:
 ```bash
 cd VantaLine
 python3 -m py_compile local_inspection_service/server.py local_inspection_service/scripts/*.py
-node --check local_inspection_service/static/app.js
+npm --prefix local_inspection_service/frontend run typecheck
+npm --prefix local_inspection_service/frontend run build:production-cutover
+python3 local_inspection_service/scripts/smoke_phase1_core_cleanup.py
 python3 local_inspection_service/scripts/smoke_ai_detection.py
 python3 local_inspection_service/scripts/verify_task_pipeline.py
 ```

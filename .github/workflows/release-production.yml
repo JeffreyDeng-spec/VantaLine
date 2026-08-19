@@ -1,0 +1,104 @@
+name: Release and deploy production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vantaline-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      PROD_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_USER: ${{ secrets.PROD_SSH_USER }}
+    steps:
+      - name: Select immutable release id
+        run: echo "RELEASE_ID=v$(date -u +%Y.%m).${{ github.event.workflow_run.run_number }}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: local_inspection_service/frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Build production frontend
+        working-directory: local_inspection_service/frontend
+        run: npm ci && npm run build:production-cutover
+      - name: Verify and package immutable release
+        run: |
+          python scripts/verify_release_contract.py
+          mkdir -p release-output
+          python scripts/build_release_artifact.py \
+            --release "$RELEASE_ID" \
+            --git-commit "$RELEASE_SHA" \
+            --built-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "release-output/$RELEASE_ID.tar.gz"
+          sha256sum "release-output/$RELEASE_ID.tar.gz" > release-output/ARTIFACT_SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vantaline-${{ env.RELEASE_SHA }}
+          path: release-output/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Create immutable draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_ID" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$RELEASE_ID:refs/tags/$RELEASE_ID"
+            test "$(git rev-list -n 1 "$RELEASE_ID")" = "$RELEASE_SHA"
+            rm -f release-output/*
+            gh release download "$RELEASE_ID" --pattern "$RELEASE_ID.tar.gz" --pattern ARTIFACT_SHA256SUMS --dir release-output
+            (cd release-output && sha256sum -c ARTIFACT_SHA256SUMS)
+          else
+            gh release create "$RELEASE_ID" \
+            release-output/"$RELEASE_ID".tar.gz \
+            release-output/ARTIFACT_SHA256SUMS \
+            --target "$RELEASE_SHA" \
+            --title "$RELEASE_ID" \
+            --notes "Automated production release for $RELEASE_SHA" \
+            --draft
+          fi
+      - name: Configure pinned SSH identity
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' '${{ secrets.PROD_SSH_PRIVATE_KEY }}' > ~/.ssh/vantaline_deploy
+          chmod 600 ~/.ssh/vantaline_deploy
+          printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Upload and deploy exact release
+        run: |
+          artifact="release-output/$RELEASE_ID.tar.gz"
+          artifact_sha="$(sha256sum "$artifact" | awk '{print $1}')"
+          scp -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 \
+            "$artifact" "$PROD_USER@$PROD_HOST:/opt/vantaline/incoming/$RELEASE_ID.tar.gz"
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            sudo /usr/local/sbin/vantaline-install-release \
+              --archive "/opt/vantaline/incoming/$RELEASE_ID.tar.gz" \
+              --archive-sha256 "$artifact_sha" \
+              --release "$RELEASE_ID" \
+              --commit "$RELEASE_SHA" \
+              --apply
+      - name: Publish successful GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_ID" --draft=false --latest

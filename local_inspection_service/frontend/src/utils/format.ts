@@ -51,10 +51,9 @@ export function recordAuditText(
 
 export function modelVariantLabel(model: { variant?: string; uses_ocr?: boolean } | null | undefined) {
   const variant = String(model?.variant || "").toLowerCase();
+  if (variant === "ai_detection") return "AI 检测";
   if (variant === "yolo_ocr" || model?.uses_ocr) return "YOLO + OCR";
   if (variant === "yolo") return "YOLO";
-  if (variant === "ai_detection") return "AI 检测";
-  if (variant === "label_sheet_local") return "标签匹配";
   return variant || "模型";
 }
 

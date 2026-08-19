@@ -1,0 +1,9 @@
+{
+  "release": "development",
+  "git_commit": "development",
+  "built_at": "development",
+  "backend_protocol": "plc-web-serial-v4",
+  "frontend_protocol": "plc-web-serial-v4",
+  "frontend_bundle": "",
+  "frontend_bundle_sha256": ""
+}

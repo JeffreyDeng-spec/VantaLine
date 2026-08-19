@@ -43,6 +43,13 @@ export interface UserPasswordResetResponse extends UserMutationResponse {
   revoked_sessions?: number;
 }
 
+export interface TaskNavigationPreferences {
+  pinned_task_ids: string[];
+  archived_task_ids: string[];
+  updated_at?: number;
+  exists?: boolean;
+}
+
 export interface ConfigSummaryResponse {
   confidence_threshold?: number;
   required_classes?: number[];
@@ -78,7 +85,6 @@ export interface StatusModel {
   exists?: boolean;
   variant?: string;
   is_ai_detection?: boolean;
-  is_label_sheet_match?: boolean;
   uses_ocr?: boolean;
   provider_status?: Record<string, unknown>;
   confidence_threshold?: number;
@@ -114,6 +120,7 @@ export interface ServiceStatusResponse {
   specialized_model_tasks?: SpecializedModelTask[];
   ai_detection_tasks?: AiDetectionLibraryTask[];
   ai_detection?: Record<string, unknown>;
+  yolo_warmup?: YoloWarmupStatus;
   training_execution?: Record<string, unknown>;
   cursor_image2?: Record<string, unknown>;
   classes?: Array<{ class_id: number; name: string; label: string }>;
@@ -123,6 +130,22 @@ export interface ServiceStatusResponse {
     min_counts?: Record<string, number>;
   };
   ocr?: Record<string, unknown>;
+}
+
+export interface YoloWarmupStatus {
+  enabled?: boolean;
+  status?: string;
+  reason?: string;
+  model_ids?: string[];
+  completed_model_ids?: string[];
+  failed_model_ids?: Array<{ model_id?: string; error?: string }> | string[];
+  loaded_model_ids?: string[];
+  selected_model_id?: string;
+  selected_model_ready?: boolean;
+  skipped?: boolean;
+  started_at?: number;
+  completed_at?: number;
+  error?: string;
 }
 
 export interface ModelOption {
@@ -139,6 +162,9 @@ export interface AgentConfigResponse {
   model_options?: ModelOption[];
   timeout_seconds: number;
   auto_advance_default: boolean;
+  api_key_env?: string;
+  api_keys?: AiKeySummary[];
+  active_key_id?: string;
   api_key_masked?: string;
   has_api_key?: boolean;
   configured?: boolean;
@@ -155,6 +181,34 @@ export interface AiKeySummary {
   id: string;
   label: string;
   masked_key: string;
+  env_name?: string;
+  provider?: string;
+}
+
+export interface ImageGenerationConfigResponse {
+  enabled: boolean;
+  configured: boolean;
+  provider: string;
+  provider_key?: string;
+  provider_label?: string;
+  model: string;
+  model_options?: ModelOption[];
+  timeout_seconds: number;
+  api_key_env?: string;
+  api_key_present?: boolean;
+  key_present?: boolean;
+  local_key_present?: boolean;
+  api_keys?: AiKeySummary[];
+  active_key_id?: string;
+  key_source?: string;
+  key_source_name?: string;
+  masked_key?: string;
+  base_url: string;
+  proxy_configured?: boolean;
+  proxy_url?: string;
+  proxy_source_name?: string;
+  status: string;
+  message?: string;
 }
 
 export interface AiConfigResponse {
@@ -180,6 +234,67 @@ export interface AiConfigResponse {
   proxy_source_name?: string;
   status: string;
   message?: string;
+  image_generation?: ImageGenerationConfigResponse;
+}
+
+export interface ApiCostSubcategory {
+  label: string;
+  call_count: number;
+  cost_usd: number;
+}
+
+export interface ApiCostCategory {
+  key: string;
+  label: string;
+  call_count: number;
+  priced_call_count: number;
+  estimated_call_count: number;
+  unpriced_call_count: number;
+  cost_usd: number;
+  avg_cost_usd: number;
+  subcategories?: ApiCostSubcategory[];
+}
+
+export interface ApiCostDailyPoint {
+  date: string;
+  total_cost_usd: number;
+  image_generation?: number;
+  structured_output?: number;
+  agent?: number;
+  call_count: number;
+}
+
+export interface ApiCostRecentCall {
+  id: string;
+  day: string;
+  category: string;
+  subcategory: string;
+  model: string;
+  cost_usd: number;
+  priced: boolean;
+  estimated: boolean;
+}
+
+export interface ApiCostLedgerResponse {
+  currency: string;
+  updated_at: number;
+  pricing_source: string;
+  summary: {
+    total_cost_usd: number;
+    known_cost_usd: number;
+    estimated_cost_usd: number;
+    call_count: number;
+    priced_call_count: number;
+    estimated_call_count: number;
+    unpriced_call_count: number;
+    avg_cost_per_call_usd: number;
+    avg_image_generation_cost_usd: number;
+    training_sample_count: number;
+    avg_cost_per_training_sample_usd: number;
+  };
+  categories: ApiCostCategory[];
+  daily: ApiCostDailyPoint[];
+  recent_calls: ApiCostRecentCall[];
 }
 
 export interface TrainingDataset {
@@ -263,6 +378,8 @@ export interface AiDetectionLibraryTask {
   missing_accessory_ids?: string[];
   created_at?: number;
   updated_at?: number;
+  background_set_id?: string;
+  environment_background?: Record<string, unknown>;
   owner_user_id?: string;
   owner_username?: string;
 }
@@ -275,7 +392,93 @@ export interface AiTasksResponse {
   deleted_task_id?: string;
 }
 
-export type PipelineDetectionMethod = "yolo_ocr" | "yolo" | "ai" | "locate" | string;
+export interface AiAutoOptimizeStatus {
+  task_id: string;
+  enabled?: boolean;
+  serving_mode?: string;
+  active_model_id?: string;
+  phase?: string;
+  samples_total?: number;
+  captured_samples?: number;
+  pending_labels?: number;
+  trainable_samples?: number;
+  bbox_only_samples?: number;
+  review_required_samples?: number;
+  negative_samples?: number;
+  generated_negative_sample_count?: number;
+  projected_negative_training_samples?: number;
+  negative_samples_per_real_image?: number;
+  positive_derivatives_per_real_image?: number;
+  usable_training_samples?: number;
+  projected_positive_training_samples?: number;
+  projected_training_samples?: number;
+  samples_per_real_image?: number;
+  background_set_id?: string;
+  environment_background?: Record<string, unknown>;
+  background_set?: Record<string, unknown>;
+  sprite_pool_count?: number;
+  sprite_pool?: Array<Record<string, unknown>>;
+  synthetic_sample_count?: number;
+  generated_synthetic_sample_count?: number;
+  dataset_synthetic_sample_count?: number;
+  rejected_samples?: number;
+  candidate_model_count?: number;
+  shadow_runs?: number;
+  shadow_agreement?: number;
+  latest_sample_at?: number;
+  settings?: Record<string, unknown>;
+  training_requirements?: Record<string, unknown>;
+  training_parameters?: Record<string, unknown>;
+  expected_production_count?: number;
+  initialization?: Record<string, unknown>;
+  latest_dataset?: Record<string, unknown>;
+  latest_candidate_model?: Record<string, unknown>;
+  samples?: AiAutoOptimizeSample[];
+}
+
+export interface AiAutoOptimizeSample {
+  sample_id: string;
+  record_id?: string;
+  request_id?: string;
+  task_id?: string;
+  sample_type?: string;
+  label_status?: string;
+  label_reject_reason?: string;
+  created_at?: number;
+  updated_at?: number;
+  retry_requested_at?: number;
+  retried_at?: number;
+  source_image?: {
+    url?: string;
+    path?: string;
+    filename?: string;
+  };
+  ai_result?: {
+    passed?: boolean;
+    rule?: Record<string, unknown>;
+    detections?: Array<Record<string, unknown>>;
+    model?: Record<string, unknown>;
+    provider_model?: string;
+    annotated_url?: string;
+    preview_url?: string;
+    output_url?: string;
+    request_id?: string;
+  };
+  candidate_accessories?: Array<Record<string, unknown>>;
+  labels?: Array<Record<string, unknown>>;
+  label_failures?: Array<Record<string, unknown>>;
+  label_artifacts?: Record<string, unknown>;
+  bbox_labels?: Array<Record<string, unknown>>;
+  manual_review?: Record<string, unknown>;
+  manual_approved_at?: number;
+  manual_approved_by?: string;
+  synthetic_status?: string;
+  synthetic_count?: number;
+  synthetic_samples?: Array<Record<string, unknown>>;
+  synthetic_error?: string;
+}
+
+export type PipelineDetectionMethod = "yolo_ocr" | "yolo" | "ai" | string;
 export type PipelineStage = "draft" | "samples" | "training" | "library" | string;
 
 export interface PipelineTaskAccessory {
@@ -288,16 +491,31 @@ export interface PipelineTaskAccessory {
 export interface PipelineTask {
   id: string;
   name?: string;
+  task_kind?: string;
+  material_code?: string;
+  material_name?: string;
+  active_reference_id?: string;
+  reference_version_label?: string;
+  shared_with_user_ids?: string[];
   accessory_ids?: string[];
   accessory_counts?: Record<string, number>;
   accessory_names?: string[];
   accessories?: PipelineTaskAccessory[];
   detection_method?: PipelineDetectionMethod;
+  optimization_route?: "yolo" | "yolo_ocr" | string;
   uses_training_flow?: boolean;
   stage?: PipelineStage;
   status?: string;
   progress?: number;
   params?: Record<string, string | number | boolean | null | undefined>;
+  expected_production_count?: number;
+  auto_optimize_initialization?: Record<string, unknown>;
+  auto_optimize_task_id?: string;
+  ai_baseline_task_id?: string;
+  ai_baseline_model_id?: string;
+  auto_optimize_link?: Record<string, unknown>;
+  background_set_id?: string;
+  environment_background?: Record<string, unknown>;
   recommended_params?: {
     stage?: string;
     params?: Record<string, string | number | boolean | null | undefined>;
@@ -310,10 +528,13 @@ export interface PipelineTask {
   samples_task_id?: string;
   training_task_id?: string;
   dataset_id?: string;
+  dataset_status?: "none" | "pending" | "available" | "missing" | "deleted" | string;
+  dataset_exists?: boolean;
   ai_task_id?: string;
   ai_model_id?: string;
   model_run_id?: string;
   model_label?: string;
+  model_status?: "none" | "pending" | "available" | "missing" | "deleted" | string;
   model_exists?: boolean;
   linked_view?: string;
   agent_reason?: string;
@@ -322,6 +543,7 @@ export interface PipelineTask {
   last_error?: string;
   job_note?: string;
   advancing?: boolean;
+  pause_requested?: boolean;
   advance_started_at?: number;
   current_epoch?: number;
   total_epochs?: number;
@@ -379,7 +601,104 @@ export interface PipelineTaskPayload {
   accessory_counts?: Record<string, number>;
   detection_method?: PipelineDetectionMethod;
   auto_advance?: boolean;
+  expected_production_count?: number;
   params?: Record<string, string | number | boolean | null | undefined>;
+  task_kind?: "product_inspection" | "incoming_material_text" | string;
+  material_code?: string;
+  material_name?: string;
+  inspection_user_ids?: string[];
+}
+
+export interface IncomingTextInspector {
+  id: string;
+  username: string;
+  display_name: string;
+}
+
+export interface IncomingTextInspectorsResponse {
+  items: IncomingTextInspector[];
+}
+
+export type IncomingTextDecision = "PASS" | "FAIL" | "REVIEW_REQUIRED" | "RELEASED" | "REJECTED" | "";
+
+export interface IncomingTextRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface IncomingTextFieldRule {
+  field_id: string;
+  name: string;
+  region_normalized: IncomingTextRegion;
+  expected_text: string;
+  match_mode: "exact" | "regex";
+  importance: "critical" | "normal";
+  case_sensitive: boolean;
+  ignore_whitespace: boolean;
+}
+
+export interface IncomingTextReference {
+  id: string;
+  task_id: string;
+  version_label: string;
+  material_code: string;
+  material_name?: string;
+  status: "draft" | "active" | "archived" | string;
+  source_sha256: string;
+  canonical_sha256?: string;
+  width: number;
+  height: number;
+  rules: IncomingTextFieldRule[];
+  source_url?: string;
+  canonical_url?: string;
+  created_at: number;
+  activated_at?: number;
+}
+
+export interface IncomingTextTaskResponse {
+  task: PipelineTask;
+  references: IncomingTextReference[];
+  active_reference?: IncomingTextReference | null;
+  automatic_decisions_verified?: boolean;
+}
+
+export interface IncomingTextFieldResult extends IncomingTextFieldRule {
+  observed_text: string;
+  confidence: number;
+  matched: boolean;
+  outcome: "PASS" | "FAIL" | "REVIEW_REQUIRED";
+  reasons: string[];
+  visual_similarity?: number | null;
+}
+
+export interface IncomingTextInspection {
+  id: string;
+  capture_id: string;
+  task_id: string;
+  reference_id: string;
+  reference_version_label: string;
+  material_code: string;
+  material_name?: string;
+  status: string;
+  auto_decision: IncomingTextDecision;
+  final_decision: IncomingTextDecision;
+  source_url?: string;
+  corrected_url?: string;
+  annotated_url?: string;
+  quality?: { accepted?: boolean; reasons?: string[]; metrics?: Record<string, number> };
+  fields?: IncomingTextFieldResult[];
+  reasons?: string[];
+  review_reason?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface IncomingTextInspectionsResponse {
+  items: IncomingTextInspection[];
+  total: number;
+  summary: Record<string, number>;
 }
 
 export interface AgentRecommendationResponse {
@@ -445,6 +764,193 @@ export interface DetectionVideoFrame {
   rule?: DetectionRuleResult;
 }
 
+export type PlcSyncState =
+  | "disabled"
+  | "queued"
+  | "attempting"
+  | "sent"
+  | "detecting"
+  | "planned"
+  | "browser_attempt_declared"
+  | "acknowledged"
+  | "partial_success"
+  | "uncertain"
+  | "failed";
+
+export interface PlcSyncStatus {
+  dispatch_id: string;
+  source: "image" | "video" | string;
+  request_id?: string;
+  passed?: boolean;
+  enabled: boolean;
+  attempted: boolean;
+  duplicate?: boolean;
+  protocol?: "fx_programming_port_ascii" | string;
+  checksum_mode?: PlcChecksumMode;
+  status: PlcSyncState;
+  error_code?: string;
+  physical_status?: string;
+  outcome?: string;
+  audit_status?: string;
+  diagnostic_source?: string;
+  attempts?: number;
+  targets?: string[];
+  acknowledged_targets?: string[];
+  failed_target?: string;
+  cancelled_after_disable?: boolean;
+  frames?: Array<{ target: string; frame_hex: string; attempts: number }>;
+  message?: string;
+  updated_at?: number;
+}
+
+export type PlcChecksumMode = "exclude_etx_legacy_vb" | "include_etx_documented_comment" | "include_etx";
+
+export interface PlcConfig {
+  enabled: boolean;
+  protocol: "fx_programming_port_ascii";
+  checksum_mode: PlcChecksumMode;
+  serial_port: string;
+  baudrate: number;
+  parity: "E" | "O" | "N";
+  data_bits: 7 | 8;
+  stop_bits: 1 | 2;
+  result_register: string;
+  output_control_point: string;
+  capture_trigger_enabled: boolean;
+  capture_input_register: string;
+  capture_trigger_value: number;
+  timeout: number;
+  retries: number;
+}
+
+export interface PlcConfigResponse {
+  config: PlcConfig;
+  resolved_addresses: {
+    result_register: string;
+    output_control_point: string;
+    capture_input_register: string;
+  };
+  device_profile_verified: boolean;
+  read_profile_verified: boolean;
+  protocol_options: Array<{ id: "fx_programming_port_ascii"; label: string }>;
+  recent_dispatches: PlcSyncStatus[];
+  validation_error?: string;
+  validation_errors: Array<{ code: string; message: string }>;
+  effective_enabled: boolean;
+  control_generation: number;
+  in_flight_attempts: Array<{
+    dispatch_id: string;
+    target: string;
+    attempt: number;
+    generation: number;
+    started_at: number;
+    disable_revokes_started_io: false;
+  }>;
+  disable_notice: string;
+  queue_wait_seconds: number;
+  worker_total_timeout_seconds: number;
+}
+
+export interface PlcCaptureSession {
+  session_id: string;
+  user_id: string;
+  model_id: string;
+  generation: number;
+  busy: boolean;
+  heartbeat_at: number;
+  expires_at: number;
+}
+
+export interface PlcCaptureEvent {
+  trigger_id: string;
+  value: number;
+  model_id: string;
+  created_at: number;
+  expires_at: number;
+  status: "pending" | "claimed";
+}
+
+export interface PlcWebSerialConfig {
+  schema_version: 4;
+  transport_mode: "web_serial";
+  profile_id: "fx_ascii_16x16_spec_v1";
+  enabled: boolean;
+  protocol: "fx_programming_port_ascii";
+  checksum_mode: "include_etx";
+  baudrate: 9600;
+  parity: "E";
+  data_bits: 7;
+  stop_bits: 1;
+  result_register: string;
+  output_control_point: string;
+  ack_timeout_ms: 500;
+  retries: 0;
+}
+
+export interface PlcWorkstationLease {
+  station_id: string;
+  session_id: string;
+  state: "connecting" | "active" | "released" | string;
+  lease_epoch: number;
+  model_id: string;
+  config_generation: number;
+  expires_at: number;
+  heartbeat_at: number;
+  serial_info?: { usb_vendor_id?: number; usb_product_id?: number };
+}
+
+export interface PlcWorkstationResponse {
+  paired: boolean;
+  protocol_version: "plc-web-serial-v4";
+  station: null | {
+    id: string;
+    name: string;
+    status: "commissioning" | "production" | string;
+    profile_verified: boolean;
+  };
+  config: PlcWebSerialConfig | null;
+  config_generation: number;
+  resolved_addresses: { result_register: string; output_control_point: string };
+  lease: PlcWorkstationLease | null;
+  effective_enabled: boolean;
+  production_ready: boolean;
+  release_consistent: boolean;
+  heartbeat_seconds: number;
+  lease_ttl_seconds: number;
+  recent_dispatches: PlcSyncStatus[];
+}
+
+export interface PlcWebSerialFrame {
+  target: string;
+  operation: "write_result" | "set_output_on" | "set_output_off";
+  frame_hex: string;
+  frame_sha256: string;
+  expected_response_hex: "06";
+}
+
+export interface PlcWebSerialAttempt extends Omit<PlcSyncStatus, "frames"> {
+  attempt_token: string;
+  deadline_at: number;
+  execution_window_ms: number;
+  ack_timeout_ms: number;
+  frames: PlcWebSerialFrame[];
+  serial_options: {
+    baudRate: number;
+    dataBits: 7 | 8;
+    stopBits: 1 | 2;
+    parity: "even" | "odd" | "none";
+    flowControl: "none" | "hardware";
+  };
+}
+
+export interface PlcWebSerialOperation {
+  target: string;
+  frame_sha256: string;
+  status: "acknowledged" | "nak" | "timeout" | "serial_error" | "unexpected_response";
+  response_hex: string;
+  completed_at: number;
+}
+
 export interface DetectionResult {
   request_id?: string;
   passed: boolean;
@@ -458,170 +964,7 @@ export interface DetectionResult {
   passed_frames?: number;
   pass_rate?: number;
   frames?: DetectionVideoFrame[];
-}
-
-export interface LabelSheetReference {
-  reference_id?: string;
-  accessory_id?: string;
-  class_id?: number;
-  label?: string;
-  name?: string;
-  annotation?: string;
-  source_path?: string;
-  image_url?: string;
-  owner_user_id?: string;
-  owner_username?: string;
-  [key: string]: unknown;
-}
-
-export interface LabelSheetReferencesResponse {
-  status: string;
-  references: LabelSheetReference[];
-  doc_filter_stats?: Record<string, unknown>;
-  item?: AccessorySummary;
-}
-
-export interface LabelSheetCandidate {
-  reference_id?: string;
-  matched_reference_id?: string;
-  matched_reference_label?: string;
-  matched_reference_name?: string;
-  matched_reference_image_url?: string;
-  score?: number;
-  candidate_id?: string;
-  candidate_bbox?: Record<string, number> | null;
-  metrics?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export interface LabelSheetMatchResult extends DetectionResult {
-  status: string;
-  review_status?: string;
-  matched_reference_id?: string;
-  matched_reference_label?: string;
-  matched_reference_name?: string;
-  matched_reference_image_url?: string;
-  best_reference_id?: string;
-  best_reference_label?: string;
-  best_reference_name?: string;
-  best_reference_image_url?: string;
-  input_crop_image_url?: string;
-  sheet_overlay_url?: string;
-  score?: number;
-  confidence?: number;
-  low_confidence_reason?: string;
-  candidates?: LabelSheetCandidate[];
-  doc_filter_stats?: Record<string, unknown>;
-  thresholds?: Record<string, unknown>;
-  error?: string;
-}
-
-export interface LocateConfigResponse {
-  enabled?: boolean;
-  configured?: boolean;
-  endpoint_url?: string;
-  generation_mode?: string;
-  max_side?: number;
-  max_new_tokens?: number;
-  timeout_seconds?: number;
-  ok?: boolean;
-  status?: string;
-  message?: string;
-  latency_ms?: number;
-  model?: string;
-  license?: string;
-  role?: string;
-  worker_configured?: boolean;
-  worker_status?: string;
-  worker_base_url?: string;
-  [key: string]: unknown;
-}
-
-export interface LocateSourceItem {
-  id: string;
-  source?: string;
-  accessory_id?: string;
-  class_id?: number;
-  label?: string;
-  display_label?: string;
-  material_type?: string;
-  task_type?: string;
-  visual_prompt?: string;
-  search_terms?: string[];
-  default_expected_present?: boolean;
-  default_expected_count?: number;
-  default_selected?: boolean;
-  locateanything_profile?: Record<string, unknown>;
-  target_scope?: string;
-  reject_cues?: string[];
-  packaging_exclusions?: string[];
-  subpart_text_logo_exclusions?: string[];
-  count_strategy?: string;
-  box_constraints?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export interface LocateAccessoriesResponse {
-  items: LocateSourceItem[];
-  required_classes?: number[];
-  min_counts?: Record<string, number>;
-}
-
-export interface LocateInspectionRule {
-  id: string;
-  label?: string;
-  display_label?: string;
-  source?: string;
-  material_type?: string;
-  visual_prompt?: string;
-  expected_present?: boolean;
-  expected_count?: number;
-  prompt_override?: string;
-}
-
-export interface LocateInspectionItem {
-  id?: string;
-  label?: string;
-  display_label?: string;
-  status?: string;
-  passed?: boolean;
-  expected_present?: boolean;
-  expected_count?: number;
-  box_count?: number;
-  error?: string;
-  prompt?: string;
-  raw_answer_snippet?: string;
-  boxes?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
-}
-
-export interface LocateDiagnosticItem {
-  id?: string;
-  label?: string;
-  prompt?: string;
-  raw_answer_snippet?: string;
-  error?: string;
-  box_count?: number;
-  [key: string]: unknown;
-}
-
-export interface LocateInspectResult {
-  ok?: boolean;
-  configured?: boolean;
-  overall_pass?: boolean;
-  decision?: string;
-  items?: LocateInspectionItem[];
-  source_image_size?: Record<string, number>;
-  sent_image_size?: Record<string, number>;
-  latency_ms?: number;
-  overlay_url?: string;
-  diagnostic_url?: string;
-  diagnostics?: LocateDiagnosticItem[];
-  error?: string;
-  prompt?: string;
-  raw_answer?: string;
-  boxes?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
+  plc_sync?: PlcSyncStatus;
 }
 
 export interface DataAnalysisTaskGroup {
@@ -630,6 +973,7 @@ export interface DataAnalysisTaskGroup {
   type?: string;
   count?: number;
   latest_at?: number;
+  image_processing_summary?: DataAnalysisImageProcessingSummary;
 }
 
 export interface DataAnalysisAiSummary {
@@ -658,47 +1002,51 @@ export interface DataAnalysisRequiredScope {
   required_accessories?: DataAnalysisRequiredAccessory[];
 }
 
-export interface DataAnalysisLocateRun {
-  run_id?: string;
-  created_at?: number;
-  status?: string;
-  configured?: boolean;
-  overall_pass?: boolean;
-  decision?: string;
-  box_count?: number;
-  latency_ms?: number;
-  error?: string;
-  overlay_url?: string;
-  diagnostic_url?: string;
-  items?: LocateInspectionItem[];
-  diagnostics?: LocateDiagnosticItem[];
-  required_accessory_ids?: string[];
-  required_counts?: Record<string, number>;
-  source_image_size?: Record<string, number>;
-  sent_image_size?: Record<string, number>;
-}
-
 export interface DataAnalysisComparisonDifference {
   accessory_id?: string;
   label?: string;
   required_count?: number;
   ai_count?: number;
-  locateanything_count?: number;
   delta?: number;
-  locate_status?: string;
 }
 
 export interface DataAnalysisComparisonSummary {
   status?: string;
   ai_passed?: boolean;
-  locateanything_passed?: boolean;
   ai_counts?: Record<string, number>;
-  locateanything_counts?: Record<string, number>;
   required_counts?: Record<string, number>;
   difference_count?: number;
   differences?: DataAnalysisComparisonDifference[];
   latest_run_id?: string;
   updated_at?: number;
+}
+
+export interface DataAnalysisImageProcessingSummary {
+  total?: number;
+  queued?: number;
+  running?: number;
+  completed?: number;
+  rejected?: number;
+  failed?: number;
+  active?: number;
+  by_status?: Record<string, number>;
+}
+
+export interface DataAnalysisImageProcessingItem {
+  id: string;
+  type?: string;
+  type_label?: string;
+  status?: string;
+  label?: string;
+  url?: string;
+  created_at?: number;
+  updated_at?: number;
+  reason?: string;
+  metrics?: Record<string, unknown>;
+  sample_id?: string;
+  accessory_id?: string;
+  record_id?: string;
+  task_id?: string;
 }
 
 export interface DataAnalysisRecord {
@@ -723,10 +1071,9 @@ export interface DataAnalysisRecord {
   ai_summary?: DataAnalysisAiSummary;
   required_accessory_scope?: DataAnalysisRequiredScope;
   comparison_summary?: DataAnalysisComparisonSummary;
-  locateanything_run_count?: number;
-  latest_locateanything_run?: DataAnalysisLocateRun;
+  image_processing_summary?: DataAnalysisImageProcessingSummary;
+  image_processing_items?: DataAnalysisImageProcessingItem[];
   ai_detection_result?: DetectionResult & Record<string, unknown>;
-  locateanything_runs?: DataAnalysisLocateRun[];
 }
 
 export interface DataAnalysisRecordsResponse {
@@ -736,33 +1083,11 @@ export interface DataAnalysisRecordsResponse {
   limit: number;
   offset: number;
   batch_limit: number;
-  locateanything?: LocateConfigResponse;
+  image_processing_summary?: DataAnalysisImageProcessingSummary;
 }
 
 export interface DataAnalysisRecordResponse {
   record: DataAnalysisRecord;
-}
-
-export interface DataAnalysisLocateRequest {
-  record_ids?: string[];
-  endpoint_url?: string;
-  max_side?: number;
-  max_new_tokens?: number;
-  timeout_seconds?: number;
-}
-
-export interface DataAnalysisLocateResponse {
-  status?: string;
-  count?: number;
-  batch_limit?: number;
-  record?: DataAnalysisRecord;
-  run?: DataAnalysisLocateRun;
-  comparison?: DataAnalysisComparisonSummary;
-  results?: Array<{
-    record: DataAnalysisRecord;
-    run: DataAnalysisLocateRun;
-    comparison: DataAnalysisComparisonSummary;
-  }>;
 }
 
 export interface TrainingResourcesResponse {
@@ -840,8 +1165,6 @@ export interface AccessorySummary {
   clean_sprite_failed_cells?: unknown[];
   ai_profile_status?: AccessoryProfileStatus | string;
   ai_profile_ready?: boolean;
-  locateanything_profile_status?: AccessoryProfileStatus | string;
-  locateanything_profile_ready?: boolean;
   thumbnail_url?: string;
   thumbnails?: AccessoryGalleryAsset[];
   created_at?: number;
@@ -855,7 +1178,6 @@ export interface AccessoryDetail extends AccessorySummary {
   original_source_files?: string[];
   normalized_assets?: unknown[];
   ai_profile?: unknown;
-  locateanything_profile?: unknown;
 }
 
 export interface AccessoryGalleryAsset {
@@ -936,6 +1258,105 @@ export interface AccessoryMutationResponse extends AccessoriesResponse {
 export interface AccessoryTextCropPayload {
   source_path: string;
   corners: Array<{ x: number; y: number }>;
+}
+
+export interface LocateInspectionRule {
+  id: string;
+  label?: string;
+  display_label?: string;
+  source?: string;
+  material_type?: string;
+  task_type?: string;
+  visual_prompt?: string;
+  expected_present?: boolean;
+  expected_count?: number;
+  default_expected_present?: boolean;
+  default_expected_count?: number;
+  default_selected?: boolean;
+  prompt_override?: string;
+  search_terms?: string[];
+}
+
+export interface LocateSourceItem extends LocateInspectionRule {}
+
+export interface LocateConfigResponse {
+  ok?: boolean;
+  configured?: boolean;
+  status?: string;
+  message?: string;
+  enabled?: boolean;
+  endpoint_url?: string;
+  generation_mode?: string;
+  max_side?: number;
+  max_new_tokens?: number;
+  timeout_seconds?: number;
+  license?: string;
+  items?: LocateSourceItem[];
+  [key: string]: unknown;
+}
+
+export interface LocateInspectItem {
+  box_count?: number;
+  [key: string]: unknown;
+}
+
+export interface LocateInspectResult {
+  ok?: boolean;
+  configured?: boolean;
+  overall_pass?: boolean;
+  boxes?: unknown[];
+  items?: LocateInspectItem[];
+  error?: string;
+  overlay_url?: string;
+  diagnostic_url?: string;
+  latency_ms?: number;
+  prompt?: string;
+  [key: string]: unknown;
+}
+
+export interface LabelSheetReference {
+  reference_id?: string;
+  name?: string;
+  label?: string;
+  annotation?: string;
+  image_url?: string;
+  accessory_id?: string;
+  [key: string]: unknown;
+}
+
+export interface LabelSheetCandidate {
+  metrics?: Record<string, unknown>;
+  matched_reference_name?: string;
+  matched_reference_label?: string;
+  reference_id?: string;
+  candidate_id?: string;
+  [key: string]: unknown;
+}
+
+export interface LabelSheetMatchResult {
+  status: string;
+  passed?: boolean;
+  error?: string;
+  request_id?: string;
+  score?: number;
+  matched_reference_image_url?: string;
+  best_reference_image_url?: string;
+  matched_reference_name?: string;
+  matched_reference_label?: string;
+  best_reference_name?: string;
+  best_reference_label?: string;
+  low_confidence_reason?: string;
+  review_status?: string;
+  thresholds?: { match_score?: number; [key: string]: unknown };
+  input_crop_image_url?: string;
+  sheet_overlay_url?: string;
+  candidates?: LabelSheetCandidate[];
+  [key: string]: unknown;
+}
+
+export interface LabelSheetReferencesResponse {
+  references: LabelSheetReference[];
+  doc_filter_stats?: Record<string, unknown>;
 }
 
 export interface ApiRequestOptions extends RequestInit {

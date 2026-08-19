@@ -1,0 +1,5 @@
+* @JeffreyDeng-spec
+/local_inspection_service/plc_*.py @JeffreyDeng-spec
+/local_inspection_service/storage/ @JeffreyDeng-spec
+/.github/workflows/ @JeffreyDeng-spec
+/scripts/install_release.sh @JeffreyDeng-spec
