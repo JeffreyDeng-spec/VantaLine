@@ -140,7 +140,8 @@ done
 chown -R root:root "$target"; find "$target" -type d -exec chmod go-w {} +; find "$target" -type f -exec chmod go-w {} +
 ln -sfn "$target" "$current.new"; mv -Tf "$current.new" "$current"; switched=1
 systemctl start vantaline
-curl --max-time 5 --retry 12 --retry-delay 1 --retry-all-errors -fsS http://127.0.0.1:8765/api/version | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1]' "$commit"
+version_json="$(curl --max-time 5 --retry 45 --retry-delay 1 --retry-all-errors -fsS http://127.0.0.1:8765/api/version)"
+printf '%s' "$version_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1]' "$commit"
 index="$(curl --max-time 5 -fsS http://127.0.0.1:8765/)"
 while read -r asset; do curl --max-time 5 -fsS "http://127.0.0.1:8765$asset" >/dev/null; done < <(printf '%s' "$index" | grep -oE '/static/assets/[^" ]+\.(js|css)' | sort -u)
 pid="$(systemctl show vantaline -p MainPID --value)"; ! journalctl _PID="$pid" --no-pager | grep -E 'Traceback|ERROR|CRITICAL'
