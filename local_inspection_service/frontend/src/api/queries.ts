@@ -193,6 +193,14 @@ export function heartbeatPlcWorkstationConnection(sessionId: string, leaseEpoch:
   });
 }
 
+export function rebindPlcWorkstationModel(sessionId: string, leaseEpoch: number, modelId: string) {
+  return apiClient.post<PlcWorkstationLease>("/api/plc/workstation/lease/rebind-model", {
+    session_id: sessionId,
+    lease_epoch: leaseEpoch,
+    model_id: modelId
+  });
+}
+
 export function disconnectPlcWorkstationConnection(sessionId: string, leaseEpoch: number) {
   return apiClient.post<PlcWorkstationLease>("/api/plc/workstation/lease/disconnect", {
     session_id: sessionId,

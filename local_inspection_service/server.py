@@ -2528,6 +2528,7 @@ def route_required_permission(path: str, method: str) -> str | None:
         ("/api/plc/workstation/connect", "POST"),
         ("/api/plc/workstation/connect/activate", "POST"),
         ("/api/plc/workstation/lease/heartbeat", "POST"),
+        ("/api/plc/workstation/lease/rebind-model", "POST"),
         ("/api/plc/workstation/lease/disconnect", "POST"),
     }
     if (clean_path, method) in plc_admin_routes:
@@ -2610,6 +2611,7 @@ def route_allowed_permissions(path: str, method: str) -> tuple[str, ...]:
         ("/api/plc/workstation/connect", "POST"),
         ("/api/plc/workstation/connect/activate", "POST"),
         ("/api/plc/workstation/lease/heartbeat", "POST"),
+        ("/api/plc/workstation/lease/rebind-model", "POST"),
         ("/api/plc/workstation/lease/disconnect", "POST"),
     }
     if (clean_path, method) in plc_runtime_routes:
@@ -3143,6 +3145,15 @@ class PlcWorkstationLeaseHeartbeatRequest(BaseModel):
 
     session_id: StrictStr
     lease_epoch: StrictInt
+
+
+class PlcWorkstationLeaseRebindRequest(BaseModel):
+    class Config:
+        extra = "forbid"
+
+    session_id: StrictStr
+    lease_epoch: StrictInt
+    model_id: StrictStr
 
 
 class PlcWebSerialAttemptRequest(BaseModel):
@@ -4163,6 +4174,28 @@ def plc_web_serial_heartbeat(station_id: str, request: PlcWorkstationLeaseHeartb
         lease["expires_at"] = now + WEB_SERIAL_ACTIVE_LEASE_SECONDS
         if str(lease.get("in_flight_dispatch_id") or "").startswith("plcweb_"):
             lease["in_flight_deadline_at"] = lease["expires_at"]
+        state["lease"] = _plc_workstation_lease_row(lease)
+
+    state = _plc_web_serial_mutate(station_id, None, mutate)
+    return _plc_web_serial_record(state.get("lease")) or {}
+
+
+def plc_web_serial_rebind_model(station_id: str, request: PlcWorkstationLeaseRebindRequest) -> dict[str, Any]:
+    clean_model_id = str(request.model_id or "").strip()
+    if not clean_model_id:
+        raise PlcConfigError("plc_workstation_model_required")
+
+    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
+        _, lease, now = _plc_web_serial_require_active_lease(
+            state, request.session_id, request.lease_epoch
+        )
+        in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
+        in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
+        if in_flight_id and in_flight_deadline > now:
+            raise PlcConfigError("plc_workstation_attempt_in_flight")
+        lease["model_id"] = clean_model_id
+        lease["heartbeat_at"] = now
+        lease["expires_at"] = now + WEB_SERIAL_ACTIVE_LEASE_SECONDS
         state["lease"] = _plc_workstation_lease_row(lease)
 
     state = _plc_web_serial_mutate(station_id, None, mutate)
@@ -28369,6 +28402,19 @@ def heartbeat_plc_web_serial_connection(
     station = require_plc_web_serial_station(request)
     try:
         return plc_web_serial_heartbeat(str(station["id"]), payload)
+    except PlcConfigError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/plc/workstation/lease/rebind-model")
+def rebind_plc_web_serial_connection_model(
+    request: Request,
+    payload: PlcWorkstationLeaseRebindRequest,
+) -> dict[str, Any]:
+    station = require_plc_web_serial_station(request)
+    require_analyze_model_permission(payload.model_id)
+    try:
+        return plc_web_serial_rebind_model(str(station["id"]), payload)
     except PlcConfigError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

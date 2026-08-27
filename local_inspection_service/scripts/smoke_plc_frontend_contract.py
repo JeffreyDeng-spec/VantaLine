@@ -95,9 +95,14 @@ def main() -> None:
             "no retry": "端口已关闭；检查线路后人工重连",
             "D ACK gates Y": 'dResult.status === "acknowledged" && attempt.frames[1]',
             "heartbeat": "heartbeatPlcWorkstationConnection",
+            "model rebind keeps serial open": "rebindPlcWorkstationModel",
+            "NAK does not force close": "const requiresClose = uncertain",
+            "NAK residual becomes auditable uncertain": 'operation.status = "unexpected_response"',
             "diagnostic read parser": "parseDiagnosticWordResponse",
         },
     )
+    if "页面已离开前台，PLC 已安全断开" in detection:
+        raise AssertionError("temporary page hiding must not disconnect PLC")
 
     phase1_surface = "\n".join(
         [
