@@ -636,6 +636,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const requestedWarmupsRef = useRef<Set<string>>(new Set());
   const detectionAudioRef = useRef<AudioContext | null>(null);
   const plcClientRef = useRef(new PlcWebSerialClient());
+  const plcBoundModelIdRef = useRef("");
   const busyRef = useRef("");
   const [source, setSource] = useState<SourceMode>("image");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -993,15 +994,34 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }, [busy]);
 
   useEffect(() => {
-    if (!plcConnected) return;
-    void disconnectPlc("检测模型已切换，PLC 已断开，请重新连接。");
-  }, [activeModelId]);
+    if (!plcConnected || !activeModelId || busy) return;
+    if (plcBoundModelIdRef.current === activeModelId) return;
+    void plcClientRef.current.rebindModel(activeModelId, (message) => {
+      plcBoundModelIdRef.current = "";
+      setPlcConnected(false);
+      setPlcConnectionStatus(message);
+    }).then(() => {
+      plcBoundModelIdRef.current = activeModelId;
+      setPlcConnectionStatus("PLC 已连接，可连续检测。");
+    }).catch(() => undefined);
+  }, [activeModelId, busy, plcConnected]);
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState !== "visible" && plcClientRef.current.state()) {
-        void disconnectPlc("页面已离开前台，PLC 已安全断开。");
+      if (!plcClientRef.current.state()) return;
+      if (document.visibilityState !== "visible") {
+        setPlcConnectionStatus("页面在后台，PLC 保持连接；已暂停新的写入。");
+        return;
       }
+      void plcClientRef.current.resume((message) => {
+        plcBoundModelIdRef.current = "";
+        setPlcConnected(false);
+        setPlcConnectionStatus(message);
+      }).then((state) => {
+        if (!state) return;
+        setPlcConnected(true);
+        setPlcConnectionStatus("PLC 已恢复就绪，可连续检测。");
+      }).catch(() => undefined);
     };
     const handleUnload = () => { void plcClientRef.current.disconnect(false); };
     document.addEventListener("visibilitychange", handleVisibility);
@@ -1465,8 +1485,9 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         setPlcConnected(false);
         setPlcConnectionStatus(message);
       });
+      plcBoundModelIdRef.current = activeModelId;
       setPlcConnected(true);
-      setPlcConnectionStatus(`已连接 ${workstation.station.name}；配置 generation ${workstation.config_generation}。`);
+      setPlcConnectionStatus(`已连接 ${workstation.station.name}；可连续检测；配置 generation ${workstation.config_generation}。`);
       await plcWorkstationQuery.refetch();
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
@@ -1478,6 +1499,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
   async function disconnectPlc(message = "PLC 已断开。") {
     await plcClientRef.current.disconnect(true);
+    plcBoundModelIdRef.current = "";
     setPlcConnected(false);
     setPlcConnectionStatus(message);
     await plcWorkstationQuery.refetch();

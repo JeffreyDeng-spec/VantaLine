@@ -192,6 +192,16 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         json={"session_id": lease_payload["session_id"], "lease_epoch": lease_payload["lease_epoch"]},
     )
     assert_status(active, 200, "activate lease")
+    rebound_model = client.post(
+        "/api/plc/workstation/lease/rebind-model",
+        json={
+            "session_id": lease_payload["session_id"],
+            "lease_epoch": lease_payload["lease_epoch"],
+            "model_id": "model-a",
+        },
+    )
+    assert_status(rebound_model, 200, "rebind active lease model")
+    assert rebound_model.json()["model_id"] == "model-a"
     assert_status(
         client.post(
             "/api/plc/workstation/diagnostic-plan",
@@ -217,7 +227,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         ordinary = client.post("/api/analyze/image", files={"file": ("ordinary.png", TINY_PNG, "image/png")})
         camera = client.post(
             "/api/analyze/camera",
-            data={"model_id": "", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
+            data={"model_id": "model-a", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
             files={"file": ("camera.png", TINY_PNG, "image/png")},
         )
     finally:
@@ -229,17 +239,29 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert plan["status"] == "planned"
     duplicate = client.post(
         "/api/analyze/camera",
-        data={"model_id": "", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
+        data={"model_id": "model-a", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
         files={"file": ("camera.png", TINY_PNG, "image/png")},
     )
     assert_status(duplicate, 200, "duplicate camera request")
     assert duplicate.json()["plc_sync"]["dispatch_id"] == plan["dispatch_id"]
+    assert_status(
+        client.post(
+            "/api/plc/workstation/lease/rebind-model",
+            json={
+                "session_id": lease_payload["session_id"],
+                "lease_epoch": lease_payload["lease_epoch"],
+                "model_id": "model-b",
+            },
+        ),
+        409,
+        "model rebind rejected while camera dispatch is reserved",
+    )
     original_analyze = server.analyze_bgr
     server.analyze_bgr = lambda _image, request_id, _model_id=None, **_kwargs: {"request_id": request_id, "passed": False, "detections": []}
     try:
         second_camera = client.post(
             "/api/analyze/camera",
-            data={"model_id": "", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0002"},
+            data={"model_id": "model-a", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0002"},
             files={"file": ("camera-2.png", TINY_PNG, "image/png")},
         )
     finally:
@@ -291,6 +313,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert server.route_required_permission("/api/plc/workstations/pair", "POST") == "system_settings"
     assert server.route_required_permission("/api/plc/workstation/config", "POST") == "system_settings"
     assert server.route_allowed_permissions("/api/plc/workstation/connect", "POST") == ("inspection", "ai_detection")
+    assert server.route_allowed_permissions("/api/plc/workstation/lease/rebind-model", "POST") == ("inspection", "ai_detection")
     assert server.route_allowed_permissions("/api/plc/workstation/dispatches/x/receipt", "POST") == ("inspection", "ai_detection")
     two_frames = build_web_serial_plan(DEFAULT_WEB_SERIAL_CONFIG, True)
     try:

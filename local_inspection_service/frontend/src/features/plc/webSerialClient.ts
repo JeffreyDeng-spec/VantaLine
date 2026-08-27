@@ -7,6 +7,7 @@ import {
   finishPlcWebSerialDiagnostic,
   getPlcWebSerialDiagnosticPlan,
   heartbeatPlcWorkstationConnection,
+  rebindPlcWorkstationModel,
   sendPlcWebSerialReceipt
 } from "../../api/queries";
 import type {
@@ -174,6 +175,50 @@ export class PlcWebSerialClient {
     this.releaseLock = null;
   }
 
+  private async waitUntilVisible() {
+    if (document.visibilityState === "visible") return false;
+    await new Promise<void>((resolve) => {
+      const handleVisibility = () => {
+        if (document.visibilityState !== "visible") return;
+        document.removeEventListener("visibilitychange", handleVisibility);
+        resolve();
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+    });
+    return true;
+  }
+
+  async resume(onFatal: (message: string) => void) {
+    const lease = this.lease;
+    if (!lease || !this.state()) return null;
+    try {
+      this.lease = await heartbeatPlcWorkstationConnection(lease.session_id, lease.lease_epoch);
+      return this.state();
+    } catch (error) {
+      await this.failClosed("PLC 工作站租约已失效，请人工重新连接", onFatal);
+      throw error;
+    }
+  }
+
+  rebindModel(modelId: string, onFatal: (message: string) => void) {
+    const operation = async () => {
+      const lease = this.lease;
+      if (!lease || !this.state()) throw new Error("PLC 未连接或租约无效");
+      try {
+        this.lease = await rebindPlcWorkstationModel(lease.session_id, lease.lease_epoch, modelId);
+        return this.state();
+      } catch (error) {
+        if (this.state()) {
+          await this.failClosed("PLC 模型绑定更新失败，端口已关闭；请人工重连", onFatal);
+        }
+        throw error;
+      }
+    };
+    const next = this.queue.then(operation, operation);
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
   private async failClosed(message: string, onFatal: (message: string) => void) {
     await this.disconnect(true);
     onFatal(message);
@@ -274,6 +319,8 @@ export class PlcWebSerialClient {
 
   execute(dispatch: PlcSyncStatus, onFatal: (message: string) => void): Promise<PlcSyncStatus> {
     const operation = async () => {
+      const resumedFromBackground = await this.waitUntilVisible();
+      if (resumedFromBackground) await this.resume(onFatal);
       const state = this.state();
       if (!state || !dispatch.dispatch_id) throw new Error("PLC 未连接或租约无效");
       const requestStarted = performance.now();
@@ -290,14 +337,26 @@ export class PlcWebSerialClient {
         if (dResult.status === "acknowledged" && attempt.frames[1]) {
           operations.push(await this.transact(attempt.frames[1], attempt.ack_timeout_ms, deadline));
         }
-        const requiresClose = operations.some((item) => item.status !== "acknowledged");
-        const uncertain = operations.some((item) => ["timeout", "serial_error", "unexpected_response"].includes(item.status));
+        let nakSyncLost = false;
+        if (operations.some((item) => item.status === "nak")) {
+          try {
+            await this.requireQuietInput(100);
+          } catch {
+            for (const operation of operations) {
+              if (operation.status === "nak") operation.status = "unexpected_response";
+            }
+
+            nakSyncLost = true;
+          }
+        }
+        const uncertain = nakSyncLost || operations.some((item) => ["timeout", "serial_error", "unexpected_response"].includes(item.status));
+        const requiresClose = uncertain;
         const outcome = dResult.status === "acknowledged"
           ? (operations.length === attempt.frames.length && operations.every((item) => item.status === "acknowledged")
             ? "acknowledged"
             : (uncertain ? "uncertain" : "partial_success"))
-          : (dResult.status === "nak" ? "rejected" : "uncertain");
-        if (requiresClose) await this.failClosed("PLC 返回异常，端口已关闭；检查线路后人工重连", onFatal);
+          : (dResult.status === "nak" && !nakSyncLost ? "rejected" : "uncertain");
+        if (requiresClose) await this.failClosed("PLC 返回不确定，端口已关闭；检查线路后人工重连", onFatal);
         return await sendPlcWebSerialReceipt(attempt.dispatch_id, {
           session_id: state.sessionId,
           lease_epoch: state.leaseEpoch,
