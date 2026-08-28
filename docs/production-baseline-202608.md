@@ -1,5 +1,7 @@
 # Production baseline reconciliation — 2026-08
 
+**Status: Authoritative provenance record**
+
 This branch was created as a fresh worktree from `origin/main` at
 `4af229d78e4fb328a66c4b2637f002bd5c01c6cc`. It does not reuse the historical
 dirty deployment worktree.

@@ -1,3 +1,7 @@
+> **Status: Historical / Do not implement**
+> Code-gate evidence only; it is not the current operating procedure.
+> Current replacement: [`docs/postgresql-runtime.md`](../../docs/postgresql-runtime.md).
+
 # PostgreSQL Endpoint-Integration Code Gate
 
 This task #19 packet prepares the first endpoint-integration code gate required

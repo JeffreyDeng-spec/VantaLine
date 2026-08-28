@@ -1,18 +1,25 @@
-## 目的
+## Purpose
 
-说明本次变更解决的问题。
+Describe the problem and intended behavior.
 
-## 风险
+## Risk
 
-- [ ] 涉及数据库迁移
-- [ ] 涉及 PLC 协议、地址、租约或物理动作
-- [ ] 涉及权限或认证
-- [ ] 不涉及上述高风险区域
+- [ ] Database schema or migration
+- [ ] PLC protocol, address, lease, browser serial, or physical action
+- [ ] Authentication, permission, or configuration
+- [ ] Release, deployment, or production operation
+- [ ] None of the above
 
-## 验证证据
+## Documentation impact
 
-列出本地及 CI 测试结果。
+- Authoritative documents updated:
+- Entry a new human/agent should read to understand this change:
+- If no documentation changed, explain why behavior, interfaces, operations, configuration, permissions, data contracts, and safety invariants are all unchanged:
 
-## 回滚
+## Verification evidence
 
-说明如何恢复上一完整 release；禁止仅回滚单个前端或后端文件。
+List local checks and expected CI evidence. High-risk changes must include their domain-specific tests.
+
+## Rollback
+
+Explain how to restore the previous complete immutable release. Do not propose a frontend-only, backend-only, or in-place server file rollback.

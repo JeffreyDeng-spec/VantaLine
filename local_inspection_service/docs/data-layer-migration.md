@@ -1,3 +1,7 @@
+> **Status: Historical / Do not implement**
+> Migration evidence only; it is not the current operating procedure.
+> Current replacement: [`docs/postgresql-runtime.md`](../../docs/postgresql-runtime.md).
+
 # VantaLine Data-Layer Migration PR1
 
 PR1 is schema, dry-run migration tooling, smoke coverage, and runbook only. It does not switch the FastAPI runtime from JSON files to SQL and must not change endpoint read/write behavior.

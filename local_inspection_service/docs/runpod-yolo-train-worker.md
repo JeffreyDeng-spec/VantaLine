@@ -1,5 +1,7 @@
 # RunPod YOLO Training Worker
 
+**Status: Authoritative**
+
 This document defines the active remote GPU training worker package:
 
 ```text

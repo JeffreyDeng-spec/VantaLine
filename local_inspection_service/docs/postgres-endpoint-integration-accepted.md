@@ -1,3 +1,7 @@
+> **Status: Historical / Do not implement**
+> Acceptance evidence only; it is not the current operating procedure.
+> Current replacement: [`docs/postgresql-runtime.md`](../../docs/postgresql-runtime.md).
+
 # PostgreSQL Endpoint Integration Accepted
 
 Status: code-on-disk endpoint integration gate passed for local, credential-free

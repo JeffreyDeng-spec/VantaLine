@@ -1,5 +1,8 @@
 # 包材文字检验部署与验收门
 
+**Status: Historical / Do not implement**
+Current replacement: [`docs/architecture.md`](../../docs/architecture.md).
+
 ## 当前引擎
 
 - Python: `paddleocr==3.7.0`, `paddlex[ocr-core]==3.7.1`,

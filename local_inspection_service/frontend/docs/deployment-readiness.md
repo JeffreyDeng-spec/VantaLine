@@ -1,5 +1,8 @@
 # React Production Readiness
 
+**Status: Historical / Do not implement**
+Current replacement: [`docs/architecture.md`](../../../docs/architecture.md).
+
 Phase 1 serves the React production bundle directly from FastAPI. The former
 static root is not the production source of truth anymore.
 

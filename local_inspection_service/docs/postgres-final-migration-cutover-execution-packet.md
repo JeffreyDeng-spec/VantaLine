@@ -1,3 +1,7 @@
+> **Status: Historical / Do not implement**
+> Cutover evidence only; it is not the current operating procedure.
+> Current replacement: [`docs/postgresql-runtime.md`](../../docs/postgresql-runtime.md).
+
 # PostgreSQL Final Migration And Cutover Execution Packet
 
 This packet is for task #17 review before a later manager execution gate. It

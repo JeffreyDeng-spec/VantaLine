@@ -1,5 +1,8 @@
 # VantaLine Phase 1 React Parity Checklist
 
+**Status: Historical / Do not implement**
+Current replacement: [`docs/testing.md`](../../../docs/testing.md).
+
 Phase 1 narrows the product to the active quality-inspection workflow and keeps
 the backend monolith in place. No database migration, backend split, worker
 expansion, or new dependency is part of this phase.
