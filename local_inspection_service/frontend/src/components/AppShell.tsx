@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   dataAnalysisNavItem,
   detectionCenterNavItem,
+  textCompareBetaNavItem,
   navItems,
   overviewNavItem,
   systemNavItems,
@@ -35,6 +36,7 @@ import { TaskDetailRoute, TaskInspectionRoute } from "../features/incoming-text/
 import { useTaskNavigationPreferences } from "../features/tasks/useTaskNavigationPreferences";
 import { TrainingLibraryPage } from "../features/training/TrainingLibraryPage";
 import { UsersPage } from "../features/users/UsersPage";
+import { TextCompareBetaPage } from "../features/text-compare/TextCompareBetaPage";
 import {
   taskEntriesFromTrainingResources,
   taskStatusTone,
@@ -519,7 +521,7 @@ export function AppShell() {
 
   const visibleTrainingAssetItems = trainingAssetNavItems.filter((item) => hasPermission(auth.user, item.permission));
   const visibleSystemItems = systemNavItems.filter((item) => hasPermission(auth.user, item.permission));
-  const visibleFixedItems = [overviewNavItem, detectionCenterNavItem, dataAnalysisNavItem].filter((item) =>
+  const visibleFixedItems = [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem, dataAnalysisNavItem].filter((item) =>
     item.view === "dataAnalysis"
       ? ["ai_detection", "inspection"].some((permission) => hasPermission(auth.user, permission))
       : hasPermission(auth.user, item.permission)
@@ -542,7 +544,7 @@ export function AppShell() {
 
         <nav className="side-nav" aria-label="主导航">
           <div className="nav-group">
-            {visibleFixedItems.slice(0, 2).map((item) => (
+            {visibleFixedItems.slice(0, 3).map((item) => (
               <SidebarLink item={item} key={item.path} />
             ))}
           </div>
@@ -566,7 +568,7 @@ export function AppShell() {
           ) : null}
 
           <div className="nav-group">
-            {visibleFixedItems.slice(2).map((item) => (
+            {visibleFixedItems.slice(3).map((item) => (
               <SidebarLink item={item} key={item.path} />
             ))}
           </div>
@@ -706,6 +708,14 @@ export function AppShell() {
             }
           />
           <Route
+            path="/text-compare-beta"
+            element={
+              <PermissionRoute permission="inspection">
+                <TextCompareBetaPage />
+              </PermissionRoute>
+            }
+          />
+          <Route
             path="/tasks/:taskId/inspect"
             element={<TaskInspectionRoute />}
           />
@@ -770,7 +780,7 @@ export function AppShell() {
             }
           />
           {navItems
-            .filter((item) => !["home", "inspect", "aiInspect", "accessories", "dataAnalysis", "trainingLibrary", "pipeline", "rules", "userManagement"].includes(item.view))
+            .filter((item) => !["home", "inspect", "textCompareBeta", "aiInspect", "accessories", "dataAnalysis", "trainingLibrary", "pipeline", "rules", "userManagement"].includes(item.view))
             .map((item) => (
               <Route
                 key={item.path}

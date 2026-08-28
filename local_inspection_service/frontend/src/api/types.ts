@@ -701,6 +701,29 @@ export interface IncomingTextInspectionsResponse {
   summary: Record<string, number>;
 }
 
+export interface TextCompareBetaDifference {
+  id: string;
+  reference_text: string;
+  actual_text: string;
+  confidence: number;
+  type: "changed" | "missing" | "extra";
+  region_normalized?: { x: number; y: number; width: number; height: number } | null;
+}
+
+export interface TextCompareBetaResult {
+  comparison_id: string;
+  decision: "MATCH" | "DIFFERENCES" | "REVIEW_REQUIRED";
+  message: string;
+  differences: TextCompareBetaDifference[];
+  annotated_image_data_url?: string;
+  reference_lines?: number;
+  captured_lines?: number;
+  reference_quality?: { accepted?: boolean; reasons?: string[] };
+  captured_quality?: { accepted?: boolean; reasons?: string[] };
+  alignment?: { accepted?: boolean; reason?: string };
+  error_code?: string;
+}
+
 export interface AgentRecommendationResponse {
   source?: string;
   reason?: string;

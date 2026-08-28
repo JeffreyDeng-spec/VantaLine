@@ -37834,6 +37834,94 @@ def require_incoming_text_storage_capacity(upload_bytes: int) -> None:
         raise HTTPException(status_code=507, detail="服务器存储空间不足，已停止本次检验，请联系管理员清理空间")
 
 
+_text_compare_beta_cache_lock = threading.RLock()
+_text_compare_beta_cache: dict[tuple[str, str], dict[str, Any]] = {}
+TEXT_COMPARE_BETA_MAX_BYTES = 10 * 1024 * 1024
+TEXT_COMPARE_BETA_MAX_PIXELS = 16_000_000
+TEXT_COMPARE_BETA_CACHE_TTL_SECONDS = 3600
+TEXT_COMPARE_BETA_CACHE_MAX_BYTES = 32 * 1024 * 1024
+
+
+def _run_text_compare_beta(
+    user_id: str,
+    clean_id: str,
+    reference_bytes: bytes,
+    captured_bytes: bytes,
+) -> dict[str, Any]:
+    reference_hash = hashlib.sha256(reference_bytes).hexdigest()
+    captured_hash = hashlib.sha256(captured_bytes).hexdigest()
+    fingerprint = hashlib.sha256(f"{len(reference_bytes)}:{reference_hash}:{len(captured_bytes)}:{captured_hash}".encode("ascii")).hexdigest()
+    key = (user_id, clean_id)
+    # The lock intentionally spans OCR. Beta is capped at one OCR comparison at
+    # a time, keeping the API event loop responsive and making same-ID retries
+    # true single-flight operations.
+    with _text_compare_beta_cache_lock:
+        now = time.monotonic()
+        for cached_key, cached in list(_text_compare_beta_cache.items()):
+            if now - float(cached.get("created_at") or 0) > TEXT_COMPARE_BETA_CACHE_TTL_SECONDS:
+                _text_compare_beta_cache.pop(cached_key, None)
+        cached = _text_compare_beta_cache.get(key)
+        if cached:
+            if cached["fingerprint"] != fingerprint:
+                raise HTTPException(status_code=409, detail="同一 comparison_id 对应了不同图片")
+            return cached["result"]
+        reference = cv2.imdecode(np.frombuffer(reference_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        captured = cv2.imdecode(np.frombuffer(captured_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if reference is None or captured is None:
+            raise HTTPException(status_code=400, detail="图片解码失败，请使用 PNG 或 JPG 图片")
+        for image in (reference, captured):
+            if image.shape[0] * image.shape[1] > TEXT_COMPARE_BETA_MAX_PIXELS or min(image.shape[:2]) < 300:
+                raise HTTPException(status_code=400, detail="图片尺寸不符合要求，单张不能超过 1600 万像素")
+        try:
+            from local_inspection_service.text_compare_beta import compare_images
+
+            result = compare_images(reference, captured, clean_id, incoming_text_ocr_observations)
+        except Exception as exc:
+            result = {
+                "comparison_id": clean_id,
+                "decision": "REVIEW_REQUIRED",
+                "message": "文字识别服务暂时无法完成对比，请人工确认或稍后重试。",
+                "differences": [],
+                "error_code": type(exc).__name__,
+            }
+        result_size = len(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+        _text_compare_beta_cache[key] = {
+            "fingerprint": fingerprint,
+            "result": result,
+            "created_at": now,
+            "size": result_size,
+        }
+        while sum(int(item.get("size") or 0) for item in _text_compare_beta_cache.values()) > TEXT_COMPARE_BETA_CACHE_MAX_BYTES:
+            oldest = min(_text_compare_beta_cache, key=lambda item: float(_text_compare_beta_cache[item].get("created_at") or 0))
+            _text_compare_beta_cache.pop(oldest, None)
+        return result
+
+
+@app.post("/api/text-compare-beta/analyze")
+async def analyze_text_compare_beta(
+    reference_file: UploadFile = File(...),
+    captured_file: UploadFile = File(...),
+    comparison_id: str = Form(...),
+) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字对比权限")
+    clean_id = comparison_id.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", clean_id):
+        raise HTTPException(status_code=400, detail="comparison_id 格式错误")
+    allowed_types = {"image/png", "image/jpeg", "image/webp"}
+    if reference_file.content_type not in allowed_types or captured_file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="仅支持 PNG、JPG 或 WEBP 图片")
+    reference_bytes, captured_bytes = await reference_file.read(), await captured_file.read()
+    if (
+        not reference_bytes
+        or not captured_bytes
+        or len(reference_bytes) > TEXT_COMPARE_BETA_MAX_BYTES
+        or len(captured_bytes) > TEXT_COMPARE_BETA_MAX_BYTES
+    ):
+        raise HTTPException(status_code=400, detail="标准图和实物图必须存在，且单张不超过 10MB")
+    user_id = str(current_auth_user().get("id") or "")
+    return await asyncio.to_thread(_run_text_compare_beta, user_id, clean_id, reference_bytes, captured_bytes)
+
+
 @app.post("/api/incoming-text/tasks/{task_id}/inspect")
 async def inspect_incoming_text(
     task_id: str,
