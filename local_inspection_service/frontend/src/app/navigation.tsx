@@ -6,6 +6,7 @@ import {
   Database,
   LayoutDashboard,
   ScanLine,
+  ScanText,
   Settings,
   Sparkles,
   Users
@@ -39,6 +40,15 @@ export const detectionCenterNavItem: NavItem = {
   view: "inspect",
   permission: "ai_detection",
   icon: ScanLine,
+  phase: "phase-3"
+};
+
+export const textCompareBetaNavItem: NavItem = {
+  label: "文字对比 Beta",
+  path: "/text-compare-beta",
+  view: "textCompareBeta",
+  permission: "inspection",
+  icon: ScanText,
   phase: "phase-3"
 };
 
@@ -124,10 +134,10 @@ export const hiddenToolNavItems: NavItem[] = [
   }
 ];
 
-export const fixedNavItems = [overviewNavItem, detectionCenterNavItem, dataAnalysisNavItem, ...systemNavItems];
+export const fixedNavItems = [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem, dataAnalysisNavItem, ...systemNavItems];
 
 export const navGroups: NavGroup[] = [
-  { items: [overviewNavItem, detectionCenterNavItem] },
+  { items: [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem] },
   { label: "训练与资产", items: trainingAssetNavItems },
   { items: [dataAnalysisNavItem] },
   { label: "系统", items: systemNavItems }
@@ -136,6 +146,7 @@ export const navGroups: NavGroup[] = [
 export const navItems = [
   overviewNavItem,
   detectionCenterNavItem,
+  textCompareBetaNavItem,
   dataAnalysisNavItem,
   ...systemNavItems,
   ...trainingAssetNavItems,

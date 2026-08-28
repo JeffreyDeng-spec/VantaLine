@@ -42,6 +42,7 @@ import type {
   IncomingTextInspection,
   IncomingTextInspectorsResponse,
   IncomingTextInspectionsResponse,
+  TextCompareBetaResult,
   IncomingTextReference,
   IncomingTextTaskResponse,
   IncomingTextFieldRule,
@@ -398,6 +399,10 @@ export function getIncomingTextInspections(auth: AuthContextValue, taskId = "") 
   if (taskId) params.set("task_id", taskId);
   const path = `/api/incoming-text/inspections${params.size ? `?${params}` : ""}`;
   return apiClient.get<IncomingTextInspectionsResponse>(withAuthScope(path, auth.user, auth.dataUserId));
+}
+
+export function analyzeTextCompareBeta(form: FormData, options?: ApiRequestOptions) {
+  return apiClient.upload<TextCompareBetaResult>("/api/text-compare-beta/analyze", form, options);
 }
 
 export function advancePipelineTask(taskId: string) {

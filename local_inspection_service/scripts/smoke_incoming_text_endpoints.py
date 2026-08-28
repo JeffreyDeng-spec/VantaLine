@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -20,6 +21,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from local_inspection_service.scripts import testclient_threadpool_shim  # noqa: E402
 from local_inspection_service import server  # noqa: E402
+from local_inspection_service import text_compare_beta  # noqa: E402
 from local_inspection_service.incoming_text_inspection import TextObservation  # noqa: E402
 
 testclient_threadpool_shim.install()
@@ -124,6 +126,52 @@ def main() -> None:
     login(config_only, "config_only")
     login(inspector_only, "inspector_only")
     login(unassigned_inspector, "unassigned_inspector")
+
+    beta_files = {
+        "reference_file": ("reference.jpg", image_bytes(), "image/jpeg"),
+        "captured_file": ("captured.jpg", image_bytes(), "image/jpeg"),
+    }
+    anonymous = TestClient(server.app, base_url="https://testserver")
+    assert_status(anonymous.post("/api/text-compare-beta/analyze", data={"comparison_id": "cmp_anonymous_01"}, files=beta_files), 401, "beta requires login")
+    assert_status(config_only.post("/api/text-compare-beta/analyze", data={"comparison_id": "cmp_no_permission_01"}, files=beta_files), 403, "beta requires inspection")
+    original_ocr = server.incoming_text_ocr_observations
+    original_quality = text_compare_beta.assess_image_quality
+    original_rectify = text_compare_beta.rectify_label
+    server.incoming_text_ocr_observations = mock_ocr_result("MODEL: PPLBP-2020")
+    text_compare_beta.assess_image_quality = lambda _: {"accepted": True, "reasons": []}
+    text_compare_beta.rectify_label = lambda image, size: (image.copy(), {"accepted": True})
+    try:
+        beta_response = manager.post("/api/text-compare-beta/analyze", data={"comparison_id": "cmp_manager_repeat_01"}, files=beta_files)
+        assert_status(beta_response, 200, "beta compare")
+        assert beta_response.json()["decision"] == "MATCH"
+        beta_repeat = manager.post("/api/text-compare-beta/analyze", data={"comparison_id": "cmp_manager_repeat_01"}, files=beta_files)
+        assert_status(beta_repeat, 200, "beta idempotent retry")
+        assert beta_repeat.json() == beta_response.json()
+        conflict_files = {
+            "reference_file": ("reference.jpg", image_bytes(), "image/jpeg"),
+            "captured_file": ("captured.jpg", image_bytes("MODEL: OTHER"), "image/jpeg"),
+        }
+        assert_status(manager.post("/api/text-compare-beta/analyze", data={"comparison_id": "cmp_manager_repeat_01"}, files=conflict_files), 409, "beta id conflict")
+        server._text_compare_beta_cache.clear()
+        ocr_calls = [0]
+
+        def counted_ocr(image):
+            ocr_calls[0] += 1
+            return mock_ocr_result("MODEL: PPLBP-2020")(image)
+
+        server.incoming_text_ocr_observations = counted_ocr
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(server._run_text_compare_beta, manager_user["id"], "cmp_concurrent_01", image_bytes(), image_bytes())
+                for _ in range(2)
+            ]
+            concurrent_results = [future.result() for future in futures]
+        assert concurrent_results[0] == concurrent_results[1]
+        assert ocr_calls[0] == 2, f"same-ID concurrent request reran OCR: {ocr_calls[0]} calls"
+    finally:
+        server.incoming_text_ocr_observations = original_ocr
+        text_compare_beta.assess_image_quality = original_quality
+        text_compare_beta.rectify_label = original_rectify
 
     denied_create = inspector_only.post(
         "/api/pipeline/tasks",
