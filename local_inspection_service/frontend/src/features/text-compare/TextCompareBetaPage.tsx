@@ -5,10 +5,10 @@ import { analyzeTextCompareBeta } from "../../api/queries";
 import type { TextCompareBetaResult } from "../../api/types";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 function validateImage(file: File) {
   if (!ACCEPTED_TYPES.has(file.type)) throw new Error("仅支持 PNG、JPG 或 WEBP 图片。");
-  if (!file.size || file.size > MAX_FILE_BYTES) throw new Error("图片必须小于 20MB。");
+  if (!file.size || file.size > MAX_FILE_BYTES) throw new Error("图片必须小于 10MB。");
 }
 function qualityCopy(reasons?: string[]) {
   const labels: Record<string, string> = { resolution_too_low: "分辨率太低", blurred: "画面模糊", underexposed: "画面太暗", overexposed_or_glare: "过曝或反光明显" };
