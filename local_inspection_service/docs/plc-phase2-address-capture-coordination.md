@@ -1,3 +1,7 @@
+> **Status: Historical / Do not implement**
+> Applicable to the retired server-side Phase 2 design only.
+> Current replacement: [`docs/plc-web-serial-v4.md`](../../docs/plc-web-serial-v4.md).
+
 # PLC Phase 2：中文地址、到位拍照与多实例协调
 
 ## 已实现的软件闭环

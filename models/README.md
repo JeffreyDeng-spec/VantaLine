@@ -1,5 +1,7 @@
 # Model Artifacts
 
+**Status: Authoritative**
+
 This folder documents how VantaLine handles model artifacts.
 
 Actual trained weights are not committed to Git. A model belongs to a task,

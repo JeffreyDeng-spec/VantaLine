@@ -1,5 +1,7 @@
 # vantaline-yolo-train-worker
 
+**Status: Authoritative**
+
 RunPod serverless worker for VantaLine YOLO training. This package is
 intentionally independent from the production FastAPI app and the legacy Windows
 worker gateway.

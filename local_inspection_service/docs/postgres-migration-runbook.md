@@ -1,5 +1,8 @@
 # PostgreSQL Migration Packet
 
+**Status: Historical / Do not implement**
+Current replacement: [`docs/postgresql-runtime.md`](../../docs/postgresql-runtime.md).
+
 This packet prepares the next database phase after the accepted pre-SQL JSON-runtime online update. It does not authorize production apply, runtime switch, or `VANTALINE_DATA_STORE`.
 
 ## Gate Order

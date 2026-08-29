@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "protocol": "plc-web-serial-v4",
+  "entry_docs": [
+    "README.md", "AGENTS.md", "CONTRIBUTING.md",
+    "local_inspection_service/AGENTS.md", "local_inspection_service/frontend/AGENTS.md",
+    ".github/PULL_REQUEST_TEMPLATE/production-change.md", "docs/archive/README.md"
+  ],
+  "authoritative_docs": [
+    "docs/README.md", "docs/agent-overview.md", "docs/architecture.md", "docs/plc-web-serial-v4.md",
+    "docs/configuration-reference.md", "docs/testing.md", "docs/release-management.md",
+    "docs/production-runbook.md", "docs/postgresql-runtime.md", "docs/new-maintainer-checklist.md",
+    "docs/production-baseline-202608.md", "local_inspection_service/README.md",
+    "local_inspection_service/docs/runpod-yolo-train-worker.md",
+    "local_inspection_service/workers/vantaline_yolo_train_worker/README.md", "models/README.md"
+  ],
+  "historical_docs": {
+    "local_inspection_service/docs/plc-phase2-address-capture-coordination.md": "docs/plc-web-serial-v4.md",
+    "local_inspection_service/docs/data-layer-migration.md": "docs/postgresql-runtime.md",
+    "local_inspection_service/docs/postgres-migration-runbook.md": "docs/postgresql-runtime.md",
+    "local_inspection_service/docs/postgres-endpoint-integration-accepted.md": "docs/postgresql-runtime.md",
+    "local_inspection_service/docs/postgres-endpoint-integration-code-gate.md": "docs/postgresql-runtime.md",
+    "local_inspection_service/docs/postgres-final-migration-cutover-execution-packet.md": "docs/postgresql-runtime.md",
+    "local_inspection_service/docs/postgres-runtime-phase-b.md": "docs/postgresql-runtime.md",
+    "local_inspection_service/docs/incoming-text-commissioning.md": "docs/architecture.md",
+    "local_inspection_service/frontend/docs/deployment-readiness.md": "docs/architecture.md",
+    "local_inspection_service/frontend/docs/migration-parity-checklist.md": "docs/testing.md"
+  },
+  "impact_rules": [
+    {
+      "name": "PLC and camera dispatch",
+      "paths": ["release/plc-protocol.json", "local_inspection_service/plc_web_serial.py", "local_inspection_service/frontend/src/features/plc/**", "local_inspection_service/frontend/src/features/detection/**"],
+      "server_diff_regex": "(?i)plc|web_serial|workstation|camera_dispatch|camera.*lease",
+      "required_docs": ["docs/plc-web-serial-v4.md", "docs/architecture.md"]
+    },
+    {
+      "name": "API authentication permissions and configuration",
+      "paths": ["local_inspection_service/server.py", "local_inspection_service/auth/**", "local_inspection_service/config/**"],
+      "server_diff_regex": "(?i)@app\\.|permission|authorize|authenticate|config|BaseModel",
+      "required_any": ["docs/architecture.md", "docs/configuration-reference.md"]
+    },
+    {
+      "name": "PostgreSQL and migrations",
+      "paths": ["local_inspection_service/storage/**", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
+      "required_docs": ["docs/production-runbook.md", "docs/postgresql-runtime.md"]
+    },
+    {
+      "name": "Release and deployment",
+      "paths": [".github/workflows/**", "scripts/install_release.sh", "scripts/bootstrap_release_host.sh", "scripts/build_release_artifact.py", "local_inspection_service/release_version.py"],
+      "required_docs": ["docs/release-management.md", "docs/production-runbook.md"]
+    }
+  ]
+}

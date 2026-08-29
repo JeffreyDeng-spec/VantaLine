@@ -1,3 +1,7 @@
+> **Status: Historical / Do not implement**
+> Phase B evidence only; it is not the current operating procedure.
+> Current replacement: [`docs/postgresql-runtime.md`](../../docs/postgresql-runtime.md).
+
 # PostgreSQL Runtime Phase B Packet
 
 This packet adds a disabled-default runtime datastore selector. It does not wire FastAPI endpoints to PostgreSQL, connect to production PostgreSQL, import production data, create roles/databases, install systemd drop-ins, set `VANTALINE_DATA_STORE`, set `DATABASE_URL`, or switch runtime.

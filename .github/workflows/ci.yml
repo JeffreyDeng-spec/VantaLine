@@ -36,6 +36,24 @@ jobs:
           grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"' scripts/install_release.sh
           grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
 
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Test documentation impact fixtures
+        run: python scripts/verify_docs_contract.py --self-test
+      - name: Verify documentation contract and PR impact
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ -n "${BASE_REF:-}" ]]; then args+=(--base-ref "$BASE_REF"); fi
+          python scripts/verify_docs_contract.py "${args[@]}"
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
