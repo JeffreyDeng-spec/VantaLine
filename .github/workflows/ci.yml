@@ -67,6 +67,7 @@ jobs:
           cache: npm
           cache-dependency-path: local_inspection_service/frontend/package-lock.json
       - run: npm ci
+      - run: npm run test:plc-capture
       - run: npm run typecheck
       - run: npm run build:production-cutover
       - name: Verify built protocol

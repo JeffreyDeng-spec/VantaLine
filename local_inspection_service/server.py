@@ -91,7 +91,9 @@ try:
         WEB_SERIAL_PLAN_DEADLINE_SECONDS,
         WEB_SERIAL_PROFILE_ID,
         WEB_SERIAL_PROTOCOL_VERSION,
+        WEB_SERIAL_SCHEMA_VERSION,
         build_legacy_web_serial_plan,
+        build_web_serial_capture_read_plan,
         build_web_serial_diagnostic_plan,
         build_web_serial_plan,
         legacy_web_serial_config_fingerprint,
@@ -146,7 +148,9 @@ except ModuleNotFoundError as exc:
         WEB_SERIAL_PLAN_DEADLINE_SECONDS,
         WEB_SERIAL_PROFILE_ID,
         WEB_SERIAL_PROTOCOL_VERSION,
+        WEB_SERIAL_SCHEMA_VERSION,
         build_legacy_web_serial_plan,
+        build_web_serial_capture_read_plan,
         build_web_serial_diagnostic_plan,
         build_web_serial_plan,
         legacy_web_serial_config_fingerprint,
@@ -3089,7 +3093,7 @@ class PlcWebSerialConfigRequest(BaseModel):
     class Config:
         extra = "forbid"
 
-    schema_version: StrictInt = 4
+    schema_version: StrictInt = WEB_SERIAL_SCHEMA_VERSION
     transport_mode: StrictStr = "web_serial"
     profile_id: StrictStr = WEB_SERIAL_PROFILE_ID
     enabled: StrictBool = False
@@ -3100,7 +3104,11 @@ class PlcWebSerialConfigRequest(BaseModel):
     data_bits: StrictInt = 7
     stop_bits: StrictInt = 1
     result_register: StrictStr = "D206"
-    output_control_point: StrictStr = "Y04"
+    output_control_point: StrictStr = ""
+    capture_trigger_enabled: StrictBool = False
+    capture_input_register: StrictStr = "D205"
+    capture_trigger_value: StrictInt = 1
+    capture_poll_interval_ms: StrictInt = 200
     ack_timeout_ms: StrictInt = 500
     retries: StrictInt = 0
 
@@ -3878,6 +3886,7 @@ def plc_web_serial_station_payload(station: dict[str, Any]) -> dict[str, Any]:
         and lease.get("bundle_version") == WEB_SERIAL_PROTOCOL_VERSION
     )
     release_consistent = bool(current_release_version()["consistent"])
+    config_generation = int(station.get("config_generation") or 0)
     return {
         "paired": True,
         "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
@@ -3888,8 +3897,9 @@ def plc_web_serial_station_payload(station: dict[str, Any]) -> dict[str, Any]:
             "profile_verified": profile_verified,
         },
         "config": config,
-        "config_generation": int(station.get("config_generation") or 0),
+        "config_generation": config_generation,
         "resolved_addresses": web_serial_resolved_addresses(config),
+        "capture_read_plan": build_web_serial_capture_read_plan(config, config_generation),
         "lease": lease if lease_active else None,
         "effective_enabled": bool(config["enabled"] and lease_active and release_consistent),
         "production_ready": bool(config["enabled"] and lease_active and profile_verified and release_consistent),
@@ -3907,7 +3917,8 @@ def plc_web_serial_unpaired_payload() -> dict[str, Any]:
         "station": None,
         "config": None,
         "config_generation": 0,
-        "resolved_addresses": {"result_register": "", "output_control_point": ""},
+        "resolved_addresses": {"result_register": "", "output_control_point": "", "capture_input_register": ""},
+        "capture_read_plan": None,
         "lease": None,
         "effective_enabled": False,
         "production_ready": False,

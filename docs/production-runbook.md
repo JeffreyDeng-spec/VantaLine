@@ -2,6 +2,8 @@
 
 **Status: Authoritative**
 
+Before merging a PLC automatic-capture release, confirm the frontend `test:plc-capture` step, backend PLC smoke, release contract, and documentation contract all passed.
+
 ## Read-only diagnosis first
 
 1. Check the GitHub workflow and immutable Release for the expected commit.

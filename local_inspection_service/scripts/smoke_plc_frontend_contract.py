@@ -34,6 +34,10 @@ def main() -> None:
             "effective enabled": "effective_enabled",
             "result register": 'name="result_register"',
             "optional output point": 'name="output_control_point"',
+            "capture trigger toggle": 'name="capture_trigger_enabled"',
+            "capture input register": 'name="capture_input_register"',
+            "capture trigger value": 'name="capture_trigger_value"',
+            "FX3GA profile": "mitsubishi_fx3ga_40mr",
             "audit display": "recent_dispatches",
             "server has zero serial I/O": "服务器永远不会打开串口",
         },
@@ -50,6 +54,12 @@ def main() -> None:
             "camera-only upload": "analyzeCamera",
             "browser execution": "plcClientRef.current.execute",
             "manual D206 diagnostic": "写入 6 并读取 D206",
+            "capture edge requires reset": "先出现非",
+            "capture missed is not queued": "本次不补拍",
+            "capture diagnostics": "PLC 到位拍照状态",
+            "automatic trigger never falls back": "禁止降级为普通图片检测",
+            "atomic camera lock": "cameraCaptureLockRef",
+            "executable edge reducer": "nextCaptureTriggerState",
         },
     )
     require(
@@ -99,6 +109,8 @@ def main() -> None:
             "NAK does not force close": "const requiresClose = uncertain",
             "NAK residual becomes auditable uncertain": 'operation.status = "unexpected_response"',
             "diagnostic read parser": "parseDiagnosticWordResponse",
+            "capture input read": "readCaptureInput",
+            "result write priority": "priorityOperations",
         },
     )
     if "页面已离开前台，PLC 已安全断开" in detection:

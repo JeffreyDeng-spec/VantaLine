@@ -48,8 +48,10 @@ from local_inspection_service.plc_fx_ascii import (  # noqa: E402
 )
 from local_inspection_service.plc_web_serial import (  # noqa: E402
     DEFAULT_WEB_SERIAL_CONFIG,
+    build_web_serial_capture_read_plan,
     build_web_serial_diagnostic_plan,
     build_web_serial_plan,
+    migrate_web_serial_config,
     normalize_web_serial_config,
     web_serial_resolved_addresses,
 )
@@ -74,9 +76,11 @@ def test_address_and_plan_contract() -> None:
     assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "result_register": "D0"})["result_register"] == "1000"
     assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "result_register": "D110"})["result_register"] == "10DC"
     assert web_serial_resolved_addresses(DEFAULT_WEB_SERIAL_CONFIG)["result_register"] == "119C"
+    assert web_serial_resolved_addresses(DEFAULT_WEB_SERIAL_CONFIG)["capture_input_register"] == "119A"
     assert web_serial_resolved_addresses({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": "Y10"})["output_control_point"] == "0805"
     assert [item["target"] for item in build_web_serial_plan({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": ""}, True)] == ["D206"]
-    assert [item["target"] for item in build_web_serial_plan(DEFAULT_WEB_SERIAL_CONFIG, False)] == ["D206", "Y04"]
+    assert [item["target"] for item in build_web_serial_plan(DEFAULT_WEB_SERIAL_CONFIG, False)] == ["D206"]
+    assert [item["target"] for item in build_web_serial_plan({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": "Y04"}, False)] == ["D206", "Y04"]
     for value in ("119C", "D256", "M1"):
         try:
             normalize_web_serial_config({**DEFAULT_WEB_SERIAL_CONFIG, "result_register": value})
@@ -91,6 +95,26 @@ def test_address_and_plan_contract() -> None:
             pass
         else:
             raise AssertionError(f"invalid Y address accepted: {value}")
+    for value in ("119A", "D256", "Y04"):
+        try:
+            normalize_web_serial_config({**DEFAULT_WEB_SERIAL_CONFIG, "capture_input_register": value})
+        except PlcConfigError:
+            pass
+        else:
+            raise AssertionError(f"invalid capture D address accepted: {value}")
+    try:
+        normalize_web_serial_config({**DEFAULT_WEB_SERIAL_CONFIG, "capture_input_register": "D206"})
+    except PlcConfigError:
+        pass
+    else:
+        raise AssertionError("capture input/output address conflict accepted")
+    for value in (-1, 65536):
+        try:
+            normalize_web_serial_config({**DEFAULT_WEB_SERIAL_CONFIG, "capture_trigger_value": value})
+        except PlcConfigError:
+            pass
+        else:
+            raise AssertionError(f"invalid capture trigger accepted: {value}")
     assert encode_fx_word(0x1234) == "3412"
     expected_d = {
         ("D0", True): "023131303030303230313030033138",
@@ -123,6 +147,36 @@ def test_address_and_plan_contract() -> None:
     response = b"\x02" + response_body + checksum(response_body, CHECKSUM_INCLUDE_ETX)
     assert response.hex().upper() == "0230363030034339"
     assert parse_d_register_read_response(response) == 6
+    capture_read = build_web_serial_capture_read_plan(DEFAULT_WEB_SERIAL_CONFIG, 7)
+    assert capture_read["target"] == "D205"
+    assert capture_read["frame_hex"] == build_d_register_read_frame("119A", CHECKSUM_INCLUDE_ETX).hex().upper()
+    assert capture_read["expected_response_bytes"] == 8
+    assert capture_read["poll_interval_ms"] == 200
+    assert capture_read["trigger_value"] == 1
+    assert capture_read["config_generation"] == 7
+    migrated = migrate_web_serial_config({
+        "schema_version": 4,
+        "transport_mode": "web_serial",
+        "profile_id": "fx_ascii_16x16_spec_v1",
+        "enabled": True,
+        "protocol": "fx_programming_port_ascii",
+        "checksum_mode": "include_etx",
+        "baudrate": 9600,
+        "parity": "E",
+        "data_bits": 7,
+        "stop_bits": 1,
+        "result_register": "D110",
+        "output_control_point": "Y04",
+        "ack_timeout_ms": 500,
+        "retries": 0,
+    })
+    assert migrated["schema_version"] == 5
+    assert migrated["profile_id"] == "mitsubishi_fx3ga_40mr"
+    assert migrated["enabled"] is True
+    assert migrated["result_register"] == "D110"
+    assert migrated["output_control_point"] == "Y04"
+    assert migrated["capture_trigger_enabled"] is False
+    assert migrated["capture_input_register"] == "D205"
     try:
         build_d_register_read_frame("119C", "exclude_etx_legacy_vb")
     except ValueError:
@@ -162,6 +216,9 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     saved = client.post("/api/plc/workstation/config", json=enabled)
     assert_status(saved, 200, "save workstation config")
     assert saved.json()["config"]["output_control_point"] == ""
+    assert saved.json()["config"]["capture_input_register"] == "D205"
+    assert saved.json()["capture_read_plan"]["target"] == "D205"
+    assert saved.json()["capture_read_plan"]["config_generation"] == saved.json()["config_generation"]
     assert saved.json()["effective_enabled"] is False
 
     assert_status(client.post("/api/auth/logout"), 200, "logout")
@@ -315,7 +372,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert server.route_allowed_permissions("/api/plc/workstation/connect", "POST") == ("inspection", "ai_detection")
     assert server.route_allowed_permissions("/api/plc/workstation/lease/rebind-model", "POST") == ("inspection", "ai_detection")
     assert server.route_allowed_permissions("/api/plc/workstation/dispatches/x/receipt", "POST") == ("inspection", "ai_detection")
-    two_frames = build_web_serial_plan(DEFAULT_WEB_SERIAL_CONFIG, True)
+    two_frames = build_web_serial_plan({**DEFAULT_WEB_SERIAL_CONFIG, "output_control_point": "Y04"}, True)
     try:
         server._plc_web_serial_receipt_outcome(
             two_frames,
