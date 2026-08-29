@@ -894,9 +894,9 @@ export interface PlcCaptureEvent {
 }
 
 export interface PlcWebSerialConfig {
-  schema_version: 4;
+  schema_version: 5;
   transport_mode: "web_serial";
-  profile_id: "fx_ascii_16x16_spec_v1";
+  profile_id: "mitsubishi_fx3ga_40mr";
   enabled: boolean;
   protocol: "fx_programming_port_ascii";
   checksum_mode: "include_etx";
@@ -906,6 +906,10 @@ export interface PlcWebSerialConfig {
   stop_bits: 1;
   result_register: string;
   output_control_point: string;
+  capture_trigger_enabled: boolean;
+  capture_input_register: string;
+  capture_trigger_value: number;
+  capture_poll_interval_ms: 200;
   ack_timeout_ms: 500;
   retries: 0;
 }
@@ -933,7 +937,8 @@ export interface PlcWorkstationResponse {
   };
   config: PlcWebSerialConfig | null;
   config_generation: number;
-  resolved_addresses: { result_register: string; output_control_point: string };
+  resolved_addresses: { result_register: string; output_control_point: string; capture_input_register: string };
+  capture_read_plan: PlcWebSerialCaptureReadPlan | null;
   lease: PlcWorkstationLease | null;
   effective_enabled: boolean;
   production_ready: boolean;
@@ -949,6 +954,26 @@ export interface PlcWebSerialFrame {
   frame_hex: string;
   frame_sha256: string;
   expected_response_hex: string;
+}
+
+export interface PlcWebSerialCaptureReadPlan {
+  target: string;
+  operation: "read_capture_input";
+  frame_hex: string;
+  frame_sha256: string;
+  expected_response_bytes: 8;
+  read_timeout_ms: 500;
+  poll_interval_ms: 200;
+  trigger_value: number;
+  config_generation: number;
+  protocol_version: "plc-web-serial-v4";
+}
+
+export interface PlcCaptureInputReadResult {
+  value: number;
+  request_hex: string;
+  response_hex: string;
+  read_at: number;
 }
 
 export interface PlcWebSerialDiagnosticPlan {

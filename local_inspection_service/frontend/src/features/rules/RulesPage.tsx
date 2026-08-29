@@ -306,9 +306,9 @@ function readImagePayload(form: HTMLFormElement) {
 function readPlcPayload(form: HTMLFormElement): PlcWebSerialConfig {
   const data = new FormData(form);
   return {
-    schema_version: 4,
+    schema_version: 5,
     transport_mode: "web_serial",
-    profile_id: "fx_ascii_16x16_spec_v1",
+    profile_id: "mitsubishi_fx3ga_40mr",
     enabled: data.get("enabled") === "on",
     protocol: "fx_programming_port_ascii",
     checksum_mode: "include_etx",
@@ -318,6 +318,10 @@ function readPlcPayload(form: HTMLFormElement): PlcWebSerialConfig {
     stop_bits: 1,
     result_register: String(data.get("result_register") || "D206").trim().toUpperCase(),
     output_control_point: String(data.get("output_control_point") ?? "").trim().toUpperCase(),
+    capture_trigger_enabled: data.get("capture_trigger_enabled") === "on",
+    capture_input_register: String(data.get("capture_input_register") || "D205").trim().toUpperCase(),
+    capture_trigger_value: Number(data.get("capture_trigger_value") ?? 1),
+    capture_poll_interval_ms: 200,
     ack_timeout_ms: 500,
     retries: 0
   };
@@ -495,6 +499,9 @@ export function RulesPage() {
       const summary = [
         `检测结果将写入 ${payload.result_register}`,
         payload.output_control_point ? `将直接控制 ${payload.output_control_point}` : "不会直接控制流水线",
+        payload.capture_trigger_enabled
+          ? `从 ${payload.capture_input_register}=${payload.capture_trigger_value} 接收拍照信号`
+          : "不会自动读取到位信号",
         "只有本机摄像头检测会生成指令"
       ].join("；");
       if (!window.confirm(`${summary}。请确认这些地址已经由 PLC 编程人员分配且未被占用。`)) return;
@@ -926,13 +933,17 @@ export function RulesPage() {
               <form
                 className="settings-form"
                 ref={plcFormRef}
-                key={`${plcResponse.config_generation}-${plc.enabled}-${plc.result_register}-${plc.output_control_point}`}
+                key={`${plcResponse.config_generation}-${plc.enabled}-${plc.result_register}-${plc.output_control_point}-${plc.capture_trigger_enabled}-${plc.capture_input_register}-${plc.capture_trigger_value}`}
                 onSubmit={handlePlcSubmit}
               >
                 <div className="form-grid settings-option-grid">
                   <label className="toggle-row">
                     <input name="enabled" type="checkbox" defaultChecked={plc.enabled} />
                     <span>允许这台工作站启用 PLC 联动</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input name="capture_trigger_enabled" type="checkbox" defaultChecked={plc.capture_trigger_enabled} />
+                    <span>启用 PLC 到位拍照</span>
                   </label>
                 </div>
                 <div className="form-grid">
@@ -947,14 +958,26 @@ export function RulesPage() {
                     <span className="field-hint">测试范围 Y00–Y17（八进制）；留空时计划和串口都不会产生 Y 指令。</span>
                   </label>
                 </div>
+                <div className="form-grid">
+                  <label className="field">
+                    输入寄存器
+                    <input name="capture_input_register" pattern="D(?:0|[1-9][0-9]{0,2})" defaultValue={plc.capture_input_register} placeholder="例如 D205" required />
+                    <span className="field-hint">FX3GA 测试范围 D0–D255；不得与输出寄存器相同。</span>
+                  </label>
+                  <label className="field">
+                    拍照触发值
+                    <input name="capture_trigger_value" type="number" min={0} max={65535} step={1} defaultValue={plc.capture_trigger_value} required />
+                    <span className="field-hint">默认 1；必须先读到其他值，再变为此值才触发一次。</span>
+                  </label>
+                </div>
                 <details className="settings-advanced">
                   <summary>高级设置与诊断</summary>
-                  <p className="hint-line">通信固定为 9600 / 偶校验 / 7 数据位 / 1 停止位；校验和包含 ETX；ACK 超时 500ms；自动重试 0 次。</p>
-                  <p className="hint-line">协议地址（只读）：输出寄存器 {plcResponse.resolved_addresses.result_register || "—"}；输出控制点 {plcResponse.resolved_addresses.output_control_point || "不控制"}。工人无需理解或填写这些数值。</p>
+                  <p className="hint-line">预设 PLC：三菱 FX3GA-40MR；通信固定为 9600 / 偶校验 / 7 数据位 / 1 停止位；校验和包含 ETX；超时 500ms；自动重试 0 次。</p>
+                  <p className="hint-line">协议地址（只读）：输入寄存器 {plcResponse.resolved_addresses.capture_input_register || "—"}；输出寄存器 {plcResponse.resolved_addresses.result_register || "—"}；输出控制点 {plcResponse.resolved_addresses.output_control_point || "不控制"}。工人无需理解或填写这些数值。</p>
                   <p className="hint-line">配置 generation：{plcResponse.config_generation}；协议版本：{plcResponse.protocol_version}。</p>
                 </details>
-                <p className="hint-line danger-text">未取得现场真实 ACK 并确认安全地址前，请保持“测试 PLC”。本版本不读取 16 个输入端口，也不自动拍照。</p>
-                <p className="hint-line">检测通过写 {plc.result_register}=1，检测不通过写 {plc.result_register}=0；{plc.output_control_point ? `D 得到 ACK 后才控制 ${plc.output_control_point}` : "不直接控制流水线"}。</p>
+                <p className="hint-line danger-text">未取得现场真实读帧、ACK 并确认安全地址前，请保持“测试 PLC”。</p>
+                <p className="hint-line">{plc.capture_trigger_enabled ? `每 200ms 读取 ${plc.capture_input_register}；先读到非 ${plc.capture_trigger_value} 后，再变为 ${plc.capture_trigger_value} 时拍照一次。` : "PLC 到位自动拍照未启用。"} 检测通过写 {plc.result_register}=1，检测不通过写 {plc.result_register}=0；{plc.output_control_point ? `D 得到 ACK 后才控制 ${plc.output_control_point}` : "不直接控制流水线"}。</p>
                 <div className="button-row">
                   <button className="primary compact-action" type="submit" disabled={plcMutation.isPending}>
                     <PlugZap size={16} aria-hidden="true" />

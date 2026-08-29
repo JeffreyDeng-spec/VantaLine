@@ -21,3 +21,9 @@ Common backend variable families include `VANTALINE_POSTGRES_DSN`, `INSPECTION_A
 - Server-wide settings belong in controlled environment/runtime configuration; workstation PLC addresses belong to the bound workstation record.
 - Defaults must be fail-closed for external I/O.
 - New configuration requires schema validation, permission definition, documentation, tests, and explicit behavior for missing/invalid values.
+
+## Workstation PLC schema v5
+
+The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed 9600/7E1, checksum including ETX, 500 ms timeout, zero retries, and a 200 ms input poll interval. Workstation-owned editable fields are `enabled`, `result_register`, optional `output_control_point`, `capture_trigger_enabled`, `capture_input_register`, and `capture_trigger_value`. Defaults are fail-closed: PLC and capture are disabled, input is D205, trigger is 1, result is D206, and Y is blank.
+
+The backend returns resolved protocol addresses and an immutable `capture_read_plan`; these are diagnostics/authorization output, never user input. Account logout does not delete the workstation cookie or configuration.

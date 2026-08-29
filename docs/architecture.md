@@ -14,6 +14,7 @@
 
 - Image upload and video requests perform detection only and never create a PLC plan.
 - Camera detection uses a dedicated authenticated endpoint. Its final result may reserve one workstation-bound v4 dispatch.
+- An enabled foreground workstation polls its configured D input locally through Web Serial. After observing reset, one non-trigger-to-trigger edge may invoke the same camera flow; sustained trigger values do not repeat and missed busy/not-ready edges are not replayed.
 - The browser declares the attempt, writes D, waits for ACK, optionally writes Y only after D ACK, and submits one evidence receipt.
 - Network/server failure after declaration cannot authorize automatic physical replay.
 

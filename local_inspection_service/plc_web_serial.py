@@ -49,15 +49,18 @@ except ModuleNotFoundError:  # pragma: no cover - direct script imports
 LEGACY_WEB_SERIAL_SCHEMA_VERSION = 3
 LEGACY_WEB_SERIAL_PROFILE_ID = "fx_ascii_16x16_test"
 LEGACY_WEB_SERIAL_PROTOCOL_VERSION = "plc-web-serial-v3"
-WEB_SERIAL_SCHEMA_VERSION = 4
+PREVIOUS_WEB_SERIAL_SCHEMA_VERSION = 4
+PREVIOUS_WEB_SERIAL_PROFILE_ID = "fx_ascii_16x16_spec_v1"
+WEB_SERIAL_SCHEMA_VERSION = 5
 WEB_SERIAL_TRANSPORT_MODE = "web_serial"
-WEB_SERIAL_PROFILE_ID = "fx_ascii_16x16_spec_v1"
+WEB_SERIAL_PROFILE_ID = "mitsubishi_fx3ga_40mr"
 WEB_SERIAL_PROTOCOL_VERSION = "plc-web-serial-v4"
 WEB_SERIAL_PLAN_DEADLINE_SECONDS = 2.0
 WEB_SERIAL_ACK_TIMEOUT_MS = 500
 WEB_SERIAL_CONNECTING_LEASE_SECONDS = 60
 WEB_SERIAL_ACTIVE_LEASE_SECONDS = 15
 WEB_SERIAL_HEARTBEAT_SECONDS = 5
+WEB_SERIAL_CAPTURE_POLL_INTERVAL_MS = 200
 
 DEFAULT_WEB_SERIAL_CONFIG: dict[str, Any] = {
     "schema_version": WEB_SERIAL_SCHEMA_VERSION,
@@ -71,7 +74,11 @@ DEFAULT_WEB_SERIAL_CONFIG: dict[str, Any] = {
     "data_bits": 7,
     "stop_bits": 1,
     "result_register": "D206",
-    "output_control_point": "Y04",
+    "output_control_point": "",
+    "capture_trigger_enabled": False,
+    "capture_input_register": "D205",
+    "capture_trigger_value": 1,
+    "capture_poll_interval_ms": WEB_SERIAL_CAPTURE_POLL_INTERVAL_MS,
     "ack_timeout_ms": WEB_SERIAL_ACK_TIMEOUT_MS,
     "retries": 0,
 }
@@ -81,6 +88,13 @@ LEGACY_WEB_SERIAL_CONFIG: dict[str, Any] = {
     "schema_version": LEGACY_WEB_SERIAL_SCHEMA_VERSION,
     "profile_id": LEGACY_WEB_SERIAL_PROFILE_ID,
     "checksum_mode": CHECKSUM_EXCLUDE_ETX_LEGACY_VB,
+}
+
+PREVIOUS_WEB_SERIAL_CONFIG: dict[str, Any] = {
+    **DEFAULT_WEB_SERIAL_CONFIG,
+    "schema_version": PREVIOUS_WEB_SERIAL_SCHEMA_VERSION,
+    "profile_id": PREVIOUS_WEB_SERIAL_PROFILE_ID,
+    "output_control_point": "Y04",
 }
 
 WEB_SERIAL_CONFIG_FIELDS = frozenset(DEFAULT_WEB_SERIAL_CONFIG)
@@ -152,10 +166,29 @@ def _normalize_web_serial_config(
             raise PlcConfigError("output_control_point must be Y00 through Y17 using octal digits")
         output_control_point = f"Y{int(output_control_point[1:], 8):02o}"
 
+    capture_trigger_enabled = _strict_bool(config["capture_trigger_enabled"], "capture_trigger_enabled")
+    capture_input_register = str(config["capture_input_register"] or "").strip().upper()
+    if not _D_RE.fullmatch(capture_input_register):
+        raise PlcConfigError("capture_input_register must be D0 through D255")
+    capture_input_number = int(capture_input_register[1:], 10)
+    if not 0 <= capture_input_number <= 255:
+        raise PlcConfigError("capture_input_register must be D0 through D255")
+    capture_input_register = f"D{capture_input_number}"
+    if capture_input_register == result_register:
+        raise PlcConfigError("capture_input_register must differ from result_register")
+    capture_trigger_value = _strict_int(config["capture_trigger_value"], "capture_trigger_value")
+    if not 0 <= capture_trigger_value <= 65535:
+        raise PlcConfigError("capture_trigger_value must be 0 through 65535")
+    if _strict_int(config["capture_poll_interval_ms"], "capture_poll_interval_ms") != WEB_SERIAL_CAPTURE_POLL_INTERVAL_MS:
+        raise PlcConfigError("FX3GA profile requires a 200ms capture poll interval")
+
     return {
         **config,
         "result_register": result_register,
         "output_control_point": output_control_point,
+        "capture_trigger_enabled": capture_trigger_enabled,
+        "capture_input_register": capture_input_register,
+        "capture_trigger_value": capture_trigger_value,
     }
 
 
@@ -182,8 +215,18 @@ def normalize_legacy_web_serial_config(raw: Mapping[str, Any] | None) -> dict[st
     )
 
 
+def normalize_previous_web_serial_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    return _normalize_web_serial_config(
+        raw,
+        defaults=PREVIOUS_WEB_SERIAL_CONFIG,
+        schema_version=PREVIOUS_WEB_SERIAL_SCHEMA_VERSION,
+        profile_id=PREVIOUS_WEB_SERIAL_PROFILE_ID,
+        checksum_modes=frozenset({CHECKSUM_INCLUDE_ETX}),
+    )
+
+
 def migrate_web_serial_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Fail-closed migration from the obsolete v3 frame contract to v4."""
+    """Migrate obsolete v3/v4 workstation configuration into schema v5."""
     source = dict(raw or {})
     if not source:
         return dict(DEFAULT_WEB_SERIAL_CONFIG)
@@ -198,6 +241,17 @@ def migrate_web_serial_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
             "result_register": legacy["result_register"],
             "output_control_point": legacy["output_control_point"],
         })
+    if (
+        source.get("schema_version") == PREVIOUS_WEB_SERIAL_SCHEMA_VERSION
+        or source.get("profile_id") == PREVIOUS_WEB_SERIAL_PROFILE_ID
+    ):
+        previous = normalize_previous_web_serial_config(source)
+        return normalize_web_serial_config({
+            **DEFAULT_WEB_SERIAL_CONFIG,
+            "enabled": previous["enabled"],
+            "result_register": previous["result_register"],
+            "output_control_point": previous["output_control_point"],
+        })
     return normalize_web_serial_config(source)
 
 
@@ -205,11 +259,30 @@ def web_serial_resolved_addresses(config: Mapping[str, Any]) -> dict[str, str]:
     normalized = normalize_web_serial_config(config)
     return {
         "result_register": logical_device_address(normalized["result_register"]),
+        "capture_input_register": logical_device_address(normalized["capture_input_register"]),
         "output_control_point": (
             logical_force_y_address(normalized["output_control_point"])
             if normalized["output_control_point"]
             else ""
         ),
+    }
+
+
+def build_web_serial_capture_read_plan(config: Mapping[str, Any], config_generation: int) -> dict[str, Any]:
+    normalized = normalize_web_serial_config(config)
+    register = normalized["capture_input_register"]
+    frame = build_d_register_read_frame(logical_device_address(register), normalized["checksum_mode"])
+    return {
+        "target": register,
+        "operation": "read_capture_input",
+        "frame_hex": frame.hex().upper(),
+        "frame_sha256": hashlib.sha256(frame).hexdigest(),
+        "expected_response_bytes": 8,
+        "read_timeout_ms": normalized["ack_timeout_ms"],
+        "poll_interval_ms": normalized["capture_poll_interval_ms"],
+        "trigger_value": normalized["capture_trigger_value"],
+        "config_generation": int(config_generation),
+        "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
     }
 
 

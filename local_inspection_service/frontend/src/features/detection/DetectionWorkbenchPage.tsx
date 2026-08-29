@@ -31,7 +31,8 @@ import type {
   SpecializedModelTask,
   StatusModel
 } from "../../api/types";
-import { PlcWebSerialClient } from "../plc/webSerialClient";
+import { PlcWebSerialClient, type PlcBrowserConnectionState } from "../plc/webSerialClient";
+import { nextCaptureTriggerState } from "../plc/captureTriggerState.mjs";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
@@ -41,6 +42,15 @@ import { useAuth } from "../auth/auth-context";
 
 type WorkbenchMode = "inspect" | "ai";
 type SourceMode = "image" | "video" | "camera";
+type PlcCapturePollState = {
+  status: "disabled" | "unarmed" | "armed" | "latched" | "triggered" | "missed" | "read_error";
+  value: number | null;
+  requestHex: string;
+  responseHex: string;
+  readAt: number | null;
+  triggerAt: number | null;
+  message: string;
+};
 
 const AI_TASK_MODEL_PREFIX = "ai_detection__task_";
 const DETECTION_UPLOAD_MAX_BYTES = 1_500_000;
@@ -118,6 +128,10 @@ function formatConfidence(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "-";
   return numeric.toFixed(3);
+}
+
+function formatLocalTimestamp(value: number) {
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
 }
 
 function formatAiStatus(value: unknown) {
@@ -638,6 +652,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const plcClientRef = useRef(new PlcWebSerialClient());
   const plcBoundModelIdRef = useRef("");
   const busyRef = useRef("");
+  const cameraCaptureLockRef = useRef(false);
   const [source, setSource] = useState<SourceMode>("image");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -657,6 +672,15 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [plcConnected, setPlcConnected] = useState(false);
   const [plcDiagnosticBusy, setPlcDiagnosticBusy] = useState(false);
   const [plcDiagnostic, setPlcDiagnostic] = useState<PlcWebSerialDiagnosticResult | null>(null);
+  const [plcCapturePoll, setPlcCapturePoll] = useState<PlcCapturePollState>({
+    status: "disabled",
+    value: null,
+    requestHex: "",
+    responseHex: "",
+    readAt: null,
+    triggerAt: null,
+    message: "PLC 到位拍照未启用。"
+  });
   const [plcConnectionStatus, setPlcConnectionStatus] = useState(
     PlcWebSerialClient.supported() ? "PLC 尚未连接。" : "当前浏览器不支持 Web Serial。"
   );
@@ -1034,6 +1058,149 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }, []);
 
   useEffect(() => {
+    const workstation = plcWorkstationQuery.data;
+    const plan = workstation?.capture_read_plan;
+    const captureEnabled = Boolean(workstation?.config?.enabled && workstation.config.capture_trigger_enabled);
+    if (!plcConnected || !captureEnabled || !plan) {
+      setPlcCapturePoll((current) => ({
+        ...current,
+        status: "disabled",
+        message: captureEnabled ? "连接 PLC 后开始读取到位信号。" : "PLC 到位拍照未启用。"
+      }));
+      return;
+    }
+
+    let cancelled = false;
+    let timer = 0;
+    let armed = false;
+    setPlcCapturePoll({
+      status: "unarmed",
+      value: null,
+      requestHex: plan.frame_hex,
+      responseHex: "",
+      readAt: null,
+      triggerAt: null,
+      message: `等待 ${plan.target} 先出现非 ${plan.trigger_value} 值后武装。`
+    });
+
+    const schedule = () => {
+      if (!cancelled) timer = window.setTimeout(() => { void poll(); }, plan.poll_interval_ms);
+    };
+    const poll = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible" || plcDiagnosticBusy) {
+        schedule();
+        return;
+      }
+      try {
+        const read = await plcClientRef.current.readCaptureInput(plan, (message) => {
+          plcBoundModelIdRef.current = "";
+          setPlcConnected(false);
+          setPlcConnectionStatus(message);
+        });
+        if (!read || cancelled) {
+          schedule();
+          return;
+        }
+        const common = {
+          value: read.value,
+          requestHex: read.request_hex,
+          responseHex: read.response_hex,
+          readAt: read.read_at
+        };
+        const edge = nextCaptureTriggerState(armed, read.value, plan.trigger_value);
+        armed = edge.armed;
+        if (edge.action === "armed") {
+          setPlcCapturePoll((current) => ({
+            ...current,
+            ...common,
+            status: "armed",
+            message: `已武装；等待 ${plan.target} 变为 ${plan.trigger_value}。`
+          }));
+        } else if (edge.action === "latched") {
+          setPlcCapturePoll((current) => ({
+            ...current,
+            ...common,
+            status: current.status === "triggered" || current.status === "missed" ? "latched" : "unarmed",
+            message: `当前值持续为 ${plan.trigger_value}；不会重复拍照，等待复位。`
+          }));
+        } else {
+          const triggerAt = Date.now();
+          const video = videoRef.current;
+          const cameraReady = source === "camera" && Boolean(stream) && Boolean(activeModelId)
+            && Boolean(video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0)
+            && Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled))
+            && !busyRef.current && !plcDiagnosticBusy;
+          if (!cameraReady) {
+            setPlcCapturePoll((current) => ({
+              ...current,
+              ...common,
+              triggerAt,
+              status: "missed",
+              message: "检测到到位沿，但摄像头、模型或检测任务未就绪；本次不补拍。"
+            }));
+          } else {
+            const requiredPlcState = plcClientRef.current.state();
+            if (!requiredPlcState) {
+              setPlcCapturePoll((current) => ({
+                ...current,
+                ...common,
+                triggerAt,
+                status: "missed",
+                message: "检测到到位沿，但 PLC 租约已经失效；本次不补拍。"
+              }));
+              schedule();
+              return;
+            }
+            setPlcCapturePoll((current) => ({
+              ...current,
+              ...common,
+              triggerAt,
+              status: "triggered",
+              message: `检测到 ${plan.target}=${plan.trigger_value}，正在拍照检测。`
+            }));
+            const completed = await runCamera(video, {
+              requiredPlcState,
+              cameraRequestId: `plc_trigger_${crypto.randomUUID()}`
+            });
+            if (!completed) {
+              setPlcCapturePoll((current) => ({
+                ...current,
+                status: "missed",
+                message: "到位沿已消费，但拍照或 PLC 专用检测未完成；本次不补拍。"
+              }));
+            }
+          }
+        }
+        schedule();
+      } catch (nextError) {
+        if (cancelled) return;
+        setPlcCapturePoll((current) => ({
+          ...current,
+          status: "read_error",
+          message: nextError instanceof Error ? nextError.message : String(nextError)
+        }));
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeModelId,
+    plcConnected,
+    plcDiagnosticBusy,
+    plcWorkstationQuery.data?.capture_read_plan?.config_generation,
+    plcWorkstationQuery.data?.capture_read_plan?.frame_hex,
+    plcWorkstationQuery.data?.capture_read_plan?.trigger_value,
+    plcWorkstationQuery.data?.config?.capture_trigger_enabled,
+    plcWorkstationQuery.data?.config?.enabled,
+    source,
+    stream
+  ]);
+
+  useEffect(() => {
     if (routeTask && !isAi) {
       const fallback = modelOptions.find((model) => model.exists || isAiModel(model));
       if (!selectedModelId || !modelOptions.some((model) => model.id === selectedModelId && (model.exists || isAiModel(model)))) {
@@ -1403,13 +1570,18 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     }
   }
 
-  async function runAnalysis(kind: SourceMode, file: File) {
-    if (!(await ensureEnvironmentBackground())) return;
+  async function runAnalysis(
+    kind: SourceMode,
+    file: File,
+    options?: { requiredPlcState?: PlcBrowserConnectionState; cameraRequestId?: string }
+  ) {
+    if (!(await ensureEnvironmentBackground())) return false;
     if (!activeModelId) {
       notify({ title: "当前任务暂无可用模型", tone: "error" });
-      return;
+      return false;
     }
     detectionAudioContext();
+    busyRef.current = kind;
     setBusy(kind);
     setError("");
     const controller = new AbortController();
@@ -1420,16 +1592,29 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       const uploadFile = kind === "video" || activeModelIsAi ? file : await optimizeImageUpload(file);
       form.append("file", uploadFile);
       form.append("model_id", activeModelId);
-      const plcState = kind === "camera" ? plcClientRef.current.state() : null;
+      const currentPlcState = kind === "camera" ? plcClientRef.current.state() : null;
+      const requiredPlcState = options?.requiredPlcState;
+      if (requiredPlcState && (
+        !currentPlcState
+        || currentPlcState.sessionId !== requiredPlcState.sessionId
+        || currentPlcState.leaseEpoch !== requiredPlcState.leaseEpoch
+        || currentPlcState.configGeneration !== requiredPlcState.configGeneration
+      )) {
+        throw new Error("PLC 自动触发连接或配置已失效，禁止降级为普通图片检测");
+      }
+      const plcState = requiredPlcState || currentPlcState;
       if (plcState) {
         form.append("plc_session_id", plcState.sessionId);
-        form.append("camera_request_id", `camera_${crypto.randomUUID()}`);
+        form.append("camera_request_id", options?.cameraRequestId || `camera_${crypto.randomUUID()}`);
       }
       let next = kind === "video"
         ? await analyzeVideo(form, { signal: controller.signal })
         : plcState
           ? await analyzeCamera(form, { signal: controller.signal })
           : await analyzeImage(form, { signal: controller.signal });
+      if (requiredPlcState && !next.plc_sync) {
+        throw new Error("PLC 自动触发检测未返回工作站指令计划");
+      }
       if (plcState && next.plc_sync?.status === "planned") {
         next = {
           ...next,
@@ -1444,31 +1629,52 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       setSource(kind);
       playDetectionSound(Boolean(next.passed));
       notify({ title: kind === "video" ? "视频分析完成" : `${activeDetectionLabel}完成`, tone: "success" });
+      return true;
     } catch (nextError) {
       const message = isAbortError(nextError) ? detectionTimeoutText(kind, timeoutMs) : nextError instanceof Error ? nextError.message : String(nextError);
       setError(message);
       playDetectionSound(false);
       notify({ title: "检测失败", description: message, tone: "error" });
+      return false;
     } finally {
       window.clearTimeout(timeout);
+      busyRef.current = "";
       setBusy("");
     }
   }
 
-  async function runCamera(videoElement: HTMLVideoElement | null = videoRef.current) {
+  async function runCamera(
+    videoElement: HTMLVideoElement | null = videoRef.current,
+    options?: { requiredPlcState?: PlcBrowserConnectionState; cameraRequestId?: string }
+  ) {
+    if (cameraCaptureLockRef.current || busyRef.current) {
+      if (!options?.requiredPlcState) notify({ title: "已有检测正在执行", tone: "info" });
+      return false;
+    }
     if (plcDiagnosticBusy) {
       notify({ title: "PLC 通讯诊断正在执行", description: "请等待诊断结束后再拍照检测", tone: "info" });
-      return;
+      return false;
     }
+    cameraCaptureLockRef.current = true;
+    busyRef.current = "camera";
+    setBusy("camera");
     try {
-      if (!(await ensureEnvironmentBackground())) return;
-      if (!stream) await startCamera();
+      if (!(await ensureEnvironmentBackground())) return false;
+      if (!stream) {
+        if (options?.requiredPlcState) return false;
+        await startCamera();
+      }
       const file = await captureVideoFrame(videoElement, activeModelIsAi ? "ai_camera_capture" : "camera_capture");
-      await runAnalysis("camera", file);
+      return await runAnalysis("camera", file, options);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
       setError(message);
       notify({ title: "摄像头检测失败", description: message, tone: "error" });
+      return false;
+    } finally {
+      cameraCaptureLockRef.current = false;
+      if (busyRef.current === "camera") busyRef.current = "";
+      setBusy("");
     }
   }
 
@@ -1782,6 +1988,32 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <p className={`hint-line ${plcConnected ? "success-text" : ""}`}>
                 {plcWorkstationQuery.data?.station ? `工作站：${plcWorkstationQuery.data.station.name}。` : "本机尚未绑定工作站。"} {plcConnectionStatus}
               </p>
+              <section className="plc-communication-diagnostic" aria-label="PLC 到位拍照状态">
+                <div className="section-title compact">
+                  <h3>PLC 到位拍照</h3>
+                  <span className={`pill ${plcCapturePoll.status === "armed" ? "ok" : plcCapturePoll.status === "read_error" || plcCapturePoll.status === "missed" ? "danger" : "neutral"}`}>
+                    {{
+                      disabled: "未启用",
+                      unarmed: "未武装",
+                      armed: "已武装",
+                      latched: "已锁定",
+                      triggered: "已触发",
+                      missed: "已错过",
+                      read_error: "读取故障"
+                    }[plcCapturePoll.status]}
+                  </span>
+                </div>
+                <div className="plc-diagnostic-labels" aria-live="polite">
+                  <label>PLC 型号<output>三菱 FX3GA-40MR</output></label>
+                  <label>输入寄存器<output>{plcWorkstationQuery.data?.config?.capture_input_register || "—"}</output></label>
+                  <label>当前读取值<output>{plcCapturePoll.value ?? "—"}</output></label>
+                  <label>状态说明<output>{plcCapturePoll.message}</output></label>
+                  <label>最近读取时间<output>{plcCapturePoll.readAt ? formatLocalTimestamp(plcCapturePoll.readAt) : "—"}</output></label>
+                  <label>最近触发时间<output>{plcCapturePoll.triggerAt ? formatLocalTimestamp(plcCapturePoll.triggerAt) : "—"}</output></label>
+                  <label>最近读取指令<code>{plcCapturePoll.requestHex || "—"}</code></label>
+                  <label>最近原始返回<code>{plcCapturePoll.responseHex || "—"}</code></label>
+                </div>
+              </section>
               <p className="hint-line">仅本页摄像头拍照检测会写 PLC；图片上传和视频分析永远不会写串口。页面隐藏、刷新、拔线或租约失效会立即停止新写入。</p>
               {canViewDiagnostics ? (
                 <section className="plc-communication-diagnostic" aria-label="PLC 通讯诊断">

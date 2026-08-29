@@ -23,9 +23,12 @@ python local_inspection_service/scripts/smoke_plc_frontend_contract.py
 python local_inspection_service/scripts/smoke_migration_safety.py
 python local_inspection_service/scripts/smoke_postgres_runtime_repository.py
 npm --prefix local_inspection_service/frontend ci
+npm --prefix local_inspection_service/frontend run test:plc-capture
 npm --prefix local_inspection_service/frontend run typecheck
 npm --prefix local_inspection_service/frontend run build:production-cutover
 git diff --check
 ```
 
 CI is authoritative for production dependency and PostgreSQL service checks. Never weaken or delete a failing safety assertion merely to make a change mergeable; resolve the behavioral mismatch or update the documented contract in the same reviewed PR.
+
+PLC input changes must additionally cover D-register read golden frames and parsing, v4-to-v5 migration, input/output conflicts, reset-before-arm, one edge/one capture, sustained-trigger latching, reset/retrigger, busy/not-ready missed edges, write priority, and reconnect fail-closed behavior.

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
+    "test:plc-capture": "node --test src/features/plc/captureTriggerState.test.mjs",
     "build:preview": "npm run typecheck && VITE_ROUTER_BASENAME=/react-preview vite build",
     "build:production-cutover": "npm run typecheck && VITE_ROUTER_BASENAME=/ vite build --base /static/ --outDir dist-production --emptyOutDir",
     "build": "npm run build:preview",

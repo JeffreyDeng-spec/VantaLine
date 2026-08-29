@@ -11,7 +11,9 @@ import {
   sendPlcWebSerialReceipt
 } from "../../api/queries";
 import type {
+  PlcCaptureInputReadResult,
   PlcSyncStatus,
+  PlcWebSerialCaptureReadPlan,
   PlcWebSerialDiagnosticResult,
   PlcWebSerialFrame,
   PlcWebSerialOperation,
@@ -90,6 +92,7 @@ export class PlcWebSerialClient {
   private disconnectListener: ((event: Event) => void) | null = null;
   private pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
   private pendingReadResolved = false;
+  private priorityOperations = 0;
 
   static supported() {
     return typeof navigator !== "undefined" && Boolean(navigator.serial) && Boolean(navigator.locks) && window.isSecureContext;
@@ -318,6 +321,7 @@ export class PlcWebSerialClient {
   }
 
   execute(dispatch: PlcSyncStatus, onFatal: (message: string) => void): Promise<PlcSyncStatus> {
+    this.priorityOperations += 1;
     const operation = async () => {
       const resumedFromBackground = await this.waitUntilVisible();
       if (resumedFromBackground) await this.resume(onFatal);
@@ -369,12 +373,48 @@ export class PlcWebSerialClient {
         throw error;
       }
     };
+    const next = this.queue.then(operation, operation).finally(() => { this.priorityOperations -= 1; });
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  readCaptureInput(
+    plan: PlcWebSerialCaptureReadPlan,
+    onFatal: (message: string) => void
+  ): Promise<PlcCaptureInputReadResult | null> {
+    if (this.priorityOperations > 0) return Promise.resolve(null);
+    const operation = async (): Promise<PlcCaptureInputReadResult | null> => {
+      if (this.priorityOperations > 0 || document.visibilityState !== "visible") return null;
+      const state = this.state();
+      if (!state || !this.writer) throw new Error("PLC 未连接或租约无效");
+      if (plan.protocol_version !== PLC_WEB_SERIAL_VERSION || plan.config_generation !== state.configGeneration) {
+        await this.failClosed("PLC 输入读取配置已变化，请人工重新连接", onFatal);
+        throw new Error("PLC 输入读取计划与当前连接不一致");
+      }
+      try {
+        this.armRead();
+        await Promise.resolve();
+        if (this.pendingReadResolved) throw new Error("读取前发现串口残留数据");
+        await this.writer.write(bytesFromHex(plan.frame_hex));
+        const response = await this.readExact(plan.expected_response_bytes, plan.read_timeout_ms);
+        return {
+          value: parseDiagnosticWordResponse(response),
+          request_hex: plan.frame_hex,
+          response_hex: hexFromBytes(response),
+          read_at: Date.now()
+        };
+      } catch (error) {
+        if (this.state()) await this.failClosed("PLC 输入寄存器读取失败，串口已关闭；请检查后重新连接", onFatal);
+        throw error;
+      }
+    };
     const next = this.queue.then(operation, operation);
     this.queue = next.catch(() => undefined);
     return next;
   }
 
   diagnoseD206(onFatal: (message: string) => void): Promise<PlcWebSerialDiagnosticResult> {
+    this.priorityOperations += 1;
     const operation = async (): Promise<PlcWebSerialDiagnosticResult> => {
       const state = this.state();
       if (!state) throw new Error("请先连接本机 PLC");
@@ -447,7 +487,7 @@ export class PlcWebSerialClient {
         }
       }
     };
-    const next = this.queue.then(operation, operation);
+    const next = this.queue.then(operation, operation).finally(() => { this.priorityOperations -= 1; });
     this.queue = next.catch(() => undefined);
     return next;
   }

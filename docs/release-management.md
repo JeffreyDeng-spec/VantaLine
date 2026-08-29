@@ -12,6 +12,8 @@
 4. Successful push CI on `main` triggers `Release and deploy production`; no manual deployment approval/button is required.
 5. The workflow builds one immutable artifact, creates a draft Release, deploys through the restricted account, verifies exact SHA/protocol/assets/service acceptance, then publishes the Release.
 
+For PLC automatic-capture changes, the required frontend job executes `test:plc-capture` before typecheck and production build. Reset-before-arm, sustained-trigger latching, and reset/retrigger failures block merge and release.
+
 ## Artifact and production invariants
 
 - Frontend and backend share one release, Git SHA, and PLC protocol contract.
