@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 SCHEMA_VERSION = "2026_07_01_phase4_pr1"
 INCOMING_TEXT_SCHEMA_VERSION = "2026_08_06_incoming_text_v1"
+TEXT_INSPECTION_SCHEMA_VERSION = "2026_08_29_text_inspection_v2"
 PLC_WEB_SERIAL_SCHEMA_VERSION = "2026_08_06_plc_web_serial_v3"
 
 ACTIVE_RUNTIME_STATUSES = frozenset(
@@ -62,6 +63,12 @@ OWNER_REQUIRED_TABLES = frozenset(
         "auto_optimize_states",
         "incoming_text_reference_versions",
         "incoming_text_inspections",
+        "text_inspection_standards",
+        "text_inspection_assets",
+        "text_inspection_records",
+        "text_inspection_manual_sessions",
+        "text_inspection_manual_pages",
+        "text_inspection_classification_feedback",
     }
 )
 
@@ -470,6 +477,75 @@ TABLES = (
             "CREATE INDEX IF NOT EXISTS idx_incoming_text_inspection_material ON incoming_text_inspections (material_code, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_incoming_text_inspection_decision ON incoming_text_inspections (auto_decision, final_decision)",
         ),
+    ),
+    # Text inspection v2 is additive so the previous release can still run on
+    # the expanded schema during the rollback window.
+    TableSchema(
+        "text_inspection_standards",
+        ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_standards (
+            id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, name TEXT NOT NULL,
+            material_code TEXT NOT NULL, version_label TEXT NOT NULL,
+            standard_type TEXT NOT NULL, status TEXT NOT NULL,
+            source_sha256 TEXT NOT NULL, created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL, raw_json TEXT NOT NULL,
+            UNIQUE (owner_user_id, material_code, version_label, standard_type)
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_inspection_standards_owner ON text_inspection_standards (owner_user_id, created_at)",),
+    ),
+    TableSchema(
+        "text_inspection_assets",
+        ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_assets (
+            id TEXT PRIMARY KEY, standard_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+            asset_kind TEXT NOT NULL, ordinal INTEGER NOT NULL, status TEXT NOT NULL,
+            sha256 TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+            raw_json TEXT NOT NULL, UNIQUE (standard_id, ordinal)
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_inspection_assets_standard ON text_inspection_assets (owner_user_id, standard_id, ordinal)",),
+    ),
+    TableSchema(
+        "text_inspection_records",
+        ("id", "owner_user_id", "standard_id", "comparison_id", "status", "auto_decision", "final_decision", "source_sha256", "created_at", "updated_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_records (
+            id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, standard_id TEXT NOT NULL,
+            comparison_id TEXT NOT NULL, status TEXT NOT NULL, auto_decision TEXT NOT NULL,
+            final_decision TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, raw_json TEXT NOT NULL,
+            UNIQUE (owner_user_id, comparison_id)
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_inspection_records_owner ON text_inspection_records (owner_user_id, created_at)",),
+    ),
+    TableSchema(
+        "text_inspection_manual_sessions",
+        ("id", "owner_user_id", "standard_id", "status", "created_at", "updated_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_manual_sessions (
+            id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, standard_id TEXT NOT NULL,
+            status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+            raw_json TEXT NOT NULL
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_manual_sessions_owner ON text_inspection_manual_sessions (owner_user_id, updated_at)",),
+    ),
+    TableSchema(
+        "text_inspection_manual_pages",
+        ("id", "session_id", "owner_user_id", "capture_id", "standard_asset_id", "status", "created_at", "updated_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_manual_pages (
+            id TEXT PRIMARY KEY, session_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+            capture_id TEXT NOT NULL, standard_asset_id TEXT NOT NULL, status TEXT NOT NULL,
+            created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, raw_json TEXT NOT NULL,
+            UNIQUE (owner_user_id, session_id, capture_id)
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_manual_pages_session ON text_inspection_manual_pages (owner_user_id, session_id, created_at)",),
+    ),
+    TableSchema(
+        "text_inspection_classification_feedback",
+        ("id", "owner_user_id", "standard_id", "asset_id", "action", "created_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_classification_feedback (
+            id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, standard_id TEXT NOT NULL,
+            asset_id TEXT NOT NULL, action TEXT NOT NULL, created_at INTEGER NOT NULL,
+            raw_json TEXT NOT NULL
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_classification_feedback ON text_inspection_classification_feedback (owner_user_id, standard_id, created_at)",),
     ),
     TableSchema(
         "plc_workstations",

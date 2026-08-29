@@ -706,7 +706,8 @@ export interface TextCompareBetaDifference {
   reference_text: string;
   actual_text: string;
   confidence: number;
-  type: "changed" | "missing" | "extra";
+  type: "changed" | "missing" | "extra" | "wrong_text" | "case" | "number" | "unit" | "punctuation" | "spacing" | "hyphen" | "blank";
+  box?: [number, number, number, number];
   region_normalized?: { x: number; y: number; width: number; height: number } | null;
 }
 
@@ -723,6 +724,33 @@ export interface TextCompareBetaResult {
   alignment?: { accepted?: boolean; reason?: string };
   error_code?: string;
 }
+
+export interface TextInspectionAsset {
+  id: string;
+  standard_id: string;
+  asset_kind: "label_candidate" | "manual_page";
+  ordinal: number;
+  status: "candidate" | "excluded" | "needs_confirmation" | "page";
+  category?: string;
+  context?: string;
+  classification_confidence?: number;
+  content_url?: string;
+}
+
+export interface TextInspectionStandard {
+  id: string;
+  name: string;
+  material_code: string;
+  version_label: string;
+  standard_type: "label" | "manual";
+  status: "draft" | "confirmed";
+  source_sha256: string;
+  created_at: number;
+  asset_count: number;
+  assets?: TextInspectionAsset[];
+}
+
+export interface TextInspectionStandardsResponse { items: TextInspectionStandard[]; }
 
 export interface AgentRecommendationResponse {
   source?: string;

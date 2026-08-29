@@ -17,6 +17,8 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 2. Run migration safety, repository smoke, and real PostgreSQL 16 schema validation.
 3. Document data ownership, compatibility window, observability, and whole-release rollback.
 4. Let the immutable release installer apply only approved compatible migrations.
+
+`2026_08_29_text_inspection_v2.sql` is expand-only. It adds six independent `text_inspection_*` tables and does not rename, rewrite or drop the previous `incoming_text_*` tables. Data deletion or copying is never part of automatic deployment and requires a separately authorized, restartable operational run with restore evidence.
 5. Verify service health and data behavior after deployment; do not switch to a legacy JSON runtime as an ad-hoc rollback.
 
 Backups and destructive retention actions require separate operational authorization and restore evidence. See [Production runbook](production-runbook.md).

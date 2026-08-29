@@ -22,6 +22,7 @@ This is the single index for current project knowledge. Documents marked **Autho
 - [Production runbook](production-runbook.md) — operations, diagnosis, and rollback
 - [PostgreSQL runtime operations](postgresql-runtime.md) — current data-store and migration contract
 - [Production baseline provenance](production-baseline-202608.md) — origin of the first reproducible baseline
+- [Text inspection v2](text-inspection-v2.md) — account-scoped standards, document safety, VLM idempotency, and staged retirement
 
 ## Authoritative subsystem guides
 

@@ -45,6 +45,12 @@ PRIMARY_KEY_COLUMNS = {
     "audit_events": ("id",),
     "incoming_text_reference_versions": ("id",),
     "incoming_text_inspections": ("id",),
+    "text_inspection_standards": ("id",),
+    "text_inspection_assets": ("id",),
+    "text_inspection_records": ("id",),
+    "text_inspection_manual_sessions": ("id",),
+    "text_inspection_manual_pages": ("id",),
+    "text_inspection_classification_feedback": ("id",),
     "plc_workstations": ("id",),
     "plc_workstation_leases": ("station_id",),
     "plc_web_serial_dispatches": ("id",),
@@ -349,6 +355,81 @@ class PostgresRuntimeRepository:
             rollback = getattr(self.connection, "rollback", None)
             if callable(rollback):
                 rollback()
+            raise
+        finally:
+            close = getattr(cursor, "close", None)
+            if callable(close):
+                close()
+
+    def patch_text_inspection_asset(self, standard_id: str, asset_id: str, owner_user_id: str, action: str, updated_at: int) -> dict[str, Any]:
+        standards = self._qualified_table("text_inspection_standards")
+        assets = self._qualified_table("text_inspection_assets")
+        cursor = self._cursor()
+        try:
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"vantaline:text-standard:{owner_user_id}:{standard_id}",))
+            cursor.execute(f"SELECT raw_json FROM {standards} WHERE id = %s AND owner_user_id = %s FOR UPDATE", (standard_id, owner_user_id))
+            standard_row = cursor.fetchone()
+            if standard_row is None:
+                raise PostgresRuntimeRepositoryError("Text inspection standard not found")
+            standard = _decode_value("raw_json", self._row_to_dict(cursor, standard_row).get("raw_json"))
+            if not isinstance(standard, dict) or standard.get("status") != "draft":
+                raise PostgresRuntimeRepositoryError("Confirmed text inspection standard is immutable")
+            cursor.execute(f"SELECT raw_json FROM {assets} WHERE id = %s AND standard_id = %s AND owner_user_id = %s FOR UPDATE", (asset_id, standard_id, owner_user_id))
+            asset_row = cursor.fetchone()
+            if asset_row is None:
+                raise PostgresRuntimeRepositoryError("Text inspection asset not found")
+            asset = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
+            if not isinstance(asset, dict):
+                raise PostgresRuntimeRepositoryError("Text inspection asset authority is corrupt")
+            asset["status"] = {"restore": "candidate", "exclude": "excluded", "confirm": "candidate"}[action]
+            asset["classification_source"] = "human"
+            asset["updated_at"] = updated_at
+            cursor.execute(f"UPDATE {assets} SET status = %s, updated_at = %s, raw_json = %s::jsonb WHERE id = %s", (asset["status"], updated_at, _json_parameter(asset), asset_id))
+            self.connection.commit()
+            return asset
+        except Exception:
+            self.connection.rollback()
+            raise
+        finally:
+            close = getattr(cursor, "close", None)
+            if callable(close):
+                close()
+
+    def confirm_text_inspection_standard(self, standard_id: str, owner_user_id: str, confirmed_at: int) -> dict[str, Any]:
+        standards = self._qualified_table("text_inspection_standards")
+        assets = self._qualified_table("text_inspection_assets")
+        cursor = self._cursor()
+        try:
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"vantaline:text-standard:{owner_user_id}:{standard_id}",))
+            cursor.execute(f"SELECT raw_json FROM {standards} WHERE id = %s AND owner_user_id = %s FOR UPDATE", (standard_id, owner_user_id))
+            row = cursor.fetchone()
+            if row is None:
+                raise PostgresRuntimeRepositoryError("Text inspection standard not found")
+            standard = _decode_value("raw_json", self._row_to_dict(cursor, row).get("raw_json"))
+            if not isinstance(standard, dict):
+                raise PostgresRuntimeRepositoryError("Text inspection standard authority is corrupt")
+            if standard.get("status") == "confirmed":
+                self.connection.commit()
+                return standard
+            if standard.get("status") != "draft":
+                raise PostgresRuntimeRepositoryError("Text inspection standard is not confirmable")
+            cursor.execute(f"SELECT raw_json FROM {assets} WHERE standard_id = %s AND owner_user_id = %s ORDER BY ordinal FOR UPDATE", (standard_id, owner_user_id))
+            selected = []
+            for asset_row in cursor.fetchall():
+                asset = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
+                if isinstance(asset, dict) and asset.get("status") in {"candidate", "page"}:
+                    selected.append(asset)
+            if not selected:
+                raise PostgresRuntimeRepositoryError("Text inspection standard requires at least one selected asset")
+            standard["status"] = "confirmed"
+            standard["confirmed_at"] = standard["updated_at"] = confirmed_at
+            standard["confirmed_assets"] = [{"id": item["id"], "sha256": item.get("sha256", ""), "ordinal": int(item.get("ordinal") or 0), "mime_type": item.get("mime_type", "")} for item in selected]
+            standard["confirmed_asset_ids"] = [item["id"] for item in selected]
+            cursor.execute(f"UPDATE {standards} SET status = 'confirmed', updated_at = %s, raw_json = %s::jsonb WHERE id = %s", (confirmed_at, _json_parameter(standard), standard_id))
+            self.connection.commit()
+            return standard
+        except Exception:
+            self.connection.rollback()
             raise
         finally:
             close = getattr(cursor, "close", None)

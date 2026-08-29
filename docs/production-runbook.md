@@ -4,6 +4,8 @@
 
 Before merging a PLC automatic-capture release, confirm the frontend `test:plc-capture` step, backend PLC smoke, release contract, and documentation contract all passed.
 
+Before enabling text inspection v2, confirm account isolation, the customer DOCX fixture, migration safety, frontend production build and provider fail-closed tests. Keep automatic VLM `MATCH` review-only until customer commissioning, external-media consent and account cost controls are recorded. Do not run old-data cleanup from the immutable release installer.
+
 ## Read-only diagnosis first
 
 1. Check the GitHub workflow and immutable Release for the expected commit.

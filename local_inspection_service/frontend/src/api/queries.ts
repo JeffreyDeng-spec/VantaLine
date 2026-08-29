@@ -43,6 +43,9 @@ import type {
   IncomingTextInspectorsResponse,
   IncomingTextInspectionsResponse,
   TextCompareBetaResult,
+  TextInspectionAsset,
+  TextInspectionStandard,
+  TextInspectionStandardsResponse,
   IncomingTextReference,
   IncomingTextTaskResponse,
   IncomingTextFieldRule,
@@ -403,6 +406,30 @@ export function getIncomingTextInspections(auth: AuthContextValue, taskId = "") 
 
 export function analyzeTextCompareBeta(form: FormData, options?: ApiRequestOptions) {
   return apiClient.upload<TextCompareBetaResult>("/api/text-compare-beta/analyze", form, options);
+}
+
+export function listTextInspectionStandards() {
+  return apiClient.get<TextInspectionStandardsResponse>("/api/text-inspection/standards");
+}
+
+export function getTextInspectionStandard(id: string) {
+  return apiClient.get<TextInspectionStandard>(`/api/text-inspection/standards/${encodeURIComponent(id)}`);
+}
+
+export function importTextInspectionStandard(form: FormData) {
+  return apiClient.upload<TextInspectionStandard>("/api/text-inspection/standards/import", form);
+}
+
+export function patchTextInspectionAsset(standardId: string, assetId: string, action: "restore" | "exclude" | "confirm") {
+  return apiClient.patch<TextInspectionAsset>(`/api/text-inspection/standards/${encodeURIComponent(standardId)}/assets/${encodeURIComponent(assetId)}`, { action });
+}
+
+export function confirmTextInspectionStandard(id: string) {
+  return apiClient.post<TextInspectionStandard>(`/api/text-inspection/standards/${encodeURIComponent(id)}/confirm`);
+}
+
+export function compareTextInspectionLabel(form: FormData, options?: ApiRequestOptions) {
+  return apiClient.upload<TextCompareBetaResult>("/api/text-inspection/label/compare", form, options);
 }
 
 export function advancePipelineTask(taskId: string) {

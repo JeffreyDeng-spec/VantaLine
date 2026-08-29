@@ -44,7 +44,7 @@ export const detectionCenterNavItem: NavItem = {
 };
 
 export const textCompareBetaNavItem: NavItem = {
-  label: "文字对比 Beta",
+  label: "文字检验",
   path: "/text-compare-beta",
   view: "textCompareBeta",
   permission: "inspection",
