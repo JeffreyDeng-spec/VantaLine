@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Camera, CheckCircle2, Clipboard, FileImage, RefreshCcw, ScanText, Upload } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
-import { analyzeTextCompareBeta } from "../../api/queries";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { analyzeTextCompareBeta, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
 import type { TextCompareBetaResult } from "../../api/types";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -16,6 +16,7 @@ function qualityCopy(reasons?: string[]) {
 }
 
 export function TextCompareBetaPage() {
+  const queryClient = useQueryClient();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const busyRef = useRef(false);
@@ -28,6 +29,31 @@ export function TextCompareBetaPage() {
   const [inputError, setInputError] = useState("");
   const [result, setResult] = useState<TextCompareBetaResult | null>(null);
   const [activeDifference, setActiveDifference] = useState("");
+  const [mode, setMode] = useState<"label" | "manual">("label");
+  const [selectedStandardId, setSelectedStandardId] = useState("");
+  const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importName, setImportName] = useState("");
+  const [importMaterial, setImportMaterial] = useState("");
+  const [importVersion, setImportVersion] = useState("V1");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const standardsQuery = useQuery({ queryKey: ["text-inspection", "standards"], queryFn: listTextInspectionStandards });
+  const standardQuery = useQuery({ queryKey: ["text-inspection", "standard", selectedStandardId], queryFn: () => getTextInspectionStandard(selectedStandardId), enabled: !!selectedStandardId });
+  const selectedAsset = standardQuery.data?.assets?.find((asset) => asset.id === selectedAssetId);
+  const importMutation = useMutation({
+    mutationFn: () => {
+      if (!importFile || !importName.trim() || !importMaterial.trim() || !importVersion.trim()) throw new Error("请填写标准名称、物料编码、版本并选择 DOCX 或 PDF。");
+      const form = new FormData(); form.set("file", importFile); form.set("name", importName.trim()); form.set("material_code", importMaterial.trim()); form.set("version_label", importVersion.trim());
+      return importTextInspectionStandard(form);
+    },
+    onSuccess: (value) => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); setSelectedStandardId(value.id); setShowImport(false); },
+    onError: (error: Error) => setInputError(error.message)
+  });
+  const assetMutation = useMutation({
+    mutationFn: ({ assetId, action }: { assetId: string; action: "restore" | "exclude" | "confirm" }) => patchTextInspectionAsset(selectedStandardId, assetId, action),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["text-inspection", "standard", selectedStandardId] })
+  });
+  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); }, onError: (error: Error) => setInputError(error.message) });
 
   const replaceReference = (file: File) => {
     if (busyRef.current) throw new Error("正在对比，请等待本次结果完成。");
@@ -74,20 +100,22 @@ export function TextCompareBetaPage() {
   });
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!reference) throw new Error("请先在左侧粘贴或选择标准图片。");
+      if (!reference && !selectedAsset) throw new Error("请先从标准库选择标签，或在左侧粘贴标准图片。");
       const actual = captured || await captureFrame();
       if (!captured) {
         validateImage(actual); setCaptured(actual);
         setCapturedUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(actual); });
       }
       let identity = comparisonIdentityRef.current;
-      if (!identity || identity.reference !== reference || identity.captured !== actual) {
-        identity = { reference, captured: actual, id: "cmp_" + crypto.randomUUID().replace(/-/g, "") };
+      const identityReference = reference || actual;
+      if (!identity || identity.reference !== identityReference || identity.captured !== actual) {
+        identity = { reference: identityReference, captured: actual, id: "cmp_" + crypto.randomUUID().replace(/-/g, "") };
         comparisonIdentityRef.current = identity;
       }
-      const form = new FormData(); form.set("reference_file", reference); form.set("captured_file", actual);
+      const form = new FormData(); form.set("captured_file", actual);
       form.set("comparison_id", identity.id);
-      return analyzeTextCompareBeta(form);
+      if (selectedAsset) { form.set("standard_asset_id", selectedAsset.id); return compareTextInspectionLabel(form); }
+      form.set("reference_file", reference as File); return analyzeTextCompareBeta(form);
     },
     onMutate: () => { busyRef.current = true; },
     onSuccess: (value) => {
@@ -102,9 +130,30 @@ export function TextCompareBetaPage() {
 
   return <section className="view active text-compare-beta">
     <header className="text-compare-beta-header">
-      <div><span className="eyebrow">快速工具 · BETA</span><h2>文字对比</h2><p>粘贴标准图，把实物放在摄像头下，一次点击定位疑似文字差异。</p></div>
+      <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
       <div className="text-compare-beta-boundary"><AlertTriangle size={17} /><span>仅辅助检查文字<br /><small>颜色、材质与印刷质量仍需肉眼确认</small></span></div>
     </header>
+    <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
+      <button className={mode === "label" ? "active" : ""} type="button" onClick={() => setMode("label")}>标签对比</button>
+      <button className={mode === "manual" ? "active" : ""} type="button" onClick={() => setMode("manual")}>说明书逐页检验</button>
+    </div>
+    <section className="text-compare-result review">
+      <div className="text-compare-panel-title"><span>库</span><div><strong>我的标准库</strong><small>只显示当前账号保存的标准</small></div><button type="button" onClick={() => setShowImport((value) => !value)}><Upload size={15} />导入标准</button></div>
+      {showImport ? <div className="incoming-task-create-fields">
+        <label className="field">标准名称<input value={importName} onChange={(event) => setImportName(event.currentTarget.value)} placeholder="例如：电池包底部标签" /></label>
+        <label className="field">物料编码<input value={importMaterial} onChange={(event) => setImportMaterial(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" /></label>
+        <label className="field">版本<input value={importVersion} onChange={(event) => setImportVersion(event.currentTarget.value)} /></label>
+        <label className="field">标准文档<input type="file" accept=".docx,.pdf" onChange={(event) => setImportFile(event.currentTarget.files?.[0] || null)} /></label>
+        <button className="text-compare-primary" type="button" disabled={importMutation.isPending} onClick={() => importMutation.mutate()}>{importMutation.isPending ? "正在安全解析…" : "提取标准内容"}</button>
+      </div> : null}
+      <div className="text-compare-differences">{(standardsQuery.data?.items || []).filter((item) => item.standard_type === mode).map((standard) => <button key={standard.id} className={selectedStandardId === standard.id ? "active" : ""} onClick={() => { setSelectedStandardId(standard.id); setSelectedAssetId(""); }}><span>{standard.standard_type === "label" ? "标" : "册"}</span><div><strong>{standard.name}</strong><small>{standard.material_code} · {standard.version_label} · {standard.status === "confirmed" ? "已确认" : "待确认"}</small></div></button>)}</div>
+      {selectedStandardId && standardQuery.data ? <>
+        <div className="text-compare-differences">{(standardQuery.data.assets || []).map((asset) => <button key={asset.id} className={selectedAssetId === asset.id ? "active" : ""} onClick={() => { if (asset.content_url && asset.status !== "excluded") { setSelectedAssetId(asset.id); setReference(null); setReferenceUrl(asset.content_url); } }}><span>{asset.ordinal}</span><div><strong>{asset.category || "标准页"}</strong><small>{asset.status === "excluded" ? "已排除（可恢复）" : asset.status === "needs_confirmation" ? "需要确认" : "候选"} · {asset.context || "无章节说明"}</small></div>{standardQuery.data?.status === "draft" ? <em onClick={(event) => { event.stopPropagation(); assetMutation.mutate({ assetId: asset.id, action: asset.status === "excluded" ? "restore" : "exclude" }); }}>{asset.status === "excluded" ? "恢复" : "排除"}</em> : null}</button>)}</div>
+        {standardQuery.data.status === "draft" ? <button className="text-compare-next" type="button" disabled={confirmMutation.isPending} onClick={() => confirmMutation.mutate()}>确认并冻结此版本</button> : null}
+      </> : null}
+    </section>
+    {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}
+    {mode === "label" ? <>
     <div className="text-compare-beta-grid">
       <article className="text-compare-panel">
         <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>Ctrl+V 粘贴、拖入或选择文件</small></div>{reference ? <button type="button" disabled={mutation.isPending} onClick={() => { comparisonIdentityRef.current = null; setReference(null); setReferenceUrl(""); setResult(null); }}><RefreshCcw size={15} />更换</button> : null}</div>
@@ -122,7 +171,7 @@ export function TextCompareBetaPage() {
       </article>
     </div>
     <div className="text-compare-action-row">
-      <button className="text-compare-primary" type="button" disabled={!reference || mutation.isPending || (!!cameraError && !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在识别和对比…" : "开始文字对比"}</button>
+      <button className="text-compare-primary" type="button" disabled={(!reference && !selectedAsset) || mutation.isPending || (!!cameraError && !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button>
       {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={() => { comparisonIdentityRef.current = null; setCaptured(null); if (capturedUrl) URL.revokeObjectURL(capturedUrl); setCapturedUrl(""); setResult(null); setActiveDifference(""); }}><Camera size={18} />拍下一件</button> : null}
     </div>
     {inputError ? <div className="text-compare-alert"><AlertTriangle size={18} />{inputError}</div> : null}
@@ -131,5 +180,6 @@ export function TextCompareBetaPage() {
       {qualityCopy(result.captured_quality?.reasons) ? <div className="text-compare-quality">拍摄提示：{qualityCopy(result.captured_quality?.reasons)}</div> : null}
       {result.differences.length ? <div className="text-compare-differences">{result.differences.map((difference, index) => <button className={activeDifference === difference.id ? "active" : ""} onClick={() => setActiveDifference(difference.id)} key={difference.id}><span>{index + 1}</span><div><small>{difference.type === "missing" ? "可能漏印" : difference.type === "extra" ? "可能多印" : "文字不同"}</small><strong>标准：{difference.reference_text || "（无）"}</strong><strong>实物：{difference.actual_text || "（无）"}</strong></div><em>{Math.round(difference.confidence * 100)}%</em></button>)}</div> : null}
     </section> : <div className="text-compare-hint"><FileImage size={19} />标准图会保留；检查下一件时只需重新拍照。</div>}
+    </> : null}
   </section>;
 }

@@ -203,7 +203,7 @@ function SidebarCreateTaskModal({
           <div className="modal-body sidebar-task-modal-body">
             <div className="sidebar-task-type-switch" role="group" aria-label="任务类型">
               <button className={taskType === "product" ? "active" : ""} type="button" onClick={() => setTaskType("product")}>产品/配件检测</button>
-              <button className={taskType === "incoming" ? "active" : ""} type="button" onClick={() => setTaskType("incoming")}>包材文字检验</button>
+              <button className={taskType === "incoming" ? "active" : ""} type="button" onClick={() => setTaskType("incoming")}>包材文字检验（旧版）</button>
             </div>
             <label className="field">
               任务名称

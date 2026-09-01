@@ -23,7 +23,7 @@ JSONB_COLUMNS = frozenset(
 
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
-INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch"})
+INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch", "ordinal"})
 
 PRIMARY_KEY_COLUMNS = {
     "schema_migrations": ("version",),
@@ -42,6 +42,12 @@ PRIMARY_KEY_COLUMNS = {
     "audit_events": ("id",),
     "incoming_text_reference_versions": ("id",),
     "incoming_text_inspections": ("id",),
+    "text_inspection_standards": ("id",),
+    "text_inspection_assets": ("id",),
+    "text_inspection_records": ("id",),
+    "text_inspection_manual_sessions": ("id",),
+    "text_inspection_manual_pages": ("id",),
+    "text_inspection_classification_feedback": ("id",),
     "plc_workstations": ("id",),
     "plc_workstation_leases": ("station_id",),
     "plc_web_serial_dispatches": ("id",),
@@ -51,6 +57,10 @@ UNIQUE_COLUMNS = {
     "users": (("username",),),
     "incoming_text_reference_versions": (("owner_user_id", "task_id", "version_label"),),
     "incoming_text_inspections": (("owner_user_id", "task_id", "capture_id"),),
+    "text_inspection_standards": (("owner_user_id", "material_code", "version_label", "standard_type"),),
+    "text_inspection_assets": (("standard_id", "ordinal"),),
+    "text_inspection_records": (("owner_user_id", "comparison_id"),),
+    "text_inspection_manual_pages": (("owner_user_id", "session_id", "capture_id"),),
     "plc_workstations": (("token_hash",),),
     "plc_web_serial_dispatches": (("station_id", "detection_request_id"),),
 }

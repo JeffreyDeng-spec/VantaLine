@@ -269,6 +269,20 @@ except ModuleNotFoundError as exc:
         rectify_label,
     )
 
+try:
+    from local_inspection_service.text_inspection_v2 import (
+        UnsafeDocument,
+        extract_docx_candidates,
+        inspect_pdf,
+        sha256_bytes,
+        strict_compare_prompt,
+        validate_vlm_result,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name not in {"local_inspection_service", "local_inspection_service.text_inspection_v2"}:
+        raise
+    from text_inspection_v2 import UnsafeDocument, extract_docx_candidates, inspect_pdf, sha256_bytes, strict_compare_prompt, validate_vlm_result
+
 
 def resolve_service_root() -> Path:
     override = (
@@ -312,6 +326,12 @@ DATA_ANALYSIS_RECORDS_PATH = DATA_DIR / "data_analysis_records.json"
 INCOMING_TEXT_REFERENCES_PATH = DATA_DIR / "incoming_text_reference_versions.json"
 INCOMING_TEXT_INSPECTIONS_PATH = DATA_DIR / "incoming_text_inspections.json"
 INCOMING_TEXT_AUDIT_PATH = DATA_DIR / "incoming_text_audit_events.json"
+TEXT_INSPECTION_DIR = DATA_DIR / "text_inspection_v2"
+TEXT_INSPECTION_JSON_DIR = TEXT_INSPECTION_DIR / "records"
+TEXT_INSPECTION_MEDIA_DIR = TEXT_INSPECTION_DIR / "media"
+TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = str(os.getenv("VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED", "")).strip().lower() in {"1", "true", "yes", "on"}
+TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
+TEXT_INSPECTION_MANUAL_PASS_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def current_release_version() -> dict[str, Any]:
@@ -2568,6 +2588,8 @@ def route_required_permission(path: str, method: str) -> str | None:
     if clean_path.startswith("/api/incoming-text/references"):
         return "incoming_material_config"
     if clean_path.startswith("/api/incoming-text"):
+        return "inspection"
+    if clean_path.startswith("/api/text-inspection"):
         return "inspection"
     if clean_path.startswith("/api/locateanything") or clean_path.startswith("/api/label-sheets") or clean_path.startswith("/api/experimental/label-inspector"):
         return "system_settings"
@@ -37318,7 +37340,592 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Package-material incoming text inspection (independent from YOLO training).
+# Account-scoped text inspection v2 (independent from the legacy task flow).
+
+TEXT_INSPECTION_TABLES = {
+    "standards": "text_inspection_standards",
+    "assets": "text_inspection_assets",
+    "records": "text_inspection_records",
+    "sessions": "text_inspection_manual_sessions",
+    "pages": "text_inspection_manual_pages",
+    "feedback": "text_inspection_classification_feedback",
+}
+
+
+def _text_v2_json_path(kind: str) -> Path:
+    return TEXT_INSPECTION_JSON_DIR / f"{kind}.json"
+
+
+def _text_v2_load(kind: str) -> list[dict[str, Any]]:
+    repository = runtime_postgres_repository_or_none()
+    if repository is not None:
+        return row_raw_json_list(repository.fetch_all(TEXT_INSPECTION_TABLES[kind]))
+    return _incoming_text_json_list(_text_v2_json_path(kind))
+
+
+def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    fields = {
+        "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
+        "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
+        "records": ("id", "owner_user_id", "standard_id", "comparison_id", "status", "auto_decision", "final_decision", "source_sha256", "created_at", "updated_at"),
+        "sessions": ("id", "owner_user_id", "standard_id", "status", "created_at", "updated_at"),
+        "pages": ("id", "session_id", "owner_user_id", "capture_id", "standard_asset_id", "status", "created_at", "updated_at"),
+        "feedback": ("id", "owner_user_id", "standard_id", "asset_id", "action", "created_at"),
+    }[kind]
+    return {**{field: value.get(field, "") for field in fields}, "raw_json": raw}
+
+
+def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
+    repository = runtime_postgres_repository_or_none()
+    if repository is not None:
+        row = _text_v2_row(kind, value)
+        if insert_only:
+            return bool(repository.insert_row_once(TEXT_INSPECTION_TABLES[kind], row))
+        repository.upsert_row(TEXT_INSPECTION_TABLES[kind], row)
+        return True
+    with _incoming_text_store_lock:
+        values = _incoming_text_json_list(_text_v2_json_path(kind))
+        index = next((i for i, item in enumerate(values) if str(item.get("id")) == str(value.get("id"))), None)
+        unique_fields = {
+            "standards": ("owner_user_id", "material_code", "version_label", "standard_type"),
+            "assets": ("standard_id", "ordinal"),
+            "records": ("owner_user_id", "comparison_id"),
+            "pages": ("owner_user_id", "session_id", "capture_id"),
+        }.get(kind, ("id",))
+        business_duplicate = next((item for item in values if all(str(item.get(field)) == str(value.get(field)) for field in unique_fields)), None)
+        if insert_only and (index is not None or business_duplicate is not None):
+            return False
+        if index is None:
+            values.insert(0, copy.deepcopy(value))
+        else:
+            values[index] = copy.deepcopy(value)
+        _save_incoming_text_json_list(_text_v2_json_path(kind), values)
+        return True
+
+
+def _text_v2_owned(kind: str, record_id: str, owner_user_id: str) -> dict[str, Any] | None:
+    return next((item for item in _text_v2_load(kind) if str(item.get("id")) == record_id and str(item.get("owner_user_id")) == owner_user_id), None)
+
+
+def _text_v2_owner() -> tuple[str, str]:
+    user = current_auth_user()
+    return str(user.get("id") or ""), str(user.get("username") or "")
+
+
+def _text_v2_media_path(owner_user_id: str, standard_id: str, filename: str) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", owner_user_id + standard_id + filename):
+        raise HTTPException(status_code=400, detail="资源标识无效")
+    base = (TEXT_INSPECTION_MEDIA_DIR / owner_user_id / standard_id).resolve()
+    target = (base / filename).resolve()
+    if base not in target.parents:
+        raise HTTPException(status_code=400, detail="资源路径无效")
+    return target
+
+
+def _text_v2_write(path: Path, contents: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.parent / f".{uuid.uuid4().hex[:12]}.tmp"
+    temp.write_bytes(contents)
+    os.replace(temp, path)
+
+
+def _text_v2_read_verified(path_value: str, owner_user_id: str, standard_id: str, *, expected_sha256: str = "", max_bytes: int = 120 * 1024 * 1024) -> bytes:
+    path = Path(path_value).resolve()
+    allowed = (TEXT_INSPECTION_MEDIA_DIR / owner_user_id / standard_id).resolve()
+    if allowed not in path.parents or not path.is_file() or path.is_symlink():
+        raise HTTPException(status_code=404, detail="标准资源不存在")
+    stat = path.stat()
+    if stat.st_size <= 0 or stat.st_size > max_bytes:
+        raise HTTPException(status_code=409, detail="标准资源大小异常")
+    contents = path.read_bytes()
+    if expected_sha256 and sha256_bytes(contents) != expected_sha256:
+        raise HTTPException(status_code=409, detail="标准资源完整性校验失败")
+    return contents
+
+
+def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(value)
+    result.pop("source_path", None)
+    result.pop("media_path", None)
+    result.pop("annotated_path", None)
+    if result.get("id") and result.get("asset_kind"):
+        result["content_url"] = f"/api/text-inspection/assets/{quote(str(result['id']))}/content"
+    return result
+
+
+def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
+    media_path = str(asset.get("media_path") or "")
+    if media_path:
+        return _text_v2_read_verified(media_path, owner_user_id, str(asset.get("standard_id") or ""), expected_sha256=str(asset.get("sha256") or ""))
+    if asset.get("asset_kind") != "manual_page":
+        raise HTTPException(status_code=404, detail="标准资源不存在")
+    standard = _text_v2_owned("standards", str(asset.get("standard_id") or ""), owner_user_id)
+    if not standard:
+        raise HTTPException(status_code=404, detail="说明书标准源文件不存在")
+    source_bytes = _text_v2_read_verified(str(standard.get("source_path") or ""), owner_user_id, str(standard.get("id") or ""), expected_sha256=str(standard.get("source_sha256") or ""))
+    import fitz
+
+    document = fitz.open(stream=source_bytes, filetype="pdf")
+    try:
+        page_index = int(asset.get("ordinal") or 0) - 1
+        if page_index < 0 or page_index >= document.page_count:
+            raise HTTPException(status_code=404, detail="标准页不存在")
+        page = document.load_page(page_index)
+        matrix = fitz.Matrix(1.5, 1.5)
+        projected = page.rect * matrix
+        if projected.width * projected.height > 20_000_000:
+            raise HTTPException(status_code=400, detail="标准页渲染像素过大")
+        pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+        contents = pixmap.tobytes("png")
+    finally:
+        document.close()
+    path = _text_v2_media_path(owner_user_id, str(asset["standard_id"]), f"{asset['id']}.png")
+    _text_v2_write(path, contents)
+    asset["media_path"] = str(path)
+    asset["sha256"] = sha256_bytes(contents)
+    asset["updated_at"] = int(time.time())
+    _text_v2_save("assets", asset)
+    return contents
+
+
+@app.post("/api/text-inspection/standards/import")
+async def import_text_inspection_standard(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    material_code: str = Form(...),
+    version_label: str = Form(...),
+) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, owner_username = _text_v2_owner()
+    clean_name = bounded_text(name.strip(), 120)
+    clean_material = bounded_text(material_code.strip(), 120)
+    clean_version = bounded_text(version_label.strip(), 80)
+    if not clean_name or not clean_material or not clean_version:
+        raise HTTPException(status_code=400, detail="标准名称、物料编码和版本不能为空")
+    contents = await file.read()
+    filename = (file.filename or "").lower()
+    digest = sha256_bytes(contents)
+    duplicate = next((item for item in _text_v2_load("standards") if str(item.get("owner_user_id")) == owner_user_id and item.get("source_sha256") == digest), None)
+    if duplicate:
+        return {**_text_v2_public(duplicate), "duplicate": True}
+    standard_id = "std_" + uuid.uuid4().hex
+    now = int(time.time())
+    try:
+        if filename.endswith(".doc") and not filename.endswith(".docx"):
+            raise HTTPException(status_code=503, detail="旧版 .doc 转换组件尚未通过生产依赖验收，请另存为 .docx 后上传")
+        if filename.endswith(".docx"):
+            metadata, blobs = extract_docx_candidates(contents)
+            standard_type, extension = "label", ".docx"
+        elif filename.endswith(".pdf"):
+            info = inspect_pdf(contents)
+            metadata = [{"asset_id": f"asset_{index:04d}_{digest[:12]}", "ordinal": index, "status": "page", "category": "manual_page", "classification_confidence": 1.0} for index in range(1, int(info["page_count"]) + 1)]
+            blobs, standard_type, extension = [], "manual", ".pdf"
+        else:
+            raise HTTPException(status_code=400, detail="仅支持 DOCX 或 PDF 标准文档")
+    except UnsafeDocument as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    source_path = _text_v2_media_path(owner_user_id, standard_id, "source" + extension)
+    _text_v2_write(source_path, contents)
+    standard = {"id": standard_id, "owner_user_id": owner_user_id, "owner_username": owner_username, "name": clean_name, "material_code": clean_material, "version_label": clean_version, "standard_type": standard_type, "status": "draft", "source_sha256": digest, "source_path": str(source_path), "created_at": now, "updated_at": now, "asset_count": len(metadata)}
+    if not _text_v2_save("standards", standard, insert_only=True):
+        raise HTTPException(status_code=409, detail="相同物料、版本和类型的标准已存在")
+    for index, item in enumerate(metadata):
+        asset_id = "ast_" + uuid.uuid4().hex
+        asset_path = ""
+        if standard_type == "label":
+            suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/bmp": ".bmp", "image/gif": ".gif", "image/tiff": ".tiff", "image/emf": ".emf", "image/wmf": ".wmf"}.get(str(item.get("mime_type")), ".bin")
+            path = _text_v2_media_path(owner_user_id, standard_id, f"{asset_id}{suffix}")
+            _text_v2_write(path, blobs[index])
+            asset_path = str(path)
+        asset = {**item, "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id, "asset_kind": "label_candidate" if standard_type == "label" else "manual_page", "media_path": asset_path, "created_at": now, "updated_at": now}
+        _text_v2_save("assets", asset, insert_only=True)
+    return {**_text_v2_public(standard), "assets": [_text_v2_public(item) for item in _text_v2_load("assets") if item.get("standard_id") == standard_id]}
+
+
+@app.get("/api/text-inspection/standards")
+def list_text_inspection_standards() -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    items = [_text_v2_public(item) for item in _text_v2_load("standards") if str(item.get("owner_user_id")) == owner_user_id]
+    return {"items": sorted(items, key=lambda item: int(item.get("created_at") or 0), reverse=True)}
+
+
+@app.get("/api/text-inspection/standards/{standard_id}")
+def get_text_inspection_standard(standard_id: str) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if not standard:
+        raise HTTPException(status_code=404, detail="标准不存在")
+    assets = [_text_v2_public(item) for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
+    return {**_text_v2_public(standard), "assets": sorted(assets, key=lambda item: int(item.get("ordinal") or 0))}
+
+
+@app.get("/api/text-inspection/assets/{asset_id}/content")
+def get_text_inspection_asset_content(asset_id: str) -> Response:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    asset = _text_v2_owned("assets", asset_id, owner_user_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="资源不存在")
+    if not asset.get("media_path"):
+        _text_v2_asset_bytes(asset, owner_user_id)
+    contents = _text_v2_asset_bytes(asset, owner_user_id)
+    mime = str(asset.get("mime_type") or ("image/png" if asset.get("asset_kind") == "manual_page" else "application/octet-stream"))
+    return Response(content=contents, media_type=mime, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+
+
+@app.patch("/api/text-inspection/standards/{standard_id}/assets/{asset_id}")
+async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: Request) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    asset = _text_v2_owned("assets", asset_id, owner_user_id)
+    if not standard or not asset or asset.get("standard_id") != standard_id:
+        raise HTTPException(status_code=404, detail="标准资源不存在")
+    if standard.get("status") != "draft":
+        raise HTTPException(status_code=409, detail="已确认标准不可修改，请复制为新版本")
+    body = await request.json()
+    action = str(body.get("action") or "") if isinstance(body, dict) else ""
+    status_by_action = {"restore": "candidate", "exclude": "excluded", "confirm": "candidate"}
+    if action not in status_by_action:
+        raise HTTPException(status_code=400, detail="action 必须为 restore、exclude 或 confirm")
+    updated_at = int(time.time())
+    repository = runtime_postgres_repository_or_none()
+    if repository is not None:
+        try:
+            asset = repository.patch_text_inspection_asset(standard_id, asset_id, owner_user_id, action, updated_at)
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail="标准已确认或资源状态已变化，请刷新后重试") from exc
+    else:
+        with _incoming_text_store_lock:
+            authoritative_standard = _text_v2_owned("standards", standard_id, owner_user_id)
+            authoritative_asset = _text_v2_owned("assets", asset_id, owner_user_id)
+            if not authoritative_standard or authoritative_standard.get("status") != "draft" or not authoritative_asset:
+                raise HTTPException(status_code=409, detail="标准已确认或资源状态已变化，请刷新后重试")
+            asset = authoritative_asset
+            asset["status"] = status_by_action[action]
+            asset["updated_at"] = updated_at
+            asset["classification_source"] = "human"
+            _text_v2_save("assets", asset)
+    feedback = {"id": "fb_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "asset_id": asset_id, "action": action, "created_at": int(time.time())}
+    _text_v2_save("feedback", feedback, insert_only=True)
+    return _text_v2_public(asset)
+
+
+@app.post("/api/text-inspection/standards/{standard_id}/confirm")
+def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if not standard:
+        raise HTTPException(status_code=404, detail="标准不存在")
+    repository = runtime_postgres_repository_or_none()
+    if repository is not None:
+        try:
+            return _text_v2_public(repository.confirm_text_inspection_standard(standard_id, owner_user_id, int(time.time())))
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail="标准无法确认，请刷新候选状态后重试") from exc
+    if standard.get("status") == "confirmed":
+        return _text_v2_public(standard)
+    with _incoming_text_store_lock:
+        standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
+        if standard.get("status") == "confirmed":
+            return _text_v2_public(standard)
+        selected = [item for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id and item.get("status") in {"candidate", "page"}]
+        if not selected:
+            raise HTTPException(status_code=409, detail="至少确认一个标签或标准页面")
+        standard["status"] = "confirmed"
+        standard["confirmed_at"] = standard["updated_at"] = int(time.time())
+        selected.sort(key=lambda item: int(item.get("ordinal") or 0))
+        standard["confirmed_assets"] = [{"id": item["id"], "sha256": item.get("sha256", ""), "ordinal": int(item.get("ordinal") or 0), "mime_type": item.get("mime_type", "")} for item in selected]
+        standard["confirmed_asset_ids"] = [item["id"] for item in selected]
+        _text_v2_save("standards", standard)
+    return _text_v2_public(standard)
+
+
+def _text_v2_data_url(contents: bytes, mime: str = "") -> str:
+    if not mime:
+        mime = "image/png" if contents.startswith(b"\x89PNG") else "image/jpeg"
+    return f"data:{mime};base64,{base64.b64encode(contents).decode('ascii')}"
+
+
+def _text_v2_validate_capture(contents: bytes) -> tuple[str, str]:
+    if not contents or len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片必须存在且不超过 10MB")
+    try:
+        with Image.open(io.BytesIO(contents)) as image:
+            image_format = str(image.format or "").upper()
+            width, height = image.size
+            image.verify()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="图片格式损坏或无法解码") from exc
+    formats = {"PNG": ("image/png", ".png"), "JPEG": ("image/jpeg", ".jpg"), "JPG": ("image/jpeg", ".jpg"), "WEBP": ("image/webp", ".webp")}
+    if image_format not in formats:
+        raise HTTPException(status_code=400, detail="实物图片仅支持 PNG、JPG 或 WEBP")
+    if width * height > 20_000_000 or min(width, height) < 100:
+        raise HTTPException(status_code=400, detail="实物图片像素尺寸不符合要求")
+    decoded = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise HTTPException(status_code=400, detail="图片无法完整解码")
+    return formats[image_format]
+
+
+def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> bytes:
+    image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError("capture image decode failed")
+    height, width = image.shape[:2]
+    for index, difference in enumerate(differences, start=1):
+        box = difference.get("box") or []
+        if len(box) != 4:
+            continue
+        x1, y1, x2, y2 = (int(float(box[0]) * width), int(float(box[1]) * height), int(float(box[2]) * width), int(float(box[3]) * height))
+        cv2.rectangle(image, (x1, y1), (x2, y2), (20, 20, 235), max(3, width // 500))
+        cv2.putText(image, str(index), (x1, max(24, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 235), 2, cv2.LINE_AA)
+    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    if not ok:
+        raise ValueError("annotation encode failed")
+    return encoded.tobytes()
+
+
+@app.post("/api/text-inspection/label/compare")
+async def compare_text_inspection_label(
+    captured_file: UploadFile = File(...),
+    standard_asset_id: str = Form(...),
+    comparison_id: str = Form(...),
+) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, owner_username = _text_v2_owner()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", comparison_id):
+        raise HTTPException(status_code=400, detail="comparison_id 格式错误")
+    asset = _text_v2_owned("assets", standard_asset_id, owner_user_id)
+    standard = _text_v2_owned("standards", str(asset.get("standard_id") if asset else ""), owner_user_id)
+    confirmed_snapshot = next((item for item in standard.get("confirmed_assets", []) if str(item.get("id")) == standard_asset_id), None) if standard else None
+    if not asset or not standard or standard.get("status") != "confirmed" or not confirmed_snapshot:
+        raise HTTPException(status_code=404, detail="已确认标准标签不存在")
+    captured = await captured_file.read()
+    captured_mime, source_suffix = _text_v2_validate_capture(captured)
+    if str(confirmed_snapshot.get("mime_type") or asset.get("mime_type") or "") not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(status_code=409, detail="该标准图片格式不能直接比对，请转换为 PNG 或 JPG 后创建新版本")
+    asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
+    reference = _text_v2_asset_bytes(asset, owner_user_id)
+    settings = ai_detection_settings()
+    fingerprint_payload = {
+        "reference_sha256": sha256_bytes(reference), "reference_bytes": len(reference),
+        "captured_sha256": sha256_bytes(captured), "captured_bytes": len(captured),
+        "standard_asset_id": standard_asset_id, "provider": settings.get("provider"),
+        "model": settings.get("model"), "prompt_version": "text-compare-v2-prompt-1",
+        "schema_version": "text-compare-result-v1",
+    }
+    fingerprint = sha256_bytes(json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode())
+    existing = next((item for item in _text_v2_load("records") if item.get("owner_user_id") == owner_user_id and item.get("comparison_id") == comparison_id), None)
+    if existing:
+        if existing.get("fingerprint") != fingerprint:
+            raise HTTPException(status_code=409, detail="comparison_id 已用于其他图片")
+        if existing.get("status") == "attempting":
+            return {**_text_v2_public(existing), "decision": "REVIEW_REQUIRED", "message": "上次模型请求结果不确定，为避免重复计费未自动重试。"}
+        return _text_v2_public(existing)
+    now = int(time.time())
+    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_sha256": sha256_bytes(captured), "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": []}
+    source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
+    _text_v2_write(source_path, captured)
+    record["source_path"] = str(source_path)
+    if not _text_v2_save("records", record, insert_only=True):
+        winner = next((item for item in _text_v2_load("records") if item.get("owner_user_id") == owner_user_id and item.get("comparison_id") == comparison_id), None)
+        if winner and winner.get("fingerprint") == fingerprint:
+            return _text_v2_public(winner)
+        raise HTTPException(status_code=409, detail="comparison_id 已用于其他输入")
+    if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
+        record.update({"status": "review_required", "decision": "REVIEW_REQUIRED", "message": "外部图片比对尚未完成客户授权和生产启用，请人工复核。", "attempt_finished_at": int(time.time()), "external_media_sent": False, "external_media_send_status": "not_sent"})
+        _text_v2_save("records", record)
+        return _text_v2_public(record)
+    user_content = [
+        {"type": "text", "text": "STANDARD_LABEL"},
+        {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference), "detail": "high"}},
+        {"type": "text", "text": "CAPTURED_LABEL"},
+        {"type": "image_url", "image_url": {"url": _text_v2_data_url(captured, captured_mime), "detail": "high"}},
+    ]
+    try:
+        record["external_media_send_status"] = "attempting"
+        record["external_media_sent"] = None
+        _text_v2_save("records", record)
+        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": settings, "system_prompt": strict_compare_prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
+        record["external_media_sent"] = True
+        record["external_media_send_status"] = "sent"
+        if not provider.get("ok"):
+            raise ValueError(str(provider.get("error") or "模型服务异常"))
+        checked = validate_vlm_result(provider.get("parsed"))
+        if checked["decision"] == "MATCH" and not TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED:
+            checked = {"decision": "REVIEW_REQUIRED", "differences": [], "message": "模型未发现差异，但自动通过尚未完成现场验收，请人工确认。"}
+        record.update(checked)
+        record["auto_decision"] = checked["decision"]
+        record["status"] = "completed" if checked["decision"] != "REVIEW_REQUIRED" else "review_required"
+        record["provider"] = provider.get("provider") or settings.get("provider")
+        record["model"] = provider.get("model") or settings.get("model")
+        record["latency_ms"] = provider.get("latency_ms")
+        annotated = _text_v2_annotate(captured, checked["differences"])
+        annotated_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-annotated.jpg")
+        _text_v2_write(annotated_path, annotated)
+        record["annotated_path"] = str(annotated_path)
+        record["annotated_sha256"] = sha256_bytes(annotated)
+        record["annotated_image_data_url"] = f"/api/text-inspection/inspections/{record['id']}/evidence/annotated"
+    except Exception as exc:
+        record.update({"decision": "REVIEW_REQUIRED", "auto_decision": "REVIEW_REQUIRED", "status": "uncertain", "message": "模型请求结果不确定；为避免重复计费不会自动重试，请人工复核。", "error_code": type(exc).__name__, "differences": [], "charge_status": "uncertain", "external_media_send_status": "uncertain", "external_media_sent": None})
+    record["attempt_finished_at"] = int(time.time())
+    record["updated_at"] = int(time.time())
+    _text_v2_save("records", record)
+    return _text_v2_public(record)
+
+
+@app.get("/api/text-inspection/inspections/{inspection_id}/evidence/{kind}")
+def get_text_inspection_v2_evidence(inspection_id: str, kind: str) -> Response:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    record = _text_v2_owned("records", inspection_id, owner_user_id)
+    if not record or kind not in {"source", "annotated"}:
+        raise HTTPException(status_code=404, detail="检验证据不存在")
+    expected = str(record.get("source_sha256") or "") if kind == "source" else str(record.get("annotated_sha256") or "")
+    contents = _text_v2_read_verified(str(record.get(f"{kind}_path") or ""), owner_user_id, str(record.get("standard_id") or ""), expected_sha256=expected, max_bytes=20 * 1024 * 1024)
+    mime = "image/png" if contents.startswith(b"\x89PNG") else "image/jpeg"
+    return Response(content=contents, media_type=mime, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+
+
+@app.post("/api/text-inspection/manual/sessions")
+async def create_text_manual_session(request: Request) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    body = await request.json()
+    standard_id = str(body.get("standard_id") or "") if isinstance(body, dict) else ""
+    standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if not standard or standard.get("standard_type") != "manual" or standard.get("status") != "confirmed":
+        raise HTTPException(status_code=404, detail="已确认说明书标准不存在")
+    now = int(time.time())
+    session = {"id": "man_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "standard_sha256": standard["source_sha256"], "status": "active", "created_at": now, "updated_at": now, "expected_page_count": standard.get("asset_count", 0)}
+    _text_v2_save("sessions", session, insert_only=True)
+    return session
+
+
+def _text_v2_similarity(left: bytes, right: bytes) -> float:
+    a = cv2.imdecode(np.frombuffer(left, np.uint8), cv2.IMREAD_GRAYSCALE)
+    b = cv2.imdecode(np.frombuffer(right, np.uint8), cv2.IMREAD_GRAYSCALE)
+    if a is None or b is None:
+        return 0.0
+    a = cv2.resize(a, (160, 220), interpolation=cv2.INTER_AREA)
+    b = cv2.resize(b, (160, 220), interpolation=cv2.INTER_AREA)
+    direct = 1.0 - float(np.mean(cv2.absdiff(a, b))) / 255.0
+    hist_a = cv2.calcHist([a], [0], None, [32], [0, 256])
+    hist_b = cv2.calcHist([b], [0], None, [32], [0, 256])
+    hist = max(0.0, float(cv2.compareHist(hist_a, hist_b, cv2.HISTCMP_CORREL)))
+    return max(0.0, min(1.0, direct * 0.65 + hist * 0.35))
+
+
+@app.post("/api/text-inspection/manual/sessions/{session_id}/pages")
+async def inspect_text_manual_page(
+    session_id: str,
+    captured_file: UploadFile = File(...),
+    capture_id: str = Form(...),
+    standard_asset_id: str = Form(""),
+) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", capture_id):
+        raise HTTPException(status_code=400, detail="capture_id 格式错误")
+    session = _text_v2_owned("sessions", session_id, owner_user_id)
+    if not session or session.get("status") != "active":
+        raise HTTPException(status_code=404, detail="可用的说明书检验会话不存在")
+    contents = await captured_file.read()
+    captured_mime, _ = _text_v2_validate_capture(contents)
+    source_hash = sha256_bytes(contents)
+    existing = next((item for item in _text_v2_load("pages") if item.get("owner_user_id") == owner_user_id and item.get("session_id") == session_id and item.get("capture_id") == capture_id), None)
+    if existing:
+        if existing.get("source_sha256") != source_hash:
+            raise HTTPException(status_code=409, detail="capture_id 已用于其他页面照片")
+        return _text_v2_public(existing)
+    completed_ids = {str(item.get("standard_asset_id")) for item in _text_v2_load("pages") if item.get("session_id") == session_id and item.get("status") == "completed"}
+    candidates = [item for item in _text_v2_load("assets") if item.get("owner_user_id") == owner_user_id and item.get("standard_id") == session.get("standard_id") and item.get("id") not in completed_ids]
+    selected = next((item for item in candidates if item.get("id") == standard_asset_id), None)
+    recommendations: list[dict[str, Any]] = []
+    if selected is None:
+        for candidate in candidates[:24]:
+            score = _text_v2_similarity(_text_v2_asset_bytes(candidate, owner_user_id), contents)
+            recommendations.append({"asset_id": candidate["id"], "ordinal": candidate.get("ordinal"), "score": round(score, 4), "content_url": f"/api/text-inspection/assets/{candidate['id']}/content"})
+        recommendations.sort(key=lambda item: item["score"], reverse=True)
+        if recommendations and recommendations[0]["score"] >= 0.72:
+            selected = next(item for item in candidates if item["id"] == recommendations[0]["asset_id"])
+        else:
+            return {"capture_id": capture_id, "decision": "REVIEW_REQUIRED", "status": "page_selection_required", "message": "自动匹配置信度不足，请从缩略图确认标准页。", "recommendations": recommendations[:6]}
+    now = int(time.time())
+    page = {"id": "pg_" + uuid.uuid4().hex, "session_id": session_id, "owner_user_id": owner_user_id, "capture_id": capture_id, "standard_asset_id": selected["id"], "source_sha256": source_hash, "status": "attempting", "decision": "REVIEW_REQUIRED", "created_at": now, "updated_at": now, "recommendations": recommendations[:6]}
+    if not _text_v2_save("pages", page, insert_only=True):
+        raise HTTPException(status_code=409, detail="本页正在处理")
+    if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
+        page.update({"status": "review_required", "decision": "REVIEW_REQUIRED", "message": "外部说明书图片比对尚未完成客户授权和生产启用，请人工复核。", "external_media_sent": False, "external_media_send_status": "not_sent", "updated_at": int(time.time())})
+        _text_v2_save("pages", page)
+        return _text_v2_public(page)
+    reference = _text_v2_asset_bytes(selected, owner_user_id)
+    try:
+        page["external_media_send_status"] = "attempting"
+        page["external_media_sent"] = None
+        _text_v2_save("pages", page)
+        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": ai_detection_settings(), "system_prompt": strict_compare_prompt(), "user_content": [{"type": "text", "text": "STANDARD_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference, "image/png"), "detail": "high"}}, {"type": "text", "text": "CAPTURED_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(contents), "detail": "high"}}], "max_tokens": 1800, "max_attempts": 1})
+        page["external_media_sent"] = True
+        page["external_media_send_status"] = "sent"
+        if not provider.get("ok"):
+            raise ValueError("provider failure")
+        checked = validate_vlm_result(provider.get("parsed"))
+        page.update(checked)
+        page["status"] = "completed" if checked["decision"] == "MATCH" else "review_required"
+    except Exception as exc:
+        page.update({"status": "uncertain", "decision": "REVIEW_REQUIRED", "message": "页面模型请求结果不确定，请人工确认；系统不会自动重试。", "error_code": type(exc).__name__, "differences": [], "external_media_send_status": "uncertain", "external_media_sent": None, "charge_status": "uncertain"})
+    page["updated_at"] = int(time.time())
+    _text_v2_save("pages", page)
+    return _text_v2_public(page)
+
+
+@app.post("/api/text-inspection/manual/sessions/{session_id}/complete")
+def complete_text_manual_session(session_id: str) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    session = _text_v2_owned("sessions", session_id, owner_user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="说明书检验会话不存在")
+    pages = [item for item in _text_v2_load("pages") if item.get("session_id") == session_id and item.get("owner_user_id") == owner_user_id]
+    matched = {str(item.get("standard_asset_id")) for item in pages if item.get("status") == "completed"}
+    standard = _text_v2_owned("standards", str(session.get("standard_id")), owner_user_id) or {}
+    expected = set(str(item) for item in standard.get("confirmed_asset_ids", []))
+    missing = sorted(expected - matched)
+    expected_order = [str(item.get("id")) for item in standard.get("confirmed_assets", [])]
+    observed_order = [str(item.get("standard_asset_id")) for item in sorted(pages, key=lambda item: int(item.get("created_at") or 0)) if item.get("status") == "completed"]
+    duplicate_sources = len({str(item.get("source_sha256") or "") for item in pages}) != len(pages)
+    ordered = observed_order == expected_order
+    can_pass = TEXT_INSPECTION_MANUAL_PASS_VERIFIED and expected and not missing and ordered and not duplicate_sources and all(item.get("decision") == "MATCH" for item in pages)
+    session.update({"status": "completed", "updated_at": int(time.time()), "missing_asset_ids": missing, "observed_asset_order": observed_order, "expected_asset_order": expected_order, "duplicate_capture_detected": duplicate_sources, "order_matches": ordered, "decision": "PASS" if can_pass else "REVIEW_REQUIRED"})
+    _text_v2_save("sessions", session)
+    return session
+
+
+@app.post("/api/text-inspection/inspections/{inspection_id}/review")
+async def review_text_inspection_v2(inspection_id: str, request: Request) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, owner_username = _text_v2_owner()
+    record = _text_v2_owned("records", inspection_id, owner_user_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="检验记录不存在")
+    body = await request.json()
+    decision = str(body.get("decision") or "") if isinstance(body, dict) else ""
+    reason = bounded_text(body.get("reason") if isinstance(body, dict) else "", 500).strip()
+    if decision not in {"PASS", "FAIL"} or not reason:
+        raise HTTPException(status_code=400, detail="强制放行或判退必须填写原因")
+    record.update({"final_decision": decision, "review_reason": reason, "reviewed_by_user_id": owner_user_id, "reviewed_by_username": owner_username, "reviewed_at": int(time.time()), "updated_at": int(time.time())})
+    _text_v2_save("records", record)
+    append_incoming_text_audit({"id": "audit_" + uuid.uuid4().hex, "event_type": "text_inspection_v2_review", "entity_type": "text_inspection_record", "entity_id": inspection_id, "created_at": int(time.time()), "actor_user_id": owner_user_id, "payload": {"decision": decision, "reason": reason, "training_pool": "pending_review" if decision == "PASS" else ""}})
+    return _text_v2_public(record)
+
+
+# ---------------------------------------------------------------------------
+# Package-material incoming text inspection (legacy, retained for rollback).
 
 
 def _incoming_text_json_list(path: Path) -> list[dict[str, Any]]:
