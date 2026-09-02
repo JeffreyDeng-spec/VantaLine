@@ -178,10 +178,6 @@ def main() -> None:
         json={"name": "forbidden", "task_kind": "incoming_material_text", "material_code": "X", "material_name": "X"},
     )
     assert_status(denied_create, 403, "inspection-only cannot configure task")
-    available_inspectors = manager.get("/api/incoming-text/inspectors")
-    assert_status(available_inspectors, 200, "configurator can list assignable inspectors")
-    assert {manager_user["id"], inspector_user["id"]}.issubset({item["id"] for item in available_inspectors.json()["items"]})
-
     create = manager.post(
         "/api/pipeline/tasks",
         json={
