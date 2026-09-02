@@ -82,9 +82,8 @@ def main() -> None:
     require(
         text_compare,
         {
-            "standard image drop": 'ariaLabel="拖拽或选择标准图片"',
+            "order asset drop": 'ariaLabel="拖拽或选择单张标准图片"',
             "actual image drop": 'ariaLabel="拖拽或选择实物图片"',
-            "standard image validation": "replaceReference(file)",
             "actual image validation": "replaceCaptured(file)",
             "camera enumeration": "navigator.mediaDevices?.enumerateDevices",
             "video-only devices": 'device.kind === "videoinput"',
@@ -108,6 +107,8 @@ def main() -> None:
         },
         "text comparison camera picker",
     )
+    if 'ariaLabel="拖拽或选择标准图片"' in text_compare or "replaceReference(file)" in text_compare:
+        raise AssertionError("text comparison must select its reference from the order gallery")
     device_change = text_compare[
         text_compare.index("const handleDeviceChange"):
         text_compare.index('addEventListener?.("devicechange"')
