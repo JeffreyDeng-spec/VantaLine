@@ -38,11 +38,11 @@ def main():
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in source
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in source
     frontend = (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text(encoding="utf-8")
-    assert "Ctrl+V" in frontend and "getUserMedia" in frontend and "track.stop()" in frontend
+    assert "getUserMedia" in frontend and "track.stop()" in frontend
     assert "comparisonIdentityRef" in frontend and "disabled={mutation.isPending}" in frontend
     assert 'useState<"camera" | "image">("camera")' in frontend
     assert "上传实物图片" in frontend and "请先上传需要对比的实物图片" in frontend
-    assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "点击放大查看" in frontend
+    assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "查看大图" in frontend
     # Standard-library navigation and inspection stays in the order detail: users
     # should not have to enter a second manager dialog to edit the same standard.
     assert 'className="text-standard-thumbnail"' in frontend and "openZoom(asset.content_url" in frontend
@@ -52,20 +52,24 @@ def main():
     assert 'role="tab"' in frontend and 'role="tabpanel"' in frontend and 'event.key !== "Escape"' in frontend
     assert 'data-testid="standard-library-assets"' in frontend
     assert "查看第 ${asset.ordinal} 张标准大图" in frontend and "第 ${asset.ordinal} 张标准缩略图" in frontend
+    assert 'className={`text-standard-asset-card ${selected ? "selected" : ""}' in frontend
+    assert 'aria-pressed={selectable ? selected : undefined}' in frontend
+    assert 'selectable ? chooseAsset(asset)' in frontend and "已选标准" in frontend and "点击选中" in frontend
+    assert 'className={mode === "label" ? "text-compare-workbench" : ""}' in frontend
     assert "setShowImport(true)" in frontend
     assert "showManager" not in frontend and "管理标准" not in frontend
-    # A local reference and a library asset are mutually exclusive. Reference
-    # changes clear stale results without clearing the independently supplied actual.
+    # Label comparison accepts only an enabled gallery asset as its standard.
+    # Changing that selection clears stale output but preserves the actual image.
     assert "const resetComparison" in frontend and "comparisonIdentityRef.current = null" in frontend
-    assert 'setSelectedAssetId(""); setReference(file);' in frontend
-    assert 'validateImage(file); resetComparison(); setSelectedAssetId(""); setReference(file);' in frontend
-    assert 'resetComparison({ clearReference: true });\n    setSelectedAssetId(asset.id);' in frontend
-    assert 'setSelectedStandardId(nextId); setSelectedAssetId(""); setAssetUploadFile(null);\n    resetComparison({ clearReference: true });' in frontend
-    assert 'const identityReference = reference || selectedAsset?.id || "";' in frontend
-    assert "已使用订单标准，无需另行上传" in frontend
+    assert 'resetComparison();\n    setSelectedAssetId(asset.id);' in frontend
+    assert 'setSelectedStandardId(nextId); setSelectedAssetId(""); setAssetUploadFile(null);\n    resetComparison();' in frontend
+    assert "standardAssetId: selectedAsset.id" in frontend
+    assert 'form.set("standard_asset_id", selectedAsset.id)' in frontend
+    assert "analyzeTextCompareBeta" not in frontend and "replaceReference" not in frontend
+    assert 'ariaLabel="拖拽或选择标准图片"' not in frontend
+    assert "请先在左侧订单画廊中选择一张已启用的标签图片" in frontend
     assert "function isActiveAsset" in frontend and 'asset.status === "needs_confirmation" ? "confirm"' in frontend
-    assert "target?.closest(\"input, textarea, [contenteditable='true']\")" in frontend
-    assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true });' in frontend
+    assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true });' in frontend
     assert 'standardQuery.data?.status !== "confirmed"' in frontend
     assert "这个订单还没有启用" in frontend
     # Logical standards remain manageable after confirmation, while the backend
