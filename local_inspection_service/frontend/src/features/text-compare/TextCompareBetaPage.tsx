@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, ChevronDown, ChevronRig
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addTextInspectionStandardAsset, analyzeTextCompareBeta, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
 import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
+import { FileDropZone } from "../../components/FileDropZone";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -41,6 +42,9 @@ export function TextCompareBetaPage() {
   const queryClient = useQueryClient();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraRequestRef = useRef(0);
+  const cameraSurfaceActiveRef = useRef(true);
+  const selectedDeviceIdRef = useRef("");
   const busyRef = useRef(false);
   const comparisonIdentityRef = useRef<{ reference: File; captured: File; id: string } | null>(null);
   const [reference, setReference] = useState<File | null>(null);
@@ -48,6 +52,9 @@ export function TextCompareBetaPage() {
   const [captured, setCaptured] = useState<File | null>(null);
   const [capturedUrl, setCapturedUrl] = useState("");
   const [cameraError, setCameraError] = useState("");
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [inputError, setInputError] = useState("");
   const [inputMode, setInputMode] = useState<"camera" | "image">("camera");
   const [result, setResult] = useState<TextCompareBetaResult | null>(null);
@@ -155,11 +162,76 @@ export function TextCompareBetaPage() {
     setResult(null);
     setActiveDifference("");
   };
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+  const refreshCameraDevices = async (preferredId = selectedDeviceIdRef.current) => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setCameraDevices([]);
+      return { devices: [] as MediaDeviceInfo[], selectedId: "" };
+    }
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput");
+    const selectedId = preferredId && devices.some((device) => device.deviceId === preferredId) ? preferredId : (devices[0]?.deviceId || "");
+    selectedDeviceIdRef.current = selectedId;
+    setSelectedDeviceId(selectedId);
+    setCameraDevices(devices);
+    return { devices, selectedId };
+  };
+  const startCamera = async (deviceId = selectedDeviceIdRef.current) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("当前浏览器不支持摄像头访问。");
+      return;
+    }
+    const requestId = ++cameraRequestRef.current;
+    setCameraStarting(true);
+    setCameraError("");
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          : { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      const actualDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || deviceId;
+      selectedDeviceIdRef.current = actualDeviceId;
+      setSelectedDeviceId(actualDeviceId);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      await refreshCameraDevices(actualDeviceId).catch(() => setCameraDevices([]));
+    } catch (error) {
+      if (requestId !== cameraRequestRef.current) return;
+      stopCamera();
+      const cameraFailure = error as DOMException;
+      setCameraError(cameraFailure.name === "NotAllowedError" ? "摄像头权限被拒绝，请在浏览器地址栏中允许访问。" : cameraFailure.name === "OverconstrainedError" || cameraFailure.name === "NotFoundError" ? "选择的摄像头已断开，请选择其他设备。" : "摄像头不可用，请检查连接或是否被其他程序占用。");
+      await refreshCameraDevices("").catch(() => undefined);
+    } finally {
+      if (requestId === cameraRequestRef.current) setCameraStarting(false);
+    }
+  };
   const switchInputMode = (nextMode: "camera" | "image") => {
     if (busyRef.current || nextMode === inputMode) return;
     clearCaptured();
     setInputMode(nextMode);
     setInputError("");
+    if (nextMode === "image") {
+      cameraSurfaceActiveRef.current = false;
+      ++cameraRequestRef.current;
+      stopCamera();
+      setCameraStarting(false);
+    } else {
+      cameraSurfaceActiveRef.current = true;
+      void startCamera();
+    }
   };
   const openZoom = (src: string, alt: string) => {
     setZoomScale(1);
@@ -168,15 +240,34 @@ export function TextCompareBetaPage() {
 
   useEffect(() => {
     let cancelled = false;
-    navigator.mediaDevices?.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
-      .then((stream) => {
-        if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) { videoRef.current.srcObject = stream; void videoRef.current.play(); }
-      })
-      .catch((error: Error) => setCameraError(error.name === "NotAllowedError" ? "摄像头权限被拒绝，请在浏览器地址栏中允许访问。" : "摄像头不可用，请检查连接或是否被其他程序占用。"));
-    return () => { cancelled = true; streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; };
+    void startCamera();
+    const handleDeviceChange = async () => {
+      const previousId = selectedDeviceIdRef.current;
+      const next = await refreshCameraDevices(previousId).catch(() => null);
+      if (cancelled || !next || !cameraSurfaceActiveRef.current) return;
+      const hasLiveTrack = Boolean(streamRef.current?.getVideoTracks().some((track) => track.readyState === "live"));
+      if (hasLiveTrack && previousId && next.devices.some((device) => device.deviceId === previousId)) return;
+      if (next.selectedId) void startCamera(next.selectedId);
+      else {
+        ++cameraRequestRef.current;
+        stopCamera();
+        setCameraError("未检测到可用摄像头，请连接设备后重试。");
+      }
+    };
+    navigator.mediaDevices?.addEventListener?.("devicechange", handleDeviceChange);
+    return () => {
+      cancelled = true;
+      cameraSurfaceActiveRef.current = false;
+      ++cameraRequestRef.current;
+      navigator.mediaDevices?.removeEventListener?.("devicechange", handleDeviceChange);
+      stopCamera();
+    };
   }, []);
+  useEffect(() => {
+    if (inputMode !== "camera" || capturedUrl || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    void videoRef.current.play().catch(() => setCameraError("摄像头画面无法播放，请重新选择设备。"));
+  }, [inputMode, capturedUrl, cameraStarting]);
   useEffect(() => () => { if (referenceUrl) URL.revokeObjectURL(referenceUrl); if (capturedUrl) URL.revokeObjectURL(capturedUrl); }, [referenceUrl, capturedUrl]);
   useEffect(() => {
     if (!zoomedImage) return;
@@ -267,8 +358,8 @@ export function TextCompareBetaPage() {
       <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
     </header>
     <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
-      <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); } }}>标签对比</button>
-      <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); } }}>说明书逐页检验</button>
+      <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
+      <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
     </div>
     <section className="text-standard-library" id="text-standard-library-panel" role="tabpanel" aria-label="我的标准库">
       <div className="text-standard-library-header"><div><span>标准库</span><strong>我的{mode === "label" ? "标签" : "说明书"}订单</strong><small>展开订单查看图片，再选择要用于检验的标准。</small></div><button className="text-standard-import-button" type="button" onClick={() => { setInputError(""); setShowImport(true); }}><Upload size={16} />导入标准</button></div>
@@ -293,20 +384,21 @@ export function TextCompareBetaPage() {
     <div className="text-compare-beta-grid">
       <article className="text-compare-panel">
         <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>Ctrl+V 粘贴、拖入或选择文件</small></div>{referenceUrl ? <button type="button" disabled={mutation.isPending} onClick={() => { setSelectedAssetId(""); resetComparison({ clearReference: true }); }}><RefreshCcw size={15} />更换</button> : null}</div>
-        <div className={"text-compare-stage reference " + (referenceUrl ? "has-image " : "") + (mutation.isPending ? "locked" : "")} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } }}>
-          {referenceUrl ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(referenceUrl, "标准图片")}><img src={referenceUrl} alt="标准图片" /><span>点击放大查看</span></button> : <label className="text-compare-empty text-compare-upload-fill"><Clipboard size={38} /><strong>把标准图片粘贴到这里</strong><span>也可以拖入图片或点击选择</span><em><Upload size={15} />选择图片</em><input type="file" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } event.currentTarget.value = ""; }} /></label>}
+        <div className={"text-compare-stage reference " + (referenceUrl ? "has-image " : "") + (mutation.isPending ? "locked" : "")}>
+          {referenceUrl ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(referenceUrl, "标准图片")}><img src={referenceUrl} alt="标准图片" /><span>点击放大查看</span></button> : <FileDropZone className="text-compare-empty text-compare-upload-fill" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" ariaLabel="拖拽或选择标准图片" onFiles={(files) => { const file = files[0]; if (!file) return; try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } }}><Clipboard size={38} /><strong>把标准图片粘贴到这里</strong><span>也可以拖入图片或点击选择</span><em><Upload size={15} />选择图片</em></FileDropZone>}
         </div>
       </article>
       <article className="text-compare-panel">
-        <div className="text-compare-panel-title"><span>02</span><div><strong>实物图片</strong><small>{inputMode === "camera" ? (captured ? "已拍照，可重新拍摄" : "来自当前摄像头画面") : (captured ? `已选择 ${captured.name}` : "上传已有图片进行对比")}</small></div><div className="text-compare-input-switch" role="group" aria-label="实物图片来源"><button className={inputMode === "camera" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("camera")}><Camera size={14} />摄像头</button><button className={inputMode === "image" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("image")}><ImagePlus size={14} />图片</button></div>{inputMode === "camera" ? <button type="button" disabled={mutation.isPending} onClick={() => captureFrame().then(replaceCaptured).catch((error) => setInputError(error.message))}><Camera size={15} />{captured ? "重拍" : "拍照"}</button> : captured ? <button type="button" disabled={mutation.isPending} onClick={clearCaptured}><RefreshCcw size={15} />更换</button> : null}</div>
-        <div className={"text-compare-stage " + inputMode + " " + (resultImage ? "has-image" : "")} onDragOver={(event) => { if (inputMode === "image") event.preventDefault(); }} onDrop={(event) => { if (inputMode !== "image") return; event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } }}>
-          {resultImage ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(resultImage, "实物文字对比结果")}><img src={resultImage} alt="实物文字对比结果" /><span>点击放大查看</span></button> : inputMode === "camera" ? <video ref={videoRef} playsInline muted /> : <label className="text-compare-empty text-compare-upload-fill"><ImagePlus size={38} /><strong>上传实物图片</strong><span>支持 PNG、JPG、WEBP，也可以直接拖入</span><em><Upload size={15} />选择图片</em><input type="file" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } event.currentTarget.value = ""; }} /></label>}
+        <div className="text-compare-panel-title"><span>02</span><div><strong>实物图片</strong><small>{inputMode === "camera" ? (captured ? "已拍照，可重新拍摄" : "来自当前摄像头画面") : (captured ? `已选择 ${captured.name}` : "上传已有图片进行对比")}</small></div><div className="text-compare-input-switch" role="group" aria-label="实物图片来源"><button className={inputMode === "camera" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("camera")}><Camera size={14} />摄像头</button><button className={inputMode === "image" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("image")}><ImagePlus size={14} />图片</button></div>{inputMode === "camera" ? <button type="button" disabled={mutation.isPending || cameraStarting} onClick={() => captureFrame().then(replaceCaptured).catch((error) => setInputError(error.message))}><Camera size={15} />{captured ? "重拍" : "拍照"}</button> : captured ? <button type="button" disabled={mutation.isPending} onClick={clearCaptured}><RefreshCcw size={15} />更换</button> : null}</div>
+        {inputMode === "camera" ? <label className="text-compare-camera-picker"><span>摄像头设备</span><select value={selectedDeviceId} disabled={cameraStarting || mutation.isPending || !cameraDevices.length} onChange={(event) => { const deviceId = event.currentTarget.value; selectedDeviceIdRef.current = deviceId; setSelectedDeviceId(deviceId); clearCaptured(); void startCamera(deviceId); }} aria-label="选择摄像头设备">{cameraDevices.length ? cameraDevices.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `摄像头 ${index + 1}`}</option>) : <option value="">{cameraStarting ? "正在读取摄像头…" : "未检测到摄像头"}</option>}</select></label> : null}
+        <div className={"text-compare-stage " + inputMode + " " + (resultImage ? "has-image" : "")}>
+          {resultImage ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(resultImage, "实物文字对比结果")}><img src={resultImage} alt="实物文字对比结果" /><span>点击放大查看</span></button> : inputMode === "camera" ? <video ref={videoRef} playsInline muted /> : <FileDropZone className="text-compare-empty text-compare-upload-fill" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" ariaLabel="拖拽或选择实物图片" onFiles={(files) => { const file = files[0]; if (!file) return; try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } }}><ImagePlus size={38} /><strong>上传实物图片</strong><span>支持 PNG、JPG、WEBP，也可以直接拖入</span><em><Upload size={15} />选择图片</em></FileDropZone>}
           {inputMode === "camera" && cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
         </div>
       </article>
     </div>
     <div className="text-compare-action-row">
-      <button className="text-compare-primary" type="button" disabled={(!reference && !selectedAsset) || mutation.isPending || (inputMode === "camera" ? (!!cameraError && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button>
+      <button className="text-compare-primary" type="button" disabled={(!reference && !selectedAsset) || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button>
       {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
     </div>
     {inputError ? <div className="text-compare-alert"><AlertTriangle size={18} />{inputError}</div> : null}
@@ -322,7 +414,7 @@ export function TextCompareBetaPage() {
         <label className="field">标准名称<input value={importName} onChange={(event) => setImportName(event.currentTarget.value)} placeholder="例如：电池包底部标签" autoFocus /></label>
         <label className="field">物料编码<input value={importMaterial} onChange={(event) => setImportMaterial(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" /></label>
         <label className="field">版本<input value={importVersion} onChange={(event) => setImportVersion(event.currentTarget.value)} placeholder="例如：V1" /></label>
-        <label className="field wide">标准文档<input type="file" accept={mode === "label" ? ".docx" : ".pdf"} onChange={(event) => setImportFile(event.currentTarget.files?.[0] || null)} /><small>{mode === "label" ? "上传 DOCX，系统会提取其中的标签候选图片。" : "上传 PDF，系统会按页建立说明书标准。"}</small></label>
+        <div className="field wide"><span>标准文档</span><FileDropZone className="dropzone compact-dropzone" accept={mode === "label" ? ".docx" : ".pdf"} disabled={importMutation.isPending} ariaLabel="拖拽或选择标准文档" onFiles={(files) => setImportFile(files[0] || null)}><strong>{importFile?.name || "拖拽标准文档到这里，或点击选择"}</strong><span>{mode === "label" ? "上传 DOCX，系统会提取其中的标签候选图片。" : "上传 PDF，系统会按页建立说明书标准。"}</span></FileDropZone></div>
         {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
       </div>
       <footer><button type="button" disabled={importMutation.isPending} onClick={() => setShowImport(false)}>取消</button><button className="primary" type="button" disabled={importMutation.isPending} onClick={() => { setInputError(""); importMutation.mutate(); }}>{importMutation.isPending ? "正在安全解析…" : "导入并整理图片"}</button></footer>
@@ -330,7 +422,7 @@ export function TextCompareBetaPage() {
     {showManager && selectedStandardId ? <div className="text-standard-modal-backdrop" role="presentation" onMouseDown={() => !assetMutation.isPending && !assetUploadMutation.isPending && setShowManager(false)}><section className="text-standard-modal manager" role="dialog" aria-modal="true" aria-labelledby="text-standard-manager-title" onMouseDown={(event) => event.stopPropagation()}>
       <header><button type="button" aria-label="返回订单" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}><ArrowLeft size={18} /></button><div><strong id="text-standard-manager-title">管理标准图片</strong><small>{standardQuery.data ? `${standardQuery.data.name} · ${standardQuery.data.material_code} · ${standardQuery.data.version_label}` : "正在加载订单"}</small></div><button type="button" aria-label="关闭管理" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}><X size={18} /></button></header>
       <div className="text-standard-modal-body">
-        <div className="text-standard-manager-summary"><div><strong>{retainedAssetCount} 张保留 · {visibleAssets.length - retainedAssetCount} 张已移除</strong><span>每张图片都可点击放大；移除后仍可恢复。</span></div>{standardQuery.data?.standard_type === "label" ? <div className="text-standard-add-asset"><label><ImagePlus size={16} />{assetUploadFile ? assetUploadFile.name : "选择单张图片"}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={assetUploadMutation.isPending} onChange={(event) => { const file = event.currentTarget.files?.[0] || null; setAssetUploadFile(file); setInputError(""); event.currentTarget.value = ""; }} /></label><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}</div>
+        <div className="text-standard-manager-summary"><div><strong>{retainedAssetCount} 张保留 · {visibleAssets.length - retainedAssetCount} 张已移除</strong><span>每张图片都可点击放大；移除后仍可恢复。</span></div>{standardQuery.data?.standard_type === "label" ? <div className="text-standard-add-asset"><FileDropZone className="text-standard-add-asset-drop" accept="image/png,image/jpeg,image/webp" disabled={assetUploadMutation.isPending} ariaLabel="拖拽或选择单张标准图片" onFiles={(files) => { setAssetUploadFile(files[0] || null); setInputError(""); }}><ImagePlus size={16} /><span>{assetUploadFile ? assetUploadFile.name : "拖拽或选择单张图片"}</span></FileDropZone><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}</div>
         {standardQuery.isLoading ? <div className="text-standard-empty"><RefreshCcw className="spin" size={24} /><strong>正在加载图片</strong></div> : renderAssetCards(true)}
         {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
       </div>

@@ -66,6 +66,7 @@ import type {
   TrainingSample
 } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { FileDropZone } from "../../components/FileDropZone";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { recordAuditText, statusLabel, toneForStatus } from "../../utils/format";
@@ -1978,16 +1979,12 @@ function AddAccessoryModal({
                 </>
               )}
             </div>
-            <label className="pipeline-create-file-field">
-              素材
-              <input
-                type="file"
-                multiple
-                accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"}
-                onChange={(event) => setDraftFiles(Array.from(event.currentTarget.files || []))}
-                required
-              />
-            </label>
+            <div className="pipeline-create-file-field">
+              <span>素材</span>
+              <FileDropZone className="file-drop-zone" accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"} multiple disabled={creating} ariaLabel="拖拽或选择流水线配件素材" onFiles={setDraftFiles}>
+                <span><strong>{draftFiles.length ? `${draftFiles.length} 个文件已选择` : "拖拽文件到这里，或点击选择"}</strong><small>{draft.material_type === "text" ? "图片，最多 2 张" : "支持图片或视频素材"}</small></span>
+              </FileDropZone>
+            </div>
             <div className="button-row">
               <button className="primary compact-action" type="submit" disabled={creating}>
                 {creating ? <Loader2 className="spin" size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}

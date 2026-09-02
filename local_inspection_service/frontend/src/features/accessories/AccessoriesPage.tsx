@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Eye, ImagePlus, RefreshCw, Route, Sparkles, Trash2, Upload, UploadCloud, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ import type {
   AccessorySummary
 } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { FileDropZone } from "../../components/FileDropZone";
 import { LibrarySearchBox } from "../../components/LibrarySearchBox";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
@@ -282,15 +283,10 @@ export function AccessoryDetailModal({
               </section>
 
               <section className="upload-strip">
-                <label>
-                  添加素材
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(event) => setFiles(Array.from(event.currentTarget.files || []))}
-                  />
-                </label>
+                <FileDropZone className="dropzone compact-dropzone" accept="image/*" multiple disabled={busy === "upload"} ariaLabel="拖拽或选择配件素材" onFiles={setFiles}>
+                  <strong>添加素材</strong>
+                  <span>{files.length ? `已选择 ${files.length} 张图片` : "拖拽图片到这里，或点击选择"}</span>
+                </FileDropZone>
                 <button className="secondary compact-action" type="button" disabled={busy === "upload"} onClick={uploadFiles}>
                   <Upload size={16} aria-hidden="true" />
                   上传 {files.length ? files.length : ""}
@@ -355,8 +351,6 @@ export function AccessoriesPage() {
   const [cropAccessory, setCropAccessory] = useState<AccessorySummary | null>(null);
   const [deleteCropAccessoryOnCancel, setDeleteCropAccessoryOnCancel] = useState(true);
   const [busy, setBusy] = useState("");
-  const [dragActive, setDragActive] = useState(false);
-  const draftFileInputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState({
     name: "",
     material_type: "object",
@@ -391,14 +385,6 @@ export function AccessoriesPage() {
 
   function setDraftFileSelection(files: File[]) {
     setDraftFiles(files);
-    if (draftFileInputRef.current) draftFileInputRef.current.value = "";
-  }
-
-  function handleDraftDrop(event: React.DragEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    setDragActive(false);
-    const files = Array.from(event.dataTransfer.files || []);
-    if (files.length) setDraftFileSelection(files);
   }
 
   const accessoriesQuery = useQuery({
@@ -563,35 +549,13 @@ export function AccessoriesPage() {
             )}
             <div className="file-drop-field">
               <span>素材</span>
-              <button
-                className={`file-drop-zone ${dragActive ? "dragging" : ""}`}
-                type="button"
-                onClick={() => draftFileInputRef.current?.click()}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragActive(true);
-                }}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={handleDraftDrop}
-              >
+              <FileDropZone className="file-drop-zone" accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"} multiple disabled={busy === "create"} ariaLabel="拖拽或选择配件素材" onFiles={setDraftFileSelection}>
                 <UploadCloud size={20} aria-hidden="true" />
                 <span>
                   <strong>{draftFiles.length ? `${draftFiles.length} 个文件已选择` : "拖拽文件到这里，或点击选择"}</strong>
                   <small>{draft.material_type === "text" ? "图片，最多 2 张" : "图片或视频，可稍后补充"}</small>
                 </span>
-              </button>
-              <input
-                ref={draftFileInputRef}
-                className="visually-hidden-file"
-                type="file"
-                multiple
-                accept={draft.material_type === "text" ? "image/*" : "image/*,video/*"}
-                onChange={(event) => setDraftFileSelection(Array.from(event.currentTarget.files || []))}
-              />
+              </FileDropZone>
             </div>
           </div>
           <div className="button-row accessory-create-actions">

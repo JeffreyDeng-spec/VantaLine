@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BoxSelect, CheckCircle2, CopyPlus, FileText, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { cloneIncomingTextReference, getIncomingTextTask, queryKeys, saveIncomingTextRules, uploadIncomingTextReference } from "../../api/queries";
 import type { IncomingTextFieldRule, IncomingTextRegion, PipelineTask } from "../../api/types";
+import { FileDropZone } from "../../components/FileDropZone";
 
 type DraftRule = Omit<IncomingTextFieldRule, "field_id"> & { field_id?: string };
 
@@ -142,7 +143,10 @@ export function IncomingTextTaskPage({ task }: { task: PipelineTask }) {
           <div className="incoming-text-upload-box">
             <strong><CopyPlus size={16} /> 新建标准版本</strong>
             <input value={versionLabel} onChange={(event) => setVersionLabel(event.currentTarget.value)} placeholder="例如：V3" />
-            <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={(event) => setReferenceFile(event.currentTarget.files?.[0] || null)} />
+            <FileDropZone className="dropzone compact-dropzone" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" disabled={uploadMutation.isPending} ariaLabel="拖拽或选择标准稿" onFiles={(files) => setReferenceFile(files[0] || null)}>
+              <strong>{referenceFile?.name || "拖拽标准稿到这里，或点击选择"}</strong>
+              <span>支持单页 PDF、PNG 或 JPG</span>
+            </FileDropZone>
             <button className="secondary" type="button" onClick={() => uploadMutation.mutate()} disabled={uploadMutation.isPending || !referenceFile || !versionLabel.trim()}><Plus size={15} /> {uploadMutation.isPending ? "上传中…" : "上传为草稿"}</button>
             {selectedReference && selectedReference.status !== "draft" ? <button className="secondary" type="button" onClick={() => cloneMutation.mutate()} disabled={cloneMutation.isPending || !versionLabel.trim()}><CopyPlus size={15} /> 复制当前规则为新版本</button> : null}
           </div>

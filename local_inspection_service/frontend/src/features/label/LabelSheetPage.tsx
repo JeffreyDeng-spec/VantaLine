@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { addLabelSheetReferences, getLabelSheetReferences, matchLabelSheet, queryKeys } from "../../api/queries";
 import type { LabelSheetCandidate, LabelSheetMatchResult, LabelSheetReference } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { FileDropZone } from "../../components/FileDropZone";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { useAuth } from "../auth/auth-context";
@@ -87,7 +88,7 @@ export function LabelSheetPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [cameraStatus, setCameraStatus] = useState("摄像头图片会走本地标签匹配。");
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const referenceFilesRef = useRef<HTMLInputElement | null>(null);
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canViewDiagnostics = auth.user.role === "admin";
@@ -174,7 +175,7 @@ export function LabelSheetPage() {
   }
 
   async function addReference() {
-    const files = Array.from(referenceFilesRef.current?.files || []);
+    const files = referenceFiles;
     const cleanAnnotation = annotation.trim();
     if (!cleanAnnotation) {
       toast.notify({ title: "请填写左列标注", tone: "error" });
@@ -191,7 +192,7 @@ export function LabelSheetPage() {
       for (const file of files) form.append("files", file);
       await addLabelSheetReferences(form);
       setAnnotation("");
-      if (referenceFilesRef.current) referenceFilesRef.current.value = "";
+      setReferenceFiles([]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.labelSheetReferences(auth.dataUserId) });
       toast.notify({ title: "标签参考已保存", tone: "success" });
     } catch (error) {
@@ -285,12 +286,11 @@ export function LabelSheetPage() {
               onChange={(event) => setAnnotation(event.currentTarget.value)}
             />
           </div>
-          <label className="dropzone compact-dropzone">
-            <input ref={referenceFilesRef} type="file" accept="image/*" multiple />
+          <FileDropZone className="dropzone compact-dropzone" accept="image/*" multiple disabled={busy === "reference"} ariaLabel="拖拽或选择标签参考图" onFiles={setReferenceFiles}>
             <strong>上传参考图</strong>
-            <span>只保留标签类标注</span>
-          </label>
-          <button className="secondary icon-label" type="button" disabled={busy === "reference"} onClick={addReference}>
+            <span>{referenceFiles.length ? `已选择 ${referenceFiles.length} 张图片` : "拖拽图片到这里，或点击选择；只保留标签类标注"}</span>
+          </FileDropZone>
+          <button className="secondary icon-label" type="button" disabled={busy === "reference" || !referenceFiles.length} onClick={addReference}>
             <Save size={15} aria-hidden="true" />
             保存参考
           </button>
@@ -330,11 +330,10 @@ export function LabelSheetPage() {
 
           {mode === "image" ? (
             <div className="tabpane active">
-              <label className="dropzone">
-                <input type="file" accept="image/*" onChange={(event) => setImageFile(event.currentTarget.files?.[0] || null)} />
+              <FileDropZone accept="image/*" disabled={Boolean(busy)} ariaLabel="拖拽或选择标签纸图片" onFiles={(files) => setImageFile(files[0] || null)}>
                 <strong>上传标签纸图片</strong>
-                <span>{imageFile?.name || "支持 PNG / JPG / JPEG"}</span>
-              </label>
+                <span>{imageFile?.name || "拖拽图片到这里，或点击选择"}</span>
+              </FileDropZone>
               <button className="primary icon-label" type="button" disabled={!imageFile || Boolean(busy)} onClick={() => runMatch(imageFile)}>
                 <Play size={15} aria-hidden="true" />
                 本地匹配

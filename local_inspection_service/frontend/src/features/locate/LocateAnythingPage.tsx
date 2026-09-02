@@ -14,6 +14,7 @@ import {
 } from "../../api/queries";
 import type { LocateConfigResponse, LocateInspectResult, LocateInspectionRule, LocateSourceItem } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { FileDropZone } from "../../components/FileDropZone";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { useAuth } from "../auth/auth-context";
@@ -603,11 +604,10 @@ export function LocateAnythingPage() {
           </div>
           <p className="hint-line">{cameraStatus}</p>
 
-          <label className="dropzone compact-dropzone">
-            <input type="file" accept="image/*" onChange={(event) => setImageFile(event.currentTarget.files?.[0] || null)} />
+          <FileDropZone className="dropzone compact-dropzone" accept="image/*" disabled={Boolean(busy)} ariaLabel="拖拽或选择待定位图片" onFiles={(files) => setImageFile(files[0] || null)}>
             <strong>图片输入</strong>
-            <span>{imageFile?.name || "摄像头不可用时上传单张图片检测"}</span>
-          </label>
+            <span>{imageFile?.name || "拖拽图片到这里，或点击选择"}</span>
+          </FileDropZone>
           <div className="button-row">
             <button className="secondary compact-action" type="button" disabled={!imageFile || Boolean(busy)} onClick={() => runInspectWithFile(imageFile)}>
               <FileImage size={15} aria-hidden="true" />
