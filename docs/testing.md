@@ -11,7 +11,7 @@ Run checks from repository root unless stated otherwise.
 | PLC/Web Serial | `smoke_plc_web_serial_v3.py`, `smoke_plc_frontend_contract.py`, release contract |
 | Frontend | `npm ci`, typecheck, production build |
 | PostgreSQL/migrations | migration safety, repository smoke, real PostgreSQL schema smoke |
-| Text inspection v2 | `python local_inspection_service/scripts/smoke_text_compare_beta.py`; `python scripts/smoke_text_inspection_v2.py`; pass `--customer-docx` for the fixed image1–image18 acceptance file; run `smoke_text_inspection_v2_endpoints.py` in fail-closed, external-only and enabled modes; run `smoke_text_inspection_v2_postgres_contract.py`; frontend typecheck/build. The frontend smoke contract keeps camera and uploaded-image inputs, zoomable previews, idempotent comparison identity, and absence of the legacy creation entry. |
+| Text inspection v2 | `python local_inspection_service/scripts/smoke_text_compare_beta.py`; `python scripts/smoke_text_inspection_v2.py`; pass `--customer-docx` for the fixed image1–image18 acceptance file; run `smoke_text_inspection_v2_endpoints.py` in fail-closed, external-only and enabled modes; run `smoke_text_inspection_v2_postgres_contract.py`; frontend typecheck/build. The frontend smoke contract keeps camera and uploaded-image inputs, zoomable previews, idempotent comparison identity, absence of the legacy creation entry, and absence of the retired persistent scope-warning badge. |
 | Release/install | release contract, dependency verification, shell syntax, docs contract |
 
 Canonical commands:

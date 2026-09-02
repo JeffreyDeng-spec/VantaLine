@@ -42,8 +42,6 @@
 .text-compare-beta-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; margin: 0 auto 22px; max-width: 1500px; }
 .text-compare-beta-header h2 { margin: 4px 0 5px; font-family: "Geist", sans-serif; font-size: clamp(28px, 3vw, 42px); letter-spacing: -.045em; }
 .text-compare-beta-header p { margin: 0; color: #5f6962; font-size: 14px; }
-.text-compare-beta-boundary { display: flex; gap: 10px; align-items: flex-start; min-width: 270px; padding: 11px 14px; border: 1px solid #e4b968; border-radius: 10px; background: #fff8e8; color: #704900; font-size: 13px; }
-.text-compare-beta-boundary small { color: #8d6b2d; }
 .text-compare-beta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 1680px; margin: 0 auto; }
 .text-compare-panel { overflow: hidden; border: 1px solid #d8dcd5; border-radius: 14px; background: #fff; box-shadow: 0 13px 32px rgba(32, 45, 36, .07); }
 .text-compare-panel-title { display: flex; align-items: center; gap: 11px; min-height: 68px; padding: 10px 14px; border-bottom: 1px solid #e2e5df; }
