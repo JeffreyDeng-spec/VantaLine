@@ -34,6 +34,7 @@ import type {
 import { PlcWebSerialClient, type PlcBrowserConnectionState } from "../plc/webSerialClient";
 import { nextCaptureTriggerState } from "../plc/captureTriggerState.mjs";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
+import { FileDropZone } from "../../components/FileDropZone";
 import { MetricCard } from "../../components/MetricCard";
 import { useToast } from "../../components/ToastProvider";
 import { modelVariantLabel } from "../../utils/format";
@@ -1906,12 +1907,11 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
           {source === "image" ? (
             <div className="tabpane active">
-              <label className="dropzone">
-                <input type="file" accept="image/*" onChange={(event) => setImageFile(event.currentTarget.files?.[0] || null)} />
+              <FileDropZone accept="image/*" disabled={Boolean(busy)} ariaLabel={`拖拽或选择${activeDetectionLabel}图片`} onFiles={(files) => setImageFile(files[0] || null)}>
                 <span className="dropzone-file-action">选择图片</span>
                 <strong>上传 {activeDetectionLabel}图片</strong>
-                <span className="dropzone-file-name">{imageFile?.name || "支持 PNG / JPG / JPEG"}</span>
-              </label>
+                <span className="dropzone-file-name">{imageFile?.name || "拖拽图片到这里，或点击选择"}</span>
+              </FileDropZone>
               <button className="primary icon-label" type="button" disabled={!imageFile || Boolean(busy)} onClick={() => imageFile && runAnalysis("image", imageFile)}>
                 <Play size={16} aria-hidden="true" />
                 开始 {activeDetectionLabel}
@@ -1921,12 +1921,11 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
           {source === "video" ? (
             <div className="tabpane active">
-              <label className="dropzone">
-                <input type="file" accept="video/*" onChange={(event) => setVideoFile(event.currentTarget.files?.[0] || null)} />
+              <FileDropZone accept="video/*" disabled={Boolean(busy)} ariaLabel={`拖拽或选择${activeDetectionLabel}视频`} onFiles={(files) => setVideoFile(files[0] || null)}>
                 <span className="dropzone-file-action">选择视频</span>
                 <strong>上传 {activeDetectionLabel}视频</strong>
-                <span className="dropzone-file-name">{videoFile?.name || "抽帧检测并应用同一套通过规则"}</span>
-              </label>
+                <span className="dropzone-file-name">{videoFile?.name || "拖拽视频到这里，或点击选择"}</span>
+              </FileDropZone>
               <button className="primary icon-label" type="button" disabled={!videoFile || Boolean(busy)} onClick={() => videoFile && runAnalysis("video", videoFile)}>
                 <Play size={16} aria-hidden="true" />
                 分析视频
@@ -2122,12 +2121,11 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                 </select>
               </label>
               {environmentInputMode === "upload" ? (
-                <label className="dropzone compact-dropzone">
-                  <input type="file" accept="image/*" onChange={(event) => handleEnvironmentUploadChange(event.currentTarget.files?.[0])} />
+                <FileDropZone className="dropzone compact-dropzone" accept="image/*" disabled={environmentBackgroundMutation.isPending} ariaLabel="拖拽或选择空白生产环境照片" onFiles={(files) => handleEnvironmentUploadChange(files[0])}>
                   <span className="dropzone-file-action">选择照片</span>
                   <strong>上传空白生产环境照片</strong>
-                  <span className="dropzone-file-name">{environmentUploadFile?.name || "支持 PNG / JPG / JPEG"}</span>
-                </label>
+                  <span className="dropzone-file-name">{environmentUploadFile?.name || "拖拽照片到这里，或点击选择"}</span>
+                </FileDropZone>
               ) : (
                 <div className="camera-preview">
                   <video ref={environmentVideoRef} autoPlay playsInline muted />

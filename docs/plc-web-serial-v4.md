@@ -24,6 +24,8 @@ Connection, refresh, configuration change, or reconnect starts unarmed. The brow
 
 Only dedicated camera detection, whether manually requested or initiated by a valid PLC input edge, may create a v4 output plan. The plan binds station, lease epoch, configuration generation, model/request identity, logical and resolved addresses, frame digests, and a short execution deadline. Image upload and video remain detection-only.
 
+The shared drag/drop component changes only browser file selection. A dragged image or video retains ordinary upload provenance and cannot create a PLC plan. Camera-device lifecycle in the PLC detection workbench remains governed by the existing readiness, edge-latching and no-replay rules; the text-comparison camera selector does not participate in PLC dispatch.
+
 The browser declares the complete attempt before I/O, writes D (`PASS=1`, `FAIL=0`), waits for `ACK=06`, then handles optional Y. D failure suppresses Y. Blank Y produces no Y plan/frame/write/audit. `NAK=15` is rejected only when the input becomes quiet; residual bytes make the operation uncertain.
 
 Receipts are workstation evidence, not proof against browser/OS failure. At-most-once is the promised physical safety property; end-to-end exactly-once is not claimed.
