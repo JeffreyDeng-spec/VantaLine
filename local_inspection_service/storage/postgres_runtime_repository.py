@@ -47,6 +47,7 @@ PRIMARY_KEY_COLUMNS = {
     "incoming_text_inspections": ("id",),
     "text_inspection_standards": ("id",),
     "text_inspection_assets": ("id",),
+    "text_inspection_standard_revisions": ("id",),
     "text_inspection_records": ("id",),
     "text_inspection_manual_sessions": ("id",),
     "text_inspection_manual_pages": ("id",),
@@ -105,6 +106,38 @@ def _missing_required_values(values: Mapping[str, Any], required_columns: tuple[
 
 def _missing_present_values(values: Mapping[str, Any], required_columns: tuple[str, ...]) -> list[str]:
     return [column for column in required_columns if column not in values or values.get(column) is None]
+
+
+def _text_standard_asset_snapshot(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected = [item for item in assets if item.get("status") in {"candidate", "page"}]
+    selected.sort(key=lambda item: int(item.get("ordinal") or 0))
+    return [
+        {
+            "id": item["id"],
+            "sha256": item.get("sha256", ""),
+            "ordinal": int(item.get("ordinal") or 0),
+            "mime_type": item.get("mime_type", ""),
+        }
+        for item in selected
+    ]
+
+
+def _legacy_text_standard_snapshot(standard: Mapping[str, Any]) -> list[dict[str, Any]]:
+    snapshots = standard.get("confirmed_assets")
+    if not isinstance(snapshots, list):
+        return []
+    return [dict(item) for item in snapshots if isinstance(item, Mapping) and item.get("id")]
+
+
+def _legacy_text_standard_baseline_revision(standard: Mapping[str, Any], created_at: int) -> dict[str, Any]:
+    snapshot = _legacy_text_standard_snapshot(standard)
+    standard_id = str(standard["id"])
+    return {
+        "id": f"rev_baseline_{standard_id}", "standard_id": standard_id,
+        "owner_user_id": str(standard["owner_user_id"]), "revision_number": 1,
+        "action": "baseline", "asset_id": "", "confirmed_assets": snapshot,
+        "confirmed_asset_ids": [str(item["id"]) for item in snapshot], "created_at": created_at,
+    }
 
 
 @dataclass(frozen=True)
@@ -361,7 +394,106 @@ class PostgresRuntimeRepository:
             if callable(close):
                 close()
 
-    def patch_text_inspection_asset(self, standard_id: str, asset_id: str, owner_user_id: str, action: str, updated_at: int) -> dict[str, Any]:
+    def _insert_text_standard_revision(self, cursor: Any, revision: Mapping[str, Any]) -> None:
+        revisions = self._qualified_table("text_inspection_standard_revisions")
+        cursor.execute(
+            f"INSERT INTO {revisions} (id, standard_id, owner_user_id, revision_number, action, asset_id, created_at, raw_json) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
+            (
+                revision["id"], revision["standard_id"], revision["owner_user_id"],
+                int(revision["revision_number"]), revision["action"], revision.get("asset_id", ""),
+                int(revision["created_at"]), _json_parameter(revision),
+            ),
+        )
+
+    def add_text_inspection_standard_asset(
+        self,
+        standard_id: str,
+        owner_user_id: str,
+        asset: dict[str, Any],
+        *,
+        revision_id: str,
+        updated_at: int,
+        expected_revision: int | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        standards = self._qualified_table("text_inspection_standards")
+        assets = self._qualified_table("text_inspection_assets")
+        cursor = self._cursor()
+        try:
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"vantaline:text-standard:{owner_user_id}:{standard_id}",))
+            cursor.execute(f"SELECT raw_json FROM {standards} WHERE id = %s AND owner_user_id = %s FOR UPDATE", (standard_id, owner_user_id))
+            row = cursor.fetchone()
+            if row is None:
+                raise PostgresRuntimeRepositoryError("Text inspection standard not found")
+            standard = _decode_value("raw_json", self._row_to_dict(cursor, row).get("raw_json"))
+            if not isinstance(standard, dict) or standard.get("standard_type") != "label":
+                raise PostgresRuntimeRepositoryError("Text inspection standard does not accept label images")
+            current_revision = int(standard.get("revision_number") or 0)
+            if expected_revision is not None and expected_revision != current_revision:
+                raise PostgresRuntimeRepositoryError("Text inspection standard revision changed")
+            cursor.execute(f"SELECT raw_json FROM {assets} WHERE standard_id = %s AND owner_user_id = %s ORDER BY ordinal FOR UPDATE", (standard_id, owner_user_id))
+            existing_assets = []
+            for asset_row in cursor.fetchall():
+                value = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
+                if isinstance(value, dict):
+                    existing_assets.append(value)
+            next_asset = dict(asset)
+            next_asset["ordinal"] = max((int(item.get("ordinal") or 0) for item in existing_assets), default=0) + 1
+            cursor.execute(
+                f"INSERT INTO {assets} (id, standard_id, owner_user_id, asset_kind, ordinal, status, sha256, created_at, updated_at, raw_json) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
+                (
+                    next_asset["id"], standard_id, owner_user_id, next_asset["asset_kind"], next_asset["ordinal"],
+                    next_asset["status"], next_asset["sha256"], next_asset["created_at"], next_asset["updated_at"],
+                    _json_parameter(next_asset),
+                ),
+            )
+            selected = _text_standard_asset_snapshot([*existing_assets, next_asset])
+            standard["asset_count"] = len(selected)
+            standard["updated_at"] = updated_at
+            revision: dict[str, Any] | None = None
+            if standard.get("status") == "confirmed":
+                if current_revision == 0:
+                    baseline = _legacy_text_standard_baseline_revision(standard, updated_at)
+                    self._insert_text_standard_revision(cursor, baseline)
+                    current_revision = 1
+                next_revision = current_revision + 1
+                revision = {
+                    "id": revision_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
+                    "revision_number": next_revision, "action": "add", "asset_id": next_asset["id"],
+                    "confirmed_assets": selected, "confirmed_asset_ids": [item["id"] for item in selected],
+                    "created_at": updated_at,
+                }
+                standard.update({
+                    "revision_number": next_revision, "current_revision_id": revision_id,
+                    "confirmed_assets": selected, "confirmed_asset_ids": revision["confirmed_asset_ids"],
+                })
+                self._insert_text_standard_revision(cursor, revision)
+            cursor.execute(
+                f"UPDATE {standards} SET updated_at = %s, raw_json = %s::jsonb WHERE id = %s AND owner_user_id = %s",
+                (updated_at, _json_parameter(standard), standard_id, owner_user_id),
+            )
+            self.connection.commit()
+            return next_asset, standard
+        except Exception:
+            self.connection.rollback()
+            raise
+        finally:
+            close = getattr(cursor, "close", None)
+            if callable(close):
+                close()
+
+    def patch_text_inspection_asset(
+        self,
+        standard_id: str,
+        asset_id: str,
+        owner_user_id: str,
+        action: str,
+        updated_at: int,
+        *,
+        revision_id: str,
+        expected_revision: int | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         standards = self._qualified_table("text_inspection_standards")
         assets = self._qualified_table("text_inspection_assets")
         cursor = self._cursor()
@@ -372,21 +504,54 @@ class PostgresRuntimeRepository:
             if standard_row is None:
                 raise PostgresRuntimeRepositoryError("Text inspection standard not found")
             standard = _decode_value("raw_json", self._row_to_dict(cursor, standard_row).get("raw_json"))
-            if not isinstance(standard, dict) or standard.get("status") != "draft":
-                raise PostgresRuntimeRepositoryError("Confirmed text inspection standard is immutable")
-            cursor.execute(f"SELECT raw_json FROM {assets} WHERE id = %s AND standard_id = %s AND owner_user_id = %s FOR UPDATE", (asset_id, standard_id, owner_user_id))
-            asset_row = cursor.fetchone()
-            if asset_row is None:
+            if not isinstance(standard, dict):
+                raise PostgresRuntimeRepositoryError("Text inspection standard authority is corrupt")
+            current_revision = int(standard.get("revision_number") or 0)
+            if expected_revision is not None and expected_revision != current_revision:
+                raise PostgresRuntimeRepositoryError("Text inspection standard revision changed")
+            cursor.execute(f"SELECT raw_json FROM {assets} WHERE standard_id = %s AND owner_user_id = %s ORDER BY ordinal FOR UPDATE", (standard_id, owner_user_id))
+            all_assets: list[dict[str, Any]] = []
+            for asset_row in cursor.fetchall():
+                value = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
+                if isinstance(value, dict):
+                    all_assets.append(value)
+            asset = next((item for item in all_assets if str(item.get("id")) == asset_id), None)
+            if asset is None:
                 raise PostgresRuntimeRepositoryError("Text inspection asset not found")
-            asset = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
-            if not isinstance(asset, dict):
-                raise PostgresRuntimeRepositoryError("Text inspection asset authority is corrupt")
-            asset["status"] = {"restore": "candidate", "exclude": "excluded", "confirm": "candidate"}[action]
+            target_status = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate"}[action]
+            if asset.get("status") == target_status:
+                self.connection.commit()
+                return asset, standard
+            asset["status"] = target_status
             asset["classification_source"] = "human"
             asset["updated_at"] = updated_at
             cursor.execute(f"UPDATE {assets} SET status = %s, updated_at = %s, raw_json = %s::jsonb WHERE id = %s", (asset["status"], updated_at, _json_parameter(asset), asset_id))
+            selected = _text_standard_asset_snapshot(all_assets)
+            standard["asset_count"] = len(selected)
+            standard["updated_at"] = updated_at
+            if standard.get("status") == "confirmed":
+                if current_revision == 0:
+                    baseline = _legacy_text_standard_baseline_revision(standard, updated_at)
+                    self._insert_text_standard_revision(cursor, baseline)
+                    current_revision = 1
+                next_revision = current_revision + 1
+                revision = {
+                    "id": revision_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
+                    "revision_number": next_revision, "action": "restore" if action in {"restore", "confirm"} else "remove",
+                    "asset_id": asset_id, "confirmed_assets": selected,
+                    "confirmed_asset_ids": [item["id"] for item in selected], "created_at": updated_at,
+                }
+                standard.update({
+                    "revision_number": next_revision, "current_revision_id": revision_id,
+                    "confirmed_assets": selected, "confirmed_asset_ids": revision["confirmed_asset_ids"],
+                })
+                self._insert_text_standard_revision(cursor, revision)
+            cursor.execute(
+                f"UPDATE {standards} SET updated_at = %s, raw_json = %s::jsonb WHERE id = %s AND owner_user_id = %s",
+                (updated_at, _json_parameter(standard), standard_id, owner_user_id),
+            )
             self.connection.commit()
-            return asset
+            return asset, standard
         except Exception:
             self.connection.rollback()
             raise
@@ -395,7 +560,7 @@ class PostgresRuntimeRepository:
             if callable(close):
                 close()
 
-    def confirm_text_inspection_standard(self, standard_id: str, owner_user_id: str, confirmed_at: int) -> dict[str, Any]:
+    def confirm_text_inspection_standard(self, standard_id: str, owner_user_id: str, confirmed_at: int, *, revision_id: str) -> dict[str, Any]:
         standards = self._qualified_table("text_inspection_standards")
         assets = self._qualified_table("text_inspection_assets")
         cursor = self._cursor()
@@ -421,10 +586,22 @@ class PostgresRuntimeRepository:
                     selected.append(asset)
             if not selected:
                 raise PostgresRuntimeRepositoryError("Text inspection standard requires at least one selected asset")
+            revision_number = int(standard.get("revision_number") or 0) + 1
+            snapshot = _text_standard_asset_snapshot(selected)
+            revision = {
+                "id": revision_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
+                "revision_number": revision_number, "action": "confirm", "asset_id": "",
+                "confirmed_assets": snapshot, "confirmed_asset_ids": [item["id"] for item in snapshot],
+                "created_at": confirmed_at,
+            }
             standard["status"] = "confirmed"
             standard["confirmed_at"] = standard["updated_at"] = confirmed_at
-            standard["confirmed_assets"] = [{"id": item["id"], "sha256": item.get("sha256", ""), "ordinal": int(item.get("ordinal") or 0), "mime_type": item.get("mime_type", "")} for item in selected]
-            standard["confirmed_asset_ids"] = [item["id"] for item in selected]
+            standard["revision_number"] = revision_number
+            standard["current_revision_id"] = revision_id
+            standard["confirmed_assets"] = snapshot
+            standard["confirmed_asset_ids"] = revision["confirmed_asset_ids"]
+            standard["asset_count"] = len(snapshot)
+            self._insert_text_standard_revision(cursor, revision)
             cursor.execute(f"UPDATE {standards} SET status = 'confirmed', updated_at = %s, raw_json = %s::jsonb WHERE id = %s", (confirmed_at, _json_parameter(standard), standard_id))
             self.connection.commit()
             return standard

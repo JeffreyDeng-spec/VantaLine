@@ -23,7 +23,7 @@ JSONB_COLUMNS = frozenset(
 
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
-INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch", "ordinal"})
+INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
     "schema_migrations": ("version",),
@@ -44,6 +44,7 @@ PRIMARY_KEY_COLUMNS = {
     "incoming_text_inspections": ("id",),
     "text_inspection_standards": ("id",),
     "text_inspection_assets": ("id",),
+    "text_inspection_standard_revisions": ("id",),
     "text_inspection_records": ("id",),
     "text_inspection_manual_sessions": ("id",),
     "text_inspection_manual_pages": ("id",),
@@ -59,6 +60,7 @@ UNIQUE_COLUMNS = {
     "incoming_text_inspections": (("owner_user_id", "task_id", "capture_id"),),
     "text_inspection_standards": (("owner_user_id", "material_code", "version_label", "standard_type"),),
     "text_inspection_assets": (("standard_id", "ordinal"),),
+    "text_inspection_standard_revisions": (("standard_id", "revision_number"),),
     "text_inspection_records": (("owner_user_id", "comparison_id"),),
     "text_inspection_manual_pages": (("owner_user_id", "session_id", "capture_id"),),
     "plc_workstations": (("token_hash",),),

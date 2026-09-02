@@ -37345,6 +37345,7 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 TEXT_INSPECTION_TABLES = {
     "standards": "text_inspection_standards",
     "assets": "text_inspection_assets",
+    "revisions": "text_inspection_standard_revisions",
     "records": "text_inspection_records",
     "sessions": "text_inspection_manual_sessions",
     "pages": "text_inspection_manual_pages",
@@ -37368,6 +37369,7 @@ def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     fields = {
         "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
         "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
+        "revisions": ("id", "standard_id", "owner_user_id", "revision_number", "action", "asset_id", "created_at"),
         "records": ("id", "owner_user_id", "standard_id", "comparison_id", "status", "auto_decision", "final_decision", "source_sha256", "created_at", "updated_at"),
         "sessions": ("id", "owner_user_id", "standard_id", "status", "created_at", "updated_at"),
         "pages": ("id", "session_id", "owner_user_id", "capture_id", "standard_asset_id", "status", "created_at", "updated_at"),
@@ -37390,6 +37392,7 @@ def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False
         unique_fields = {
             "standards": ("owner_user_id", "material_code", "version_label", "standard_type"),
             "assets": ("standard_id", "ordinal"),
+            "revisions": ("standard_id", "revision_number"),
             "records": ("owner_user_id", "comparison_id"),
             "pages": ("owner_user_id", "session_id", "capture_id"),
         }.get(kind, ("id",))
@@ -37489,6 +37492,74 @@ def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
     return contents
 
 
+def _text_v2_confirmed_snapshot(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected = [item for item in assets if item.get("status") in {"candidate", "page"}]
+    selected.sort(key=lambda item: int(item.get("ordinal") or 0))
+    return [
+        {
+            "id": item["id"], "sha256": item.get("sha256", ""),
+            "ordinal": int(item.get("ordinal") or 0), "mime_type": item.get("mime_type", ""),
+        }
+        for item in selected
+    ]
+
+
+def _text_v2_expected_revision(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool) or (not isinstance(value, int) and not re.fullmatch(r"[0-9]+", str(value))):
+        raise HTTPException(status_code=400, detail="expected_revision 必须为非负整数")
+    try:
+        revision = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="expected_revision 必须为非负整数") from exc
+    if revision < 0:
+        raise HTTPException(status_code=400, detail="expected_revision 必须为非负整数")
+    return revision
+
+
+def _text_v2_apply_revision(
+    standard: dict[str, Any], assets: list[dict[str, Any]], *, action: str, asset_id: str, now: int,
+) -> dict[str, Any]:
+    snapshot = _text_v2_confirmed_snapshot(assets)
+    current_revision = int(standard.get("revision_number") or 0)
+    if standard.get("status") == "confirmed" and action != "confirm" and current_revision == 0:
+        legacy_snapshot = [
+            dict(item) for item in standard.get("confirmed_assets", [])
+            if isinstance(item, dict) and item.get("id")
+        ]
+        baseline = {
+            "id": f"rev_baseline_{standard['id']}", "standard_id": standard["id"],
+            "owner_user_id": standard["owner_user_id"], "revision_number": 1,
+            "action": "baseline", "asset_id": "", "confirmed_assets": legacy_snapshot,
+            "confirmed_asset_ids": [str(item["id"]) for item in legacy_snapshot], "created_at": now,
+        }
+        existing_baseline = next((
+            item for item in _text_v2_load("revisions")
+            if item.get("id") == baseline["id"] and item.get("standard_id") == standard["id"]
+        ), None)
+        if existing_baseline:
+            if existing_baseline.get("confirmed_assets") != legacy_snapshot:
+                raise HTTPException(status_code=409, detail="标准基线修订冲突，请刷新后重试")
+        elif not _text_v2_save("revisions", baseline, insert_only=True):
+            raise HTTPException(status_code=409, detail="标准基线修订已存在，请刷新后重试")
+        current_revision = 1
+    revision_number = current_revision + 1
+    revision = {
+        "id": "rev_" + uuid.uuid4().hex, "standard_id": standard["id"],
+        "owner_user_id": standard["owner_user_id"], "revision_number": revision_number,
+        "action": action, "asset_id": asset_id, "confirmed_assets": snapshot,
+        "confirmed_asset_ids": [item["id"] for item in snapshot], "created_at": now,
+    }
+    standard.update({
+        "revision_number": revision_number, "current_revision_id": revision["id"],
+        "confirmed_assets": snapshot, "confirmed_asset_ids": revision["confirmed_asset_ids"],
+        "asset_count": len(snapshot), "updated_at": now,
+    })
+    _text_v2_save("revisions", revision, insert_only=True)
+    return revision
+
+
 @app.post("/api/text-inspection/standards/import")
 async def import_text_inspection_standard(
     file: UploadFile = File(...),
@@ -37506,7 +37577,13 @@ async def import_text_inspection_standard(
     contents = await file.read()
     filename = (file.filename or "").lower()
     digest = sha256_bytes(contents)
-    duplicate = next((item for item in _text_v2_load("standards") if str(item.get("owner_user_id")) == owner_user_id and item.get("source_sha256") == digest), None)
+    duplicate = next((
+        item for item in _text_v2_load("standards")
+        if str(item.get("owner_user_id")) == owner_user_id
+        and item.get("source_sha256") == digest
+        and item.get("material_code") == clean_material
+        and item.get("version_label") == clean_version
+    ), None)
     if duplicate:
         return {**_text_v2_public(duplicate), "duplicate": True}
     standard_id = "std_" + uuid.uuid4().hex
@@ -37576,6 +37653,72 @@ def get_text_inspection_asset_content(asset_id: str) -> Response:
     return Response(content=contents, media_type=mime, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
 
 
+@app.post("/api/text-inspection/standards/{standard_id}/assets")
+async def add_text_inspection_standard_asset(
+    standard_id: str,
+    file: UploadFile = File(...),
+    expected_revision: str = Form(""),
+) -> dict[str, Any]:
+    require_permission("inspection", detail="没有文字检验权限")
+    owner_user_id, _ = _text_v2_owner()
+    standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if not standard:
+        raise HTTPException(status_code=404, detail="标准不存在")
+    if standard.get("standard_type") != "label":
+        raise HTTPException(status_code=409, detail="说明书标准不支持追加标签图片")
+    expected = _text_v2_expected_revision(expected_revision)
+    contents = await file.read()
+    mime, suffix = _text_v2_validate_capture(contents)
+    now = int(time.time())
+    asset_id = "ast_" + uuid.uuid4().hex
+    media_path = _text_v2_media_path(owner_user_id, standard_id, f"{asset_id}{suffix}")
+    asset = {
+        "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
+        "asset_kind": "label_candidate", "ordinal": 0, "status": "candidate",
+        "sha256": sha256_bytes(contents), "mime_type": mime, "category": "label",
+        "context": bounded_text(file.filename or "新增标签图片", 160),
+        "classification_source": "human", "media_path": str(media_path),
+        "created_at": now, "updated_at": now,
+    }
+    _text_v2_write(media_path, contents)
+    repository = runtime_postgres_repository_or_none()
+    try:
+        if repository is not None:
+            asset, standard = repository.add_text_inspection_standard_asset(
+                standard_id, owner_user_id, asset,
+                revision_id="rev_" + uuid.uuid4().hex, updated_at=now, expected_revision=expected,
+            )
+        else:
+            with _incoming_text_store_lock:
+                standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
+                if not standard or standard.get("standard_type") != "label":
+                    raise HTTPException(status_code=409, detail="标准状态已变化，请刷新后重试")
+                current_revision = int(standard.get("revision_number") or 0)
+                if expected is not None and expected != current_revision:
+                    raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试")
+                assets = [
+                    item for item in _text_v2_load("assets")
+                    if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id
+                ]
+                asset["ordinal"] = max((int(item.get("ordinal") or 0) for item in assets), default=0) + 1
+                if not _text_v2_save("assets", asset, insert_only=True):
+                    raise HTTPException(status_code=409, detail="标签图片序号冲突，请刷新后重试")
+                assets.append(asset)
+                if standard.get("status") == "confirmed":
+                    _text_v2_apply_revision(standard, assets, action="add", asset_id=asset_id, now=now)
+                else:
+                    standard["asset_count"] = len(_text_v2_confirmed_snapshot(assets))
+                    standard["updated_at"] = now
+                _text_v2_save("standards", standard)
+    except HTTPException:
+        media_path.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        media_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试") from exc
+    return {"asset": _text_v2_public(asset), "standard": _text_v2_public(standard)}
+
+
 @app.patch("/api/text-inspection/standards/{standard_id}/assets/{asset_id}")
 async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: Request) -> dict[str, Any]:
     require_permission("inspection", detail="没有文字检验权限")
@@ -37584,34 +37727,57 @@ async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: 
     asset = _text_v2_owned("assets", asset_id, owner_user_id)
     if not standard or not asset or asset.get("standard_id") != standard_id:
         raise HTTPException(status_code=404, detail="标准资源不存在")
-    if standard.get("status") != "draft":
-        raise HTTPException(status_code=409, detail="已确认标准不可修改，请复制为新版本")
     body = await request.json()
     action = str(body.get("action") or "") if isinstance(body, dict) else ""
-    status_by_action = {"restore": "candidate", "exclude": "excluded", "confirm": "candidate"}
+    status_by_action = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate"}
     if action not in status_by_action:
-        raise HTTPException(status_code=400, detail="action 必须为 restore、exclude 或 confirm")
+        raise HTTPException(status_code=400, detail="action 必须为 restore、remove、exclude 或 confirm")
+    expected = _text_v2_expected_revision(body.get("expected_revision") if isinstance(body, dict) else None)
     updated_at = int(time.time())
+    revision_id = "rev_" + uuid.uuid4().hex
     repository = runtime_postgres_repository_or_none()
     if repository is not None:
         try:
-            asset = repository.patch_text_inspection_asset(standard_id, asset_id, owner_user_id, action, updated_at)
+            asset, standard = repository.patch_text_inspection_asset(
+                standard_id, asset_id, owner_user_id, action, updated_at,
+                revision_id=revision_id, expected_revision=expected,
+            )
         except Exception as exc:
-            raise HTTPException(status_code=409, detail="标准已确认或资源状态已变化，请刷新后重试") from exc
+            raise HTTPException(status_code=409, detail="标准或资源状态已变化，请刷新后重试") from exc
     else:
         with _incoming_text_store_lock:
             authoritative_standard = _text_v2_owned("standards", standard_id, owner_user_id)
             authoritative_asset = _text_v2_owned("assets", asset_id, owner_user_id)
-            if not authoritative_standard or authoritative_standard.get("status") != "draft" or not authoritative_asset:
-                raise HTTPException(status_code=409, detail="标准已确认或资源状态已变化，请刷新后重试")
+            if not authoritative_standard or not authoritative_asset:
+                raise HTTPException(status_code=409, detail="标准或资源状态已变化，请刷新后重试")
+            current_revision = int(authoritative_standard.get("revision_number") or 0)
+            if expected is not None and expected != current_revision:
+                raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试")
             asset = authoritative_asset
-            asset["status"] = status_by_action[action]
-            asset["updated_at"] = updated_at
-            asset["classification_source"] = "human"
-            _text_v2_save("assets", asset)
+            target_status = status_by_action[action]
+            if asset.get("status") != target_status:
+                asset["status"] = target_status
+                asset["updated_at"] = updated_at
+                asset["classification_source"] = "human"
+                _text_v2_save("assets", asset)
+                assets = [
+                    item for item in _text_v2_load("assets")
+                    if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id
+                ]
+                if authoritative_standard.get("status") == "confirmed":
+                    _text_v2_apply_revision(
+                        authoritative_standard, assets,
+                        action="restore" if action in {"restore", "confirm"} else "remove",
+                        asset_id=asset_id, now=updated_at,
+                    )
+                else:
+                    authoritative_standard["asset_count"] = len(_text_v2_confirmed_snapshot(assets))
+                    authoritative_standard["updated_at"] = updated_at
+                _text_v2_save("standards", authoritative_standard)
+            standard = authoritative_standard
     feedback = {"id": "fb_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "asset_id": asset_id, "action": action, "created_at": int(time.time())}
     _text_v2_save("feedback", feedback, insert_only=True)
-    return _text_v2_public(asset)
+    return {**_text_v2_public(asset), "standard": _text_v2_public(standard)}
 
 
 @app.post("/api/text-inspection/standards/{standard_id}/confirm")
@@ -37624,7 +37790,9 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     repository = runtime_postgres_repository_or_none()
     if repository is not None:
         try:
-            return _text_v2_public(repository.confirm_text_inspection_standard(standard_id, owner_user_id, int(time.time())))
+            return _text_v2_public(repository.confirm_text_inspection_standard(
+                standard_id, owner_user_id, int(time.time()), revision_id="rev_" + uuid.uuid4().hex,
+            ))
         except Exception as exc:
             raise HTTPException(status_code=409, detail="标准无法确认，请刷新候选状态后重试") from exc
     if standard.get("status") == "confirmed":
@@ -37639,8 +37807,7 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
         standard["status"] = "confirmed"
         standard["confirmed_at"] = standard["updated_at"] = int(time.time())
         selected.sort(key=lambda item: int(item.get("ordinal") or 0))
-        standard["confirmed_assets"] = [{"id": item["id"], "sha256": item.get("sha256", ""), "ordinal": int(item.get("ordinal") or 0), "mime_type": item.get("mime_type", "")} for item in selected]
-        standard["confirmed_asset_ids"] = [item["id"] for item in selected]
+        _text_v2_apply_revision(standard, selected, action="confirm", asset_id="", now=standard["confirmed_at"])
         _text_v2_save("standards", standard)
     return _text_v2_public(standard)
 
@@ -37716,6 +37883,8 @@ async def compare_text_inspection_label(
         "reference_sha256": sha256_bytes(reference), "reference_bytes": len(reference),
         "captured_sha256": sha256_bytes(captured), "captured_bytes": len(captured),
         "standard_asset_id": standard_asset_id, "provider": settings.get("provider"),
+        "standard_revision_id": standard.get("current_revision_id", ""),
+        "standard_revision_number": int(standard.get("revision_number") or 0),
         "model": settings.get("model"), "prompt_version": "text-compare-v2-prompt-1",
         "schema_version": "text-compare-result-v1",
     }
@@ -37728,7 +37897,7 @@ async def compare_text_inspection_label(
             return {**_text_v2_public(existing), "decision": "REVIEW_REQUIRED", "message": "上次模型请求结果不确定，为避免重复计费未自动重试。"}
         return _text_v2_public(existing)
     now = int(time.time())
-    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_sha256": sha256_bytes(captured), "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": []}
+    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_sha256": sha256_bytes(captured), "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": []}
     source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
     _text_v2_write(source_path, captured)
     record["source_path"] = str(source_path)

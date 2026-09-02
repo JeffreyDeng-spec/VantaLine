@@ -13,6 +13,7 @@ from dataclasses import dataclass
 SCHEMA_VERSION = "2026_07_01_phase4_pr1"
 INCOMING_TEXT_SCHEMA_VERSION = "2026_08_06_incoming_text_v1"
 TEXT_INSPECTION_SCHEMA_VERSION = "2026_08_29_text_inspection_v2"
+TEXT_INSPECTION_STANDARD_REVISIONS_SCHEMA_VERSION = "2026_09_02_text_inspection_standard_revisions"
 PLC_WEB_SERIAL_SCHEMA_VERSION = "2026_08_06_plc_web_serial_v3"
 
 ACTIVE_RUNTIME_STATUSES = frozenset(
@@ -65,6 +66,7 @@ OWNER_REQUIRED_TABLES = frozenset(
         "incoming_text_inspections",
         "text_inspection_standards",
         "text_inspection_assets",
+        "text_inspection_standard_revisions",
         "text_inspection_records",
         "text_inspection_manual_sessions",
         "text_inspection_manual_pages",
@@ -503,6 +505,17 @@ TABLES = (
             raw_json TEXT NOT NULL, UNIQUE (standard_id, ordinal)
         )""",
         ("CREATE INDEX IF NOT EXISTS idx_text_inspection_assets_standard ON text_inspection_assets (owner_user_id, standard_id, ordinal)",),
+    ),
+    TableSchema(
+        "text_inspection_standard_revisions",
+        ("id", "standard_id", "owner_user_id", "revision_number", "action", "asset_id", "created_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_inspection_standard_revisions (
+            id TEXT PRIMARY KEY, standard_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+            revision_number INTEGER NOT NULL, action TEXT NOT NULL, asset_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL, raw_json TEXT NOT NULL,
+            UNIQUE (standard_id, revision_number)
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_inspection_standard_revisions ON text_inspection_standard_revisions (owner_user_id, standard_id, revision_number)",),
     ),
     TableSchema(
         "text_inspection_records",

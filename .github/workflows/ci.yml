@@ -111,5 +111,26 @@ jobs:
       - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
       - run: python local_inspection_service/scripts/smoke_release_version.py
       - run: python local_inspection_service/scripts/smoke_postgres_runtime_repository.py
+      - name: Verify text inspection comparison and document contracts
+        run: |
+          python local_inspection_service/scripts/smoke_text_compare_beta.py
+          python scripts/smoke_text_inspection_v2.py
+      - name: Verify text inspection API fail-closed mode
+        run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
+      - name: Verify text inspection API external-only mode
+        env:
+          VANTALINE_TEXT_V2_SMOKE_MODE: external_only
+        run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
+      - name: Verify text inspection API enabled mode
+        env:
+          VANTALINE_TEXT_V2_SMOKE_MODE: enabled
+        run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
+      - name: Verify text inspection PostgreSQL contract
+        run: python local_inspection_service/scripts/smoke_text_inspection_v2_postgres_contract.py
+      - name: Keep legacy incoming-text rollback path readable
+        run: |
+          python local_inspection_service/scripts/smoke_incoming_text_inspection.py
+          python local_inspection_service/scripts/smoke_incoming_text_endpoints.py
+          python local_inspection_service/scripts/smoke_incoming_text_postgres.py
       - name: Validate generated schema with PostgreSQL 16
         run: python local_inspection_service/scripts/smoke_postgres_schema_real_engine.py --postgres-bin-dir /usr/lib/postgresql/16/bin

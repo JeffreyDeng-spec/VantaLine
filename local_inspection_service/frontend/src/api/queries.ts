@@ -43,7 +43,8 @@ import type {
   IncomingTextInspectorsResponse,
   IncomingTextInspectionsResponse,
   TextCompareBetaResult,
-  TextInspectionAsset,
+  TextInspectionAssetAddResponse,
+  TextInspectionAssetMutationResponse,
   TextInspectionStandard,
   TextInspectionStandardsResponse,
   IncomingTextReference,
@@ -420,8 +421,12 @@ export function importTextInspectionStandard(form: FormData) {
   return apiClient.upload<TextInspectionStandard>("/api/text-inspection/standards/import", form);
 }
 
-export function patchTextInspectionAsset(standardId: string, assetId: string, action: "restore" | "exclude" | "confirm") {
-  return apiClient.patch<TextInspectionAsset>(`/api/text-inspection/standards/${encodeURIComponent(standardId)}/assets/${encodeURIComponent(assetId)}`, { action });
+export function addTextInspectionStandardAsset(standardId: string, form: FormData) {
+  return apiClient.upload<TextInspectionAssetAddResponse>(`/api/text-inspection/standards/${encodeURIComponent(standardId)}/assets`, form);
+}
+
+export function patchTextInspectionAsset(standardId: string, assetId: string, action: "restore" | "remove" | "exclude" | "confirm", expectedRevision?: number) {
+  return apiClient.patch<TextInspectionAssetMutationResponse>(`/api/text-inspection/standards/${encodeURIComponent(standardId)}/assets/${encodeURIComponent(assetId)}`, { action, expected_revision: expectedRevision });
 }
 
 export function confirmTextInspectionStandard(id: string) {

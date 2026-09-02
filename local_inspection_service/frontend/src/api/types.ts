@@ -747,10 +747,14 @@ export interface TextInspectionStandard {
   source_sha256: string;
   created_at: number;
   asset_count: number;
+  revision_number?: number;
+  current_revision_id?: string;
   assets?: TextInspectionAsset[];
 }
 
 export interface TextInspectionStandardsResponse { items: TextInspectionStandard[]; }
+export interface TextInspectionAssetAddResponse { asset: TextInspectionAsset; standard: TextInspectionStandard; }
+export interface TextInspectionAssetMutationResponse extends TextInspectionAsset { standard: TextInspectionStandard; }
 
 export interface AgentRecommendationResponse {
   source?: string;
