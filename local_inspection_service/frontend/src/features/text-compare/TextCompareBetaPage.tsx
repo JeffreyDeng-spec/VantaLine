@@ -158,7 +158,6 @@ export function TextCompareBetaPage() {
   return <section className="view active text-compare-beta">
     <header className="text-compare-beta-header">
       <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
-      <div className="text-compare-beta-boundary"><AlertTriangle size={17} /><span>仅辅助检查文字<br /><small>颜色、材质与印刷质量仍需肉眼确认</small></span></div>
     </header>
     <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
       <button className={mode === "label" ? "active" : ""} type="button" onClick={() => setMode("label")}>标签对比</button>

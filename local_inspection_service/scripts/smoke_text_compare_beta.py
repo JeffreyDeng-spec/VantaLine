@@ -43,6 +43,7 @@ def main():
     assert 'useState<"camera" | "image">("camera")' in frontend
     assert "上传实物图片" in frontend and "请先上传需要对比的实物图片" in frontend
     assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "点击放大查看" in frontend
+    assert "仅辅助检查文字" not in frontend and "颜色、材质与印刷质量仍需肉眼确认" not in frontend
     shell = (APP_DIR / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
     assert "包材文字检验（旧版）" not in shell
     assert 'task_kind: "incoming_material_text"' not in shell
