@@ -46,7 +46,7 @@ export function TextCompareBetaPage() {
   const cameraSurfaceActiveRef = useRef(true);
   const selectedDeviceIdRef = useRef("");
   const busyRef = useRef(false);
-  const comparisonIdentityRef = useRef<{ reference: File; captured: File; id: string } | null>(null);
+  const comparisonIdentityRef = useRef<{ reference: File | string; captured: File; id: string } | null>(null);
   const [reference, setReference] = useState<File | null>(null);
   const [referenceUrl, setReferenceUrl] = useState("");
   const [captured, setCaptured] = useState<File | null>(null);
@@ -65,7 +65,6 @@ export function TextCompareBetaPage() {
   const [selectedStandardId, setSelectedStandardId] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [showImport, setShowImport] = useState(false);
-  const [showManager, setShowManager] = useState(false);
   const [assetUploadFile, setAssetUploadFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
   const [importMaterial, setImportMaterial] = useState("");
@@ -84,7 +83,7 @@ export function TextCompareBetaPage() {
     },
     onSuccess: (value) => {
       void queryClient.invalidateQueries({ queryKey: ["text-inspection"] });
-      setSelectedStandardId(value.id); setShowImport(false); setShowManager(true);
+      setSelectedStandardId(value.id); setShowImport(false);
       setImportName(""); setImportMaterial(""); setImportVersion("V1"); setImportFile(null);
     },
     onError: (error: Error) => setInputError(error.message)
@@ -93,7 +92,7 @@ export function TextCompareBetaPage() {
     mutationFn: ({ assetId, action }: { assetId: string; action: "restore" | "remove" | "confirm" }) => patchTextInspectionAsset(selectedStandardId, assetId, action, standardQuery.data?.revision_number),
     onSuccess: (_value, variables) => {
       if (variables.action === "remove" && variables.assetId === selectedAssetId) {
-        setSelectedAssetId(""); resetComparison({ clearReference: true, clearCaptured: true });
+        setSelectedAssetId(""); resetComparison({ clearReference: true });
       } else {
         resetComparison();
       }
@@ -112,7 +111,7 @@ export function TextCompareBetaPage() {
     onSuccess: () => { setAssetUploadFile(null); resetComparison(); void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); },
     onError: (error: Error) => setInputError(error.message)
   });
-  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); setShowManager(false); }, onError: (error: Error) => setInputError(error.message) });
+  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { resetComparison(); void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); }, onError: (error: Error) => setInputError(error.message) });
 
   const resetComparison = (options: { clearReference?: boolean; clearCaptured?: boolean } = {}) => {
     comparisonIdentityRef.current = null;
@@ -129,8 +128,8 @@ export function TextCompareBetaPage() {
 
   const chooseStandard = (standardId: string) => {
     const nextId = selectedStandardId === standardId ? "" : standardId;
-    setSelectedStandardId(nextId); setSelectedAssetId(""); setShowManager(false);
-    resetComparison({ clearReference: true, clearCaptured: true });
+    setSelectedStandardId(nextId); setSelectedAssetId(""); setAssetUploadFile(null);
+    resetComparison({ clearReference: true });
   };
 
   const chooseAsset = (asset: TextInspectionAsset) => {
@@ -139,14 +138,14 @@ export function TextCompareBetaPage() {
       setInputError("这个订单还没有启用。请先管理候选图片并保存启用，再开始对比。");
       return;
     }
-    resetComparison({ clearReference: true, clearCaptured: true });
+    resetComparison({ clearReference: true });
     setSelectedAssetId(asset.id); setReferenceUrl(asset.content_url);
   };
 
   const replaceReference = (file: File) => {
     if (busyRef.current) throw new Error("正在对比，请等待本次结果完成。");
-    validateImage(file); resetComparison({ clearCaptured: true }); setSelectedAssetId(""); setReference(file);
-    setReferenceUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(file); });
+    validateImage(file); resetComparison(); setSelectedAssetId(""); setReference(file);
+    setReferenceUrl((current) => { if (current.startsWith("blob:")) URL.revokeObjectURL(current); return URL.createObjectURL(file); });
     setInputError("");
   };
   const replaceCaptured = (file: File) => {
@@ -276,14 +275,14 @@ export function TextCompareBetaPage() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [zoomedImage]);
   useEffect(() => {
-    if (!showImport && !showManager) return;
+    if (!showImport) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || importMutation.isPending || assetMutation.isPending || assetUploadMutation.isPending) return;
-      setShowImport(false); setShowManager(false);
+      setShowImport(false);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [showImport, showManager, importMutation.isPending, assetMutation.isPending, assetUploadMutation.isPending]);
+  }, [showImport, importMutation.isPending, assetMutation.isPending, assetUploadMutation.isPending]);
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
       if (busyRef.current) { setInputError("正在对比，请等待本次结果完成。"); return; }
@@ -315,7 +314,7 @@ export function TextCompareBetaPage() {
         setCapturedUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(actual); });
       }
       let identity = comparisonIdentityRef.current;
-      const identityReference = reference || actual;
+      const identityReference = reference || selectedAsset?.id || "";
       if (!identity || identity.reference !== identityReference || identity.captured !== actual) {
         identity = { reference: identityReference, captured: actual, id: "cmp_" + crypto.randomUUID().replace(/-/g, "") };
         comparisonIdentityRef.current = identity;
@@ -338,7 +337,7 @@ export function TextCompareBetaPage() {
   const visibleStandards = (standardsQuery.data?.items || []).filter((item) => item.standard_type === mode);
   const visibleAssets = standardQuery.data?.assets || [];
   const retainedAssetCount = visibleAssets.filter(isActiveAsset).length;
-  const renderAssetCards = (managing = false) => <div className="text-standard-asset-grid" data-testid={managing ? "standard-manager-assets" : "standard-library-assets"}>
+  const renderAssetCards = () => <div className="text-standard-asset-grid" data-testid="standard-library-assets">
     {visibleAssets.map((asset) => <article className={`text-standard-asset-card ${asset.status === "excluded" ? "removed" : ""}`} key={asset.id}>
       <button className="text-standard-thumbnail" type="button" onClick={() => asset.content_url && openZoom(asset.content_url, `${CATEGORY_LABELS[asset.category || ""] || "标准图片"} ${asset.ordinal}`)} disabled={!asset.content_url} aria-label={`查看第 ${asset.ordinal} 张标准大图`}>
         {asset.content_url ? <img src={asset.content_url} alt={`第 ${asset.ordinal} 张标准缩略图`} loading="lazy" /> : <span><FileImage size={26} />暂无预览</span>}
@@ -346,11 +345,11 @@ export function TextCompareBetaPage() {
       </button>
       <div className="text-standard-asset-copy"><strong>{CATEGORY_LABELS[asset.category || ""] || "标准图片"}</strong><small>{assetStatusCopy(asset)}{asset.context ? ` · ${asset.context}` : ""}</small></div>
       <div className="text-standard-asset-actions">
-        {!managing && mode === "label" && isActiveAsset(asset) ? <button type="button" disabled={standardQuery.data?.status !== "confirmed"} onClick={() => chooseAsset(asset)}>{selectedAssetId === asset.id ? "已选作标准" : "选作对比标准"}</button> : null}
-        {managing ? <button className={asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "restore" : "remove"} type="button" disabled={assetMutation.isPending} onClick={() => assetMutation.mutate({ assetId: asset.id, action: asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "confirm" : "remove" })}>{asset.status === "excluded" ? <><RefreshCcw size={14} />恢复</> : asset.status === "needs_confirmation" ? <><CheckCircle2 size={14} />保留</> : <><Trash2 size={14} />移除</>}</button> : null}
+        {mode === "label" && isActiveAsset(asset) ? <button type="button" disabled={standardQuery.data?.status !== "confirmed"} onClick={() => chooseAsset(asset)}>{selectedAssetId === asset.id ? "已选作标准" : "选作对比标准"}</button> : null}
+        <button className={asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "restore" : "remove"} type="button" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => assetMutation.mutate({ assetId: asset.id, action: asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "confirm" : "remove" })}>{asset.status === "excluded" ? <><RefreshCcw size={14} />启用</> : asset.status === "needs_confirmation" ? <><CheckCircle2 size={14} />启用</> : <><Trash2 size={14} />停用</>}</button>
       </div>
     </article>)}
-    {!visibleAssets.length && !standardQuery.isLoading ? <div className="text-standard-empty"><ImagePlus size={28} /><strong>还没有标准图片</strong><span>进入管理后添加图片，或重新导入包含图片的文档。</span></div> : null}
+    {!visibleAssets.length && !standardQuery.isLoading ? <div className="text-standard-empty"><ImagePlus size={28} /><strong>还没有标准图片</strong><span>请在当前订单中添加图片，或重新导入包含图片的文档。</span></div> : null}
   </div>;
 
   return <section className="view active text-compare-beta">
@@ -358,8 +357,8 @@ export function TextCompareBetaPage() {
       <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
     </header>
     <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
-      <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
-      <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
+      <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
+      <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
     </div>
     <section className="text-standard-library" id="text-standard-library-panel" role="tabpanel" aria-label="我的标准库">
       <div className="text-standard-library-header"><div><span>标准库</span><strong>我的{mode === "label" ? "标签" : "说明书"}订单</strong><small>展开订单查看图片，再选择要用于检验的标准。</small></div><button className="text-standard-import-button" type="button" onClick={() => { setInputError(""); setShowImport(true); }}><Upload size={16} />导入标准</button></div>
@@ -372,8 +371,11 @@ export function TextCompareBetaPage() {
           return <article className={`text-standard-order ${expanded ? "expanded" : ""}`} key={standard.id}>
             <button className="text-standard-order-toggle" type="button" aria-expanded={expanded} onClick={() => chooseStandard(standard.id)}><span>{standard.standard_type === "label" ? "标" : "册"}</span><div><strong>{standard.name}</strong><small>{standard.material_code} · {standard.version_label} · {standard.asset_count} 张</small></div><em className={standard.status}>{standard.status === "confirmed" ? "已启用" : "待整理"}</em>{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</button>
             {expanded ? <div className="text-standard-order-detail" data-testid="standard-order-detail">
-              <div className="text-standard-order-toolbar"><div><strong>{standardQuery.isLoading ? "正在读取订单…" : `${retainedAssetCount} 张图片可用`}</strong><small>{standard.status === "confirmed" ? "点击缩略图可查看大图，也可以随时管理内容。" : "请先整理候选图片并保存启用。"}</small></div><button type="button" onClick={() => { setInputError(""); setShowManager(true); }} disabled={standardQuery.isLoading}>管理标准</button></div>
-              {standardQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={22} /><strong>订单内容加载失败</strong><button type="button" onClick={() => void standardQuery.refetch()}>重试</button></div> : renderAssetCards(false)}
+              <div className="text-standard-order-toolbar"><div><strong>{standardQuery.isLoading ? "正在读取订单…" : `${retainedAssetCount} 张图片已启用`}</strong><small>{standard.status === "confirmed" ? "直接选择对比标准，或在这里添加、停用和重新启用图片。" : "请整理候选图片，然后保存并启用订单。"}</small></div></div>
+              {standardQuery.data?.standard_type === "label" ? <div className="text-standard-inline-controls"><FileDropZone className="text-standard-add-asset-drop" accept="image/png,image/jpeg,image/webp" disabled={assetUploadMutation.isPending} ariaLabel="拖拽或选择单张标准图片" onFiles={(files) => { setAssetUploadFile(files[0] || null); setInputError(""); }}><ImagePlus size={16} /><span>{assetUploadFile ? assetUploadFile.name : "拖拽或选择单张图片"}</span></FileDropZone><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}
+              {standardQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={22} /><strong>订单内容加载失败</strong><button type="button" onClick={() => void standardQuery.refetch()}>重试</button></div> : renderAssetCards()}
+              {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
+              {standardQuery.data?.status === "draft" ? <div className="text-standard-inline-footer"><span>启用后即可直接选择订单中的图片进行对比。</span><button type="button" disabled={!retainedAssetCount || confirmMutation.isPending || assetMutation.isPending || assetUploadMutation.isPending} onClick={() => confirmMutation.mutate()}>{confirmMutation.isPending ? "正在保存…" : "保存并启用"}</button></div> : null}
             </div> : null}
           </article>;
         })}
@@ -383,7 +385,7 @@ export function TextCompareBetaPage() {
     {mode === "label" ? <>
     <div className="text-compare-beta-grid">
       <article className="text-compare-panel">
-        <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>Ctrl+V 粘贴、拖入或选择文件</small></div>{referenceUrl ? <button type="button" disabled={mutation.isPending} onClick={() => { setSelectedAssetId(""); resetComparison({ clearReference: true }); }}><RefreshCcw size={15} />更换</button> : null}</div>
+        <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>{selectedAsset ? "已使用订单标准，无需另行上传" : "可从订单选择，也可 Ctrl+V、拖入或选择文件"}</small></div>{referenceUrl ? <button type="button" disabled={mutation.isPending} onClick={() => { setSelectedAssetId(""); resetComparison({ clearReference: true }); }}><RefreshCcw size={15} />更换</button> : null}</div>
         <div className={"text-compare-stage reference " + (referenceUrl ? "has-image " : "") + (mutation.isPending ? "locked" : "")}>
           {referenceUrl ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(referenceUrl, "标准图片")}><img src={referenceUrl} alt="标准图片" /><span>点击放大查看</span></button> : <FileDropZone className="text-compare-empty text-compare-upload-fill" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" ariaLabel="拖拽或选择标准图片" onFiles={(files) => { const file = files[0]; if (!file) return; try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } }}><Clipboard size={38} /><strong>把标准图片粘贴到这里</strong><span>也可以拖入图片或点击选择</span><em><Upload size={15} />选择图片</em></FileDropZone>}
         </div>
@@ -418,15 +420,6 @@ export function TextCompareBetaPage() {
         {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
       </div>
       <footer><button type="button" disabled={importMutation.isPending} onClick={() => setShowImport(false)}>取消</button><button className="primary" type="button" disabled={importMutation.isPending} onClick={() => { setInputError(""); importMutation.mutate(); }}>{importMutation.isPending ? "正在安全解析…" : "导入并整理图片"}</button></footer>
-    </section></div> : null}
-    {showManager && selectedStandardId ? <div className="text-standard-modal-backdrop" role="presentation" onMouseDown={() => !assetMutation.isPending && !assetUploadMutation.isPending && setShowManager(false)}><section className="text-standard-modal manager" role="dialog" aria-modal="true" aria-labelledby="text-standard-manager-title" onMouseDown={(event) => event.stopPropagation()}>
-      <header><button type="button" aria-label="返回订单" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}><ArrowLeft size={18} /></button><div><strong id="text-standard-manager-title">管理标准图片</strong><small>{standardQuery.data ? `${standardQuery.data.name} · ${standardQuery.data.material_code} · ${standardQuery.data.version_label}` : "正在加载订单"}</small></div><button type="button" aria-label="关闭管理" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}><X size={18} /></button></header>
-      <div className="text-standard-modal-body">
-        <div className="text-standard-manager-summary"><div><strong>{retainedAssetCount} 张保留 · {visibleAssets.length - retainedAssetCount} 张已移除</strong><span>每张图片都可点击放大；移除后仍可恢复。</span></div>{standardQuery.data?.standard_type === "label" ? <div className="text-standard-add-asset"><FileDropZone className="text-standard-add-asset-drop" accept="image/png,image/jpeg,image/webp" disabled={assetUploadMutation.isPending} ariaLabel="拖拽或选择单张标准图片" onFiles={(files) => { setAssetUploadFile(files[0] || null); setInputError(""); }}><ImagePlus size={16} /><span>{assetUploadFile ? assetUploadFile.name : "拖拽或选择单张图片"}</span></FileDropZone><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}</div>
-        {standardQuery.isLoading ? <div className="text-standard-empty"><RefreshCcw className="spin" size={24} /><strong>正在加载图片</strong></div> : renderAssetCards(true)}
-        {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
-      </div>
-      <footer><button type="button" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}>返回订单</button>{standardQuery.data?.status === "draft" ? <button className="primary" type="button" disabled={!retainedAssetCount || confirmMutation.isPending || assetMutation.isPending || assetUploadMutation.isPending} onClick={() => confirmMutation.mutate()}>{confirmMutation.isPending ? "正在保存…" : "保存并启用"}</button> : <button className="primary" type="button" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}>完成</button>}</footer>
     </section></div> : null}
     {zoomedImage ? <div className="text-compare-lightbox-backdrop" role="presentation" onMouseDown={() => setZoomedImage(null)}><section className="text-compare-lightbox" role="dialog" aria-modal="true" aria-label={`${zoomedImage.alt}放大预览`} onMouseDown={(event) => event.stopPropagation()}><header><strong>{zoomedImage.alt}</strong><div><button type="button" aria-label="缩小图片" disabled={zoomScale <= 1} onClick={() => setZoomScale((value) => Math.max(1, value - .5))}><Minus size={17} /></button><output>{Math.round(zoomScale * 100)}%</output><button type="button" aria-label="放大图片" disabled={zoomScale >= 3} onClick={() => setZoomScale((value) => Math.min(3, value + .5))}><Plus size={17} /></button><button type="button" onClick={() => setZoomScale(1)}>适合窗口</button><button type="button" aria-label="关闭放大预览" onClick={() => setZoomedImage(null)}><X size={18} /></button></div></header><div className="text-compare-lightbox-viewport"><img src={zoomedImage.src} alt={zoomedImage.alt} style={{ width: `${zoomScale * 100}%` }} /></div></section></div> : null}
   </section>;
