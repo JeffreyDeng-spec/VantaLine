@@ -116,7 +116,7 @@ def main() -> None:
     assert_status(admin.post("/api/auth/bootstrap", json={"username": "admin", "password": PASSWORD}), 200, "bootstrap")
     manager_user = create_user(admin, "manager", ["incoming_material_config", "inspection"])
     create_user(admin, "config_only", ["incoming_material_config"])
-    inspector_user = create_user(admin, "inspector_only", ["inspection"])
+    create_user(admin, "inspector_only", ["inspection"])
     unassigned_user = create_user(admin, "unassigned_inspector", ["inspection"])
     manager = TestClient(server.app, base_url="https://testserver")
     config_only = TestClient(server.app, base_url="https://testserver")
@@ -186,7 +186,6 @@ def main() -> None:
             "detection_method": "label_text_compare",
             "material_code": "PKG-BAT-001",
             "material_name": "电池包底部标签",
-            "inspection_user_ids": [inspector_user["id"]],
             "auto_advance": False,
         },
     )
@@ -208,15 +207,14 @@ def main() -> None:
     reference_v1 = upload_reference(manager, task_id, "V1")
     active_v1 = activate_reference(manager, reference_v1["id"])
     assert active_v1["status"] == "active"
-    inspector_tasks = inspector_only.get("/api/pipeline/tasks")
-    assert_status(inspector_tasks, 200, "assigned inspector can list task")
-    assert task_id in {item["id"] for item in inspector_tasks.json()["items"]}
-    shared_task = inspector_only.get(f"/api/incoming-text/tasks/{task_id}")
-    assert_status(shared_task, 200, "assigned inspector can open task")
-    assert shared_task.json()["active_reference"]["id"] == reference_v1["id"]
-    assert shared_task.json()["automatic_decisions_verified"] is True
-    hidden_task = unassigned_inspector.get(f"/api/incoming-text/tasks/{task_id}")
-    assert_status(hidden_task, 404, "unassigned inspector cannot open task")
+    owner_tasks = manager.get("/api/pipeline/tasks")
+    assert_status(owner_tasks, 200, "owner can list task")
+    assert task_id in {item["id"] for item in owner_tasks.json()["items"]}
+    owned_task = manager.get(f"/api/incoming-text/tasks/{task_id}")
+    assert_status(owned_task, 200, "owner can open task")
+    assert owned_task.json()["active_reference"]["id"] == reference_v1["id"]
+    assert owned_task.json()["automatic_decisions_verified"] is True
+    assert_status(inspector_only.get(f"/api/incoming-text/tasks/{task_id}"), 404, "other inspector cannot open owner task")
     immutable = manager.put(
         f"/api/incoming-text/references/{reference_v1['id']}/rules",
         json={"activate": False, "rules": active_v1["rules"]},
@@ -226,7 +224,7 @@ def main() -> None:
     original_disk_usage = server.shutil.disk_usage
     server.shutil.disk_usage = lambda _path: type("DiskUsage", (), {"free": server.INCOMING_TEXT_MIN_FREE_BYTES - 1})()
     try:
-        no_space = inspector_only.post(
+        no_space = manager.post(
             f"/api/incoming-text/tasks/{task_id}/inspect",
             data={"capture_id": "capture-no-space-0000"},
             files={"file": ("capture.jpg", image_bytes(), "image/jpeg")},
@@ -242,7 +240,7 @@ def main() -> None:
     try:
         capture_id = "capture-idempotent-0001"
         capture = image_bytes()
-        first = inspector_only.post(
+        first = manager.post(
             f"/api/incoming-text/tasks/{task_id}/inspect",
             data={"capture_id": capture_id},
             files={"file": ("capture.jpg", capture, "image/jpeg")},
@@ -279,7 +277,7 @@ def main() -> None:
         assert mismatch.json()["auto_decision"] == "FAIL", mismatch.json()
 
         server.incoming_text_ocr_observations = lambda image: []
-        review = inspector_only.post(
+        review = manager.post(
             f"/api/incoming-text/tasks/{task_id}/inspect",
             data={"capture_id": "capture-review-0003"},
             files={"file": ("capture.jpg", capture, "image/jpeg")},
@@ -287,14 +285,14 @@ def main() -> None:
         assert_status(review, 200, "review inspection")
         review_payload = review.json()
         assert review_payload["auto_decision"] == "REVIEW_REQUIRED", review_payload
-        reviewed = inspector_only.post(
+        reviewed = manager.post(
             f"/api/incoming-text/inspections/{review_payload['id']}/review",
             json={"decision": "RELEASED", "reason": "现场复核确认标准文字正确"},
         )
         assert_status(reviewed, 200, "manual review")
         assert reviewed.json()["final_decision"] == "RELEASED"
-        evidence = inspector_only.get(f"/api/incoming-text/inspections/{review_payload['id']}/evidence/source")
-        assert_status(evidence, 200, "assigned inspector can read evidence")
+        evidence = manager.get(f"/api/incoming-text/inspections/{review_payload['id']}/evidence/source")
+        assert_status(evidence, 200, "owner can read evidence")
         repeated = manager.post(
             f"/api/incoming-text/inspections/{review_payload['id']}/review",
             json={"decision": "RELEASED", "reason": "重复请求不得改写原因"},
@@ -318,13 +316,13 @@ def main() -> None:
         f"/api/pipeline/tasks/{task_id}",
         json={"inspection_user_ids": [unassigned_user["id"]]},
     )
-    assert_status(reassigned, 200, "configurator can reassign workstation")
+    assert_status(reassigned, 409, "owner-only task cannot be reassigned")
     assert inspector_only.get(f"/api/incoming-text/tasks/{task_id}").status_code == 404
-    assert_status(unassigned_inspector.get(f"/api/incoming-text/tasks/{task_id}"), 200, "newly assigned inspector can open task")
+    assert unassigned_inspector.get(f"/api/incoming-text/tasks/{task_id}").status_code == 404
     assert_status(
-        unassigned_inspector.get(f"/api/incoming-text/inspections/{review_payload['id']}/evidence/source"),
+        manager.get(f"/api/incoming-text/inspections/{review_payload['id']}/evidence/source"),
         200,
-        "newly assigned inspector can read existing task evidence",
+        "owner keeps access to existing task evidence",
     )
     bad_upload = manager.post(
         f"/api/incoming-text/tasks/{task_id}/references",
