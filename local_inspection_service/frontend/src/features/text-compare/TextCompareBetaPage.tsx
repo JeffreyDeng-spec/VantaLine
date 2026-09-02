@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Camera, CheckCircle2, Clipboard, FileImage, ImagePlus, Minus, Plus, RefreshCcw, ScanText, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, ChevronDown, ChevronRight, Clipboard, FileImage, ImagePlus, Minus, Plus, RefreshCcw, ScanText, Trash2, Upload, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { analyzeTextCompareBeta, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
-import type { TextCompareBetaResult } from "../../api/types";
+import { addTextInspectionStandardAsset, analyzeTextCompareBeta, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
+import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
 
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -13,6 +13,28 @@ function validateImage(file: File) {
 function qualityCopy(reasons?: string[]) {
   const labels: Record<string, string> = { resolution_too_low: "分辨率太低", blurred: "画面模糊", underexposed: "画面太暗", overexposed_or_glare: "过曝或反光明显" };
   return (reasons || []).map((reason) => labels[reason] || reason).join("、");
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  label: "标签",
+  possible_label: "疑似标签",
+  packaging_artwork: "包装展开图",
+  dieline: "刀线或内衬",
+  manual_page: "说明书页面",
+  carton_artwork: "外箱图",
+  placement_diagram: "贴标位置图",
+  photo: "实拍图",
+  other: "其他图片"
+};
+
+function assetStatusCopy(asset: TextInspectionAsset) {
+  if (asset.status === "excluded") return "已移除";
+  if (asset.status === "needs_confirmation") return "待确认";
+  return asset.status === "page" ? "标准页面" : "已保留";
+}
+
+function isActiveAsset(asset: TextInspectionAsset) {
+  return asset.status === "candidate" || asset.status === "page";
 }
 
 export function TextCompareBetaPage() {
@@ -36,6 +58,8 @@ export function TextCompareBetaPage() {
   const [selectedStandardId, setSelectedStandardId] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [showManager, setShowManager] = useState(false);
+  const [assetUploadFile, setAssetUploadFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
   const [importMaterial, setImportMaterial] = useState("");
   const [importVersion, setImportVersion] = useState("V1");
@@ -46,23 +70,77 @@ export function TextCompareBetaPage() {
   const importMutation = useMutation({
     mutationFn: () => {
       if (!importFile || !importName.trim() || !importMaterial.trim() || !importVersion.trim()) throw new Error("请填写标准名称、物料编码、版本并选择 DOCX 或 PDF。");
+      const expectedSuffix = mode === "label" ? ".docx" : ".pdf";
+      if (!importFile.name.toLowerCase().endsWith(expectedSuffix)) throw new Error(mode === "label" ? "标签标准请上传 DOCX 文件。" : "说明书标准请上传 PDF 文件。");
       const form = new FormData(); form.set("file", importFile); form.set("name", importName.trim()); form.set("material_code", importMaterial.trim()); form.set("version_label", importVersion.trim());
       return importTextInspectionStandard(form);
     },
-    onSuccess: (value) => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); setSelectedStandardId(value.id); setShowImport(false); },
+    onSuccess: (value) => {
+      void queryClient.invalidateQueries({ queryKey: ["text-inspection"] });
+      setSelectedStandardId(value.id); setShowImport(false); setShowManager(true);
+      setImportName(""); setImportMaterial(""); setImportVersion("V1"); setImportFile(null);
+    },
     onError: (error: Error) => setInputError(error.message)
   });
   const assetMutation = useMutation({
-    mutationFn: ({ assetId, action }: { assetId: string; action: "restore" | "exclude" | "confirm" }) => patchTextInspectionAsset(selectedStandardId, assetId, action),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["text-inspection", "standard", selectedStandardId] })
+    mutationFn: ({ assetId, action }: { assetId: string; action: "restore" | "remove" | "confirm" }) => patchTextInspectionAsset(selectedStandardId, assetId, action, standardQuery.data?.revision_number),
+    onSuccess: (_value, variables) => {
+      if (variables.action === "remove" && variables.assetId === selectedAssetId) {
+        setSelectedAssetId(""); resetComparison({ clearReference: true, clearCaptured: true });
+      } else {
+        resetComparison();
+      }
+      void queryClient.invalidateQueries({ queryKey: ["text-inspection"] });
+    },
+    onError: (error: Error) => setInputError(error.message)
   });
-  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); }, onError: (error: Error) => setInputError(error.message) });
+  const assetUploadMutation = useMutation({
+    mutationFn: () => {
+      if (!assetUploadFile) throw new Error("请先选择一张标签图片。");
+      validateImage(assetUploadFile);
+      const form = new FormData(); form.set("file", assetUploadFile);
+      if (standardQuery.data?.revision_number !== undefined) form.set("expected_revision", String(standardQuery.data.revision_number));
+      return addTextInspectionStandardAsset(selectedStandardId, form);
+    },
+    onSuccess: () => { setAssetUploadFile(null); resetComparison(); void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); },
+    onError: (error: Error) => setInputError(error.message)
+  });
+  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); setShowManager(false); }, onError: (error: Error) => setInputError(error.message) });
+
+  const resetComparison = (options: { clearReference?: boolean; clearCaptured?: boolean } = {}) => {
+    comparisonIdentityRef.current = null;
+    setResult(null); setActiveDifference(""); setInputError("");
+    if (options.clearReference) {
+      setReference(null);
+      setReferenceUrl((current) => { if (current.startsWith("blob:")) URL.revokeObjectURL(current); return ""; });
+    }
+    if (options.clearCaptured) {
+      setCaptured(null);
+      setCapturedUrl((current) => { if (current.startsWith("blob:")) URL.revokeObjectURL(current); return ""; });
+    }
+  };
+
+  const chooseStandard = (standardId: string) => {
+    const nextId = selectedStandardId === standardId ? "" : standardId;
+    setSelectedStandardId(nextId); setSelectedAssetId(""); setShowManager(false);
+    resetComparison({ clearReference: true, clearCaptured: true });
+  };
+
+  const chooseAsset = (asset: TextInspectionAsset) => {
+    if (!asset.content_url || asset.status === "excluded") return;
+    if (standardQuery.data?.status !== "confirmed") {
+      setInputError("这个订单还没有启用。请先管理候选图片并保存启用，再开始对比。");
+      return;
+    }
+    resetComparison({ clearReference: true, clearCaptured: true });
+    setSelectedAssetId(asset.id); setReferenceUrl(asset.content_url);
+  };
 
   const replaceReference = (file: File) => {
     if (busyRef.current) throw new Error("正在对比，请等待本次结果完成。");
-    validateImage(file); setReference(file);
+    validateImage(file); resetComparison({ clearCaptured: true }); setSelectedAssetId(""); setReference(file);
     setReferenceUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(file); });
-    comparisonIdentityRef.current = null; setResult(null); setInputError("");
+    setInputError("");
   };
   const replaceCaptured = (file: File) => {
     if (busyRef.current) throw new Error("正在对比，请等待本次结果完成。");
@@ -107,10 +185,21 @@ export function TextCompareBetaPage() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [zoomedImage]);
   useEffect(() => {
+    if (!showImport && !showManager) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || importMutation.isPending || assetMutation.isPending || assetUploadMutation.isPending) return;
+      setShowImport(false); setShowManager(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showImport, showManager, importMutation.isPending, assetMutation.isPending, assetUploadMutation.isPending]);
+  useEffect(() => {
     const paste = (event: ClipboardEvent) => {
       if (busyRef.current) { setInputError("正在对比，请等待本次结果完成。"); return; }
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
       const file = Array.from(event.clipboardData?.files || []).find((item) => item.type.startsWith("image/"));
-      if (!file) { setInputError("剪贴板里没有图片，请先复制标准图片。"); return; }
+      if (!file) return;
       try { replaceReference(file); } catch (error) { setInputError((error as Error).message); }
     };
     window.addEventListener("paste", paste);
@@ -127,6 +216,7 @@ export function TextCompareBetaPage() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!reference && !selectedAsset) throw new Error("请先从标准库选择标签，或在左侧粘贴标准图片。");
+      if (selectedAsset && standardQuery.data?.status !== "confirmed") throw new Error("这个订单还没有启用，请先保存并启用标准。");
       if (inputMode === "image" && !captured) throw new Error("请先上传需要对比的实物图片。");
       const actual = captured || await captureFrame();
       if (!captured) {
@@ -154,35 +244,55 @@ export function TextCompareBetaPage() {
   });
   const resultImage = result?.annotated_image_data_url || capturedUrl;
   const tone = result?.decision === "MATCH" ? "match" : result?.decision === "DIFFERENCES" ? "differences" : "review";
+  const visibleStandards = (standardsQuery.data?.items || []).filter((item) => item.standard_type === mode);
+  const visibleAssets = standardQuery.data?.assets || [];
+  const retainedAssetCount = visibleAssets.filter(isActiveAsset).length;
+  const renderAssetCards = (managing = false) => <div className="text-standard-asset-grid" data-testid={managing ? "standard-manager-assets" : "standard-library-assets"}>
+    {visibleAssets.map((asset) => <article className={`text-standard-asset-card ${asset.status === "excluded" ? "removed" : ""}`} key={asset.id}>
+      <button className="text-standard-thumbnail" type="button" onClick={() => asset.content_url && openZoom(asset.content_url, `${CATEGORY_LABELS[asset.category || ""] || "标准图片"} ${asset.ordinal}`)} disabled={!asset.content_url} aria-label={`查看第 ${asset.ordinal} 张标准大图`}>
+        {asset.content_url ? <img src={asset.content_url} alt={`第 ${asset.ordinal} 张标准缩略图`} loading="lazy" /> : <span><FileImage size={26} />暂无预览</span>}
+        <em>{asset.ordinal}</em>
+      </button>
+      <div className="text-standard-asset-copy"><strong>{CATEGORY_LABELS[asset.category || ""] || "标准图片"}</strong><small>{assetStatusCopy(asset)}{asset.context ? ` · ${asset.context}` : ""}</small></div>
+      <div className="text-standard-asset-actions">
+        {!managing && mode === "label" && isActiveAsset(asset) ? <button type="button" disabled={standardQuery.data?.status !== "confirmed"} onClick={() => chooseAsset(asset)}>{selectedAssetId === asset.id ? "已选作标准" : "选作对比标准"}</button> : null}
+        {managing ? <button className={asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "restore" : "remove"} type="button" disabled={assetMutation.isPending} onClick={() => assetMutation.mutate({ assetId: asset.id, action: asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "confirm" : "remove" })}>{asset.status === "excluded" ? <><RefreshCcw size={14} />恢复</> : asset.status === "needs_confirmation" ? <><CheckCircle2 size={14} />保留</> : <><Trash2 size={14} />移除</>}</button> : null}
+      </div>
+    </article>)}
+    {!visibleAssets.length && !standardQuery.isLoading ? <div className="text-standard-empty"><ImagePlus size={28} /><strong>还没有标准图片</strong><span>进入管理后添加图片，或重新导入包含图片的文档。</span></div> : null}
+  </div>;
 
   return <section className="view active text-compare-beta">
     <header className="text-compare-beta-header">
       <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
     </header>
     <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
-      <button className={mode === "label" ? "active" : ""} type="button" onClick={() => setMode("label")}>标签对比</button>
-      <button className={mode === "manual" ? "active" : ""} type="button" onClick={() => setMode("manual")}>说明书逐页检验</button>
+      <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); } }}>标签对比</button>
+      <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true }); } }}>说明书逐页检验</button>
     </div>
-    <section className="text-compare-result review">
-      <div className="text-compare-panel-title"><span>库</span><div><strong>我的标准库</strong><small>只显示当前账号保存的标准</small></div><button type="button" onClick={() => setShowImport((value) => !value)}><Upload size={15} />导入标准</button></div>
-      {showImport ? <div className="incoming-task-create-fields">
-        <label className="field">标准名称<input value={importName} onChange={(event) => setImportName(event.currentTarget.value)} placeholder="例如：电池包底部标签" /></label>
-        <label className="field">物料编码<input value={importMaterial} onChange={(event) => setImportMaterial(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" /></label>
-        <label className="field">版本<input value={importVersion} onChange={(event) => setImportVersion(event.currentTarget.value)} /></label>
-        <label className="field">标准文档<input type="file" accept=".docx,.pdf" onChange={(event) => setImportFile(event.currentTarget.files?.[0] || null)} /></label>
-        <button className="text-compare-primary" type="button" disabled={importMutation.isPending} onClick={() => importMutation.mutate()}>{importMutation.isPending ? "正在安全解析…" : "提取标准内容"}</button>
-      </div> : null}
-      <div className="text-compare-differences">{(standardsQuery.data?.items || []).filter((item) => item.standard_type === mode).map((standard) => <button key={standard.id} className={selectedStandardId === standard.id ? "active" : ""} onClick={() => { setSelectedStandardId(standard.id); setSelectedAssetId(""); }}><span>{standard.standard_type === "label" ? "标" : "册"}</span><div><strong>{standard.name}</strong><small>{standard.material_code} · {standard.version_label} · {standard.status === "confirmed" ? "已确认" : "待确认"}</small></div></button>)}</div>
-      {selectedStandardId && standardQuery.data ? <>
-        <div className="text-compare-differences">{(standardQuery.data.assets || []).map((asset) => <button key={asset.id} className={selectedAssetId === asset.id ? "active" : ""} onClick={() => { if (asset.content_url && asset.status !== "excluded") { setSelectedAssetId(asset.id); setReference(null); setReferenceUrl(asset.content_url); } }}><span>{asset.ordinal}</span><div><strong>{asset.category || "标准页"}</strong><small>{asset.status === "excluded" ? "已排除（可恢复）" : asset.status === "needs_confirmation" ? "需要确认" : "候选"} · {asset.context || "无章节说明"}</small></div>{standardQuery.data?.status === "draft" ? <em onClick={(event) => { event.stopPropagation(); assetMutation.mutate({ assetId: asset.id, action: asset.status === "excluded" ? "restore" : "exclude" }); }}>{asset.status === "excluded" ? "恢复" : "排除"}</em> : null}</button>)}</div>
-        {standardQuery.data.status === "draft" ? <button className="text-compare-next" type="button" disabled={confirmMutation.isPending} onClick={() => confirmMutation.mutate()}>确认并冻结此版本</button> : null}
-      </> : null}
+    <section className="text-standard-library" id="text-standard-library-panel" role="tabpanel" aria-label="我的标准库">
+      <div className="text-standard-library-header"><div><span>标准库</span><strong>我的{mode === "label" ? "标签" : "说明书"}订单</strong><small>展开订单查看图片，再选择要用于检验的标准。</small></div><button className="text-standard-import-button" type="button" onClick={() => { setInputError(""); setShowImport(true); }}><Upload size={16} />导入标准</button></div>
+      {standardsQuery.isLoading ? <div className="text-standard-empty"><RefreshCcw className="spin" size={24} /><strong>正在加载标准库</strong></div> : null}
+      {standardsQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={24} /><strong>标准库加载失败</strong><span>{(standardsQuery.error as Error).message}</span><button type="button" onClick={() => void standardsQuery.refetch()}>重新加载</button></div> : null}
+      {!standardsQuery.isLoading && !standardsQuery.isError && !visibleStandards.length ? <div className="text-standard-empty"><FileImage size={28} /><strong>还没有{mode === "label" ? "标签" : "说明书"}标准</strong><span>点击“导入标准”创建第一个订单。</span></div> : null}
+      <div className="text-standard-order-list">
+        {visibleStandards.map((standard) => {
+          const expanded = selectedStandardId === standard.id;
+          return <article className={`text-standard-order ${expanded ? "expanded" : ""}`} key={standard.id}>
+            <button className="text-standard-order-toggle" type="button" aria-expanded={expanded} onClick={() => chooseStandard(standard.id)}><span>{standard.standard_type === "label" ? "标" : "册"}</span><div><strong>{standard.name}</strong><small>{standard.material_code} · {standard.version_label} · {standard.asset_count} 张</small></div><em className={standard.status}>{standard.status === "confirmed" ? "已启用" : "待整理"}</em>{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</button>
+            {expanded ? <div className="text-standard-order-detail" data-testid="standard-order-detail">
+              <div className="text-standard-order-toolbar"><div><strong>{standardQuery.isLoading ? "正在读取订单…" : `${retainedAssetCount} 张图片可用`}</strong><small>{standard.status === "confirmed" ? "点击缩略图可查看大图，也可以随时管理内容。" : "请先整理候选图片并保存启用。"}</small></div><button type="button" onClick={() => { setInputError(""); setShowManager(true); }} disabled={standardQuery.isLoading}>管理标准</button></div>
+              {standardQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={22} /><strong>订单内容加载失败</strong><button type="button" onClick={() => void standardQuery.refetch()}>重试</button></div> : renderAssetCards(false)}
+            </div> : null}
+          </article>;
+        })}
+      </div>
     </section>
     {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}
     {mode === "label" ? <>
     <div className="text-compare-beta-grid">
       <article className="text-compare-panel">
-        <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>Ctrl+V 粘贴、拖入或选择文件</small></div>{reference ? <button type="button" disabled={mutation.isPending} onClick={() => { comparisonIdentityRef.current = null; setReference(null); setReferenceUrl(""); setResult(null); }}><RefreshCcw size={15} />更换</button> : null}</div>
+        <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>Ctrl+V 粘贴、拖入或选择文件</small></div>{referenceUrl ? <button type="button" disabled={mutation.isPending} onClick={() => { setSelectedAssetId(""); resetComparison({ clearReference: true }); }}><RefreshCcw size={15} />更换</button> : null}</div>
         <div className={"text-compare-stage reference " + (referenceUrl ? "has-image " : "") + (mutation.isPending ? "locked" : "")} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } }}>
           {referenceUrl ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(referenceUrl, "标准图片")}><img src={referenceUrl} alt="标准图片" /><span>点击放大查看</span></button> : <label className="text-compare-empty text-compare-upload-fill"><Clipboard size={38} /><strong>把标准图片粘贴到这里</strong><span>也可以拖入图片或点击选择</span><em><Upload size={15} />选择图片</em><input type="file" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } event.currentTarget.value = ""; }} /></label>}
         </div>
@@ -206,6 +316,26 @@ export function TextCompareBetaPage() {
       {result.differences.length ? <div className="text-compare-differences">{result.differences.map((difference, index) => <button className={activeDifference === difference.id ? "active" : ""} onClick={() => setActiveDifference(difference.id)} key={difference.id}><span>{index + 1}</span><div><small>{difference.type === "missing" ? "可能漏印" : difference.type === "extra" ? "可能多印" : "文字不同"}</small><strong>标准：{difference.reference_text || "（无）"}</strong><strong>实物：{difference.actual_text || "（无）"}</strong></div><em>{Math.round(difference.confidence * 100)}%</em></button>)}</div> : null}
     </section> : <div className="text-compare-hint"><FileImage size={19} />{inputMode === "camera" ? "标准图会保留；检查下一件时只需重新拍照。" : "标准图会保留；检查下一件时只需选择新的实物图片。"}</div>}
     </> : null}
+    {showImport ? <div className="text-standard-modal-backdrop" role="presentation" onMouseDown={() => !importMutation.isPending && setShowImport(false)}><section className="text-standard-modal import" role="dialog" aria-modal="true" aria-labelledby="text-standard-import-title" onMouseDown={(event) => event.stopPropagation()}>
+      <header><button type="button" aria-label="返回标准库" disabled={importMutation.isPending} onClick={() => setShowImport(false)}><ArrowLeft size={18} /></button><div><strong id="text-standard-import-title">导入{mode === "label" ? "标签" : "说明书"}标准</strong><small>填写订单信息并上传标准文档</small></div><button type="button" aria-label="关闭导入" disabled={importMutation.isPending} onClick={() => setShowImport(false)}><X size={18} /></button></header>
+      <div className="text-standard-modal-body text-standard-import-form">
+        <label className="field">标准名称<input value={importName} onChange={(event) => setImportName(event.currentTarget.value)} placeholder="例如：电池包底部标签" autoFocus /></label>
+        <label className="field">物料编码<input value={importMaterial} onChange={(event) => setImportMaterial(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" /></label>
+        <label className="field">版本<input value={importVersion} onChange={(event) => setImportVersion(event.currentTarget.value)} placeholder="例如：V1" /></label>
+        <label className="field wide">标准文档<input type="file" accept={mode === "label" ? ".docx" : ".pdf"} onChange={(event) => setImportFile(event.currentTarget.files?.[0] || null)} /><small>{mode === "label" ? "上传 DOCX，系统会提取其中的标签候选图片。" : "上传 PDF，系统会按页建立说明书标准。"}</small></label>
+        {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
+      </div>
+      <footer><button type="button" disabled={importMutation.isPending} onClick={() => setShowImport(false)}>取消</button><button className="primary" type="button" disabled={importMutation.isPending} onClick={() => { setInputError(""); importMutation.mutate(); }}>{importMutation.isPending ? "正在安全解析…" : "导入并整理图片"}</button></footer>
+    </section></div> : null}
+    {showManager && selectedStandardId ? <div className="text-standard-modal-backdrop" role="presentation" onMouseDown={() => !assetMutation.isPending && !assetUploadMutation.isPending && setShowManager(false)}><section className="text-standard-modal manager" role="dialog" aria-modal="true" aria-labelledby="text-standard-manager-title" onMouseDown={(event) => event.stopPropagation()}>
+      <header><button type="button" aria-label="返回订单" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}><ArrowLeft size={18} /></button><div><strong id="text-standard-manager-title">管理标准图片</strong><small>{standardQuery.data ? `${standardQuery.data.name} · ${standardQuery.data.material_code} · ${standardQuery.data.version_label}` : "正在加载订单"}</small></div><button type="button" aria-label="关闭管理" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}><X size={18} /></button></header>
+      <div className="text-standard-modal-body">
+        <div className="text-standard-manager-summary"><div><strong>{retainedAssetCount} 张保留 · {visibleAssets.length - retainedAssetCount} 张已移除</strong><span>每张图片都可点击放大；移除后仍可恢复。</span></div>{standardQuery.data?.standard_type === "label" ? <div className="text-standard-add-asset"><label><ImagePlus size={16} />{assetUploadFile ? assetUploadFile.name : "选择单张图片"}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={assetUploadMutation.isPending} onChange={(event) => { const file = event.currentTarget.files?.[0] || null; setAssetUploadFile(file); setInputError(""); event.currentTarget.value = ""; }} /></label><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}</div>
+        {standardQuery.isLoading ? <div className="text-standard-empty"><RefreshCcw className="spin" size={24} /><strong>正在加载图片</strong></div> : renderAssetCards(true)}
+        {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
+      </div>
+      <footer><button type="button" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}>返回订单</button>{standardQuery.data?.status === "draft" ? <button className="primary" type="button" disabled={!retainedAssetCount || confirmMutation.isPending || assetMutation.isPending || assetUploadMutation.isPending} onClick={() => confirmMutation.mutate()}>{confirmMutation.isPending ? "正在保存…" : "保存并启用"}</button> : <button className="primary" type="button" disabled={assetMutation.isPending || assetUploadMutation.isPending} onClick={() => setShowManager(false)}>完成</button>}</footer>
+    </section></div> : null}
     {zoomedImage ? <div className="text-compare-lightbox-backdrop" role="presentation" onMouseDown={() => setZoomedImage(null)}><section className="text-compare-lightbox" role="dialog" aria-modal="true" aria-label={`${zoomedImage.alt}放大预览`} onMouseDown={(event) => event.stopPropagation()}><header><strong>{zoomedImage.alt}</strong><div><button type="button" aria-label="缩小图片" disabled={zoomScale <= 1} onClick={() => setZoomScale((value) => Math.max(1, value - .5))}><Minus size={17} /></button><output>{Math.round(zoomScale * 100)}%</output><button type="button" aria-label="放大图片" disabled={zoomScale >= 3} onClick={() => setZoomScale((value) => Math.min(3, value + .5))}><Plus size={17} /></button><button type="button" onClick={() => setZoomScale(1)}>适合窗口</button><button type="button" aria-label="关闭放大预览" onClick={() => setZoomedImage(null)}><X size={18} /></button></div></header><div className="text-compare-lightbox-viewport"><img src={zoomedImage.src} alt={zoomedImage.alt} style={{ width: `${zoomScale * 100}%` }} /></div></section></div> : null}
   </section>;
 }
