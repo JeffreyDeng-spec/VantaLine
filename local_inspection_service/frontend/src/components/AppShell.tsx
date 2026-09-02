@@ -20,8 +20,7 @@ import {
   getPipeline,
   getTrainingResources,
   getUsers,
-  queryKeys,
-  uploadIncomingTextReference
+  queryKeys
 } from "../api/queries";
 import type { AccessorySummary, AiTasksResponse, PipelineResponse, PipelineTaskPayload, TrainingResourcesResponse } from "../api/types";
 import { useAuth } from "../features/auth/auth-context";
@@ -117,19 +116,14 @@ function SidebarCreateTaskModal({
   existingTasks: TaskEntry[];
   busy: boolean;
   onClose: () => void;
-  onCreate: (payload: PipelineTaskPayload, standard?: { file: File; versionLabel: string }) => Promise<unknown>;
+  onCreate: (payload: PipelineTaskPayload) => Promise<unknown>;
 }) {
-  const [taskType, setTaskType] = useState<"product" | "incoming">("product");
   const [name, setName] = useState("");
   const [formError, setFormError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [expectedProductionCount, setExpectedProductionCount] = useState("");
-  const [materialCode, setMaterialCode] = useState("");
-  const [materialName, setMaterialName] = useState("");
-  const [standardVersion, setStandardVersion] = useState("");
-  const [standardFile, setStandardFile] = useState<File | null>(null);
 
   function addAccessory(accessoryId: string) {
     setSelectedIds((current) => current.includes(accessoryId) ? current : [...current, accessoryId]);
@@ -146,22 +140,6 @@ function SidebarCreateTaskModal({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (taskType === "incoming") {
-      const taskName = name.trim() || materialName.trim() || "包材文字检验";
-      if (!materialCode.trim() || !materialName.trim() || !standardVersion.trim() || !standardFile) {
-        setFormError("请填写包材信息并上传标准稿。");
-        return;
-      }
-      if (existingTasks.some((task) => taskNameKey(task.label) === taskNameKey(taskName))) {
-        setFormError(`已经存在名为「${taskName}」的任务，请换一个名称。`);
-        return;
-      }
-      await onCreate(
-        { name: taskName, task_kind: "incoming_material_text", detection_method: "label_text_compare", material_code: materialCode.trim(), material_name: materialName.trim(), auto_advance: false },
-        { file: standardFile, versionLabel: standardVersion.trim() }
-      ).then(onClose).catch((error: Error) => setFormError(error.message || "创建任务失败"));
-      return;
-    }
     const selectedAccessories = accessories.filter((item) => selectedIds.includes(item.id));
     const fallbackName = selectedAccessories.map((item) => item.name || item.id).join(" + ");
     const taskName = name.trim() || fallbackName || "新检测任务";
@@ -194,22 +172,18 @@ function SidebarCreateTaskModal({
           <header className="modal-head">
             <div>
               <h3>添加任务</h3>
-              <span>{taskType === "incoming" ? "创建包材文字专项任务并上传电子标准稿。" : "创建产品/配件检测任务。"}</span>
+              <span>创建产品/配件检测任务。</span>
             </div>
             <button className="icon-only" type="button" aria-label="关闭" onClick={onClose}>
               <X size={18} aria-hidden="true" />
             </button>
           </header>
           <div className="modal-body sidebar-task-modal-body">
-            <div className="sidebar-task-type-switch" role="group" aria-label="任务类型">
-              <button className={taskType === "product" ? "active" : ""} type="button" onClick={() => setTaskType("product")}>产品/配件检测</button>
-              <button className={taskType === "incoming" ? "active" : ""} type="button" onClick={() => setTaskType("incoming")}>包材文字检验（旧版）</button>
-            </div>
             <label className="field">
               任务名称
               <input
                 value={name}
-                placeholder={taskType === "incoming" ? "例如：电池包底部标签" : "例如：数据分析测试"}
+                placeholder="例如：数据分析测试"
                 onChange={(event) => {
                   setName(event.currentTarget.value);
                   setFormError("");
@@ -217,17 +191,6 @@ function SidebarCreateTaskModal({
               />
             </label>
             {formError ? <div className="form-error compact-form-error">{formError}</div> : null}
-            {taskType === "incoming" ? (
-              <div className="incoming-task-create-fields">
-                <label className="field">物料编码<input value={materialCode} onChange={(event) => setMaterialCode(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" required /></label>
-                <label className="field">包材名称<input value={materialName} onChange={(event) => setMaterialName(event.currentTarget.value)} placeholder="例如：电池包底部标签" required /></label>
-                <label className="field">标准版本号<input value={standardVersion} onChange={(event) => setStandardVersion(event.currentTarget.value)} placeholder="例如：V3" required /></label>
-                <label className="field">电子标准稿<input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" onChange={(event) => setStandardFile(event.currentTarget.files?.[0] || null)} required /></label>
-                <div className="incoming-task-boundary-note"><ShieldCheck size={16} /><span>任务会自动保存到当前登录账号，无需分配给其他账号。</span></div>
-                <div className="incoming-task-boundary-note"><ShieldCheck size={16} /><span>首期仅检测已配置文字；色差、材质、膜面、污渍和图标不在自动判定范围。</span></div>
-              </div>
-            ) : (
-              <>
             <label className="field">
               预计产量
               <input
@@ -282,14 +245,12 @@ function SidebarCreateTaskModal({
                 )}
               </div>
             </section>
-              </>
-            )}
           </div>
           <footer className="modal-footer">
             <button className="secondary compact-action" type="button" onClick={onClose}>
               取消
             </button>
-            <button className="primary compact-action" type="submit" disabled={busy || (taskType === "product" ? !selectedIds.length : !standardFile)}>
+            <button className="primary compact-action" type="submit" disabled={busy || !selectedIds.length}>
               <Plus size={16} aria-hidden="true" />
               创建并 Pin
             </button>
@@ -620,7 +581,7 @@ export function AppShell() {
             )}
           </div>
 
-          {hasPermission(auth.user, "training_pipeline") || hasPermission(auth.user, "incoming_material_config") ? (
+          {hasPermission(auth.user, "training_pipeline") ? (
             <div className="nav-group sidebar-task-create">
               <button className="sidebar-create-task-button" type="button" onClick={() => setCreateTaskOpen(true)}>
                 <Plus size={16} aria-hidden="true" />
@@ -658,23 +619,7 @@ export function AppShell() {
           existingTasks={taskEntries}
           busy={createPipelineTaskMutation.isPending}
           onClose={() => setCreateTaskOpen(false)}
-          onCreate={async (payload, standard) => {
-            const task = await createPipelineTaskMutation.mutateAsync(payload);
-            if (standard) {
-              const form = new FormData();
-              form.set("file", standard.file);
-              form.set("version_label", standard.versionLabel);
-              try {
-                await uploadIncomingTextReference(task.id, form);
-              } catch (error) {
-                await queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
-                const detail = error instanceof Error ? error.message : "未知错误";
-                throw new Error(`任务已创建并固定，但标准稿上传失败（${detail}）。请关闭窗口，从任务配置页重新上传。`);
-              }
-              await queryClient.invalidateQueries({ queryKey: queryKeys.incomingTextTask(task.id) });
-            }
-            return task;
-          }}
+          onCreate={(payload) => createPipelineTaskMutation.mutateAsync(payload)}
         />
       ) : null}
 

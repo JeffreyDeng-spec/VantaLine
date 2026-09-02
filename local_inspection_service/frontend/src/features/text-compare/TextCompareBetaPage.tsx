@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Camera, CheckCircle2, Clipboard, FileImage, RefreshCcw, ScanText, Upload } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, Clipboard, FileImage, ImagePlus, Minus, Plus, RefreshCcw, ScanText, Upload, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { analyzeTextCompareBeta, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
 import type { TextCompareBetaResult } from "../../api/types";
@@ -27,8 +27,11 @@ export function TextCompareBetaPage() {
   const [capturedUrl, setCapturedUrl] = useState("");
   const [cameraError, setCameraError] = useState("");
   const [inputError, setInputError] = useState("");
+  const [inputMode, setInputMode] = useState<"camera" | "image">("camera");
   const [result, setResult] = useState<TextCompareBetaResult | null>(null);
   const [activeDifference, setActiveDifference] = useState("");
+  const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
   const [mode, setMode] = useState<"label" | "manual">("label");
   const [selectedStandardId, setSelectedStandardId] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
@@ -67,6 +70,23 @@ export function TextCompareBetaPage() {
     setCapturedUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(file); });
     comparisonIdentityRef.current = null; setResult(null); setActiveDifference("");
   };
+  const clearCaptured = () => {
+    comparisonIdentityRef.current = null;
+    setCaptured(null);
+    setCapturedUrl((current) => { if (current) URL.revokeObjectURL(current); return ""; });
+    setResult(null);
+    setActiveDifference("");
+  };
+  const switchInputMode = (nextMode: "camera" | "image") => {
+    if (busyRef.current || nextMode === inputMode) return;
+    clearCaptured();
+    setInputMode(nextMode);
+    setInputError("");
+  };
+  const openZoom = (src: string, alt: string) => {
+    setZoomScale(1);
+    setZoomedImage({ src, alt });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +100,12 @@ export function TextCompareBetaPage() {
     return () => { cancelled = true; streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; };
   }, []);
   useEffect(() => () => { if (referenceUrl) URL.revokeObjectURL(referenceUrl); if (capturedUrl) URL.revokeObjectURL(capturedUrl); }, [referenceUrl, capturedUrl]);
+  useEffect(() => {
+    if (!zoomedImage) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setZoomedImage(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [zoomedImage]);
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
       if (busyRef.current) { setInputError("正在对比，请等待本次结果完成。"); return; }
@@ -101,6 +127,7 @@ export function TextCompareBetaPage() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!reference && !selectedAsset) throw new Error("请先从标准库选择标签，或在左侧粘贴标准图片。");
+      if (inputMode === "image" && !captured) throw new Error("请先上传需要对比的实物图片。");
       const actual = captured || await captureFrame();
       if (!captured) {
         validateImage(actual); setCaptured(actual);
@@ -157,29 +184,29 @@ export function TextCompareBetaPage() {
     <div className="text-compare-beta-grid">
       <article className="text-compare-panel">
         <div className="text-compare-panel-title"><span>01</span><div><strong>标准图片</strong><small>Ctrl+V 粘贴、拖入或选择文件</small></div>{reference ? <button type="button" disabled={mutation.isPending} onClick={() => { comparisonIdentityRef.current = null; setReference(null); setReferenceUrl(""); setResult(null); }}><RefreshCcw size={15} />更换</button> : null}</div>
-        <label className={"text-compare-stage reference " + (referenceUrl ? "has-image " : "") + (mutation.isPending ? "locked" : "")} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } }}>
-          {referenceUrl ? <img src={referenceUrl} alt="标准图片" /> : <div className="text-compare-empty"><Clipboard size={38} /><strong>把标准图片粘贴到这里</strong><span>也可以拖入图片或点击选择</span><em><Upload size={15} />选择图片</em></div>}
-          <input type="file" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } event.currentTarget.value = ""; }} />
-        </label>
+        <div className={"text-compare-stage reference " + (referenceUrl ? "has-image " : "") + (mutation.isPending ? "locked" : "")} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } }}>
+          {referenceUrl ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(referenceUrl, "标准图片")}><img src={referenceUrl} alt="标准图片" /><span>点击放大查看</span></button> : <label className="text-compare-empty text-compare-upload-fill"><Clipboard size={38} /><strong>把标准图片粘贴到这里</strong><span>也可以拖入图片或点击选择</span><em><Upload size={15} />选择图片</em><input type="file" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) try { replaceReference(file); } catch (error) { setInputError((error as Error).message); } event.currentTarget.value = ""; }} /></label>}
+        </div>
       </article>
       <article className="text-compare-panel">
-        <div className="text-compare-panel-title"><span>02</span><div><strong>实物图片</strong><small>{captured ? "已拍照，可重新拍摄" : "来自当前摄像头画面"}</small></div><button type="button" disabled={mutation.isPending} onClick={() => captureFrame().then(replaceCaptured).catch((error) => setInputError(error.message))}><Camera size={15} />{captured ? "重拍" : "拍照"}</button></div>
-        <div className={"text-compare-stage camera " + (resultImage ? "has-image" : "")}>
-          {resultImage ? <img src={resultImage} alt="实物文字对比结果" /> : <video ref={videoRef} playsInline muted />}
-          {cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
+        <div className="text-compare-panel-title"><span>02</span><div><strong>实物图片</strong><small>{inputMode === "camera" ? (captured ? "已拍照，可重新拍摄" : "来自当前摄像头画面") : (captured ? `已选择 ${captured.name}` : "上传已有图片进行对比")}</small></div><div className="text-compare-input-switch" role="group" aria-label="实物图片来源"><button className={inputMode === "camera" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("camera")}><Camera size={14} />摄像头</button><button className={inputMode === "image" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("image")}><ImagePlus size={14} />图片</button></div>{inputMode === "camera" ? <button type="button" disabled={mutation.isPending} onClick={() => captureFrame().then(replaceCaptured).catch((error) => setInputError(error.message))}><Camera size={15} />{captured ? "重拍" : "拍照"}</button> : captured ? <button type="button" disabled={mutation.isPending} onClick={clearCaptured}><RefreshCcw size={15} />更换</button> : null}</div>
+        <div className={"text-compare-stage " + inputMode + " " + (resultImage ? "has-image" : "")} onDragOver={(event) => { if (inputMode === "image") event.preventDefault(); }} onDrop={(event) => { if (inputMode !== "image") return; event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } }}>
+          {resultImage ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(resultImage, "实物文字对比结果")}><img src={resultImage} alt="实物文字对比结果" /><span>点击放大查看</span></button> : inputMode === "camera" ? <video ref={videoRef} playsInline muted /> : <label className="text-compare-empty text-compare-upload-fill"><ImagePlus size={38} /><strong>上传实物图片</strong><span>支持 PNG、JPG、WEBP，也可以直接拖入</span><em><Upload size={15} />选择图片</em><input type="file" disabled={mutation.isPending} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } event.currentTarget.value = ""; }} /></label>}
+          {inputMode === "camera" && cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
         </div>
       </article>
     </div>
     <div className="text-compare-action-row">
-      <button className="text-compare-primary" type="button" disabled={(!reference && !selectedAsset) || mutation.isPending || (!!cameraError && !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button>
-      {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={() => { comparisonIdentityRef.current = null; setCaptured(null); if (capturedUrl) URL.revokeObjectURL(capturedUrl); setCapturedUrl(""); setResult(null); setActiveDifference(""); }}><Camera size={18} />拍下一件</button> : null}
+      <button className="text-compare-primary" type="button" disabled={(!reference && !selectedAsset) || mutation.isPending || (inputMode === "camera" ? (!!cameraError && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button>
+      {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
     </div>
     {inputError ? <div className="text-compare-alert"><AlertTriangle size={18} />{inputError}</div> : null}
     {result ? <section className={"text-compare-result " + tone}>
       <div className="text-compare-result-summary">{tone === "match" ? <CheckCircle2 /> : <AlertTriangle />}<div><small>辅助对比结果</small><strong>{result.decision === "MATCH" ? "未发现文字差异" : result.decision === "DIFFERENCES" ? "发现疑似差异" : "无法可靠判断"}</strong><p>{result.message}</p></div></div>
       {qualityCopy(result.captured_quality?.reasons) ? <div className="text-compare-quality">拍摄提示：{qualityCopy(result.captured_quality?.reasons)}</div> : null}
       {result.differences.length ? <div className="text-compare-differences">{result.differences.map((difference, index) => <button className={activeDifference === difference.id ? "active" : ""} onClick={() => setActiveDifference(difference.id)} key={difference.id}><span>{index + 1}</span><div><small>{difference.type === "missing" ? "可能漏印" : difference.type === "extra" ? "可能多印" : "文字不同"}</small><strong>标准：{difference.reference_text || "（无）"}</strong><strong>实物：{difference.actual_text || "（无）"}</strong></div><em>{Math.round(difference.confidence * 100)}%</em></button>)}</div> : null}
-    </section> : <div className="text-compare-hint"><FileImage size={19} />标准图会保留；检查下一件时只需重新拍照。</div>}
+    </section> : <div className="text-compare-hint"><FileImage size={19} />{inputMode === "camera" ? "标准图会保留；检查下一件时只需重新拍照。" : "标准图会保留；检查下一件时只需选择新的实物图片。"}</div>}
     </> : null}
+    {zoomedImage ? <div className="text-compare-lightbox-backdrop" role="presentation" onMouseDown={() => setZoomedImage(null)}><section className="text-compare-lightbox" role="dialog" aria-modal="true" aria-label={`${zoomedImage.alt}放大预览`} onMouseDown={(event) => event.stopPropagation()}><header><strong>{zoomedImage.alt}</strong><div><button type="button" aria-label="缩小图片" disabled={zoomScale <= 1} onClick={() => setZoomScale((value) => Math.max(1, value - .5))}><Minus size={17} /></button><output>{Math.round(zoomScale * 100)}%</output><button type="button" aria-label="放大图片" disabled={zoomScale >= 3} onClick={() => setZoomScale((value) => Math.min(3, value + .5))}><Plus size={17} /></button><button type="button" onClick={() => setZoomScale(1)}>适合窗口</button><button type="button" aria-label="关闭放大预览" onClick={() => setZoomedImage(null)}><X size={18} /></button></div></header><div className="text-compare-lightbox-viewport"><img src={zoomedImage.src} alt={zoomedImage.alt} style={{ width: `${zoomScale * 100}%` }} /></div></section></div> : null}
   </section>;
 }

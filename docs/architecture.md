@@ -8,7 +8,7 @@
 - **FastAPI backend:** authentication, permissions, task/model orchestration, immutable PLC plans, audit receipts, static release serving, and `/api/version`.
 - **PostgreSQL runtime repository:** shared application configuration, workstation identity/configuration, leases, dispatch state, and durable records.
 - **Workers/model services:** training and inference integrations; they do not own PLC serial I/O.
-- **Text inspection v2:** an account-scoped standard library and inspection workflow, independent from product/YOLO tasks. DOCX label candidates are reversible until an immutable version is confirmed; PDF pages are rendered lazily. See `docs/text-inspection-v2.md`.
+- **Text inspection v2:** an account-scoped standard library and inspection workflow, independent from product/YOLO tasks. New label comparisons enter only through this workspace and accept a browser camera capture or uploaded image; both comparison previews can open an enlarged zoom view. Existing legacy incoming-text tasks remain readable, but their creation affordance is retired. DOCX label candidates are reversible until an immutable version is confirmed; PDF pages are rendered lazily. See `docs/text-inspection-v2.md`.
 - **GitHub Actions:** required checks, one-commit release packaging, checksum/version generation, production installation, acceptance, release publication, and rollback on failure.
 
 ## Inspection flows
