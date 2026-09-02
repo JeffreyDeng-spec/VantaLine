@@ -43,31 +43,36 @@ def main():
     assert 'useState<"camera" | "image">("camera")' in frontend
     assert "上传实物图片" in frontend and "请先上传需要对比的实物图片" in frontend
     assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "点击放大查看" in frontend
-    # Standard-library navigation and inspection must remain a real master/detail
-    # workflow instead of growing another inline form inside the comparison bench.
+    # Standard-library navigation and inspection stays in the order detail: users
+    # should not have to enter a second manager dialog to edit the same standard.
     assert 'className="text-standard-thumbnail"' in frontend and "openZoom(asset.content_url" in frontend
     assert 'aria-expanded={expanded}' in frontend and 'data-testid="standard-order-detail"' in frontend
     assert 'aria-labelledby="text-standard-import-title"' in frontend and 'aria-label="返回标准库"' in frontend
-    assert 'aria-labelledby="text-standard-manager-title"' in frontend and 'aria-label="返回订单"' in frontend
     assert 'role="dialog"' in frontend and 'aria-modal="true"' in frontend
     assert 'role="tab"' in frontend and 'role="tabpanel"' in frontend and 'event.key !== "Escape"' in frontend
-    assert 'data-testid={managing ? "standard-manager-assets" : "standard-library-assets"}' in frontend
+    assert 'data-testid="standard-library-assets"' in frontend
     assert "查看第 ${asset.ordinal} 张标准大图" in frontend and "第 ${asset.ordinal} 张标准缩略图" in frontend
-    assert "setShowImport(true)" in frontend and "setShowManager(true)" in frontend
-    # A local reference and a library asset are mutually exclusive. Every order,
-    # mode or reference change must clear stale results and comparison identity.
+    assert "setShowImport(true)" in frontend
+    assert "showManager" not in frontend and "管理标准" not in frontend
+    # A local reference and a library asset are mutually exclusive. Reference
+    # changes clear stale results without clearing the independently supplied actual.
     assert "const resetComparison" in frontend and "comparisonIdentityRef.current = null" in frontend
     assert 'setSelectedAssetId(""); setReference(file);' in frontend
+    assert 'validateImage(file); resetComparison(); setSelectedAssetId(""); setReference(file);' in frontend
+    assert 'resetComparison({ clearReference: true });\n    setSelectedAssetId(asset.id);' in frontend
+    assert 'setSelectedStandardId(nextId); setSelectedAssetId(""); setAssetUploadFile(null);\n    resetComparison({ clearReference: true });' in frontend
+    assert 'const identityReference = reference || selectedAsset?.id || "";' in frontend
+    assert "已使用订单标准，无需另行上传" in frontend
     assert "function isActiveAsset" in frontend and 'asset.status === "needs_confirmation" ? "confirm"' in frontend
     assert "target?.closest(\"input, textarea, [contenteditable='true']\")" in frontend
-    assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowManager(false); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true });' in frontend
+    assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearReference: true, clearCaptured: true });' in frontend
     assert 'standardQuery.data?.status !== "confirmed"' in frontend
     assert "这个订单还没有启用" in frontend
     # Logical standards remain manageable after confirmation, while the backend
     # records immutable revisions and only soft-removes their assets.
     assert "addTextInspectionStandardAsset" in frontend
     assert 'action: asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "confirm" : "remove"' in frontend
-    assert "添加到标准" in frontend and "移除" in frontend and "恢复" in frontend
+    assert "添加到标准" in frontend and "停用" in frontend and "启用" in frontend
     assert "standard_revision_id" in source and "standard_revision_number" in source
     assert '"revisions": "text_inspection_standard_revisions"' in source
     assert "仅辅助检查文字" not in frontend and "颜色、材质与印刷质量仍需肉眼确认" not in frontend
