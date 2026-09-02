@@ -2,13 +2,14 @@
 
 **Status: Authoritative**
 
-The formal **文字检验** entry is account scoped and independent from product/YOLO tasks. It contains label comparison and a manual-page pilot. The previous `incoming_material_text` task workflow and its visibly marked “旧版” task-creation entry remain available throughout the expand/rollback window.
+The formal **文字检验** entry is account scoped and independent from product/YOLO tasks. It contains label comparison and a manual-page pilot. The previous `incoming_material_text` task workflow remains readable for existing records during the rollback window, but its “旧版” task-creation entry is no longer exposed; all new label comparison work starts from **文字检验**.
 
 ## Release stages
 
-1. **Expand (this release):** add v2 tables, account-scoped APIs, safe DOCX candidate extraction, lazy PDF pages, confirmed immutable versions, idempotent comparison attempts, and the new UI. Old UI, tables and APIs are untouched.
-2. **Migrate/observe:** tenant-by-tenant copy or cleanup is a separately authorized operation with backup/restore evidence, counts and hashes. It must not run from an automatic release.
-3. **Contract:** after the observation and rollback windows, a separate PR may freeze and then remove old routes and permissions. Additive database policy keeps empty historical tables.
+1. **Expand (completed):** add v2 tables, account-scoped APIs, safe DOCX candidate extraction, lazy PDF pages, confirmed immutable versions, idempotent comparison attempts, and the new UI. Old tables and APIs remain untouched.
+2. **UI consolidation (current):** remove the legacy creation affordance while preserving existing legacy tasks and rollback-compatible routes. The label bench accepts either a live camera capture or an uploaded PNG/JPG/WEBP as the actual image. Both reference and actual preview stages provide an enlarged, zoomable inspection view.
+3. **Migrate/observe:** tenant-by-tenant copy or cleanup is a separately authorized operation with backup/restore evidence, counts and hashes. It must not run from an automatic release.
+4. **Contract:** after the observation and rollback windows, a separate PR may freeze and then remove old routes and permissions. Additive database policy keeps empty historical tables.
 
 ## Trust boundaries
 

@@ -40,6 +40,12 @@ def main():
     frontend = (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text(encoding="utf-8")
     assert "Ctrl+V" in frontend and "getUserMedia" in frontend and "track.stop()" in frontend
     assert "comparisonIdentityRef" in frontend and "disabled={mutation.isPending}" in frontend
+    assert 'useState<"camera" | "image">("camera")' in frontend
+    assert "上传实物图片" in frontend and "请先上传需要对比的实物图片" in frontend
+    assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "点击放大查看" in frontend
+    shell = (APP_DIR / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
+    assert "包材文字检验（旧版）" not in shell
+    assert 'task_kind: "incoming_material_text"' not in shell
     print("text compare beta smoke: PASS")
 
 if __name__ == "__main__":

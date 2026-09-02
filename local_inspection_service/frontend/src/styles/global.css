@@ -44,7 +44,7 @@
 .text-compare-beta-header p { margin: 0; color: #5f6962; font-size: 14px; }
 .text-compare-beta-boundary { display: flex; gap: 10px; align-items: flex-start; min-width: 270px; padding: 11px 14px; border: 1px solid #e4b968; border-radius: 10px; background: #fff8e8; color: #704900; font-size: 13px; }
 .text-compare-beta-boundary small { color: #8d6b2d; }
-.text-compare-beta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; max-width: 1500px; margin: 0 auto; }
+.text-compare-beta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 1680px; margin: 0 auto; }
 .text-compare-panel { overflow: hidden; border: 1px solid #d8dcd5; border-radius: 14px; background: #fff; box-shadow: 0 13px 32px rgba(32, 45, 36, .07); }
 .text-compare-panel-title { display: flex; align-items: center; gap: 11px; min-height: 68px; padding: 10px 14px; border-bottom: 1px solid #e2e5df; }
 .text-compare-panel-title > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #1b2b21; color: #fff; font: 700 12px/1 "Geist Mono", monospace; }
@@ -52,11 +52,19 @@
 .text-compare-panel-title strong { font-size: 15px; }
 .text-compare-panel-title small { color: #788078; font-size: 11px; }
 .text-compare-panel-title button { display: inline-flex; gap: 6px; align-items: center; padding: 8px 10px; border: 1px solid #ccd2ca; border-radius: 8px; background: #fff; color: #34463a; cursor: pointer; }
-.text-compare-stage { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3; min-height: 360px; overflow: hidden; background-color: #e9ece6; background-image: linear-gradient(45deg, rgba(25,42,30,.035) 25%, transparent 25%), linear-gradient(-45deg, rgba(25,42,30,.035) 25%, transparent 25%); background-size: 24px 24px; cursor: pointer; }
+.text-compare-stage { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 11; min-height: 460px; overflow: hidden; background-color: #e9ece6; background-image: linear-gradient(45deg, rgba(25,42,30,.035) 25%, transparent 25%), linear-gradient(-45deg, rgba(25,42,30,.035) 25%, transparent 25%); background-size: 24px 24px; cursor: pointer; }
 .text-compare-stage input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .text-compare-stage.locked { cursor: wait; opacity: .82; }
 .text-compare-panel-title button:disabled, .text-compare-next:disabled { opacity: .45; cursor: not-allowed; }
 .text-compare-stage img, .text-compare-stage video { width: 100%; height: 100%; object-fit: contain; background: #111713; }
+.text-compare-upload-fill { width: 100%; height: 100%; min-height: inherit; cursor: pointer; }
+.text-compare-panel-title > .text-compare-input-switch { display: inline-flex; flex: 0 0 auto; gap: 3px; padding: 3px; border-radius: 9px; background: #edf0eb; }
+.text-compare-panel-title .text-compare-input-switch button { gap: 5px; padding: 6px 8px; border: 0; background: transparent; color: #68736b; }
+.text-compare-panel-title .text-compare-input-switch button.active { background: #fff; color: #185d40; box-shadow: 0 1px 3px rgba(30, 45, 35, .13); }
+.text-compare-zoom-trigger { position: relative; width: 100%; height: 100%; padding: 0; overflow: hidden; border: 0; background: #111713; cursor: zoom-in; }
+.text-compare-zoom-trigger img { display: block; }
+.text-compare-zoom-trigger > span { position: absolute; right: 14px; bottom: 14px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; background: rgba(12, 20, 15, .76); color: #fff; font-size: 11px; opacity: 0; transform: translateY(4px); transition: opacity .18s ease, transform .18s ease; }
+.text-compare-zoom-trigger:hover > span, .text-compare-zoom-trigger:focus-visible > span { opacity: 1; transform: translateY(0); }
 .text-compare-empty { display: grid; justify-items: center; gap: 8px; color: #647067; text-align: center; }
 .text-compare-empty svg { color: #277653; }
 .text-compare-empty strong { color: #26382c; font-size: 17px; }
@@ -92,7 +100,17 @@
 .text-compare-differences small { color: #a43b32; }
 .text-compare-differences strong { overflow: hidden; font: 500 11px/1.35 "Geist Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
 .text-compare-differences em { color: #7d837d; font-size: 10px; font-style: normal; }
-@media (max-width: 960px) { .text-compare-beta { padding: 18px 14px 34px; } .text-compare-beta-header { align-items: stretch; flex-direction: column; } .text-compare-beta-grid { grid-template-columns: 1fr; } .text-compare-stage { min-height: 300px; } .text-compare-differences { grid-template-columns: 1fr; } }
+.text-compare-lightbox-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(8, 13, 10, .86); backdrop-filter: blur(5px); }
+.text-compare-lightbox { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(1680px, 96vw); height: min(94vh, 1120px); overflow: hidden; border: 1px solid rgba(255,255,255,.2); border-radius: 14px; background: #101713; box-shadow: 0 28px 90px rgba(0,0,0,.5); }
+.text-compare-lightbox header { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 62px; padding: 10px 14px 10px 18px; border-bottom: 1px solid rgba(255,255,255,.13); color: #fff; }
+.text-compare-lightbox header > div { display: flex; align-items: center; gap: 7px; }
+.text-compare-lightbox header button { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; min-height: 38px; padding: 0 10px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: rgba(255,255,255,.08); color: #fff; }
+.text-compare-lightbox header button:disabled { opacity: .35; cursor: not-allowed; }
+.text-compare-lightbox header output { min-width: 52px; color: #c8d4cc; text-align: center; font: 600 12px/1 "Geist Mono", monospace; }
+.text-compare-lightbox-viewport { display: grid; align-items: start; justify-items: center; min-height: 0; overflow: auto; background: #080d0a; }
+.text-compare-lightbox-viewport img { display: block; height: auto; max-width: none; object-fit: contain; background: #080d0a; transform-origin: top center; transition: width .16s ease; }
+@media (max-width: 1100px) { .text-compare-panel-title { flex-wrap: wrap; } .text-compare-panel-title > div:not(.text-compare-input-switch) { min-width: 180px; } }
+@media (max-width: 960px) { .text-compare-beta { padding: 18px 14px 34px; } .text-compare-beta-header { align-items: stretch; flex-direction: column; } .text-compare-beta-grid { grid-template-columns: 1fr; } .text-compare-stage { min-height: 360px; } .text-compare-differences { grid-template-columns: 1fr; } .text-compare-lightbox-backdrop { padding: 10px; } .text-compare-lightbox { width: 98vw; height: 96vh; } .text-compare-lightbox header { align-items: flex-start; flex-direction: column; } }
 
 * {
   box-sizing: border-box;
