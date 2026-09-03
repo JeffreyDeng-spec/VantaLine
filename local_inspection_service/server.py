@@ -41,7 +41,7 @@ os.environ.setdefault("NUMBA_NUM_THREADS", "1")
 import cv2
 import numpy as np
 import requests
-from PIL import Image
+from PIL import Image, ImageOps
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -37668,7 +37668,7 @@ async def add_text_inspection_standard_asset(
         raise HTTPException(status_code=409, detail="说明书标准不支持追加标签图片")
     expected = _text_v2_expected_revision(expected_revision)
     contents = await file.read()
-    mime, suffix = _text_v2_validate_capture(contents)
+    contents, mime, suffix, source_format = _text_v2_prepare_image(contents)
     now = int(time.time())
     asset_id = "ast_" + uuid.uuid4().hex
     media_path = _text_v2_media_path(owner_user_id, standard_id, f"{asset_id}{suffix}")
@@ -37677,6 +37677,7 @@ async def add_text_inspection_standard_asset(
         "asset_kind": "label_candidate", "ordinal": 0, "status": "candidate",
         "sha256": sha256_bytes(contents), "mime_type": mime, "category": "label",
         "context": bounded_text(file.filename or "新增标签图片", 160),
+        "source_format": source_format,
         "classification_source": "human", "media_path": str(media_path),
         "created_at": now, "updated_at": now,
     }
@@ -37818,25 +37819,42 @@ def _text_v2_data_url(contents: bytes, mime: str = "") -> str:
     return f"data:{mime};base64,{base64.b64encode(contents).decode('ascii')}"
 
 
-def _text_v2_validate_capture(contents: bytes) -> tuple[str, str]:
+def _text_v2_prepare_image(contents: bytes) -> tuple[bytes, str, str, str]:
+    """Trust decoded image content, then normalize uncommon readable formats."""
     if not contents or len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="图片必须存在且不超过 10MB")
     try:
         with Image.open(io.BytesIO(contents)) as image:
             image_format = str(image.format or "").upper()
             width, height = image.size
-            image.verify()
+            if width * height > 20_000_000 or min(width, height) < 100:
+                raise HTTPException(status_code=400, detail="实物图片像素尺寸不符合要求")
+            image.seek(0)
+            image.load()
+            if image_format in {"PNG", "JPEG", "JPG", "WEBP"}:
+                decoded = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+                if decoded is not None:
+                    formats = {"PNG": ("image/png", ".png"), "JPEG": ("image/jpeg", ".jpg"), "JPG": ("image/jpeg", ".jpg"), "WEBP": ("image/webp", ".webp")}
+                    mime, suffix = formats[image_format]
+                    return contents, mime, suffix, image_format
+            normalized = ImageOps.exif_transpose(image)
+            if normalized.mode in {"RGBA", "LA"} or "transparency" in normalized.info:
+                rgba = normalized.convert("RGBA")
+                rgb = Image.new("RGB", rgba.size, "white")
+                rgb.paste(rgba, mask=rgba.getchannel("A"))
+            else:
+                rgb = normalized.convert("RGB")
+            output = io.BytesIO()
+            rgb.save(output, format="JPEG", quality=95, optimize=True)
+            prepared = output.getvalue()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="图片格式损坏或无法解码") from exc
-    formats = {"PNG": ("image/png", ".png"), "JPEG": ("image/jpeg", ".jpg"), "JPG": ("image/jpeg", ".jpg"), "WEBP": ("image/webp", ".webp")}
-    if image_format not in formats:
-        raise HTTPException(status_code=400, detail="实物图片仅支持 PNG、JPG 或 WEBP")
-    if width * height > 20_000_000 or min(width, height) < 100:
-        raise HTTPException(status_code=400, detail="实物图片像素尺寸不符合要求")
-    decoded = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(status_code=400, detail="图片格式损坏或当前服务器无法解码") from exc
+    decoded = cv2.imdecode(np.frombuffer(prepared, np.uint8), cv2.IMREAD_COLOR)
     if decoded is None:
         raise HTTPException(status_code=400, detail="图片无法完整解码")
-    return formats[image_format]
+    return prepared, "image/jpeg", ".jpg", image_format or "UNKNOWN"
 
 
 def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> bytes:
@@ -37872,15 +37890,17 @@ async def compare_text_inspection_label(
     confirmed_snapshot = next((item for item in standard.get("confirmed_assets", []) if str(item.get("id")) == standard_asset_id), None) if standard else None
     if not asset or not standard or standard.get("status") != "confirmed" or not confirmed_snapshot:
         raise HTTPException(status_code=404, detail="已确认标准标签不存在")
-    captured = await captured_file.read()
-    captured_mime, source_suffix = _text_v2_validate_capture(captured)
-    if str(confirmed_snapshot.get("mime_type") or asset.get("mime_type") or "") not in {"image/png", "image/jpeg", "image/webp"}:
-        raise HTTPException(status_code=409, detail="该标准图片格式不能直接比对，请转换为 PNG 或 JPG 后创建新版本")
+    captured_upload = await captured_file.read()
+    captured_upload_sha256 = sha256_bytes(captured_upload)
+    captured, captured_mime, source_suffix, captured_source_format = _text_v2_prepare_image(captured_upload)
     asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
-    reference = _text_v2_asset_bytes(asset, owner_user_id)
+    reference_original = _text_v2_asset_bytes(asset, owner_user_id)
+    reference, reference_mime, _, reference_source_format = _text_v2_prepare_image(reference_original)
     settings = ai_detection_settings()
     fingerprint_payload = {
-        "reference_sha256": sha256_bytes(reference), "reference_bytes": len(reference),
+        "reference_sha256": sha256_bytes(reference_original), "reference_bytes": len(reference_original),
+        "prepared_reference_sha256": sha256_bytes(reference), "prepared_reference_bytes": len(reference),
+        "captured_upload_sha256": captured_upload_sha256, "captured_upload_bytes": len(captured_upload),
         "captured_sha256": sha256_bytes(captured), "captured_bytes": len(captured),
         "standard_asset_id": standard_asset_id, "provider": settings.get("provider"),
         "standard_revision_id": standard.get("current_revision_id", ""),
@@ -37897,7 +37917,7 @@ async def compare_text_inspection_label(
             return {**_text_v2_public(existing), "decision": "REVIEW_REQUIRED", "message": "上次模型请求结果不确定，为避免重复计费未自动重试。"}
         return _text_v2_public(existing)
     now = int(time.time())
-    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_sha256": sha256_bytes(captured), "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": []}
+    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": []}
     source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
     _text_v2_write(source_path, captured)
     record["source_path"] = str(source_path)
@@ -37912,7 +37932,7 @@ async def compare_text_inspection_label(
         return _text_v2_public(record)
     user_content = [
         {"type": "text", "text": "STANDARD_LABEL"},
-        {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference), "detail": "high"}},
+        {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference, reference_mime), "detail": "high"}},
         {"type": "text", "text": "CAPTURED_LABEL"},
         {"type": "image_url", "image_url": {"url": _text_v2_data_url(captured, captured_mime), "detail": "high"}},
     ]
@@ -38005,7 +38025,7 @@ async def inspect_text_manual_page(
     if not session or session.get("status") != "active":
         raise HTTPException(status_code=404, detail="可用的说明书检验会话不存在")
     contents = await captured_file.read()
-    captured_mime, _ = _text_v2_validate_capture(contents)
+    contents, captured_mime, _, source_format = _text_v2_prepare_image(contents)
     source_hash = sha256_bytes(contents)
     existing = next((item for item in _text_v2_load("pages") if item.get("owner_user_id") == owner_user_id and item.get("session_id") == session_id and item.get("capture_id") == capture_id), None)
     if existing:
@@ -38026,7 +38046,7 @@ async def inspect_text_manual_page(
         else:
             return {"capture_id": capture_id, "decision": "REVIEW_REQUIRED", "status": "page_selection_required", "message": "自动匹配置信度不足，请从缩略图确认标准页。", "recommendations": recommendations[:6]}
     now = int(time.time())
-    page = {"id": "pg_" + uuid.uuid4().hex, "session_id": session_id, "owner_user_id": owner_user_id, "capture_id": capture_id, "standard_asset_id": selected["id"], "source_sha256": source_hash, "status": "attempting", "decision": "REVIEW_REQUIRED", "created_at": now, "updated_at": now, "recommendations": recommendations[:6]}
+    page = {"id": "pg_" + uuid.uuid4().hex, "session_id": session_id, "owner_user_id": owner_user_id, "capture_id": capture_id, "standard_asset_id": selected["id"], "source_sha256": source_hash, "source_format": source_format, "captured_mime": captured_mime, "status": "attempting", "decision": "REVIEW_REQUIRED", "created_at": now, "updated_at": now, "recommendations": recommendations[:6]}
     if not _text_v2_save("pages", page, insert_only=True):
         raise HTTPException(status_code=409, detail="本页正在处理")
     if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
