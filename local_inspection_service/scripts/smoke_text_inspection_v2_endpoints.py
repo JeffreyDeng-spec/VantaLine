@@ -44,6 +44,14 @@ def picture(text: str) -> bytes:
     return encoded.tobytes()
 
 
+def bitmap_picture(text: str) -> bytes:
+    image = np.full((500, 900, 3), 255, np.uint8)
+    cv2.putText(image, text, (50, 280), cv2.FONT_HERSHEY_SIMPLEX, 2, (10, 10, 10), 4, cv2.LINE_AA)
+    ok, encoded = cv2.imencode(".bmp", image)
+    assert ok
+    return encoded.tobytes()
+
+
 def docx() -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -60,6 +68,15 @@ def login(client: TestClient, username: str) -> None:
 
 
 def main() -> None:
+    # The browser may label a file image/jpeg purely because its name ends in
+    # .jpg. Backend acceptance follows decoded bytes and normalizes readable
+    # formats instead of rejecting that mismatch.
+    prepared, mime, suffix, source_format = server._text_v2_prepare_image(bitmap_picture("BMP AS JPG"))
+    assert source_format == "BMP"
+    assert mime == "image/jpeg" and suffix == ".jpg"
+    assert prepared.startswith(b"\xff\xd8")
+    assert cv2.imdecode(np.frombuffer(prepared, np.uint8), cv2.IMREAD_COLOR) is not None
+
     admin = TestClient(server.app, base_url="https://testserver")
     bootstrap = admin.post("/api/auth/bootstrap", json={"username": "admin", "password": PASSWORD})
     assert_status(bootstrap, 200, "bootstrap")
@@ -230,7 +247,15 @@ def main() -> None:
         assert_status(other.get(f"/api/text-inspection/inspections/{inspection_id}/evidence/{evidence_kind}"), 404, "cross account evidence")
         second = admin.post("/api/text-inspection/label/compare", data=payload, files=files)
         assert_status(second, 200, "idempotent compare")
-        assert len(calls) == (0 if SMOKE_MODE == "fail_closed" else 1)
+        compatibility = admin.post(
+            "/api/text-inspection/label/compare",
+            data={"standard_asset_id": asset["id"], "comparison_id": "cmp_disguised_jpg_0001"},
+            files={"captured_file": ("camera-export.jpg", bitmap_picture("BMP AS JPG"), "image/jpeg")},
+        )
+        assert_status(compatibility, 200, "decoded-content compatibility")
+        assert compatibility.json()["source_format"] == "BMP"
+        assert compatibility.json()["source_upload_sha256"] != compatibility.json()["source_sha256"]
+        assert len(calls) == (0 if SMOKE_MODE == "fail_closed" else 2)
     finally:
         server.call_ai_mcp_tool = original_call
 

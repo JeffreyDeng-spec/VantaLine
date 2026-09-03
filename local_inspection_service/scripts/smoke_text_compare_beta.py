@@ -42,6 +42,9 @@ def main():
     assert "getUserMedia" in frontend and "track.stop()" in frontend
     assert "comparisonIdentityRef" in frontend and "disabled={mutation.isPending}" in frontend
     assert 'useState<"camera" | "image">("camera")' in frontend
+    assert 'const IMAGE_ACCEPT = "image/*' in frontend
+    assert "ACCEPTED_TYPES" not in frontend and "仅支持 PNG、JPG 或 WEBP 图片。" not in frontend
+    assert "支持常见图片格式" in frontend
     assert "上传实物图片" in frontend and "请先上传需要对比的实物图片" in frontend
     assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "查看大图" in frontend
     # Standard-library navigation and inspection stays in the order detail: users
