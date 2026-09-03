@@ -6,6 +6,7 @@ import copy
 import io
 import ipaddress
 import json
+import logging
 import math
 import mimetypes
 import os
@@ -332,6 +333,7 @@ TEXT_INSPECTION_MEDIA_DIR = TEXT_INSPECTION_DIR / "media"
 TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = str(os.getenv("VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_MANUAL_PASS_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
+TEXT_INSPECTION_DIAGNOSTIC_LOGGER = logging.getLogger("uvicorn.error")
 
 
 def current_release_version() -> dict[str, Any]:
@@ -15108,10 +15110,19 @@ class OpenAICompatibleAiProvider:
             self.last_usage_metadata = response_json.get("usage") if isinstance(response_json.get("usage"), dict) else {}
             content = response_json["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            raise AiProviderError("AI provider response shape was not recognized") from exc
+            provider_error = AiProviderError("AI provider response shape was not recognized")
+            provider_error.response_sha256 = sha256_bytes(body.encode("utf-8", errors="replace"))
+            provider_error.response_preview = body[:8192]
+            raise provider_error from exc
         if isinstance(content, list):
             content = "\n".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
-        return parse_ai_json_object(str(content or "")), latency_ms
+        response_text = str(content or "")
+        try:
+            return parse_ai_json_object(response_text), latency_ms
+        except AiProviderError as exc:
+            exc.response_sha256 = sha256_bytes(response_text.encode("utf-8", errors="replace"))
+            exc.response_preview = response_text[:8192]
+            raise
 
 
 def data_url_payload(data_url: str) -> tuple[str, str]:
@@ -16157,6 +16168,8 @@ def provider_generate_json_error_payload(
         http_status = getattr(exc, "http_status", None)
         fallback_model = getattr(exc, "fallback_model", "")
         fallback_reason = getattr(exc, "fallback_reason", "")
+        response_sha256 = getattr(exc, "response_sha256", "")
+        response_preview = getattr(exc, "response_preview", "")
         if isinstance(usage_metadata, dict) and usage_metadata:
             provider_failure_meta["usage_metadata"] = usage_metadata
         if isinstance(failed_usage_metadata, list) and failed_usage_metadata:
@@ -16173,6 +16186,10 @@ def provider_generate_json_error_payload(
             provider_failure_meta["fallback_model"] = str(fallback_model)
         if fallback_reason:
             provider_failure_meta["fallback_reason"] = str(fallback_reason)
+        if response_sha256:
+            provider_failure_meta["response_sha256"] = str(response_sha256)
+        if response_preview:
+            provider_failure_meta["response_preview"] = _text_v2_diagnostic_value(str(response_preview))
     error_meta = {**meta, "error_type": error_type, "overloaded": overloaded, **provider_failure_meta}
     return {
         "tool": "provider.gemini.generate_json",
@@ -37819,6 +37836,118 @@ def _text_v2_data_url(contents: bytes, mime: str = "") -> str:
     return f"data:{mime};base64,{base64.b64encode(contents).decode('ascii')}"
 
 
+def _text_v2_diagnostic_value(value: Any, *, depth: int = 0) -> Any:
+    """Bound diagnostic payloads and remove credentials or embedded media."""
+    if depth > 6:
+        return "<depth-limit>"
+    if isinstance(value, dict):
+        clean: dict[str, Any] = {}
+        for raw_key, raw_value in list(value.items())[:120]:
+            key = str(raw_key)[:120]
+            normalized = key.lower().replace("-", "_")
+            sensitive_key = (
+                normalized in {"api_key", "authorization", "cookie", "set_cookie", "secret", "token"}
+                or normalized.endswith(("_api_key", "_authorization", "_cookie", "_secret", "_token"))
+            )
+            if sensitive_key:
+                clean[key] = "<redacted>"
+            elif normalized in {"image_url", "data_url", "url"} and str(raw_value).startswith("data:"):
+                clean[key] = f"<embedded-media:{len(str(raw_value))}-chars>"
+            else:
+                clean[key] = _text_v2_diagnostic_value(raw_value, depth=depth + 1)
+        return clean
+    if isinstance(value, (list, tuple)):
+        return [_text_v2_diagnostic_value(item, depth=depth + 1) for item in list(value)[:120]]
+    if isinstance(value, str):
+        if value.startswith("data:") and ";base64," in value[:160]:
+            return f"<embedded-media:{len(value)}-chars>"
+        return value[:8192]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return str(value)[:1000]
+
+
+def _text_v2_image_diagnostics(contents: bytes, *, source_format: str, mime_type: str) -> dict[str, Any]:
+    width = height = 0
+    mode = ""
+    try:
+        with Image.open(io.BytesIO(contents)) as image:
+            width, height = image.size
+            mode = str(image.mode or "")
+    except Exception:
+        pass
+    return {
+        "bytes": len(contents),
+        "sha256": sha256_bytes(contents),
+        "source_format": str(source_format or ""),
+        "mime_type": str(mime_type or ""),
+        "width": int(width),
+        "height": int(height),
+        "mode": mode,
+    }
+
+
+def _text_v2_diagnostic_event(
+    diagnostics: dict[str, Any],
+    stage: str,
+    status: str,
+    *,
+    details: dict[str, Any] | None = None,
+) -> None:
+    started_ms = int(diagnostics.get("request_received_at_ms") or int(time.time() * 1000))
+    now_ms = int(time.time() * 1000)
+    event: dict[str, Any] = {
+        "stage": str(stage),
+        "status": str(status),
+        "at_ms": now_ms,
+        "elapsed_ms": max(0, now_ms - started_ms),
+    }
+    if details:
+        event["details"] = _text_v2_diagnostic_value(details)
+    diagnostics.setdefault("events", []).append(event)
+
+
+def _text_v2_provider_diagnostics(provider: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "ok", "tool", "provider", "provider_model", "latency_ms", "timed_out", "overloaded",
+        "provider_failure", "error", "error_type", "http_status", "attempts", "retry_count",
+        "previous_errors", "fallback_model", "fallback_reason", "usage_metadata",
+        "failed_usage_metadata", "response_sha256", "response_preview",
+    )
+    result = {key: provider.get(key) for key in keys if provider.get(key) not in (None, "", [], {})}
+    result["provider"] = provider.get("provider") or settings.get("provider") or ""
+    result["model"] = provider.get("model") or provider.get("provider_model") or settings.get("model") or ""
+    result["parsed_response"] = provider.get("parsed") if isinstance(provider.get("parsed"), dict) else {}
+    return _text_v2_diagnostic_value(result)
+
+
+def _text_v2_write_server_diagnostic(record: dict[str, Any]) -> None:
+    diagnostics = record.get("diagnostics") if isinstance(record.get("diagnostics"), dict) else {}
+    failure = diagnostics.get("failure") if isinstance(diagnostics.get("failure"), dict) else {}
+    payload = {
+        "event": "text_inspection_label_compare",
+        "inspection_id": record.get("id"),
+        "comparison_id": record.get("comparison_id"),
+        "standard_id": record.get("standard_id"),
+        "standard_asset_id": record.get("standard_asset_id"),
+        "status": record.get("status"),
+        "decision": record.get("decision"),
+        "provider": record.get("provider") or record.get("planned_provider"),
+        "model": record.get("model") or record.get("planned_model"),
+        "failure_stage": failure.get("stage"),
+        "error_type": failure.get("error_type"),
+        "error_message_sha256": (
+            sha256_bytes(str(failure.get("message") or "").encode("utf-8", errors="replace"))
+            if failure.get("message") else ""
+        ),
+        "elapsed_ms": max(0, int(time.time() * 1000) - int(diagnostics.get("request_received_at_ms") or 0)),
+    }
+    TEXT_INSPECTION_DIAGNOSTIC_LOGGER.info(
+        "text_inspection_diagnostic %s",
+        json.dumps(_text_v2_diagnostic_value(payload), ensure_ascii=False, separators=(",", ":")),
+    )
+
+
 def _text_v2_prepare_image(contents: bytes) -> tuple[bytes, str, str, str]:
     """Trust decoded image content, then normalize uncommon readable formats."""
     if not contents or len(contents) > 10 * 1024 * 1024:
@@ -37881,6 +38010,7 @@ async def compare_text_inspection_label(
     standard_asset_id: str = Form(...),
     comparison_id: str = Form(...),
 ) -> dict[str, Any]:
+    request_received_at_ms = int(time.time() * 1000)
     require_permission("inspection", detail="没有文字检验权限")
     owner_user_id, owner_username = _text_v2_owner()
     if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", comparison_id):
@@ -37917,7 +38047,45 @@ async def compare_text_inspection_label(
             return {**_text_v2_public(existing), "decision": "REVIEW_REQUIRED", "message": "上次模型请求结果不确定，为避免重复计费未自动重试。"}
         return _text_v2_public(existing)
     now = int(time.time())
-    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": []}
+    diagnostics: dict[str, Any] = {
+        "schema_version": "text-inspection-diagnostics-v1",
+        "request_received_at_ms": request_received_at_ms,
+        "request": {
+            "comparison_id": comparison_id,
+            "standard_id": standard["id"],
+            "standard_asset_id": standard_asset_id,
+            "standard_revision_id": standard.get("current_revision_id", ""),
+            "standard_revision_number": int(standard.get("revision_number") or 0),
+            "uploaded_actual": {
+                "bytes": len(captured_upload),
+                "sha256": captured_upload_sha256,
+                "filename_suffix": Path(str(captured_file.filename or "")).suffix.lower()[:20],
+                "declared_content_type": str(captured_file.content_type or "")[:120],
+            },
+            "prepared_actual": _text_v2_image_diagnostics(
+                captured, source_format=captured_source_format, mime_type=captured_mime,
+            ),
+            "prepared_reference": _text_v2_image_diagnostics(
+                reference, source_format=reference_source_format, mime_type=reference_mime,
+            ),
+        },
+        "provider_config": {
+            "provider": settings.get("provider") or "",
+            "model": settings.get("model") or "",
+            "endpoint_host": urlsplit(str(settings.get("base_url") or "")).hostname or "",
+            "timeout_seconds": settings.get("timeout_seconds"),
+            "configured": bool(settings.get("configured")),
+            "api_key_present": bool(settings.get("api_key_present")),
+            "key_source_name": settings.get("key_source_name") or "",
+            "max_attempts": 1,
+            "max_tokens": 1800,
+            "external_vlm_enabled": TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+            "automatic_match_verified": TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED,
+        },
+        "events": [],
+    }
+    _text_v2_diagnostic_event(diagnostics, "input_prepared", "ok")
+    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
     source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
     _text_v2_write(source_path, captured)
     record["source_path"] = str(source_path)
@@ -37927,8 +38095,10 @@ async def compare_text_inspection_label(
             return _text_v2_public(winner)
         raise HTTPException(status_code=409, detail="comparison_id 已用于其他输入")
     if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
+        _text_v2_diagnostic_event(diagnostics, "external_media_gate", "blocked")
         record.update({"status": "review_required", "decision": "REVIEW_REQUIRED", "message": "外部图片比对尚未完成客户授权和生产启用，请人工复核。", "attempt_finished_at": int(time.time()), "external_media_sent": False, "external_media_send_status": "not_sent"})
         _text_v2_save("records", record)
+        _text_v2_write_server_diagnostic(record)
         return _text_v2_public(record)
     user_content = [
         {"type": "text", "text": "STANDARD_LABEL"},
@@ -37936,35 +38106,74 @@ async def compare_text_inspection_label(
         {"type": "text", "text": "CAPTURED_LABEL"},
         {"type": "image_url", "image_url": {"url": _text_v2_data_url(captured, captured_mime), "detail": "high"}},
     ]
+    failure_stage = "provider_call"
     try:
         record["external_media_send_status"] = "attempting"
         record["external_media_sent"] = None
+        _text_v2_diagnostic_event(diagnostics, "provider_call", "started")
         _text_v2_save("records", record)
         provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": settings, "system_prompt": strict_compare_prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
+        diagnostics["provider_result"] = _text_v2_provider_diagnostics(provider, settings)
+        _text_v2_diagnostic_event(
+            diagnostics,
+            "provider_call",
+            "ok" if provider.get("ok") else "failed",
+            details={
+                "latency_ms": provider.get("latency_ms"),
+                "timed_out": provider.get("timed_out"),
+                "http_status": provider.get("http_status"),
+                "error_type": provider.get("error_type"),
+            },
+        )
         record["external_media_sent"] = True
         record["external_media_send_status"] = "sent"
         if not provider.get("ok"):
+            failure_stage = "provider_result"
             raise ValueError(str(provider.get("error") or "模型服务异常"))
+        failure_stage = "response_validation"
         checked = validate_vlm_result(provider.get("parsed"))
+        _text_v2_diagnostic_event(diagnostics, "response_validation", "ok", details={"decision": checked.get("decision")})
         if checked["decision"] == "MATCH" and not TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED:
             checked = {"decision": "REVIEW_REQUIRED", "differences": [], "message": "模型未发现差异，但自动通过尚未完成现场验收，请人工确认。"}
+            _text_v2_diagnostic_event(diagnostics, "automatic_match_gate", "blocked")
         record.update(checked)
         record["auto_decision"] = checked["decision"]
         record["status"] = "completed" if checked["decision"] != "REVIEW_REQUIRED" else "review_required"
         record["provider"] = provider.get("provider") or settings.get("provider")
         record["model"] = provider.get("model") or settings.get("model")
         record["latency_ms"] = provider.get("latency_ms")
+        failure_stage = "annotation"
         annotated = _text_v2_annotate(captured, checked["differences"])
         annotated_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-annotated.jpg")
         _text_v2_write(annotated_path, annotated)
         record["annotated_path"] = str(annotated_path)
         record["annotated_sha256"] = sha256_bytes(annotated)
         record["annotated_image_data_url"] = f"/api/text-inspection/inspections/{record['id']}/evidence/annotated"
+        _text_v2_diagnostic_event(diagnostics, "annotation", "ok", details={"bytes": len(annotated), "sha256": record["annotated_sha256"]})
+        _text_v2_diagnostic_event(diagnostics, "completed", "ok", details={"decision": record.get("decision")})
     except Exception as exc:
-        record.update({"decision": "REVIEW_REQUIRED", "auto_decision": "REVIEW_REQUIRED", "status": "uncertain", "message": "模型请求结果不确定；为避免重复计费不会自动重试，请人工复核。", "error_code": type(exc).__name__, "differences": [], "charge_status": "uncertain", "external_media_send_status": "uncertain", "external_media_sent": None})
+        provider_error_type = (
+            str(provider.get("error_type") or "")
+            if failure_stage == "provider_result" and isinstance(provider, dict)
+            else ""
+        )
+        error_type = provider_error_type or type(exc).__name__
+        diagnostics["failure"] = {
+            "stage": failure_stage,
+            "error_type": error_type,
+            "message": str(exc)[:1000],
+        }
+        _text_v2_diagnostic_event(
+            diagnostics,
+            failure_stage,
+            "failed",
+            details={"error_type": error_type, "message": str(exc)},
+        )
+        record.update({"decision": "REVIEW_REQUIRED", "auto_decision": "REVIEW_REQUIRED", "status": "uncertain", "message": "模型请求结果不确定；为避免重复计费不会自动重试，请人工复核。", "error_code": error_type, "differences": [], "charge_status": "uncertain", "external_media_send_status": "uncertain", "external_media_sent": None})
     record["attempt_finished_at"] = int(time.time())
     record["updated_at"] = int(time.time())
     _text_v2_save("records", record)
+    _text_v2_write_server_diagnostic(record)
     return _text_v2_public(record)
 
 

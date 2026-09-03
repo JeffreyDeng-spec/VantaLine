@@ -234,12 +234,15 @@ def main() -> None:
         if SMOKE_MODE == "fail_closed":
             assert first.json()["decision"] == "REVIEW_REQUIRED"
             assert first.json()["external_media_send_status"] == "not_sent"
+            assert first.json()["diagnostics"]["events"][-1]["stage"] == "external_media_gate"
             assert len(calls) == 0
         elif SMOKE_MODE == "external_only":
             assert first.json()["decision"] == "REVIEW_REQUIRED"
             assert first.json()["external_media_send_status"] == "sent"
+            assert first.json()["diagnostics"]["provider_result"]["parsed_response"] == provider_payload
         else:
             assert first.json()["decision"] == "DIFFERENCES"
+            assert first.json()["diagnostics"]["provider_result"]["parsed_response"] == provider_payload
         inspection_id = first.json()["id"]
         assert "annotated_path" not in first.json() and "source_path" not in first.json()
         evidence_kind = "source" if SMOKE_MODE == "fail_closed" else "annotated"
@@ -258,6 +261,86 @@ def main() -> None:
         assert len(calls) == (0 if SMOKE_MODE == "fail_closed" else 2)
     finally:
         server.call_ai_mcp_tool = original_call
+
+    assert server._text_v2_diagnostic_value(
+        {"Authorization": "Bearer secret", "image_url": "data:image/png;base64,AAAA"}
+    ) == {"Authorization": "<redacted>", "image_url": "<embedded-media:26-chars>"}
+    logged: list[str] = []
+
+    class CaptureLogger:
+        def info(self, _pattern: str, payload: str) -> None:
+            logged.append(payload)
+
+    original_logger = server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER
+    try:
+        server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER = CaptureLogger()
+        server._text_v2_write_server_diagnostic(
+            {
+                "id": "ins_log_redaction",
+                "comparison_id": "cmp_log_redaction",
+                "status": "uncertain",
+                "diagnostics": {
+                    "request_received_at_ms": int(server.time.time() * 1000),
+                    "failure": {"stage": "provider_result", "error_type": "AuthError", "message": "Bearer secret"},
+                },
+            }
+        )
+    finally:
+        server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER = original_logger
+    assert logged and "Bearer secret" not in logged[0] and "error_message_sha256" in logged[0]
+
+    if SMOKE_MODE in {"external_only", "enabled"}:
+        original_call = server.call_ai_mcp_tool
+        try:
+            server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
+                "ok": False,
+                "parsed": {},
+                "latency_ms": 10_000,
+                "provider": "qwen",
+                "provider_model": "qwen-test",
+                "timed_out": True,
+                "provider_failure": True,
+                "error_type": "AiProviderTimeout",
+                "error": "AI provider timed out",
+                "attempts": 1,
+            }
+            provider_failed = admin.post(
+                "/api/text-inspection/label/compare",
+                data={"standard_asset_id": asset["id"], "comparison_id": "cmp_diagnostic_provider_failure"},
+                files={"captured_file": ("capture.png", picture("PROVIDER FAILURE"), "image/png")},
+            )
+            assert_status(provider_failed, 200, "provider failure diagnostics")
+            provider_failure_json = provider_failed.json()
+            assert provider_failure_json["status"] == "uncertain"
+            assert provider_failure_json["diagnostics"]["failure"] == {
+                "stage": "provider_result",
+                "error_type": "AiProviderTimeout",
+                "message": "AI provider timed out",
+            }
+            assert provider_failure_json["diagnostics"]["provider_result"]["timed_out"] is True
+            assert provider_failure_json["diagnostics"]["provider_result"]["error_type"] == "AiProviderTimeout"
+
+            invalid_payload = {"decision": "MATCH", "differences": [], "message": "same", "unexpected": True}
+            server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
+                "ok": True,
+                "parsed": invalid_payload,
+                "latency_ms": 7,
+                "provider": "qwen",
+                "provider_model": "qwen-test",
+            }
+            validation_failed = admin.post(
+                "/api/text-inspection/label/compare",
+                data={"standard_asset_id": asset["id"], "comparison_id": "cmp_diagnostic_validation_failure"},
+                files={"captured_file": ("capture.png", picture("SCHEMA FAILURE"), "image/png")},
+            )
+            assert_status(validation_failed, 200, "validation failure diagnostics")
+            validation_failure_json = validation_failed.json()
+            assert validation_failure_json["status"] == "uncertain"
+            assert validation_failure_json["diagnostics"]["failure"]["stage"] == "response_validation"
+            assert "结构不符合约定" in validation_failure_json["diagnostics"]["failure"]["message"]
+            assert validation_failure_json["diagnostics"]["provider_result"]["parsed_response"] == invalid_payload
+        finally:
+            server.call_ai_mcp_tool = original_call
 
     if SMOKE_MODE == "fail_closed":
         now = 1_800_000_000
