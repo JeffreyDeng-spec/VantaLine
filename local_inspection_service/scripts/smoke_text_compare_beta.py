@@ -38,6 +38,7 @@ def main():
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in source
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in source
     frontend = (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text(encoding="utf-8")
+    styles = (APP_DIR / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
     assert "getUserMedia" in frontend and "track.stop()" in frontend
     assert "comparisonIdentityRef" in frontend and "disabled={mutation.isPending}" in frontend
     assert 'useState<"camera" | "image">("camera")' in frontend
@@ -56,6 +57,9 @@ def main():
     assert 'aria-pressed={selectable ? selected : undefined}' in frontend
     assert 'selectable ? chooseAsset(asset)' in frontend and "已选标准" in frontend and "点击选中" in frontend
     assert 'className={mode === "label" ? "text-compare-workbench" : ""}' in frontend
+    assert 'className="text-compare-compact-topbar"' in frontend
+    assert "100dvh" in styles and "max-height: 800px" in styles
+    assert ".text-compare-workbench .text-compare-actual-panel .text-compare-stage" in styles
     assert "setShowImport(true)" in frontend
     assert "showManager" not in frontend and "管理标准" not in frontend
     # Label comparison accepts only an enabled gallery asset as its standard.

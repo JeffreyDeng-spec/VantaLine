@@ -27,6 +27,8 @@ A user may add or remove images from the logical order standard at any time. The
 
 The client accepts exactly one reference source: a selected asset from the current confirmed order revision. Selecting another enabled thumbnail preserves the actual image but clears stale comparison output and identity. Replacing the actual image preserves the selected gallery asset. An unchanged retry may reuse its comparison identity, but changed inputs must not. Draft, pending and soft-disabled assets cannot be submitted as production comparison standards.
 
+The label workspace is responsive by available width and height, not by a single fixed canvas. On desktop, the account context, title, explanation and mode switch share a compact top strip; the order header also collapses sparse guidance into one line. The gallery becomes independently scrollable and the actual-image stage uses viewport-relative height so inspection imagery receives most of the visible area. At medium widths the two panels stack, and narrow or short screens progressively reduce spacing, typography and secondary chrome while preserving usable primary actions and image zoom.
+
 The first classifier is a deterministic local context classifier with manual feedback. The customer fixture must keep `image1`–`image6` as label candidates and collapse `image7`–`image18` into packaging, dieline, manual/insert, carton, placement or photo categories. No classified asset is physically deleted.
 
 ## Remaining production gates

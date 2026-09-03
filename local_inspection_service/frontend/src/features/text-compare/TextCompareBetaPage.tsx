@@ -329,12 +329,14 @@ export function TextCompareBetaPage() {
   </div>;
 
   return <section className="view active text-compare-beta">
-    <header className="text-compare-beta-header">
-      <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
-    </header>
-    <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
-      <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
-      <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
+    <div className="text-compare-compact-topbar">
+      <header className="text-compare-beta-header">
+        <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
+      </header>
+      <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
+        <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
+        <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
+      </div>
     </div>
     <div className={mode === "label" ? "text-compare-workbench" : ""}>
     <section className="text-standard-library" id="text-standard-library-panel" role="tabpanel" aria-label="我的标准库">
