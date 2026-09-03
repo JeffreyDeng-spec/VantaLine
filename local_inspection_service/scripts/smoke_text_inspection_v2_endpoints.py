@@ -52,6 +52,14 @@ def bitmap_picture(text: str) -> bytes:
     return encoded.tobytes()
 
 
+def large_picture(text: str) -> bytes:
+    image = np.full((1800, 3200, 3), 255, np.uint8)
+    cv2.putText(image, text, (120, 950), cv2.FONT_HERSHEY_SIMPLEX, 5, (10, 10, 10), 10, cv2.LINE_AA)
+    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+    assert ok
+    return encoded.tobytes()
+
+
 def docx() -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -76,6 +84,11 @@ def main() -> None:
     assert mime == "image/jpeg" and suffix == ".jpg"
     assert prepared.startswith(b"\xff\xd8")
     assert cv2.imdecode(np.frombuffer(prepared, np.uint8), cv2.IMREAD_COLOR) is not None
+    provider_image, provider_mime, provider_format = server._text_v2_prepare_provider_image(large_picture("LARGE"), "image/jpeg")
+    provider_decoded = cv2.imdecode(np.frombuffer(provider_image, np.uint8), cv2.IMREAD_COLOR)
+    assert provider_decoded is not None
+    assert max(provider_decoded.shape[:2]) == server.TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE
+    assert provider_mime == "image/jpeg" and provider_format == "JPEG"
 
     admin = TestClient(server.app, base_url="https://testserver")
     bootstrap = admin.post("/api/auth/bootstrap", json={"username": "admin", "password": PASSWORD})
@@ -222,10 +235,10 @@ def main() -> None:
     original_call = server.call_ai_mcp_tool
     calls = []
     provider_payload = {"decision": "MATCH", "message": "same", "differences": []} if SMOKE_MODE == "external_only" else {"decision": "DIFFERENCES", "message": "case", "differences": [{"type": "case", "reference_text": "O", "actual_text": "o", "confidence": 0.99, "box": [0.1, 0.2, 0.3, 0.4]}]}
-    server.call_ai_mcp_tool = lambda *_args, **_kwargs: calls.append(1) or {"ok": True, "parsed": provider_payload, "latency_ms": 5, "provider": "qwen", "model": "qwen-test"}
+    server.call_ai_mcp_tool = lambda _tool, call_payload: calls.append(call_payload) or {"ok": True, "parsed": provider_payload, "latency_ms": 5, "provider": "qwen", "model": "qwen-test"}
     try:
         payload = {"standard_asset_id": asset["id"], "comparison_id": "cmp_endpoint_0001"}
-        files = {"captured_file": ("capture.png", picture("MoDEL: PPLBP-2020"), "image/png")}
+        files = {"captured_file": ("capture.jpg", large_picture("MoDEL: PPLBP-2020"), "image/jpeg")}
         first = admin.post("/api/text-inspection/label/compare", data=payload, files=files)
         assert_status(first, 200, "compare")
         assert first.json()["standard_revision_id"] == added.json()["standard"]["current_revision_id"]
@@ -243,6 +256,11 @@ def main() -> None:
         else:
             assert first.json()["decision"] == "DIFFERENCES"
             assert first.json()["diagnostics"]["provider_result"]["parsed_response"] == provider_payload
+        if SMOKE_MODE != "fail_closed":
+            assert calls[0]["provider_config"]["timeout_seconds"] >= server.TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS
+            assert first.json()["diagnostics"]["request"]["prepared_actual"]["width"] == 3200
+            assert first.json()["diagnostics"]["request"]["provider_actual"]["width"] == server.TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE
+            assert first.json()["diagnostics"]["request"]["provider_actual"]["height"] == 1152
         inspection_id = first.json()["id"]
         assert "annotated_path" not in first.json() and "source_path" not in first.json()
         evidence_kind = "source" if SMOKE_MODE == "fail_closed" else "annotated"
