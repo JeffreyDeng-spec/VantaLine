@@ -275,6 +275,7 @@ try:
         UnsafeDocument,
         extract_docx_candidates,
         inspect_pdf,
+        normalize_vlm_provider_result,
         sha256_bytes,
         strict_compare_prompt,
         validate_vlm_result,
@@ -282,7 +283,7 @@ try:
 except ModuleNotFoundError as exc:
     if exc.name not in {"local_inspection_service", "local_inspection_service.text_inspection_v2"}:
         raise
-    from text_inspection_v2 import UnsafeDocument, extract_docx_candidates, inspect_pdf, sha256_bytes, strict_compare_prompt, validate_vlm_result
+    from text_inspection_v2 import UnsafeDocument, extract_docx_candidates, inspect_pdf, normalize_vlm_provider_result, sha256_bytes, strict_compare_prompt, validate_vlm_result
 
 
 def resolve_service_root() -> Path:
@@ -337,6 +338,7 @@ TEXT_INSPECTION_DIAGNOSTIC_LOGGER = logging.getLogger("uvicorn.error")
 TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE = 2048
 TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY = 90
 TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS = 30.0
+TEXT_INSPECTION_PROMPT_VERSION = "text-compare-v2-prompt-2"
 
 
 def current_release_version() -> dict[str, Any]:
@@ -38079,7 +38081,7 @@ async def compare_text_inspection_label(
         "standard_asset_id": standard_asset_id, "provider": settings.get("provider"),
         "standard_revision_id": standard.get("current_revision_id", ""),
         "standard_revision_number": int(standard.get("revision_number") or 0),
-        "model": settings.get("model"), "prompt_version": "text-compare-v2-prompt-1",
+        "model": settings.get("model"), "prompt_version": TEXT_INSPECTION_PROMPT_VERSION,
         "schema_version": "text-compare-result-v1",
     }
     fingerprint = sha256_bytes(json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode())
@@ -38135,7 +38137,7 @@ async def compare_text_inspection_label(
         "events": [],
     }
     _text_v2_diagnostic_event(diagnostics, "input_prepared", "ok")
-    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": "text-compare-v2-prompt-1", "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
+    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": TEXT_INSPECTION_PROMPT_VERSION, "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
     source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
     _text_v2_write(source_path, captured)
     record["source_path"] = str(source_path)
@@ -38181,7 +38183,12 @@ async def compare_text_inspection_label(
             failure_stage = "provider_result"
             raise ValueError(str(provider.get("error") or "模型服务异常"))
         failure_stage = "response_validation"
-        checked = validate_vlm_result(provider.get("parsed"))
+        normalized_response = normalize_vlm_provider_result(
+            provider.get("parsed"),
+            str(provider.get("provider") or provider_settings.get("provider") or ""),
+        )
+        diagnostics["normalized_response"] = _text_v2_diagnostic_value(normalized_response)
+        checked = validate_vlm_result(normalized_response)
         _text_v2_diagnostic_event(diagnostics, "response_validation", "ok", details={"decision": checked.get("decision")})
         if checked["decision"] == "MATCH" and not TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED:
             checked = {"decision": "REVIEW_REQUIRED", "differences": [], "message": "模型未发现差异，但自动通过尚未完成现场验收，请人工确认。"}

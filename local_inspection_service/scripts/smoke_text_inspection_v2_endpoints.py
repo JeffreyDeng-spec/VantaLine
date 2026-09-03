@@ -244,6 +244,7 @@ def main() -> None:
         assert first.json()["standard_revision_id"] == added.json()["standard"]["current_revision_id"]
         assert first.json()["standard_revision_number"] == 4
         assert first.json()["reference_sha256"]
+        assert first.json()["prompt_version"] == server.TEXT_INSPECTION_PROMPT_VERSION
         if SMOKE_MODE == "fail_closed":
             assert first.json()["decision"] == "REVIEW_REQUIRED"
             assert first.json()["external_media_send_status"] == "not_sent"
@@ -337,6 +338,43 @@ def main() -> None:
             }
             assert provider_failure_json["diagnostics"]["provider_result"]["timed_out"] is True
             assert provider_failure_json["diagnostics"]["provider_result"]["error_type"] == "AiProviderTimeout"
+
+            qwen_payload = {
+                "decision": "DIFFERENCES",
+                "differences": [
+                    {
+                        "type": "text_mismatch", "reference_text": "MODEL A", "actual_text": "",
+                        "confidence": 100, "box": [0, 100, 1000, 250],
+                    },
+                    {
+                        "type": "text_mismatch", "reference_text": "40Wh", "actual_text": "40Wh",
+                        "confidence": 1.0, "box": [200, 300, 400, 350],
+                    },
+                ],
+            }
+            server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
+                "ok": True,
+                "parsed": qwen_payload,
+                "latency_ms": 8,
+                "provider": "qwen",
+                "provider_model": "qwen-test",
+            }
+            qwen_adapted = admin.post(
+                "/api/text-inspection/label/compare",
+                data={"standard_asset_id": asset["id"], "comparison_id": "cmp_qwen_response_adapter"},
+                files={"captured_file": ("capture.png", picture("QWEN ADAPTER"), "image/png")},
+            )
+            assert_status(qwen_adapted, 200, "Qwen response adapter")
+            qwen_adapted_json = qwen_adapted.json()
+            assert qwen_adapted_json["decision"] == "DIFFERENCES"
+            assert qwen_adapted_json["differences"] == [{
+                "id": "diff-1", "type": "missing", "reference_text": "MODEL A", "actual_text": "",
+                "confidence": 1.0, "box": [0.0, 0.1, 1.0, 0.25],
+            }]
+            assert qwen_adapted_json["diagnostics"]["provider_result"]["parsed_response"] == qwen_payload
+            assert qwen_adapted_json["diagnostics"]["normalized_response"]["differences"] == [qwen_payload["differences"][0] | {
+                "type": "missing", "confidence": 1.0, "box": [0.0, 0.1, 1.0, 0.25],
+            }]
 
             invalid_payload = {"decision": "MATCH", "differences": [], "message": "same", "unexpected": True}
             server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
