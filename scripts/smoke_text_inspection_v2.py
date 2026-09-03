@@ -15,6 +15,7 @@ from local_inspection_service.text_inspection_v2 import (
     _classify,
     extract_docx_candidates,
     inspect_pdf,
+    normalize_vlm_provider_result,
     validate_vlm_result,
 )
 
@@ -29,6 +30,26 @@ def main() -> None:
     assert _classify("标贴粘贴位置", 800, 300)[:2] == ("excluded", "placement_diagram")
     checked = validate_vlm_result({"decision": "DIFFERENCES", "message": "case", "differences": [{"type": "case", "reference_text": "O", "actual_text": "o", "confidence": 0.99, "box": [0.1, 0.2, 0.3, 0.4]}]})
     assert checked["differences"][0]["reference_text"] == "O"
+    qwen = normalize_vlm_provider_result(
+        {
+            "decision": "DIFFERENCES",
+            "differences": [
+                {"type": "text_mismatch", "reference_text": "MODEL A", "actual_text": "", "confidence": 100, "box": [0, 100, 1000, 250]},
+                {"type": "text_mismatch", "reference_text": "40Wh", "actual_text": "40Wh", "confidence": 1.0, "box": [200, 300, 400, 350]},
+            ],
+        },
+        "qwen",
+    )
+    qwen_checked = validate_vlm_result(qwen)
+    assert qwen_checked["differences"] == [{
+        "id": "diff-1", "type": "missing", "reference_text": "MODEL A", "actual_text": "",
+        "confidence": 1.0, "box": [0.0, 0.1, 1.0, 0.25],
+    }]
+    unchanged_only = normalize_vlm_provider_result(
+        {"decision": "DIFFERENCES", "differences": [{"type": "text_mismatch", "reference_text": "same", "actual_text": "same", "confidence": 1, "box": [0, 0, 1000, 1000]}]},
+        "qwen",
+    )
+    assert unchanged_only["decision"] == "REVIEW_REQUIRED" and unchanged_only["differences"] == []
     for unsafe in (b"not a docx", b"not a pdf"):
         try:
             extract_docx_candidates(unsafe) if unsafe == b"not a docx" else inspect_pdf(unsafe)
