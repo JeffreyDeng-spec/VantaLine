@@ -334,6 +334,9 @@ TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = str(os.getenv("VANTALINE_TEXT_INSPECTION_
 TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_MANUAL_PASS_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_DIAGNOSTIC_LOGGER = logging.getLogger("uvicorn.error")
+TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE = 2048
+TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY = 90
+TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS = 30.0
 
 
 def current_release_version() -> dict[str, Any]:
@@ -37986,6 +37989,38 @@ def _text_v2_prepare_image(contents: bytes) -> tuple[bytes, str, str, str]:
     return prepared, "image/jpeg", ".jpg", image_format or "UNKNOWN"
 
 
+def _text_v2_prepare_provider_image(contents: bytes, mime_type: str) -> tuple[bytes, str, str]:
+    """Bound only the model copy while preserving full-resolution audit evidence."""
+    try:
+        with Image.open(io.BytesIO(contents)) as image:
+            image_format = str(image.format or "").upper() or "UNKNOWN"
+            width, height = image.size
+            if max(width, height) <= TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE:
+                return contents, mime_type, image_format
+            working = ImageOps.exif_transpose(image)
+            working.thumbnail(
+                (TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE, TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE),
+                Image.Resampling.LANCZOS,
+            )
+            if working.mode in {"RGBA", "LA"} or "transparency" in working.info:
+                rgba = working.convert("RGBA")
+                rgb = Image.new("RGB", rgba.size, "white")
+                rgb.paste(rgba, mask=rgba.getchannel("A"))
+            else:
+                rgb = working.convert("RGB")
+            output = io.BytesIO()
+            rgb.save(
+                output,
+                format="JPEG",
+                quality=TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY,
+                optimize=True,
+            )
+            prepared = output.getvalue()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="图片无法为模型生成兼容副本") from exc
+    return prepared, "image/jpeg", "JPEG"
+
+
 def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> bytes:
     image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
@@ -38027,6 +38062,15 @@ async def compare_text_inspection_label(
     reference_original = _text_v2_asset_bytes(asset, owner_user_id)
     reference, reference_mime, _, reference_source_format = _text_v2_prepare_image(reference_original)
     settings = ai_detection_settings()
+    provider_settings = {
+        **settings,
+        "timeout_seconds": max(
+            TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
+            float(settings.get("timeout_seconds") or 0),
+        ),
+    }
+    provider_reference, provider_reference_mime, provider_reference_format = _text_v2_prepare_provider_image(reference, reference_mime)
+    provider_captured, provider_captured_mime, provider_captured_format = _text_v2_prepare_provider_image(captured, captured_mime)
     fingerprint_payload = {
         "reference_sha256": sha256_bytes(reference_original), "reference_bytes": len(reference_original),
         "prepared_reference_sha256": sha256_bytes(reference), "prepared_reference_bytes": len(reference),
@@ -38068,12 +38112,18 @@ async def compare_text_inspection_label(
             "prepared_reference": _text_v2_image_diagnostics(
                 reference, source_format=reference_source_format, mime_type=reference_mime,
             ),
+            "provider_actual": _text_v2_image_diagnostics(
+                provider_captured, source_format=provider_captured_format, mime_type=provider_captured_mime,
+            ),
+            "provider_reference": _text_v2_image_diagnostics(
+                provider_reference, source_format=provider_reference_format, mime_type=provider_reference_mime,
+            ),
         },
         "provider_config": {
             "provider": settings.get("provider") or "",
             "model": settings.get("model") or "",
             "endpoint_host": urlsplit(str(settings.get("base_url") or "")).hostname or "",
-            "timeout_seconds": settings.get("timeout_seconds"),
+            "timeout_seconds": provider_settings.get("timeout_seconds"),
             "configured": bool(settings.get("configured")),
             "api_key_present": bool(settings.get("api_key_present")),
             "key_source_name": settings.get("key_source_name") or "",
@@ -38102,9 +38152,9 @@ async def compare_text_inspection_label(
         return _text_v2_public(record)
     user_content = [
         {"type": "text", "text": "STANDARD_LABEL"},
-        {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference, reference_mime), "detail": "high"}},
+        {"type": "image_url", "image_url": {"url": _text_v2_data_url(provider_reference, provider_reference_mime), "detail": "high"}},
         {"type": "text", "text": "CAPTURED_LABEL"},
-        {"type": "image_url", "image_url": {"url": _text_v2_data_url(captured, captured_mime), "detail": "high"}},
+        {"type": "image_url", "image_url": {"url": _text_v2_data_url(provider_captured, provider_captured_mime), "detail": "high"}},
     ]
     failure_stage = "provider_call"
     try:
@@ -38112,8 +38162,8 @@ async def compare_text_inspection_label(
         record["external_media_sent"] = None
         _text_v2_diagnostic_event(diagnostics, "provider_call", "started")
         _text_v2_save("records", record)
-        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": settings, "system_prompt": strict_compare_prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
-        diagnostics["provider_result"] = _text_v2_provider_diagnostics(provider, settings)
+        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": provider_settings, "system_prompt": strict_compare_prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
+        diagnostics["provider_result"] = _text_v2_provider_diagnostics(provider, provider_settings)
         _text_v2_diagnostic_event(
             diagnostics,
             "provider_call",
