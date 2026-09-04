@@ -15,6 +15,19 @@ function qualityCopy(reasons?: string[]) {
   return (reasons || []).map((reason) => labels[reason] || reason).join("、");
 }
 
+const MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000;
+function formatDiagnosticOutput(value: unknown) {
+  let output: string;
+  if (typeof value === "string") output = value;
+  else {
+    try { output = JSON.stringify(value, null, 2) ?? String(value); }
+    catch { output = String(value); }
+  }
+  return output.length > MAX_DIAGNOSTIC_OUTPUT_CHARS
+    ? `${output.slice(0, MAX_DIAGNOSTIC_OUTPUT_CHARS)}\n…（显示内容已截断）`
+    : output;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   label: "标签",
   possible_label: "疑似标签",
@@ -67,6 +80,12 @@ export function TextCompareBetaPage() {
   const [importMaterial, setImportMaterial] = useState("");
   const [importVersion, setImportVersion] = useState("V1");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const providerDiagnostics = result?.diagnostics?.provider_result;
+  const rawProviderOutput = providerDiagnostics?.response_preview !== undefined
+    ? providerDiagnostics.response_preview
+    : providerDiagnostics?.parsed_response;
+  const normalizedOutput = result?.diagnostics?.normalized_response;
+  const hasDiagnosticOutput = rawProviderOutput !== undefined || normalizedOutput !== undefined;
   const standardsQuery = useQuery({ queryKey: ["text-inspection", "standards"], queryFn: listTextInspectionStandards });
   const standardQuery = useQuery({ queryKey: ["text-inspection", "standard", selectedStandardId], queryFn: () => getTextInspectionStandard(selectedStandardId), enabled: !!selectedStandardId });
   const selectedAsset = standardQuery.data?.assets?.find((asset) => asset.id === selectedAssetId);
@@ -380,6 +399,13 @@ export function TextCompareBetaPage() {
       <div className="text-compare-result-summary">{tone === "match" ? <CheckCircle2 /> : <AlertTriangle />}<div><small>辅助对比结果</small><strong>{result.decision === "MATCH" ? "未发现文字差异" : result.decision === "DIFFERENCES" ? "发现疑似差异" : "无法可靠判断"}</strong><p>{result.message}</p></div></div>
       {qualityCopy(result.captured_quality?.reasons) ? <div className="text-compare-quality">拍摄提示：{qualityCopy(result.captured_quality?.reasons)}</div> : null}
       {result.differences.length ? <div className="text-compare-differences">{result.differences.map((difference, index) => <button className={activeDifference === difference.id ? "active" : ""} onClick={() => setActiveDifference(difference.id)} key={difference.id}><span>{index + 1}</span><div><small>{difference.type === "missing" ? "可能漏印" : difference.type === "extra" ? "可能多印" : "文字不同"}</small><strong>标准：{difference.reference_text || "（无）"}</strong><strong>实物：{difference.actual_text || "（无）"}</strong></div><em>{Math.round(difference.confidence * 100)}%</em></button>)}</div> : null}
+      {hasDiagnosticOutput ? <details className="text-compare-raw-output">
+        <summary><ChevronRight size={15} /><span>Raw Output（调试信息）</span><small>默认折叠</small></summary>
+        <div className="text-compare-raw-output-body">
+          {rawProviderOutput !== undefined ? <section><header><strong>模型原始输出</strong><small>{providerDiagnostics?.response_preview !== undefined ? "原始文本预览" : "解析后的 JSON"}</small></header><pre>{formatDiagnosticOutput(rawProviderOutput)}</pre></section> : null}
+          {normalizedOutput !== undefined ? <section><header><strong>系统适配结果</strong><small>进入业务校验前的数据</small></header><pre>{formatDiagnosticOutput(normalizedOutput)}</pre></section> : null}
+        </div>
+      </details> : null}
     </section> : <div className="text-compare-hint"><FileImage size={19} />{inputMode === "camera" ? "标准图会保留；检查下一件时只需重新拍照。" : "标准图会保留；检查下一件时只需选择新的实物图片。"}</div>}
     </> : null}
     {showImport ? <div className="text-standard-modal-backdrop" role="presentation" onMouseDown={() => !importMutation.isPending && setShowImport(false)}><section className="text-standard-modal import" role="dialog" aria-modal="true" aria-labelledby="text-standard-import-title" onMouseDown={(event) => event.stopPropagation()}>

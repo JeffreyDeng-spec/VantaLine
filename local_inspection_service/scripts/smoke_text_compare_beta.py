@@ -87,6 +87,11 @@ def main():
     assert "standard_revision_id" in source and "standard_revision_number" in source
     assert '"revisions": "text_inspection_standard_revisions"' in source
     assert "仅辅助检查文字" not in frontend and "颜色、材质与印刷质量仍需肉眼确认" not in frontend
+    assert '<details className="text-compare-raw-output">' in frontend
+    assert "Raw Output（调试信息）" in frontend and "默认折叠" in frontend
+    assert "parsed_response" in frontend and "response_preview" in frontend and "normalized_response" in frontend
+    assert "MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000" in frontend and "formatDiagnosticOutput" in frontend
+    assert '.text-compare-raw-output[open] > summary svg' in styles
     shell = (APP_DIR / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
     assert "包材文字检验（旧版）" not in shell
     assert 'task_kind: "incoming_material_text"' not in shell

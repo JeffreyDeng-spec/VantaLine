@@ -711,6 +711,16 @@ export interface TextCompareBetaDifference {
   region_normalized?: { x: number; y: number; width: number; height: number } | null;
 }
 
+export interface TextInspectionDiagnostics {
+  provider_result?: {
+    parsed_response?: unknown;
+    response_preview?: string;
+    [key: string]: unknown;
+  };
+  normalized_response?: unknown;
+  [key: string]: unknown;
+}
+
 export interface TextCompareBetaResult {
   comparison_id: string;
   decision: "MATCH" | "DIFFERENCES" | "REVIEW_REQUIRED";
@@ -723,6 +733,7 @@ export interface TextCompareBetaResult {
   captured_quality?: { accepted?: boolean; reasons?: string[] };
   alignment?: { accepted?: boolean; reason?: string };
   error_code?: string;
+  diagnostics?: TextInspectionDiagnostics;
 }
 
 export interface TextInspectionAsset {
