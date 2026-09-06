@@ -41,7 +41,7 @@
     },
     {
       "name": "Text inspection v2",
-      "paths": ["local_inspection_service/text_inspection_v2.py", "local_inspection_service/frontend/src/features/text-compare/**", "scripts/smoke_text_inspection_v2.py"],
+      "paths": ["local_inspection_service/text_inspection_v2.py", "local_inspection_service/label_extraction.py", "local_inspection_service/label_extraction_api.py", "local_inspection_service/frontend/src/features/text-compare/**", "scripts/smoke_text_inspection_v2.py"],
       "server_diff_regex": "(?i)text-inspection|text_inspection_v2",
       "required_docs": ["docs/text-inspection-v2.md", "docs/architecture.md", "docs/testing.md"]
     },

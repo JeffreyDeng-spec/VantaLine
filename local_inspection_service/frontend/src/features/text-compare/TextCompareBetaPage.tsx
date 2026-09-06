@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addTextInspectionStandardAsset, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
 import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
 import { FileDropZone } from "../../components/FileDropZone";
+import { apiClient } from "../../api/client";
+import { DEFAULT_GUIDE, GuideOverlay, LabelExtractionPanel, type Guide } from "./LabelExtraction";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,.gif,.tif,.tiff";
@@ -80,6 +82,9 @@ export function TextCompareBetaPage() {
   const [importMaterial, setImportMaterial] = useState("");
   const [importVersion, setImportVersion] = useState("V1");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [guide, setGuide] = useState<Guide>([...DEFAULT_GUIDE]);
+  const capabilities = useQuery({ queryKey: ["text-inspection", "extraction-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; ai_available: boolean }>("/api/text-inspection/extraction-capabilities") });
+  const extractionEnabled = capabilities.data?.enabled === true;
   const providerDiagnostics = result?.diagnostics?.provider_result;
   const rawProviderOutput = providerDiagnostics?.response_preview !== undefined
     ? providerDiagnostics.response_preview
@@ -296,7 +301,7 @@ export function TextCompareBetaPage() {
     canvas.toBlob((blob) => blob ? resolve(new File([blob], "capture-" + Date.now() + ".jpg", { type: "image/jpeg" })) : reject(new Error("拍照失败，请重试。")), "image/jpeg", 0.94);
   });
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (extractionId: string | void) => {
       if (!selectedAsset) throw new Error("请先在左侧订单画廊中选择一张已启用的标签图片。");
       if (standardQuery.data?.status !== "confirmed") throw new Error("这个订单还没有启用，请先保存并启用标准。");
       if (inputMode === "image" && !captured) throw new Error("请先上传需要对比的实物图片。");
@@ -311,6 +316,9 @@ export function TextCompareBetaPage() {
         comparisonIdentityRef.current = identity;
       }
       const form = new FormData(); form.set("captured_file", actual);
+      if (extractionId) { form.delete("captured_file"); form.set("extraction_id", extractionId); }
+      else if (extractionEnabled) throw new Error("请先提取并确认完整标签。");
+      if (extractionId) identity.id = "cmp_" + extractionId;
       form.set("comparison_id", identity.id);
       form.set("standard_asset_id", selectedAsset.id); return compareTextInspectionLabel(form);
     },
@@ -379,19 +387,22 @@ export function TextCompareBetaPage() {
       </div>
     </section>
     {mode === "label" ? <article className="text-compare-panel text-compare-actual-panel">
-        <div className="text-compare-panel-title"><span>02</span><div><strong>实物图片</strong><small>{inputMode === "camera" ? (captured ? "已拍照，可重新拍摄" : "来自当前摄像头画面") : (captured ? `已选择 ${captured.name}` : "上传已有图片进行对比")}</small></div><div className="text-compare-input-switch" role="group" aria-label="实物图片来源"><button className={inputMode === "camera" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("camera")}><Camera size={14} />摄像头</button><button className={inputMode === "image" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("image")}><ImagePlus size={14} />图片</button></div>{inputMode === "camera" ? <button type="button" disabled={mutation.isPending || cameraStarting} onClick={() => captureFrame().then(replaceCaptured).catch((error) => setInputError(error.message))}><Camera size={15} />{captured ? "重拍" : "拍照"}</button> : captured ? <button type="button" disabled={mutation.isPending} onClick={clearCaptured}><RefreshCcw size={15} />更换</button> : null}</div>
+        <div className="text-compare-panel-title"><span>02</span><div><strong>实物图片</strong><small>{inputMode === "camera" ? (captured ? "已拍照，可重新拍摄" : "来自当前摄像头画面") : (captured ? `已选择 ${captured.name}` : "上传已有图片进行对比")}</small></div><div className="text-compare-input-switch" role="group" aria-label="实物图片来源"><button className={inputMode === "camera" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("camera")}><Camera size={14} />摄像头</button><button className={inputMode === "image" ? "active" : ""} type="button" disabled={mutation.isPending} onClick={() => switchInputMode("image")}><ImagePlus size={14} />图片</button></div>{inputMode === "camera" ? <button type="button" disabled={mutation.isPending || cameraStarting} onClick={() => captured ? clearCaptured() : captureFrame().then(replaceCaptured).catch((error) => setInputError(error.message))}><Camera size={15} />{captured ? "重拍" : "拍照"}</button> : captured ? <button type="button" disabled={mutation.isPending} onClick={clearCaptured}><RefreshCcw size={15} />更换</button> : null}</div>
         <div className={`text-compare-selected-standard ${selectedAsset ? "ready" : ""}`}>{selectedAsset ? <><CheckCircle2 size={20} /><div><small>当前对比标准</small><strong>{CATEGORY_LABELS[selectedAsset.category || ""] || "标签图片"} · 第 {selectedAsset.ordinal} 张（已在左侧高亮）</strong></div></> : <><FileImage size={20} /><span>请先在左侧订单画廊中选择一张标签图片</span></>}</div>
         {inputMode === "camera" ? <label className="text-compare-camera-picker"><span>摄像头设备</span><select value={selectedDeviceId} disabled={cameraStarting || mutation.isPending || !cameraDevices.length} onChange={(event) => { const deviceId = event.currentTarget.value; selectedDeviceIdRef.current = deviceId; setSelectedDeviceId(deviceId); clearCaptured(); void startCamera(deviceId); }} aria-label="选择摄像头设备">{cameraDevices.length ? cameraDevices.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `摄像头 ${index + 1}`}</option>) : <option value="">{cameraStarting ? "正在读取摄像头…" : "未检测到摄像头"}</option>}</select></label> : null}
         <div className={"text-compare-stage " + inputMode + " " + (resultImage ? "has-image" : "")}>
           {resultImage ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(resultImage, "实物文字对比结果")}><img src={resultImage} alt="实物文字对比结果" /><span>点击放大查看</span></button> : inputMode === "camera" ? <video ref={videoRef} playsInline muted /> : <FileDropZone className="text-compare-empty text-compare-upload-fill" disabled={mutation.isPending} accept={IMAGE_ACCEPT} ariaLabel="拖拽或选择实物图片" onFiles={(files) => { const file = files[0]; if (!file) return; try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } }}><ImagePlus size={38} /><strong>上传实物图片</strong><span>支持常见图片格式，也可以直接拖入；系统会按实际内容识别</span><em><Upload size={15} />选择图片</em></FileDropZone>}
           {inputMode === "camera" && cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
+          {extractionEnabled && !result && (captured || inputMode === "camera") ? <GuideOverlay value={guide} onChange={setGuide} disabled={mutation.isPending} /> : null}
         </div>
+        {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
       </article> : null}
     </div>
     {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}
     {mode === "label" ? <>
     <div className="text-compare-action-row">
-      <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button>
+      {capabilities.data?.enabled === false ? <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button> : null}
+      {capabilities.isError ? <button type="button" onClick={() => void capabilities.refetch()}>提取配置读取失败，点击重试</button> : null}
       {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
     </div>
     {inputError ? <div className="text-compare-alert"><AlertTriangle size={18} />{inputError}</div> : null}

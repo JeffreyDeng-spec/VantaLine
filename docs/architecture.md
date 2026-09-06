@@ -14,6 +14,8 @@
 
 ## Inspection flows
 
+- Single-label extraction is an account-gated stage before text comparison. It owns normalized camera/upload coordinates, a persisted at-most-once image-generation attempt, label-specific mask validation, immutable polygon/confirmation revisions, and original-pixel crops. The text-comparison provider consumes a confirmed server crop, with the extraction evidence attached to its diagnostic record. It does not use the accessory sprite pipeline or create PLC actions.
+
 - Image upload and video requests perform detection only and never create a PLC plan.
 - The text-comparison camera surface enumerates video inputs, exposes a labeled device selector, invalidates stale `getUserMedia` requests when a user switches devices, and refreshes on `devicechange`. If the selected device disappears, an available fallback may be opened only while that surface is active; permission denial or no remaining device leaves capture disabled and keeps the uploaded-image path available. Other camera surfaces retain their existing device lifecycle until separately hardened.
 - File selection and drag/drop use one accessible frontend contract across the application. The chooser and drop path apply the same `accept`, single-versus-multiple and disabled rules; Enter or Space opens the chooser, rejected files are reported, and a disabled target cannot accept a drop. Domain-specific handlers still perform their stricter image, video or document validation after selection. These browser-only input conveniences do not change API authorization or PLC provenance.

@@ -22,6 +22,7 @@ from local_inspection_service.storage.schema import TEXT_INSPECTION_STANDARD_REV
 def main() -> None:
     now = 1_800_000_000
     samples = {
+        "extractions": {"id": "ext_1", "owner_user_id": "user_1", "created_at": now, "status": "ready", "version": 0},
         "standards": {"id": "std_1", "owner_user_id": "user_1", "name": "label", "material_code": "PKG", "version_label": "V1", "standard_type": "label", "status": "draft", "source_sha256": "a" * 64, "created_at": now, "updated_at": now},
         "assets": {"id": "ast_1", "standard_id": "std_1", "owner_user_id": "user_1", "asset_kind": "label_candidate", "ordinal": 1, "status": "candidate", "sha256": "b" * 64, "created_at": now, "updated_at": now},
         "revisions": {"id": "rev_1", "standard_id": "std_1", "owner_user_id": "user_1", "revision_number": 1, "action": "confirm", "asset_id": "", "created_at": now},
@@ -34,6 +35,8 @@ def main() -> None:
     repository = PostgresRuntimeRepository(connection=connection, database_url_redacted="postgresql:///vantaline")
     for kind, value in samples.items():
         row = server._text_v2_row(kind, value)
+        if kind == "extractions":
+            assert isinstance(row["raw_json"], dict), "extraction root queries require a JSONB object"
         repository.upsert_row(server.TEXT_INSPECTION_TABLES[kind], row)
     sql = "\n".join(statement for statement, _ in connection.statements)
     for table in server.TEXT_INSPECTION_TABLES.values():

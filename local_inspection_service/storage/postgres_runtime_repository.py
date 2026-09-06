@@ -29,6 +29,7 @@ JSON_COLUMNS = frozenset(
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
 PRIMARY_KEY_COLUMNS = {
+    "text_label_extractions": ("id",),
     "schema_migrations": ("version",),
     "users": ("id",),
     "auth_sessions": ("id_hash",),
@@ -197,6 +198,21 @@ class PostgresRuntimeRepository:
             finally:
                 self._end_read_transaction()
         return counts
+
+    def fetch_label_extraction_rows(self, owner_user_id: str, root_id: str | None = None) -> list[dict[str, Any]]:
+        table = self._qualified_table("text_label_extractions")
+        sql = f"SELECT raw_json FROM {table} WHERE owner_user_id = %s"
+        params = (owner_user_id,)
+        if root_id is not None:
+            sql += " AND raw_json->>'root_id' = %s"
+            params += (root_id,)
+        cursor = self._cursor()
+        try:
+            cursor.execute(sql, params)
+            return [_decode_value("raw_json", self._row_to_dict(cursor, row)["raw_json"]) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            self._end_read_transaction()
 
     def fetch_all(self, table_name: str, *, limit: int | None = None) -> list[dict[str, Any]]:
         qualified_table = self._qualified_table(table_name)

@@ -15476,7 +15476,7 @@ class AgnesImageProvider:
             "model": model_name,
             "prompt": request_prompt,
             "n": 1,
-            "size": os.environ.get("VANTALINE_AGNES_IMAGE_SIZE", "1024x1024").strip() or "1024x1024",
+            "size": "1024x1024" if self.settings.get("single_attempt") else (os.environ.get("VANTALINE_AGNES_IMAGE_SIZE", "1024x1024").strip() or "1024x1024"),
         }
         extra_body: dict[str, Any] = {"response_format": "b64_json"}
         if images:
@@ -15485,7 +15485,7 @@ class AgnesImageProvider:
         try:
             response_json, latency_ms = self.request_image(payload)
         except AiProviderConfigError as exc:
-            if "response_format" not in str(exc).lower():
+            if self.settings.get("single_attempt") or "response_format" not in str(exc).lower():
                 raise
             payload["extra_body"] = {key: value for key, value in extra_body.items() if key != "response_format"}
             response_json, latency_ms = self.request_image(payload)
@@ -15618,7 +15618,7 @@ class QwenImageProvider:
             "parameters": {
                 "n": 1,
                 "watermark": False,
-                "size": os.environ.get("VANTALINE_QWEN_IMAGE_SIZE", "1024*1024").strip() or "1024*1024",
+                "size": "1024*1024" if self.settings.get("single_attempt") else (os.environ.get("VANTALINE_QWEN_IMAGE_SIZE", "1024*1024").strip() or "1024*1024"),
             },
         }
         response_json, latency_ms = self.request_image(payload)
@@ -37365,6 +37365,7 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
 TEXT_INSPECTION_TABLES = {
+    "extractions": "text_label_extractions",
     "standards": "text_inspection_standards",
     "assets": "text_inspection_assets",
     "revisions": "text_inspection_standard_revisions",
@@ -37389,6 +37390,7 @@ def _text_v2_load(kind: str) -> list[dict[str, Any]]:
 def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     fields = {
+        "extractions": ("id", "owner_user_id", "created_at"),
         "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
         "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
         "revisions": ("id", "standard_id", "owner_user_id", "revision_number", "action", "asset_id", "created_at"),
@@ -37397,7 +37399,9 @@ def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
         "pages": ("id", "session_id", "owner_user_id", "capture_id", "standard_asset_id", "status", "created_at", "updated_at"),
         "feedback": ("id", "owner_user_id", "standard_id", "asset_id", "action", "created_at"),
     }[kind]
-    return {**{field: value.get(field, "") for field in fields}, "raw_json": raw}
+    # Extraction queries index fields inside JSONB: write an object, not a
+    # JSON-encoded string (legacy tables retain their existing representation).
+    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind == "extractions" else raw}
 
 
 def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
@@ -37953,9 +37957,9 @@ def _text_v2_write_server_diagnostic(record: dict[str, Any]) -> None:
     )
 
 
-def _text_v2_prepare_image(contents: bytes) -> tuple[bytes, str, str, str]:
+def _text_v2_prepare_image(contents: bytes, *, max_bytes: int = 10 * 1024 * 1024) -> tuple[bytes, str, str, str]:
     """Trust decoded image content, then normalize uncommon readable formats."""
-    if not contents or len(contents) > 10 * 1024 * 1024:
+    if not contents or len(contents) > max_bytes:
         raise HTTPException(status_code=400, detail="图片必须存在且不超过 10MB")
     try:
         with Image.open(io.BytesIO(contents)) as image:
@@ -38041,11 +38045,17 @@ def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> byt
     return encoded.tobytes()
 
 
+from local_inspection_service.label_extraction_api import register as register_label_extraction
+
+resolve_label_extraction = register_label_extraction(globals())
+
+
 @app.post("/api/text-inspection/label/compare")
 async def compare_text_inspection_label(
-    captured_file: UploadFile = File(...),
+    captured_file: UploadFile | None = File(None),
     standard_asset_id: str = Form(...),
     comparison_id: str = Form(...),
+    extraction_id: str = Form(""),
 ) -> dict[str, Any]:
     request_received_at_ms = int(time.time() * 1000)
     require_permission("inspection", detail="没有文字检验权限")
@@ -38057,9 +38067,15 @@ async def compare_text_inspection_label(
     confirmed_snapshot = next((item for item in standard.get("confirmed_assets", []) if str(item.get("id")) == standard_asset_id), None) if standard else None
     if not asset or not standard or standard.get("status") != "confirmed" or not confirmed_snapshot:
         raise HTTPException(status_code=404, detail="已确认标准标签不存在")
-    captured_upload = await captured_file.read()
+    extraction = None
+    if bool(captured_file) == bool(extraction_id):
+        raise HTTPException(status_code=400, detail="请提供已确认提取或实物图片中的一种")
+    if extraction_id:
+        captured_upload, extraction = resolve_label_extraction(extraction_id, owner_user_id, standard_asset_id, standard)
+    else:
+        captured_upload = await captured_file.read(10 * 1024 * 1024 + 1)
     captured_upload_sha256 = sha256_bytes(captured_upload)
-    captured, captured_mime, source_suffix, captured_source_format = _text_v2_prepare_image(captured_upload)
+    captured, captured_mime, source_suffix, captured_source_format = _text_v2_prepare_image(captured_upload, max_bytes=100 * 1024 * 1024 if extraction else 10 * 1024 * 1024)
     asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
     reference_original = _text_v2_asset_bytes(asset, owner_user_id)
     reference, reference_mime, _, reference_source_format = _text_v2_prepare_image(reference_original)
@@ -38084,6 +38100,8 @@ async def compare_text_inspection_label(
         "model": settings.get("model"), "prompt_version": TEXT_INSPECTION_PROMPT_VERSION,
         "schema_version": "text-compare-result-v1",
     }
+    if extraction_id:
+        fingerprint_payload["extraction_id"] = extraction_id
     fingerprint = sha256_bytes(json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode())
     existing = next((item for item in _text_v2_load("records") if item.get("owner_user_id") == owner_user_id and item.get("comparison_id") == comparison_id), None)
     if existing:
@@ -38105,8 +38123,8 @@ async def compare_text_inspection_label(
             "uploaded_actual": {
                 "bytes": len(captured_upload),
                 "sha256": captured_upload_sha256,
-                "filename_suffix": Path(str(captured_file.filename or "")).suffix.lower()[:20],
-                "declared_content_type": str(captured_file.content_type or "")[:120],
+                "filename_suffix": Path(str(captured_file.filename or "")).suffix.lower()[:20] if captured_file else ".png",
+                "declared_content_type": str(captured_file.content_type or "")[:120] if captured_file else "image/png",
             },
             "prepared_actual": _text_v2_image_diagnostics(
                 captured, source_format=captured_source_format, mime_type=captured_mime,
@@ -38137,6 +38155,8 @@ async def compare_text_inspection_label(
         "events": [],
     }
     _text_v2_diagnostic_event(diagnostics, "input_prepared", "ok")
+    if extraction:
+        diagnostics["extraction"] = extraction
     record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": TEXT_INSPECTION_PROMPT_VERSION, "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
     source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
     _text_v2_write(source_path, captured)

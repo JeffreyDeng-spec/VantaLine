@@ -1,0 +1,24 @@
+<!doctype html><html lang="zh"><head><meta charset="UTF-8"><title>Single label test harness</title></head><body><div id="root"></div>
+<script type="module">
+import React from "react";
+import {createRoot} from "react-dom/client";
+import {GuideOverlay,LabelExtractionPanel,DEFAULT_GUIDE} from "../src/features/text-compare/LabelExtraction.tsx";
+import "../src/styles/global.css";
+const canvas=document.createElement("canvas");canvas.width=1000;canvas.height=600;
+const ctx=canvas.getContext("2d");ctx.fillStyle="#aaa";ctx.fillRect(0,0,1000,600);ctx.fillStyle="white";ctx.fillRect(200,150,600,300);ctx.fillStyle="black";ctx.font="48px sans-serif";ctx.fillText("LABEL ABC 123",260,320);
+window.fixtureUrl=canvas.toDataURL("image/png");
+const blob=await new Promise(resolve=>canvas.toBlob(resolve));
+function Harness(){
+const [file,setFile]=React.useState(new File([blob],"label.png",{type:"image/png"}));
+const [guide,setGuide]=React.useState(DEFAULT_GUIDE);
+const [standard,setStandard]=React.useState("asset_1");
+const [comparison,setComparison]=React.useState("");
+return React.createElement("main",{style:{maxWidth:1000,margin:"auto"}},
+React.createElement("button",{onClick:()=>{setFile(new File([blob],"next.png",{type:"image/png"}));setComparison("");}},"换一张照片"),
+React.createElement("button",{onClick:()=>setStandard(v=>v==="asset_1"?"asset_2":"asset_1")},"更换标准"),
+React.createElement("div",{className:"text-compare-stage",style:{height:500,aspectRatio:"auto"}},React.createElement("img",{src:window.fixtureUrl}),React.createElement(GuideOverlay,{value:guide,onChange:setGuide,disabled:false})),
+React.createElement(LabelExtractionPanel,{file,capture:async()=>file,onCaptured:setFile,guide,onGuide:setGuide,standardId:standard,standardRevision:"1",onCompare:setComparison,comparing:false,onZoom:(src)=>{window.zoomed=src;}}),
+React.createElement("output",{"data-testid":"comparison"},comparison));
+}
+createRoot(document.getElementById("root")).render(React.createElement(React.StrictMode,null,React.createElement(Harness)));
+</script></body></html>
