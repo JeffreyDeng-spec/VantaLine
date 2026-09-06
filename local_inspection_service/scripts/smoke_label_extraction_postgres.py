@@ -24,7 +24,7 @@ def main():
             def writer(index):
                 with psycopg.connect(dsn) as conn:
                     repo=PostgresRuntimeRepository(conn,"test",schema)
-                    row={"id":"root_v1","owner_user_id":"owner","created_at":1,"raw_json":json.dumps({"id":"root_v1","root_id":"root","version":1,"winner":index})}
+                    row={"id":"root_v1","owner_user_id":"owner","created_at":1,"raw_json":{"id":"root_v1","root_id":"root","version":1,"winner":index}}
                     barrier.wait()
                     return repo.insert_row_once("text_label_extractions",row)
             with ThreadPoolExecutor(max_workers=2) as pool:

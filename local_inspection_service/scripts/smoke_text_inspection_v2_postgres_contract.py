@@ -35,6 +35,8 @@ def main() -> None:
     repository = PostgresRuntimeRepository(connection=connection, database_url_redacted="postgresql:///vantaline")
     for kind, value in samples.items():
         row = server._text_v2_row(kind, value)
+        if kind == "extractions":
+            assert isinstance(row["raw_json"], dict), "extraction root queries require a JSONB object"
         repository.upsert_row(server.TEXT_INSPECTION_TABLES[kind], row)
     sql = "\n".join(statement for statement, _ in connection.statements)
     for table in server.TEXT_INSPECTION_TABLES.values():

@@ -37399,7 +37399,9 @@ def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
         "pages": ("id", "session_id", "owner_user_id", "capture_id", "standard_asset_id", "status", "created_at", "updated_at"),
         "feedback": ("id", "owner_user_id", "standard_id", "asset_id", "action", "created_at"),
     }[kind]
-    return {**{field: value.get(field, "") for field in fields}, "raw_json": raw}
+    # Extraction queries index fields inside JSONB: write an object, not a
+    # JSON-encoded string (legacy tables retain their existing representation).
+    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind == "extractions" else raw}
 
 
 def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
