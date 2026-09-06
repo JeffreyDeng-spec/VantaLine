@@ -181,6 +181,27 @@
 .text-compare-result-summary strong { font-size: 20px; }
 .text-compare-result-summary p { margin: 2px 0 0; color: #687169; font-size: 12px; }
 .text-compare-quality { margin: 0 18px 14px; padding: 9px 11px; border-radius: 7px; background: #fff7e6; color: #815100; font-size: 12px; }
+.label-guide-container { position: absolute; overflow: hidden; pointer-events: none; }
+.label-guide { position: absolute; border: 2px solid #6affb1; box-shadow: 0 0 0 3000px #0005; pointer-events: auto; touch-action: none; cursor: move; }
+.label-guide-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #6affb1; font-size: 24px; }
+.label-guide-caption { position: absolute; left: 0; bottom: 100%; padding: 3px; background: #0009; color: white; white-space: nowrap; font-size: 11px; }
+.label-guide button { position: absolute; right: -12px; bottom: -12px; width: 28px; height: 28px; border: 1px solid #6affb1; background: #123c26; color: white; cursor: nwse-resize; }
+.label-extraction-panel { padding: 12px; font-size: 12px; }
+.label-extraction-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
+.label-extraction-toolbar button, .label-extraction-panel > div button { padding: 8px 10px; border: 1px solid #aabdaf; border-radius: 6px; cursor: pointer; }
+.label-extraction-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+.label-extraction-toolbar input { width: 74px; }
+.label-extraction-previews { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.label-extraction-previews > div { min-width: 0; }
+.label-editor-expanded { position: fixed; z-index: 1150; inset: 3vh 3vw; overflow: auto; padding: 16px; background: #f4f7f4; box-shadow: 0 0 0 100vmax #000b; }
+.label-contour-editor { position: relative; margin: 8px 0; line-height: 0; touch-action: none; }
+.label-contour-editor img { width: 100%; height: auto; display: block; }
+.label-contour-editor svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.label-contour-editor circle { cursor: move; }
+.label-crop-preview { display: block; width: 100%; overflow: hidden; margin: 8px 0; background: #e8eee9; }
+.label-crop-preview img { display: block; width: 100%; max-height: 320px; object-fit: contain; }
+.label-extraction-panel pre { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media(max-width:620px) { .label-extraction-previews { grid-template-columns: 1fr; } }
 .text-compare-differences { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; padding: 0 14px 14px; }
 .text-compare-differences button { display: grid; grid-template-columns: 28px 1fr auto; gap: 9px; align-items: center; padding: 10px; border: 1px solid #e0e2de; border-radius: 8px; background: #fafbf8; text-align: left; cursor: pointer; }
 .text-compare-differences button.active { border-color: #df463b; background: #fff3f1; }

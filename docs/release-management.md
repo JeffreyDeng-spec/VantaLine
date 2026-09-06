@@ -20,6 +20,8 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+Single-label extraction adds required geometry and real-route smoke checks to CI. Its additive migration and default-empty account allowlist permit staged activation while retaining the legacy input route for rollback. Synthetic geometry and API tests are not substitutes for customer-image commissioning or permission to automatically pass labels.
+
 - Frontend and backend share one release, Git SHA, and PLC protocol contract.
 - The artifact contains source, production bundle, migrations, locked dependencies, `VERSION.json`, and `SHA256SUMS`.
 - Production uses `/opt/vantaline/releases/<release-id>` and an atomic `current` link; mutable state stays outside releases.

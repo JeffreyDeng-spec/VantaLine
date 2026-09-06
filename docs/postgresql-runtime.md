@@ -13,6 +13,8 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Change procedure
 
+`2026_09_06_text_label_extractions.sql` adds an independent account-owned extraction table. Task claim IDs are deterministic from account/request identity; edit and confirmation IDs are deterministic from root/version, and insert-once is the concurrency arbiter. Only the original task is updated by its single worker; edit and confirmation rows are immutable. Expiration appends a competing revision and retains tombstones, while any confirmed or comparison-referenced root is excluded from media cleanup. The previous release ignores this additive table.
+
 1. Update repository/schema code and migration safety expectations in one PR.
 2. Run migration safety, repository smoke, and real PostgreSQL 16 schema validation.
 3. Document data ownership, compatibility window, observability, and whole-release rollback.

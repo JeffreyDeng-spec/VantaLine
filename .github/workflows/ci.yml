@@ -117,6 +117,9 @@ jobs:
         run: |
           python local_inspection_service/scripts/smoke_text_compare_beta.py
           python scripts/smoke_text_inspection_v2.py
+          python local_inspection_service/scripts/smoke_label_extraction.py
+          python local_inspection_service/scripts/smoke_label_extraction_endpoints.py
+          python local_inspection_service/scripts/smoke_label_extraction_postgres.py
       - name: Verify text inspection API fail-closed mode
         run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
       - name: Verify text inspection API external-only mode
