@@ -20,6 +20,11 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+The dedicated SAM3 worker image is built by `sam3-worker.yml` from the isolated
+implementation branch. This builds a private GHCR package, not a web release.
+Commissioning pins its digest and model revision; production provider activation
+requires the ordinary PR/CI/release gates and real-image acceptance.
+
 Single-label extraction adds required geometry and real-route smoke checks to CI. Its additive migration and default-empty account allowlist permit staged activation while retaining the legacy input route for rollback. Synthetic geometry and API tests are not substitutes for customer-image commissioning or permission to automatically pass labels.
 
 - Frontend and backend share one release, Git SHA, and PLC protocol contract.

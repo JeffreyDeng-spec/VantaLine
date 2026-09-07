@@ -10,6 +10,14 @@ Before merging camera-selector or upload-surface changes, run the browser-media 
 
 ## Read-only diagnosis first
 
+SAM3 commissioning uses a separate zero-minimum, one-maximum Serverless endpoint
+and a 20GB standard network volume. The inference image never downloads weights:
+run its explicit provisioning entrypoint once with temporary HF read access,
+verify the pinned checksum, then remove that credential and use `handler.py`.
+Keep customer media off the model volume. Record the private image digest,
+model revision, region, startup timings and billed compute; do not activate the
+provider before the real single-label crop passes human inspection.
+
 For single-label extraction, enable only the intended account through `VANTALINE_LABEL_EXTRACTION_ACCOUNTS` after image-generation configuration and synthetic mask acceptance. Verify manual correction, explicit confirmation, stale-version rejection and authenticated source/mask/crop access. Observe `label_extraction` events for status, elapsed time and failure code; inspect bounded record diagnostics for provider usage when available. A stuck attempt is uncertain, not a reason to replay a paid model call. Draft media expiration is limited to unconfirmed/unreferenced roots older than seven days and retains metadata tombstones; all confirmed evidence remains available. Roll back the complete release if regression occurs; the additive table remains readable.
 
 1. Check the GitHub workflow and immutable Release for the expected commit.
