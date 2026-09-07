@@ -1,5 +1,10 @@
 # Testing
 
+The whole-sheet benchmark also exports an amber observation overlay, including
+partial observations on timeout. These boxes are raw recognition locations, not
+accepted matches. Runner RSS excludes the isolated native OCR child and must not
+be reported as complete deployment memory consumption.
+
 **Status: Authoritative**
 
 Run checks from repository root unless stated otherwise.

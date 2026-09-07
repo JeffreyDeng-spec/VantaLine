@@ -99,6 +99,7 @@ def main():
             record["ocr_artifacts"]=ocr_metadata()
             record["max_rss_native_units"]=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
             record["rss_scope"]="runner_process_only_excludes_native_ocr_subprocess"
+            write_observation_overlay(dest/f"observations-{run}.png",source,record)
             records.append(record)
             (dest/f"result-{run}.json").write_text(json.dumps(record,ensure_ascii=False,indent=2))
             print(json.dumps({k:record[k] for k in ("sample","run","status","elapsed_ms")}),flush=True)
@@ -106,6 +107,12 @@ def main():
             publish(args.output,records)
     publish(args.output,records)
     if manifest:cancel_task(name+"_"+str(args.runs-1))
+
+
+def write_observation_overlay(path,source,record):
+    values=record.get("observations",record.get("partial_observations",[]))
+    rows=[{"state":"unreadable","standard_box":value["box"],"evidence":[value]} for value in values]
+    path.write_bytes(engine.annotate(source,{"elements":rows},False))
 
 
 def publish(output,records):
@@ -120,6 +127,8 @@ def publish(output,records):
         name=r["sample"];run=r.get("run")
         pictures=[(f"{name}/reference.png","临时标准（需核对）"),(f"{name}/source.jpg","完整实拍输入")]
         if run is not None:pictures += [(f"{name}/standard-overlay-{run}.png","标准结果／失败时仅原图"),(f"{name}/actual-overlay-{run}.png","实拍结果／失败时仅原图")]
+        if run is not None and (output/name/f"observations-{run}.png").exists():
+            pictures.append((f"{name}/observations-{run}.png","原始识别位置（超时时仅部分结果，不代表匹配通过）"))
         cards.append(f"<section><h2>{html.escape(name)} · {html.escape(r['status'])}</h2><p>{r.get('elapsed_ms','—')} ms</p>"+
                      "".join(f'<figure><a href="{path}"><img src="{path}"></a><figcaption>{label}</figcaption></figure>' for path,label in pictures)+
                      f"<pre>{html.escape(json.dumps(r.get('result',r.get('failure',{})),ensure_ascii=False,indent=2))}</pre></section>")
