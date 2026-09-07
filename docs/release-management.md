@@ -20,8 +20,10 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
-The dedicated SAM3 worker image is built by `sam3-worker.yml` from the isolated
-implementation branch. This builds a private GHCR package, not a web release.
+The dedicated SAM3 worker image is built in the private
+`vantaline-sam3-build-private` repository from an explicit VantaLine source SHA.
+Its build must verify the GHCR package is private before commissioning; the
+public-package prototype must not be deployed. This is not a web release.
 Commissioning pins its digest and model revision; production provider activation
 requires the ordinary PR/CI/release gates and real-image acceptance.
 
