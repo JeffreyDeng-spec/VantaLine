@@ -29,6 +29,7 @@ JSON_COLUMNS = frozenset(
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
 PRIMARY_KEY_COLUMNS = {
+    "text_sheet_elements": ("id",),
     "text_label_extractions": ("id",),
     "schema_migrations": ("version",),
     "users": ("id",),
@@ -198,6 +199,22 @@ class PostgresRuntimeRepository:
             finally:
                 self._end_read_transaction()
         return counts
+
+    def fetch_sheet_element_rows(self, owner_user_id: str, root_id: str | None = None) -> list[dict[str, Any]]:
+        table = self._qualified_table("text_sheet_elements")
+        sql = f"SELECT raw_json FROM {table} WHERE owner_user_id = %s"
+        params = (owner_user_id,)
+        if root_id is not None:
+            sql += " AND root_id = %s"
+            params += (root_id,)
+        sql += " ORDER BY created_at, id"
+        cursor = self._cursor()
+        try:
+            cursor.execute(sql, params)
+            return [_decode_value("raw_json", self._row_to_dict(cursor, row)["raw_json"]) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            self._end_read_transaction()
 
     def fetch_label_extraction_rows(self, owner_user_id: str, root_id: str | None = None) -> list[dict[str, Any]]:
         table = self._qualified_table("text_label_extractions")

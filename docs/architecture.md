@@ -14,6 +14,13 @@
 
 ## Inspection flows
 
+- Opt-in whole-sheet element inspection is independent of masks and PLC. The
+  account/root-indexed `text_sheet_elements` table stores append-only templates,
+  job claims, progress, provider claims/outcomes and terminal records. Local OCR,
+  code decoding and gated geometric checks own pass evidence; VLM advice cannot
+  independently authorize a match. Timeout and worker race for one terminal row.
+  Existing comparison paths and evidence remain intact.
+
 - The optional `vlm_bbox` extraction method ports the colleague's whole-image rectangle prompt to the existing Qwen vision settings. It is account-gated separately, disabled by default, and never changes the comparison or image-generation provider. Its 1600-pixel JPEG input, bounded model response and zero-expansion original-pixel rectangle are evidence, not a verified mask. Invalid output has no whole-image fallback. Polygon corrections and confirmation retain immutable previews and the existing comparison size gate.
 
 - Single-label extraction is an account-gated stage before text comparison. It owns normalized camera/upload coordinates, a persisted at-most-once image-generation attempt, label-specific mask validation, immutable polygon/confirmation revisions, and original-pixel crops. The text-comparison provider consumes a confirmed server crop, with the extraction evidence attached to its diagnostic record. It does not use the accessory sprite pipeline or create PLC actions.

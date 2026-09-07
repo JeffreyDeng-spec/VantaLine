@@ -23,6 +23,56 @@ The formal **文字检验** entry is account scoped and independent from product
 
 ## API
 
+### Whole-sheet element inspection (account-gated experiment)
+
+This opt-in pipeline checks content presence across a sheet assumed to contain one
+repeated design, not defects in every instance. It does not replace old APIs or
+create PLC actions. Local OCR scans overlapping full-resolution tiles at 0/90
+degrees; the pinned line-orientation model handles 180-degree reversals. This
+avoids recognizing every repeated line four times. It removes only spatial
+duplicates. Matching preserves digits, case,
+punctuation and token boundaries; confirmed text rules may normalize whitespace
+and join nearby lines. OpenCV decodes QR; provisioned ZXing additionally supports
+barcodes. Graphic candidates undergo scale/rotation retrieval and local ORB/RANSAC,
+coverage, pixel and edge checks, but cannot pass before graphic commissioning.
+Missing/unsupported content and conflicting parameters remain review-required.
+
+`POST /api/text-inspection/sheet/templates` accepts `standard_asset_id` and
+`request_id`; `GET .../templates?standard_asset_id=...` lists templates.
+`POST .../templates/{id}/revise` accepts `version`, `elements`, `confirm` and
+`inventory_confirmed`. Elements have an ID, `text|parameter|code|graphic` type,
+expected content, normalized rectangle, required flag, ignore reason and
+`exact|whitespace` rule. Save before confirming; the operator must confirm a
+complete inventory including graphics. Edits append versions and invalidate old
+confirmations for new work. Variable fields currently require a documented ignore,
+not an arbitrary regex. The editor offers numeric box adjustment, merge/split,
+add/delete, text correction and explicit confirmation.
+
+`POST .../sheet/jobs` accepts multipart `template_id`, `request_id`, and `file`.
+`GET .../sheet/jobs?standard_asset_id=...` exposes the most recent 50 account-owned
+jobs for recovery without resubmitting inference, including disabled-asset history.
+`GET .../sheet/resources/{id}` polls state; its `/media/{kind}` route serves
+account-owned original, normalized source, reference, overlays and advisory input.
+Templates bind the current standard revision/hash; jobs freeze confirmed templates
+and input hashes. Duplicate IDs return existing work, even after later standard
+edits; changed inputs return 409. New jobs reject stale or disabled standards.
+One inference slot serves local jobs. P95 15 seconds is a commissioning target.
+At 120 seconds the timer/status lookup competes for one immutable terminal record.
+OCR lives in a warm subprocess so a native call can be terminated without blocking
+the API interpreter. Cancellation checks active task ownership; late output cannot
+overwrite the outcome. Lost
+jobs are not resubmitted after restart. The engine currently emits MATCH candidates
+or REVIEW_REQUIRED, never an unsubstantiated definitive defect decision. MATCH
+is downgraded until account commissioning.
+
+Optional Qwen advice uses existing resolved credentials, with separate account
+consent and external-media gates. Standard inventory proposals need confirmation.
+Actual advisory sees at most six doubtful regions; only fresh local OCR of their
+source pixels may verify suggestions. VLM text cannot create pass evidence.
+Claims and authenticated inputs precede one non-retried call. Bounded sanitized
+outputs, coordinates, versions, timing and available usage appear in default-
+collapsed diagnostics. No suitable region/configuration means no external call.
+
 ### Single-label extraction
 
 An additional account-gated experimental `method=vlm_bbox` searches the **whole** image, canonicalizing target to `[0,0,1,1]`; guide coordinates do not select its target. Capabilities expose `bbox_enabled` and `bbox_available`. Its prompt is the original colleague multi-label layout prompt, ported to Qwen: normalized `cropRect` values are validated strictly, not clamped. Single/no-label replies without a rectangle fail closed rather than silently comparing the whole photograph. The known prompt limitation (no single-label coordinates requested) is preserved for the first baseline, not hidden by a second paid call.

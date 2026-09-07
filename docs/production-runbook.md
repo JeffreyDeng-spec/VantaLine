@@ -21,6 +21,15 @@ Do not place real hosts, usernames, keys, or DSNs in commands committed to this 
 
 ## Deployment behavior
 
+Ship whole-sheet inspection dark. Before enabling its account verification gates,
+verify local model checksums and run cold-start plus at least 30 complete comparisons
+on the target host at concurrency one. Report P50/P95, RSS, timeouts, false passes,
+automatic match and review rates separately. Same-photo temporary templates are
+not independent accuracy evidence. Do not enable graphic matches based on OCR
+tests. The pinned ZXing decoder ships through the dependency lock and CI, never a
+manual production pip install. New compute requires approval. Roll back the complete
+release while retaining the additive table and comparison evidence.
+
 Keep `VANTALINE_LABEL_BBOX_ACCOUNTS` empty until real-image rectangle localization is accepted. The method reuses resolved Qwen comparison credentials, not the generation service. Review the saved model input and crop before enabling any account; failure or timeout never falls back to a whole-sheet comparison. Roll back the complete release, retaining prior extraction evidence, if integration regressions occur.
 
 A successful push CI for `main` triggers `Release and deploy production` automatically. The workflow creates one immutable artifact, verifies checksums/version/protocol, uploads it through the restricted account, runs the installer, atomically switches `current`, restarts once, and performs acceptance. GitHub Release publication occurs only after acceptance.

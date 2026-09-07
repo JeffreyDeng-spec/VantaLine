@@ -13,6 +13,12 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Change procedure
 
+`2026_09_08_sheet_elements.sql` adds account/root-indexed `text_sheet_elements`.
+JSONB objects hold immutable roots, revisions, progress, provider attempts and
+terminal outcomes. Root/request hashes are stable; edit IDs are root/version and
+terminal IDs are root/terminal. Insert-once resolves edit and timeout races.
+Previous releases ignore the table; rollback preserves all records and media.
+
 `2026_09_06_text_label_extractions.sql` adds an independent account-owned extraction table. Task claim IDs are deterministic from account/request identity; edit and confirmation IDs are deterministic from root/version, and insert-once is the concurrency arbiter. Only the original task is updated by its single worker; edit and confirmation rows are immutable. Expiration appends a competing revision and retains tombstones, while any confirmed or comparison-referenced root is excluded from media cleanup. The previous release ignores this additive table.
 
 Extraction `raw_json` is passed to the repository as an object so PostgreSQL stores a JSONB object, not a twice-encoded JSON string. Account/root-scoped queries use the indexed `root_id` inside that object. Existing tables retain their representation for compatibility.

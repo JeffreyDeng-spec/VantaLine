@@ -4,6 +4,18 @@
 
 Run checks from repository root unless stated otherwise.
 
+Whole-sheet elements require `smoke_sheet_elements.py` and
+`smoke_sheet_elements_endpoints.py` under `local_inspection_service/scripts/`.
+These test geometry, exact boundaries, spatial deduplication, intentional global
+coverage, conflict/unknown gates, auth/media isolation, immutable edits, stale
+confirmations, idempotency and lost-worker terminal behavior. Injected OCR tests
+prove mechanics only. `scripts/benchmark_sheet_elements.py` writes isolated HTML,
+input/reference images, overlays, raw observations and JSON timings; unconfirmed
+same-photo templates cannot certify accuracy. Test all nine real samples plus
+wrong-standard/digit/unit/QR/graphic and glare/rotation negatives, independent
+positive samples, 30-run cold/warm performance, PostgreSQL concurrency, frontend
+stale responses and existing PLC/media regressions before production activation.
+
 | Change area | Required local checks |
 | --- | --- |
 | Documentation only | `python scripts/verify_docs_contract.py --base-ref origin/main`, `git diff --check` |

@@ -5,6 +5,7 @@ import { addTextInspectionStandardAsset, compareTextInspectionLabel, confirmText
 import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
 import { FileDropZone } from "../../components/FileDropZone";
 import { apiClient } from "../../api/client";
+import { SheetElementsPanel } from "./SheetElementsPanel";
 import { DEFAULT_GUIDE, GuideOverlay, LabelExtractionPanel, type Guide } from "./LabelExtraction";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -84,7 +85,9 @@ export function TextCompareBetaPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [guide, setGuide] = useState<Guide>([...DEFAULT_GUIDE]);
   const capabilities = useQuery({ queryKey: ["text-inspection", "extraction-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; ai_available: boolean; bbox_enabled?: boolean; bbox_available?: boolean }>("/api/text-inspection/extraction-capabilities") });
-  const extractionEnabled = capabilities.data?.enabled === true;
+  const sheetCapabilities = useQuery({ queryKey: ["text-inspection", "sheet-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean }>("/api/text-inspection/sheet/capabilities") });
+  const [sheetMode, setSheetMode] = useState(false);
+  const extractionEnabled = capabilities.data?.enabled === true && !sheetMode;
   const providerDiagnostics = result?.diagnostics?.provider_result;
   const rawProviderOutput = providerDiagnostics?.response_preview !== undefined
     ? providerDiagnostics.response_preview
@@ -355,6 +358,7 @@ export function TextCompareBetaPage() {
   </div>;
 
   return <section className="view active text-compare-beta">
+    {sheetCapabilities.data?.enabled && mode === "label" ? <label><input type="checkbox" checked={sheetMode} onChange={event => { setSheetMode(event.target.checked); setResult(null); comparisonIdentityRef.current = null; }} />整页元素核对（试验，不改变默认流程）</label> : null}
     <div className="text-compare-compact-topbar">
       <header className="text-compare-beta-header">
         <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
@@ -398,10 +402,11 @@ export function TextCompareBetaPage() {
         {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} bboxEnabled={capabilities.data?.bbox_enabled === true} bboxAvailable={capabilities.data?.bbox_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
       </article> : null}
     </div>
+    {sheetMode && mode === "label" ? <SheetElementsPanel assetId={selectedAsset?.id || ""} revision={String(standardQuery.data?.current_revision_id || "")} referenceUrl={selectedAsset?.content_url || ""} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onZoom={openZoom} /> : null}
     {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}
     {mode === "label" ? <>
     <div className="text-compare-action-row">
-      {capabilities.data?.enabled === false ? <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button> : null}
+      {capabilities.data?.enabled === false && !sheetMode ? <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button> : null}
       {capabilities.isError ? <button type="button" onClick={() => void capabilities.refetch()}>提取配置读取失败，点击重试</button> : null}
       {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
     </div>

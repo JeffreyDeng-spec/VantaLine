@@ -37365,6 +37365,7 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
 TEXT_INSPECTION_TABLES = {
+    "sheet_elements": "text_sheet_elements",
     "extractions": "text_label_extractions",
     "standards": "text_inspection_standards",
     "assets": "text_inspection_assets",
@@ -37390,6 +37391,7 @@ def _text_v2_load(kind: str) -> list[dict[str, Any]]:
 def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     fields = {
+        "sheet_elements": ("id", "owner_user_id", "root_id", "created_at"),
         "extractions": ("id", "owner_user_id", "created_at"),
         "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
         "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
@@ -37401,7 +37403,10 @@ def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     }[kind]
     # Extraction queries index fields inside JSONB: write an object, not a
     # JSON-encoded string (legacy tables retain their existing representation).
-    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind == "extractions" else raw}
+    row = {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind in {"extractions", "sheet_elements"} else raw}
+    if kind == "sheet_elements":
+        row["created_at"] = int(value["created_at"])
+    return row
 
 
 def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
@@ -38048,6 +38053,10 @@ def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> byt
 from local_inspection_service.label_extraction_api import register as register_label_extraction
 
 resolve_label_extraction = register_label_extraction(globals())
+
+from local_inspection_service.sheet_elements_api import register as register_sheet_elements
+
+sheet_elements_service = register_sheet_elements(globals())
 
 
 @app.post("/api/text-inspection/label/compare")

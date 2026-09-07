@@ -9,5 +9,6 @@ ultralytics
 paddleocr==3.7.0
 paddlex[ocr-core]==3.7.1
 paddlepaddle==3.2.2
+zxing-cpp==2.3.0
 PyMuPDF==1.28.0
 requests

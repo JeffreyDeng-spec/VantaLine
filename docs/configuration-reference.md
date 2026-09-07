@@ -28,6 +28,26 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 ## Text inspection v2
 
+Whole-sheet inspection uses default-empty account-ID allowlists:
+`VANTALINE_SHEET_ELEMENTS_ACCOUNTS` exposes the opt-in experiment;
+`VANTALINE_SHEET_ELEMENTS_VERIFIED_ACCOUNTS` permits MATCH after commissioning;
+`VANTALINE_SHEET_ELEMENTS_GRAPHIC_VERIFIED_ACCOUNTS` separately permits verified
+graphic matches; `VANTALINE_SHEET_ELEMENTS_VLM_ACCOUNTS` allows one optional Qwen
+advisory using existing resolved settings and the existing external-media gate.
+Keep verification allowlists empty until independent samples and performance pass.
+No new key source or default GPU purchase is introduced.
+
+`VANTALINE_SHEET_OCR_MODEL_DIR` points to pre-provisioned local directories
+`PP-OCRv6_medium_det`, `PP-OCRv6_medium_rec`, `PP-LCNet_x1_0_textline_ori`.
+`VANTALINE_SHEET_OCR_PROFILE=medium|small` defaults to `medium`; `small` selects the
+corresponding pinned v6-small artifacts for isolated performance comparisons.
+Changing profile requires fresh accuracy/performance commissioning. Inference uses
+two CPU threads and 0/90-degree passes plus local line-orientation correction.
+Missing artifacts fail explicitly without runtime downloads. The experiment uses
+CPU and existing pinned Paddle dependencies. ZXing-C++ 2.3.0 is pinned in both
+dependency files (https://pypi.org/project/zxing-cpp/2.3.0/); incomplete development
+environments fall back to OpenCV QR only and do not claim barcode coverage.
+
 `VANTALINE_LABEL_BBOX_ACCOUNTS` is a separate, default-empty account allowlist for `vlm_bbox`. An account must also be in `VANTALINE_LABEL_EXTRACTION_ACCOUNTS`. Availability requires the external-media gate and a configured Qwen result from the same `ai_detection_settings()` resolver used for label comparison. There is no new key/model source or browser-supplied endpoint. One task freezes these resolved settings; the experimental timeout is 180 seconds, one attempt, temperature 0.1, 512 output tokens and `enable_thinking=false`. The timeout overrides only this method, not the comparison settings. Never activate based on synthetic tests alone.
 
 `VANTALINE_LABEL_EXTRACTION_ACCOUNTS` is a comma-separated allowlist of authenticated account IDs; empty disables the new extraction UI. The extraction capabilities route reports availability without keys. AI masks use the existing image-generation provider/model/key, require the existing external-media gate, and disable provider format-retry fallback for this one-call path. Missing image-generation configuration leaves explicit manual polygon extraction available. Qwen text comparison keeps its existing separate settings. Enable the initial account only after synthetic extraction and manual-confirmation acceptance; do not infer image-generation availability from the text model's configuration.

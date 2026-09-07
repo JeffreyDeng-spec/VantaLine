@@ -122,6 +122,9 @@ jobs:
           python local_inspection_service/scripts/smoke_label_bbox.py
           python local_inspection_service/scripts/smoke_label_bbox_endpoints.py
           python local_inspection_service/scripts/smoke_label_extraction_postgres.py
+          python local_inspection_service/scripts/smoke_sheet_elements.py
+          python local_inspection_service/scripts/smoke_sheet_elements_endpoints.py
+          python local_inspection_service/scripts/smoke_sheet_elements_postgres.py
       - name: Verify text inspection API fail-closed mode
         run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
       - name: Verify text inspection API external-only mode
