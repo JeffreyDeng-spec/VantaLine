@@ -60,10 +60,11 @@ One inference slot serves local jobs. P95 15 seconds is a commissioning target.
 At 120 seconds the timer/status lookup competes for one immutable terminal record.
 OCR lives in a warm subprocess so a native call can be terminated without blocking
 the API interpreter. Cancellation checks active task ownership; late output cannot
-overwrite the outcome. Lost
-jobs are not resubmitted after restart. The engine currently emits MATCH candidates
-or REVIEW_REQUIRED, never an unsubstantiated definitive defect decision. MATCH
-is downgraded until account commissioning.
+overwrite the outcome. Lost jobs are not resubmitted after restart. The engine
+emits DIFFERENCES only for a parameter mismatch supported by at least two spatially
+distinct identical readings at confidence >= .98, with matching nonnumeric context
+and no reliable expected value. Mixed correct/incorrect readings remain review.
+Both MATCH and DIFFERENCES candidates are downgraded until account commissioning.
 
 Optional Qwen advice uses existing resolved credentials, with separate account
 consent and external-media gates. Standard inventory proposals need confirmation.

@@ -56,7 +56,9 @@ def main():
         baseline={"sample":name,"source_size":[w,h],"source_sha256":hashlib.sha256(Path(sample["source"]).read_bytes()).hexdigest(),
                   "reference_box":sample["reference_box"],"reference_sha256":hashlib.sha256((dest/"reference.png").read_bytes()).hexdigest(),
                   "template_confirmed":sample.get("confirmed",False),"same_source_reference":True,
-                  "independent_accuracy_evidence":False,"version":engine.VERSION,"external_calls":0}
+                  "independent_accuracy_evidence":False,"version":engine.VERSION,"external_calls":0,
+                  "engine_sha256":hashlib.sha256(Path(engine.__file__).read_bytes()).hexdigest(),
+                  "latency_scope":"engine_plus_overlays_not_full_api_or_queue"}
         (dest/"input.json").write_text(json.dumps(baseline,indent=2))
         if args.prepare_only:
             records.append({**baseline,"status":"prepared_not_tested"});continue
@@ -96,6 +98,7 @@ def main():
             record["elapsed_ms"]=round((time.time()-started)*1000)
             record["ocr_artifacts"]=ocr_metadata()
             record["max_rss_native_units"]=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            record["rss_scope"]="runner_process_only_excludes_native_ocr_subprocess"
             records.append(record)
             (dest/f"result-{run}.json").write_text(json.dumps(record,ensure_ascii=False,indent=2))
             print(json.dumps({k:record[k] for k in ("sample","run","status","elapsed_ms")}),flush=True)
@@ -109,6 +112,7 @@ def publish(output,records):
     times=[r["elapsed_ms"] for r in records if "elapsed_ms" in r]
     report={"records":records,"completed_measurements":len(times),"p50_ms":float(np.percentile(times,50)) if times else None,
             "p95_ms":float(np.percentile(times,95)) if times else None,"accuracy_verified":False,
+            "completed_inference_runs":sum(r["status"]=="completed" for r in records),
             "note":"Temporary same-photo standards are not independent accuracy evidence. No production writes or external calls."}
     (output/"report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
     cards=[]

@@ -52,6 +52,8 @@ def main():
     assert e.compare([item()],[observation(confidence=.5)])["decision"]=="REVIEW_REQUIRED"
     result=e.compare([item()],[observation(),observation("18V",x=.7)])
     assert result["decision"]=="REVIEW_REQUIRED" and result["elements"][0]["state"]=="conflict"
+    assert e.compare([item()],[observation("18V"),observation("18V",x=.7)])["decision"]=="DIFFERENCES"
+    assert e.compare([item()],[observation("18V"),observation("18V")])["decision"]=="REVIEW_REQUIRED"
     assert e.compare([item()],[observation("120V")])["decision"]!="MATCH"
     assert e.compare([item("QR-A","code")],[observation("QR-B",kind="code")])["decision"]!="MATCH"
     assert e.compare([item("QR-A","code")],[observation("QR-A",kind="code")])["decision"]=="MATCH"

@@ -30,7 +30,7 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 Whole-sheet inspection uses default-empty account-ID allowlists:
 `VANTALINE_SHEET_ELEMENTS_ACCOUNTS` exposes the opt-in experiment;
-`VANTALINE_SHEET_ELEMENTS_VERIFIED_ACCOUNTS` permits MATCH after commissioning;
+`VANTALINE_SHEET_ELEMENTS_VERIFIED_ACCOUNTS` permits automatic decisions after commissioning;
 `VANTALINE_SHEET_ELEMENTS_GRAPHIC_VERIFIED_ACCOUNTS` separately permits verified
 graphic matches; `VANTALINE_SHEET_ELEMENTS_VLM_ACCOUNTS` allows one optional Qwen
 advisory using existing resolved settings and the existing external-media gate.

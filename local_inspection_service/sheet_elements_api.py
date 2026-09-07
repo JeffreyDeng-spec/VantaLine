@@ -86,7 +86,8 @@ def register(namespace):
 
     def write(value, kind, data):
         sha = s.sha256_bytes(data)
-        path = s._text_v2_media_path(value["owner_user_id"], value["root_id"], sha+"-"+kind+".bin")
+        # Source/original may be byte-identical; share one account/root-local blob.
+        path = s._text_v2_media_path(value["owner_user_id"], value["root_id"], sha+".bin")
         s._text_v2_write(path, data)
         value[kind+"_path"], value[kind+"_sha256"] = str(path), sha
 
@@ -216,7 +217,7 @@ def register(namespace):
                 except HTTPException:
                     result["decision"]="REVIEW_REQUIRED"
                     result["gate_reason"]="standard_or_template_changed"
-                if result["decision"] == "MATCH" and not allowed(root["owner_user_id"], "VANTALINE_SHEET_ELEMENTS_VERIFIED_ACCOUNTS"):
+                if result["decision"] != "REVIEW_REQUIRED" and not allowed(root["owner_user_id"], "VANTALINE_SHEET_ELEMENTS_VERIFIED_ACCOUNTS"):
                     result["decision"] = "REVIEW_REQUIRED"
                     result["gate_reason"] = "commissioning_not_complete"
                 diagnostic["elapsed_ms"] = round((time.time()-root["created_at"])*1000)

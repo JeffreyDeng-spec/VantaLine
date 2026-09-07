@@ -341,18 +341,24 @@ def compare(elements, observations, reference=None, actual=None, deadline=float(
                              re.sub(r"\s+","",v["text"]) != re.sub(r"\s+","",element["expected"])]
                 if conflicts:
                     row.update(state="conflict",reason="conflicting_parameter",conflicts=conflicts[:8])
+                    corroborated={}
+                    for value in deduplicate(conflicts):
+                        if value["confidence"]>=.98:
+                            corroborated.setdefault(value["text"],[]).append(value)
+                    if not matches and any(len(values)>=2 for values in corroborated.values()):
+                        row.update(state="wrong",reason="consistent_parameter_mismatch")
         rows.append(row)
     complete = all(r["state"] in {"matched","ignored"} for r in rows) and any(r["state"] == "matched" for r in rows)
-    return {"decision": "MATCH" if complete else "REVIEW_REQUIRED", "elements": rows,
+    return {"decision": "DIFFERENCES" if any(r["state"]=="wrong" for r in rows) else "MATCH" if complete else "REVIEW_REQUIRED", "elements": rows,
             "counts": {state: sum(r["state"] == state for r in rows) for state in
-                       ("matched","ignored","unreadable","conflict")}, "version": VERSION,
+                       ("matched","ignored","unreadable","conflict","wrong")}, "version": VERSION,
             "scope": "whole_sheet_content_presence_not_individual_print_defects"}
 
 
 def annotate(image, result, standard=True):
     output = image.copy(); h,w = output.shape[:2]
     for index, row in enumerate(result["elements"]):
-        color = (40,170,40) if row["state"] == "matched" else (30,30,220) if row["state"] == "conflict" else (0,180,240)
+        color = (40,170,40) if row["state"] == "matched" else (30,30,220) if row["state"] in {"conflict","wrong"} else (0,180,240)
         boxes = [row["standard_box"]] if standard else [v["box"] for v in row.get("evidence",[]) + row.get("conflicts",[])]
         for x,y,bw,bh in boxes:
             a,b = (round(x*w),round(y*h)),(round((x+bw)*w),round((y+bh)*h))

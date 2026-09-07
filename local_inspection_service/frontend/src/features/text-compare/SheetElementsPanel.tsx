@@ -10,7 +10,7 @@ type Resource = {id:string;root_id:string;status:string;version:number;standard_
 const API="/api/text-inspection/sheet";
 const finished=(v:Resource)=>["draft","confirmed","completed","review"].includes(v.status);
 const states:Record<string,string>={queued:"排队",recognizing:"识别",matching:"核对",reviewing:"复核",draft:"待确认",confirmed:"已确认",completed:"完成",review:"待复核"};
-const reasons:Record<string,string>={not_detected:"未检出（不代表漏印）",conflicting_parameter:"存在冲突参数",graphic_not_commissioned:"图形核验未完成验收",local_evidence:"找到本地证据"};
+const reasons:Record<string,string>={not_detected:"未检出（不代表漏印）",conflicting_parameter:"存在冲突参数",consistent_parameter_mismatch:"多个位置识别到一致的不同参数",graphic_not_commissioned:"图形核验未完成验收",local_evidence:"找到本地证据"};
 
 function EvidenceImage({src,boxes,select,zoom}:{src:string;boxes:{id:string;box:Box;state?:string}[];select:(id:string)=>void;zoom:()=>void}) {
   return <div className="sheet-image"><img src={src} alt="核对证据图" onClick={zoom}/>{boxes.map(v=><button key={v.id} type="button" aria-label={`定位元素 ${v.id}`} className={`sheet-box ${v.state||"editing"}`} onClick={()=>select(v.id)} style={{left:`${v.box[0]*100}%`,top:`${v.box[1]*100}%`,width:`${v.box[2]*100}%`,height:`${v.box[3]*100}%`}}/>)}</div>;
@@ -73,7 +73,7 @@ export function SheetElementsPanel({assetId,revision,referenceUrl,file,capture,o
     {error?<p role="alert">{error}</p>:null}
     <details onToggle={event=>{if(event.currentTarget.open&&assetId){const version=epoch.current;void apiClient.get<{items:Resource[]}>(`${API}/jobs?standard_asset_id=${encodeURIComponent(assetId)}`).then(data=>{if(mounted.current&&version===epoch.current)setHistory(data.items);}).catch(e=>{if(mounted.current&&version===epoch.current)setError(e.message);});}}}><summary>最近核对记录（查询不重复识别）</summary>{history.map(v=><button type="button" disabled={busy} key={v.root_id} onClick={()=>void action(version=>poll(v,version,setJob))}>{v.root_id.slice(-8)} · {states[v.status]}</button>)}</details>
     {template?.error_code?<p>标准解析未完成（{template.error_code}）。可手工建立模板，不会忽略未识别的图形。</p>:null}
-    {job?<div><h3>{job.result?.decision==="MATCH"?"通过":job.result?.decision==="DIFFERENCES"?"不通过":finished(job)?"待复核":states[job.status]}</h3>{job.result?.gate_reason?<p>本地证据匹配，但正式验收尚未完成，不能自动通过。</p>:null}{job.error_code?<p>识别未完成：{job.error_code}</p>:null}
+    {job?<div><h3>{job.result?.decision==="MATCH"?"通过":job.result?.decision==="DIFFERENCES"?"不通过":finished(job)?"待复核":states[job.status]}</h3>{job.result?.gate_reason?<p>自动判断尚未完成正式验收，当前结果需人工复核。</p>:null}{job.error_code?<p>识别未完成：{job.error_code}</p>:null}
       <div className="sheet-result-grid"><EvidenceImage src={job.media.reference||referenceUrl} boxes={(job.result?.elements||[]).map(v=>({id:v.element_id,box:v.standard_box,state:v.state}))} select={setSelected} zoom={()=>onZoom(job.media.standard_overlay||job.media.reference,"标准结果")}/>{job.media.source?<EvidenceImage src={job.media.source} boxes={[...(finding?.evidence||[]),...(finding?.conflicts||[])].map((v,i)=>({id:String(i),box:v.box,state:finding?.state}))} select={()=>{}} zoom={()=>onZoom(job.media.actual_overlay||job.media.source,"整页证据")}/>:null}</div>
       <div className="sheet-findings">{job.result?.elements.map((v,i)=><button type="button" key={v.element_id} className={v.element_id===selected?"selected":""} onClick={()=>setSelected(v.element_id)}>{i+1}. {v.expected||"图形"} · {reasons[v.reason]||v.reason}</button>)}</div>
       {finding?<p>标准：{finding.expected}　实拍：{finding.evidence.map(v=>v.text).join("；")||"无可靠匹配"}</p>:null}
