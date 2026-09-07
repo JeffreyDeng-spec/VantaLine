@@ -47,3 +47,10 @@ Diagnostic assertions must verify the persisted request/provider/stage envelope 
 Single-label extraction requires `smoke_label_extraction.py` and `smoke_label_extraction_endpoints.py`. Geometry fixtures cover rectangular/circular/irregular shapes, preservation of original text pixels, multiple candidates, malformed masks, orientation and invalid polygons. Endpoint tests cover account/media isolation, request identity conflicts, preview-before-confirm, stale edit versions, confirmed server-crop comparison, mutually exclusive inputs and timeout-after-charge with no replay. Frontend acceptance includes contained-image coordinates under portrait/landscape/narrow screens, guide drag/resize, polygon editing, disabled confirmation after edits, stale response discard and independent standard selection. Measure real-sample correction rates and provider latency separately from synthetic correctness; synthetic tests do not certify segmentation accuracy.
 
 `smoke_label_extraction_postgres.py` runs against the CI PostgreSQL service in a disposable schema and verifies one-winner concurrent revision insertion plus account/root-scoped queries. For browser interaction, start Vite on port 5177 and run `smoke_label_extraction_browser.py` with development-only Playwright; `LABEL_TEST_BROWSER=msedge` selects an installed Edge. Its isolated fixture checks sub-pixel source-coordinate mapping across screen sizes, real React editing/confirmation state and absence of model calls during manual edits. No customer media is used.
+# SAM 3 isolated geometry checks
+
+`python scripts/smoke_sam3_geometry.py` checks pixel-center coordinate round trips
+for landscape, portrait, and downscaled ROIs, plus strict binary PNG size, fragment,
+and hole rejection. It requires Pillow, NumPy, and OpenCV. These synthetic checks
+do not establish SAM 3 model accuracy or replace real sample acceptance. The new
+`sam3_geometry` module is preparatory and not yet selected by the production API.

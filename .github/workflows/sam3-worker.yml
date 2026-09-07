@@ -29,3 +29,12 @@ jobs:
           platforms: linux/amd64
       - name: Record immutable digest
         run: echo '${{ steps.image.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"
+      - name: Require private package before deployment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          visibility=$(gh api /users/jeffreydeng-spec/packages/container/vantaline-sam3-worker --jq .visibility)
+          if [ "$visibility" != private ]; then
+            echo 'Package is not private; deployment is blocked.' >&2
+            exit 1
+          fi
