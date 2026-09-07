@@ -65,16 +65,29 @@ def load_model():
     _model = Sam3TrackerModel.from_pretrained(str(MODEL_DIR), local_files_only=True).to("cuda").eval()
 
 
+def point_prompt(value, box):
+    points = value.get("positive_points", [])
+    if not isinstance(points, list) or len(points) > 8:
+        raise ValueError("invalid_points")
+    for point in points:
+        if (not isinstance(point, list) or len(point) != 2
+                or any(type(v) not in (int, float) or not math.isfinite(v) for v in point)
+                or not (box[0] < point[0] < box[2] and box[1] < point[1] < box[3])):
+            raise ValueError("invalid_points")
+    return {"input_points": [[points]], "input_labels": [[[1]*len(points)]]} if points else {}
+
+
 def handler(event):
     started = time.monotonic()
     try:
         value = event.get("input")
         image, box = validate_input(value)
+        prompt = point_prompt(value, box)
         load_model()
         import torch
         import numpy as np
         from PIL import Image
-        inputs = _processor(images=image, input_boxes=[[box]], return_tensors="pt").to("cuda")
+        inputs = _processor(images=image, input_boxes=[[box]], return_tensors="pt", **prompt).to("cuda")
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             output = _model(**inputs, multimask_output=True)
         masks = _processor.post_process_masks(output.pred_masks.cpu(), inputs["original_sizes"])[0][0]
@@ -93,7 +106,7 @@ def handler(event):
         # Upstream exception text can contain URLs or data; only bounded types escape.
         safe_codes = {"invalid_protocol", "invalid_request_id", "invalid_source_hash", "input_too_large",
                       "image_hash_mismatch", "invalid_image_size", "invalid_box", "box_out_of_bounds",
-                      "model_not_provisioned", "model_checksum_mismatch", "gpu_unavailable"}
+                      "model_not_provisioned", "model_checksum_mismatch", "gpu_unavailable", "invalid_points"}
         return {"ok": False, "error": str(exc) if str(exc) in safe_codes else type(exc).__name__,
                 "elapsed_ms": round((time.monotonic()-started)*1000)}
 
