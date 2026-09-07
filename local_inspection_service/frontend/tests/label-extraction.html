@@ -17,7 +17,7 @@ return React.createElement("main",{style:{maxWidth:1000,margin:"auto"}},
 React.createElement("button",{onClick:()=>{setFile(new File([blob],"next.png",{type:"image/png"}));setComparison("");}},"换一张照片"),
 React.createElement("button",{onClick:()=>setStandard(v=>v==="asset_1"?"asset_2":"asset_1")},"更换标准"),
 React.createElement("div",{className:"text-compare-stage",style:{height:500,aspectRatio:"auto"}},React.createElement("img",{src:window.fixtureUrl}),React.createElement(GuideOverlay,{value:guide,onChange:setGuide,disabled:false})),
-React.createElement(LabelExtractionPanel,{file,capture:async()=>file,onCaptured:setFile,guide,onGuide:setGuide,standardId:standard,standardRevision:"1",onCompare:setComparison,comparing:false,onZoom:(src)=>{window.zoomed=src;}}),
+React.createElement(LabelExtractionPanel,{file,capture:async()=>file,onCaptured:setFile,guide,onGuide:setGuide,bboxEnabled:true,bboxAvailable:true,standardId:standard,standardRevision:"1",onCompare:setComparison,comparing:false,onZoom:(src)=>{window.zoomed=src;}}),
 React.createElement("output",{"data-testid":"comparison"},comparison));
 }
 createRoot(document.getElementById("root")).render(React.createElement(React.StrictMode,null,React.createElement(Harness)));

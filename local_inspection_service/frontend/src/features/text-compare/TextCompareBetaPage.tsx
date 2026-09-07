@@ -83,7 +83,7 @@ export function TextCompareBetaPage() {
   const [importVersion, setImportVersion] = useState("V1");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [guide, setGuide] = useState<Guide>([...DEFAULT_GUIDE]);
-  const capabilities = useQuery({ queryKey: ["text-inspection", "extraction-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; ai_available: boolean }>("/api/text-inspection/extraction-capabilities") });
+  const capabilities = useQuery({ queryKey: ["text-inspection", "extraction-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; ai_available: boolean; bbox_enabled?: boolean; bbox_available?: boolean }>("/api/text-inspection/extraction-capabilities") });
   const extractionEnabled = capabilities.data?.enabled === true;
   const providerDiagnostics = result?.diagnostics?.provider_result;
   const rawProviderOutput = providerDiagnostics?.response_preview !== undefined
@@ -395,7 +395,7 @@ export function TextCompareBetaPage() {
           {inputMode === "camera" && cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
           {extractionEnabled && !result && (captured || inputMode === "camera") ? <GuideOverlay value={guide} onChange={setGuide} disabled={mutation.isPending} /> : null}
         </div>
-        {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
+        {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} bboxEnabled={capabilities.data?.bbox_enabled === true} bboxAvailable={capabilities.data?.bbox_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
       </article> : null}
     </div>
     {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}

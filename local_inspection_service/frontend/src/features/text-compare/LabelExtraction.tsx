@@ -5,7 +5,7 @@ export type Guide = [number, number, number, number];
 type Point = [number, number];
 export type Extraction = {
   id: string; root_id: string; version: number; status: string; error_code?: string;
-  polygon?: Point[]; media: { source?: string; crop?: string; mask?: string };
+  polygon?: Point[]; media: { source?: string; crop?: string; mask?: string; input?: string };
   diagnostics?: Record<string, unknown>;
 };
 export const DEFAULT_GUIDE: Guide = [.15, .15, .7, .7];
@@ -51,6 +51,12 @@ export function GuideOverlay({ value, onChange, disabled }: { value: Guide; onCh
 }
 
 const errors: Record<string,string> = {
+  bbox_missing_rectangle: "模型没有返回单标签矩形；不会改用整图。请手动描边。",
+  bbox_invalid_json: "定位输出不是有效 JSON，请手动描边或新建提取。",
+  bbox_invalid_schema: "定位输出结构无效，请手动描边。",
+  bbox_invalid_coordinates: "定位坐标无效或越界，不会强行裁剪。",
+  bbox_output_truncated: "定位输出被截断，不会自动重试。",
+  bbox_label_too_small: "标签过小：仅供检查预览，请靠近重拍后再确认比较。",
   draft_expired: "未使用的草稿已过期，请重新提取。",
   multiple_labels: "发现多个标签，请缩小目标框或手动描边。", no_label: "未找到标签，请重拍或手动描边。",
   target_not_centered: "标签没有对准框中心，请调整。", label_touches_image_edge: "标签贴近照片边缘，请重拍并留出空隙。",
@@ -59,10 +65,10 @@ const errors: Record<string,string> = {
   segmentation_not_configured: "AI 分割尚未配置或启用，可以手动描边。", provider_outcome_unknown: "模型请求结果不明，不会自动重试。可新建手动提取。", manual_selection: "请描出一个完整标签，然后保存预览。"
 };
 
-export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady, onInvalidate, aiAvailable = true, guide, onGuide, standardId, standardRevision, onCompare, comparing, onZoom }: {
+export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady, onInvalidate, aiAvailable = true, bboxEnabled = false, bboxAvailable = false, guide, onGuide, standardId, standardRevision, onCompare, comparing, onZoom }: {
   file: File | null; capture: () => Promise<File>; onCaptured: (f: File) => void;
   onSourceReady?: (url: string) => void;
-  onInvalidate?: () => void; aiAvailable?: boolean;
+  onInvalidate?: () => void; aiAvailable?: boolean; bboxEnabled?: boolean; bboxAvailable?: boolean;
   guide: Guide; onGuide: (v: Guide) => void; standardId: string; standardRevision: string;
   onCompare: (id: string) => void; comparing: boolean; onZoom: (src: string, alt: string) => void;
 }) {
@@ -74,6 +80,7 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
   const [selected, setSelected] = useState<number | null>(null);
   const [rotation, setRotation] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const [method, setMethod] = useState<"ai" | "vlm_bbox">("ai");
   const generation = useRef(0);
   const currentFile = useRef(file);
   const expectedStandard = useRef(standardId + standardRevision);
@@ -116,7 +123,7 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
     timer = setTimeout(poll, 1000);
     return () => { stopped = true; clearTimeout(timer); };
   }, [extraction?.id, extraction?.status]);
-  const start = async (method: "ai" | "manual") => {
+  const start = async (method: "ai" | "manual" | "vlm_bbox") => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError("");
     onInvalidate?.();
@@ -125,7 +132,7 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
       const actual = file || await capture();
       if (epoch !== generation.current) return;
       if (!file) { currentFile.current = actual; onCaptured(actual); }
-      const frozenGuide = JSON.stringify(guide);
+      const frozenGuide = JSON.stringify(method === "vlm_bbox" ? [0,0,1,1] : guide);
       let identity = requestIdentity.current;
       if (!identity || identity.file !== actual || identity.guide !== frozenGuide || identity.method !== method) {
         identity = { file: actual, guide: frozenGuide, method, id: crypto.randomUUID() }; requestIdentity.current = identity;
@@ -160,15 +167,19 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
   };
   return <section className="label-extraction-panel">
     <div className="label-extraction-toolbar">
+      {bboxEnabled ? <label>提取方式<select aria-label="提取方式" value={method} disabled={comparing} onChange={e => {
+        setMethod(e.target.value as "ai" | "vlm_bbox"); ++generation.current; inFlight.current = false;
+        setBusy(false); setExtraction(null); setPoints([]); setDirty(false); setError(""); requestIdentity.current = null; onInvalidate?.();
+      }}><option value="ai">框内 AI 蒙版</option><option value="vlm_bbox">整图定位单标签（实验）</option></select></label> : null}
       <button type="button" disabled={busy || comparing} onClick={() => onGuide([...DEFAULT_GUIDE])}>重置取景框</button>
       <button type="button" disabled={busy || comparing} onClick={() => onGuide([clamp(guide[0]-.02,0,1-guide[2]),guide[1],guide[2],guide[3]])} aria-label="取景框左移">←</button>
       <button type="button" disabled={busy || comparing} onClick={() => onGuide([clamp(guide[0]+.02,0,1-guide[2]),guide[1],guide[2],guide[3]])} aria-label="取景框右移">→</button>
       <button type="button" disabled={busy || comparing} onClick={() => onGuide([guide[0],clamp(guide[1]-.02,0,1-guide[3]),guide[2],guide[3]])} aria-label="取景框上移">↑</button>
       <button type="button" disabled={busy || comparing} onClick={() => onGuide([guide[0],clamp(guide[1]+.02,0,1-guide[3]),guide[2],guide[3]])} aria-label="取景框下移">↓</button>
-      <button type="button" disabled={!!editing || !aiAvailable} onClick={() => { if (extraction) requestIdentity.current = null; void start("ai"); }}>{extraction?.status === "attempting" ? "正在提取…" : file ? "提取框内标签" : "拍照并提取"}</button>
+      <button type="button" disabled={!!editing || !(method === "vlm_bbox" ? bboxEnabled && bboxAvailable : aiAvailable)} onClick={() => { if (extraction) requestIdentity.current = null; void start(method); }}>{extraction?.status === "attempting" ? "正在提取…" : method === "vlm_bbox" ? "整图定位单标签" : file ? "提取框内标签" : "拍照并提取"}</button>
       <button type="button" disabled={busy || comparing} onClick={() => void start("manual")}>手动描边</button>
     </div>
-    {!aiAvailable ? <p>图像生成服务尚未配置或启用。可以先手动描边；AI 配置完成后刷新页面。</p> : null}
+    {method === "vlm_bbox" ? <p>实验：搜索整张照片，不使用取景框。矩形只是候选范围，不代表真实外轮廓；请检查是否完整且没有邻居。{!bboxAvailable ? "当前千问配置或外发开关不可用。" : ""}</p> : !aiAvailable ? <p>图像生成服务尚未配置或启用。可以先手动描边；AI 配置完成后刷新页面。</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {extraction ? <>
       {extraction.error_code ? <p role="status">{errors[extraction.error_code] || `提取未完成（${extraction.error_code}），请手动描边或重拍。`}</p> : null}
@@ -196,7 +207,7 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
         <button className="text-compare-primary" type="button" disabled={!!editing || dirty || !standardId || !extraction.media.crop || !["ready","confirmed"].includes(extraction.status)} onClick={()=>void revise(true)}>{comparing ? "正在对比…" : "确认标签并对比"}</button>
       </div>
       <small>确认即表示：这是目标标签、边缘完整且没有相邻标签。修改轮廓后需要重新保存预览。</small>
-      <details><summary>Raw Output · 分割诊断</summary><pre>{JSON.stringify(extraction.diagnostics,null,2)?.slice(0,20000)}</pre>{extraction.media.mask ? <button type="button" onClick={()=>onZoom(extraction.media.mask!,"AI 分割掩膜")}>查看掩膜</button> : null}</details>
+      <details><summary>Raw Output · 分割诊断</summary><pre>{JSON.stringify(extraction.diagnostics,null,2)?.slice(0,20000)}</pre>{extraction.media.input ? <button type="button" onClick={()=>onZoom(extraction.media.input!,"实际定位模型输入")}>查看模型输入</button> : null}{extraction.media.mask ? <button type="button" onClick={()=>onZoom(extraction.media.mask!,"AI 分割掩膜")}>查看掩膜</button> : null}</details>
     </> : null}
   </section>;
 }

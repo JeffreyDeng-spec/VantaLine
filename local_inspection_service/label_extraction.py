@@ -80,7 +80,7 @@ def polygon(value) -> list[list[float]]:
     return points
 
 
-def crop(original: bytes, points) -> tuple[bytes, dict]:
+def crop(original: bytes, points, *, margin_pixels: int = 2) -> tuple[bytes, dict]:
     points = polygon(points)
     image = decode(original)
     h, w = image.shape[:2]
@@ -88,9 +88,11 @@ def crop(original: bytes, points) -> tuple[bytes, dict]:
     mask = np.zeros((h, w), np.uint8)
     cv2.fillPoly(mask, [contour], 255)
     # A two-pixel outward safety margin preserves edge printing; never erode.
-    mask = cv2.dilate(mask, np.ones((5, 5), np.uint8))
+    if margin_pixels:
+        mask = cv2.dilate(mask, np.ones((2*margin_pixels+1, 2*margin_pixels+1), np.uint8))
     x, y, cw, ch = cv2.boundingRect(contour)
-    x0, y0, x1, y1 = max(0,x-4), max(0,y-4), min(w,x+cw+4), min(h,y+ch+4)
+    pad = 2*margin_pixels
+    x0, y0, x1, y1 = max(0,x-pad), max(0,y-pad), min(w,x+cw+pad), min(h,y+ch+pad)
     if min(cw, ch) < 100:
         raise ValueError("标签太小，请靠近后重拍")
     image[mask == 0] = 255

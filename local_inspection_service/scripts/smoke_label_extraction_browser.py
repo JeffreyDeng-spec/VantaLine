@@ -67,6 +67,18 @@ def main():
         page.wait_for_timeout(100)
         expect(page.locator(".label-crop-preview img")).to_have_count(0)
         assert not errors,errors
+        held.clear()
+        page.get_by_label("提取方式",exact=True).select_option("vlm_bbox")
+        page.get_by_role("button",name="整图定位单标签",exact=True).click()
+        page.wait_for_timeout(100)
+        assert len(held)==1
+        assert b'vlm_bbox' in held[0].request.post_data_buffer
+        assert b'[0,0,1,1]' in held[0].request.post_data_buffer
+        page.get_by_label("提取方式",exact=True).select_option("ai")
+        held[0].fulfill(json={"id":"stale_bbox","root_id":"stale_bbox","version":0,"status":"ready","polygon":state["polygon"],"media":{"source":page.evaluate("window.fixtureUrl"),"crop":page.evaluate("window.fixtureUrl")}})
+        page.wait_for_timeout(100)
+        expect(page.locator(".label-crop-preview img")).to_have_count(0)
+        assert not errors,errors
         print("single label browser smoke: PASS",output)
         browser.close()
 
