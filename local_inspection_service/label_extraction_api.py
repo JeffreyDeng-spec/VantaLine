@@ -11,6 +11,7 @@ import uuid
 from fastapi import File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from . import label_extraction as geometry
+from . import label_bbox
 
 
 def register(namespace):
@@ -59,7 +60,7 @@ def register(namespace):
 
     def public(value):
         result = {k:v for k,v in value.items() if not k.endswith("_path") and k != "owner_user_id"}
-        result["media"] = {kind:f"/api/text-inspection/extractions/{value['id']}/media/{kind}" for kind in ("source","mask","crop") if value.get(kind+"_path")}
+        result["media"] = {kind:f"/api/text-inspection/extractions/{value['id']}/media/{kind}" for kind in ("source","mask","crop","input") if value.get(kind+"_path")}
         if result["status"] == "attempting" and time.time() > value["deadline_at"]:
             result["status"] = "uncertain"
             result["error_code"] = "provider_outcome_unknown"
@@ -69,6 +70,8 @@ def register(namespace):
         return result
 
     def run(value, settings, original):
+        if value["diagnostics"]["method"] == "vlm_bbox":
+            return run_bbox(value, settings, original)
         started = time.monotonic()
         diagnostic = value["diagnostics"]
         stage = "prepare"
@@ -106,6 +109,48 @@ def register(namespace):
         finally:
             s.clear_thread_runtime_repository_selection()
 
+    def run_bbox(value, settings, original):
+        started = time.monotonic()
+        diagnostic = value["diagnostics"]
+        stage = "prepare"
+        try:
+            data, meta = label_bbox.prepare(original)
+            diagnostic["geometry"] = meta
+            write(value, "input", data)
+            stage = "provider"
+            body = label_bbox.request_once(data, settings, s.ai_urlopen)
+            # Sanitize parsed fields, not the JSON string, so nested secret keys
+            # cannot bypass the existing diagnostic redaction.
+            diagnostic["provider_result"] = s._text_v2_diagnostic_value(label_bbox.evidence(body, settings.get("api_key", "")))
+            stage = "bbox_validation"
+            result, rect = label_bbox.parse(body)
+            diagnostic["parsed_result"] = s._text_v2_diagnostic_value(label_bbox.evidence(json.dumps(result), settings.get("api_key", "")))
+            cropped, points, quality = label_bbox.crop_rectangle(original, rect)
+            value["polygon"] = points
+            write(value, "crop", cropped)
+            diagnostic["quality"] = quality
+            value["status"] = "ready" if quality["comparison_size_ok"] else "needs_adjustment"
+            if not quality["comparison_size_ok"]:
+                value["error_code"] = "bbox_label_too_small"
+        except Exception as exc:
+            value["status"] = "uncertain" if stage == "provider" else "needs_adjustment"
+            value["error_code"] = str(exc) if stage == "bbox_validation" and isinstance(exc,ValueError) else type(exc).__name__
+            diagnostic["failure"] = {"stage":stage,"type":type(exc).__name__}
+            if hasattr(exc, "code") and isinstance(exc.code, int):
+                diagnostic["failure"]["http_status"] = exc.code
+        diagnostic["elapsed_ms"] = round((time.monotonic()-started)*1000)
+        value["finished_at"] = int(time.time())
+        try:
+            save(value)
+        finally:
+            s.clear_thread_runtime_repository_selection()
+
+    def bbox_settings():
+        return {**s.ai_detection_settings(), "timeout_seconds":label_bbox.TIMEOUT}
+
+    def bbox_enabled(uid):
+        return uid in {v.strip() for v in os.environ.get("VANTALINE_LABEL_BBOX_ACCOUNTS", "").split(",") if v.strip()}
+
     def expire_drafts(uid):
         account_rows = rows(uid)
         pinned = {v["root_id"] for v in account_rows if v.get("status") == "confirmed"}
@@ -131,23 +176,29 @@ def register(namespace):
         expire_drafts(uid)
         allowed = {v.strip() for v in os.environ.get("VANTALINE_LABEL_EXTRACTION_ACCOUNTS", "").split(",") if v.strip()}
         settings = s.image_generation_settings()
-        return {"enabled":uid in allowed, "ai_available":uid in allowed and s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED and bool(settings.get("configured")), "provider":settings.get("provider"), "model":settings.get("model")}
+        bbox = bbox_settings() if bbox_enabled(uid) else {}
+        return {"enabled":uid in allowed, "ai_available":uid in allowed and s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED and bool(settings.get("configured")), "provider":settings.get("provider"), "model":settings.get("model"), "bbox_enabled":uid in allowed and bbox_enabled(uid), "bbox_available":uid in allowed and bbox_enabled(uid) and s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED and bbox.get("provider") == "qwen" and bool(bbox.get("configured"))}
 
     @s.app.post("/api/text-inspection/extractions")
     async def create(file: UploadFile = File(...), target: str = Form(...), request_id: str = Form(...), method: str = Form("ai")):
         uid = owner()
         if not capabilities()["enabled"]:
             raise HTTPException(403,"当前账户尚未启用单标签提取")
-        if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}",request_id) or method not in {"ai","manual"}:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}",request_id) or method not in {"ai","manual","vlm_bbox"}:
             raise HTTPException(400,"提取请求无效")
+        if method == "vlm_bbox" and not bbox_enabled(uid):
+            raise HTTPException(403,"当前账户尚未启用实验矩形定位")
         data = await file.read(10*1024*1024+1)
         try:
             target_box = geometry.box(json.loads(target))
+            if method == "vlm_bbox":
+                target_box = [0.,0.,1.,1.]
             normalized = geometry.normalized_image(data)
         except Exception as exc:
             raise HTTPException(400,"图片或目标框无效："+str(exc)[:120]) from exc
-        settings = {**s.image_generation_settings(),"single_attempt":True}
-        fingerprint = s.sha256_bytes(json.dumps([s.sha256_bytes(data),target_box,method,geometry.PROMPT_VERSION],sort_keys=True).encode())
+        settings = bbox_settings() if method == "vlm_bbox" else {**s.image_generation_settings(),"single_attempt":True}
+        prompt_version = label_bbox.VERSION if method == "vlm_bbox" else geometry.PROMPT_VERSION
+        fingerprint = s.sha256_bytes(json.dumps([s.sha256_bytes(data),target_box,method,prompt_version],sort_keys=True).encode())
         identifier = "ext_"+hashlib.sha256((uid+":"+request_id).encode()).hexdigest()[:40]
         existing = optional(identifier,uid)
         if existing:
@@ -158,10 +209,10 @@ def register(namespace):
                 raise HTTPException(410,"未使用的提取草稿已过期，请重新拍照")
             return public(current)
         now = int(time.time())
-        value = {"id":identifier,"root_id":identifier,"kind":"task","owner_user_id":uid,"created_at":now,"version":0,"fingerprint":fingerprint,"target":target_box,"status":"attempting","deadline_at":now+2*int(settings.get("timeout_seconds",300))+120,"source_upload_sha256":s.sha256_bytes(data),"diagnostics":{"provider":settings.get("provider"),"model":settings.get("model"),"max_attempts":1,"method":method}}
+        value = {"id":identifier,"root_id":identifier,"kind":"task","owner_user_id":uid,"created_at":now,"version":0,"fingerprint":fingerprint,"target":target_box,"status":"attempting","deadline_at":now+2*int(settings.get("timeout_seconds",300))+120,"source_upload_sha256":s.sha256_bytes(data),"diagnostics":{"provider":settings.get("provider"),"model":settings.get("model"),"prompt_version":prompt_version,"max_attempts":1,"method":method}}
         # Save source first, then atomically claim. Concurrent losers write identical bytes.
         write(value,"source",normalized)
-        if method == "manual" or not s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED or not settings.get("configured"):
+        if method == "manual" or not s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED or not settings.get("configured") or (method == "vlm_bbox" and settings.get("provider") != "qwen"):
             value["status"] = "needs_adjustment"
             value["error_code"] = "manual_selection" if method == "manual" else "segmentation_not_configured"
         if not save(value,True):
@@ -182,7 +233,7 @@ def register(namespace):
     @s.app.get("/api/text-inspection/extractions/{identifier}/media/{kind}")
     def media(identifier: str, kind: str):
         value = get(identifier,owner())
-        if kind not in {"source","mask","crop"} or not value.get(kind+"_path"):
+        if kind not in {"source","mask","crop","input"} or not value.get(kind+"_path"):
             raise HTTPException(404,"提取图片不存在")
         data = read(value,kind)
         return Response(data,media_type="image/png" if data.startswith(b"\x89PNG") else "image/jpeg",headers={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
@@ -203,11 +254,16 @@ def register(namespace):
         try:
             points = geometry.polygon(body.get("polygon"))
             root = get(parent["root_id"],uid)
-            cropped,quality = geometry.crop(read(root,"source"),points)
+            cropper = label_bbox.crop_revision if root.get("diagnostics",{}).get("method") == "vlm_bbox" else geometry.crop
+            cropped,quality = cropper(read(root,"source"),points)
         except ValueError as exc:
             raise HTTPException(400,str(exc)) from exc
         if confirmation and (current["status"] not in {"ready","confirmed"} or current.get("polygon") != points):
             raise HTTPException(409,"请先保存轮廓并检查预览，再确认标签")
+        if confirmation and root.get("diagnostics",{}).get("method") == "vlm_bbox":
+            # Freeze exactly the preview bytes the operator inspected, after
+            # revalidating source geometry and the unchanged minimum-size gate.
+            cropped = read(current,"crop")
         revision = {**current,"id":parent["root_id"]+"_v"+str(current["version"]+1),"kind":"revision","version":current["version"]+1,"created_at":int(time.time()),"status":"confirmed" if confirmation else "ready","polygon":points,"error_code":"","diagnostics":{**current["diagnostics"],"quality":quality,"manually_adjusted":not confirmation or current["diagnostics"].get("manually_adjusted",False)}}
         if confirmation:
             asset = s._text_v2_owned("assets",str(body.get("standard_asset_id", "")),uid)
