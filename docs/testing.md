@@ -54,3 +54,6 @@ for landscape, portrait, and downscaled ROIs, plus strict binary PNG size, fragm
 and hole rejection. It requires Pillow, NumPy, and OpenCV. These synthetic checks
 do not establish SAM 3 model accuracy or replace real sample acceptance. The new
 `sam3_geometry` module is preparatory and not yet selected by the production API.
+
+`python scripts/smoke_sam3_worker.py` verifies image/hash protocol validation and
+interior-only finite point prompts without loading model weights or renting GPUs.
