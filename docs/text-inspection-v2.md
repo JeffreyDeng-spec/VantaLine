@@ -23,6 +23,43 @@ The formal **文字检验** entry is account scoped and independent from product
 
 ## API
 
+### Document label import (opt-in)
+
+`VANTALINE_DOCUMENT_LABEL_ACCOUNTS` routes DOCX/DOC at the existing
+`POST /api/text-inspection/standards/import` into an async job. The standard
+response adds `import_job_id`. `GET /document-import-capabilities` reports model
+and isolated-DOC availability. `GET /document-imports/{id}` restores progress,
+counts, image references, sanitized diagnostics and authenticated evidence URLs.
+Native image hashes deduplicate references; surrounding text is untrusted auxiliary
+data and cannot itself exclude an image. Composite/overlaid, vector, animated,
+unreadable or over-20MP images remain review items, not fatal per-document errors.
+Unsafe document structure still fails the document explicitly. Original DOC is
+preserved and conversion failures never masquerade as a completed import.
+
+Each decodable image gets one dedicated `document-label-crop-v1` classification /
+normalized `[left,top,right,bottom]` rectangle and, only for a label, one joint
+original/crop verification. A full-image label requires a rectangle too. Strict
+finite/in-bounds validation precedes outward-rounded cropping into lossless PNG
+from direction-normalized original pixels. This is not physical die-line recovery.
+Every claim is persisted before transport; outcomes, model/prompt/input hashes,
+mapping, preview and crop evidence are retained. Unknown results never trigger a
+fallback model or whole-image candidate. Only verified crops enter the existing
+candidate gallery; the source image is not another candidate. Final standard
+confirmation is blocked while the initial import is processing.
+
+`POST /document-imports/{job}/items/{item}/review` accepts current `version`,
+`action=confirm|exclude` and a normalized rectangle for confirmation. Manual edits
+create immutable crop versions without a model call. Incompletely rendered
+composites cannot be confirmed from their bare background: supply a complete
+render through existing image-add instead. Already accepted crops are disabled
+through existing order membership controls. `POST .../retry` requires current
+version and request ID and explicitly starts a new at-most-two-call attempt.
+The old attempt stays readable. Different inputs cannot reuse the same retry ID.
+No-progress imports/edits become interrupted/review-only on query after 180 seconds;
+queries never resubmit providers. The UI restores results in the expanded order,
+offers source/crop zoom, rectangle editing, explicit completeness acknowledgement
+and default-closed Raw Output. PDF import and whole-sheet OCR are unchanged.
+
 ### Single-label extraction
 
 An additional account-gated experimental `method=vlm_bbox` searches the **whole** image, canonicalizing target to `[0,0,1,1]`; guide coordinates do not select its target. Capabilities expose `bbox_enabled` and `bbox_available`. Its prompt is the original colleague multi-label layout prompt, ported to Qwen: normalized `cropRect` values are validated strictly, not clamped. Single/no-label replies without a rectangle fail closed rather than silently comparing the whole photograph. The known prompt limitation (no single-label coordinates requested) is preserved for the first baseline, not hidden by a second paid call.

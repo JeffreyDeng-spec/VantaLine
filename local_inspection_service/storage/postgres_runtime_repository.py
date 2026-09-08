@@ -29,6 +29,7 @@ JSON_COLUMNS = frozenset(
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
 PRIMARY_KEY_COLUMNS = {
+    "text_document_imports": ("id",),
     "text_label_extractions": ("id",),
     "schema_migrations": ("version",),
     "users": ("id",),
@@ -198,6 +199,16 @@ class PostgresRuntimeRepository:
             finally:
                 self._end_read_transaction()
         return counts
+
+    def fetch_document_import_rows(self, owner_user_id: str, root_id: str) -> list[dict[str, Any]]:
+        table = self._qualified_table("text_document_imports")
+        cursor = self._cursor()
+        try:
+            cursor.execute(f"SELECT raw_json FROM {table} WHERE owner_user_id = %s AND root_id = %s", (owner_user_id, root_id))
+            return [_decode_value("raw_json", self._row_to_dict(cursor, row)["raw_json"]) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            self._end_read_transaction()
 
     def fetch_label_extraction_rows(self, owner_user_id: str, root_id: str | None = None) -> list[dict[str, Any]]:
         table = self._qualified_table("text_label_extractions")
@@ -431,6 +442,7 @@ class PostgresRuntimeRepository:
         revision_id: str,
         updated_at: int,
         expected_revision: int | None = None,
+        replace_document_item: str = "",
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         standards = self._qualified_table("text_inspection_standards")
         assets = self._qualified_table("text_inspection_assets")
@@ -453,6 +465,26 @@ class PostgresRuntimeRepository:
                 value = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
                 if isinstance(value, dict):
                     existing_assets.append(value)
+            if replace_document_item:
+                # Document crops are immutable media. Publish/recover by stable
+                # asset ID and atomically soft-disable prior versions of this
+                # document item under the existing standard revision lock.
+                already = next((item for item in existing_assets if item["id"] == asset["id"]), None)
+                if already:
+                    if already.get("sha256") != asset.get("sha256"):
+                        raise PostgresRuntimeRepositoryError("Document crop identity conflict")
+                    self.connection.commit()
+                    return already, standard
+                newer = next((item for item in existing_assets if item.get("document_item_id") == replace_document_item
+                              and item.get("document_crop_version", -1) > asset.get("document_crop_version", -1)), None)
+                if newer:
+                    self.connection.commit()
+                    return newer, standard
+                for item in existing_assets:
+                    if item.get("document_item_id") == replace_document_item and item.get("status") != "excluded":
+                        item.update(status="excluded", updated_at=updated_at)
+                        cursor.execute(f"UPDATE {assets} SET status = %s, updated_at = %s, raw_json = %s::jsonb WHERE id = %s AND owner_user_id = %s",
+                            ("excluded", updated_at, _json_parameter(item), item["id"], owner_user_id))
             next_asset = dict(asset)
             next_asset["ordinal"] = max((int(item.get("ordinal") or 0) for item in existing_assets), default=0) + 1
             cursor.execute(

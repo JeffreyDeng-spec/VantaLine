@@ -20,6 +20,11 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+Document-import changes add offline real-route and PostgreSQL race/revision checks
+to required CI. They ship behind a default-empty account gate. CI cannot certify
+unseen-label accuracy or a separately provisioned DOC converter/font environment;
+those remain commissioning gates before activation. No production copy is allowed.
+
 The optional whole-image rectangle experiment adds offline parser/geometry and real-route smoke checks to required CI. Its separate account gate remains empty if customer-image commissioning fails; shipping disabled code is not production algorithm acceptance.
 
 Single-label extraction adds required geometry and real-route smoke checks to CI. Its additive migration and default-empty account allowlist permit staged activation while retaining the legacy input route for rollback. Synthetic geometry and API tests are not substitutes for customer-image commissioning or permission to automatically pass labels.

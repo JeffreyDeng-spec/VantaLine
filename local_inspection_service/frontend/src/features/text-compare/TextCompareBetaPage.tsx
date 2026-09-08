@@ -5,6 +5,7 @@ import { addTextInspectionStandardAsset, compareTextInspectionLabel, confirmText
 import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
 import { FileDropZone } from "../../components/FileDropZone";
 import { apiClient } from "../../api/client";
+import { DocumentImportProgress } from "./DocumentImportProgress";
 import { DEFAULT_GUIDE, GuideOverlay, LabelExtractionPanel, type Guide } from "./LabelExtraction";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -82,6 +83,7 @@ export function TextCompareBetaPage() {
   const [importMaterial, setImportMaterial] = useState("");
   const [importVersion, setImportVersion] = useState("V1");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const documentCapabilities = useQuery({ queryKey: ["text-inspection", "document-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; available: boolean; doc_available: boolean; reason: string }>("/api/text-inspection/document-import-capabilities") });
   const [guide, setGuide] = useState<Guide>([...DEFAULT_GUIDE]);
   const capabilities = useQuery({ queryKey: ["text-inspection", "extraction-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; ai_available: boolean; bbox_enabled?: boolean; bbox_available?: boolean }>("/api/text-inspection/extraction-capabilities") });
   const extractionEnabled = capabilities.data?.enabled === true;
@@ -97,8 +99,9 @@ export function TextCompareBetaPage() {
   const importMutation = useMutation({
     mutationFn: () => {
       if (!importFile || !importName.trim() || !importMaterial.trim() || !importVersion.trim()) throw new Error("请填写标准名称、物料编码、版本并选择 DOCX 或 PDF。");
-      const expectedSuffix = mode === "label" ? ".docx" : ".pdf";
-      if (!importFile.name.toLowerCase().endsWith(expectedSuffix)) throw new Error(mode === "label" ? "标签标准请上传 DOCX 文件。" : "说明书标准请上传 PDF 文件。");
+      const validFile = mode === "label" ? importFile.name.toLowerCase().endsWith(".docx") || (documentCapabilities.data?.doc_available && documentCapabilities.data?.enabled && importFile.name.toLowerCase().endsWith(".doc")) : importFile.name.toLowerCase().endsWith(".pdf");
+      if (!validFile) throw new Error(mode === "label" ? "请上传 DOCX；DOC 需要安全转换组件验收启用。" : "说明书标准请上传 PDF 文件。");
+      if (mode === "label" && documentCapabilities.data?.enabled && !documentCapabilities.data.available) throw new Error(documentCapabilities.data.reason);
       const form = new FormData(); form.set("file", importFile); form.set("name", importName.trim()); form.set("material_code", importMaterial.trim()); form.set("version_label", importVersion.trim());
       return importTextInspectionStandard(form);
     },
@@ -376,6 +379,7 @@ export function TextCompareBetaPage() {
           return <article className={`text-standard-order ${expanded ? "expanded" : ""}`} key={standard.id}>
             <button className="text-standard-order-toggle" type="button" aria-expanded={expanded} onClick={() => chooseStandard(standard.id)}><span>{standard.standard_type === "label" ? "标" : "册"}</span><div><strong>{standard.name}</strong><small>{standard.material_code} · {standard.version_label} · {standard.asset_count} 张</small></div><em className={standard.status}>{standard.status === "confirmed" ? "已启用" : "待整理"}</em>{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</button>
             {expanded ? <div className="text-standard-order-detail" data-testid="standard-order-detail">
+              {standard.import_job_id ? <DocumentImportProgress key={standard.import_job_id} jobId={standard.import_job_id} /> : null}
               <div className="text-standard-order-toolbar"><div><strong>{standardQuery.isLoading ? "正在读取订单…" : `${retainedAssetCount} 张图片已启用`}</strong><small>{standard.status === "confirmed" ? "点击任一已启用图片即可高亮选中；“查看大图”不会改变选择。" : "请整理候选图片，然后保存并启用订单。"}</small></div></div>
               {standardQuery.data?.standard_type === "label" ? <div className="text-standard-inline-controls"><FileDropZone className="text-standard-add-asset-drop" accept={IMAGE_ACCEPT} disabled={assetUploadMutation.isPending} ariaLabel="拖拽或选择单张标准图片" onFiles={(files) => { setAssetUploadFile(files[0] || null); setInputError(""); }}><ImagePlus size={16} /><span>{assetUploadFile ? assetUploadFile.name : "拖拽或选择单张图片"}</span></FileDropZone><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}
               {standardQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={22} /><strong>订单内容加载失败</strong><button type="button" onClick={() => void standardQuery.refetch()}>重试</button></div> : renderAssetCards()}
@@ -425,7 +429,8 @@ export function TextCompareBetaPage() {
         <label className="field">标准名称<input value={importName} onChange={(event) => setImportName(event.currentTarget.value)} placeholder="例如：电池包底部标签" autoFocus /></label>
         <label className="field">物料编码<input value={importMaterial} onChange={(event) => setImportMaterial(event.currentTarget.value)} placeholder="例如：PKG-BAT-001" /></label>
         <label className="field">版本<input value={importVersion} onChange={(event) => setImportVersion(event.currentTarget.value)} placeholder="例如：V1" /></label>
-        <div className="field wide"><span>标准文档</span><FileDropZone className="dropzone compact-dropzone" accept={mode === "label" ? ".docx" : ".pdf"} disabled={importMutation.isPending} ariaLabel="拖拽或选择标准文档" onFiles={(files) => setImportFile(files[0] || null)}><strong>{importFile?.name || "拖拽标准文档到这里，或点击选择"}</strong><span>{mode === "label" ? "上传 DOCX，系统会提取其中的标签候选图片。" : "上传 PDF，系统会按页建立说明书标准。"}</span></FileDropZone></div>
+        <div className="field wide"><span>标准文档</span><FileDropZone className="dropzone compact-dropzone" accept={mode === "label" ? (documentCapabilities.data?.enabled && documentCapabilities.data.doc_available ? ".doc,.docx" : ".docx") : ".pdf"} disabled={importMutation.isPending} ariaLabel="拖拽或选择标准文档" onFiles={(files) => setImportFile(files[0] || null)}><strong>{importFile?.name || "拖拽标准文档到这里，或点击选择"}</strong><span>{mode === "label" ? (documentCapabilities.data?.enabled ? "后台识别标签、裁剪并复核；异常图片单独待确认。" : "上传 DOCX，系统会提取其中的标签候选图片。") : "上传 PDF，系统会按页建立说明书标准。"}</span></FileDropZone></div>
+        {mode === "label" && documentCapabilities.data?.enabled && !documentCapabilities.data.available ? <p role="alert">{documentCapabilities.data.reason}</p> : null}
         {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
       </div>
       <footer><button type="button" disabled={importMutation.isPending} onClick={() => setShowImport(false)}>取消</button><button className="primary" type="button" disabled={importMutation.isPending} onClick={() => { setInputError(""); importMutation.mutate(); }}>{importMutation.isPending ? "正在安全解析…" : "导入并整理图片"}</button></footer>

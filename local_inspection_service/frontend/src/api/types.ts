@@ -749,6 +749,7 @@ export interface TextInspectionAsset {
 }
 
 export interface TextInspectionStandard {
+  import_job_id?: string;
   id: string;
   name: string;
   material_code: string;

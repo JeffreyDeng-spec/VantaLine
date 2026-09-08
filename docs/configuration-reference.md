@@ -28,6 +28,23 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 ## Text inspection v2
 
+`VANTALINE_DOCUMENT_LABEL_ACCOUNTS` is a default-empty authenticated account-ID
+allowlist for asynchronous DOCX classification and cropping. It requires the
+existing external-media gate and configured Qwen resolver; there is no new key,
+endpoint or fallback model. Each distinct image gets at most one locate and one
+verify call per explicitly created attempt (60 seconds each). Manual edits do not
+call a provider. A retry requires a new user-triggered attempt with a request ID.
+
+`VANTALINE_DOC_CONVERTER_VERIFIED=true` is an operations commissioning gate, NOT
+proof that a runtime is safe. Availability also requires Linux, bubblewrap,
+prlimit and soffice. Provision/pin those packages and fonts separately. The
+converter uses a fresh highest-security macro profile, unshared network/PID/etc.
+namespaces, read-only runtime mounts, no host home, 2 GiB address-space / 45 second
+CPU / 60 second wall / 120 MiB file limits and process-group termination. No
+converter package is installed by this feature. Missing or failed confinement
+returns an explicit unavailable/failed result; never turn on this flag merely to
+make a DOC upload succeed. DOCX native extraction needs no conversion process.
+
 `VANTALINE_LABEL_BBOX_ACCOUNTS` is a separate, default-empty account allowlist for `vlm_bbox`. An account must also be in `VANTALINE_LABEL_EXTRACTION_ACCOUNTS`. Availability requires the external-media gate and a configured Qwen result from the same `ai_detection_settings()` resolver used for label comparison. There is no new key/model source or browser-supplied endpoint. One task freezes these resolved settings; the experimental timeout is 180 seconds, one attempt, temperature 0.1, 512 output tokens and `enable_thinking=false`. The timeout overrides only this method, not the comparison settings. Never activate based on synthetic tests alone.
 
 `VANTALINE_LABEL_EXTRACTION_ACCOUNTS` is a comma-separated allowlist of authenticated account IDs; empty disables the new extraction UI. The extraction capabilities route reports availability without keys. AI masks use the existing image-generation provider/model/key, require the existing external-media gate, and disable provider format-retry fallback for this one-call path. Missing image-generation configuration leaves explicit manual polygon extraction available. Qwen text comparison keeps its existing separate settings. Enable the initial account only after synthetic extraction and manual-confirmation acceptance; do not infer image-generation availability from the text model's configuration.
