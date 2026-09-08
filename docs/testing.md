@@ -1,8 +1,31 @@
 # Testing
 
+The whole-sheet benchmark also exports an amber observation overlay, including
+partial observations on timeout. These boxes are raw recognition locations, not
+accepted matches. Runner RSS excludes the isolated native OCR child and must not
+be reported as complete deployment memory consumption.
+
 **Status: Authoritative**
 
 Run checks from repository root unless stated otherwise.
+
+Whole-sheet elements require `smoke_sheet_elements.py` and
+`smoke_sheet_elements_endpoints.py` under `local_inspection_service/scripts/`.
+Incremental assertions count one detection pass, pre-recognition spatial dedup,
+non-repeated region IDs, early stopping, exhaustive template modelling and failure
+to complete parameter auditing from only one match. Browser tests require direction
+confirmation and prove changing direction/photo invalidates that confirmation.
+Real logs must separately report detection and recognition time, detected/recognized/
+skipped region counts, missing elements per batch, and bounded conflict-audit scope.
+These test geometry, exact boundaries, spatial deduplication, intentional global
+coverage, conflict/unknown gates, auth/media isolation, immutable edits, stale
+confirmations, idempotency and lost-worker terminal behavior. Injected OCR tests
+prove mechanics only. `scripts/benchmark_sheet_elements.py` writes isolated HTML,
+input/reference images, overlays, raw observations and JSON timings; unconfirmed
+same-photo templates cannot certify accuracy. Test all nine real samples plus
+wrong-standard/digit/unit/QR/graphic and glare/rotation negatives, independent
+positive samples, 30-run cold/warm performance, PostgreSQL concurrency, frontend
+stale responses and existing PLC/media regressions before production activation.
 
 | Change area | Required local checks |
 | --- | --- |

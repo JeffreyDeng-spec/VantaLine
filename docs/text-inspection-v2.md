@@ -23,6 +23,67 @@ The formal **文字检验** entry is account scoped and independent from product
 
 ## API
 
+### Whole-sheet element inspection (account-gated experiment)
+
+This opt-in pipeline checks content presence across a sheet assumed to contain one
+repeated design, not defects in every instance. It does not replace old APIs or
+create PLC actions. The incremental path detects text once per overlapping tile,
+deduplicates boxes before recognition, and recognizes quality/aspect-prioritized
+batches of 32. Matching after every batch updates missing-element IDs; each region
+is recognized at most once. Complete text coverage plus three distinct matching
+locations per required parameter permits early stopping. Insufficient parameter
+evidence remains review-required, even if one correct value was found. This bounded
+audit does not certify unrecognized regions. Standards are recognized exhaustively
+and still require complete human inventory confirmation. Line crops are rectified
+for OCR only; result coordinates/evidence remain on the normalized original.
+Matching preserves digits, case,
+punctuation and token boundaries; confirmed text rules may normalize whitespace
+and join nearby lines. OpenCV decodes QR; provisioned ZXing additionally supports
+barcodes. Graphic candidates undergo scale/rotation retrieval and local ORB/RANSAC,
+coverage, pixel and edge checks, but cannot pass before graphic commissioning.
+Missing/unsupported content and conflicting parameters remain review-required.
+
+`POST /api/text-inspection/sheet/templates` accepts `standard_asset_id` and
+`request_id`; `GET .../templates?standard_asset_id=...` lists templates.
+`POST .../templates/{id}/revise` accepts `version`, `elements`, `confirm` and
+`inventory_confirmed`. Elements have an ID, `text|parameter|code|graphic` type,
+expected content, normalized rectangle, required flag, ignore reason and
+`exact|whitespace` rule. Save before confirming; the operator must confirm a
+complete inventory including graphics. Edits append versions and invalidate old
+confirmations for new work. Variable fields currently require a documented ignore,
+not an arbitrary regex. The editor offers numeric box adjustment, merge/split,
+add/delete, text correction and explicit confirmation.
+
+`POST .../sheet/jobs` accepts multipart `template_id`, `request_id`, `file`,
+`quarter_turns` (0–3 counterclockwise) and required `orientation_confirmed=true`.
+The browser previews rotation and changing it or the photograph clears confirmation.
+Rotation is included in immutable request identity. Whole-page rotations are not
+retried; the pinned line classifier handles local 180-degree reversals.
+`GET .../sheet/jobs?standard_asset_id=...` exposes the most recent 50 account-owned
+jobs for recovery without resubmitting inference, including disabled-asset history.
+`GET .../sheet/resources/{id}` polls state; its `/media/{kind}` route serves
+account-owned original, normalized source, reference, overlays and advisory input.
+Templates bind the current standard revision/hash; jobs freeze confirmed templates
+and input hashes. Duplicate IDs return existing work, even after later standard
+edits; changed inputs return 409. New jobs reject stale or disabled standards.
+One inference slot serves local jobs. P95 15 seconds is a commissioning target.
+At 120 seconds the timer/status lookup competes for one immutable terminal record.
+OCR lives in a warm subprocess so a native call can be terminated without blocking
+the API interpreter. Cancellation checks active task ownership; late output cannot
+overwrite the outcome. Lost jobs are not resubmitted after restart. The engine
+emits DIFFERENCES only for a parameter mismatch supported by at least two spatially
+distinct identical readings at confidence >= .98, with matching nonnumeric context
+and no reliable expected value. Mixed correct/incorrect readings remain review.
+Both MATCH and DIFFERENCES candidates are downgraded until account commissioning.
+
+Optional Qwen advice uses existing resolved credentials, with separate account
+consent and external-media gates. Standard inventory proposals need confirmation.
+Actual advisory sees at most six doubtful regions; only fresh local OCR of their
+source pixels may verify suggestions. VLM text cannot create pass evidence.
+Claims and authenticated inputs precede one non-retried call. Bounded sanitized
+outputs, coordinates, versions, timing and available usage appear in default-
+collapsed diagnostics. No suitable region/configuration means no external call.
+
 ### Single-label extraction
 
 An additional account-gated experimental `method=vlm_bbox` searches the **whole** image, canonicalizing target to `[0,0,1,1]`; guide coordinates do not select its target. Capabilities expose `bbox_enabled` and `bbox_available`. Its prompt is the original colleague multi-label layout prompt, ported to Qwen: normalized `cropRect` values are validated strictly, not clamped. Single/no-label replies without a rectangle fail closed rather than silently comparing the whole photograph. The known prompt limitation (no single-label coordinates requested) is preserved for the first baseline, not hidden by a second paid call.

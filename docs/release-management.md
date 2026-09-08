@@ -20,6 +20,11 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+Whole-sheet element experiments add deterministic evidence, real-route and
+PostgreSQL concurrency tests to CI. They remain opt-in and uncommissioned until
+independent real-image and performance gates pass. Disabled-code release is not
+permission to enable automatic decisions.
+
 The optional whole-image rectangle experiment adds offline parser/geometry and real-route smoke checks to required CI. Its separate account gate remains empty if customer-image commissioning fails; shipping disabled code is not production algorithm acceptance.
 
 Single-label extraction adds required geometry and real-route smoke checks to CI. Its additive migration and default-empty account allowlist permit staged activation while retaining the legacy input route for rollback. Synthetic geometry and API tests are not substitutes for customer-image commissioning or permission to automatically pass labels.
