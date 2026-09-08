@@ -9,7 +9,7 @@ type Finding = {element_id:string;expected:string;state:string;reason:string;sta
 type Resource = {id:string;root_id:string;status:string;version:number;standard_revision_id:string;elements?:Item[];media:Record<string,string>;error_code?:string;result?:{decision:string;gate_reason?:string;elements:Finding[]};diagnostics?:unknown};
 const API="/api/text-inspection/sheet";
 const finished=(v:Resource)=>["draft","confirmed","completed","review"].includes(v.status);
-const states:Record<string,string>={queued:"排队",recognizing:"识别",matching:"核对",reviewing:"复核",draft:"待确认",confirmed:"已确认",completed:"完成",review:"待复核"};
+const states:Record<string,string>={queued:"排队",detecting:"单轮文字检测",recognizing:"分批识别与匹配",matching:"核对",reviewing:"复核",draft:"待确认",confirmed:"已确认",completed:"完成",review:"待复核"};
 const reasons:Record<string,string>={not_detected:"未检出（不代表漏印）",conflicting_parameter:"存在冲突参数",consistent_parameter_mismatch:"多个位置识别到一致的不同参数",graphic_not_commissioned:"图形核验未完成验收",local_evidence:"找到本地证据"};
 
 function EvidenceImage({src,boxes,select,zoom}:{src:string;boxes:{id:string;box:Box;state?:string}[];select:(id:string)=>void;zoom:()=>void}) {
@@ -25,6 +25,8 @@ export function SheetElementsPanel({assetId,revision,referenceUrl,file,capture,o
   const retry=useRef<{file:File;templateId:string;id:string}|null>(null);
   const [template,setTemplate]=useState<Resource|null>(null),[job,setJob]=useState<Resource|null>(null);
   const [history,setHistory]=useState<Resource[]>([]);
+  const [turns,setTurns]=useState(0),[directionConfirmed,setDirectionConfirmed]=useState(false),[inputPreview,setInputPreview]=useState("");
+  useEffect(()=>{setTurns(0);setDirectionConfirmed(false);if(!file){setInputPreview("");return;}const url=URL.createObjectURL(file);setInputPreview(url);return()=>URL.revokeObjectURL(url);},[file]);
   const [items,setItems]=useState<Item[]>([]),[selected,setSelected]=useState("");
   const [editing,setEditing]=useState(false),[dirty,setDirty]=useState(false),[inventory,setInventory]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;++epoch.current;};},[]);
@@ -63,12 +65,13 @@ export function SheetElementsPanel({assetId,revision,referenceUrl,file,capture,o
     <div className="sheet-toolbar"><strong>整页同款标签 · 核对试验</strong><span>不检查每张标签的独立漏印</span>
       <button type="button" disabled={!assetId||busy} onClick={()=>void action(async version=>{if(!templateRequest.current||templateRequest.current.asset!==assetId||templateRequest.current.revision!==revision)templateRequest.current={asset:assetId,revision,id:crypto.randomUUID()};const value=await apiClient.post<Resource>(`${API}/templates`,{standard_asset_id:assetId,request_id:templateRequest.current.id});await poll(value,version,v=>{setTemplate(v);setItems(v.elements||[]);setEditing(true);setDirty(false);});})}>解析／查询模板</button>
       <button type="button" disabled={!template||busy} onClick={()=>setEditing(true)}>编辑／确认模板</button>
-      <button type="button" disabled={!template||template.status!=="confirmed"||dirty||busy} onClick={()=>{
+      <button type="button" disabled={!template||template.status!=="confirmed"||dirty||busy||Boolean(file&&!directionConfirmed)} onClick={()=>{
         if(!template)return;
         if(!file){void capture().then(onCaptured).catch(e=>setError(e.message));return;}
-        void action(async version=>{if(!retry.current||retry.current.file!==file||retry.current.templateId!==template.id)retry.current={file,templateId:template.id,id:crypto.randomUUID()};const form=new FormData();form.set("template_id",template.id);form.set("request_id",retry.current.id);form.set("file",file);await poll(await apiClient.upload<Resource>(`${API}/jobs`,form),version,setJob);});
+        void action(async version=>{if(!retry.current||retry.current.file!==file||retry.current.templateId!==template.id)retry.current={file,templateId:template.id,id:crypto.randomUUID()};const form=new FormData();form.set("template_id",template.id);form.set("request_id",retry.current.id);form.set("file",file);form.set("quarter_turns",String(turns));form.set("orientation_confirmed",String(directionConfirmed));await poll(await apiClient.upload<Resource>(`${API}/jobs`,form),version,setJob);});
       }}>{file?"开始整页核对":"拍摄整页照片"}</button>
     </div>
+    {file?<div className="sheet-direction"><img src={inputPreview} alt="实拍方向预览" style={{width:120,height:120,objectFit:"contain",transform:`rotate(${-90*turns}deg)`}}/><label>阅读方向<select disabled={busy} value={turns} onChange={event=>{setTurns(Number(event.target.value));setDirectionConfirmed(false);setJob(null);retry.current=null;++epoch.current;}}><option value={0}>原方向</option><option value={1}>向左 90°</option><option value={2}>旋转 180°</option><option value={3}>向右 90°</option></select></label><label><input type="checkbox" disabled={busy} checked={directionConfirmed} onChange={event=>setDirectionConfirmed(event.target.checked)}/>已确认主要文字方向；正反混排由文字行方向模块处理</label></div>:null}
     {busy?<p role="status">{states[job?.status||template?.status||"queued"]}…15 秒为目标，慢任务继续等待，120 秒结束为待复核。</p>:null}
     {error?<p role="alert">{error}</p>:null}
     <details onToggle={event=>{if(event.currentTarget.open&&assetId){const version=epoch.current;void apiClient.get<{items:Resource[]}>(`${API}/jobs?standard_asset_id=${encodeURIComponent(assetId)}`).then(data=>{if(mounted.current&&version===epoch.current)setHistory(data.items);}).catch(e=>{if(mounted.current&&version===epoch.current)setError(e.message);});}}}><summary>最近核对记录（查询不重复识别）</summary>{history.map(v=><button type="button" disabled={busy} key={v.root_id} onClick={()=>void action(version=>poll(v,version,setJob))}>{v.root_id.slice(-8)} · {states[v.status]}</button>)}</details>

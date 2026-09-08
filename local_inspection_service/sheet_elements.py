@@ -15,7 +15,7 @@ from typing import Callable
 import cv2
 import numpy as np
 
-VERSION = "sheet-elements-2"
+VERSION = "sheet-elements-3"
 TILE_SIZE = 1536
 OVERLAP = 256
 MIN_CONFIDENCE = .90

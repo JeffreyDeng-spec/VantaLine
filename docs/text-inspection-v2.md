@@ -27,10 +27,16 @@ The formal **文字检验** entry is account scoped and independent from product
 
 This opt-in pipeline checks content presence across a sheet assumed to contain one
 repeated design, not defects in every instance. It does not replace old APIs or
-create PLC actions. Local OCR scans overlapping full-resolution tiles at 0/90
-degrees; the pinned line-orientation model handles 180-degree reversals. This
-avoids recognizing every repeated line four times. It removes only spatial
-duplicates. Matching preserves digits, case,
+create PLC actions. The incremental path detects text once per overlapping tile,
+deduplicates boxes before recognition, and recognizes quality/aspect-prioritized
+batches of 32. Matching after every batch updates missing-element IDs; each region
+is recognized at most once. Complete text coverage plus three distinct matching
+locations per required parameter permits early stopping. Insufficient parameter
+evidence remains review-required, even if one correct value was found. This bounded
+audit does not certify unrecognized regions. Standards are recognized exhaustively
+and still require complete human inventory confirmation. Line crops are rectified
+for OCR only; result coordinates/evidence remain on the normalized original.
+Matching preserves digits, case,
 punctuation and token boundaries; confirmed text rules may normalize whitespace
 and join nearby lines. OpenCV decodes QR; provisioned ZXing additionally supports
 barcodes. Graphic candidates undergo scale/rotation retrieval and local ORB/RANSAC,
@@ -48,7 +54,11 @@ confirmations for new work. Variable fields currently require a documented ignor
 not an arbitrary regex. The editor offers numeric box adjustment, merge/split,
 add/delete, text correction and explicit confirmation.
 
-`POST .../sheet/jobs` accepts multipart `template_id`, `request_id`, and `file`.
+`POST .../sheet/jobs` accepts multipart `template_id`, `request_id`, `file`,
+`quarter_turns` (0–3 counterclockwise) and required `orientation_confirmed=true`.
+The browser previews rotation and changing it or the photograph clears confirmation.
+Rotation is included in immutable request identity. Whole-page rotations are not
+retried; the pinned line classifier handles local 180-degree reversals.
 `GET .../sheet/jobs?standard_asset_id=...` exposes the most recent 50 account-owned
 jobs for recovery without resubmitting inference, including disabled-asset history.
 `GET .../sheet/resources/{id}` polls state; its `/media/{kind}` route serves

@@ -46,6 +46,12 @@ def main():
         page.get_by_role("button",name="保存草稿",exact=True).click()
         page.get_by_role("button",name="确认模板",exact=True).click()
         expect(page.get_by_role("dialog")).to_have_count(0)
+        expect(page.get_by_role("button",name="开始整页核对",exact=True)).to_be_disabled()
+        direction=page.get_by_label("已确认主要文字方向；正反混排由文字行方向模块处理",exact=True)
+        direction.check()
+        page.locator(".sheet-direction select").select_option("1")
+        expect(direction).not_to_be_checked()
+        direction.check()
         page.get_by_role("button",name="开始整页核对",exact=True).click()
         expect(page.get_by_role("heading",name="待复核",exact=True)).to_be_visible()
         assert page.locator("details").evaluate_all("items=>items.every(el=>!el.open)")
@@ -53,6 +59,7 @@ def main():
         page.screenshot(path=str(output),full_page=True)
         state["hold"]=True
         page.get_by_role("button",name="更换实拍",exact=True).click()
+        expect(direction).not_to_be_checked();direction.check()
         page.get_by_role("button",name="开始整页核对",exact=True).click()
         page.wait_for_timeout(100);assert held
         page.get_by_role("button",name="更换实拍",exact=True).click()

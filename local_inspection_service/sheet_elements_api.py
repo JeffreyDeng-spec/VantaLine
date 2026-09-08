@@ -8,6 +8,8 @@ import re
 import threading
 import time
 import uuid
+import cv2
+import numpy as np
 
 from fastapi import File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -133,6 +135,9 @@ def register(namespace):
         return observations(image)
 
     namespace["sheet_elements_ocr"] = ocr
+    from .sheet_elements_runtime import detect, recognize
+    namespace["sheet_elements_detect"] = detect
+    namespace["sheet_elements_recognize"] = recognize
 
     def advisory_settings(uid):
         if not allowed(uid,"VANTALINE_SHEET_ELEMENTS_VLM_ACCOUNTS") or not s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
@@ -156,8 +161,10 @@ def register(namespace):
             begin_task(root["id"],root["deadline_at"])
             event(root, "recognizing")
             source = images.decode(read(root, "source"))
-            observations, metrics = engine.observe(source, s.sheet_elements_ocr, root["deadline_at"],
-                                                   lambda state, progress: event(root, state, progress))
+            from .sheet_elements_incremental import observe as incremental_observe
+            observations, metrics = incremental_observe(source, s.sheet_elements_detect, s.sheet_elements_recognize,
+                root["deadline_at"], None if root["task_type"]=="template" else root["elements"],
+                lambda state, progress: event(root, state, progress))
             diagnostic.update(metrics, observations_raw=observations)
             from .sheet_elements_runtime import metadata as ocr_metadata
             diagnostic["ocr_artifacts"] = ocr_metadata()
@@ -209,6 +216,9 @@ def register(namespace):
                 write(output, "standard_overlay", engine.annotate(images.decode(read(root,"reference")), result))
                 write(output, "actual_overlay", engine.annotate(source, result, False))
                 result["candidate_decision"] = result["decision"]
+                if result["decision"]=="MATCH" and not metrics.get("conflict_audit_complete"):
+                    result["decision"]="REVIEW_REQUIRED"
+                    result["gate_reason"]="parameter_audit_incomplete"
                 try:
                     validate_binding(root,root["owner_user_id"])
                     template=get(root["template_id"],root["owner_user_id"])
@@ -354,8 +364,11 @@ def register(namespace):
         return public(revision)
 
     @s.app.post("/api/text-inspection/sheet/jobs")
-    async def create_job(template_id: str = Form(...), request_id: str = Form(...), file: UploadFile = File(...)):
+    async def create_job(template_id: str = Form(...), request_id: str = Form(...), file: UploadFile = File(...),
+                         quarter_turns: int = Form(0), orientation_confirmed: bool = Form(False)):
         uid = enabled_owner()
+        if quarter_turns not in range(4) or not orientation_confirmed:
+            raise HTTPException(400,"请先确认图片阅读方向")
         if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}",request_id): raise HTTPException(400,"请求 ID 无效")
         template = get(template_id,uid)
         if template.get("task_type") != "template" or template["status"] != "confirmed":
@@ -365,7 +378,7 @@ def register(namespace):
             normalized, *_ = s._text_v2_prepare_image(data)
         except Exception as exc:
             raise HTTPException(400,"图片无法解码或超过安全限制") from exc
-        identity = engine.digest([template_id,template["elements_sha256"],s.sha256_bytes(data),engine.VERSION])
+        identity = engine.digest([template_id,template["elements_sha256"],s.sha256_bytes(data),quarter_turns,engine.VERSION])
         identifier = "sej_"+engine.digest([uid,request_id])[:40]
         existing = optional(identifier,uid)
         # Read an unchanged previous request even if the standard later changed.
@@ -378,6 +391,9 @@ def register(namespace):
         root = {**new_root(uid,identifier,"comparison",identity),
                 **{k:template[k] for k in ("standard_id","standard_asset_id","standard_revision_id","reference_asset_sha256")},
                 "template_id": template_id, "elements_sha256": template["elements_sha256"], "elements": template["elements"]}
+        root["orientation"]={"quarter_turns_ccw":quarter_turns,"operator_confirmed":True}
+        if quarter_turns:
+            normalized=cv2.imencode(".png",np.ascontiguousarray(np.rot90(images.decode(normalized),quarter_turns)))[1].tobytes()
         write(root,"original",data); write(root,"source",normalized); write(root,"reference",read(template,"source"))
         return claim(root)
 

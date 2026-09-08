@@ -15,6 +15,12 @@
 ## Inspection flows
 
 - Opt-in whole-sheet element inspection is independent of masks and PLC. The
+  incremental path runs one tiled detection pass, deduplicates source boxes,
+  then recognizes batches of 32 only while text coverage or parameter evidence
+  remains incomplete. Standard modelling is exhaustive. Operator-confirmed page
+  rotation is frozen; per-line direction correction does not repeat detection.
+  Three matching source locations per required parameter are a bounded audit,
+  not a guarantee of finding every defect on the sheet.
   account/root-indexed `text_sheet_elements` table stores append-only templates,
   job claims, progress, provider claims/outcomes and terminal records. Local OCR,
   code decoding and gated geometric checks own pass evidence; VLM advice cannot

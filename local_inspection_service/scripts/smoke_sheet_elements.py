@@ -13,6 +13,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from local_inspection_service import sheet_elements as e
 from local_inspection_service import sheet_elements_vlm as advisory
 from local_inspection_service import sheet_elements_runtime as runtime
+from local_inspection_service import sheet_elements_incremental as incremental
 
 
 def item(text="20V", kind="parameter", **kwargs):
@@ -25,6 +26,40 @@ def observation(text="20V", x=.1, confidence=.98, kind="text"):
 
 
 def main():
+    detection_calls=[];recognition_calls=[]
+    page=np.zeros((500,700,3),np.uint8)
+    quads=[[[10+(i%10)*60,10+(i//10)*50],[55+(i%10)*60,10+(i//10)*50],
+            [55+(i%10)*60,30+(i//10)*50],[10+(i%10)*60,30+(i//10)*50]] for i in range(80)]
+    def detect_once(image):detection_calls.append(1);return quads+quads[:3]
+    def recognize_batch(patches):
+        recognition_calls.append(len(patches));return [{"text":"20V","confidence":.99} for _ in patches]
+    found,metrics=incremental.observe(page,detect_once,recognize_batch,time.time()+10,[item()])
+    assert len(detection_calls)==1 and metrics["detected_regions"]==80
+    assert recognition_calls==[32] and metrics["skipped_regions"]==48 and metrics["conflict_audit_complete"]
+    assert len({v["region_id"] for v in found})==len(found)
+    detection_calls.clear();recognition_calls.clear()
+    _,metrics=incremental.observe(page,detect_once,recognize_batch,time.time()+10,None)
+    assert len(detection_calls)==1 and sum(recognition_calls)==80,"standard inventory must be exhaustive"
+    _,metrics=incremental.observe(page,lambda _:quads[:1],recognize_batch,time.time()+10,[item()])
+    assert not metrics["conflict_audit_complete"],"one matching location cannot finish parameter audit"
+    def timed_out(_):raise TimeoutError()
+    try:incremental.observe(page,timed_out,recognize_batch,time.time()+10,[item()])
+    except e.ObservationTimeout:pass
+    else:raise AssertionError("detection timeout ignored")
+    calls=[]
+    class Predictor:
+        def __init__(self,operation):self.operation=operation
+        def predict(self,inputs,**kwargs):
+            calls.append(self.operation)
+            if self.operation=="orientation":return [{"label_names":["180_degree"],"scores":[.97]} for _ in inputs]
+            if self.operation=="recognize":return [{"rec_text":"20V","rec_score":.99} for _ in inputs]
+            return [{"dt_polys":np.asarray(quads[:1])}]
+    runtime._split_models=tuple(Predictor(v) for v in ("detect","recognize","orientation"))
+    runtime._metadata={"profile":"medium"}
+    assert runtime._split("detect",page)==quads[:1]
+    assert runtime._split("recognize",[page])[0]["confidence"]==.97
+    assert calls==["detect","orientation","recognize"]
+    runtime._split_models=None;runtime._metadata={}
     # Pixel centers must round-trip in all orientations and all tile origins.
     for w,h in [(4096,3072),(3072,4096),(1080,1919),(317,129)]:
         for k in range(4):

@@ -16,6 +16,48 @@ _connection = None
 _task_id = ""
 _deadline = 0.
 _worker_metadata = {}
+_split_models = None
+
+
+def _split(operation, inputs):
+    global _split_models, _metadata
+    profile=os.environ.get("VANTALINE_SHEET_OCR_PROFILE","medium")
+    if profile not in {"small","medium"}: raise RuntimeError("invalid_sheet_ocr_profile")
+    if _split_models is not None and _metadata["profile"] != profile:
+        raise RuntimeError("restart_required_after_profile_change")
+    if _split_models is None:
+        configured=os.environ.get("VANTALINE_SHEET_OCR_MODEL_DIR","")
+        if not configured: raise RuntimeError("sheet_ocr_models_not_provisioned")
+        base=Path(configured)
+        names=(f"PP-OCRv6_{profile}_det",f"PP-OCRv6_{profile}_rec","PP-LCNet_x1_0_textline_ori")
+        hashes={}
+        for name in names:
+            for filename in ("inference.yml","inference.json","inference.pdiparams"):
+                path=base/name/filename
+                if not path.is_file(): raise RuntimeError("sheet_ocr_models_missing")
+                sha=hashlib.sha256()
+                with path.open("rb") as stream:
+                    for chunk in iter(lambda:stream.read(1024*1024),b""):sha.update(chunk)
+                hashes[name+"/"+filename]=sha.hexdigest()
+        from paddleocr import TextDetection,TextRecognition,TextLineOrientationClassification
+        _split_models=tuple(cls(model_name=name,model_dir=str(base/name),device="cpu",cpu_threads=2)
+                            for cls,name in zip((TextDetection,TextRecognition,TextLineOrientationClassification),names))
+        _metadata={"profile":profile,"paddleocr":"3.7.0","paddle":"3.2.2","artifacts":hashes,"device":"cpu","threads":2,"mode":"split_detection_recognition"}
+    detector,recognizer,orientation=_split_models
+    if operation=="detect":
+        raw=detector.predict(inputs)[0]
+        return [v.tolist() for v in raw["dt_polys"]]
+    import numpy as np
+    # Classification changes only line crops, never causes another page detection.
+    orientations=orientation.predict(inputs,batch_size=8)
+    if len(orientations)!=len(inputs): raise RuntimeError("orientation_batch_length_mismatch")
+    patches=[]
+    for patch,result in zip(inputs,orientations):
+        label=str(result["label_names"][0])
+        if label not in {"0_degree","180_degree"}: raise RuntimeError("unsupported_line_orientation")
+        patches.append(np.ascontiguousarray(np.rot90(patch,2)) if label=="180_degree" else patch)
+    return [{"text":v["rec_text"],"confidence":min(float(v["rec_score"]),float(direction["scores"][0]))}
+            for v,direction in zip(recognizer.predict(patches,batch_size=8),orientations)]
 
 
 def _local_observations(image):
@@ -86,9 +128,9 @@ def cancel_task(identifier):
 def _child(connection):
     try:
         while True:
-            image=connection.recv()
+            operation,image=connection.recv()
             try:
-                values=_local_observations(image)
+                values=_local_observations(image) if operation=="legacy" else _split(operation,image)
                 connection.send({"observations":values,"metadata":_metadata})
             except Exception as exc:
                 connection.send({"error":type(exc).__name__})
@@ -99,6 +141,18 @@ def _child(connection):
 
 
 def observations(image):
+    return _request("legacy",image)
+
+
+def detect(image):
+    return _request("detect",image)
+
+
+def recognize(patches):
+    return _request("recognize",patches)
+
+
+def _request(operation,image):
     """Warm subprocess protects API latency/GIL and permits hard cancellation."""
     global _process, _connection, _worker_metadata
     if time.time() >= _deadline:
@@ -111,7 +165,7 @@ def observations(image):
             _process.start();child.close();_connection=parent
         connection=_connection
     try:
-        connection.send(image)
+        connection.send((operation,image))
         if not connection.poll(max(0,_deadline-time.time())):
             cancel_task(_task_id)
             raise TimeoutError("sheet_ocr_deadline")

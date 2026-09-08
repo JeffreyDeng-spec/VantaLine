@@ -25,6 +25,8 @@ def main():
         calls.append(1)
         return [{"text":"20V","confidence":.99,"polygon":[[80,80],[180,80],[180,110],[80,110]]}]
     server.sheet_elements_ocr=ocr
+    server.sheet_elements_detect=lambda image:[v["polygon"] for v in ocr(image)]
+    server.sheet_elements_recognize=lambda patches:[{"text":"20V","confidence":.99} for _ in patches]
     body={"standard_asset_id":asset["id"],"request_id":"template_001"}
     def poll(root):
         for _ in range(200):
@@ -49,11 +51,14 @@ def main():
     assert_status(other.get(template["media"]["source"]),404,"template media isolation")
     assert_status(other.post(route,json=confirm),403,"gated edit")
     def create(rid="comparison_001",file=None):
-        return admin.post("/api/text-inspection/sheet/jobs",data={"template_id":template["id"],"request_id":rid},files={"file":("fake.data",file or picture("ACTUAL"),"application/octet-stream")})
+        return admin.post("/api/text-inspection/sheet/jobs",data={"template_id":template["id"],"request_id":rid,"orientation_confirmed":"true"},files={"file":("fake.data",file or picture("ACTUAL"),"application/octet-stream")})
     started=create();assert_status(started,200,"compare")
     final=poll(started.json()["id"])
+    assert_status(admin.post("/api/text-inspection/sheet/jobs",data={"template_id":template["id"],"request_id":"direction_missing"},files={"file":("x.png",picture("ACTUAL"),"image/png")}),400,"direction required")
+    assert_status(admin.post("/api/text-inspection/sheet/jobs",data={"template_id":template["id"],"request_id":"comparison_001","orientation_confirmed":"true","quarter_turns":"1"},files={"file":("x.png",picture("ACTUAL"),"image/png")}),409,"rotation changes identity")
     assert final["result"]["candidate_decision"]=="MATCH" and final["result"]["decision"]=="REVIEW_REQUIRED",final
     assert final["diagnostics"]["external_attempts"]==0
+    assert not final["diagnostics"]["conflict_audit_complete"]
     assert_status(other.get(f"/api/text-inspection/sheet/resources/{started.json()['id']}"),404,"task isolation")
     assert_status(other.get(final["media"]["actual_overlay"]),404,"evidence isolation")
     count=len(calls);assert create().json()["id"]==final["id"] and len(calls)==count

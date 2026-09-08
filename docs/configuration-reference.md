@@ -42,7 +42,9 @@ No new key source or default GPU purchase is introduced.
 `VANTALINE_SHEET_OCR_PROFILE=medium|small` defaults to `medium`; `small` selects the
 corresponding pinned v6-small artifacts for isolated performance comparisons.
 Changing profile requires fresh accuracy/performance commissioning. Inference uses
-two CPU threads and 0/90-degree passes plus local line-orientation correction.
+two CPU threads, one tiled text-detection pass, and local line-orientation correction
+before recognition batches of 32. The legacy full-OCR helper remains for optional
+bounded advisory verification, not the normal whole-page comparison path.
 Missing artifacts fail explicitly without runtime downloads. The experiment uses
 CPU and existing pinned Paddle dependencies. ZXing-C++ 2.3.0 is pinned in both
 dependency files (https://pypi.org/project/zxing-cpp/2.3.0/); incomplete development

@@ -24,6 +24,8 @@ from local_inspection_service import sheet_elements as engine
 from local_inspection_service.sheet_elements_runtime import observations
 from local_inspection_service.sheet_elements_runtime import metadata as ocr_metadata
 from local_inspection_service.sheet_elements_runtime import begin_task, cancel_task
+from local_inspection_service.sheet_elements_runtime import detect, recognize
+from local_inspection_service import sheet_elements_incremental as incremental
 
 
 def main():
@@ -66,7 +68,7 @@ def main():
         if not elements:
             try:
                 begin_task(name+"_template",time.time()+args.timeout)
-                detected,details=engine.observe(ref,observations,time.time()+args.timeout,rotations=(0,1,2,3))
+                detected,details=incremental.observe(ref,detect,recognize,time.time()+args.timeout)
                 elements=engine.draft_elements(detected)
                 (dest/"template-ocr.json").write_text(json.dumps(details,indent=2))
             except Exception as exc:
@@ -78,8 +80,12 @@ def main():
             begin_task(name+"_"+str(run),started+args.timeout)
             record={**baseline,"run":run,"cold_process":not records and run==0,"status":"review"}
             try:
-                values,metrics=engine.observe(source,observations,started+args.timeout)
+                if not elements: raise ValueError("empty_template_not_a_valid_comparison")
+                values,metrics=incremental.observe(source,detect,recognize,started+args.timeout,elements)
                 result=engine.compare(elements,values,ref,source,started+args.timeout)
+                if result["decision"]=="MATCH" and not metrics["conflict_audit_complete"]:
+                    result["decision"]="REVIEW_REQUIRED"
+                    result["gate_reason"]="parameter_audit_incomplete"
                 if not sample.get("confirmed"):
                     result["unvalidated_candidate_decision"]=result["decision"]
                     result["decision"]="REVIEW_REQUIRED"
