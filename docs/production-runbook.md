@@ -21,6 +21,19 @@ Do not place real hosts, usernames, keys, or DSNs in commands committed to this 
 
 ## Deployment behavior
 
+Ship document label import disabled. Before enabling its account allowlist, review
+independent unseen-document labels/non-labels, clipped content, outside-note
+contamination and manual-review rates, not just successful HTTP responses. The
+two development packaging documents are not a held-out acceptance set. Legacy
+DOC additionally requires independently pinned converter packages/fonts, runtime
+namespace/network/macro/resource-limit tests, and visual comparison of complete
+converted layouts. Missing fonts/composites stay review-only. Do not install a
+desktop converter or pip packages directly into production to bypass this gate.
+Observe persisted claim/outcome IDs; no-progress jobs become interrupted after
+180 seconds on query and never auto-replay. Explicit per-image retry adds a new
+attempt, and unknown retry results also expire to review. Roll back the complete
+immutable release and close the account gate while retaining documents/crops.
+
 Keep `VANTALINE_LABEL_BBOX_ACCOUNTS` empty until real-image rectangle localization is accepted. The method reuses resolved Qwen comparison credentials, not the generation service. Review the saved model input and crop before enabling any account; failure or timeout never falls back to a whole-sheet comparison. Roll back the complete release, retaining prior extraction evidence, if integration regressions occur.
 
 A successful push CI for `main` triggers `Release and deploy production` automatically. The workflow creates one immutable artifact, verifies checksums/version/protocol, uploads it through the restricted account, runs the installer, atomically switches `current`, restarts once, and performs acceptance. GitHub Release publication occurs only after acceptance.

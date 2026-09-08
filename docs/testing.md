@@ -2,6 +2,30 @@
 
 **Status: Authoritative**
 
+Document import requires `smoke_document_label_import.py` and
+`smoke_document_label_postgres.py` in `local_inspection_service/scripts/` plus
+frontend typecheck/build and existing document/media/PLC regressions. Assert strict
+finite rectangles, outward rounding, exact source pixels, full-image labels,
+deduplicated occurrences, max two calls, non-label single call, review-only failures,
+no uncertain replay, explicit retry identity, authenticated media, immutable manual
+edits and one-winner PostgreSQL claims. Generated fixture outcomes prove mechanics,
+not semantic accuracy. Development/held-out logs must include input/actual crop
+images, bounded raw outputs and independent annotations; report detection, automatic
+crop acceptance, false acceptance, truncation/notes, review rate, calls and latency
+separately. Do not enable on a held-out false acceptance, absent held-out documents,
+or uncommissioned DOC isolation/fonts.
+
+`smoke_document_import_browser.py` uses a development Vite server at port 5179
+and optional `LABEL_TEST_BROWSER=msedge`. Its synthetic fixture checks default
+collapsed raw output, rectangle edit acknowledgement invalidation, original/crop
+preview, manual confirmation payload, mobile layout and order switching.
+`scripts/benchmark_document_label_import.py` writes separate immutable rounds with
+input/crop images and original outputs using the existing authorized remote Qwen
+resolver; it never creates production standards. Every new round is explicit.
+The initial development round with the configured Flash model contained erroneous
+acceptances of manuals, placement photos and truncated crops. Therefore no account
+activation is authorized by these implementation tests.
+
 Run checks from repository root unless stated otherwise.
 
 | Change area | Required local checks |

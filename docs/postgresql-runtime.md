@@ -13,6 +13,17 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Change procedure
 
+`2026_09_08_document_label_import.sql` adds `text_document_imports`, indexed by
+account/root/time. Root, native-image references, stage claims/outcomes, terminal
+and edit records are append-only JSONB objects. A unique stage ID arbitrates
+at-most-once submission; a unique edit/version ID arbitrates manual edit/retry.
+Reads may reconcile durable accepted results into the standard library without
+making model calls. Stable crop asset IDs make publication idempotent. The existing
+standard advisory lock atomically soft-disables superseded crops, inserts the new
+asset, and snapshots an already confirmed standard. A late lower crop version
+cannot replace a higher one. Prior media/revisions remain unchanged; rollback
+ignores the additive table and retains evidence. JSON fallback is for tests only.
+
 `2026_09_06_text_label_extractions.sql` adds an independent account-owned extraction table. Task claim IDs are deterministic from account/request identity; edit and confirmation IDs are deterministic from root/version, and insert-once is the concurrency arbiter. Only the original task is updated by its single worker; edit and confirmation rows are immutable. Expiration appends a competing revision and retains tombstones, while any confirmed or comparison-referenced root is excluded from media cleanup. The previous release ignores this additive table.
 
 Extraction `raw_json` is passed to the repository as an object so PostgreSQL stores a JSONB object, not a twice-encoded JSON string. Account/root-scoped queries use the indexed `root_id` inside that object. Existing tables retain their representation for compatibility.

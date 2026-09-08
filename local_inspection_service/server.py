@@ -37365,6 +37365,7 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
 TEXT_INSPECTION_TABLES = {
+    "document_imports": "text_document_imports",
     "extractions": "text_label_extractions",
     "standards": "text_inspection_standards",
     "assets": "text_inspection_assets",
@@ -37390,6 +37391,7 @@ def _text_v2_load(kind: str) -> list[dict[str, Any]]:
 def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     fields = {
+        "document_imports": ("id", "owner_user_id", "root_id", "created_at"),
         "extractions": ("id", "owner_user_id", "created_at"),
         "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
         "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
@@ -37401,7 +37403,10 @@ def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     }[kind]
     # Extraction queries index fields inside JSONB: write an object, not a
     # JSON-encoded string (legacy tables retain their existing representation).
-    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind == "extractions" else raw}
+    row = {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind in {"extractions", "document_imports"} else raw}
+    if kind == "document_imports":
+        row["created_at"] = int(value["created_at"])
+    return row
 
 
 def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
@@ -37600,8 +37605,12 @@ async def import_text_inspection_standard(
     clean_version = bounded_text(version_label.strip(), 80)
     if not clean_name or not clean_material or not clean_version:
         raise HTTPException(status_code=400, detail="标准名称、物料编码和版本不能为空")
-    contents = await file.read()
+    contents = await file.read(100 * 1024 * 1024 + 1)
+    if len(contents) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="标准文档超过 100MB")
     filename = (file.filename or "").lower()
+    if filename.endswith((".doc", ".docx")) and document_import_service.enabled(owner_user_id):
+        return document_import_service.start(contents, filename, owner_user_id, owner_username, clean_name, clean_material, clean_version)
     digest = sha256_bytes(contents)
     duplicate = next((
         item for item in _text_v2_load("standards")
@@ -37814,6 +37823,8 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     standard = _text_v2_owned("standards", standard_id, owner_user_id)
     if not standard:
         raise HTTPException(status_code=404, detail="标准不存在")
+    if standard.get("import_job_id") and document_import_service.processing(standard["import_job_id"], owner_user_id):
+        raise HTTPException(status_code=409, detail="文档仍在处理，请结束后确认候选标准")
     repository = runtime_postgres_repository_or_none()
     if repository is not None:
         try:
@@ -38048,6 +38059,10 @@ def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> byt
 from local_inspection_service.label_extraction_api import register as register_label_extraction
 
 resolve_label_extraction = register_label_extraction(globals())
+
+from local_inspection_service.document_label_api import register as register_document_import
+
+document_import_service = register_document_import(globals())
 
 
 @app.post("/api/text-inspection/label/compare")

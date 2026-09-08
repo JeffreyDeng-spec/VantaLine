@@ -14,6 +14,15 @@
 
 ## Inspection flows
 
+- The opt-in document label importer is separate from capture/OCR/extraction.
+  Native document images and their occurrences enter a dedicated classifier,
+  original-pixel rectangular crop and joint original/crop verifier. Only verified
+  crops become standard assets. A new account/root-indexed append-only store owns
+  claims, outcomes and manual versions. Uncertain calls are not replayed; manual
+  revisions publish immutable crops through the existing standard revision lock.
+  DOC uses a separately commissioned network-isolated converter, never an unsafe
+  headless fallback. PDF and unflagged accounts keep their existing import path.
+
 - The optional `vlm_bbox` extraction method ports the colleague's whole-image rectangle prompt to the existing Qwen vision settings. It is account-gated separately, disabled by default, and never changes the comparison or image-generation provider. Its 1600-pixel JPEG input, bounded model response and zero-expansion original-pixel rectangle are evidence, not a verified mask. Invalid output has no whole-image fallback. Polygon corrections and confirmation retain immutable previews and the existing comparison size gate.
 
 - Single-label extraction is an account-gated stage before text comparison. It owns normalized camera/upload coordinates, a persisted at-most-once image-generation attempt, label-specific mask validation, immutable polygon/confirmation revisions, and original-pixel crops. The text-comparison provider consumes a confirmed server crop, with the extraction evidence attached to its diagnostic record. It does not use the accessory sprite pipeline or create PLC actions.

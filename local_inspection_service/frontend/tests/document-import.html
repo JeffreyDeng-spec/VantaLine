@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Document import test</title></head><body><div id="root"></div><script type="module">
+import React from "react";
+import {createRoot} from "react-dom/client";
+import {QueryClient,QueryClientProvider} from "@tanstack/react-query";
+import {DocumentImportProgress} from "../src/features/text-compare/DocumentImportProgress.tsx";
+import "../src/styles/global.css";
+const canvas=document.createElement("canvas");canvas.width=1000;canvas.height=600;
+const ctx=canvas.getContext("2d");ctx.fillStyle="#eee";ctx.fillRect(0,0,1000,600);ctx.fillStyle="white";ctx.fillRect(200,150,600,300);ctx.fillStyle="black";ctx.font="36px sans-serif";ctx.fillText("LABEL 123",260,320);ctx.fillText("OUTSIDE NOTES",150,60);
+window.fixtureUrl=canvas.toDataURL("image/png");
+function Harness(){const[id,setId]=React.useState("job_one");return React.createElement("main",{style:{maxWidth:1000,margin:"auto"}},React.createElement("button",{onClick:()=>setId(id==="job_one"?"job_two":"job_one")},"换订单"),React.createElement(DocumentImportProgress,{key:id,jobId:id}));}
+createRoot(document.getElementById("root")).render(React.createElement(QueryClientProvider,{client:new QueryClient({defaultOptions:{queries:{retry:false}}})},React.createElement(Harness)));
+</script></body></html>

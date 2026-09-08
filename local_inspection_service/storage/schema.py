@@ -55,6 +55,7 @@ HISTORICAL_RUNTIME_STATUSES = frozenset(
 
 OWNER_REQUIRED_TABLES = frozenset(
     {
+        "text_document_imports",
         "text_label_extractions",
         "accessories",
         "accessory_candidates",
@@ -529,6 +530,15 @@ TABLES = (
             UNIQUE (owner_user_id, comparison_id)
         )""",
         ("CREATE INDEX IF NOT EXISTS idx_text_inspection_records_owner ON text_inspection_records (owner_user_id, created_at)",),
+    ),
+    TableSchema(
+        "text_document_imports",
+        ("id", "owner_user_id", "root_id", "created_at", "raw_json"),
+        """CREATE TABLE IF NOT EXISTS text_document_imports (
+            id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, root_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL, raw_json TEXT NOT NULL
+        )""",
+        ("CREATE INDEX IF NOT EXISTS idx_text_document_imports_root ON text_document_imports (owner_user_id, root_id, created_at)",),
     ),
     TableSchema(
         "text_label_extractions",
