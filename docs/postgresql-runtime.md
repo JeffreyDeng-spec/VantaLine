@@ -7,6 +7,9 @@ needed. `review` transitions to `needs_confirmation` under the standard advisory
 lock and revision check, preserving `original_classification` in raw_json. On an
 enabled order it creates a new immutable membership snapshot excluding that
 asset. Draft confirmation rejects pending assets within the same transaction.
+Document job claims/results and tombstones use `mutate_text_document` with the
+same advisory lock as human edits. Only changed rows are updated. Compatible
+JSONB job/attempt/deletion fields require no new table; snapshots stay immutable.
 
 PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL preparation packets are migration evidence and must not be used to switch production back to JSON.
 

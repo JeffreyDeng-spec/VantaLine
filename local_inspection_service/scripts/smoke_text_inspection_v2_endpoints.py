@@ -103,7 +103,9 @@ def main() -> None:
     assert_status(imported, 200, "import docx")
     standard = imported.json()
     asset = standard["assets"][0]
-    assert asset["status"] == "candidate"
+    assert asset["status"] == "needs_confirmation"
+    assert_status(admin.post(f"/api/text-inspection/standards/{standard['id']}/confirm"), 409, "unreviewed import")
+    assert_status(admin.patch(f"/api/text-inspection/standards/{standard['id']}/assets/{asset['id']}", json={"action": "confirm"}), 200, "human accept")
     assert_status(other.get(f"/api/text-inspection/standards/{standard['id']}"), 404, "cross account standard")
     assert_status(other.get(f"/api/text-inspection/assets/{asset['id']}/content"), 404, "cross account media")
 

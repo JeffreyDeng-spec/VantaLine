@@ -37615,6 +37615,8 @@ async def import_text_inspection_standard(
         and item.get("version_label") == clean_version
     ), None)
     if duplicate:
+        if duplicate.get('status') == 'deleted':
+            raise HTTPException(status_code=409, detail='该物料版本已删除并保留历史，请使用新的版本号导入')
         return {**_text_v2_public(duplicate), "duplicate": True}
     standard_id = "std_" + uuid.uuid4().hex
     now = int(time.time())
@@ -37651,7 +37653,15 @@ async def import_text_inspection_standard(
             _text_v2_write(path, blobs[index])
             asset_path = str(path)
         asset = {**item, "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id, "asset_kind": "label_candidate" if standard_type == "label" else "manual_page", "media_path": asset_path, "created_at": now, "updated_at": now}
+        if standard_type == 'label':
+            asset.update(status='needs_confirmation', classification_source='unclassified', classification_reason='等待视觉模型识别')
         _text_v2_save("assets", asset, insert_only=True)
+    if standard_type == 'label':
+        try:
+            document_import_jobs.start(standard_id, owner_user_id)
+        except HTTPException as exc:
+            document_import_jobs.mark_unavailable(standard_id, owner_user_id, str(exc.detail))
+        standard = _text_v2_owned('standards', standard_id, owner_user_id) or standard
     return {**_text_v2_public(standard), "assets": [_text_v2_public(item) for item in _text_v2_load("assets") if item.get("standard_id") == standard_id]}
 
 
@@ -37659,7 +37669,7 @@ async def import_text_inspection_standard(
 def list_text_inspection_standards() -> dict[str, Any]:
     require_permission("inspection", detail="没有文字检验权限")
     owner_user_id, _ = _text_v2_owner()
-    items = [_text_v2_public(item) for item in _text_v2_load("standards") if str(item.get("owner_user_id")) == owner_user_id]
+    items = [_text_v2_public(item) for item in _text_v2_load("standards") if str(item.get("owner_user_id")) == owner_user_id and item.get('status') != 'deleted']
     return {"items": sorted(items, key=lambda item: int(item.get("created_at") or 0), reverse=True)}
 
 
@@ -37670,6 +37680,9 @@ def get_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     standard = _text_v2_owned("standards", standard_id, owner_user_id)
     if not standard:
         raise HTTPException(status_code=404, detail="标准不存在")
+    if standard.get('classification', {}).get('state') == 'processing':
+        document_import_jobs.refresh(standard_id, owner_user_id)
+        standard = _text_v2_owned('standards', standard_id, owner_user_id) or standard
     assets = [_text_v2_public(item) for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
     return {**_text_v2_public(standard), "assets": sorted(assets, key=lambda item: int(item.get("ordinal") or 0))}
 
@@ -37701,6 +37714,8 @@ async def add_text_inspection_standard_asset(
         raise HTTPException(status_code=404, detail="标准不存在")
     if standard.get("standard_type") != "label":
         raise HTTPException(status_code=409, detail="说明书标准不支持追加标签图片")
+    if standard.get('status') == 'deleted':
+        raise HTTPException(status_code=409, detail='订单已删除')
     expected = _text_v2_expected_revision(expected_revision)
     contents = await file.read()
     contents, mime, suffix, source_format = _text_v2_prepare_image(contents)
@@ -37727,7 +37742,7 @@ async def add_text_inspection_standard_asset(
         else:
             with _incoming_text_store_lock:
                 standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
-                if not standard or standard.get("standard_type") != "label":
+                if not standard or standard.get("standard_type") != "label" or standard.get('status') == 'deleted':
                     raise HTTPException(status_code=409, detail="标准状态已变化，请刷新后重试")
                 current_revision = int(standard.get("revision_number") or 0)
                 if expected is not None and expected != current_revision:
@@ -37784,7 +37799,7 @@ async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: 
         with _incoming_text_store_lock:
             authoritative_standard = _text_v2_owned("standards", standard_id, owner_user_id)
             authoritative_asset = _text_v2_owned("assets", asset_id, owner_user_id)
-            if not authoritative_standard or not authoritative_asset:
+            if not authoritative_standard or not authoritative_asset or authoritative_standard.get('status') == 'deleted':
                 raise HTTPException(status_code=409, detail="标准或资源状态已变化，请刷新后重试")
             current_revision = int(authoritative_standard.get("revision_number") or 0)
             if expected is not None and expected != current_revision:
@@ -37836,6 +37851,8 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
         return _text_v2_public(standard)
     with _incoming_text_store_lock:
         standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
+        if standard.get('status') == 'deleted' or standard.get('classification', {}).get('state') == 'processing':
+            raise HTTPException(status_code=409, detail='订单已删除或仍在识别中')
         if standard.get("status") == "confirmed":
             return _text_v2_public(standard)
         all_assets = [item for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
@@ -38059,6 +38076,9 @@ def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> byt
 
 
 from local_inspection_service.label_extraction_api import register as register_label_extraction
+from local_inspection_service.document_import_jobs import register as register_document_import_jobs
+
+document_import_jobs = register_document_import_jobs(globals())
 
 resolve_label_extraction = register_label_extraction(globals())
 

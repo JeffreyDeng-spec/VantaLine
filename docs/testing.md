@@ -27,9 +27,17 @@ undimmed zoom and mobile overflow. Human corrections are not model successes.
 reversible states and immutable snapshots on real PostgreSQL in an isolated
 temporary schema. CI runs it plus a Java 17 helper build/hash validation job.
 Deployed end-to-end checks remain a separate release gate.
-The separate VLM classification experiment is not part of this release.
-Direct DOC extraction leaves every image pending human review; no model call
-or automatic label classification is enabled by configuring the Java helper.
+`smoke_document_label_classifier.py` checks strict categories, preview bounds,
+single-call behavior and redaction. `smoke_document_jobs_endpoints.py` runs real
+authenticated routes with isolated JSON storage and a fake VLM: auto-start, hash
+dedup, duplicate POST/import, human-vs-model races, stale status, ownership and
+tombstone/history/media preservation. Real PostgreSQL tests also verify deletion
+and cross-owner rejection. Fake model tests are not semantic accuracy evidence.
+After release, `scripts/accept_document_classification.py --owner <approved-id>
+--image <fixture> --output <new-directory> --allow-paid-calls` can probe 1-3 real
+images through the gated production model configuration without creating orders.
+It saves original bytes, model preview, pre-call claim and sanitized result/usage;
+an existing output directory is rejected to prevent accidental replay.
 
 Run checks from repository root unless stated otherwise.
 

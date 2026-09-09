@@ -8,8 +8,8 @@ text/shapes, apply Word crop settings or follow external links. Original DOC and
 its hash remain authoritative. Java runs off the request event loop with a 256MiB
 heap, 30s wall timeout and process-group termination. This is not an OS sandbox;
 keep the JRE and parser patched. Missing/invalid runtime bundles return 503.
-All extracted images enter manual review; extraction alone does not classify
-labels or enable the experimental VLM classifier. Undecodable images are retained
+Images start pending, then account-gated DOC/DOCX jobs classify unique images
+with the existing Qwen vision model. Undecodable images are retained
 with a preview-unavailable reason. Other embedded OLE files are not exported.
 
 Document import review preserves all extracted images for human correction. The
@@ -17,7 +17,9 @@ gallery distinguishes retained/pending/excluded without hiding excluded sources.
 Owned asset PATCH adds `review` for `needs_confirmation`; JSON and PostgreSQL
 paths preserve initial classification metadata on human edits. Pending assets
 are excluded from active snapshots, and unresolved pending items block draft
-activation. This UI change does not enable the experimental VLM classifier.
+activation. Classification persists each attempt before external I/O, preserves
+human edits, and never replays interrupted/unknown paid calls. Label-order deletion
+is a tombstone: future list/edit/compare use stops; media and history stay owned.
 
 ## Components and boundaries
 

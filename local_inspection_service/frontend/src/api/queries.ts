@@ -417,6 +417,14 @@ export function getTextInspectionStandard(id: string) {
   return apiClient.get<TextInspectionStandard>(`/api/text-inspection/standards/${encodeURIComponent(id)}`);
 }
 
+export function classifyTextInspectionStandard(id: string) {
+  return apiClient.post<TextInspectionStandard>(`/api/text-inspection/standards/${encodeURIComponent(id)}/classify`);
+}
+
+export function deleteTextInspectionStandard(id: string) {
+  return apiClient.delete<TextInspectionStandard>(`/api/text-inspection/standards/${encodeURIComponent(id)}`);
+}
+
 export function importTextInspectionStandard(form: FormData) {
   return apiClient.upload<TextInspectionStandard>("/api/text-inspection/standards/import", form);
 }

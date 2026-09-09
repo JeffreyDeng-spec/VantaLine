@@ -46,7 +46,9 @@ def main():
     other=TestClient(server.app,base_url="https://testserver");login(other,"other")
     for url in ["/api/text-inspection/extractions/"+root["id"],*final["media"].values()]:assert other.get(url).status_code==404
     standard=admin.post("/api/text-inspection/standards/import",data={"name":"test","material_code":"BB","version_label":"V1"},files={"file":("s.docx",docx(),"application/octet-stream")}).json()
-    asset=standard["assets"][0]["id"];admin.post(f"/api/text-inspection/standards/{standard['id']}/confirm")
+    asset=standard["assets"][0]["id"]
+    assert admin.patch(f"/api/text-inspection/standards/{standard['id']}/assets/{asset}",json={"action":"confirm"}).status_code == 200
+    assert admin.post(f"/api/text-inspection/standards/{standard['id']}/confirm").status_code == 200
     compare={"standard_asset_id":asset,"extraction_id":root["id"],"comparison_id":"compare_bbox_001"}
     assert admin.post("/api/text-inspection/label/compare",data=compare).status_code==409
     route=f"/api/text-inspection/extractions/{root['id']}/revise"

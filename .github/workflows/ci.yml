@@ -131,6 +131,8 @@ jobs:
       - name: Verify text inspection comparison and document contracts
         run: |
           python local_inspection_service/scripts/smoke_doc_images.py
+          python local_inspection_service/scripts/smoke_document_label_classifier.py
+          python local_inspection_service/scripts/smoke_document_jobs_endpoints.py
           python local_inspection_service/scripts/smoke_document_review.py
           python local_inspection_service/scripts/smoke_document_review_postgres.py
           python local_inspection_service/scripts/smoke_text_compare_beta.py

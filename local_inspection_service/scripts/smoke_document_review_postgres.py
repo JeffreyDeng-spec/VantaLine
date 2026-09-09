@@ -44,6 +44,20 @@ def main():
                     assert result['confirmed_asset_ids'] == (['asset'] if action == 'confirm' else [])
                 old = repo.fetch_by_primary_key('text_inspection_standard_revisions', {'id': 'rev1'})
                 assert old['raw_json']['confirmed_asset_ids'] == ['asset']
+                def remove_order(standard, assets):
+                    standard.update(status='deleted', deleted_by='owner', deleted_at=20)
+                repo.mutate_text_document('std', 'owner', remove_order)
+                assert repo.fetch_by_primary_key('text_inspection_standards', {'id':'std'})['raw_json']['status'] == 'deleted'
+                assert repo.fetch_by_primary_key('text_inspection_assets', {'id':'asset'}) is not None
+                assert repo.fetch_by_primary_key('text_inspection_standard_revisions', {'id':'rev1'}) == old
+                for operation in [lambda: repo.mutate_text_document('std', 'other', remove_order),
+                                  lambda: repo.patch_text_inspection_asset('std','asset','owner','confirm',21,revision_id='bad'),
+                                  lambda: repo.confirm_text_inspection_standard('std','owner',21,revision_id='bad')]:
+                    try:
+                        operation()
+                        raise AssertionError('deleted/cross-owner mutation accepted')
+                    except PostgresRuntimeRepositoryError:
+                        pass
         finally:
             control.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))
     print('document review real PostgreSQL: PASS')

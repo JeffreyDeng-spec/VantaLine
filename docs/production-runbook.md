@@ -13,9 +13,15 @@ Full code rollout still follows PR, required CI and immutable release acceptance
 
 Document-review UI rollout requires frontend build, review-handler tests and
 target PostgreSQL regression before release. It adds no tables and does not
-enable document VLM calls or DOC conversion. Verify all three asset states remain
+enable DOC conversion. Verify all three asset states remain
 visible, excluded images can be restored and pending assets block draft activation.
 Rollback is a whole immutable release, never deletion of images or feedback.
+
+Enable `VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS` only for approved accounts
+with configured Qwen vision and external-media authorization. Verify real imported
+images obtain classification results (not just extraction), unknown calls are not
+replayed, and deleted orders disappear without removing historical media. Clearing
+the allowlist prevents new jobs; whole-release rollback preserves all evidence.
 
 Before merging a PLC automatic-capture release, confirm the frontend `test:plc-capture` step, backend PLC smoke, release contract, and documentation contract all passed.
 

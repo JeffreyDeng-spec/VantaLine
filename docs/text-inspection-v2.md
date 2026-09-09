@@ -6,8 +6,8 @@ Label import accepts `.doc` and `.docx` in the chooser, drag/drop and API. Legac
 DOC directly exports embedded pictures with POI HWPF, without rendering pages or
 merging Word overlays. Missing helper/JRE returns 503; extraction failure returns
 400 without creating a standard. The original DOC is preserved; no converted DOCX
-is created. All DOC images enter manual review, including non-previewable images;
-image extraction itself makes no label classification claim. PDF is unchanged.
+is created. Images start pending; enabled accounts automatically start background
+VLM classification. Non-previewable images remain pending. PDF is unchanged.
 
 ### Import image review
 
@@ -23,9 +23,23 @@ the action. Draft activation refuses unresolved pending images and requires at
 least one retained image. Confirmed-standard edits continue to create immutable
 membership revisions; a pending asset cannot be used for comparison.
 
-This review UI consumes current asset statuses and does not itself enable the
-experimental VLM document classifier or legacy DOC conversion. System suggestions
-must not be labelled as verified VLM results when supplied by local heuristics.
+`POST /standards/{id}/classify` starts classification for an unclassified draft;
+new imports start automatically for enabled accounts. Standard GET returns
+`classification` progress; assets retain sanitized attempts, output and usage.
+Duplicate POST/import never re-calls. The prompt judges whole-image flat label
+artwork versus manuals, packaging, placement diagrams, photographs, other and
+uncertain. Labels attached to photographed objects are not flat label artwork.
+This step does not crop or generate masks. Human changes override late results.
+Confirmation waits for processing and pending review to finish. A stale heartbeat
+(150s) becomes interrupted on polling, without automatic replay or paid retry.
+
+`DELETE /standards/{id}` requires ownership and inspection permission. It marks
+a label order deleted with actor/time and removes it from the list; edits,
+activation and new comparison reject deleted orders. UI confirmation is required.
+Original media and immutable revisions remain readable by their owner. An already
+submitted call may finish but cannot change deleted membership; subsequent calls
+stop. Reimport of a deleted material/version requires a new version label because
+historical uniqueness is retained. Deletion is not disk cleanup or evidence erasure.
 
 The formal **文字检验** entry is account scoped and independent from product/YOLO tasks. It contains label comparison and a manual-page pilot. The previous `incoming_material_text` task workflow remains readable for existing records during the rollback window, but its “旧版” task-creation entry is no longer exposed; all new label comparison work starts from **文字检验**.
 

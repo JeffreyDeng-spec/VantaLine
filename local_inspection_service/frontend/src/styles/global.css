@@ -6171,3 +6171,8 @@ button.pipeline-params-chip:hover {
 .incoming-text-analysis-summary span { color: #748092; font-size: 11px; }
 .incoming-text-analysis-summary strong { font-size: 22px; }
 @media (max-width: 850px) { .incoming-text-analysis-summary { grid-template-columns: repeat(2, 1fr); } }
+.text-standard-document-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 0; }
+.text-standard-document-actions [role="status"] { flex: 1 1 220px; font-size: 13px; }
+.text-standard-document-actions button { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; cursor: pointer; }
+.text-standard-document-actions .text-standard-delete-order { color: #b91c1c; border-color: #fecaca; }
+.text-standard-document-actions button:disabled { opacity: .5; cursor: not-allowed; }

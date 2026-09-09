@@ -442,7 +442,7 @@ class PostgresRuntimeRepository:
             if row is None:
                 raise PostgresRuntimeRepositoryError("Text inspection standard not found")
             standard = _decode_value("raw_json", self._row_to_dict(cursor, row).get("raw_json"))
-            if not isinstance(standard, dict) or standard.get("standard_type") != "label":
+            if not isinstance(standard, dict) or standard.get("standard_type") != "label" or standard.get('status') == 'deleted':
                 raise PostgresRuntimeRepositoryError("Text inspection standard does not accept label images")
             current_revision = int(standard.get("revision_number") or 0)
             if expected_revision is not None and expected_revision != current_revision:
@@ -499,6 +499,37 @@ class PostgresRuntimeRepository:
             if callable(close):
                 close()
 
+    def mutate_text_document(self, standard_id, owner_user_id, change):
+        """Serialize document jobs/deletion with all human standard edits."""
+        cursor = self._cursor()
+        try:
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"vantaline:text-standard:{owner_user_id}:{standard_id}",))
+            cursor.execute(f"SELECT raw_json FROM {self._qualified_table('text_inspection_standards')} WHERE id = %s AND owner_user_id = %s FOR UPDATE", (standard_id, owner_user_id))
+            row = cursor.fetchone()
+            if row is None:
+                raise PostgresRuntimeRepositoryError("Text inspection standard not found")
+            standard = _decode_value('raw_json', self._row_to_dict(cursor, row)['raw_json'])
+            cursor.execute(f"SELECT raw_json FROM {self._qualified_table('text_inspection_assets')} WHERE standard_id = %s AND owner_user_id = %s ORDER BY ordinal FOR UPDATE", (standard_id, owner_user_id))
+            assets = [_decode_value('raw_json', self._row_to_dict(cursor, row)['raw_json']) for row in cursor.fetchall()]
+            before_standard = _json_parameter(standard)
+            before_assets = {a['id']: _json_parameter(a) for a in assets}
+            result = change(standard, assets)
+            if _json_parameter(standard) != before_standard:
+                cursor.execute(f"UPDATE {self._qualified_table('text_inspection_standards')} SET status = %s, updated_at = %s, raw_json = %s::jsonb WHERE id = %s AND owner_user_id = %s",
+                    (standard['status'], standard.get('updated_at', 0), _json_parameter(standard), standard_id, owner_user_id))
+            for asset in assets:
+                if _json_parameter(asset) == before_assets[asset['id']]:
+                    continue
+                cursor.execute(f"UPDATE {self._qualified_table('text_inspection_assets')} SET status = %s, updated_at = %s, raw_json = %s::jsonb WHERE id = %s AND owner_user_id = %s",
+                    (asset['status'], asset.get('updated_at', 0), _json_parameter(asset), asset['id'], owner_user_id))
+            self.connection.commit()
+            return result
+        except Exception:
+            self.connection.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def patch_text_inspection_asset(
         self,
         standard_id: str,
@@ -522,6 +553,8 @@ class PostgresRuntimeRepository:
             standard = _decode_value("raw_json", self._row_to_dict(cursor, standard_row).get("raw_json"))
             if not isinstance(standard, dict):
                 raise PostgresRuntimeRepositoryError("Text inspection standard authority is corrupt")
+            if standard.get('status') == 'deleted':
+                raise PostgresRuntimeRepositoryError("Text inspection standard deleted")
             current_revision = int(standard.get("revision_number") or 0)
             if expected_revision is not None and expected_revision != current_revision:
                 raise PostgresRuntimeRepositoryError("Text inspection standard revision changed")
@@ -595,6 +628,8 @@ class PostgresRuntimeRepository:
                 return standard
             if standard.get("status") != "draft":
                 raise PostgresRuntimeRepositoryError("Text inspection standard is not confirmable")
+            if standard.get('classification', {}).get('state') in {'queued', 'processing'}:
+                raise PostgresRuntimeRepositoryError("Document classification in progress")
             cursor.execute(f"SELECT raw_json FROM {assets} WHERE standard_id = %s AND owner_user_id = %s ORDER BY ordinal FOR UPDATE", (standard_id, owner_user_id))
             selected = []
             for asset_row in cursor.fetchall():
