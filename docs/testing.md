@@ -2,6 +2,35 @@
 
 **Status: Authoritative**
 
+`python3 local_inspection_service/scripts/smoke_doc_images.py` checks direct DOC
+extraction bounds, malformed output, missing runtime, timeout cleanup, temporary
+cleanup and concurrency with process doubles. Real acceptance separately runs
+`scripts/benchmark_doc_images.py --input-dir <fixtures> --output <new-directory>`
+with `VANTALINE_DOC_IMAGE_BUNDLE` configured. It exports images, hashes, metadata
+and an HTML preview gallery. Compare image inventories with an independently
+inspected baseline; image counts alone are not proof of completeness. Word text
+overlays and unrelated OLE files are deliberately not composited/exported.
+
+## Classification-only document experiment
+
+The review interface now accepts imperfect classification with explicit human
+correction, not silent image removal. Run
+`python3 local_inspection_service/scripts/smoke_document_review.py` for extracted
+production-handler logic and a DB-API test double (not live PostgreSQL).
+Run `scripts/test_document_review_ui.cjs` against local Vite with Playwright and
+`REVIEW_UI_OUTPUT` set: it mounts the real page with a fixture API and saves desktop
+and mobile screenshots. Optional `REVIEW_IMAGE_FIXTURES` selects local benchmark
+images; these do not enter source control. Verify pending activation gating,
+all-status edits, exclusion recovery, API-error retention, refresh persistence,
+undimmed zoom and mobile overflow. Human corrections are not model successes.
+`smoke_document_review_postgres.py` exercises pending/cross-owner rejection,
+reversible states and immutable snapshots on real PostgreSQL in an isolated
+temporary schema. CI runs it plus a Java 17 helper build/hash validation job.
+Deployed end-to-end checks remain a separate release gate.
+The separate VLM classification experiment is not part of this release.
+Direct DOC extraction leaves every image pending human review; no model call
+or automatic label classification is enabled by configuring the Java helper.
+
 Run checks from repository root unless stated otherwise.
 
 | Change area | Required local checks |

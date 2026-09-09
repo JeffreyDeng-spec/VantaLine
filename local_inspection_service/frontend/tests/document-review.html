@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh"><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Document review test fixture</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import {TextCompareBetaPage} from '../src/features/text-compare/TextCompareBetaPage.tsx';
+import '../src/styles/global.css';
+// Only served by local Vite; APIs must be intercepted by the test runner.
+createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider,
+  {client: new QueryClient({defaultOptions: {queries: {retry: false}}})},
+  React.createElement(TextCompareBetaPage)));
+</script></body></html>

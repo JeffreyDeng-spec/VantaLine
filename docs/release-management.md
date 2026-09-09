@@ -20,6 +20,12 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+The DOC image helper is built in CI with Java 17 from the fixed Maven dependency
+lock. Release packaging verifies its source and jar hashes, then includes only
+the runtime jars and manifest under `workers/doc_image_extractor/bundle`.
+Production requires a patched headless Java runtime and the configured bundle
+path; it never compiles the helper or downloads Maven dependencies on import.
+
 The optional whole-image rectangle experiment adds offline parser/geometry and real-route smoke checks to required CI. Its separate account gate remains empty if customer-image commissioning fails; shipping disabled code is not production algorithm acceptance.
 
 Single-label extraction adds required geometry and real-route smoke checks to CI. Its additive migration and default-empty account allowlist permit staged activation while retaining the legacy input route for rollback. Synthetic geometry and API tests are not substitutes for customer-image commissioning or permission to automatically pass labels.

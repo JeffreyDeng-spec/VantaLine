@@ -25,6 +25,7 @@ parser.add_argument("--release", required=True)
 parser.add_argument("--git-commit", required=True)
 parser.add_argument("--built-at", required=True)
 parser.add_argument("--output", required=True, type=Path)
+parser.add_argument("--doc-image-bundle", required=True, type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 dist = root / "local_inspection_service/frontend/dist-production"
@@ -55,6 +56,23 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
     with tarfile.open(source_tar) as handle:
         handle.extractall(stage, filter="data")
     shutil.copytree(dist, stage / "local_inspection_service/frontend/dist-production")
+    doc_bundle = args.doc_image_bundle.resolve()
+    manifest = json.loads((doc_bundle / "manifest.json").read_text())
+    source = stage / "local_inspection_service/workers/doc_image_extractor/DocImages.java"
+    lock = json.loads(source.with_name("dependencies.json").read_text())
+    if manifest["source_sha256"] != sha256(source) or manifest["version"] != "doc-images-v1" or manifest["poi"] != "5.5.1":
+        raise SystemExit("DOC bundle/source mismatch")
+    if {k: v for k, v in manifest["files"].items() if k != "doc-images.jar"} != lock or "doc-images.jar" not in manifest["files"]:
+        raise SystemExit("DOC bundle dependency mismatch")
+    destination = source.parent / "bundle"
+    destination.mkdir()
+    for name, digest in manifest["files"].items():
+        if not re.fullmatch(r"(?:lib/)?[A-Za-z0-9_.-]+\.jar", name) or sha256(doc_bundle / name) != digest:
+            raise SystemExit("DOC bundle checksum mismatch")
+        target = destination / name
+        target.parent.mkdir(exist_ok=True)
+        shutil.copy2(doc_bundle / name, target)
+    shutil.copy2(doc_bundle / "manifest.json", destination / "manifest.json")
     (stage / "VERSION.json").write_text(json.dumps(version, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     files = sorted(path for path in stage.rglob("*") if path.is_file())
     sums = "".join(f"{sha256(path)}  {path.relative_to(stage).as_posix()}\n" for path in files)

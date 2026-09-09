@@ -43,6 +43,12 @@ jobs:
       - name: Build production frontend
         working-directory: local_inspection_service/frontend
         run: npm ci && npm run build:production-cutover
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build locked DOC image extractor
+        run: python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
       - name: Verify and package immutable release
         run: |
           python scripts/verify_release_contract.py
@@ -51,6 +57,7 @@ jobs:
             --release "$RELEASE_ID" \
             --git-commit "$RELEASE_SHA" \
             --built-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --doc-image-bundle "$RUNNER_TEMP/doc-image-bundle" \
             --output "release-output/$RELEASE_ID.tar.gz"
           sha256sum "release-output/$RELEASE_ID.tar.gz" > release-output/ARTIFACT_SHA256SUMS
       - uses: actions/upload-artifact@v4
