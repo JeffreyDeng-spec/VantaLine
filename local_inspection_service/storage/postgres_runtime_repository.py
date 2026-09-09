@@ -534,10 +534,11 @@ class PostgresRuntimeRepository:
             asset = next((item for item in all_assets if str(item.get("id")) == asset_id), None)
             if asset is None:
                 raise PostgresRuntimeRepositoryError("Text inspection asset not found")
-            target_status = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate"}[action]
-            if asset.get("status") == target_status:
+            target_status = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate", "review": "needs_confirmation"}[action]
+            if asset.get("status") == target_status and asset.get("classification_source") == "human":
                 self.connection.commit()
                 return asset, standard
+            asset.setdefault("original_classification", {key: asset.get(key) for key in ("status", "category", "classification_source", "classification_reason")})
             asset["status"] = target_status
             asset["classification_source"] = "human"
             asset["updated_at"] = updated_at
@@ -553,7 +554,7 @@ class PostgresRuntimeRepository:
                 next_revision = current_revision + 1
                 revision = {
                     "id": revision_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
-                    "revision_number": next_revision, "action": "restore" if action in {"restore", "confirm"} else "remove",
+                    "revision_number": next_revision, "action": "review" if action == "review" else "restore" if action in {"restore", "confirm"} else "remove",
                     "asset_id": asset_id, "confirmed_assets": selected,
                     "confirmed_asset_ids": [item["id"] for item in selected], "created_at": updated_at,
                 }
@@ -598,6 +599,8 @@ class PostgresRuntimeRepository:
             selected = []
             for asset_row in cursor.fetchall():
                 asset = _decode_value("raw_json", self._row_to_dict(cursor, asset_row).get("raw_json"))
+                if isinstance(asset, dict) and asset.get("status") == "needs_confirmation":
+                    raise PostgresRuntimeRepositoryError("还有待确认图片，请逐张选择保留或排除后再启用")
                 if isinstance(asset, dict) and asset.get("status") in {"candidate", "page"}:
                     selected.append(asset)
             if not selected:

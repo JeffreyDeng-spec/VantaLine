@@ -271,6 +271,7 @@ except ModuleNotFoundError as exc:
     )
 
 try:
+    from local_inspection_service.document_images import extract_doc_images, DocImageError, DocImageUnavailable
     from local_inspection_service.text_inspection_v2 import (
         UnsafeDocument,
         extract_docx_candidates,
@@ -284,6 +285,7 @@ except ModuleNotFoundError as exc:
     if exc.name not in {"local_inspection_service", "local_inspection_service.text_inspection_v2"}:
         raise
     from text_inspection_v2 import UnsafeDocument, extract_docx_candidates, inspect_pdf, normalize_vlm_provider_result, sha256_bytes, strict_compare_prompt, validate_vlm_result
+    from document_images import extract_doc_images, DocImageError, DocImageUnavailable
 
 
 def resolve_service_root() -> Path:
@@ -37600,7 +37602,9 @@ async def import_text_inspection_standard(
     clean_version = bounded_text(version_label.strip(), 80)
     if not clean_name or not clean_material or not clean_version:
         raise HTTPException(status_code=400, detail="标准名称、物料编码和版本不能为空")
-    contents = await file.read()
+    contents = await file.read(100 * 1024 * 1024 + 1)
+    if not contents or len(contents) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="标准文档不能为空且不能超过 100MB")
     filename = (file.filename or "").lower()
     digest = sha256_bytes(contents)
     duplicate = next((
@@ -37616,8 +37620,9 @@ async def import_text_inspection_standard(
     now = int(time.time())
     try:
         if filename.endswith(".doc") and not filename.endswith(".docx"):
-            raise HTTPException(status_code=503, detail="旧版 .doc 转换组件尚未通过生产依赖验收，请另存为 .docx 后上传")
-        if filename.endswith(".docx"):
+            metadata, blobs = await asyncio.to_thread(extract_doc_images, contents)
+            standard_type, extension = "label", ".doc"
+        elif filename.endswith(".docx"):
             metadata, blobs = extract_docx_candidates(contents)
             standard_type, extension = "label", ".docx"
         elif filename.endswith(".pdf"):
@@ -37625,7 +37630,11 @@ async def import_text_inspection_standard(
             metadata = [{"asset_id": f"asset_{index:04d}_{digest[:12]}", "ordinal": index, "status": "page", "category": "manual_page", "classification_confidence": 1.0} for index in range(1, int(info["page_count"]) + 1)]
             blobs, standard_type, extension = [], "manual", ".pdf"
         else:
-            raise HTTPException(status_code=400, detail="仅支持 DOCX 或 PDF 标准文档")
+            raise HTTPException(status_code=400, detail="仅支持 DOC、DOCX 或 PDF 标准文档")
+    except DocImageUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except DocImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except UnsafeDocument as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     source_path = _text_v2_media_path(owner_user_id, standard_id, "source" + extension)
@@ -37756,9 +37765,9 @@ async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: 
         raise HTTPException(status_code=404, detail="标准资源不存在")
     body = await request.json()
     action = str(body.get("action") or "") if isinstance(body, dict) else ""
-    status_by_action = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate"}
+    status_by_action = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate", "review": "needs_confirmation"}
     if action not in status_by_action:
-        raise HTTPException(status_code=400, detail="action 必须为 restore、remove、exclude 或 confirm")
+        raise HTTPException(status_code=400, detail="action 必须为 restore、remove、exclude、confirm 或 review")
     expected = _text_v2_expected_revision(body.get("expected_revision") if isinstance(body, dict) else None)
     updated_at = int(time.time())
     revision_id = "rev_" + uuid.uuid4().hex
@@ -37782,7 +37791,8 @@ async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: 
                 raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试")
             asset = authoritative_asset
             target_status = status_by_action[action]
-            if asset.get("status") != target_status:
+            if asset.get("status") != target_status or asset.get("classification_source") != "human":
+                asset.setdefault("original_classification", {key: asset.get(key) for key in ("status", "category", "classification_source", "classification_reason")})
                 asset["status"] = target_status
                 asset["updated_at"] = updated_at
                 asset["classification_source"] = "human"
@@ -37794,7 +37804,7 @@ async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: 
                 if authoritative_standard.get("status") == "confirmed":
                     _text_v2_apply_revision(
                         authoritative_standard, assets,
-                        action="restore" if action in {"restore", "confirm"} else "remove",
+                        action="review" if action == "review" else "restore" if action in {"restore", "confirm"} else "remove",
                         asset_id=asset_id, now=updated_at,
                     )
                 else:
@@ -37828,7 +37838,10 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
         standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
         if standard.get("status") == "confirmed":
             return _text_v2_public(standard)
-        selected = [item for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id and item.get("status") in {"candidate", "page"}]
+        all_assets = [item for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
+        if any(item.get("status") == "needs_confirmation" for item in all_assets):
+            raise HTTPException(status_code=409, detail="还有待确认图片，请逐张选择保留或排除后再启用")
+        selected = [item for item in all_assets if item.get("status") in {"candidate", "page"}]
         if not selected:
             raise HTTPException(status_code=409, detail="至少确认一个标签或标准页面")
         standard["status"] = "confirmed"

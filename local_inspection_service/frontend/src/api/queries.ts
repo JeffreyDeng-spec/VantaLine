@@ -425,7 +425,7 @@ export function addTextInspectionStandardAsset(standardId: string, form: FormDat
   return apiClient.upload<TextInspectionAssetAddResponse>(`/api/text-inspection/standards/${encodeURIComponent(standardId)}/assets`, form);
 }
 
-export function patchTextInspectionAsset(standardId: string, assetId: string, action: "restore" | "remove" | "exclude" | "confirm", expectedRevision?: number) {
+export function patchTextInspectionAsset(standardId: string, assetId: string, action: "restore" | "remove" | "exclude" | "confirm" | "review", expectedRevision?: number) {
   return apiClient.patch<TextInspectionAssetMutationResponse>(`/api/text-inspection/standards/${encodeURIComponent(standardId)}/assets/${encodeURIComponent(assetId)}`, { action, expected_revision: expectedRevision });
 }
 

@@ -2,6 +2,12 @@
 
 **Status: Authoritative**
 
+Document review uses existing asset status and JSONB fields; no migration is
+needed. `review` transitions to `needs_confirmation` under the standard advisory
+lock and revision check, preserving `original_classification` in raw_json. On an
+enabled order it creates a new immutable membership snapshot excluding that
+asset. Draft confirmation rejects pending assets within the same transaction.
+
 PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL preparation packets are migration evidence and must not be used to switch production back to JSON.
 
 ## Ownership and compatibility

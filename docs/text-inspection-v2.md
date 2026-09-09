@@ -2,6 +2,31 @@
 
 **Status: Authoritative**
 
+Label import accepts `.doc` and `.docx` in the chooser, drag/drop and API. Legacy
+DOC directly exports embedded pictures with POI HWPF, without rendering pages or
+merging Word overlays. Missing helper/JRE returns 503; extraction failure returns
+400 without creating a standard. The original DOC is preserved; no converted DOCX
+is created. All DOC images enter manual review, including non-previewable images;
+image extraction itself makes no label classification claim. PDF is unchanged.
+
+### Import image review
+
+The label-order gallery keeps every extracted image visible by default. Retained
+label candidates have green emphasis; pending items use amber dashed borders and
+an explicit warning; excluded thumbnails are dimmed, not deleted. Preview and
+manual controls remain legible, and zoom shows the undimmed source. Count filters
+include all, retained, pending and excluded with an empty-filter recovery action.
+Each label asset can be manually set to retained, pending or excluded. Human
+choices persist through the existing owned asset PATCH route (`confirm`, `review`,
+`remove`); the first edit preserves `original_classification`, and feedback keeps
+the action. Draft activation refuses unresolved pending images and requires at
+least one retained image. Confirmed-standard edits continue to create immutable
+membership revisions; a pending asset cannot be used for comparison.
+
+This review UI consumes current asset statuses and does not itself enable the
+experimental VLM document classifier or legacy DOC conversion. System suggestions
+must not be labelled as verified VLM results when supplied by local heuristics.
+
 The formal **文字检验** entry is account scoped and independent from product/YOLO tasks. It contains label comparison and a manual-page pilot. The previous `incoming_material_text` task workflow remains readable for existing records during the rollback window, but its “旧版” task-creation entry is no longer exposed; all new label comparison work starts from **文字检验**.
 
 ## Release stages
@@ -15,7 +40,7 @@ The formal **文字检验** entry is account scoped and independent from product
 
 - `owner_user_id` is always derived from the authenticated session; request IDs never select another account. Media downloads repeat the ownership check and validate the resolved path.
 - DOCX imports are size/entry/ratio bounded, reject path traversal, external relationships and macros, and read only document XML plus `word/media`. OLE payloads are quarantined and never opened. Automatic classification only changes visibility; a user can restore every extracted candidate before confirmation.
-- `.doc` conversion is not enabled until a pinned LibreOffice package, isolated runtime user, timeout/process-kill behavior and production health gate are reviewed in a separate dependency PR.
+- `.doc` uses direct POI image extraction, not LibreOffice conversion. A fixed helper bundle and Java runtime must be commissioned before production imports. Word overlays, crop settings and unrelated embedded OLE documents are not rendered or exported.
 - PDF metadata is validated synchronously, but pages are rendered lazily with page and pixel limits. The complete action is the only time missing pages are calculated.
 - The external VLM receives only one confirmed standard image and one capture. The service writes an `attempting` record before the call, uses one provider attempt, and never re-calls an uncertain comparison ID. Provider/schema/prompt failures become `REVIEW_REQUIRED`.
 - Every label comparison persists a bounded diagnostic envelope in the same account-scoped record. It includes prepared image dimensions, byte counts, formats and hashes; provider/model/endpoint host and timeout; stage-by-stage timestamps; provider latency, HTTP/timeout/retry and usage metadata when returned; the parsed model response; the exact validation or post-processing failure stage and message; and a bounded raw model-text preview when JSON parsing fails. Embedded image data, authorization headers, cookies, tokens, API keys and secrets are redacted. A compact structured event is also written to the service log without model text or media. Diagnostics never authorize an automatic retry of an uncertain charged request.

@@ -2,6 +2,21 @@
 
 **Status: Authoritative**
 
+For direct DOC extraction, the release workflow builds the locked POI helper with
+Java 17 and packages its jars, licenses and checksum manifest in the immutable
+release. Configure `VANTALINE_DOC_IMAGE_BUNDLE` to
+`/opt/vantaline/current/local_inspection_service/workers/doc_image_extractor/bundle`
+and verify the real fixtures under the service account with a patched Java 11+
+runtime. Do not install LibreOffice or fonts. Imports make no runtime downloads.
+Unset the variable to disable DOC imports without affecting DOCX/PDF or old media.
+Full code rollout still follows PR, required CI and immutable release acceptance.
+
+Document-review UI rollout requires frontend build, review-handler tests and
+target PostgreSQL regression before release. It adds no tables and does not
+enable document VLM calls or DOC conversion. Verify all three asset states remain
+visible, excluded images can be restored and pending assets block draft activation.
+Rollback is a whole immutable release, never deletion of images or feedback.
+
 Before merging a PLC automatic-capture release, confirm the frontend `test:plc-capture` step, backend PLC smoke, release contract, and documentation contract all passed.
 
 Before enabling text inspection v2, confirm account isolation, the customer DOCX fixture, migration safety, frontend production build, the standard-library revision/add/soft-delete contract, and provider fail-closed, external-only and enabled-mode tests. A confirmed standard revision is audit evidence and must never be edited or physically deleted in place; every user-facing add, remove or restore on a confirmed logical standard must append a numbered snapshot under the standard transaction lock. Verify that new comparisons bind to that exact revision and reference hash, old comparisons and media remain readable after later edits, and cross-account standard mutation, asset and media requests fail closed. Keep automatic VLM `MATCH` review-only until customer commissioning, external-media consent and account cost controls are recorded. Do not run old-data cleanup from the immutable release installer.

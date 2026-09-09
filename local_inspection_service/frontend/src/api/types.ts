@@ -745,6 +745,8 @@ export interface TextInspectionAsset {
   category?: string;
   context?: string;
   classification_confidence?: number;
+  classification_source?: string;
+  classification_reason?: string;
   content_url?: string;
 }
 
