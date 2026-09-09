@@ -33,6 +33,11 @@ authenticated routes with isolated JSON storage and a fake VLM: auto-start, hash
 dedup, duplicate POST/import, human-vs-model races, stale status, ownership and
 tombstone/history/media preservation. Real PostgreSQL tests also verify deletion
 and cross-owner rejection. Fake model tests are not semantic accuracy evidence.
+After release, `scripts/accept_document_classification.py --owner <approved-id>
+--image <fixture> --output <new-directory> --allow-paid-calls` can probe 1-3 real
+images through the gated production model configuration without creating orders.
+It saves original bytes, model preview, pre-call claim and sanitized result/usage;
+an existing output directory is rejected to prevent accidental replay.
 
 Run checks from repository root unless stated otherwise.
 
