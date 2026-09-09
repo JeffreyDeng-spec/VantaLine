@@ -133,7 +133,7 @@ class DocumentJobs:
                     if standard.get('status') != 'draft' or job.get('state') != 'processing':
                         return
                     if item.get('classification_source') != 'human':
-                        item.update(status=value['status'], category=value['category'], classification_source='vlm',
+                        item.update(status=value['status'], category=value['category'], classification_source='unclassified' if diagnostic.get('external_call') is False else 'vlm',
                             classification_reason=value['reason'], updated_at=int(time.time()))
                     job['done'] += 1
                     job['heartbeat'] = time.time()
