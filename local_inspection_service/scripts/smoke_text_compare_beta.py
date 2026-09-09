@@ -56,7 +56,8 @@ def main():
     assert 'role="tab"' in frontend and 'role="tabpanel"' in frontend and 'event.key !== "Escape"' in frontend
     assert 'data-testid="standard-library-assets"' in frontend
     assert "查看第 ${asset.ordinal} 张标准大图" in frontend and "第 ${asset.ordinal} 张标准缩略图" in frontend
-    assert 'className={`text-standard-asset-card ${selected ? "selected" : ""}' in frontend
+    assert 'className={`text-standard-asset-card ' in frontend
+    assert 'classification-${asset.status}' in frontend and '${selected ? "selected" : ""}' in frontend
     assert 'aria-pressed={selectable ? selected : undefined}' in frontend
     assert 'selectable ? chooseAsset(asset)' in frontend and "已选标准" in frontend and "点击选中" in frontend
     assert 'className={mode === "label" ? "text-compare-workbench" : ""}' in frontend
@@ -75,14 +76,14 @@ def main():
     assert "analyzeTextCompareBeta" not in frontend and "replaceReference" not in frontend
     assert 'ariaLabel="拖拽或选择标准图片"' not in frontend
     assert "请先在左侧订单画廊中选择一张已启用的标签图片" in frontend
-    assert "function isActiveAsset" in frontend and 'asset.status === "needs_confirmation" ? "confirm"' in frontend
+    assert "function isActiveAsset" in frontend and '<option value="needs_confirmation">' in frontend
     assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true });' in frontend
     assert 'standardQuery.data?.status !== "confirmed"' in frontend
     assert "这个订单还没有启用" in frontend
     # Logical standards remain manageable after confirmation, while the backend
     # records immutable revisions and only soft-removes their assets.
     assert "addTextInspectionStandardAsset" in frontend
-    assert 'action: asset.status === "excluded" ? "restore" : asset.status === "needs_confirmation" ? "confirm" : "remove"' in frontend
+    assert 'action: event.currentTarget.value === "candidate" ? "confirm" : event.currentTarget.value === "excluded" ? "remove" : "review"' in frontend
     assert "添加到标准" in frontend and "停用" in frontend and "启用" in frontend
     assert "standard_revision_id" in source and "standard_revision_number" in source
     assert '"revisions": "text_inspection_standard_revisions"' in source
