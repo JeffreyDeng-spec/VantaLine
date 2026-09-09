@@ -21,8 +21,12 @@ def main():
                 standard = dict(id='std', owner_user_id='owner', status='draft', revision_number=0)
                 asset = dict(id='asset', standard_id='std', owner_user_id='owner', ordinal=1,
                              status='needs_confirmation', classification_source='unclassified', sha256='a'*64)
-                repo.upsert_row('text_inspection_standards', dict(id='std', owner_user_id='owner', created_at=1, raw_json=standard))
-                repo.upsert_row('text_inspection_assets', dict(id='asset', standard_id='std', owner_user_id='owner', ordinal=1, created_at=1, raw_json=asset))
+                repo.upsert_row('text_inspection_standards', dict(id='std', owner_user_id='owner', name='test',
+                    material_code='test', version_label='1', standard_type='label', status='draft',
+                    source_sha256='b'*64, created_at=1, updated_at=1, raw_json=standard))
+                repo.upsert_row('text_inspection_assets', dict(id='asset', standard_id='std', owner_user_id='owner',
+                    asset_kind='label_candidate', ordinal=1, status='needs_confirmation', sha256='a'*64,
+                    created_at=1, updated_at=1, raw_json=asset))
                 for owner in ['owner', 'other']:
                     try:
                         repo.confirm_text_inspection_standard('std', owner, 2, revision_id='blocked')
