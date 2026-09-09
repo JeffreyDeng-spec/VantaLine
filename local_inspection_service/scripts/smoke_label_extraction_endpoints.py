@@ -22,6 +22,7 @@ def main():
     other=TestClient(server.app,base_url="https://testserver"); login(other,"other")
     standard=admin.post("/api/text-inspection/standards/import",data={"name":"label","material_code":"EXTRACT","version_label":"V1"},files={"file":("labels.docx",docx(),"application/octet-stream")}).json()
     asset=standard["assets"][0]
+    assert_status(admin.patch(f"/api/text-inspection/standards/{standard['id']}/assets/{asset['id']}",json={"action":"confirm"}),200,"review imported asset")
     assert_status(admin.post(f"/api/text-inspection/standards/{standard['id']}/confirm"),200,"confirm standard")
     def create(request_id="manual_001",method="manual",target="[0.1,0.1,0.8,0.8]"):
         return admin.post("/api/text-inspection/extractions",data={"target":target,"request_id":request_id,"method":method},files={"file":("disguised.data",picture("ABC"),"application/octet-stream")})
