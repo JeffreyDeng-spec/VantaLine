@@ -27,7 +27,9 @@ fs.mkdirSync(output, { recursive: true });
       const req = route.request(); const url = new URL(req.url());
       if (!url.pathname.startsWith('/api/')) return route.continue();
       if (url.pathname.endsWith('/extraction-capabilities')) return route.fulfill({ json: { enabled: false, ai_available: false } });
-      if (url.pathname === '/api/text-inspection/standards') return route.fulfill({ json: { items: [standard] } });
+      if (url.pathname === '/api/text-inspection/standards') return route.fulfill({ json: { items: standard.status === 'deleted' ? [] : [standard] } });
+      if (req.method() === 'DELETE') { standard.status = 'deleted'; return route.fulfill({ json: standard }); }
+      if (url.pathname.endsWith('/classify')) { standard.classification = { id: 'test-job', state: 'completed', done: 3, total: 3 }; return route.fulfill({ json: standard }); }
       if (req.method() === 'PATCH') {
         if (rejectNext) { rejectNext = false; return route.fulfill({ status: 409, json: { detail: '模拟保存冲突，请刷新后重试' } }); }
         const { action } = req.postDataJSON();
@@ -45,6 +47,8 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('button', { name: /测试订单/ }).click();
     const picker = i => page.getByRole('combobox', { name: `第 ${i} 张图片分类` });
     await picker(1).waitFor();
+    await page.getByRole('button', { name: '识别标签', exact: true }).click();
+    await page.getByText('视觉分类完成，请检查并确认保留的标签。').waitFor();
     assert.equal(await page.locator('.text-standard-asset-card').count(), 3);
     assert.equal(await page.getByRole('button', { name: /确认保留.*并启用/ }).isDisabled(), true);
     await page.screenshot({ path: path.join(output, 'desktop-three-states.png'), fullPage: true });
@@ -79,6 +83,13 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('button', { name: /确认保留.*并启用/ }).click();
     await page.getByText('已启用', { exact: true }).waitFor();
     assert.equal(standard.status, 'confirmed');
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByRole('button', { name: '删除标签订单', exact: true }).click();
+    assert.equal(standard.status, 'confirmed');
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: '删除标签订单', exact: true }).click();
+    await page.getByText('还没有标签标准', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(output, 'deleted-order.png'), fullPage: true });
     assert.deepEqual(mutations, ['confirm', 'confirm', 'review', 'remove']);
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ passed: true, fixture_api: true, real_model_calls: 0, checks: ['three states', 'pending blocks confirmation', 'filter empty state', 'manual restore', 'failure preserves state', 'mark pending', 'exclude', 'reload', 'undimmed zoom', 'mobile overflow', 'explicit activation'], mutations }, null, 2));

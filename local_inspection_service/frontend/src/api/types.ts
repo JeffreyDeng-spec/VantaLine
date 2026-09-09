@@ -747,6 +747,7 @@ export interface TextInspectionAsset {
   classification_confidence?: number;
   classification_source?: string;
   classification_reason?: string;
+  classification_attempt?: { state?: string; diagnostics?: unknown; result?: unknown };
   content_url?: string;
 }
 
@@ -756,7 +757,8 @@ export interface TextInspectionStandard {
   material_code: string;
   version_label: string;
   standard_type: "label" | "manual";
-  status: "draft" | "confirmed";
+  status: "draft" | "confirmed" | "deleted";
+  classification?: { id?: string; state: string; done?: number; total?: number; reason?: string; model?: string };
   source_sha256: string;
   created_at: number;
   asset_count: number;

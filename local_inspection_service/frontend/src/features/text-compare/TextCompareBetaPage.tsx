@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, Camera, CheckCircle2, ChevronDown, ChevronRight, Expand, FileImage, ImagePlus, Minus, Plus, RefreshCcw, ScanText, Upload, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addTextInspectionStandardAsset, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
+import { addTextInspectionStandardAsset, classifyTextInspectionStandard, deleteTextInspectionStandard, compareTextInspectionLabel, confirmTextInspectionStandard, getTextInspectionStandard, importTextInspectionStandard, listTextInspectionStandards, patchTextInspectionAsset } from "../../api/queries";
 import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
 import { FileDropZone } from "../../components/FileDropZone";
 import { apiClient } from "../../api/client";
@@ -98,7 +98,13 @@ export function TextCompareBetaPage() {
   const normalizedOutput = result?.diagnostics?.normalized_response;
   const hasDiagnosticOutput = rawProviderOutput !== undefined || normalizedOutput !== undefined;
   const standardsQuery = useQuery({ queryKey: ["text-inspection", "standards"], queryFn: listTextInspectionStandards });
-  const standardQuery = useQuery({ queryKey: ["text-inspection", "standard", selectedStandardId], queryFn: () => getTextInspectionStandard(selectedStandardId), enabled: !!selectedStandardId });
+  const standardQuery = useQuery({ queryKey: ["text-inspection", "standard", selectedStandardId], queryFn: () => getTextInspectionStandard(selectedStandardId), enabled: !!selectedStandardId, refetchInterval: (query) => query.state.data?.classification?.state === "processing" ? 2000 : false });
+  const selectedOrderRef = useRef(selectedStandardId); selectedOrderRef.current = selectedStandardId;
+  const classifyMutation = useMutation({ mutationFn: classifyTextInspectionStandard, onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); }, onError: (error: Error) => setInputError(error.message) });
+  const deleteOrderMutation = useMutation({ mutationFn: deleteTextInspectionStandard, onSuccess: (_value, id) => {
+    if (selectedOrderRef.current === id) { setSelectedStandardId(""); setSelectedAssetId(""); resetComparison(); }
+    void queryClient.invalidateQueries({ queryKey: ["text-inspection"] });
+  }, onError: (error: Error) => setInputError(error.message) });
   const selectedAsset = standardQuery.data?.assets?.find((asset) => asset.id === selectedAssetId);
   const importMutation = useMutation({
     mutationFn: () => {
@@ -349,7 +355,8 @@ export function TextCompareBetaPage() {
   const pendingAssetCount = visibleAssets.filter((asset) => asset.status === "needs_confirmation").length;
   const excludedAssetCount = visibleAssets.filter((asset) => asset.status === "excluded").length;
   const filteredAssets = visibleAssets.filter((asset) => assetFilter === "all" || asset.status === assetFilter);
-  const reviewBusy = assetMutation.isPending || assetUploadMutation.isPending || confirmMutation.isPending || standardQuery.isFetching;
+  const classification = standardQuery.data?.classification;
+  const reviewBusy = assetMutation.isPending || assetUploadMutation.isPending || confirmMutation.isPending || standardQuery.isFetching || deleteOrderMutation.isPending;
   const renderAssetCards = () => <>
     {mode === "label" ? <div className="text-standard-review-summary">
       <strong>确认要保留的标签设计图</strong><p>绿色为标签，琥珀色为待定，灰色为非标签。分类仅作建议，所有图片都能放大查看和手动修改，不会删除原图。</p>
@@ -399,10 +406,15 @@ export function TextCompareBetaPage() {
             <button className="text-standard-order-toggle" type="button" aria-expanded={expanded} onClick={() => chooseStandard(standard.id)}><span>{standard.standard_type === "label" ? "标" : "册"}</span><div><strong>{standard.name}</strong><small>{standard.material_code} · {standard.version_label} · {standard.asset_count} 张</small></div><em className={standard.status}>{standard.status === "confirmed" ? "已启用" : "待整理"}</em>{expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</button>
             {expanded ? <div className="text-standard-order-detail" data-testid="standard-order-detail">
               <div className="text-standard-order-toolbar"><div><strong>{standardQuery.isLoading ? "正在读取订单…" : `${retainedAssetCount} 张图片已启用`}</strong><small>{standard.status === "confirmed" ? "点击任一已启用图片即可高亮选中；“查看大图”不会改变选择。" : "请整理候选图片，然后保存并启用订单。"}</small></div></div>
+              {mode === "label" ? <div className="text-standard-document-actions">
+                <div role="status" aria-live="polite">{classification?.state === "processing" ? `正在识别 ${classification.done || 0}/${classification.total || 0} 张图片…` : classification?.state === "completed" ? "视觉分类完成，请检查并确认保留的标签。" : classification?.reason || "此订单尚未进行视觉分类。"}</div>
+                {standardQuery.data?.status === "draft" && !classification?.id ? <button type="button" disabled={classifyMutation.isPending || reviewBusy} onClick={() => classifyMutation.mutate(standard.id)}>{classifyMutation.isPending ? "正在启动…" : "识别标签"}</button> : null}
+                <button type="button" className="text-standard-delete-order" disabled={deleteOrderMutation.isPending || assetMutation.isPending} onClick={() => { if (window.confirm(`删除标签订单“${standard.name}”？订单将从列表隐藏，原图和历史对比记录仍保留。`)) deleteOrderMutation.mutate(standard.id); }}>删除标签订单</button>
+              </div> : null}
               {standardQuery.data?.standard_type === "label" ? <div className="text-standard-inline-controls"><FileDropZone className="text-standard-add-asset-drop" accept={IMAGE_ACCEPT} disabled={assetUploadMutation.isPending} ariaLabel="拖拽或选择单张标准图片" onFiles={(files) => { setAssetUploadFile(files[0] || null); setInputError(""); }}><ImagePlus size={16} /><span>{assetUploadFile ? assetUploadFile.name : "拖拽或选择单张图片"}</span></FileDropZone><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}
               {standardQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={22} /><strong>订单内容加载失败</strong><button type="button" onClick={() => void standardQuery.refetch()}>重试</button></div> : renderAssetCards()}
               {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
-              {standardQuery.data?.status === "draft" ? <div className="text-standard-inline-footer"><span>{pendingAssetCount ? `还有 ${pendingAssetCount} 张待定图片，请选择保留或排除。` : `将保留 ${retainedAssetCount} 张，排除 ${excludedAssetCount} 张；排除的图片仍可恢复。`}</span>{pendingAssetCount ? <button type="button" onClick={() => setAssetFilter("needs_confirmation")}>查看待定项</button> : null}<button type="button" disabled={!retainedAssetCount || pendingAssetCount > 0 || reviewBusy} onClick={() => confirmMutation.mutate()}>{confirmMutation.isPending ? "正在保存…" : `确认保留 ${retainedAssetCount} 张并启用`}</button></div> : null}
+              {standardQuery.data?.status === "draft" ? <div className="text-standard-inline-footer"><span>{pendingAssetCount ? `还有 ${pendingAssetCount} 张待定图片，请选择保留或排除。` : `将保留 ${retainedAssetCount} 张，排除 ${excludedAssetCount} 张；排除的图片仍可恢复。`}</span>{pendingAssetCount ? <button type="button" onClick={() => setAssetFilter("needs_confirmation")}>查看待定项</button> : null}<button type="button" disabled={!retainedAssetCount || pendingAssetCount > 0 || reviewBusy || classification?.state === "processing"} onClick={() => confirmMutation.mutate()}>{confirmMutation.isPending ? "正在保存…" : `确认保留 ${retainedAssetCount} 张并启用`}</button></div> : null}
             </div> : null}
           </article>;
         })}

@@ -20,6 +20,10 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+Document classification adds authenticated job/deletion smoke tests and parser
+checks to CI. Its separate account allowlist must be configured for rollout;
+shipping the Java extractor alone does not enable VLM classification.
+
 The DOC image helper is built in CI with Java 17 from the fixed Maven dependency
 lock. Release packaging verifies its source and jar hashes, then includes only
 the runtime jars and manifest under `workers/doc_image_extractor/bundle`.

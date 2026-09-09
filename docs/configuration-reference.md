@@ -28,11 +28,18 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 ## Text inspection v2
 
+`VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS` is a default-empty account allowlist
+for DOC/DOCX classification. It also requires the external-media gate and the
+existing configured Qwen visual model/key from `ai_detection_settings()`.
+Each unique image has at most one call (60s timeout); two document workers per
+application process are allowed. Busy/unconfigured imports show the reason and
+allow explicit later start. PDF is unchanged. No other model/key fallback exists.
+
 `VANTALINE_DOC_IMAGE_BUNDLE` points to the fixed POI 5.5.1 helper bundle built by
 `scripts/build_doc_image_extractor.py --output <directory>`. Java 11+ is required
 at runtime (use a supported patched JRE); building additionally needs javac/jar.
 The bundle manifest verifies every jar's SHA-256 and the helper source version.
-No download occurs on import, no model call is made and credentials/JVM injection
+No download or model call occurs in the Java helper, and credentials/JVM injection
 environment variables are not inherited by the helper. No LibreOffice, fonts,
 bubblewrap or DOC-to-DOCX conversion is required. The earlier converter flag is
 unused. Limits: 30MB DOC, 500 images, 30MB per image, 100MB total output, 256MiB Java
