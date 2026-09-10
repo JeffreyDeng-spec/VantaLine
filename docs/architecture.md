@@ -14,7 +14,11 @@ with a preview-unavailable reason. Other embedded OLE files are not exported.
 
 Document import review preserves all extracted images for human correction. The
 gallery distinguishes retained/pending/excluded without hiding excluded sources.
-Manual review uses a green/red/orange button instead of a selector: pending first
+Label cards display retained first, pending next, excluded last; source ordinals
+order each group. This display-only ordering recomputes after uploads/reviews and
+does not mutate stored assets, selection IDs, snapshots or manual page ordering.
+Manual review separates a green/red/orange current-state indicator from a neutral
+one-click action labelled with its destination (retain or exclude). Pending first
 becomes retained, then retained and excluded toggle. Existing PATCH history and
 revision handling are unchanged; a failed save does not flip the displayed state.
 Owned asset PATCH adds `review` for `needs_confirmation`; JSON and PostgreSQL
@@ -65,6 +69,12 @@ camera/serial permission origins and model/PLC configuration are unchanged.
 - **GitHub Actions:** required checks, one-commit release packaging, checksum/version generation, production installation, acceptance, release publication, and rollback on failure.
 
 ## Inspection flows
+
+- Retaining a library asset and selecting a comparison reference are separate
+  actions. Enabled assets expose an explicit reference-selection button. The
+  extraction confirmation control explains missing order activation/reference,
+  unsaved contours, pending work or missing preview; it links back to the library
+  without discarding the crop. Draft/inactive assets cannot serve as references.
 
 - The optional `vlm_bbox` extraction method ports the colleague's whole-image rectangle prompt to the existing Qwen vision settings. It is account-gated separately, disabled by default, and never changes the comparison or image-generation provider. Its 1600-pixel JPEG input, bounded model response and zero-expansion original-pixel rectangle are evidence, not a verified mask. Invalid output has no whole-image fallback. Polygon corrections and confirmation retain immutable previews and the existing comparison size gate.
 

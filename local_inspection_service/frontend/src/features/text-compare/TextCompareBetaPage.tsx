@@ -105,7 +105,13 @@ export function TextCompareBetaPage() {
     if (selectedOrderRef.current === id) { setSelectedStandardId(""); setSelectedAssetId(""); resetComparison(); }
     void queryClient.invalidateQueries({ queryKey: ["text-inspection"] });
   }, onError: (error: Error) => setInputError(error.message) });
-  const selectedAsset = standardQuery.data?.assets?.find((asset) => asset.id === selectedAssetId);
+  const selectedAsset = standardQuery.data?.status === "confirmed"
+    ? standardQuery.data.assets?.find((asset) => asset.id === selectedAssetId && isActiveAsset(asset)) : undefined;
+  const standardBlockReason = !selectedStandardId ? "请先在左侧展开一个标签订单，再选择对比标准。"
+    : standardQuery.isLoading ? "正在读取标准订单…"
+    : standardQuery.isError ? "标准订单读取失败，请重新展开订单。"
+    : standardQuery.data?.status !== "confirmed" ? "订单尚未启用：请在左侧处理待定图片，点击“确认保留并启用”，再选择一张标准。"
+    : !selectedAsset ? "请在左侧点击一张标签的“用作对比标准”；绿色“已保留”只表示纳入标准库，不代表已选中。" : "";
   const importMutation = useMutation({
     mutationFn: () => {
       if (!importFile || !importName.trim() || !importMaterial.trim() || !importVersion.trim()) throw new Error("请填写标准名称、物料编码、版本并选择 DOC、DOCX 或 PDF。");
@@ -354,7 +360,10 @@ export function TextCompareBetaPage() {
   const retainedAssetCount = visibleAssets.filter(isActiveAsset).length;
   const pendingAssetCount = visibleAssets.filter((asset) => asset.status === "needs_confirmation").length;
   const excludedAssetCount = visibleAssets.filter((asset) => asset.status === "excluded").length;
-  const filteredAssets = visibleAssets.filter((asset) => assetFilter === "all" || asset.status === assetFilter);
+  // Sort the display copy only: retain source ordinals, IDs and immutable snapshots.
+  const reviewRank = (asset: TextInspectionAsset) => isActiveAsset(asset) ? 0 : asset.status === "excluded" ? 2 : 1;
+  const filteredAssets = visibleAssets.filter((asset) => assetFilter === "all" || asset.status === assetFilter)
+    .sort((a, b) => reviewRank(a) - reviewRank(b) || a.ordinal - b.ordinal);
   const classification = standardQuery.data?.classification;
   const reviewBusy = assetMutation.isPending || assetUploadMutation.isPending || confirmMutation.isPending || standardQuery.isFetching || deleteOrderMutation.isPending;
   const renderAssetCards = () => <>
@@ -376,14 +385,17 @@ export function TextCompareBetaPage() {
       <div className="text-standard-asset-copy"><span className="text-standard-classification-badge">{asset.status === "needs_confirmation" ? <AlertTriangle size={15} /> : isActiveAsset(asset) ? <CheckCircle2 size={15} /> : <X size={15} />}{assetStatusCopy(asset)}</span><strong>{CATEGORY_LABELS[asset.category || ""] || "标准图片"}</strong><small>{asset.classification_source === "human" ? "人工已修改" : "系统建议，尚未经人工确认"}{asset.context ? ` · ${asset.context}` : ""}</small>{asset.classification_reason ? <details><summary>查看分类依据</summary><p>{asset.classification_reason}</p></details> : null}</div>
       <div className="text-standard-asset-actions">
         {asset.content_url ? <button type="button" onClick={() => openZoom(asset.content_url!, `${CATEGORY_LABELS[asset.category || ""] || "标准图片"} ${asset.ordinal}`)}><Expand size={14} />查看大图</button> : null}
-        {mode === "label" ? <button
+        {selectable ? <button type="button" disabled={mutation.isPending} onClick={() => chooseAsset(asset)} aria-pressed={selected} className="text-standard-select-reference">{selected ? "已选为对比标准" : "用作对比标准"}</button> : null}
+        {mode === "label" ? <div className={`text-standard-retention-control retention-${asset.status}`}>
+        <span className="text-standard-retention-state">{asset.status === "candidate" ? <CheckCircle2 size={16} /> : asset.status === "excluded" ? <X size={16} /> : <AlertTriangle size={16} />}{asset.status === "candidate" ? "已保留" : asset.status === "excluded" ? "未保留" : "待确认"}</span>
+        <button
           type="button"
-          className={`text-standard-retention-toggle retention-${asset.status}`}
-          aria-label={`第 ${asset.ordinal} 张图片：${asset.status === "candidate" ? "保留，点击不保留" : asset.status === "excluded" ? "不保留，点击保留" : "不确定，点击保留"}`}
+          className="text-standard-retention-toggle"
+          aria-label={`第 ${asset.ordinal} 张图片：${asset.status === "candidate" ? "改为不保留" : "改为保留"}`}
           title={asset.status === "candidate" ? "点击改为不保留" : "点击改为保留"}
           disabled={reviewBusy}
           onClick={() => { setInputError(""); assetMutation.mutate({ standardId: selectedStandardId, assetId: asset.id, revision: standardQuery.data?.revision_number, action: asset.status === "candidate" ? "remove" : "confirm" }); }}
-        >{asset.status === "candidate" ? <CheckCircle2 size={16} /> : asset.status === "excluded" ? <X size={16} /> : <AlertTriangle size={16} />}{asset.status === "candidate" ? "保留" : asset.status === "excluded" ? "不保留" : "不确定"}</button> : <button type="button" disabled={reviewBusy} onClick={() => assetMutation.mutate({ standardId: selectedStandardId, assetId: asset.id, revision: standardQuery.data?.revision_number, action: asset.status === "excluded" ? "restore" : "remove" })}>{asset.status === "excluded" ? "启用" : "停用"}</button>}
+        >{asset.status === "candidate" ? "改为不保留" : "改为保留"}</button></div> : <button type="button" disabled={reviewBusy} onClick={() => assetMutation.mutate({ standardId: selectedStandardId, assetId: asset.id, revision: standardQuery.data?.revision_number, action: asset.status === "excluded" ? "restore" : "remove" })}>{asset.status === "excluded" ? "启用" : "停用"}</button>}
       </div>
     </article>})}
     {!visibleAssets.length && !standardQuery.isLoading ? <div className="text-standard-empty"><ImagePlus size={28} /><strong>还没有标准图片</strong><span>请在当前订单中添加图片，或重新导入包含图片的文档。</span></div> : null}
@@ -436,7 +448,7 @@ export function TextCompareBetaPage() {
           {inputMode === "camera" && cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
           {extractionEnabled && !result && (captured || inputMode === "camera") ? <GuideOverlay value={guide} onChange={setGuide} disabled={mutation.isPending} /> : null}
         </div>
-        {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} bboxEnabled={capabilities.data?.bbox_enabled === true} bboxAvailable={capabilities.data?.bbox_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
+        {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} bboxEnabled={capabilities.data?.bbox_enabled === true} bboxAvailable={capabilities.data?.bbox_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} standardBlockReason={standardBlockReason} onSelectStandard={() => { const library = document.getElementById("text-standard-library-panel"); library?.scrollIntoView({ behavior: "smooth", block: "start" }); library?.querySelector<HTMLButtonElement>(".text-standard-select-reference, .text-standard-order-toggle, .text-standard-import-button")?.focus({ preventScroll: true }); }} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
       </article> : null}
     </div>
     {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}

@@ -21,9 +21,18 @@ Run `scripts/test_document_review_ui.cjs` against local Vite with Playwright and
 `REVIEW_UI_OUTPUT` set: it mounts the real page with a fixture API and saves desktop
 and mobile screenshots. Optional `REVIEW_IMAGE_FIXTURES` selects local benchmark
 images; these do not enter source control. Verify pending activation gating,
-green/red/orange decision buttons, pending-to-retained-to-excluded toggling,
+green/red/orange status indicators with explicit destination-action buttons, pending-to-retained-to-excluded toggling,
 keyboard activation, exclusion recovery, API-error retention, refresh persistence,
 undimmed zoom and mobile overflow. Human corrections are not model successes.
+Also verify retained/pending/excluded display order, stable source ordinals within
+groups, newly uploaded retained images ahead of exclusions, both toggle directions,
+and the same order after reload. PDF/manual pages must retain their page order.
+`scripts/test_label_confirm_flow.cjs` uses the same local Vite page and screenshot
+output variables with isolated HTTP fixtures. It covers crop save before order
+selection, draft activation, explicit reference selection, confirmation followed
+by crop-ID-only comparison, reference switching without crop loss, and the dirty
+contour gate. These browser fixtures plus real-route extraction smoke tests prove
+the integration contract, not live model accuracy or a production comparison.
 `smoke_document_review_postgres.py` exercises pending/cross-owner rejection,
 reversible states and immutable snapshots on real PostgreSQL in an isolated
 temporary schema. CI runs it plus a Java 17 helper build/hash validation job.

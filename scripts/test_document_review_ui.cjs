@@ -28,6 +28,11 @@ fs.mkdirSync(output, { recursive: true });
       if (!url.pathname.startsWith('/api/')) return route.continue();
       if (url.pathname.endsWith('/extraction-capabilities')) return route.fulfill({ json: { enabled: false, ai_available: false } });
       if (url.pathname === '/api/text-inspection/standards') return route.fulfill({ json: { items: standard.status === 'deleted' ? [] : [standard] } });
+      if (req.method() === 'POST' && url.pathname.endsWith('/test-standard/assets')) {
+        const asset = { ...assets[0], id: 'asset-added', ordinal: 4, status: 'candidate', content_url: '/review-media/0' };
+        assets.push(asset); standard.asset_count = assets.length;
+        return route.fulfill({ json: { ...asset, standard } });
+      }
       if (req.method() === 'DELETE') { standard.status = 'deleted'; return route.fulfill({ json: standard }); }
       if (url.pathname.endsWith('/classify')) { standard.classification = { id: 'test-job', state: 'completed', done: 3, total: 3 }; return route.fulfill({ json: standard }); }
       if (req.method() === 'PATCH') {
@@ -46,11 +51,14 @@ fs.mkdirSync(output, { recursive: true });
     await page.screenshot({ path: path.join(output, 'loading-debug.png'), fullPage: true });
     await page.getByRole('button', { name: /测试订单/ }).click();
     const picker = i => page.getByRole('button', { name: new RegExp(`^第 ${i} 张图片：`) });
+    const order = () => page.locator('.text-standard-thumbnail em').allTextContents();
     await picker(1).waitFor();
+    assert.deepEqual(await order(), ['1','2','3']);
     assert.equal(await page.locator('.text-standard-asset-actions select').count(), 0);
     for (const [i, label, color] of [[1, '保留', 'rgb(24, 115, 68)'], [2, '不确定', 'rgb(255, 207, 133)'], [3, '不保留', 'rgb(180, 35, 50)']]) {
-      assert.equal(await picker(i).innerText(), label);
-      assert.equal(await picker(i).evaluate(el => getComputedStyle(el).backgroundColor), color);
+      assert.equal(await picker(i).innerText(), i === 1 ? '改为不保留' : '改为保留');
+      assert.equal(await picker(i).locator('..').evaluate(el => getComputedStyle(el).backgroundColor), color);
+      assert.equal(await picker(i).locator('..').locator('.text-standard-retention-state').innerText(), ['已保留','待确认','未保留'][i-1]);
     }
     await page.getByRole('button', { name: '识别标签', exact: true }).click();
     await page.getByText('视觉分类完成，请检查并确认保留的标签。').waitFor();
@@ -67,11 +75,12 @@ fs.mkdirSync(output, { recursive: true });
     rejectNext = true;
     await picker(1).click();
     await page.getByText('模拟保存冲突，请刷新后重试').first().waitFor();
-    assert.equal(await picker(1).innerText(), '保留');
+    assert.equal(await picker(1).innerText(), '改为不保留');
     await picker(2).focus();
     await page.keyboard.press('Space');
     await page.getByRole('button', { name: '非标签 1', exact: true }).waitFor();
-    assert.equal(await picker(2).innerText(), '不保留');
+    assert.deepEqual(await order(), ['1','3','2']);
+    assert.equal(await picker(2).innerText(), '改为保留');
     await picker(2).focus();
     await page.keyboard.press('Enter');
     await page.getByRole('button', { name: '标签 3', exact: true }).waitFor();
@@ -80,8 +89,9 @@ fs.mkdirSync(output, { recursive: true });
     assert.equal(await page.getByRole('button', { name: /确认保留.*并启用/ }).isEnabled(), true);
     await page.reload();
     await page.getByRole('button', { name: /测试订单/ }).click();
-    assert.equal(await picker(1).innerText(), '不保留');
-    assert.equal(await picker(3).innerText(), '保留');
+    assert.equal(await picker(1).innerText(), '改为保留');
+    assert.equal(await picker(3).innerText(), '改为不保留');
+    assert.deepEqual(await order(), ['2','3','1']);
     await page.getByRole('button', { name: '查看大图', exact: true }).first().click();
     await page.getByRole('dialog').waitFor();
     assert.equal(await page.locator('.text-compare-lightbox img').evaluate(img => getComputedStyle(img).filter), 'none');
@@ -93,6 +103,23 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('button', { name: /确认保留.*并启用/ }).click();
     await page.getByText('已启用', { exact: true }).waitFor();
     assert.equal(standard.status, 'confirmed');
+    // New uploads have the last source ordinal but belong ahead of exclusions.
+    const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width=200; c.height=200; return c.toDataURL().split(',')[1]; });
+    await page.locator('.text-standard-order-detail input[type=file]').setInputFiles({ name: 'new.png', mimeType:'image/png', buffer:Buffer.from(png,'base64') });
+    await page.getByRole('button',{name:'添加到标准',exact:true}).click();
+    await picker(4).waitFor();
+    assert.deepEqual(await order(), ['2','3','4','1']);
+    await picker(4).click();
+    await page.getByRole('button',{name:'非标签 2',exact:true}).waitFor();
+    assert.deepEqual(await order(), ['2','3','1','4']);
+    await picker(4).click();
+    await page.getByRole('button',{name:'标签 3',exact:true}).waitFor();
+    assert.deepEqual(await order(), ['2','3','4','1']);
+    await page.reload();
+    await page.getByRole('button',{name:/测试订单/}).click();
+    await picker(4).waitFor();
+    assert.deepEqual(await order(), ['2','3','4','1']);
+    await page.screenshot({path:path.join(output,'retained-first-after-upload.png'),fullPage:true});
     page.once('dialog', dialog => dialog.dismiss());
     await page.getByRole('button', { name: '删除标签订单', exact: true }).click();
     assert.equal(standard.status, 'confirmed');
@@ -100,7 +127,7 @@ fs.mkdirSync(output, { recursive: true });
     await page.getByRole('button', { name: '删除标签订单', exact: true }).click();
     await page.getByText('还没有标签标准', { exact: true }).waitFor();
     await page.screenshot({ path: path.join(output, 'deleted-order.png'), fullPage: true });
-    assert.deepEqual(mutations, ['confirm', 'confirm', 'remove', 'confirm', 'remove']);
+    assert.deepEqual(mutations, ['confirm', 'confirm', 'remove', 'confirm', 'remove', 'remove', 'confirm']);
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ passed: true, fixture_api: true, real_model_calls: 0, checks: ['three button colors', 'no dropdown', 'pending blocks confirmation', 'filter empty state', 'manual restore', 'failure preserves state', 'pending then retained/excluded toggle', 'Space and Enter', 'reload', 'undimmed zoom', 'mobile overflow', 'explicit activation'], mutations }, null, 2));
     console.log('Document review UI checks passed; screenshots:', output);

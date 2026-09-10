@@ -89,7 +89,9 @@
 .text-standard-review-filters button { min-height: 36px; border: 1px solid #bccac0; border-radius: 7px; background: white; padding: 5px 10px; color: #315642; cursor: pointer; }
 .text-standard-review-filters button[aria-pressed="true"] { background: #245b3d; color: white; }
 .text-standard-asset-actions { flex-wrap: wrap; }
-.text-standard-asset-actions .text-standard-retention-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.text-standard-retention-control { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 8px; border: 1px solid; border-radius: 7px; }
+.text-standard-retention-state { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.text-standard-asset-actions .text-standard-retention-toggle { flex: 0 0 auto; min-height: 44px; padding: 6px 10px; border: 1px solid #bbc6c0; border-radius: 6px; background: white; color: #233a2e; font-size: 13px; font-weight: 700; cursor: pointer; }
 .text-standard-asset-actions .retention-candidate { background: #187344; border-color: #145d38; color: white; }
 .text-standard-asset-actions .retention-excluded { background: #b42332; border-color: #941d29; color: white; }
 .text-standard-asset-actions .retention-needs_confirmation { background: #ffcf85; border-color: #b86b08; color: #653800; }
