@@ -29,6 +29,11 @@ JSON_COLUMNS = frozenset(
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
 PRIMARY_KEY_COLUMNS = {
+    "agent_policies": ("id",),
+    "agent_operations": ("id",),
+    "agent_operation_attempts": ("id",),
+    "agent_operation_audit": ("id",),
+
     "text_label_extractions": ("id",),
     "schema_migrations": ("version",),
     "users": ("id",),
@@ -169,6 +174,44 @@ class PostgresRuntimeRepository:
         rollback = getattr(self.connection, "rollback", None)
         if callable(rollback):
             rollback()
+
+    def authenticate_session(self, id_hash: str, *, now: int, ttl: int, persist_interval: int):
+        """Indexed protected-request lookup; conditional touch cannot recreate a revoked session."""
+        cursor = self._cursor()
+        sessions, users = self._qualified_table("auth_sessions"), self._qualified_table("users")
+        try:
+            cursor.execute(
+                f"SELECT s.*, u.raw_json AS user_raw_json FROM {sessions} s "
+                f"JOIN {users} u ON u.id = s.user_id "
+                "WHERE s.id_hash = %s AND s.expires_at > %s AND u.active = TRUE FOR UPDATE OF s",
+                (id_hash, now),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {users} LIMIT 1) AS has_users")
+                has_users = bool(self._row_to_dict(cursor, cursor.fetchone())["has_users"])
+                self.connection.commit()
+                return None, None, has_users
+            session = self._row_to_dict(cursor, row)
+            user = {"raw_json": session.pop("user_raw_json")}
+            original = session["raw_json"]
+            raw = json.loads(original) if isinstance(original, str) else dict(original)
+            if now - int(session["last_seen_at"]) >= persist_interval:
+                raw.update(last_seen_at=now, expires_at=now + ttl)
+                # Retain legacy twice-encoded JSONB representation where present.
+                payload = json.dumps(json.dumps(raw) if isinstance(original, str) else raw)
+                cursor.execute(
+                    f"UPDATE {sessions} SET last_seen_at=%s, expires_at=%s, raw_json=%s::jsonb WHERE id_hash=%s",
+                    (now, now + ttl, payload, id_hash),
+                )
+                session.update(last_seen_at=now, expires_at=now + ttl, raw_json=raw)
+            self.connection.commit()
+            return user, session, True
+        except Exception:
+            self.connection.rollback()
+            raise
+        finally:
+            cursor.close()
 
     def _row_to_dict(self, cursor: Any, row: Any) -> dict[str, Any]:
         if isinstance(row, Mapping):

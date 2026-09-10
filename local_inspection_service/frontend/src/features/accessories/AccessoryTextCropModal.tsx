@@ -6,6 +6,7 @@ import { cropAccessoryTextImage, getAccessoryDetail, queryKeys } from "../../api
 import type { AccessoryGalleryAsset, AccessoryMutationResponse, AccessorySummary } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { useToast } from "../../components/ToastProvider";
+import { useAgentActions } from "../agent/useAgentActions";
 
 type CornerKey = "tl" | "tr" | "br" | "bl";
 
@@ -233,6 +234,12 @@ export function AccessoryTextCropModal({
   const disabled = Boolean(busy);
   const currentNumber = sources.length ? Math.min(sourceIndex + 1, sources.length) : 0;
   const allCropped = Boolean(completeResult);
+  useAgentActions([
+    {name:"accessory_crop_get_state",domain:"accessories",description:"Read the active crop source and four corners, expressed as percentages of the source image (0–100), not screen coordinates.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({accessory_id:accessory.id,source_index:sourceIndex,sources:sources.map((item,index)=>({index,url:item.url,label:item.label})),points,coordinate_system:"source_percent",busy,all_cropped:allCropped})},
+    {name:"accessory_crop_set_corners",domain:"accessories",description:"Set the four corners of the current source image in top-left, top-right, bottom-right, bottom-left order; percentages 0–100.",readOnly:false,inputSchema:{type:"object",properties:{corners:{type:"array",minItems:4,maxItems:4,items:{type:"object",properties:{x:{type:"number",minimum:0,maximum:100},y:{type:"number",minimum:0,maximum:100}},required:["x","y"],additionalProperties:false}}},required:["corners"],additionalProperties:false},available:()=>disabled||allCropped?"Crop session is busy or completed":null,execute:input=>{const [tl,tr,br,bl]=input.corners as CropPoint[];setPoints({tl,tr,br,bl});}},
+    {name:"accessory_crop_save",domain:"accessories",description:"Save the current crop and advance to the next source using the existing crop workflow. Read crop state for the verified result.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},available:()=>disabled||!source||allCropped?"No editable crop is ready":null,execute:async()=>{await submitCrop();return {status:"accepted",next_action:"accessory_crop_get_state"};}},
+    {name:"accessory_crop_finish",domain:"accessories",description:"Finish a crop session whose sources have all been saved, using the page's continuation callback.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},available:()=>disabled||!allCropped?"Save all source crops first":null,execute:async()=>{await finishSession();return {status:"accepted",next_action:"get_context"};}}
+  ]);
   const primaryLabel = allCropped ? "下一步" : sourceIndex + 1 < sources.length ? "保存本张，继续下一张" : "保存本张";
 
   return (

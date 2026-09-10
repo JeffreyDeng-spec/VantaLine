@@ -7,7 +7,7 @@
     ".github/PULL_REQUEST_TEMPLATE/production-change.md", "docs/archive/README.md"
   ],
   "authoritative_docs": [
-    "docs/README.md", "docs/agent-overview.md", "docs/architecture.md", "docs/plc-web-serial-v4.md",
+    "docs/README.md", "docs/agent-overview.md", "docs/agent-platform.md", "docs/architecture.md", "docs/plc-web-serial-v4.md",
     "docs/configuration-reference.md", "docs/testing.md", "docs/release-management.md",
     "docs/production-runbook.md", "docs/postgresql-runtime.md", "docs/new-maintainer-checklist.md",
     "docs/production-baseline-202608.md", "docs/text-inspection-v2.md", "local_inspection_service/README.md",
@@ -54,6 +54,11 @@
       "name": "Release and deployment",
       "paths": [".github/workflows/**", "scripts/install_release.sh", "scripts/bootstrap_release_host.sh", "scripts/build_release_artifact.py", "local_inspection_service/release_version.py"],
       "required_docs": ["docs/release-management.md", "docs/production-runbook.md"]
+    },
+    {
+      "name": "Browser agent platform",
+      "paths": ["local_inspection_service/agent_api.py", "local_inspection_service/frontend/src/features/agent/**", "local_inspection_service/frontend/scripts/generate-agent-tools.mjs"],
+      "required_docs": ["docs/agent-platform.md", "docs/architecture.md", "docs/testing.md"]
     }
   ]
 }

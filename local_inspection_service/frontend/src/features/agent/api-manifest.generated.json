@@ -1,0 +1,3948 @@
+[
+  {
+    "name": "get_auth_status",
+    "source": "getAuthStatus",
+    "domain": "core",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_users",
+    "source": "getUsers",
+    "domain": "users",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_task_navigation_preferences",
+    "source": "getTaskNavigationPreferences",
+    "domain": "core",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "save_task_navigation_preferences",
+    "source": "saveTaskNavigationPreferences",
+    "domain": "core",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "pinned_task_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "maxItems": 500
+            },
+            "archived_task_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "maxItems": 500
+            }
+          },
+          "required": [
+            "pinned_task_ids",
+            "archived_task_ids"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_service_status",
+    "source": "getServiceStatus",
+    "domain": "core",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "warmup_yolo_model",
+    "source": "warmupYoloModel",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "modelId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "modelId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_config_summary",
+    "source": "getConfigSummary",
+    "domain": "core",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_rules",
+    "source": "updateRules",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "confidence_threshold": {
+              "type": "number"
+            },
+            "required_classes": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 500
+            },
+            "min_counts": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "confidence_threshold",
+            "required_classes",
+            "min_counts"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_task_rules",
+    "source": "updateTaskRules",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "confidence_threshold": {
+              "type": "number"
+            },
+            "required_accessory_counts": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          },
+          "required": [
+            "confidence_threshold",
+            "required_accessory_counts"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_agent_config",
+    "source": "getAgentConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "save_agent_config",
+    "source": "saveAgentConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "provider": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "provider_label": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "model_options": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "label": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 8192
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "timeout_seconds": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "auto_advance_default": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "api_keys": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "label": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "masked_key": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "env_name": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 8192
+                          }
+                        ]
+                      },
+                      "provider": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 8192
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "masked_key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "active_key_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "configured": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "connection_status": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "connection_message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "last_tested_at": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "last_model_count": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "recommendation_supported": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "ok": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "test_agent_config",
+    "source": "testAgentConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_ai_config",
+    "source": "getAiConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_plc_config",
+    "source": "getPlcConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "save_plc_config",
+    "source": "savePlcConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "protocol": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "fx_programming_port_ascii"
+                  ]
+                }
+              ]
+            },
+            "checksum_mode": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "exclude_etx_legacy_vb"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "include_etx_documented_comment"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "include_etx"
+                  ]
+                }
+              ]
+            },
+            "serial_port": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "baudrate": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "parity": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "E"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "O"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "N"
+                  ]
+                }
+              ]
+            },
+            "data_bits": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "enum": [
+                    7
+                  ]
+                },
+                {
+                  "type": "number",
+                  "enum": [
+                    8
+                  ]
+                }
+              ]
+            },
+            "stop_bits": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "enum": [
+                    1
+                  ]
+                },
+                {
+                  "type": "number",
+                  "enum": [
+                    2
+                  ]
+                }
+              ]
+            },
+            "result_register": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "output_control_point": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "capture_trigger_enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "capture_input_register": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "capture_trigger_value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "timeout": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "retries": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_plc_workstation",
+    "source": "getPlcWorkstation",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "list_plc_workstations",
+    "source": "listPlcWorkstations",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "pair_plc_workstation",
+    "source": "pairPlcWorkstation",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "station_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "save_plc_workstation_config",
+    "source": "savePlcWorkstationConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "number",
+              "enum": [
+                5
+              ]
+            },
+            "transport_mode": {
+              "type": "string",
+              "enum": [
+                "web_serial"
+              ]
+            },
+            "profile_id": {
+              "type": "string",
+              "enum": [
+                "mitsubishi_fx3ga_40mr"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "protocol": {
+              "type": "string",
+              "enum": [
+                "fx_programming_port_ascii"
+              ]
+            },
+            "checksum_mode": {
+              "type": "string",
+              "enum": [
+                "include_etx"
+              ]
+            },
+            "baudrate": {
+              "type": "number",
+              "enum": [
+                9600
+              ]
+            },
+            "parity": {
+              "type": "string",
+              "enum": [
+                "E"
+              ]
+            },
+            "data_bits": {
+              "type": "number",
+              "enum": [
+                7
+              ]
+            },
+            "stop_bits": {
+              "type": "number",
+              "enum": [
+                1
+              ]
+            },
+            "result_register": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "output_control_point": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "capture_trigger_enabled": {
+              "type": "boolean"
+            },
+            "capture_input_register": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "capture_trigger_value": {
+              "type": "number"
+            },
+            "capture_poll_interval_ms": {
+              "type": "number",
+              "enum": [
+                200
+              ]
+            },
+            "ack_timeout_ms": {
+              "type": "number",
+              "enum": [
+                500
+              ]
+            },
+            "retries": {
+              "type": "number",
+              "enum": [
+                0
+              ]
+            }
+          },
+          "required": [
+            "schema_version",
+            "transport_mode",
+            "profile_id",
+            "enabled",
+            "protocol",
+            "checksum_mode",
+            "baudrate",
+            "parity",
+            "data_bits",
+            "stop_bits",
+            "result_register",
+            "output_control_point",
+            "capture_trigger_enabled",
+            "capture_input_register",
+            "capture_trigger_value",
+            "capture_poll_interval_ms",
+            "ack_timeout_ms",
+            "retries"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "verify_plc_workstation_profile",
+    "source": "verifyPlcWorkstationProfile",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "verified"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "claimPlcWorkstationConnection",
+    "status": "controller: lease creation belongs to WebSerial controller"
+  },
+  {
+    "source": "activatePlcWorkstationConnection",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "heartbeatPlcWorkstationConnection",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "rebindPlcWorkstationModel",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "disconnectPlcWorkstationConnection",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "declarePlcWebSerialAttempt",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "sendPlcWebSerialReceipt",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "getPlcWebSerialDiagnosticPlan",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "finishPlcWebSerialDiagnostic",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "source": "confirmPlcWebSerialDiagnostic",
+    "status": "controller: WebSerial controller"
+  },
+  {
+    "name": "get_api_cost_ledger",
+    "source": "getApiCostLedger",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_ai_tasks",
+    "source": "getAiTasks",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_ai_task_auto_optimize",
+    "source": "getAiTaskAutoOptimize",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_ai_task_auto_optimize",
+    "source": "updateAiTaskAutoOptimize",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "samples_per_real_image": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "negative_samples_per_real_image": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "training_epochs": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "training_image_size": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "min_trainable_samples": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "min_positive_samples": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "min_negative_samples": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "max_label_jobs_per_cycle": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "mask_compare_min_score": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "shadow_min_samples": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "shadow_min_agreement": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "auto_promote": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "upload_ai_task_environment_background",
+    "source": "uploadAiTaskEnvironmentBackground",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_ai_task_auto_optimize_sample",
+    "source": "deleteAiTaskAutoOptimizeSample",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "sampleId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId",
+        "sampleId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "retry_ai_task_auto_optimize_sample",
+    "source": "retryAiTaskAutoOptimizeSample",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "sampleId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId",
+        "sampleId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "approve_ai_task_auto_optimize_sample",
+    "source": "approveAiTaskAutoOptimizeSample",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "sampleId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "sprite"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "bbox_only"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "taskId",
+        "sampleId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "save_ai_config",
+    "source": "saveAiConfig",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "configured": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "provider": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "provider_label": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "model_options": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "label": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 8192
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "timeout_seconds": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "key_present": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "local_key_present": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "api_keys": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "label": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "masked_key": {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      "env_name": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 8192
+                          }
+                        ]
+                      },
+                      "provider": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 8192
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "masked_key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "active_key_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "key_source": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "key_source_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "masked_key": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "proxy_configured": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "proxy_url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "proxy_source_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "image_generation": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "maxLength": 8192
+                    },
+                    "provider_key": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "provider_label": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "maxLength": 8192
+                    },
+                    "model_options": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 8192
+                              },
+                              "label": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 8192
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 500
+                        }
+                      ]
+                    },
+                    "timeout_seconds": {
+                      "type": "number"
+                    },
+                    "key_present": {
+                      "anyOf": [
+                        {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "local_key_present": {
+                      "anyOf": [
+                        {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "api_keys": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 8192
+                              },
+                              "label": {
+                                "type": "string",
+                                "maxLength": 8192
+                              },
+                              "masked_key": {
+                                "type": "string",
+                                "maxLength": 8192
+                              },
+                              "env_name": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 8192
+                                  }
+                                ]
+                              },
+                              "provider": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 8192
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "masked_key"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 500
+                        }
+                      ]
+                    },
+                    "active_key_id": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "key_source": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "key_source_name": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "masked_key": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "proxy_configured": {
+                      "anyOf": [
+                        {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "proxy_url": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "proxy_source_name": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "maxLength": 8192
+                    },
+                    "message": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 8192
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "configured",
+                    "provider",
+                    "model",
+                    "timeout_seconds",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "image_provider": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "image_model": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "image_timeout_seconds": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "image_active_key_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_active_ai_key",
+    "source": "deleteActiveAiKey",
+    "domain": "settings",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_training_resources",
+    "source": "getTrainingResources",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_pipeline",
+    "source": "getPipeline",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "create_pipeline_task",
+    "source": "createPipelineTask",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "accessory_ids": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 8192
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "accessory_counts": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": {
+                    "type": "number"
+                  }
+                }
+              ]
+            },
+            "detection_method": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "auto_advance": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "expected_production_count": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "params": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "task_kind": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "material_code": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "material_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "inspection_user_ids": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 8192
+                  },
+                  "maxItems": 500
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_pipeline_task",
+    "source": "updatePipelineTask",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "accessory_ids": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 8192
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "accessory_counts": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": {
+                    "type": "number"
+                  }
+                }
+              ]
+            },
+            "detection_method": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "auto_advance": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            },
+            "expected_production_count": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "params": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "maxLength": 8192
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      },
+                      {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "task_kind": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "material_code": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "material_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "inspection_user_ids": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 8192
+                  },
+                  "maxItems": 500
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_pipeline_task",
+    "source": "deletePipelineTask",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_incoming_text_task",
+    "source": "getIncomingTextTask",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_incoming_text_inspectors",
+    "source": "getIncomingTextInspectors",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "upload_incoming_text_reference",
+    "source": "uploadIncomingTextReference",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "version_label": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "save_incoming_text_rules",
+    "source": "saveIncomingTextRules",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "referenceId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "region_normalized": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "width": {
+                    "type": "number"
+                  },
+                  "height": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              },
+              "expected_text": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "match_mode": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "exact"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "regex"
+                    ]
+                  }
+                ]
+              },
+              "importance": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "critical"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "normal"
+                    ]
+                  }
+                ]
+              },
+              "case_sensitive": {
+                "type": "boolean"
+              },
+              "ignore_whitespace": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "field_id",
+              "name",
+              "region_normalized",
+              "expected_text",
+              "match_mode",
+              "importance",
+              "case_sensitive",
+              "ignore_whitespace"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 500
+        },
+        "activate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "referenceId",
+        "rules",
+        "activate"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "clone_incoming_text_reference",
+    "source": "cloneIncomingTextReference",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "referenceId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "versionLabel": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "referenceId",
+        "versionLabel"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "inspect_incoming_text",
+    "source": "inspectIncomingText",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "capture_id": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "review_incoming_text_inspection",
+    "source": "reviewIncomingTextInspection",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "inspectionId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "RELEASED"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "REJECTED"
+              ]
+            }
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "inspectionId",
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_incoming_text_inspections",
+    "source": "getIncomingTextInspections",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "analyzeTextCompareBeta",
+    "status": "retired: current workspace uses text-inspection label/compare"
+  },
+  {
+    "name": "list_text_inspection_standards",
+    "source": "listTextInspectionStandards",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_text_inspection_standard",
+    "source": "getTextInspectionStandard",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "classify_text_inspection_standard",
+    "source": "classifyTextInspectionStandard",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_text_inspection_standard",
+    "source": "deleteTextInspectionStandard",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "import_text_inspection_standard",
+    "source": "importTextInspectionStandard",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "material_code": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "version_label": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "standard_type": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "add_text_inspection_standard_asset",
+    "source": "addTextInspectionStandardAsset",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "standardId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "expected_revision": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "standardId",
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "patch_text_inspection_asset",
+    "source": "patchTextInspectionAsset",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "standardId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "assetId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "action": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "restore"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "remove"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "exclude"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "confirm"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "review"
+              ]
+            }
+          ]
+        },
+        "expectedRevision": {
+          "anyOf": [
+            {
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "required": [
+        "standardId",
+        "assetId",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "confirm_text_inspection_standard",
+    "source": "confirmTextInspectionStandard",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "compare_text_inspection_label",
+    "source": "compareTextInspectionLabel",
+    "domain": "text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "standard_asset_id": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "comparison_id": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "extraction_id": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "captured_file": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "advance_pipeline_task",
+    "source": "advancePipelineTask",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "pause_pipeline_task",
+    "source": "pausePipelineTask",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "send_pipeline_agent_feedback",
+    "source": "sendPipelineAgentFeedback",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "updated_plan": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "send_pipeline_agent_chat",
+    "source": "sendPipelineAgentChat",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "add_pipeline_accessory",
+    "source": "addPipelineAccessory",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "accessoryId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "accessoryId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "remove_pipeline_accessory",
+    "source": "removePipelineAccessory",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "accessoryId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "accessoryId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_agent_recommendation",
+    "source": "getAgentRecommendation",
+    "domain": "pipeline",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "stage": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "samples"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "training"
+                  ]
+                }
+              ]
+            },
+            "accessory_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 8192
+              },
+              "maxItems": 500
+            },
+            "sample_count": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "required": [
+            "stage",
+            "accessory_ids"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_accessories",
+    "source": "getAccessories",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "getLocateConfig",
+    "status": "retired: LocateAnything is removed from current navigation"
+  },
+  {
+    "source": "saveLocateConfig",
+    "status": "retired: LocateAnything"
+  },
+  {
+    "source": "getLocateStatus",
+    "status": "retired: LocateAnything"
+  },
+  {
+    "source": "startLocateRuntime",
+    "status": "retired: LocateAnything"
+  },
+  {
+    "source": "getLocateAccessories",
+    "status": "retired: LocateAnything"
+  },
+  {
+    "source": "inspectLocateAnything",
+    "status": "retired: LocateAnything"
+  },
+  {
+    "source": "locateAnythingPrompt",
+    "status": "retired: LocateAnything"
+  },
+  {
+    "source": "getLabelSheetReferences",
+    "status": "retired: legacy label sheet flow"
+  },
+  {
+    "source": "addLabelSheetReferences",
+    "status": "retired: legacy label sheet flow"
+  },
+  {
+    "source": "matchLabelSheet",
+    "status": "retired: legacy label sheet flow"
+  },
+  {
+    "source": "getAccessoryDetail",
+    "status": "asset-adapter: accessoryActions supplies opaque asset IDs"
+  },
+  {
+    "name": "get_accessory_candidate",
+    "source": "getAccessoryCandidate",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "candidateId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "candidateId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "preview_accessory",
+    "source": "previewAccessory",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "material_type": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "material_alpha_policy": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "training_role": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "pipeline_context": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "paper_preset": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "paper_width_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "paper_height_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "object_length_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "object_width_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "object_height_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "size_reference": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "create_accessory",
+    "source": "createAccessory",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "material_type": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "material_alpha_policy": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "training_role": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "pipeline_context": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "paper_preset": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "paper_width_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "paper_height_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "object_length_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "object_width_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "object_height_mm": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "size_reference": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "class_id": {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "confirm_accessory",
+    "source": "confirmAccessory",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "candidateId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "candidateId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "add_accessory_files",
+    "source": "addAccessoryFiles",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "accessoryId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "form": {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            },
+            "files": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "accessoryId",
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "cropAccessoryTextImage",
+    "status": "asset-adapter: accessoryActions resolves current owned asset ID"
+  },
+  {
+    "source": "setAccessoryAiReference",
+    "status": "asset-adapter: accessoryActions resolves current owned asset ID"
+  },
+  {
+    "source": "deleteAccessoryFile",
+    "status": "asset-adapter: accessoryActions resolves current owned asset ID"
+  },
+  {
+    "name": "delete_accessory",
+    "source": "deleteAccessory",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "accessoryId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "accessoryId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "set_accessory_route",
+    "source": "setAccessoryRoute",
+    "domain": "accessories",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "accessoryId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "route": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "apply": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "route",
+            "apply"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "accessoryId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "analyzeImage",
+    "status": "workspace: use detection_run_image for visible result synchronization"
+  },
+  {
+    "source": "analyzeCamera",
+    "status": "workspace: dedicated capture callback owns camera provenance and dispatch"
+  },
+  {
+    "source": "analyzeVideo",
+    "status": "workspace: use detection_run_video for visible result synchronization"
+  },
+  {
+    "name": "get_data_analysis_records",
+    "source": "getDataAnalysisRecords",
+    "domain": "analysis",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "type": "object",
+          "properties": {
+            "taskId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "offset": {
+              "anyOf": [
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_data_analysis_record",
+    "source": "getDataAnalysisRecord",
+    "domain": "analysis",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "recordId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "get_training_dataset_detail",
+    "source": "getTrainingDatasetDetail",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "datasetId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "datasetId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_training_dataset",
+    "source": "updateTrainingDataset",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "datasetId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "datasetId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_training_dataset",
+    "source": "deleteTrainingDataset",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "datasetId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "datasetId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_training_dataset_sample",
+    "source": "deleteTrainingDatasetSample",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "datasetId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "sampleName": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "datasetId",
+        "sampleName"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_training_model",
+    "source": "updateTrainingModel",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "runId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_training_model",
+    "source": "deleteTrainingModel",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "runId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "update_training_task",
+    "source": "updateTrainingTask",
+    "domain": "training",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jobId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "name": "delete_ai_task",
+    "source": "deleteAiTask",
+    "domain": "detection",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "taskId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "createUser",
+    "status": "secure-input: password must be entered in the account form"
+  },
+  {
+    "name": "update_user",
+    "source": "updateUser",
+    "domain": "users",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "display_name": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "role": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
+            "permissions": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 8192
+                  },
+                  "maxItems": 500
+                }
+              ]
+            },
+            "active": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "userId",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  },
+  {
+    "source": "resetUserPassword",
+    "status": "secure-input: password must not enter tool arguments/results"
+  },
+  {
+    "name": "delete_user",
+    "source": "deleteUser",
+    "domain": "users",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "userId"
+      ],
+      "additionalProperties": false
+    },
+    "status": "api-adapter",
+    "ui": "src/api/queries.ts"
+  }
+]

@@ -40,3 +40,16 @@ export function safeWorkspaceNext(value: string | null | undefined) {
 export function loginPath(next: string) {
   return `/login?next=${encodeURIComponent(safeWorkspaceNext(next))}`;
 }
+
+// Agent navigation and UI navigation must use the same protected route boundary.
+export const workspaceSections: Record<string, string> = Object.fromEntries(Object.entries({
+  detection: "/inspect", accessories: "/accessories", text: "/text-compare-beta",
+  training: "/training-library", pipeline: "/pipeline", analysis: "/data-analysis",
+  settings: "/rules", users: "/users", overview: "/"
+}).map(([name, path]) => [name, workspacePath(path)]));
+
+export function workspaceDomain(path: string) {
+  if (path.startsWith(workspacePath("/tasks/")) && path.endsWith("/inspect")) return "detection";
+  if (path.startsWith(workspacePath("/tasks/"))) return "pipeline";
+  return Object.entries(workspaceSections).find(([name, route]) => name !== "overview" && path.startsWith(route))?.[0] ?? "core";
+}

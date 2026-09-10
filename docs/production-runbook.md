@@ -71,3 +71,18 @@ The installer requires at least 2 GiB free under `/opt/vantaline`. If the disk g
 ## PLC incident triage
 
 Confirm browser support, HTTPS/Permissions Policy, workstation binding, active lease/epoch, configuration generation, profile verification, protocol consistency, and receipt evidence. ACK/NAK can be conclusive; timeout, malformed response, residual bytes, browser crash, or lost receipt is uncertain and must not be resent automatically. Ordinary website availability does not imply PLC effective enablement.
+
+## Agent platform development boundary
+
+Keep `VANTALINE_WEBMCP_ACCOUNTS` empty in production while the outstanding gates in
+[Agent platform implementation status](agent-platform.md) remain. Native browser
+fixture tests are not a full industrial rollout approval. The additive operation
+migration is compatible with older releases; whole-release rollback must retain
+policy, attempt, reservation and audit rows for reconciliation. The browser tool
+switch alone cannot revoke an Agent using an authenticated full-page session.
+
+The frontend CI gate now includes `test:agent`. A passing unit gate does not enable
+the experimental Agent account allowlist or establish native-browser, physical
+PLC or full-platform acceptance. Native lifecycle evidence and remaining rollout
+constraints are recorded in `docs/agent-platform.md`; the whole-release rollback
+procedure remains unchanged.

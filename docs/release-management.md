@@ -12,6 +12,11 @@
 4. Successful push CI on `main` triggers `Release and deploy production`; no manual deployment approval/button is required.
 5. The workflow builds one immutable artifact, creates a draft Release, deploys through the restricted account, verifies exact SHA/protocol/assets/service acceptance, then publishes the Release.
 
+The required frontend job also runs `test:agent` for generated action drift,
+registry lifecycle and browser-test waiting regressions. Experimental native
+WebMCP browser acceptance remains a separate explicitly recorded check; this
+unit-test gate does not certify full-platform Agent coverage.
+
 For PLC automatic-capture changes, the required frontend job executes `test:plc-capture` before typecheck and production build. Reset-before-arm, sustained-trigger latching, and reset/retrigger failures block merge and release.
 
 For text-inspection changes, required CI runs the comparison/source contract, dependency-light document contract, endpoint smoke in fail-closed, external-only and enabled modes, the PostgreSQL revision contract, and the legacy incoming-text rollback suite. The gate must prove account isolation, append-only numbered standard revisions, reversible soft deletion, exact comparison-to-revision binding and preservation of the previous readable workflow; a frontend build alone is not sufficient.

@@ -98,6 +98,7 @@ jobs:
           name: navigation-ui
           path: ${{ runner.temp }}/navigation-ui
           if-no-files-found: ignore
+      - run: npm run test:agent
       - run: npm run typecheck
       - run: npm run build:production-cutover
       - name: Verify built protocol

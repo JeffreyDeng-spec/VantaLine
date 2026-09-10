@@ -6,7 +6,7 @@ const file = require('node:path').join(__dirname, '../local_inspection_service/f
 const compiled = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } });
 const target = { exports: {} };
 new Function('exports', 'module', compiled.outputText)(target.exports, target);
-const { workspacePath, safeWorkspaceNext, legacyWorkspaceDestination, loginPath, legacyWorkspacePages } = target.exports;
+const { workspacePath, safeWorkspaceNext, legacyWorkspaceDestination, loginPath, legacyWorkspacePages, workspaceSections, workspaceDomain } = target.exports;
 assert.equal(workspacePath(), '/workspace');
 assert.equal(workspacePath('/training-library?tab=tasks'), '/workspace/training-library?tab=tasks');
 for (const value of ['/workspace', '/workspace/about', '/workspace/text-compare-beta?order=one#image', '/workspace/tasks/pipeline%3Aabc/inspect?view=1#crop']) {
@@ -20,3 +20,9 @@ for (const page of legacyWorkspacePages.filter(x => x !== 'tasks')) assert.equal
 assert.equal(legacyWorkspaceDestination('/tasks/pipeline%3Aone/inspect'), '/workspace/tasks/pipeline%3Aone/inspect');
 for (const value of ['/api/status', '/static/file', '/unknown', '/inspect/unexpected', '/login', '/']) assert.equal(legacyWorkspaceDestination(value), null);
 console.log('navigation path tests: passed');
+assert.ok(Object.values(workspaceSections).every(path => path.startsWith('/workspace')));
+assert.equal(workspaceSections.overview, '/workspace');
+assert.equal(workspaceDomain(workspaceSections.text), 'text');
+assert.equal(workspaceDomain('/workspace/tasks/pipeline%3Aone/inspect'), 'detection');
+assert.equal(workspaceDomain('/workspace/tasks/pipeline%3Aone'), 'pipeline');
+assert.equal(workspaceDomain('/workspace'), 'core');

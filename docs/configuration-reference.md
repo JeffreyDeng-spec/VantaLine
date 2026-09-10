@@ -62,3 +62,13 @@ DOCX/PDF retain their existing 100MB bound. Original DOC hashes govern deduplica
 The feature uses the existing authenticated AI provider configuration and `inspection` permission. No provider key or media is stored in Git. Legacy `.doc` image extraction requires the configured POI bundle, not an office converter. External image sending defaults off and requires `VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=true`; automatic label match and manual-book pass have separate commissioning flags. Missing flags, provider failure, invalid JSON and uncertain charging always return review-required behavior.
 
 The backend returns resolved protocol addresses and an immutable `capture_read_plan`; these are diagnostics/authorization output, never user input. Account logout does not delete the workstation cookie or configuration.
+
+## WebMCP development commissioning
+
+`VANTALINE_WEBMCP_ACCOUNTS` is a default-empty comma-separated account-ID allowlist.
+The developing browser surface also requires an enabled policy in PostgreSQL;
+admin-only `/api/agent/policy/{account_id}` GET/PUT manages versioned policy records.
+The new migration must exist before an account is allowlisted. Keep production
+activation off: existing business/worker paths do not yet all enforce this policy.
+A persisted budget or provider ID list is not a platform-wide safety guarantee.
+See [implementation status](agent-platform.md) for the remaining release gates.

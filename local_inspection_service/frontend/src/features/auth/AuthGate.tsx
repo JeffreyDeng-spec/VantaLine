@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { getAuthStatus, queryKeys } from "../../api/queries";
+import type { AuthStatusResponse } from "../../api/types";
 import { LoadingState, ErrorState } from "../../components/LoadingState";
 import { useToast } from "../../components/ToastProvider";
 import { useUiStore } from "../../store/uiStore";
@@ -8,6 +9,9 @@ import { AuthContext } from "./auth-context";
 import { AuthForms } from "./AuthForms";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { loginPath, safeWorkspaceNext } from "../../app/paths";
+import { AgentToolsProvider } from "../agent/AgentToolsProvider";
+import { actionRegistry } from "../agent/registry";
+import { clearFiles } from "../agent/files";
 
 import { AppShell } from "../../components/AppShell";
 import { useLayoutEffect, useState } from "react";
@@ -43,10 +47,15 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   const logoutMutation = useMutation({
     mutationFn: () => apiClient.post<{ status: string }>("/api/auth/logout"),
     onSuccess: async () => {
+      actionRegistry.reset();
+      clearFiles();
       setDataUserId("");
+      await queryClient.cancelQueries();
+      queryClient.removeQueries({predicate:query=>JSON.stringify(query.queryKey)!==JSON.stringify(queryKeys.authStatus)});
+      // Preserve the observed auth query: clearing it would leave its observer
+      // attached to an orphaned authenticated snapshot with nothing to refetch.
+      queryClient.setQueryData<AuthStatusResponse>(queryKeys.authStatus,{authenticated:false,setup_required:false,user:null,features:{},default_user_permissions:[],legacy_owner_id:""});
       navigate("/login", { replace: true });
-      queryClient.setQueryData(queryKeys.authStatus, { authenticated: false, setup_required: false });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
       notify({ title: "已退出登录" });
     },
     onError: () => notify({ title: "退出登录未完成，请重试", tone: "error" })
@@ -94,10 +103,11 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
         dataUserId,
         setDataUserId,
         logout: async () => {
-          await logoutMutation.mutateAsync().catch(() => undefined);
+          await logoutMutation.mutateAsync();
         }
       }}
     >
+      <AgentToolsProvider key={identity} />
       <AppShell key={identity} />
     </AuthContext.Provider>
   );

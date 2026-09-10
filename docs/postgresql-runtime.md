@@ -43,3 +43,15 @@ Text-inspection library edits preserve the same expand-first boundary. The stand
 5. Verify service health and data behavior after deployment; do not switch to a legacy JSON runtime as an ad-hoc rollback.
 
 Backups and destructive retention actions require separate operational authorization and restore evidence. See [Production runbook](production-runbook.md).
+
+## Agent operation foundation
+
+`2026_09_11_agent_operations.sql` adds `agent_policies`, `agent_operations`,
+`agent_operation_attempts` and `agent_operation_audit`. Admission and reservation
+share an account advisory lock and transaction; `(owner_user_id, idempotency_key)`
+is unique. A changed parameter hash conflicts. Unknown outcomes keep reservations
+and cannot be re-claimed. Audit writes are append-only through the repository.
+These primitives are not yet connected to production business submission or
+provider settlement. Previous releases ignore the new tables; retain them on
+rollback. Real PostgreSQL concurrency tests and current limitations are recorded
+in [Agent platform implementation status](agent-platform.md).
