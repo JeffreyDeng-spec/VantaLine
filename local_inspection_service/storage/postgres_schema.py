@@ -26,6 +26,11 @@ BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passe
 INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "agent_policies": ("id",),
+    "agent_operations": ("id",),
+    "agent_operation_attempts": ("id",),
+    "agent_operation_audit": ("id",),
+
     "text_label_extractions": ("id",),
     "schema_migrations": ("version",),
     "users": ("id",),
@@ -56,6 +61,7 @@ PRIMARY_KEY_COLUMNS = {
 }
 
 UNIQUE_COLUMNS = {
+    "agent_operations": (("owner_user_id", "idempotency_key"),),
     "users": (("username",),),
     "incoming_text_reference_versions": (("owner_user_id", "task_id", "version_label"),),
     "incoming_text_inspections": (("owner_user_id", "task_id", "capture_id"),),

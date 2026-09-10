@@ -1,4 +1,6 @@
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
+import { getFile, rememberFile } from "../features/agent/files";
+import { useAgentActions } from "../features/agent/useAgentActions";
 
 export function fileMatchesAccept(file: File, accept = "") {
   if (!accept.trim()) return true;
@@ -35,6 +37,8 @@ export function FileDropZone({
   children: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const toolId = useId().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const [requested, setRequested] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [rejection, setRejection] = useState("");
 
@@ -43,9 +47,26 @@ export function FileDropZone({
     const accepted = incoming.filter((file) => fileMatchesAccept(file, accept));
     const rejected = incoming.filter((file) => !fileMatchesAccept(file, accept));
     setRejection(rejected.length ? `不支持：${rejected.map((file) => file.name).join("、")}` : "");
-    if (accepted.length) onFiles(multiple ? accepted : accepted.slice(0, 1));
+    if (accepted.length) {
+      const selected = multiple ? accepted : accepted.slice(0, 1);
+      selected.forEach(rememberFile);
+      onFiles(selected);
+      setRequested(false);
+    }
     else if (incoming.length) onFiles([]);
   };
+
+  useAgentActions([{ name: `select_files_${toolId}`, domain: "core", description: `Select already-authorized files for ${ariaLabel}. With no file_ids, request native file selection. Accepted types: ${accept || "any"}.`, readOnly: false,
+    inputSchema: {type:"object",properties:{file_ids:{type:"array",items:{type:"string"},maxItems:multiple ? 50 : 1}},additionalProperties:false},
+    available: () => disabled ? "This upload surface is disabled." : null,
+    execute: input => {
+      if (!Array.isArray(input.file_ids) || !input.file_ids.length) { setRequested(true); return {status:"requires_user_input",data:{label:ariaLabel,accept,multiple},next_action:`select_files_${toolId}`}; }
+      const chosen = input.file_ids.map(id => getFile(String(id)));
+      if (chosen.some(file => !fileMatchesAccept(file, accept))) throw new Error("Selected file type is not accepted here.");
+      selectFiles(chosen);
+      return {selected: input.file_ids};
+    }
+  }]);
 
   return <div
     className={`${className} file-drop-target ${dragging ? "dragging" : ""} ${disabled ? "disabled" : ""}`}
@@ -76,6 +97,7 @@ export function FileDropZone({
       onChange={(event) => { selectFiles(Array.from(event.currentTarget.files || [])); event.currentTarget.value = ""; }}
     />
     {children}
+    {requested ? <small role="status">Agent 请求为“{ariaLabel}”选择文件；选择后可继续操作。</small> : null}
     {rejection ? <small className="file-drop-rejection" role="alert">{rejection}</small> : null}
   </div>;
 }

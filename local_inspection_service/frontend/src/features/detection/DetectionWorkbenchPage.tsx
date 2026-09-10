@@ -1,3 +1,6 @@
+import { useAgentActions } from "../agent/useAgentActions";
+import { cameraPermissionRequired } from "../agent/nativePermissions";
+import { getFile } from "../agent/files";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ChevronRight, FileImage, Maximize2, Play, RefreshCw, Save, Settings, Video, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -1790,6 +1793,17 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     });
   }
 
+  useAgentActions([
+    {name:"detection_get_state",domain:"detection",description:"Read current detection input, selected model/task, camera and PLC readiness and last result.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({source,selectedTaskId,selectedModelId,activeModelId,selectedDeviceId,devices:devices.map(device=>({id:device.deviceId,label:device.label})),busy,error,result,plcConnected,plcConnectionStatus,plcDiagnostic})},
+    {name:"detection_select_model",domain:"detection",description:"Select the detection model through the existing model selection workflow.",readOnly:false,inputSchema:{type:"object",properties:{model_id:{type:"string"}},required:["model_id"],additionalProperties:false},available:()=>busy ? "Detection is busy" : null,execute:input=>handleModelSelection(String(input.model_id))},
+    {name:"detection_start_camera",domain:"detection",description:"Start the selected camera; browser permission may require user interaction.",readOnly:false,inputSchema:{type:"object",properties:{device_id:{type:"string"}},additionalProperties:false},available:()=>busy ? "Detection is busy" : null,execute:async input=>{if(!stream && await cameraPermissionRequired())return {status:"requires_user_input",data:{instruction:"Authorize the camera with the visible camera start control."},next_action:"detection_get_state"};await startCamera(String(input.device_id || selectedDeviceId));return {status:"accepted",next_action:"detection_get_state"};}},
+    {name:"detection_capture",domain:"detection",description:"Capture a real frame from the active camera and run the existing inspection and leased PLC dispatch workflow.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},available:()=>!stream ? "Start and authorize the camera first" : busy ? "Detection is busy" : null,execute:async()=>({status:await runCamera() ? "completed" : "outcome_unknown",next_action:"detection_get_state"})},
+    ...(["image","video"] as const).map(kind=>({name:`detection_run_${kind}`,domain:"detection",description:`Inspect an authorized ${kind} file through the existing workbench; updates the visible result. Never creates PLC output.`,readOnly:false,inputSchema:{type:"object",properties:{file_id:{type:"string"}},required:["file_id"],additionalProperties:false},available:()=>busy ? "Detection is busy" : null,execute:async(input:Record<string,unknown>)=>({status:await runAnalysis(kind,getFile(String(input.file_id))) ? "completed" : "outcome_unknown",next_action:"detection_get_state"})})),
+    {name:"plc_request_connection",domain:"detection",description:"Request the existing workstation connection flow. A human must use the visible connect control to grant the native serial permission.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({status:"requires_user_input",data:{instruction:"Use the workbench PLC connect control to select the physical port."},next_action:"detection_get_state"})},
+    {name:"plc_disconnect",domain:"detection",description:"Disconnect using the existing Web Serial controller and release the workstation lease.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>disconnectPlc()},
+    {name:"plc_run_diagnostic",domain:"detection",description:"Run the existing serialized PLC diagnostic with the current workstation lease. Query state for its outcome; never automatically retry.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},available:()=>!plcConnected || busy || plcDiagnosticBusy ? "PLC must be connected and idle" : null,execute:async()=>{await runPlcDiagnostic();return {status:"accepted",next_action:"detection_get_state"};}},
+    {name:"detection_save_environment",domain:"detection",description:"Save the current environment capture/upload using the existing background workflow.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>saveEnvironmentBackground()}
+  ]);
   if (!decodedRouteTaskId && !requestedTaskId) {
     return (
       <TaskDetectionEntryPage
@@ -1821,6 +1835,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   if (decodedRouteTaskId && !routeTask) return <Navigate to="/inspect" replace />;
 
   if (statusQuery.isLoading || (shouldLoadAiTasks && aiTasksQuery.isLoading)) return <LoadingState label="正在加载检测工作台" />;
+
   if (statusQuery.isError) return <ErrorState error={statusQuery.error} action={<button onClick={() => statusQuery.refetch()}>重试</button>} />;
   if (shouldLoadAiTasks && aiTasksQuery.isError) return <ErrorState error={aiTasksQuery.error} action={<button onClick={() => aiTasksQuery.refetch()}>重试</button>} />;
 

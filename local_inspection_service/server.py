@@ -1314,7 +1314,29 @@ def set_user_password(user: dict[str, Any], password: str) -> None:
     user["updated_at"] = int(time.time())
 
 
-def authenticate_request(request: Request) -> tuple[dict[str, Any] | None, dict[str, Any], bool]:
+def authenticate_request(request: Request, *, indexed: bool = False) -> tuple[dict[str, Any] | None, dict[str, Any], bool]:
+    # Protected hot paths never load every account/session. Auth management keeps
+    # the existing full-store path, including first-admin bootstrap semantics.
+    repository = runtime_postgres_repository_or_none() if indexed else None
+    if repository is not None:
+        session_id = request.cookies.get(AUTH_SESSION_COOKIE, "")
+        user_row, session_row, has_users = repository.authenticate_session(
+            session_key_hash(session_id) if session_id else "",
+            now=int(time.time()), ttl=AUTH_SESSION_TTL_SECONDS,
+            persist_interval=AUTH_SESSION_PERSIST_INTERVAL_SECONDS,
+        )
+        store = auth_store_from_rows([user_row] if user_row else [], [session_row] if session_row else [])
+        session = store["sessions"].get(str((session_row or {}).get("id_hash") or ""))
+        identity = str((session or {}).get("user_id") or "")
+        selected_user = find_user(store, identity) if identity else None
+        if selected_user and identity == str((session_row or {}).get("user_id") or "") and bool(selected_user.get("active", True)):
+            return public_user(selected_user), store, False
+        if not has_users:
+            return authenticate_request(request)
+        if has_users:
+            # Used only by middleware's setup-required check; never persisted.
+            store["users"] = [{"id": "existing-account"}]
+        return None, store, False
     store = load_auth_store()
     changed = prune_expired_sessions(store)
     expired_sessions_pruned = changed
@@ -2549,6 +2571,10 @@ def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = 
 
 def route_required_permission(path: str, method: str) -> str | None:
     clean_path = path.rstrip("/") or "/"
+    # Discovery and account-owned operation recovery require authentication,
+    # not the administrator's provider-configuration permission.
+    if clean_path == "/api/agent/capabilities" or clean_path.startswith("/api/operations/"):
+        return None
     plc_admin_routes = {
         ("/api/plc/config", "GET"),
         ("/api/plc/config", "POST"),
@@ -2599,6 +2625,8 @@ def route_required_permission(path: str, method: str) -> str | None:
     if clean_path.startswith("/api/incoming-text"):
         return "inspection"
     if clean_path.startswith("/api/text-inspection"):
+        return "inspection"
+    if clean_path.startswith("/api/text-compare-beta"):
         return "inspection"
     if clean_path.startswith("/api/locateanything") or clean_path.startswith("/api/label-sheets") or clean_path.startswith("/api/experimental/label-inspector"):
         return "system_settings"
@@ -2834,7 +2862,7 @@ async def reject_untrusted_cross_origin_writes(request: Request, call_next):
         and re.match(r"^/api/training/runpod/artifacts/[^/]+/[^/]+/run\.zip$", path) is not None
     )
     if path.startswith("/api/") and path not in public_auth_paths and not public_runpod_training_transfer:
-        auth_user, auth_store, _ = authenticate_request(request)
+        auth_user, auth_store, _ = authenticate_request(request, indexed=True)
         if not users_exist(auth_store):
             return JSONResponse({"detail": "First admin setup required", "setup_required": True}, status_code=503)
         if not auth_user:
@@ -2848,7 +2876,7 @@ async def reject_untrusted_cross_origin_writes(request: Request, call_next):
         request.state.user = auth_user
         token = _request_user.set(auth_user)
     elif path.startswith("/outputs/"):
-        auth_user, auth_store, _ = authenticate_request(request)
+        auth_user, auth_store, _ = authenticate_request(request, indexed=True)
         if not users_exist(auth_store):
             return PlainTextResponse("First admin setup required", status_code=503)
         if not auth_user:
@@ -14340,10 +14368,8 @@ def data_analysis_records_for_user(
 
 
 def find_data_analysis_record(record_id: str, user: dict[str, Any], *, write: bool = False) -> dict[str, Any]:
-    clean_id = sanitize_data_analysis_record_id(record_id)
-    for record in load_data_analysis_records():
-        if str(record.get("record_id") or "") != clean_id:
-            continue
+    record = load_data_analysis_record(record_id)
+    if record is not None:
         require_record_access(record, user, write=write)
         return record
     raise HTTPException(status_code=404, detail="Analysis record not found")
@@ -38076,11 +38102,13 @@ def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> byt
 
 
 from local_inspection_service.label_extraction_api import register as register_label_extraction
+from local_inspection_service.agent_api import register as register_agent_api
 from local_inspection_service.document_import_jobs import register as register_document_import_jobs
 
 document_import_jobs = register_document_import_jobs(globals())
 
 resolve_label_extraction = register_label_extraction(globals())
+register_agent_api(globals())
 
 
 @app.post("/api/text-inspection/label/compare")

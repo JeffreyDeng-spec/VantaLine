@@ -50,3 +50,13 @@ is a tombstone: future list/edit/compare use stops; media and history stay owned
 `main` is packaged into `/opt/vantaline/releases/<release-id>` and production `current` atomically points to one immutable release. Mutable data, environment configuration, model artifacts, and database state remain outside release directories. A release contains backend source, one production frontend bundle, migration definitions, locked dependencies, `VERSION.json`, and `SHA256SUMS`.
 
 The browser cookie identifies a workstation independently of login. User permissions still gate configuration, connection, camera inspection, attempt, and receipt operations. Secrets remain in GitHub Environment secrets or restricted server environment files and are never represented by real values in Git.
+
+## Browser Agent foundation
+
+The developing WebMCP surface shares page callbacks and existing API query functions.
+Its typed registry, native permission waits and PostgreSQL operation primitives
+are documented in [Agent platform implementation status](agent-platform.md).
+Full-site coverage, shared policy enforcement across legacy/background paths and
+independent worker admission are still incomplete. Protected PostgreSQL requests
+now use indexed session/account lookup; analysis detail uses its primary-key loader.
+These changes do not establish the planned million-record latency target.

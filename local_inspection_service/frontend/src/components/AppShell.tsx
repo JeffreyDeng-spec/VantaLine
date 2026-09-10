@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useAgentActions } from "../features/agent/useAgentActions";
 import { Archive, ChevronDown, ChevronRight, Database, LogOut, Minus, MoreHorizontal, Pin, Play, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -312,6 +313,7 @@ function SidebarCreateTaskModal({
 
 export function AppShell() {
   const auth = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const [assetsExpanded, setAssetsExpanded] = useState(() => ["/training-library", "/pipeline"].includes(window.location.pathname));
@@ -428,6 +430,29 @@ export function AppShell() {
     .map((id) => entryById.get(id))
     .filter((entry): entry is TaskEntry => Boolean(entry))
     .filter((entry) => !archivedTaskIds.includes(entry.id));
+
+  useAgentActions([
+    {name:"navigation_get_tasks",domain:"core",description:"Read task identities, authorized task destinations and current pin/archive state.",readOnly:true,inputSchema:{type:"object",properties:{offset:{type:"integer",minimum:0},limit:{type:"integer",minimum:1,maximum:50}},additionalProperties:false},execute:input=>{
+      const offset=Number(input.offset||0),limit=Number(input.limit||50);
+      return {total:taskEntries.length,next_offset:offset+limit<taskEntries.length?offset+limit:null,tasks:taskEntries.slice(offset,offset+limit).map(entry=>({id:entry.id,name:entry.label,path:entry.path,pinned:effectivePinnedTaskIds.includes(entry.id),archived:archivedTaskIds.includes(entry.id)}))};
+    }},
+    {name:"navigation_open_task",domain:"core",description:"Open the existing task workspace by its identity from navigation_get_tasks.",readOnly:false,inputSchema:{type:"object",properties:{task_id:{type:"string"}},required:["task_id"],additionalProperties:false},execute:input=>{
+      const entry=entryById.get(String(input.task_id));if(!entry)throw new Error("Task is not available in this account");navigate(entry.path);return {status:"accepted",next_action:"get_context"};
+    }},
+    {name:"navigation_set_task_state",domain:"core",description:"Pin, unpin, archive or restore a task using the same persistent navigation state as the sidebar.",readOnly:false,inputSchema:{type:"object",properties:{task_id:{type:"string"},pinned:{type:"boolean"},archived:{type:"boolean"}},required:["task_id"],additionalProperties:false},execute:input=>{
+      const entry=entryById.get(String(input.task_id));if(!entry)throw new Error("Task is not available in this account");
+      if (input.archived === true) {
+        if (input.pinned === true) return {status:"failed",error:{code:"INVALID_ARGUMENT",message:"Archived tasks cannot be pinned."}};
+        archiveTask(entry);
+      } else {
+        persistTaskPreferences(current=>({
+          pinnedTaskIds:input.pinned===undefined?current.pinnedTaskIds:input.pinned?[entry.id,...effectivePinnedTaskIds.filter(id=>id!==entry.id)]:effectivePinnedTaskIds.filter(id=>id!==entry.id),
+          archivedTaskIds:input.archived===false?current.archivedTaskIds.filter(id=>id!==entry.id):current.archivedTaskIds
+        }));
+      }
+      return {status:"accepted",next_action:"get_task_navigation_preferences"};
+    }}
+  ]);
 
   function unpinTask(entry: TaskEntry) {
     persistTaskPreferences((current) => ({

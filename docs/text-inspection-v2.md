@@ -99,3 +99,12 @@ The first classifier is a deterministic local context classifier with manual fee
 ## Remaining production gates
 
 External media sending defaults off (`VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED`). Even after consent enables sending, `MATCH` remains review-only until `VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED` is set after customer samples, account budgets/rate limits, prompt/model pinning and commissioning evidence pass. Manual completion cannot return PASS until `VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED` is set after page lease/fencing and multi-tab recovery tests pass.
+
+## Developing browser tools
+
+The WebMCP workspace hooks reuse current standard/asset selection, document
+import, comparison, camera and extraction-revision callbacks. Geometry tools
+use source-normalized guide and polygon coordinates, not viewport pixels.
+The native browser fixture covers selection and import-field state; complete
+workflow equivalence and all inspection modes remain separate acceptance work.
+Activation and limitations are documented in [Agent platform status](agent-platform.md).
