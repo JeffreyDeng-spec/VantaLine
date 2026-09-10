@@ -77,13 +77,16 @@ def main():
     assert 'ariaLabel="拖拽或选择标准图片"' not in frontend
     assert "请先在左侧订单画廊中选择一张已启用的标签图片" in frontend
     assert "function isActiveAsset" in frontend
-    # Manual decisions use a single accessible three-color button, not the old
-    # selector. Pending/excluded become retained; retained becomes excluded.
+    # Colored current state is distinct from the one-click destination action.
+    # Pending/excluded become retained; retained becomes excluded.
     assert '<option value="needs_confirmation">' not in frontend
-    toggle = frontend.split('className={`text-standard-retention-toggle', 1)[1].split('</button>', 1)[0]
-    assert 'retention-${asset.status}' in toggle
+    control = frontend.split('className={`text-standard-retention-control', 1)[1].split('</div>', 1)[0]
+    assert 'retention-${asset.status}' in control
+    assert 'className="text-standard-retention-state"' in control
+    assert all(label in control for label in ('"已保留"', '"未保留"', '"待确认"'))
+    toggle = control.split('className="text-standard-retention-toggle"', 1)[1].split('</button>', 1)[0]
     assert 'aria-label={`第 ${asset.ordinal} 张图片：' in toggle
-    assert '"保留，点击不保留"' in toggle and '"不保留，点击保留"' in toggle and '"不确定，点击保留"' in toggle
+    assert '"改为不保留"' in toggle and '"改为保留"' in toggle
     assert 'disabled={reviewBusy}' in toggle
     assert 'action: asset.status === "candidate" ? "remove" : "confirm"' in toggle
     for status, color in [('candidate', '#187344'), ('excluded', '#b42332'), ('needs_confirmation', '#ffcf85')]:
