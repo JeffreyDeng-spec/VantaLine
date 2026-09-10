@@ -16,6 +16,9 @@ label candidates have green emphasis; pending items use amber dashed borders and
 an explicit warning; excluded thumbnails are dimmed, not deleted. Preview and
 manual controls remain legible, and zoom shows the undimmed source. Count filters
 include all, retained, pending and excluded with an empty-filter recovery action.
+The label gallery orders retained, pending, then excluded, keeping source ordinal
+order within each group. Uploads and status changes recompute this display order;
+source numbering, selected IDs and historical snapshots remain unchanged.
 Each label asset separates a colored current-state indicator (green retained,
 red excluded, orange uncertain) from a neutral action button explicitly naming
 the next state. Uncertain and excluded become retained on click; retained

@@ -360,7 +360,10 @@ export function TextCompareBetaPage() {
   const retainedAssetCount = visibleAssets.filter(isActiveAsset).length;
   const pendingAssetCount = visibleAssets.filter((asset) => asset.status === "needs_confirmation").length;
   const excludedAssetCount = visibleAssets.filter((asset) => asset.status === "excluded").length;
-  const filteredAssets = visibleAssets.filter((asset) => assetFilter === "all" || asset.status === assetFilter);
+  // Sort the display copy only: retain source ordinals, IDs and immutable snapshots.
+  const reviewRank = (asset: TextInspectionAsset) => isActiveAsset(asset) ? 0 : asset.status === "excluded" ? 2 : 1;
+  const filteredAssets = visibleAssets.filter((asset) => assetFilter === "all" || asset.status === assetFilter)
+    .sort((a, b) => reviewRank(a) - reviewRank(b) || a.ordinal - b.ordinal);
   const classification = standardQuery.data?.classification;
   const reviewBusy = assetMutation.isPending || assetUploadMutation.isPending || confirmMutation.isPending || standardQuery.isFetching || deleteOrderMutation.isPending;
   const renderAssetCards = () => <>

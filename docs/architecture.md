@@ -14,6 +14,9 @@ with a preview-unavailable reason. Other embedded OLE files are not exported.
 
 Document import review preserves all extracted images for human correction. The
 gallery distinguishes retained/pending/excluded without hiding excluded sources.
+Label cards display retained first, pending next, excluded last; source ordinals
+order each group. This display-only ordering recomputes after uploads/reviews and
+does not mutate stored assets, selection IDs, snapshots or manual page ordering.
 Manual review separates a green/red/orange current-state indicator from a neutral
 one-click action labelled with its destination (retain or exclude). Pending first
 becomes retained, then retained and excluded toggle. Existing PATCH history and
