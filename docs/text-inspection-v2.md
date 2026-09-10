@@ -16,7 +16,12 @@ label candidates have green emphasis; pending items use amber dashed borders and
 an explicit warning; excluded thumbnails are dimmed, not deleted. Preview and
 manual controls remain legible, and zoom shows the undimmed source. Count filters
 include all, retained, pending and excluded with an empty-filter recovery action.
-Each label asset can be manually set to retained, pending or excluded. Human
+Each label asset has a colored decision button: green retained, red excluded,
+orange uncertain. Uncertain and excluded become retained on click; retained
+becomes excluded. After resolving uncertainty, clicks alternate retained/excluded.
+Saving disables the controls; failed saves preserve the current server state.
+The API still supports pending for compatibility, but the UI does not reset a
+human decision to pending. Human
 choices persist through the existing owned asset PATCH route (`confirm`, `review`,
 `remove`); the first edit preserves `original_classification`, and feedback keeps
 the action. Draft activation refuses unresolved pending images and requires at

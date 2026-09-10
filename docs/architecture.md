@@ -14,6 +14,9 @@ with a preview-unavailable reason. Other embedded OLE files are not exported.
 
 Document import review preserves all extracted images for human correction. The
 gallery distinguishes retained/pending/excluded without hiding excluded sources.
+Manual review uses a green/red/orange button instead of a selector: pending first
+becomes retained, then retained and excluded toggle. Existing PATCH history and
+revision handling are unchanged; a failed save does not flip the displayed state.
 Owned asset PATCH adds `review` for `needs_confirmation`; JSON and PostgreSQL
 paths preserve initial classification metadata on human edits. Pending assets
 are excluded from active snapshots, and unresolved pending items block draft

@@ -21,7 +21,8 @@ Run `scripts/test_document_review_ui.cjs` against local Vite with Playwright and
 `REVIEW_UI_OUTPUT` set: it mounts the real page with a fixture API and saves desktop
 and mobile screenshots. Optional `REVIEW_IMAGE_FIXTURES` selects local benchmark
 images; these do not enter source control. Verify pending activation gating,
-all-status edits, exclusion recovery, API-error retention, refresh persistence,
+green/red/orange decision buttons, pending-to-retained-to-excluded toggling,
+keyboard activation, exclusion recovery, API-error retention, refresh persistence,
 undimmed zoom and mobile overflow. Human corrections are not model successes.
 `smoke_document_review_postgres.py` exercises pending/cross-owner rejection,
 reversible states and immutable snapshots on real PostgreSQL in an isolated

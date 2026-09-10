@@ -89,12 +89,14 @@
 .text-standard-review-filters button { min-height: 36px; border: 1px solid #bccac0; border-radius: 7px; background: white; padding: 5px 10px; color: #315642; cursor: pointer; }
 .text-standard-review-filters button[aria-pressed="true"] { background: #245b3d; color: white; }
 .text-standard-asset-actions { flex-wrap: wrap; }
-.text-standard-status-picker { display: grid; gap: 4px; width: 100%; color: #46544a; font-size: 11px; }
-.text-standard-status-picker select { width: 100%; min-height: 38px; padding: 6px; border: 1px solid #96ac9d; border-radius: 7px; background: white; color: #243e2d; font-size: 12px; }
-.text-standard-status-picker select:disabled { opacity: .6; }
+.text-standard-asset-actions .text-standard-retention-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.text-standard-asset-actions .retention-candidate { background: #187344; border-color: #145d38; color: white; }
+.text-standard-asset-actions .retention-excluded { background: #b42332; border-color: #941d29; color: white; }
+.text-standard-asset-actions .retention-needs_confirmation { background: #ffcf85; border-color: #b86b08; color: #653800; }
+.text-standard-asset-actions .text-standard-retention-toggle:disabled { opacity: .6; cursor: wait; }
 .text-standard-asset-copy details { font-size: 11px; overflow-wrap: anywhere; }
 .text-standard-asset-copy details summary { cursor: pointer; }
-.text-standard-review-filters button:focus-visible, .text-standard-status-picker select:focus-visible, .text-standard-thumbnail:focus-visible { outline: 3px solid #2b6bc0; outline-offset: 2px; }
+.text-standard-review-filters button:focus-visible, .text-standard-retention-toggle:focus-visible, .text-standard-thumbnail:focus-visible { outline: 3px solid #2b6bc0; outline-offset: 2px; }
 .text-standard-thumbnail { position: relative; display: grid; place-items: center; width: 100%; height: 138px; padding: 0; overflow: hidden; border: 0; border-bottom: 1px solid #e3e7e2; background: #18211c; cursor: zoom-in; }
 .text-standard-thumbnail:disabled { cursor: default; }
 .text-standard-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
