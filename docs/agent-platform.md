@@ -152,8 +152,10 @@ Primary references checked during diagnosis:
 The additive `2026_09_11_agent_operations.sql` migration creates independent
 policy/operation/attempt/audit tables. Previous releases ignore these tables;
 do not drop them during whole-release rollback. Unknown attempts must remain
-available for reconciliation. Do not enable the commissioning allowlist or merge
-this foundation as the full implementation while the outstanding items remain.
+available for reconciliation. This foundation may be deployed as disabled code
+through the normal immutable release workflow. Keep the commissioning allowlist
+empty; deployment does not establish full-platform acceptance or authorize
+activation while the outstanding items remain.
 
 The full browser page continues to expose everything the account can access.
 Neither a tool marker nor a confirmation proves human identity. Revoking the
