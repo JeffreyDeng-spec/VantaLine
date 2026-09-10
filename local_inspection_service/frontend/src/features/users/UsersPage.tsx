@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
+import { useAgentActions } from "../agent/useAgentActions";
 import { Copy, KeyRound, Plus, Save, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -48,6 +49,8 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const [temporaryPasswords, setTemporaryPasswords] = useState<Record<string, string>>({});
+  const [createDraft,setCreateDraft] = useState({username:"",display_name:"",role:"user",permissions:undefined as string[]|undefined});
+  const [secureRequest,setSecureRequest] = useState<{id:string;kind:"create"|"reset";target:string;status:"requires_user_input"|"completed"|"failed"} | null>(null);
 
   const usersQuery = useQuery({
     queryKey: queryKeys.users,
@@ -70,7 +73,9 @@ export function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: createUser,
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      setSecureRequest(current=>current?.kind==="create"?{...current,status:"completed",target:result.user?.id || current.target}:current);
+      setCreateDraft({username:"",display_name:"",role:"user",permissions:undefined});
       await refreshUsers();
       notify({ title: "用户已创建", tone: "success" });
     },
@@ -91,6 +96,7 @@ export function UsersPage() {
     mutationFn: ({ userId, payload }: { userId: string; payload: Parameters<typeof resetUserPassword>[1] }) =>
       resetUserPassword(userId, payload),
     onSuccess: async (result, variables) => {
+      setSecureRequest(current=>current?.kind==="reset" && current.target===variables.userId?{...current,status:"completed"}:current);
       if (result.temporary_password) {
         setTemporaryPasswords((current) => ({ ...current, [variables.userId]: result.temporary_password || "" }));
       } else {
@@ -169,6 +175,12 @@ export function UsersPage() {
     notify({ title: "临时密码已复制", tone: "success" });
   }
 
+  useAgentActions([
+    {name:"users_prepare_create",domain:"users",permissions:["user_management"],description:"Prepare the existing account creation form with non-secret fields. The user supplies the password in the site's secure form and submits it; no password enters tool arguments or results.",readOnly:false,inputSchema:{type:"object",properties:{username:{type:"string",minLength:1,maxLength:100},display_name:{type:"string",maxLength:200},role:{type:"string",enum:["user","admin"]},permissions:{type:"array",items:{type:"string"},maxItems:100}},required:["username","role","permissions"],additionalProperties:false},available:()=>createMutation.isPending||secureRequest?.status==="requires_user_input"?"A secure account workflow is already pending":null,execute:input=>{const id=crypto.randomUUID();setCreateDraft({username:String(input.username),display_name:String(input.display_name||""),role:String(input.role),permissions:input.permissions as string[]});setSecureRequest({id,kind:"create",target:String(input.username),status:"requires_user_input"});return {status:"requires_user_input",operation_id:id,next_action:"users_secure_state"};}},
+    {name:"users_prepare_password_reset",domain:"users",permissions:["user_management"],description:"Request secure password entry for an existing user. The existing password form revokes sessions on successful reset; no secret is returned to the tool.",readOnly:false,inputSchema:{type:"object",properties:{user_id:{type:"string"}},required:["user_id"],additionalProperties:false},available:()=>passwordMutation.isPending||secureRequest?.status==="requires_user_input"?"A secure account workflow is already pending":null,execute:input=>{const target=String(input.user_id);if(!usersQuery.data?.users.some(user=>user.id===target))throw new Error("User is not in the current authorized account list");const id=crypto.randomUUID();setSecureRequest({id,kind:"reset",target,status:"requires_user_input"});return {status:"requires_user_input",operation_id:id,next_action:"users_secure_state"};}},
+    {name:"users_secure_state",domain:"users",permissions:["user_management"],description:"Read secure-input workflow status and target identity, without reading any password or temporary secret.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({request:secureRequest,create_status:createMutation.status,reset_status:passwordMutation.status})}
+  ]);
+
   if (usersQuery.isLoading) return <LoadingState label="正在加载用户" />;
   if (usersQuery.isError) return <ErrorState error={usersQuery.error} />;
 
@@ -185,6 +197,11 @@ export function UsersPage() {
         </div>
       </header>
 
+      {secureRequest?.status==="requires_user_input" ? <div role="status" className="text-compare-alert">
+        请在{secureRequest.kind==="create"?"下方新建用户表单":`账号 ${secureRequest.target} 的重置表单`}中输入并提交密码。密码不会返回给 Agent 工具。
+        <button type="button" onClick={()=>setSecureRequest(current=>current?{...current,status:"failed"}:current)}>取消安全输入</button>
+      </div> : null}
+
       <section className="panel page-panel">
         <div className="section-title">
           <h3>新建用户</h3>
@@ -193,11 +210,11 @@ export function UsersPage() {
           <div className="form-grid">
             <label className="field">
               用户名
-              <input name="username" type="text" autoComplete="off" required />
+              <input name="username" type="text" autoComplete="off" required value={createDraft.username} onChange={event=>setCreateDraft(current=>({...current,username:event.target.value}))} />
             </label>
             <label className="field">
               显示名称
-              <input name="display_name" type="text" autoComplete="off" />
+              <input name="display_name" type="text" autoComplete="off" value={createDraft.display_name} onChange={event=>setCreateDraft(current=>({...current,display_name:event.target.value}))} />
             </label>
             <label className="field">
               初始密码
@@ -205,13 +222,13 @@ export function UsersPage() {
             </label>
             <label className="field">
               角色
-              <select name="role" defaultValue="user">
+              <select name="role" value={createDraft.role} onChange={event=>setCreateDraft(current=>({...current,role:event.target.value}))}>
                 <option value="user">普通用户</option>
                 <option value="admin">Admin</option>
               </select>
             </label>
           </div>
-          <PermissionGrid entries={featureEntries} selected={defaultUserPermissions} name="new_permissions" />
+          <PermissionGrid key={secureRequest?.kind==="create"?secureRequest.id:"manual"} entries={featureEntries} selected={createDraft.permissions ?? defaultUserPermissions} name="new_permissions" />
           <button className="primary compact-action" type="submit" disabled={busy}>
             <Plus size={16} aria-hidden="true" />
             创建用户

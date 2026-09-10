@@ -30,12 +30,16 @@ def assert_status(response, expected: int, label: str) -> None:
 
 def assert_api_route_permissions() -> None:
     public_routes = {
+        ("GET", "/api/version"),
         ("GET", "/api/auth/status"),
         ("POST", "/api/auth/bootstrap"),
         ("POST", "/api/auth/login"),
         ("POST", "/api/auth/logout"),
     }
     authenticated_allowlist = {
+        ("GET", "/api/agent/capabilities"),
+        ("GET", "/api/operations/{operation_id}"),
+        ("POST", "/api/operations/{operation_id}/cancel"),
         ("GET", "/api/status"),
         ("GET", "/api/config/summary"),
         ("GET", "/api/user/preferences/tasks"),

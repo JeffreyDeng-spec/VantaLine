@@ -35,3 +35,13 @@ Receipts are workstation evidence, not proof against browser/OS failure. At-most
 PLC action remains fail-closed unless workstation binding/configuration is enabled, authorization, lease/generation, protocol/bundle consistency, HTTPS/Permissions Policy, and browser support are valid. Configuration or detection success never overrides an invalid physical-action gate.
 
 `profile_verified`/`production_ready` is currently commissioning and UI evidence, not an enforced physical-write gate. Do not describe it as a hard safety gate unless code, tests, and this specification are changed together.
+
+## Developing structured browser entry points
+
+The Agent workbench hooks call the existing camera capture, disconnect and
+diagnostic callbacks. First serial connection returns a native-user-input wait;
+no arbitrary serial-write tool or server serial path is added. Uploaded images
+and videos still use their existing non-PLC analysis flow. Tool unregistration
+is not a verified cancellation of physical I/O and does not permit replay.
+Native browser fixture tests do not access physical devices; authorized station
+commissioning remains outstanding in [Agent platform status](agent-platform.md).

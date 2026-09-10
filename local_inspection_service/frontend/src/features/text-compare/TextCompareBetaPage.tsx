@@ -6,6 +6,10 @@ import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types
 import { FileDropZone } from "../../components/FileDropZone";
 import { apiClient } from "../../api/client";
 import { DEFAULT_GUIDE, GuideOverlay, LabelExtractionPanel, type Guide } from "./LabelExtraction";
+import { useAgentActions } from "../agent/useAgentActions";
+import { getFile, rememberFile } from "../agent/files";
+import { useAgentState } from "../agent/useAgentState";
+import { cameraPermissionRequired } from "../agent/nativePermissions";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,.gif,.tif,.tiff";
@@ -250,7 +254,7 @@ export function TextCompareBetaPage() {
       if (requestId === cameraRequestRef.current) setCameraStarting(false);
     }
   };
-  const switchInputMode = (nextMode: "camera" | "image") => {
+  const switchInputMode = (nextMode: "camera" | "image", deviceId?: string) => {
     if (busyRef.current || nextMode === inputMode) return;
     clearCaptured();
     setInputMode(nextMode);
@@ -262,7 +266,7 @@ export function TextCompareBetaPage() {
       setCameraStarting(false);
     } else {
       cameraSurfaceActiveRef.current = true;
-      void startCamera();
+      void startCamera(deviceId);
     }
   };
   const openZoom = (src: string, alt: string) => {
@@ -402,6 +406,24 @@ export function TextCompareBetaPage() {
     {mode === "label" && visibleAssets.length > 0 && !filteredAssets.length ? <div className="text-standard-empty"><strong>这个分类下暂无图片</strong><button type="button" onClick={() => setAssetFilter("all")}>查看全部图片</button></div> : null}
   </div></>;
 
+  useAgentState("text_import", "text", {
+    name:{value:importName,schema:{type:"string",maxLength:200},set:setImportName},
+    material_code:{value:importMaterial,schema:{type:"string",maxLength:200},set:setImportMaterial},
+    version_label:{value:importVersion,schema:{type:"string",maxLength:100},set:setImportVersion}
+  });
+  useAgentActions([
+    {name:"text_prepare_import",domain:"text",description:"Open the document import form and optionally select a file handle. Edit fields with text_import_set_fields, then submit with text_import_current.",readOnly:false,inputSchema:{type:"object",properties:{file_id:{type:"string"}},additionalProperties:false},execute:input=>{setShowImport(true);if(input.file_id)setImportFile(getFile(String(input.file_id)));}},
+    {name:"text_filter_assets",domain:"text",description:"Filter the current standard gallery using the same status filter as the page.",readOnly:false,inputSchema:{type:"object",properties:{filter:{type:"string",enum:["all","candidate","excluded","needs_confirmation","pending","page"]}},required:["filter"],additionalProperties:false},execute:input=>setAssetFilter(String(input.filter))},
+    {name:"text_get_state",domain:"text",description:"Read the current standard, selected reference, captured asset and comparison evidence.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({mode,inputMode,selectedStandardId,selectedAssetId,guide,captured_file_id:captured ? rememberFile(captured) : null,result,inputError,cameraError,busy:mutation.isPending})},
+    {name:"text_select_standard",domain:"text",description:"Select a standard and invalidate stale comparison state using the existing workspace action.",readOnly:false,inputSchema:{type:"object",properties:{standard_id:{type:"string"}},required:["standard_id"],additionalProperties:false},execute:input=>{const id=String(input.standard_id);if(!standardsQuery.data?.items.some(item=>item.id===id)) throw new Error("Standard is not in the current authorized library");chooseStandard(id);}},
+    {name:"text_select_asset",domain:"text",description:"Select a confirmed enabled reference asset from the current standard.",readOnly:false,inputSchema:{type:"object",properties:{asset_id:{type:"string"}},required:["asset_id"],additionalProperties:false},execute:input=>{const asset=visibleAssets.find(item=>item.id===input.asset_id);if(!asset || !isActiveAsset(asset) || standardQuery.data?.status!=="confirmed")throw new Error("Reference is not confirmed and enabled");chooseAsset(asset);}},
+    {name:"text_set_actual_image",domain:"text",description:"Use an explicitly selected file as the actual image and clear stale comparison results.",readOnly:false,inputSchema:{type:"object",properties:{file_id:{type:"string"}},required:["file_id"],additionalProperties:false},execute:input=>{switchInputMode("image");replaceCaptured(getFile(String(input.file_id)));}},
+    {name:"text_set_guide",domain:"text",description:"Set normalized x, y, width, height of the extraction guide, relative to the source image.",readOnly:false,inputSchema:{type:"object",properties:{rect:{type:"array",items:{type:"number",minimum:0,maximum:1},minItems:4,maxItems:4}},required:["rect"],additionalProperties:false},execute:input=>{const rect=input.rect as Guide;if(rect[2]<=0||rect[3]<=0||rect[0]+rect[2]>1||rect[1]+rect[3]>1)throw new Error("Guide exceeds source image bounds");setGuide(rect);}},
+    {name:"text_compare",domain:"text",description:"Run the current text comparison through its existing identity, reference and extraction validation.",readOnly:false,inputSchema:{type:"object",properties:{extraction_id:{type:"string"}},additionalProperties:false},available:()=>mutation.isPending ? "Comparison is already running" : null,execute:input=>mutation.mutateAsync(input.extraction_id as string | undefined)},
+    {name:"text_import_current",domain:"text",description:"Import the document selected in the current standard form using its validated fields.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>importMutation.mutateAsync()},
+    {name:"text_start_camera",domain:"text",description:"Start a camera for text inspection; the browser may request native permission.",readOnly:false,inputSchema:{type:"object",properties:{device_id:{type:"string"}},additionalProperties:false},execute:async input=>{if(!streamRef.current && await cameraPermissionRequired())return {status:"requires_user_input",data:{instruction:"Authorize the camera using the visible camera control."},next_action:"text_get_state"};if(inputMode!=="camera")switchInputMode("camera",String(input.device_id||selectedDeviceId));else await startCamera(String(input.device_id||selectedDeviceId));return {status:"accepted",next_action:"text_get_state"};}},
+    {name:"text_stop_camera",domain:"text",description:"Stop the text inspection camera.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:stopCamera}
+  ]);
   return <section className="view active text-compare-beta">
     <div className="text-compare-compact-topbar">
       <header className="text-compare-beta-header">

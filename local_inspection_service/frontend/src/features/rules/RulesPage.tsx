@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useAgentActions } from "../agent/useAgentActions";
 import { KeyRound, PlugZap, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { hasPermission } from "../../app/permissions";
@@ -642,6 +643,12 @@ export function RulesPage() {
   useEffect(() => {
     if (!aiAllowed && systemAllowed && (settingsTab === "ai" || settingsTab === "image")) setSettingsTab("plc");
   }, [aiAllowed, settingsTab, systemAllowed]);
+
+  useAgentActions([
+    {name:"settings_get_state",domain:"settings",description:"Read the active settings section and credential-input workflow status. Secret values and form contents are never returned.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({tab:settingsTab,credential_input:apiKeyDialog,save_status:{ai:aiMutation.status,image:imageMutation.status,agent:agentMutation.status}})},
+    {name:"settings_open_credential_input",domain:"settings",description:"Open the existing secure API-key entry dialog for the selected provider section. The user enters the secret in the site; query settings_get_state after submission.",readOnly:false,inputSchema:{type:"object",properties:{target:{type:"string",enum:["ai","image","agent"]}},required:["target"],additionalProperties:false},execute:input=>{const target=input.target as ApiKeyDialogTarget;if(target==="agent"?!agentAllowed:!aiAllowed)throw new Error("Provider configuration permission required");setSettingsTab(target);setApiKeyDialog(target);return {status:"requires_user_input",next_action:"settings_get_state"};}},
+    {name:"settings_select_section",domain:"settings",description:"Select an authorized settings section.",readOnly:false,inputSchema:{type:"object",properties:{section:{type:"string",enum:SETTINGS_TABS.map(tab=>tab.value)}},required:["section"],additionalProperties:false},execute:input=>{const tab=input.section as SettingsTab;const allowed=tab==="agent"?agentAllowed:tab==="plc"?systemAllowed:tab==="cost-ledger"?adminAllowed:aiAllowed;if(!allowed)throw new Error("Settings section permission required");setSettingsTab(tab);}}
+  ]);
 
   return (
     <section className="view active">

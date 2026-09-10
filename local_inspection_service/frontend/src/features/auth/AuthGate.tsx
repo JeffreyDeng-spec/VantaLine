@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { getAuthStatus, queryKeys } from "../../api/queries";
+import type { AuthStatusResponse } from "../../api/types";
 import { LoadingState, ErrorState } from "../../components/LoadingState";
 import { useToast } from "../../components/ToastProvider";
 import { useUiStore } from "../../store/uiStore";
@@ -9,6 +10,9 @@ import { AuthContext } from "./auth-context";
 import { AuthForms } from "./AuthForms";
 import { Route, Routes } from "react-router-dom";
 import { PublicLandingPage } from "../public/PublicLandingPage";
+import { AgentToolsProvider } from "../agent/AgentToolsProvider";
+import { actionRegistry } from "../agent/registry";
+import { clearFiles } from "../agent/files";
 
 export function AuthGate() {
   const queryClient = useQueryClient();
@@ -23,11 +27,18 @@ export function AuthGate() {
 
   const logoutMutation = useMutation({
     mutationFn: () => apiClient.post<{ status: string }>("/api/auth/logout"),
-    onSettled: async () => {
+    onSuccess: async () => {
+      actionRegistry.reset();
+      clearFiles();
       setDataUserId("");
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
+      await queryClient.cancelQueries();
+      queryClient.removeQueries({predicate:query=>JSON.stringify(query.queryKey)!==JSON.stringify(queryKeys.authStatus)});
+      // Preserve the observed auth query: clearing it would leave its observer
+      // attached to an orphaned authenticated snapshot with nothing to refetch.
+      queryClient.setQueryData<AuthStatusResponse>(queryKeys.authStatus,{authenticated:false,setup_required:false,user:null,features:{},default_user_permissions:[],legacy_owner_id:""});
       notify({ title: "已退出登录" });
-    }
+    },
+    onError: () => notify({title:"退出登录未得到确认",description:"请检查连接后重试。",tone:"error"})
   });
 
   if (authQuery.isLoading) {
@@ -74,6 +85,7 @@ export function AuthGate() {
         }
       }}
     >
+      <AgentToolsProvider />
       <AppShell />
     </AuthContext.Provider>
   );

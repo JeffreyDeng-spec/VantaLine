@@ -13,6 +13,7 @@ This is the single index for current project knowledge. Documents marked **Autho
 
 ## Current authoritative specifications
 
+- [Agent platform implementation status](agent-platform.md) — developing WebMCP foundation and outstanding acceptance gates
 - [Agent overview](agent-overview.md) — context and routing for coding agents
 - [Architecture](architecture.md) — services, data ownership, and request flows
 - [PLC Web Serial v4](plc-web-serial-v4.md) — only current PLC implementation contract

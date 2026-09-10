@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../api/client";
+import { useAgentActions } from "../agent/useAgentActions";
 
 export type Guide = [number, number, number, number];
 type Point = [number, number];
@@ -172,6 +173,12 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
     const bounds = svg.current!.getBoundingClientRect();
     return [clamp((e.clientX-bounds.left)/bounds.width),clamp((e.clientY-bounds.top)/bounds.height)];
   };
+  useAgentActions([
+    {name:"extraction_get_state",domain:"text",description:"Read source-relative polygon points, revision, preview and extraction readiness.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({extraction,points,dirty,busy,error,coordinate_system:"normalized_source_image",guide})},
+    {name:"extraction_start",domain:"text",description:"Start extraction on the current image through the existing at-most-once request identity.",readOnly:false,inputSchema:{type:"object",properties:{method:{type:"string",enum:["manual","ai","vlm_bbox"]}},required:["method"],additionalProperties:false},available:()=>editing ? "Extraction is busy" : null,execute:async input=>{const chosen=input.method as "manual"|"ai"|"vlm_bbox";if(chosen==="ai"&&!aiAvailable||chosen==="vlm_bbox"&&!bboxAvailable)throw new Error("Extraction method unavailable");await start(chosen);return {status:"accepted",next_action:"extraction_get_state"};}},
+    {name:"extraction_set_polygon",domain:"text",description:"Replace the draft polygon using normalized source-image coordinates. Saving creates the authoritative preview revision.",readOnly:false,inputSchema:{type:"object",properties:{points:{type:"array",minItems:3,maxItems:128,items:{type:"array",minItems:2,maxItems:2,items:{type:"number",minimum:0,maximum:1}}}},required:["points"],additionalProperties:false},available:()=>editing || !extraction ? "An idle extraction draft is required" : null,execute:input=>change(input.points as Point[])},
+    {name:"extraction_save",domain:"text",description:"Save the current polygon revision; confirm=true uses the existing confirmation-and-comparison workflow.",readOnly:false,inputSchema:{type:"object",properties:{confirm:{type:"boolean"}},required:["confirm"],additionalProperties:false},available:()=>editing || !extraction ? "An idle extraction draft is required" : null,execute:async input=>{await revise(input.confirm===true);return {status:"accepted",next_action:"extraction_get_state"};}}
+  ]);
   return <section className="label-extraction-panel">
     <div className="label-extraction-toolbar">
       {bboxEnabled ? <label>提取方式<select aria-label="提取方式" value={method} disabled={comparing} onChange={e => {

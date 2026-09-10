@@ -96,3 +96,27 @@ Single-label extraction requires `smoke_label_extraction.py` and `smoke_label_ex
 The `vlm_bbox` experiment additionally requires `smoke_label_bbox.py` and `smoke_label_bbox_endpoints.py`: orientation, normalized rectangle rounding, zero-expansion pixel provenance, malformed/overflow/NaN coordinates, omitted single-label rectangles, separate account gate, input-media isolation, one-call idempotency, timeout without replay, immutable confirmation bytes and stale revision rejection. Browser acceptance switches the extraction method while an old result is pending and verifies it cannot overwrite the new method. Real-image logs must include actual inputs, raw bounded outputs, crop/overlay/detail images, independent visual failure descriptions, usage and unknown monetary charges explicitly. Do not turn manual correction, unreadable die lines or nine HTTP successes into nine automatic passes.
 
 `smoke_label_extraction_postgres.py` runs against the CI PostgreSQL service in a disposable schema and verifies one-winner concurrent revision insertion plus account/root-scoped queries. For browser interaction, start Vite on port 5177 and run `smoke_label_extraction_browser.py` with development-only Playwright; `LABEL_TEST_BROWSER=msedge` selects an installed Edge. Its isolated fixture checks sub-pixel source-coordinate mapping across screen sizes, real React editing/confirmation state and absence of model calls during manual edits. No customer media is used.
+
+## Agent foundation checks
+
+Run `npm --prefix local_inspection_service/frontend run test:agent` for contract
+generation and registry/adapter tests. Run
+`python local_inspection_service/scripts/smoke_agent_operations_postgres.py` with an
+explicit isolated `AGENT_TEST_DATABASE_URL` for real PostgreSQL transition and
+authentication tests. `scripts/test_agent_webmcp.cjs` validates the native browser
+API against in-memory endpoints, using the root Vite base and routing settings
+listed in [implementation status](agent-platform.md). It executes tools without
+DOM clicking. These tests do not prove full UI/tool coverage, external Agent
+reasoning, physical PLC behavior or the planned load/latency targets.
+
+The required frontend CI job runs `test:agent`, including bounded asynchronous
+native-discovery polling and delayed result-channel cleanup regressions. Native
+Chrome checks are separate: `scripts/test_agent_webmcp.cjs` covers the full-page
+fixture and `scripts/test_agent_webmcp_lifecycle.cjs` covers the production adapter
+on a synthetic page. Configure `PLAYWRIGHT_MODULE` and `AGENT_CHROME_PATH`; the
+full-page fixture additionally needs `AGENT_UI_BASE`. Never use
+`page.waitForFunction(async ...)` for native discovery in these tests: on the
+verified Playwright version it can finish with a false resolved value. The shared
+helper awaits observations, has negative timeout coverage, and retries no business
+operations. Native suites are not yet CI gates; keep their browser version and
+repeat-run evidence explicit.

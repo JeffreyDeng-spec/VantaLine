@@ -638,6 +638,10 @@ TABLES = (
             "CREATE INDEX IF NOT EXISTS idx_plc_web_serial_dispatch_status ON plc_web_serial_dispatches (station_id, status, created_at)",
         ),
     ),
+    TableSchema('agent_policies', ('id', 'owner_user_id', 'created_at', 'raw_json'), "CREATE TABLE IF NOT EXISTS agent_policies (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL)", ('CREATE INDEX IF NOT EXISTS idx_agent_policies_owner ON agent_policies (owner_user_id, created_at)',)),
+    TableSchema('agent_operations', ('id', 'owner_user_id', 'created_at', 'raw_json', 'idempotency_key', 'status', 'updated_at'), "CREATE TABLE IF NOT EXISTS agent_operations (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL, idempotency_key TEXT NOT NULL, status TEXT NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(owner_user_id, idempotency_key))", ('CREATE INDEX IF NOT EXISTS idx_agent_operations_owner ON agent_operations (owner_user_id, created_at)', 'CREATE INDEX IF NOT EXISTS idx_agent_operations_queue ON agent_operations (owner_user_id, status, created_at)')),
+    TableSchema('agent_operation_attempts', ('id', 'owner_user_id', 'created_at', 'raw_json'), "CREATE TABLE IF NOT EXISTS agent_operation_attempts (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL)", ('CREATE INDEX IF NOT EXISTS idx_agent_operation_attempts_owner ON agent_operation_attempts (owner_user_id, created_at)',)),
+    TableSchema('agent_operation_audit', ('id', 'owner_user_id', 'created_at', 'raw_json'), "CREATE TABLE IF NOT EXISTS agent_operation_audit (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL)", ('CREATE INDEX IF NOT EXISTS idx_agent_operation_audit_owner ON agent_operation_audit (owner_user_id, created_at)',)),
 )
 
 TABLE_BY_NAME = {table.name: table for table in TABLES}
