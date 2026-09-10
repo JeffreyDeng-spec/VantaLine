@@ -15,6 +15,12 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Ownership and compatibility
 
+Public/workspace path separation requires no schema or data migration. Task
+identities and account-scoped preferences remain unchanged; only generated
+browser URLs gain `/workspace`. The deployed PostgreSQL acceptance runner checks
+the admin-doc boundary at `/api/docs` (Swagger), not the now-public `/docs` user
+guide. Existing API/data-store and media-isolation checks remain unchanged.
+
 - Runtime repositories own database access; API/business code must not introduce ad-hoc direct connections.
 - Migrations are additive and expand-first. The new schema must remain readable by the previous release during deployment and rollback.
 - Dropping, renaming, narrowing, or repurposing fields requires a separately reviewed multi-release contract phase.

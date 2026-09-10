@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { WORKSPACE_PATH } from "../../app/paths";
 import "./vantaline-public.css";
 
 const workflowSteps = [
@@ -38,17 +39,13 @@ export function PublicLandingPage() {
           <div className="container nav-inner">
             <Brand />
             <nav className="desktop-nav" aria-label="Primary navigation">
-              <a href="#inspect">Product</a>
-              <a href="#workflow">Workflow</a>
-              <a href="#capabilities">Capabilities</a>
-              <a href="#reliability">Reliability</a>
+              <a href="#inspect">产品功能</a>
+              <a href="#workflow">工作流程</a>
+              <Link to="/docs">使用文档</Link>
             </nav>
             <div className="nav-actions">
-              <Link className="login-link" to="/login">
-                Log in
-              </Link>
-              <Link className="button nav-button" to="/login">
-                Open workspace
+              <Link className="button nav-button" to={WORKSPACE_PATH}>
+                进入工作台
               </Link>
             </div>
             <details className="mobile-menu">
@@ -57,13 +54,11 @@ export function PublicLandingPage() {
                 <span />
               </summary>
               <nav aria-label="Mobile navigation">
-                <a href="#inspect">Product</a>
-                <a href="#workflow">Workflow</a>
-                <a href="#capabilities">Capabilities</a>
-                <a href="#reliability">Reliability</a>
-                <Link to="/login">Log in</Link>
-                <Link className="button button-primary" to="/login">
-                  Open workspace
+                <a href="#inspect">产品功能</a>
+                <a href="#workflow">工作流程</a>
+                <Link to="/docs">使用文档</Link>
+                <Link className="button button-primary" to={WORKSPACE_PATH}>
+                  进入工作台
                 </Link>
               </nav>
             </details>
@@ -80,8 +75,8 @@ export function PublicLandingPage() {
                 evidence—so quality work improves with every run.
               </p>
               <div className="hero-actions">
-                <Link className="button button-primary" to="/login">
-                  Open workspace <span aria-hidden="true">↗</span>
+                <Link className="button button-primary" to={WORKSPACE_PATH}>
+                  进入工作台 <span aria-hidden="true">↗</span>
                 </Link>
                 <a className="button button-secondary" href="#workflow">
                   See how it works <span aria-hidden="true">↓</span>
@@ -444,8 +439,8 @@ export function PublicLandingPage() {
           <div className="container final-cta-inner">
             <p className="eyebrow">START WITH THE LINE YOU RUN TODAY</p>
             <h2>Build an inspection system that improves with the line.</h2>
-            <Link className="button button-light" to="/login">
-              Log in to VantaLine <span aria-hidden="true">↗</span>
+            <Link className="button button-light" to={WORKSPACE_PATH}>
+              进入工作台 <span aria-hidden="true">↗</span>
             </Link>
           </div>
         </section>
@@ -456,7 +451,8 @@ export function PublicLandingPage() {
             <nav aria-label="Footer navigation">
               <a href="#inspect">Product</a>
               <a href="#workflow">Workflow</a>
-              <Link to="/login">Login</Link>
+              <Link to="/docs">使用文档</Link>
+              <Link to={WORKSPACE_PATH}>进入工作台</Link>
             </nav>
             <p>© 2026 VantaLine</p>
           </div>

@@ -34,14 +34,14 @@ export function Dashboard() {
 
   const status = statusQuery.data;
   const config = configQuery.data;
-  const cards = navItems.filter((item) => item.path !== "/" && hasPermission(auth.user, item.permission));
+  const cards = navItems.filter((item) => item.view !== "home" && hasPermission(auth.user, item.permission));
 
   return (
     <section className="view active">
       <header className="page-head">
         <div>
           <h2>总览</h2>
-          <p className="page-desc">React/Vite 已作为生产入口，根路径由 production bundle 提供。</p>
+          <p className="page-desc">查看服务状态，进入检测、文字检验和训练任务。</p>
         </div>
         <button className="secondary compact-action" type="button" onClick={refresh}>
           <RefreshCw size={16} aria-hidden="true" />
@@ -71,8 +71,7 @@ export function Dashboard() {
 
       <section className="panel page-panel">
         <div className="section-title">
-          <h3>迁移入口</h3>
-          <span className="pill neutral">Phase 1</span>
+          <h3>工作台功能</h3>
         </div>
         <div className="route-grid">
           {cards.map((item) => {
@@ -82,7 +81,7 @@ export function Dashboard() {
                 <Icon size={20} aria-hidden="true" />
                 <div>
                   <strong>{item.label}</strong>
-                  <span>{item.phase === "phase-1" ? "已接入" : item.phase === "phase-2" ? "低风险页" : "复杂工作流"}</span>
+                  <span>打开{item.label}</span>
                 </div>
               </Link>
             );

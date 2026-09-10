@@ -1,5 +1,8 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { workspacePath } from "../app/paths";
+import { NotFoundPage } from "../app/SiteRoutes";
+import { AboutPage } from "../features/public/AboutPage";
 import { Archive, ChevronDown, ChevronRight, Database, LogOut, Minus, MoreHorizontal, Pin, Play, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -67,7 +70,7 @@ function AnyPermissionRoute({ permissions, children }: { permissions: string[]; 
 
 function taskNavActive(path: string, location: ReturnType<typeof useLocation>) {
   const [pathname, search = ""] = path.split("?");
-  if (pathname === "/inspect" && /^\/tasks\/[^/]+\/inspect$/.test(location.pathname)) return true;
+  if (pathname === workspacePath("/inspect") && /^\/workspace\/tasks\/[^/]+\/inspect$/.test(location.pathname)) return true;
   if (location.pathname !== pathname) return false;
   if (!search) return true;
   const expected = new URLSearchParams(search);
@@ -79,7 +82,7 @@ function SidebarLink({ item, indent = false }: { item: (typeof navItems)[number]
   const location = useLocation();
   const Icon = item.icon;
   return (
-    <Link className={`nav-item ${indent ? "nav-item-child" : ""} ${taskNavActive(item.path, location) ? "active" : ""}`} to={item.path}>
+    <Link className={`nav-item ${indent ? "nav-item-child" : ""} ${taskNavActive(item.path, location) ? "active" : ""}`} to={item.path} aria-current={taskNavActive(item.path, location) ? "page" : undefined}>
       <Icon size={18} aria-hidden="true" />
       <span>{item.label}</span>
     </Link>
@@ -294,7 +297,7 @@ function SidebarCreateTaskModal({
                   <div className="empty-panel compact-empty">库存中还没有配件。</div>
                 )}
               </section>
-              <Link className="sidebar-create-accessory-link" to="/accessories" onClick={onClose}>
+              <Link className="sidebar-create-accessory-link" to={workspacePath("/accessories")} onClick={onClose}>
                 需要创建新配件？跳转到创建配件页面
               </Link>
             </div>
@@ -314,7 +317,7 @@ export function AppShell() {
   const auth = useAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [assetsExpanded, setAssetsExpanded] = useState(() => ["/training-library", "/pipeline"].includes(window.location.pathname));
+  const [assetsExpanded, setAssetsExpanded] = useState(() => [workspacePath("/training-library"), workspacePath("/pipeline")].includes(location.pathname));
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const canReadTaskResources = ["ai_detection", "model_library", "training_pipeline"].some((permission) => hasPermission(auth.user, permission));
   const canReadPipelineTasks = ["training_pipeline", "incoming_material_config", "inspection"].some((permission) => hasPermission(auth.user, permission));
@@ -407,7 +410,7 @@ export function AppShell() {
   });
 
   useEffect(() => {
-    if (["/training-library", "/pipeline"].includes(location.pathname)) setAssetsExpanded(true);
+    if ([workspacePath("/training-library"), workspacePath("/pipeline")].includes(location.pathname)) setAssetsExpanded(true);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -493,15 +496,15 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-block">
+        <Link className="brand-block" to={workspacePath()} aria-label="VantaLine 工作台总览">
           <div className="brand-mark" aria-hidden="true">
             <img src="/static/brand-logo.png?v=20260614-logo" alt="" width="36" height="36" decoding="async" />
           </div>
           <div className="brand-copy">
             <h1>VantaLine</h1>
-            <p>React Preview</p>
+            <p>Workspace</p>
           </div>
-        </div>
+        </Link>
 
         <nav className="side-nav" aria-label="主导航">
           <div className="nav-group">
@@ -598,6 +601,11 @@ export function AppShell() {
             </div>
           ) : null}
 
+          <div className="sidebar-resource-links">
+            <Link to="/" target="_blank" rel="noopener noreferrer" aria-label="产品官网（新标签页）">产品官网 ↗</Link>
+            <Link to="/docs" target="_blank" rel="noopener noreferrer" aria-label="使用文档（新标签页）">使用文档 ↗</Link>
+          </div>
+
           <div className="account-card compact-account-card" title={accountDisplayName}>
             <span className="account-avatar" style={{ backgroundColor: userAvatarColor(accountDisplayName) }} aria-hidden="true">
               {userAvatarInitial(accountDisplayName)}
@@ -642,10 +650,11 @@ export function AppShell() {
         ) : null}
 
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/status" element={<Navigate to="/" replace />} />
+          <Route index element={<Dashboard />} />
+          <Route path="about" element={<AboutPage />} />
+          <Route path="status" element={<Navigate to={`${workspacePath()}${location.search}${location.hash}`} replace />} />
           <Route
-            path="/inspect"
+            path="inspect"
             element={
               <PermissionRoute permission="inspection">
                 <DetectionWorkbenchPage mode="inspect" />
@@ -653,7 +662,7 @@ export function AppShell() {
             }
           />
           <Route
-            path="/text-compare-beta"
+            path="text-compare-beta"
             element={
               <PermissionRoute permission="inspection">
                 <TextCompareBetaPage />
@@ -661,11 +670,11 @@ export function AppShell() {
             }
           />
           <Route
-            path="/tasks/:taskId/inspect"
+            path="tasks/:taskId/inspect"
             element={<TaskInspectionRoute />}
           />
           <Route
-            path="/ai-inspect"
+            path="ai-inspect"
             element={
               <PermissionRoute permission="ai_detection">
                 <DetectionWorkbenchPage mode="ai" />
@@ -673,7 +682,7 @@ export function AppShell() {
             }
           />
           <Route
-            path="/accessories"
+            path="accessories"
             element={
               <PermissionRoute permission="accessory_library">
                 <AccessoriesPage />
@@ -681,7 +690,7 @@ export function AppShell() {
             }
           />
           <Route
-            path="/data-analysis"
+            path="data-analysis"
             element={
               <AnyPermissionRoute permissions={["ai_detection", "inspection"]}>
                 <DataAnalysisPage />
@@ -689,7 +698,7 @@ export function AppShell() {
             }
           />
           <Route
-            path="/training-library"
+            path="training-library"
             element={
               <PermissionRoute permission="model_library">
                 <TrainingLibraryPage />
@@ -697,11 +706,11 @@ export function AppShell() {
             }
           />
           <Route
-            path="/tasks/:taskId"
+            path="tasks/:taskId"
             element={<TaskDetailRoute />}
           />
           <Route
-            path="/pipeline"
+            path="pipeline"
             element={
               <PermissionRoute permission="training_pipeline">
                 <TrainingPipelinePage />
@@ -709,7 +718,7 @@ export function AppShell() {
             }
           />
           <Route
-            path="/rules"
+            path="rules"
             element={
               <PermissionRoute permission="system_settings">
                 <RulesPage />
@@ -717,7 +726,7 @@ export function AppShell() {
             }
           />
           <Route
-            path="/users"
+            path="users"
             element={
               <PermissionRoute permission="user_management">
                 <UsersPage />
@@ -725,11 +734,11 @@ export function AppShell() {
             }
           />
           {navItems
-            .filter((item) => !["home", "inspect", "textCompareBeta", "aiInspect", "accessories", "dataAnalysis", "trainingLibrary", "pipeline", "rules", "userManagement"].includes(item.view))
+            .filter((item) => !["home", "inspect", "textCompareBeta", "aiInspect", "accessories", "dataAnalysis", "trainingLibrary", "taskLibrary", "trainingDatasets", "pipeline", "rules", "userManagement", "about"].includes(item.view))
             .map((item) => (
               <Route
                 key={item.path}
-                path={item.path}
+                path={item.path.replace(/^\/workspace\//, "")}
                 element={
                   <PermissionRoute permission={item.permission}>
                     <PlaceholderPage item={item} />
@@ -737,7 +746,7 @@ export function AppShell() {
                 }
               />
             ))}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
     </div>

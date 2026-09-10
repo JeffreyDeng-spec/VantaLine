@@ -1,4 +1,5 @@
 import type { AiDetectionLibraryTask, PipelineResponse, PipelineTask, TrainingResourcesResponse } from "../api/types";
+import { workspacePath } from "../app/paths";
 
 export type TaskEntryKind = "ai" | "pipeline";
 
@@ -78,7 +79,7 @@ function pipelineTaskLabel(task: PipelineTask) {
 }
 
 function pipelineTaskPath(task: PipelineTask) {
-  return `/tasks/${encodeURIComponent(taskId("pipeline", task.id))}/inspect`;
+  return workspacePath(`/tasks/${encodeURIComponent(taskId("pipeline", task.id))}/inspect`);
 }
 
 function pipelineTaskStatus(task: PipelineTask) {
@@ -122,7 +123,7 @@ export function taskEntriesFromTrainingResources(
           : `${accessoryCount} 类配件 · ${task.detection_method === "ai" ? "AI 检测" : task.optimization_route || "检测任务"}`,
         status: pipelineTaskStatus(task),
         path: pipelineTaskPath(task),
-        detailPath: `/tasks/${encodeURIComponent(taskId("pipeline", task.id))}`,
+        detailPath: workspacePath(`/tasks/${encodeURIComponent(taskId("pipeline", task.id))}`),
         accessoryNames,
         accessoryIds,
         accessoryCounts: task.accessory_counts || {},
@@ -180,8 +181,8 @@ export function taskEntriesFromTrainingResources(
         label: aiTaskLabel(task),
         meta: `AI 检测 · ${accessoryCount} 类配件`,
         status: "AI",
-        path: `/tasks/${encodeURIComponent(taskId("ai", sourceId))}/inspect`,
-        detailPath: `/tasks/${encodeURIComponent(taskId("ai", sourceId))}`,
+        path: workspacePath(`/tasks/${encodeURIComponent(taskId("ai", sourceId))}/inspect`),
+        detailPath: workspacePath(`/tasks/${encodeURIComponent(taskId("ai", sourceId))}`),
         accessoryNames: task.accessory_names || task.selected_accessory_ids || [],
         accessoryIds: task.selected_accessory_ids || [],
         accessoryCounts: task.required_accessory_counts || {},

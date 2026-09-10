@@ -32,6 +32,14 @@ Receipts are workstation evidence, not proof against browser/OS failure. At-most
 
 ## Production gates
 
+Public/workspace route separation keeps the same browser origin. Updated camera
+task links use `/workspace/tasks/.../inspect`; legacy URLs remain aliases.
+Website/help shortcuts open new tabs instead of replacing a live workbench;
+the existing hidden-page pause and lease-validation behavior still applies.
+Authentication return navigation never automatically connects a port, starts
+capture or replays a request. No PLC protocol, lease, plan or physical I/O logic
+is changed by the navigation layer.
+
 PLC action remains fail-closed unless workstation binding/configuration is enabled, authorization, lease/generation, protocol/bundle consistency, HTTPS/Permissions Policy, and browser support are valid. Configuration or detection success never overrides an invalid physical-action gate.
 
 `profile_verified`/`production_ready` is currently commissioning and UI evidence, not an enforced physical-write gate. Do not describe it as a hard safety gate unless code, tests, and this specification are changed together.

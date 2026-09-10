@@ -1952,7 +1952,7 @@ def run_deployed_postgres(args: argparse.Namespace, repository: Any | None = Non
             unauth_client.request("GET", path, accepted={404}, label=f"deleted feature boundary {path}")
         report["deleted_feature_boundary_pass"] = True
 
-        for path in ("/docs", "/openapi.json", "/redoc"):
+        for path in ("/api/docs", "/openapi.json", "/redoc"):
             unauth_client.request("GET", path, accepted={401, 403, 404}, label=f"docs boundary {path}")
         report["docs_boundary_pass"] = True
 
@@ -2565,7 +2565,7 @@ def make_contract_handler(state: ContractHttpState) -> type[BaseHTTPRequestHandl
             if path in {"/legacy", "/label-sheet", "/locate-anything"}:
                 self.send_json(404, {"detail": "Not found"})
                 return
-            if path in {"/docs", "/openapi.json", "/redoc"}:
+            if path in {"/api/docs", "/openapi.json", "/redoc"}:
                 self.send_json(404, {"detail": "Not found"})
                 return
             if path.startswith("/api/") and not self.authenticated() and path != "/api/auth/status":

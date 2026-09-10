@@ -2574,7 +2574,7 @@ def route_required_permission(path: str, method: str) -> str | None:
         suffix = clean_path.rsplit("/", 1)[-1]
         if suffix in {"attempt", "receipt"}:
             return "inspection"
-    if clean_path.startswith("/api/auth/users"):
+    if clean_path == "/api/docs" or clean_path.startswith("/api/auth/users"):
         return "user_management"
     if clean_path.startswith("/api/windows-worker"):
         return "worker_settings"
@@ -27970,7 +27970,7 @@ def openapi_schema(request: Request) -> dict[str, Any]:
     return app.openapi_schema
 
 
-@app.get("/docs", include_in_schema=False)
+@app.get("/api/docs", include_in_schema=False)
 def swagger_ui(request: Request) -> Response:
     require_docs_admin(request)
     return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} Docs")
@@ -28134,8 +28134,20 @@ def legacy_index(legacy_path: str = "") -> FileResponse:
 @app.get("/react-preview")
 @app.get("/react-preview/")
 @app.get("/react-preview/{preview_path:path}")
-def react_preview(preview_path: str = "") -> RedirectResponse:
-    return RedirectResponse(url="/", status_code=307)
+def react_preview(request: Request, preview_path: str = "") -> RedirectResponse:
+    path = preview_path.strip("/")
+    first_segment = path.split("/", 1)[0]
+    if not path:
+        destination = "/workspace"
+    elif first_segment in {"workspace", "docs", "login"}:
+        destination = f"/{path}"
+    elif first_segment in REACT_PRODUCTION_ROUTE_SEGMENTS:
+        destination = f"/workspace/{path}"
+    else:
+        raise HTTPException(status_code=404, detail="Not found")
+    if request.url.query:
+        destination += f"?{request.url.query}"
+    return RedirectResponse(url=destination, status_code=307)
 
 
 @app.get("/api/status")
@@ -39423,6 +39435,9 @@ def set_accessory_route(accessory_id: str, request: AccessoryRouteRequest) -> di
 
 
 REACT_PRODUCTION_ROUTE_SEGMENTS = {
+    "workspace",
+    "docs",
+    "text-compare-beta",
     "login",
     "status",
     "inspect",
