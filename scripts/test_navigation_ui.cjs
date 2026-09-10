@@ -123,6 +123,7 @@ let browser;
   await page.getByRole('button', { name: '退出登录', exact: true }).click();
   await page.getByLabel('Workspace username').waitFor();
   assert.equal(new URL(page.url()).pathname, '/login');
+  assert.equal(new URL(page.url()).search, '', 'explicit logout must discard the previous page return link');
   // Account change must not display the prior account's cached standard library.
   await page.getByLabel('Workspace username').fill('operator-b');
   await page.getByLabel('Password', { exact: true }).fill('test-password');

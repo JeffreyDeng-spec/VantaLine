@@ -14,7 +14,7 @@ import { actionRegistry } from "../agent/registry";
 import { clearFiles } from "../agent/files";
 
 import { AppShell } from "../../components/AppShell";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   const location = useLocation();
@@ -36,7 +36,9 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   // another identity, but never remove the workstation cookie or task preferences.
   const identity = authQuery.data?.authenticated ? authQuery.data.user?.id || "" : "";
   const [cacheIdentity, setCacheIdentity] = useState<string | null>(null);
+  const explicitLogout = useRef(false);
   useLayoutEffect(() => {
+    if (identity) explicitLogout.current = false;
     const privateQueries = { predicate: (query: { queryKey: readonly unknown[] }) => JSON.stringify(query.queryKey) !== JSON.stringify(queryKeys.authStatus) };
     void queryClient.cancelQueries(privateQueries);
     queryClient.removeQueries(privateQueries);
@@ -52,6 +54,9 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
       setDataUserId("");
       await queryClient.cancelQueries();
       queryClient.removeQueries({predicate:query=>JSON.stringify(query.queryKey)!==JSON.stringify(queryKeys.authStatus)});
+      // The workspace guard can render before navigation commits. Explicit
+      // logout must not manufacture a return link to the page being left.
+      explicitLogout.current = true;
       // Preserve the observed auth query: clearing it would leave its observer
       // attached to an orphaned authenticated snapshot with nothing to refetch.
       queryClient.setQueryData<AuthStatusResponse>(queryKeys.authStatus,{authenticated:false,setup_required:false,user:null,features:{},default_user_permissions:[],legacy_owner_id:""});
@@ -84,7 +89,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   const destination = safeWorkspaceNext(new URLSearchParams(location.search).get("next"));
   if (!auth) return <ErrorState error={new Error("无法确认登录状态，请刷新重试")} />;
   if (!loginPage && (!auth.authenticated || !auth.user)) {
-    return <Navigate to={loginPath(`${location.pathname}${location.search}${location.hash}`)} replace />;
+    return <Navigate to={explicitLogout.current ? "/login" : loginPath(`${location.pathname}${location.search}${location.hash}`)} replace />;
   }
   if (auth.setup_required) return <AuthForms mode="setup" />;
   if (!auth.authenticated || !auth.user) {
@@ -107,8 +112,8 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
         }
       }}
     >
-      <AgentToolsProvider key={identity} />
-      <AppShell key={identity} />
+      <AgentToolsProvider key={`agent:${identity}`} />
+      <AppShell key={`workspace:${identity}`} />
     </AuthContext.Provider>
   );
 }
