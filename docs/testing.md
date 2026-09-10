@@ -24,6 +24,9 @@ images; these do not enter source control. Verify pending activation gating,
 green/red/orange status indicators with explicit destination-action buttons, pending-to-retained-to-excluded toggling,
 keyboard activation, exclusion recovery, API-error retention, refresh persistence,
 undimmed zoom and mobile overflow. Human corrections are not model successes.
+Also verify retained/pending/excluded display order, stable source ordinals within
+groups, newly uploaded retained images ahead of exclusions, both toggle directions,
+and the same order after reload. PDF/manual pages must retain their page order.
 `scripts/test_label_confirm_flow.cjs` uses the same local Vite page and screenshot
 output variables with isolated HTTP fixtures. It covers crop save before order
 selection, draft activation, explicit reference selection, confirmation followed
