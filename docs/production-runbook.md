@@ -68,3 +68,9 @@ fixture tests are not a full industrial rollout approval. The additive operation
 migration is compatible with older releases; whole-release rollback must retain
 policy, attempt, reservation and audit rows for reconciliation. The browser tool
 switch alone cannot revoke an Agent using an authenticated full-page session.
+
+The frontend CI gate now includes `test:agent`. A passing unit gate does not enable
+the experimental Agent account allowlist or establish native-browser, physical
+PLC or full-platform acceptance. Native lifecycle evidence and remaining rollout
+constraints are recorded in `docs/agent-platform.md`; the whole-release rollback
+procedure remains unchanged.

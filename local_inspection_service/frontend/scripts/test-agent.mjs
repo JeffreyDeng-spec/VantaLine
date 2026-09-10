@@ -24,6 +24,7 @@ const {validate,safeResult}=load('validation');
 const action=(name,execute=()=>({id:'ok'}),domain='core')=>({name,domain,description:name,readOnly:false,inputSchema:{type:'object',properties:{},additionalProperties:false},execute});
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+const deliverResult=()=>new Promise(resolve=>setTimeout(resolve,0));
 
 test('strict inputs reject unknown fields and unsafe prototypes before side effects',async()=>{
   let count=0;const registry=new ActionRegistry();registry.register([action('edit',()=>count++)]);
@@ -63,7 +64,7 @@ test('document queue survives a delayed registration followed by StrictMode remo
   const old=connectWebMCP(context,registry,()=> 'core',error=>errors.push(error));await flush();
   void old.close();const next=connectWebMCP(context,registry,()=> 'core',error=>errors.push(error));delay.resolve();await flush();await flush();
   assert.equal(tools.size,1);assert.equal(JSON.parse(await tools.get('vantaline_save').execute({})).status,'completed');assert.deepEqual(errors,[]);
-  const stale=tools.get('vantaline_save');await next.close();assert.equal(tools.size,0);assert.equal(JSON.parse(await stale.execute({})).error.code,'SESSION_CHANGED');
+  const stale=tools.get('vantaline_save');await next.close();await deliverResult();await flush();assert.equal(tools.size,0);assert.equal(JSON.parse(await stale.execute({})).error.code,'SESSION_CHANGED');
 });
 test('current signal-based WebMCP API works without unregisterTool',async()=>{
   const tools=new Map();const registry=new ActionRegistry();registry.configure(()=>true,async()=>{});registry.register([action('save')]);
@@ -87,5 +88,22 @@ test('removing a tool preserves every concurrent read result channel',async()=>{
   await flush();const tool=tools.get('vantaline_read');const one=tool.execute({}),two=tool.execute({});
   domain='training';adapter.refresh();await flush();assert.equal(tools.size,1);
   a.resolve({id:1});await one;await flush();assert.equal(tools.size,1);
-  b.resolve({id:2});await two;await flush();assert.equal(tools.size,0);await adapter.close();
+  b.resolve({id:2});await two;await deliverResult();await flush();assert.equal(tools.size,0);await adapter.close();
+});
+
+test('native result can be consumed before deferred unregistration',async()=>{
+  const tools=new Map(),result=deferred();let domain='text',signal;
+  const registry=new ActionRegistry();registry.configure(()=>true,async()=>{});
+  registry.register([{...action('pending',()=>result.promise,'text'),readOnly:true}]);
+  const adapter=connectWebMCP({registerTool(tool,options){signal=options.signal;tools.set(tool.name,tool);signal.addEventListener('abort',()=>tools.delete(tool.name));}},registry,()=>domain,assert.fail);
+  await flush();
+  const delivered=tools.get('vantaline_pending').execute({}).then(value=>{
+    // Models Chrome's result consumption after the callback promise resolves.
+    assert.equal(signal.aborted,false,'registration aborted before result delivery');
+    return JSON.parse(value);
+  });
+  domain='training';adapter.refresh();await flush();
+  result.resolve({id:'verified'});assert.equal((await delivered).status,'completed');
+  await deliverResult();await flush();assert.equal(signal.aborted,true);assert.equal(tools.size,0);
+  await adapter.close();
 });

@@ -1,12 +1,13 @@
 // Native browser WebMCP integration. All API/media traffic uses test fixtures.
 // This verifies browser discovery/execution, not external LLM or physical PLC acceptance.
 const assert = require('node:assert/strict');
+const {waitForNativeTools} = require('./agent_browser_wait.cjs');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.AGENT_UI_BASE || 'http://127.0.0.1:5173';
 (async()=>{
   const browser = await chromium.launch({headless:true,...(process.env.AGENT_CHROME_PATH?{executablePath:process.env.AGENT_CHROME_PATH}:{}),args:['--enable-blink-features=WebMCP,WebMCPTesting']});
   try {
-    const page=await browser.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));let authenticated=true;
+    const page=await browser.newPage();const timeline=[];page.on('framenavigated',frame=>{if(frame===page.mainFrame())timeline.push({event:'navigation',url:frame.url(),time:Date.now()});});page.on('request',request=>{if(request.url().includes('/api/'))timeline.push({event:'api',url:request.url(),time:Date.now()});});const errors=[];page.on('pageerror',error=>errors.push(error.message));let authenticated=true;
     if(process.env.AGENT_TRACE_REGISTRATION) await page.addInitScript(() => {
       window.agentRegistrationTrace=[];
       const context=document.modelContext;if(!context)return;
@@ -35,15 +36,15 @@ const base = process.env.AGENT_UI_BASE || 'http://127.0.0.1:5173';
       return route.fulfill({status:404,json:{detail:'No fixture for this endpoint'}});
     });
     await page.goto(base+'/text-compare-beta');
-    await page.waitForFunction(async()=>document.querySelector('[data-agent-ready="true"]') && typeof document.modelContext?.getTools==='function' && (await document.modelContext.getTools()).some(tool=>tool.name==='vantaline_text_select_standard'));
+    await waitForNativeTools(page, {ready:true, present:['vantaline_get_context','vantaline_text_select_standard']});
     async function execute(name,input={}){
-      return page.evaluate(async({name,input})=>{
+      try { return await page.evaluate(async({name,input})=>{
         const tool=(await document.modelContext.getTools()).find(item=>item.name==='vantaline_'+name);
         if(!tool){
           throw Error(JSON.stringify({missing:name,url:location.href,native:(await document.modelContext.getTools()).map(item=>item.name),trace:window.agentRegistrationTrace,registration_status:document.querySelector('[aria-label="Agent 工具状态"]')?.textContent}));
         }
         return JSON.parse(await document.modelContext.executeTool(tool,JSON.stringify(input)));
-      },{name,input});
+      },{name,input}); } catch(error) { console.error(JSON.stringify({timeline})); throw error; }
     }
     const context=await execute('get_context');
     assert.equal(context.data.account_id,user.id);
@@ -59,10 +60,10 @@ const base = process.env.AGENT_UI_BASE || 'http://127.0.0.1:5173';
     assert.equal((await execute('text_start_camera')).status,'requires_user_input');
     // Full route transition must unregister workspace callbacks, retaining core discovery.
     await execute('open_workspace',{workspace:'overview'});
-    await page.waitForFunction(async()=>!(await document.modelContext.getTools()).some(tool=>tool.name==='vantaline_text_get_state'));
+    await waitForNativeTools(page, {present:['vantaline_get_context'], absent:['vantaline_text_get_state']});
     assert.equal((await execute('get_context')).data.route,'/');
     assert.equal((await execute('logout')).status,'completed');
-    await page.waitForFunction(async()=>(await document.modelContext.getTools()).length===0);
+    await waitForNativeTools(page, {empty:true});
     assert.equal(await page.getByRole('status').filter({hasText:'退出登录未得到确认'}).count(),0);
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({browser:await browser.version(),native_webmcp:true,result:'PASS',scope:'discovery, pagination, live React selection/form state, native permission wait, workspace cleanup'}));

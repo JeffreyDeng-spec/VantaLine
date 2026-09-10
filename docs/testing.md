@@ -98,3 +98,15 @@ API against in-memory endpoints, using the root Vite base and routing settings
 listed in [implementation status](agent-platform.md). It executes tools without
 DOM clicking. These tests do not prove full UI/tool coverage, external Agent
 reasoning, physical PLC behavior or the planned load/latency targets.
+
+The required frontend CI job runs `test:agent`, including bounded asynchronous
+native-discovery polling and delayed result-channel cleanup regressions. Native
+Chrome checks are separate: `scripts/test_agent_webmcp.cjs` covers the full-page
+fixture and `scripts/test_agent_webmcp_lifecycle.cjs` covers the production adapter
+on a synthetic page. Configure `PLAYWRIGHT_MODULE` and `AGENT_CHROME_PATH`; the
+full-page fixture additionally needs `AGENT_UI_BASE`. Never use
+`page.waitForFunction(async ...)` for native discovery in these tests: on the
+verified Playwright version it can finish with a false resolved value. The shared
+helper awaits observations, has negative timeout coverage, and retries no business
+operations. Native suites are not yet CI gates; keep their browser version and
+repeat-run evidence explicit.

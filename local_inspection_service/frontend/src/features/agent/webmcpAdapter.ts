@@ -46,7 +46,17 @@ export function connectWebMCP(context: ModelContext, registry: ActionRegistry, d
             // Browser cancellation never implicitly replays or interrupts PLC I/O.
             shared.inFlight.set(name,(shared.inFlight.get(name) ?? 0)+1);
             try { return JSON.stringify(await registry.execute(action.name, input)); }
-            finally { const remaining=(shared.inFlight.get(name) ?? 1)-1;if(remaining)shared.inFlight.set(name,remaining);else shared.inFlight.delete(name);shared.refresh?.(); }
+            finally {
+              // Chrome 152 delivers the native result after this callback settles.
+              // A microtask reconciliation can abort its registration before that
+              // delivery. Release the result-channel lease in the next task.
+              setTimeout(() => {
+                const remaining = (shared.inFlight.get(name) ?? 1) - 1;
+                if (remaining) shared.inFlight.set(name, remaining);
+                else shared.inFlight.delete(name);
+                shared.refresh?.();
+              }, 0);
+            }
           } }, {signal:controller.signal});
           shared.registered.set(name,{owner,controller});
         } catch (error) { controller.abort(); throw error; }

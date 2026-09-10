@@ -78,11 +78,7 @@ These are outstanding work, not exclusions from the agreed scope:
 7. A real external Agent's complete business chains and authorized physical
    camera/PLC commissioning. Native browser fixture execution and protocol tests
    do not establish either of those results.
-8. Native browser startup stabilization: repeated uninstrumented Chrome 152
-   runs intermittently lose the core menu between discovery and the first call.
-   Instrumented runs passed repeatedly, which does not resolve this timing bug.
-   Readiness signaling and deferred mounting have not proved it fixed.
-9. CI enforcement of the full reviewed action manifest, single-account rollout,
+8. CI enforcement of the full reviewed action manifest, single-account rollout,
    immutable release deployment and post-release acceptance.
 
 ## Verification
@@ -110,8 +106,46 @@ coordinates. Successful Chrome 152.0.7977.83 runs covered discovery, paginated m
 selection/form updates, native-permission waiting, module cleanup and logout
 revocation locally. The fixture waits for the page's published-tool readiness
 signal; optional `AGENT_TRACE_REGISTRATION=1` records lifecycle diagnostics.
-Uninstrumented startup remains intermittent and is a release blocker.
 An external model is not involved in that test.
+
+### Lifecycle investigation and regression evidence
+
+The previously reported startup disappearance was a premature test invocation,
+not established evidence of a disappearing application registry. In Playwright
+1.62.1, `page.waitForFunction(async () => false)` returned false immediately
+instead of waiting until timeout. Its polling code checks the Promise object as
+truthy before adopting its resolved value. The fixture now explicitly awaits
+native discovery snapshots in Node, checks actual names/readiness, and fails on
+a bounded timeout. Business operations are executed once; they are not retried.
+No browser API wrapping or registration tracing is needed for the passing tests.
+
+A separate real adapter defect was then reproduced in the native lifecycle test:
+after the last callback finished, microtask reconciliation could abort its
+registration before Chrome 152 delivered the native result, yielding
+`UnknownError`. The adapter now retains each in-flight result-channel lease until
+the next event-loop task. Session revocation still rejects new execution
+immediately; it does not wait for deferred menu cleanup or replay an operation.
+
+Local final verification on Chrome 152.0.7977.83: 10 independent full-application
+runs and 10 independent native lifecycle runs passed without registration
+instrumentation. The lifecycle fixture uses the actual production registry and
+adapter and tests delayed registration, negative timeout, concurrent reads during
+module switching, revocation, result redaction and repeated remounts. This is
+finite regression evidence, not a claim about all browser versions or physical
+industrial workflows.
+
+Run `node scripts/test_agent_webmcp_lifecycle.cjs` with `PLAYWRIGHT_MODULE` and
+`AGENT_CHROME_PATH`. It serves only intercepted synthetic pages/modules and needs
+no live service. The required frontend CI job runs `test:agent`, including the
+async-discovery helper and result-delivery regressions. Native browser suites are
+explicit local checks until the supported experimental browser is pinned in CI.
+
+Primary references checked during diagnosis:
+
+- [Playwright polling implementation](https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/frames.ts): `waitForFunctionExpression` checks the predicate value before resolving it; verified against the installed 1.62.1 bundle and a minimal empty-page reproduction.
+- [Chrome imperative API](https://developer.chrome.com/docs/ai/webmcp/imperative-api): signal-based unregistration and the Chrome 153 change preserving in-flight executions.
+- [WebMCP draft](https://webmachinelearning.github.io/webmcp/): asynchronous discovery, tool lifecycle and event-loop integration; this remains an evolving draft.
+- [Chrome-maintained React hook](https://github.com/GoogleChromeLabs/use-webmcp-tool/blob/main/useWebMCP.js): stable callback references and lifecycle cleanup; reviewed for comparison, not added as a dependency.
 
 ## Release boundary
 

@@ -60,3 +60,9 @@ Full-site coverage, shared policy enforcement across legacy/background paths and
 independent worker admission are still incomplete. Protected PostgreSQL requests
 now use indexed session/account lookup; analysis detail uses its primary-key loader.
 These changes do not establish the planned million-record latency target.
+
+WebMCP registration cleanup retains active result channels through the next
+JavaScript task after callbacks settle, avoiding premature native cancellation on
+Chrome 152. Revocation still blocks new execution immediately. Browser tests await
+resolved discovery snapshots; a Promise-valued polling predicate is not a ready
+signal. See the lifecycle investigation in the Agent implementation document.
