@@ -520,8 +520,8 @@ def main() -> None:
     assert response.json()["default_user_permissions"] == []
     assert response.json()["legacy_owner_id"] == ""
 
-    response = client.get("/docs")
-    assert_status(response, 404, "anonymous docs hidden")
+    response = client.get("/api/docs")
+    assert_status(response, 503, "API docs gated before first admin")
 
     response = client.get("/openapi.json")
     assert_status(response, 404, "anonymous openapi hidden")

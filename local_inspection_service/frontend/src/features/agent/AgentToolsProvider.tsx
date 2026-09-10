@@ -10,13 +10,9 @@ import { accessoryActions } from "./accessoryActions";
 import { clearFiles, listFiles } from "./files";
 import { connectWebMCP } from "./webmcpAdapter";
 import { useAgentActions } from "./useAgentActions";
+import { workspaceSections as workspaces, workspaceDomain as domainFor } from "../../app/paths";
 
-export const workspaces: Record<string, string> = { detection: "/inspect", accessories: "/accessories", text: "/text-compare-beta", training: "/training-library", pipeline: "/pipeline", analysis: "/data-analysis", settings: "/rules", users: "/users", overview: "/" };
-function domainFor(path: string) {
-  if (path.startsWith("/tasks/") && path.endsWith("/inspect")) return "detection";
-  if (path.startsWith("/tasks/")) return "pipeline";
-  return Object.entries(workspaces).find(([, route]) => route !== "/" && path.startsWith(route))?.[0] ?? "core";
-}
+export { workspaces };
 
 export function AgentToolsProvider() {
   const auth = useAuth();

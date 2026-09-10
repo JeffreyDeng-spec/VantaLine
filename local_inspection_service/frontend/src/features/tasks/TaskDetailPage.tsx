@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { workspacePath } from "../../app/paths";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { CheckCircle2, ChevronRight, Eye, Loader2, PauseCircle, Play, RefreshCw, RotateCcw, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -830,7 +831,7 @@ export function TaskDetailPage() {
   if (resourcesQuery.isError) return <ErrorState error={resourcesQuery.error} action={<button onClick={() => resourcesQuery.refetch()}>重试</button>} />;
   if (pipelineQuery.isError) return <ErrorState error={pipelineQuery.error} action={<button onClick={() => pipelineQuery.refetch()}>重试</button>} />;
 
-  if (!task) return <Navigate to="/training-library?tab=tasks" replace />;
+  if (!task) return <Navigate to={workspacePath("/training-library?tab=tasks")} replace />;
 
   const records = analysisQuery.data || [];
   const autoOptimize = autoOptimizeQuery.data;
@@ -939,7 +940,7 @@ export function TaskDetailPage() {
           <p className="page-desc">任务详情会汇总当前进度、检测入口、采集样本、自动标注结果和训练集。</p>
         </div>
         <div className="page-head-actions">
-          <Link className="secondary compact-action" to="/training-library?tab=tasks">
+          <Link className="secondary compact-action" to={workspacePath("/training-library?tab=tasks")}>
             返回任务库
           </Link>
           <Link className="primary compact-action" to={task.path}>
@@ -1158,7 +1159,7 @@ export function TaskDetailPage() {
                 <h2>采集样本与自动标注</h2>
               </div>
               <div className="modal-head-actions">
-                <Link className="secondary compact-action" to={`/data-analysis?task_id=${encodeURIComponent(task.aiTaskId || task.sourceId)}`}>
+                <Link className="secondary compact-action" to={workspacePath(`/data-analysis?task_id=${encodeURIComponent(task.aiTaskId || task.sourceId)}`)}>
                   <Eye size={15} aria-hidden="true" />
                   数据分析
                 </Link>

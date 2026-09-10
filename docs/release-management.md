@@ -25,6 +25,11 @@ For the text-comparison camera selector or any upload surface, required CI also 
 
 ## Artifact and production invariants
 
+The required frontend job runs the pinned Playwright navigation suite and uploads
+its screenshot evidence. The backend job checks actual public/workspace routes
+and API-doc permission boundaries. Route/layout separation does not change the
+single immutable bundle or PLC protocol verification contract.
+
 Document classification adds authenticated job/deletion smoke tests and parser
 checks to CI. Its separate account allowlist must be configured for rollout;
 shipping the Java extractor alone does not enable VLM classification.

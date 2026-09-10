@@ -10,6 +10,14 @@ full-site action manifest or a coverage percentage.
 
 ## Implemented behavior
 
+Public-site separation keeps the provider mounted only inside an authenticated
+workspace. Agent `open_workspace`, context domains and task navigation use the
+same `/workspace/*` route helpers as the UI; overview is `/workspace`, never the
+public homepage. Logout retains immediate registry/file-handle revocation and
+query cancellation, then navigates to `/login`. Public pages do not register
+Agent tools or query the account's Agent capabilities. Account/commissioning gates
+and the outstanding acceptance items below remain unchanged.
+
 - `frontend/src/features/agent/registry.ts` provides account-gated registration,
   bounded input validation, compact results, sensitive-key redaction, concurrent
   mutation rejection and session-epoch checks. Domain API adapters call the

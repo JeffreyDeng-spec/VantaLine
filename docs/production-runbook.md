@@ -31,6 +31,18 @@ Before merging camera-selector or upload-surface changes, run the browser-media 
 
 ## Read-only diagnosis first
 
+For the public/workspace navigation release, verify `/` stays the introduction,
+`/docs` is the public user guide, and `/workspace` plus a functional deep link
+refresh correctly. An unauthenticated deep link must go directly to login and
+return to the same target; an authenticated `/` must remain public. About and
+sidebar website/docs links open another tab. Admin Swagger is now `/api/docs`,
+not `/docs`; verify ordinary/anonymous users cannot read API documentation.
+Check legacy task links, account switching, version consistency and that viewing
+help does not replace the active workbench. No DNS, cookies, provider keys,
+database migration or device authorization migration is part of this rollout.
+Roll back the whole release on regression; original root-level functional
+addresses remain compatible, while new workspace bookmarks require this release.
+
 For single-label extraction, enable only the intended account through `VANTALINE_LABEL_EXTRACTION_ACCOUNTS` after image-generation configuration and synthetic mask acceptance. Verify manual correction, explicit confirmation, stale-version rejection and authenticated source/mask/crop access. Observe `label_extraction` events for status, elapsed time and failure code; inspect bounded record diagnostics for provider usage when available. A stuck attempt is uncertain, not a reason to replay a paid model call. Draft media expiration is limited to unconfirmed/unreferenced roots older than seven days and retains metadata tombstones; all confirmed evidence remains available. Roll back the complete release if regression occurs; the additive table remains readable.
 
 1. Check the GitHub workflow and immutable Release for the expected commit.

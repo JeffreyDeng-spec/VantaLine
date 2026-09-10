@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { WORKSPACE_PATH } from "../../app/paths";
 import type { NavItem } from "../../app/navigation";
 
 const endpointGroups: Record<string, string[]> = {
@@ -54,7 +55,7 @@ export function PlaceholderPage({ item }: { item: NavItem }) {
         </div>
       </section>
 
-      <Link className="secondary inline-link" to="/">
+      <Link className="secondary inline-link" to={WORKSPACE_PATH}>
         返回总览
       </Link>
     </section>

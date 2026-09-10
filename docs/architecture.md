@@ -30,6 +30,36 @@ is a tombstone: future list/edit/compare use stops; media and history stay owned
 
 ## Components and boundaries
 
+### Public site and workspace routing
+
+`/` always serves the product introduction and `/docs` the curated public user
+guide, irrespective of login state. Neither mounts the authentication gate or
+workspace data queries. `/workspace` is the protected dashboard; all functional
+pages and pinned task URLs live under `/workspace/*`. `/workspace/about` is
+available to every signed-in user and links to the public site and guide in new
+tabs. Sidebar public-resource shortcuts also preserve the active workbench.
+
+The React router keeps a root production basename, separate public/login/app
+layouts, and one release bundle (including the existing PLC bundle contract).
+Unauthenticated deep links go straight to `/login?next=…`; an allowlisted local
+workspace destination preserves query/hash after login and rejects open redirects.
+Session 401 responses recheck authentication without replaying the operation.
+Identity changes cancel/remove private query caches before mounting another
+account; workstation cookies and persisted per-account task preferences remain.
+Failed logout stays retryable; successful logout lands on `/login`, not marketing.
+
+Legacy functional URLs (including `/text-compare-beta` and `/tasks/...`) redirect
+to their workspace counterparts. Retired `/react-preview/...` bookmarks retain
+their target and query. Server SPA allowlisting handles direct refreshes without
+capturing `/api`, static assets or authenticated media; unknown UI pages show 404
+content instead of silently returning to the homepage. `/docs` is no longer
+Swagger: administrator-only Swagger lives at `/api/docs`; `/openapi.json` and
+`/redoc` retain their administrator checks. No customer or internal repository
+documents are published automatically.
+
+This is same-origin path separation, not a domain migration: DNS, TLS, cookies,
+camera/serial permission origins and model/PLC configuration are unchanged.
+
 - **React frontend:** task/model selection, camera and upload workflows, administration, and workstation-local Web Serial.
 - **FastAPI backend:** authentication, permissions, task/model orchestration, immutable PLC plans, audit receipts, static release serving, and `/api/version`.
 - **PostgreSQL runtime repository:** shared application configuration, workstation identity/configuration, leases, dispatch state, and durable records.

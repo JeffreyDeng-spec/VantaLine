@@ -51,6 +51,34 @@ an existing output directory is rejected to prevent accidental replay.
 
 Run checks from repository root unless stated otherwise.
 
+## Public/workspace navigation
+
+After integration with the Agent foundation, also run `test:agent`. Navigation
+path tests cover Agent workspace URLs and context-domain resolution; the native
+WebMCP fixture expects `/workspace` after opening overview and continues to check
+logout revocation. Public routes must not mount the Agent provider.
+
+Run `npm --prefix local_inspection_service/frontend run test:navigation` after
+`npm ci` and `npx --no-install playwright install chromium` in the frontend.
+The pinned development-only browser suite starts a loopback Vite server on port
+5184 with fixture APIs, never a production account or model. `NAVIGATION_UI_OUTPUT`
+selects screenshot/result output; otherwise a new temporary directory is used.
+CI uploads the screenshots as `navigation-ui`.
+
+Coverage includes public pages without auth dependencies, retryable auth errors,
+old links with query/hash, safe login returns, login/logout failure and success,
+ordinary-user permission denial, account-cache separation, session expiration,
+404 behavior, new-tab documentation without reloading the workbench, keyboard
+guide navigation, desktop/mobile overflow and absence of camera/model/PLC writes.
+`test_navigation_paths.cjs` executes the actual TypeScript path helpers with
+malicious, encoded and malformed redirect fixtures. Production endpoint handling
+is separately tested by
+`python local_inspection_service/scripts/smoke_navigation_endpoints.py`, using the
+real app and auth handlers with isolated runtime storage and a fixture SPA file.
+It verifies direct refresh, old preview redirects, protected media/API errors and
+public-guide vs admin-only API documentation boundaries. These browser fixtures
+do not constitute a physical camera/PLC commissioning run.
+
 | Change area | Required local checks |
 | --- | --- |
 | Documentation only | `python scripts/verify_docs_contract.py --base-ref origin/main`, `git diff --check` |

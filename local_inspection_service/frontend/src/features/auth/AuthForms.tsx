@@ -71,7 +71,7 @@ export function AuthForms({ mode, initialError = "" }: { mode: AuthMode; initial
               </span>
               <span>VantaLine</span>
             </Link>
-            <Link to="/">← Back to overview</Link>
+            <Link to="/">← 返回产品介绍</Link>
           </header>
 
           <section className="login-shell" aria-labelledby="login-title">

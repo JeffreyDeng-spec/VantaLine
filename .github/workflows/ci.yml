@@ -85,6 +85,19 @@ jobs:
           cache-dependency-path: local_inspection_service/frontend/package-lock.json
       - run: npm ci
       - run: npm run test:plc-capture
+      - name: Install pinned navigation test browser
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Verify public/workspace navigation
+        env:
+          NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
+        run: npm run test:navigation
+      - name: Upload navigation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-ui
+          path: ${{ runner.temp }}/navigation-ui
+          if-no-files-found: ignore
       - run: npm run test:agent
       - run: npm run typecheck
       - run: npm run build:production-cutover
@@ -128,6 +141,7 @@ jobs:
       - run: python local_inspection_service/scripts/smoke_plc_web_serial_v3.py
       - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
       - run: python local_inspection_service/scripts/smoke_release_version.py
+      - run: python local_inspection_service/scripts/smoke_navigation_endpoints.py
       - run: python local_inspection_service/scripts/smoke_postgres_runtime_repository.py
       - name: Verify text inspection comparison and document contracts
         run: |

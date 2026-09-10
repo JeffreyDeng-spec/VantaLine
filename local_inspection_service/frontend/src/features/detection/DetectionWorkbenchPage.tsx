@@ -2,6 +2,7 @@ import { useAgentActions } from "../agent/useAgentActions";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { getFile } from "../agent/files";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { workspacePath } from "../../app/paths";
 import { Camera, ChevronRight, FileImage, Maximize2, Play, RefreshCw, Save, Settings, Video, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
@@ -214,7 +215,7 @@ function aiTaskMatchesEntry(task: AiDetectionLibraryTask, entry: TaskEntry | nul
 }
 
 function taskInspectPath(task: TaskEntry) {
-  return `/tasks/${encodeURIComponent(task.id)}/inspect`;
+  return workspacePath(`/tasks/${encodeURIComponent(task.id)}/inspect`);
 }
 
 function taskAccessoryText(task: TaskEntry | null | undefined) {
@@ -610,7 +611,7 @@ function TaskDetectionEntryPage({
             <h3>选择检测任务</h3>
             <p>每个任务都有独立的检测中心、样本集和模型集。</p>
           </div>
-          <Link className="secondary compact-action" to="/training-library?tab=tasks">
+          <Link className="secondary compact-action" to={workspacePath("/training-library?tab=tasks")}>
             打开任务库
           </Link>
         </div>
@@ -1832,7 +1833,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       />
     );
   }
-  if (decodedRouteTaskId && !routeTask) return <Navigate to="/inspect" replace />;
+  if (decodedRouteTaskId && !routeTask) return <Navigate to={workspacePath("/inspect")} replace />;
 
   if (statusQuery.isLoading || (shouldLoadAiTasks && aiTasksQuery.isLoading)) return <LoadingState label="正在加载检测工作台" />;
 

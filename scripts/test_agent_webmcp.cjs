@@ -61,7 +61,7 @@ const base = process.env.AGENT_UI_BASE || 'http://127.0.0.1:5173';
     // Full route transition must unregister workspace callbacks, retaining core discovery.
     await execute('open_workspace',{workspace:'overview'});
     await waitForNativeTools(page, {present:['vantaline_get_context'], absent:['vantaline_text_get_state']});
-    assert.equal((await execute('get_context')).data.route,'/');
+    assert.equal((await execute('get_context')).data.route,'/workspace');
     assert.equal((await execute('logout')).status,'completed');
     await waitForNativeTools(page, {empty:true});
     assert.equal(await page.getByRole('status').filter({hasText:'退出登录未得到确认'}).count(),0);

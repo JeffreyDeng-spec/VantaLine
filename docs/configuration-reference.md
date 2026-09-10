@@ -16,6 +16,14 @@ Common backend variable families include `VANTALINE_POSTGRES_DSN`, `INSPECTION_A
 
 ## Rules
 
+Public navigation uses `/`, `/docs`, and protected `/workspace/*` on the same
+origin; no new environment variable, domain or API credential is needed.
+`VITE_ROUTER_BASENAME=/` remains the production setting; preview builds retain
+their existing basename support. Public user documentation is static curated
+content. API documentation is separate: `/api/docs` requires an authenticated
+administrator (and keeps the handler's admin check), while `/openapi.json` and
+`/redoc` remain admin-only. The website must not treat `/docs` as API tooling.
+
 - Never commit `.env`, private keys, tokens, cookies, real DSNs, production addresses, customer data, or copied server environment files.
 - Do not add a second configuration source for an existing setting.
 - Server-wide settings belong in controlled environment/runtime configuration; workstation PLC addresses belong to the bound workstation record.
