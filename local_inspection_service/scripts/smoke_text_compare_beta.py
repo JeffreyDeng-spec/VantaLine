@@ -76,14 +76,29 @@ def main():
     assert "analyzeTextCompareBeta" not in frontend and "replaceReference" not in frontend
     assert 'ariaLabel="拖拽或选择标准图片"' not in frontend
     assert "请先在左侧订单画廊中选择一张已启用的标签图片" in frontend
-    assert "function isActiveAsset" in frontend and '<option value="needs_confirmation">' in frontend
+    assert "function isActiveAsset" in frontend
+    # Colored current state is distinct from the one-click destination action.
+    # Pending/excluded become retained; retained becomes excluded.
+    assert '<option value="needs_confirmation">' not in frontend
+    control = frontend.split('className={`text-standard-retention-control', 1)[1].split('</div>', 1)[0]
+    assert 'retention-${asset.status}' in control
+    assert 'className="text-standard-retention-state"' in control
+    assert all(label in control for label in ('"已保留"', '"未保留"', '"待确认"'))
+    toggle = control.split('className="text-standard-retention-toggle"', 1)[1].split('</button>', 1)[0]
+    assert 'aria-label={`第 ${asset.ordinal} 张图片：' in toggle
+    assert '"改为不保留"' in toggle and '"改为保留"' in toggle
+    assert 'disabled={reviewBusy}' in toggle
+    assert 'action: asset.status === "candidate" ? "remove" : "confirm"' in toggle
+    for status, color in [('candidate', '#187344'), ('excluded', '#b42332'), ('needs_confirmation', '#ffcf85')]:
+        assert f'.retention-{status} {{ background: {color};' in styles
+    assert '.text-standard-retention-toggle:focus-visible' in styles
     assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true });' in frontend
     assert 'standardQuery.data?.status !== "confirmed"' in frontend
     assert "这个订单还没有启用" in frontend
     # Logical standards remain manageable after confirmation, while the backend
     # records immutable revisions and only soft-removes their assets.
     assert "addTextInspectionStandardAsset" in frontend
-    assert 'action: event.currentTarget.value === "candidate" ? "confirm" : event.currentTarget.value === "excluded" ? "remove" : "review"' in frontend
+    assert 'revision: standardQuery.data?.revision_number' in toggle
     assert "添加到标准" in frontend and "停用" in frontend and "启用" in frontend
     assert "standard_revision_id" in source and "standard_revision_number" in source
     assert '"revisions": "text_inspection_standard_revisions"' in source

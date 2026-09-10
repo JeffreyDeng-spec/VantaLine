@@ -16,12 +16,28 @@ label candidates have green emphasis; pending items use amber dashed borders and
 an explicit warning; excluded thumbnails are dimmed, not deleted. Preview and
 manual controls remain legible, and zoom shows the undimmed source. Count filters
 include all, retained, pending and excluded with an empty-filter recovery action.
-Each label asset can be manually set to retained, pending or excluded. Human
+The label gallery orders retained, pending, then excluded, keeping source ordinal
+order within each group. Uploads and status changes recompute this display order;
+source numbering, selected IDs and historical snapshots remain unchanged.
+Each label asset separates a colored current-state indicator (green retained,
+red excluded, orange uncertain) from a neutral action button explicitly naming
+the next state. Uncertain and excluded become retained on click; retained
+becomes excluded. After resolving uncertainty, clicks alternate retained/excluded.
+Saving disables the controls; failed saves preserve the current server state.
+The API still supports pending for compatibility, but the UI does not reset a
+human decision to pending. Human
 choices persist through the existing owned asset PATCH route (`confirm`, `review`,
 `remove`); the first edit preserves `original_classification`, and feedback keeps
 the action. Draft activation refuses unresolved pending images and requires at
 least one retained image. Confirmed-standard edits continue to create immutable
 membership revisions; a pending asset cannot be used for comparison.
+
+Retained membership is not reference selection. Confirmed assets expose a
+separate "use as comparison reference" action. After saving an extraction,
+confirmation remains gated on a selected enabled reference and a valid unchanged
+preview. The UI explains the current blocker next to the disabled control and
+offers a library navigation action without resetting the crop. Reference changes
+still require explicit confirmation against the new standard revision.
 
 `POST /standards/{id}/classify` starts classification for an unclassified draft;
 new imports start automatically for enabled accounts. Standard GET returns

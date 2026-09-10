@@ -66,11 +66,12 @@ const errors: Record<string,string> = {
   segmentation_not_configured: "AI 分割尚未配置或启用，可以手动描边。", provider_outcome_unknown: "模型请求结果不明，不会自动重试。可新建手动提取。", manual_selection: "请描出一个完整标签，然后保存预览。"
 };
 
-export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady, onInvalidate, aiAvailable = true, bboxEnabled = false, bboxAvailable = false, guide, onGuide, standardId, standardRevision, onCompare, comparing, onZoom }: {
+export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady, onInvalidate, aiAvailable = true, bboxEnabled = false, bboxAvailable = false, guide, onGuide, standardId, standardRevision, standardBlockReason, onSelectStandard, onCompare, comparing, onZoom }: {
   file: File | null; capture: () => Promise<File>; onCaptured: (f: File) => void;
   onSourceReady?: (url: string) => void;
   onInvalidate?: () => void; aiAvailable?: boolean; bboxEnabled?: boolean; bboxAvailable?: boolean;
   guide: Guide; onGuide: (v: Guide) => void; standardId: string; standardRevision: string;
+  standardBlockReason?: string; onSelectStandard?: () => void;
   onCompare: (id: string) => void; comparing: boolean; onZoom: (src: string, alt: string) => void;
 }) {
   const [extraction, setExtraction] = useState<Extraction | null>(null);
@@ -161,6 +162,12 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
     finally { if (epoch === generation.current) { inFlight.current = false; setBusy(false); } }
   };
   const editing = busy || comparing || extraction?.status === "attempting";
+  const confirmationBlock = comparing ? "正在对比，请等待本次结果。" : busy ? "正在保存，请稍候。"
+    : extraction?.status === "attempting" ? "正在提取，完成后请检查裁剪。"
+    : dirty ? "轮廓已修改，请先保存轮廓并检查新预览。"
+    : !extraction?.media.crop ? "请先提取标签，或手动描边后保存预览。"
+    : !["ready", "confirmed"].includes(extraction.status) ? "当前提取需要调整，请保存正确轮廓后再确认。"
+    : standardBlockReason || (!standardId ? "请先在左侧选择一张已启用的标签作为对比标准。" : "");
   const change = (next: Point[]) => { setPoints(next); setDirty(true); onInvalidate?.(); };
   const pointer = (e: { clientX: number; clientY: number }): Point => {
     const bounds = svg.current!.getBoundingClientRect();
@@ -211,8 +218,9 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
         <button type="button" disabled={!!editing || selected===null || points.length<=3} onClick={()=>{change(points.filter((_,i)=>i!==selected));setSelected(null);}}>删除顶点</button>
         <button type="button" disabled={!!editing || selected===null || points.length>=128} onClick={()=>{if(selected===null)return;const a=points[selected],b=points[(selected+1)%points.length];const next=[...points];next.splice(selected+1,0,[(a[0]+b[0])/2,(a[1]+b[1])/2]);change(next);setSelected(selected+1);}}>在下一条边添加顶点</button>
         <button type="button" disabled={!!editing || points.length<3} onClick={()=>void revise(false)}>保存轮廓并预览</button>
-        <button className="text-compare-primary" type="button" disabled={!!editing || dirty || !standardId || !extraction.media.crop || !["ready","confirmed"].includes(extraction.status)} onClick={()=>void revise(true)}>{comparing ? "正在对比…" : "确认标签并对比"}</button>
+        <button className="text-compare-primary" type="button" disabled={!!confirmationBlock} aria-describedby="label-confirmation-help" onClick={()=>void revise(true)}>{comparing ? "正在对比…" : "确认标签并对比"}</button>
       </div>
+      <p id="label-confirmation-help" role="status">{confirmationBlock || "裁剪与标准已就绪，确认完整性后即可开始对比。"}{!standardId && onSelectStandard ? <button type="button" onClick={onSelectStandard}>去选择对比标准</button> : null}</p>
       <small>确认即表示：这是目标标签、边缘完整且没有相邻标签。修改轮廓后需要重新保存预览。</small>
       <details><summary>Raw Output · 分割诊断</summary><pre>{JSON.stringify(extraction.diagnostics,null,2)?.slice(0,20000)}</pre>{extraction.media.input ? <button type="button" onClick={()=>onZoom(extraction.media.input!,"实际定位模型输入")}>查看模型输入</button> : null}{extraction.media.mask ? <button type="button" onClick={()=>onZoom(extraction.media.mask!,"AI 分割掩膜")}>查看掩膜</button> : null}</details>
     </> : null}
