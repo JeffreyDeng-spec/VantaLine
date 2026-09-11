@@ -23,12 +23,14 @@ def main():
     parser.add_argument("--ordinals", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--ocr-cache", type=Path, help="Explicit reuse of verified earlier OCR evidence, not provider output")
+    parser.add_argument("--omit-ocr-id", help="Controlled missing-detection fixture only; never counts as natural OCR accuracy")
     parser.add_argument("--allow-paid-calls", action="store_true")
     args = parser.parse_args()
     if not args.allow_paid_calls: parser.error("explicit paid-call consent required")
     from local_inspection_service import server
     from local_inspection_service import standard_preparation as engine
     from local_inspection_service import standard_preparation_ocr as ocr
+    from local_inspection_service.standard_preparation_recovery import recover
     from local_inspection_service.document_label_classifier import evidence, prepare_image
     settings = server.document_import_jobs.settings(args.owner)
     if not ocr.available(): raise RuntimeError("local_ocr_models_not_available")
@@ -58,18 +60,33 @@ def main():
                 elements = engine.observations(image, ocr.recognize)
             result["ocr_ms"] = round((time.monotonic()-started)*1000)
             (folder/"ocr.json").write_text(json.dumps(elements, ensure_ascii=False, indent=2))
+            if args.omit_ocr_id:
+                if not any(e["id"] == args.omit_ocr_id for e in elements):
+                    raise ValueError("unknown_controlled_omission_id")
+                elements = [e for e in elements if e["id"] != args.omit_ocr_id]
+                result["controlled_omission_id"] = args.omit_ocr_id
+            (folder/"ocr-input.json").write_text(json.dumps(elements, ensure_ascii=False, indent=2))
             (folder/"elements-before.png").write_bytes(engine.overlay(image, elements))
             previews = [prepare_image(blob), prepare_image(engine.overlay(image, elements))]
             (folder/"claim.json").write_text(json.dumps(dict(state="attempting", model=settings["model"], version=engine.VERSION)))
             result["external_calls"] = 1
             provider = server.call_ai_mcp_tool("provider.gemini.generate_json", dict(provider_config={**settings, "timeout_seconds":60}, system_prompt=engine.PROMPT,
-                user_content=[*[{"type":"image_url", "image_url":{"url":server._text_v2_data_url(preview,"image/jpeg")}} for preview in previews],
-                              {"type":"text", "text":json.dumps([{k:e[k] for k in ("id","type","text","box","confidence")} for e in elements], ensure_ascii=False)}], max_tokens=6000, max_attempts=1))
+                user_content=engine.classification_content(*[server._text_v2_data_url(p,"image/jpeg") for p in previews], elements), max_tokens=6000, max_attempts=1))
             result["provider"] = evidence(json.dumps(server._text_v2_provider_diagnostics(provider,settings)),settings.get("api_key",""))
             if not provider.get("ok"): raise ValueError("provider_not_ok")
             classification = provider["parsed"]
             classified = engine.classify(classification, elements)
+            def checkpoint(recovery, crop, annotated):
+                row = recovery["regions"][-1]
+                prefix = f"{row['id']}-{row['state']}"
+                if crop is not None: crop.save(folder/(prefix+"-input.png"))
+                if annotated is not None: (folder/(prefix+"-ocr.png")).write_bytes(annotated)
+                (folder/"recovery.json").write_text(json.dumps(recovery, ensure_ascii=False, indent=2))
+            classified, recovery = recover(image, classified, classification,
+                lambda picture, timeout: engine.observations(picture, lambda bgr: ocr.recognize(bgr, timeout=timeout)), progress=checkpoint)
+            result["recovery"] = recovery
             cleaned, info = engine.clean(image, classified)
+            info["reasons"].extend(recovery["reasons"])
             if classification.get("coverage_complete") is not True:
                 info["reasons"].append("ocr_coverage_incomplete_requires_review")
             (folder/"clean.png").write_bytes(cleaned)

@@ -6,9 +6,9 @@ import "./standard-preparation.css";
 type Element = { id: string; text: string; type: string; box: number[]; state: "keep" | "exclude" | "uncertain"; reason: string };
 type Revision = { id: string; clean_url: string; overlay_url: string; elements: Element[]; reasons: string[]; human: boolean };
 type Item = { id: string; ordinal: number; source_sha256: string; original_url: string; draft?: string; active?: string;
-  revisions: Revision[]; attempt?: { state: string; elements?: Element[]; diagnostics?: unknown } };
+  revisions: Revision[]; attempt?: { state: string; elements?: Element[]; diagnostics?: { recovery?: { regions: { id: string; region_url?: string; ocr_url?: string }[] }; [key: string]: unknown } } };
 type Progress = { job: { state?: string; reason?: string }; items: Item[] };
-const phases: Record<string, string> = { recognizing: "提取文字与编码", classifying: "判断保留与排除", ready: "已准备并启用", review: "需要人工确认" };
+const phases: Record<string, string> = { recognizing: "提取文字与编码", classifying: "判断保留与排除", supplementing: "局部补识别漏检文字", ready: "已准备并启用", review: "需要人工确认" };
 
 function Review({ item, standardId, onZoom }: { item: Item; standardId: string; onZoom: (url: string, title: string) => void }) {
   const latest = item.revisions.find(r => r.id === item.draft);
@@ -20,7 +20,7 @@ function Review({ item, standardId, onZoom }: { item: Item; standardId: string; 
     source_sha256: item.source_sha256, expected_draft: item.draft ?? null, elements
   }), onSuccess: () => { void cache.invalidateQueries({ queryKey: ["text-inspection"] }); } });
   const update = (index: number, value: Partial<Element>) => { setConfirmLabel(false); setElements(current => current.map((e, i) => i === index ? { ...e, ...value } : e)); };
-  const processing = ["recognizing", "classifying"].includes(item.attempt?.state || "");
+  const processing = ["recognizing", "classifying", "supplementing"].includes(item.attempt?.state || "");
   return <details className="standard-preparation-item">
     <summary>第 {item.ordinal} 张 · {phases[item.attempt?.state || ""] || "等待处理"}{item.active ? " · 有可用版本" : ""}</summary>
     <div className="standard-preparation-images">
@@ -39,7 +39,11 @@ function Review({ item, standardId, onZoom }: { item: Item; standardId: string; 
     <label><input type="checkbox" checked={confirmLabel} disabled={processing || save.isPending} onChange={event => setConfirmLabel(event.currentTarget.checked)} />我已核对这是一个完整标签设计，保留内容正确，排除区域不属于标签。</label>
     <button type="button" disabled={processing || save.isPending || !confirmLabel || !elements.length || elements.some(e => e.state === "uncertain")} onClick={() => save.mutate()}>{save.isPending ? "保存中…" : "确认修改并启用新版本"}</button>
     {save.error ? <p role="alert">{(save.error as Error).message}</p> : null}
-    <details><summary>Raw Output（默认折叠）</summary><pre>{JSON.stringify(item.attempt?.diagnostics, null, 2)?.slice(0, 20000)}</pre></details>
+    <details><summary>Raw Output（默认折叠）</summary>
+      <div className="standard-preparation-images">{item.attempt?.diagnostics?.recovery?.regions.flatMap(region =>
+        [{ url: region.region_url, title: `${region.id} 补识别区域` }, { url: region.ocr_url, title: `${region.id} 局部 OCR 元素` }]
+          .filter(v => v.url).map(v => <button type="button" key={v.title} onClick={() => onZoom(v.url!, v.title)}><img src={v.url} alt={v.title} /><span>{v.title} · 点击放大</span></button>))}</div>
+      <pre>{JSON.stringify(item.attempt?.diagnostics, null, 2)?.slice(0, 20000)}</pre></details>
   </details>;
 }
 

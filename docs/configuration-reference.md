@@ -39,8 +39,12 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 `VANTALINE_STANDARD_PREPARATION_ACCOUNTS` is a default-empty account allowlist for
 activation-time cleaning and reusable text/code templates. It additionally requires
 the existing external-media authorization and configured visual model. Each source
-gets at most one classification call; unknown calls are never replayed. Manual
-edits call no external service. `VANTALINE_STANDARD_OCR_MODEL_DIR` must contain the
+gets at most one classification call; unknown calls are never replayed.
+The same response may locate up to eight missing-text regions for local OCR,
+with a shared 60-second supplementary budget; this adds no paid provider or key.
+The region limit and area bounds are fixed validation constraints, not environment
+overrides. Invalid responses remain reviewable without retries.
+Manual edits call no external service. `VANTALINE_STANDARD_OCR_MODEL_DIR` must contain the
 existing `PP-OCRv6_medium_det`, `PP-OCRv6_medium_rec` and
 `PP-LCNet_x1_0_textline_ori` directories with inference.yml/json/pdiparams. Models
 are not downloaded by requests. Missing local models leave the source reviewable.

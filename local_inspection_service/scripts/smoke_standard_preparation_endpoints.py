@@ -16,11 +16,33 @@ def main():
     server.ai_detection_settings = lambda: dict(configured=True, provider="qwen", model="fixture", api_key="private-fixture")
     image, elements = fixture()
     calls = []
-    server.standard_preparation_jobs.observe = lambda image, **kwargs: copy.deepcopy(elements)
+    recovery_mode = os.environ.get("PREPARATION_TEST_RECOVERY")
+    observed = []
+    region = dict(box=[.04,.04,.20,.08], state="exclude", reason="outside dimensions")
+    initial = elements[1:] if recovery_mode else elements
+    def observe(picture, **kwargs):
+        observed.append(picture.size)
+        if len(observed) == 1 or not recovery_mode:
+            return copy.deepcopy(initial)
+        stored_asset = next(a for a in server._text_v2_load("assets") if a.get("preparation_attempt"))
+        assert stored_asset["preparation_attempt"]["state"] == "supplementing"
+        assert stored_asset["preparation_attempt"]["original_elements"] == initial
+        assert stored_asset["preparation_attempt"]["result"]["missing_regions"] == [region]
+        if recovery_mode == "timeout": raise TimeoutError("local fixture timeout")
+        if recovery_mode == "interrupted":
+            standard = server._text_v2_owned("standards", stored_asset["standard_id"], owner)
+            standard["preparation_job"]["heartbeat"] = 0
+            server._text_v2_save("standards", standard)
+            server.standard_preparation_jobs.view(standard["id"], owner)
+        from local_inspection_service import standard_preparation as engine
+        l,t,r,b = engine.pixels(region["box"], image.size)
+        x,y,w,h = elements[0]["box"]
+        return [{**elements[0], "box": [(x*600-l)/(r-l),(y*500-t)/(b-t),w*600/(r-l),h*500/(b-t)]}]
+    server.standard_preparation_jobs.observe = observe
     def provider(*args):
         assert any(a.get("preparation_attempt", {}).get("state") == "classifying" for a in server._text_v2_load("assets"))
         calls.append(1)
-        return dict(ok=True, parsed=dict(kind="label_design", coverage_complete=os.environ.get("PREPARATION_TEST_INCOMPLETE") != "1", reason="fixture", elements=[{k: e[k] for k in ("id", "state", "reason")} for e in elements]))
+        return dict(ok=True, parsed=dict(kind="label_design", coverage_complete=os.environ.get("PREPARATION_TEST_INCOMPLETE") != "1", missing_regions=[region] if recovery_mode else [], reason="fixture", elements=[{k: e[k] for k in ("id", "state", "reason")} for e in initial]))
     server.call_ai_mcp_tool = provider
     response = admin.post("/api/text-inspection/standards/import", data=dict(name="fixture", material_code="fixture", version_label="1"), files={"file": ("test.docx", docx())})
     assert_status(response, 200, "import")
@@ -39,6 +61,31 @@ def main():
             time.sleep(.02)
         raise AssertionError("preparation timeout")
     result = wait()
+    if recovery_mode:
+        item = result["items"][0]
+        assert item["attempt"]["original_elements"] == initial
+        assert len(calls) == 1 and len(observed) == 2
+        if recovery_mode in {"timeout", "interrupted"}:
+            assert not item.get("active"), result
+            assert item["attempt"]["state"] == "review", result
+            if recovery_mode == "interrupted":
+                assert result["job"]["state"] == "interrupted", result
+                assert not item["revisions"], result
+        else:
+            assert item["active"], result
+            assert item["attempt"]["elements"][-1]["id"] == "r1e1"
+            assert item["attempt"]["elements"][-1]["text"] == elements[0]["text"]
+            media = item["attempt"]["diagnostics"]["recovery"]["regions"][0]
+            assert_status(admin.get(media["region_url"]), 200, "local region evidence")
+            assert_status(admin.get(media["ocr_url"]), 200, "local OCR evidence")
+            admin.post("/api/auth/users", json=dict(username="other", password=PASSWORD, role="user", permissions=["inspection"]))
+            other = TestClient(server.app, base_url="https://testserver")
+            other.post("/api/auth/login", json=dict(username="other", password=PASSWORD))
+            assert_status(other.get(media["ocr_url"]), 404, "cross owner local evidence")
+        assert_status(admin.post(base+"/confirm"), 200, "local recovery dedup")
+        assert len(calls) == 1 and len(observed) == 2
+        print("local recovery state/evidence/no replay:", recovery_mode, "PASS")
+        return
     if os.environ.get("PREPARATION_TEST_INCOMPLETE") == "1":
         assert not result["items"][0].get("active"), result
         assert not admin.get(base).json().get("confirmed_assets"), result

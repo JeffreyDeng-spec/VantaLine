@@ -31,7 +31,8 @@ is a tombstone: future list/edit/compare use stops; media and history stay owned
 ## Components and boundaries
 
 Account-gated standard preparation runs on activation: one local OCR prediction
-and local code decoding, ID-only VLM element classification, deterministic white
+and local code decoding, VLM classification of existing element IDs plus bounded
+missing-region localization, optional local-only supplemental OCR, deterministic white
 background clearing, safe all-ink whitespace trimming, then atomic publication
 of a cleaned PNG and immutable element template. Original pixels, observations,
 excluded elements and previous active snapshots remain available. Partial success
@@ -42,6 +43,13 @@ controls MATCH; missing evidence and numeric conflicts require review.
 This experimental path is not commissioned by synthetic tests. OCR runs in an
 isolated, two-thread CPU worker with explicit local model paths and hard timeout;
 no request downloads models or invokes image generation. Existing flows are unchanged.
+
+Supplementation uses the same single VLM response, never a second paid request.
+The model proposes only region geometry/ownership, never text. Up to eight regions
+receive one local prediction each within a shared 60-second budget; original OCR
+observations are retained and measured new boxes map back to source pixels.
+Conflicts, empty results, crop-edge text or incomplete coverage require review.
+`supplementing` is a durable phase; stale results cannot revive interrupted jobs.
 
 ### Public site and workspace routing
 

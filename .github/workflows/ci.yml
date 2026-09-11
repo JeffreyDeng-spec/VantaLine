@@ -149,8 +149,12 @@ jobs:
           python local_inspection_service/scripts/smoke_document_label_classifier.py
           python local_inspection_service/scripts/smoke_document_jobs_endpoints.py
           python -m local_inspection_service.scripts.smoke_standard_preparation
+          python -m local_inspection_service.scripts.smoke_standard_preparation_recovery
           python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
           PREPARATION_TEST_INCOMPLETE=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
+          for mode in success timeout interrupted; do
+            PREPARATION_TEST_RECOVERY="$mode" python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
+          done
           PREPARATION_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python -m local_inspection_service.scripts.smoke_standard_preparation_postgres
           python local_inspection_service/scripts/smoke_document_review.py
           python local_inspection_service/scripts/smoke_document_review_postgres.py

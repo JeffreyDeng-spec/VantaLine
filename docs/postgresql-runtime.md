@@ -25,6 +25,11 @@ reference. New unprepared assets cannot enter a managed snapshot. Previous activ
 snapshots stay usable until their replacements are ready. Records bind the exact
 preparation revision; no original, historical evidence or old revision is overwritten.
 
+The `supplementing` phase stores the successful VLM response, original observations,
+and each local region's claim before OCR. Region results/coordinates/media hashes
+live in additive attempt diagnostics. An interrupted phase never replays the paid
+call; late completion cannot publish or replace manual edits. No new table is needed.
+
 Public/workspace path separation requires no schema or data migration. Task
 identities and account-scoped preferences remain unchanged; only generated
 browser URLs gain `/workspace`. The deployed PostgreSQL acceptance runner checks

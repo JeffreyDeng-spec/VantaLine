@@ -37,6 +37,16 @@ original/clean/overlay PNGs, pre-call claim and sanitized provider response to a
 new directory, never the standard library. Explicit `--ocr-cache` requires matching
 source hashes; a new prompt experiment is not an automatic retry of an unknown call.
 
+`smoke_standard_preparation_recovery` checks region limits, rejection of model-authored
+text, mapping through rounded crops, pixel-preserving cleanup, stable added IDs,
+duplicate/conflict handling, empty/timeout/edge reads and no OCR for non-labels.
+Run endpoint fixtures with `PREPARATION_TEST_RECOVERY=success`, `timeout` and
+`interrupted` to exercise persisted local claims, original observations, owner-only
+region evidence, no paid replay, and rejection of late results after interruption.
+The paid probe additionally saves `recovery.json`, region input and local OCR overlay
+PNGs. Previously missed dimensions must be visually inspected, not accepted solely
+because a coverage boolean or OCR confidence is high.
+
 The review interface now accepts imperfect classification with explicit human
 correction, not silent image removal. Run
 `python3 local_inspection_service/scripts/smoke_document_review.py` for extracted

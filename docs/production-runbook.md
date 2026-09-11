@@ -64,6 +64,12 @@ allowlist empty until independent negative samples pass. Restarted/unknown paid
 attempts stay reviewable; never resend them from a recovery script. Roll back the
 entire immutable release and retain all source/derived media and revision JSONB.
 
+Include v4 missing-region recovery in commissioning: inspect actual supplemental
+OCR pixels, false positives, region truncation, dimensions removed and internal
+MODEL/parameters retained. Successful local recovery does not certify the remaining
+template text. Keep the draft release blocked if automatic acceptance is incorrect.
+Do not replay an interrupted `supplementing` attempt or its VLM classification.
+
 Keep `VANTALINE_LABEL_BBOX_ACCOUNTS` empty until real-image rectangle localization is accepted. The method reuses resolved Qwen comparison credentials, not the generation service. Review the saved model input and crop before enabling any account; failure or timeout never falls back to a whole-sheet comparison. Roll back the complete release, retaining prior extraction evidence, if integration regressions occur.
 
 A successful push CI for `main` triggers `Release and deploy production` automatically. The workflow creates one immutable artifact, verifies checksums/version/protocol, uploads it through the restricted account, runs the installer, atomically switches `current`, restarts once, and performs acceptance. GitHub Release publication occurs only after acceptance.

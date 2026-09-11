@@ -9,6 +9,9 @@ import uuid
 from fastapi import HTTPException, Request, Response
 from . import standard_preparation as engine
 from .document_label_classifier import evidence, prepare_image
+from .standard_preparation_recovery import recover
+
+PROCESSING = {"recognizing", "classifying", "supplementing"}
 
 
 def enabled(owner):
@@ -78,7 +81,7 @@ class PreparationJobs:
         if not self.slots.acquire(blocking=False):
             # A duplicate submission must still be a harmless query.
             current = self.view(identity, owner)
-            if current["job"].get("state") == "processing":
+            if current["job"].get("state") == "processing" or (current["items"] and all(a.get("attempt") for a in current["items"])):
                 return current
             raise HTTPException(429, "标准准备繁忙，请稍后重试；未新增模型调用")
         job_id = uuid.uuid4().hex
@@ -133,7 +136,7 @@ class PreparationJobs:
             while True:
                 def take(standard, assets):
                     self.check(standard)
-                    if standard.get("preparation_job", {}).get("id") != job_id:
+                    if standard.get("preparation_job", {}).get("id") != job_id or standard.get("preparation_job", {}).get("state") != "processing":
                         return None
                     for a in assets:
                         if a.get("status") == "candidate" and not a.get("preparation_attempt"):
@@ -158,7 +161,7 @@ class PreparationJobs:
                         if prior.get("state") not in {"ready", "review"} or not prior.get("elements"):
                             raise ValueError("same_source_attempt_unknown")
                         elements, result = copy.deepcopy(prior["elements"]), copy.deepcopy(prior["result"])
-                        diagnostics = {"reused_attempt": prior["id"]}
+                        diagnostics = {"reused_attempt": prior["id"], "recovery": copy.deepcopy(prior.get("diagnostics", {}).get("recovery", {}))}
                     else:
                         elements = self.observe(image)
                         def pre_call(standard, assets):
@@ -166,21 +169,51 @@ class PreparationJobs:
                             a = next(a for a in assets if a["id"] == asset["id"])
                             if a.get("status") != "candidate":
                                 raise ValueError("asset_no_longer_retained")
-                            a["preparation_attempt"].update(state="classifying", elements=copy.deepcopy(elements), external_started_at=time.time())
+                            a["preparation_attempt"].update(state="classifying", elements=copy.deepcopy(elements), original_elements=copy.deepcopy(elements), external_started_at=time.time())
                             standard["preparation_job"]["heartbeat"] = time.time()
                         self.mutate(identity, owner, pre_call)
                         preview = prepare_image(engine.overlay(image, elements))
                         provider = self.s.call_ai_mcp_tool("provider.gemini.generate_json", {
                             "provider_config": {**settings, "timeout_seconds": 60}, "system_prompt": engine.PROMPT,
-                            "user_content": [{"type": "image_url", "image_url": {"url": self.s._text_v2_data_url(prepare_image(blob), "image/jpeg")}},
-                                {"type": "image_url", "image_url": {"url": self.s._text_v2_data_url(preview, "image/jpeg")}},
-                                {"type": "text", "text": json.dumps([{k:e[k] for k in ("id", "type", "text", "box", "confidence")} for e in elements], ensure_ascii=False)}], "max_tokens": 6000, "max_attempts": 1})
+                            "user_content": engine.classification_content(self.s._text_v2_data_url(prepare_image(blob), "image/jpeg"),
+                                self.s._text_v2_data_url(preview, "image/jpeg"), elements), "max_tokens": 6000, "max_attempts": 1})
                         diagnostics = evidence(json.dumps(self.s._text_v2_provider_diagnostics(provider, settings)), settings.get("api_key", ""))
                         if not provider.get("ok"):
                             raise ValueError("provider_result_unknown")
                         result = provider.get("parsed")
                         elements = engine.classify(result, elements)
+                        def checkpoint(recovery, crop, annotated):
+                            # Hash-addressed evidence files are unique to this attempt.
+                            rid = recovery["regions"][-1]["id"]
+                            stage = recovery["regions"][-1]["state"]
+                            for kind, picture in (("region", engine.png(crop) if crop is not None else None), ("ocr", annotated)):
+                                if picture is None:
+                                    continue
+                                filename = f"recovery_{asset['preparation_attempt']['id']}_{rid}_{stage}_{kind}.png"
+                                path = self.s._text_v2_media_path(owner, identity, filename)
+                                self.s._text_v2_write(path, picture)
+                                recovery["regions"][-1][kind+"_media"] = {"filename": filename, "sha256": self.s.sha256_bytes(picture)}
+                            def save_progress(standard, assets):
+                                a = next(a for a in assets if a["id"] == asset["id"])
+                                attempt = a["preparation_attempt"]
+                                if (attempt["id"] != asset["preparation_attempt"]["id"] or attempt.get("state") not in PROCESSING
+                                    or standard.get("preparation_job", {}).get("state") != "processing" or a.get("status") != "candidate"):
+                                    raise ValueError("preparation_no_longer_active")
+                                # Preserve previously saved media across local progress checkpoints.
+                                prior_rows = attempt.get("diagnostics", {}).get("recovery", {}).get("regions", [])
+                                for row in recovery["regions"]:
+                                    prior = next((v for v in prior_rows if v["id"] == row["id"]), {})
+                                    for key in ("region_media", "ocr_media"):
+                                        if key in prior and key not in row:
+                                            row[key] = prior[key]
+                                attempt.update(state="supplementing", result=copy.deepcopy(result), elements=copy.deepcopy(elements),
+                                    diagnostics={**diagnostics, "recovery": copy.deepcopy(recovery)})
+                                standard["preparation_job"]["heartbeat"] = time.time()
+                            self.mutate(identity, owner, save_progress)
+                        elements, recovery = recover(image, elements, result, self.observe, progress=checkpoint)
+                        diagnostics["recovery"] = recovery
                     revision = self.store(identity, owner, asset, image, elements)
+                    revision["reasons"].extend(diagnostics.get("recovery", {}).get("reasons", []))
                     if result.get("kind") != "label_design":
                         revision["reasons"].append("not_single_label_design")
                     if result.get("coverage_complete") is not True:
@@ -193,10 +226,17 @@ class PreparationJobs:
                     attempt = a["preparation_attempt"]
                     if attempt["id"] != asset["preparation_attempt"]["id"]:
                         return {"published": False}
-                    if attempt.get("state") not in {"recognizing", "classifying"}:
+                    if attempt.get("state") not in PROCESSING:
                         attempt["late_result"] = {"diagnostics": diagnostics, "received_at": time.time()}
                         return {"published": False}
                     ready = bool(revision and not revision["reasons"])
+                    if "recovery" in diagnostics:
+                        saved_rows = attempt.get("diagnostics", {}).get("recovery", {}).get("regions", [])
+                        for row in diagnostics["recovery"].get("regions", []):
+                            prior = next((v for v in saved_rows if v["id"] == row["id"]), {})
+                            for key in ("region_media", "ocr_media"):
+                                if key in prior:
+                                    row[key] = prior[key]
                     attempt.update(state="ready" if ready else "review", elements=elements, result=result,
                         diagnostics=diagnostics, finished_at=time.time())
                     if revision:
@@ -221,8 +261,8 @@ class PreparationJobs:
                 job.update(state="interrupted", reason="任务中断；已开始的模型请求不会自动重发")
                 for a in assets:
                     attempt = a.get("preparation_attempt", {})
-                    if attempt.get("state") in {"recognizing", "classifying"}:
-                        attempt.update(state="review", diagnostics={"reason_code": "interrupted_no_replay"})
+                    if attempt.get("state") in PROCESSING:
+                        attempt.update(state="review", diagnostics={**attempt.get("diagnostics", {}), "reason_code": "interrupted_no_replay"})
             items = []
             for a in assets:
                 if a.get("status") != "candidate":
@@ -231,8 +271,13 @@ class PreparationJobs:
                 base = f"/api/text-inspection/standards/{identity}/preparation/{a['id']}"
                 for rev in revisions:
                     rev["clean_url"], rev["overlay_url"] = base+f"/{rev['id']}/clean", base+f"/{rev['id']}/overlay"
+                attempt = copy.deepcopy(a.get("preparation_attempt"))
+                for row in (attempt or {}).get("diagnostics", {}).get("recovery", {}).get("regions", []):
+                    for kind in ("region", "ocr"):
+                        if row.get(kind+"_media"):
+                            row[kind+"_url"] = base+f"/recovery/{row['id']}/{kind}"
                 items.append(dict(id=a["id"], source_sha256=a["sha256"], ordinal=a.get("ordinal"),
-                    original_url=f"/api/text-inspection/assets/{a['id']}/content", attempt=a.get("preparation_attempt"),
+                    original_url=f"/api/text-inspection/assets/{a['id']}/content", attempt=attempt,
                     revisions=revisions, draft=a.get("preparation_draft"), active=a.get("active_preparation", {}).get("id")))
             return dict(job=copy.deepcopy(job), items=items)
         return self.mutate(identity, owner, read)
@@ -247,7 +292,7 @@ class PreparationJobs:
                 raise HTTPException(404, "保留图片不存在")
             if body.get("source_sha256") != a["sha256"] or body.get("expected_draft") != a.get("preparation_draft"):
                 raise HTTPException(409, "版本已变化，请刷新")
-            if a.get("preparation_attempt", {}).get("state") in {"recognizing", "classifying"}:
+            if a.get("preparation_attempt", {}).get("state") in PROCESSING:
                 raise HTTPException(409, "正在处理，不能覆盖进行中的版本")
             original = a.get("preparation_attempt", {}).get("elements", [])
             values = body["elements"]
@@ -283,6 +328,18 @@ class PreparationJobs:
             raise HTTPException(404, "版本不存在")
         path = self.s._text_v2_media_path(owner, identity, f"preparation_{revision_id}_{kind}.png")
         return self.s._text_v2_read_verified(str(path), owner, identity, expected_sha256=revision[kind+"_sha256"])
+
+    def recovery_media(self, identity, owner, asset_id, region_id, kind):
+        a = self.s._text_v2_owned("assets", asset_id, owner)
+        if not a or a.get("standard_id") != identity or kind not in {"region", "ocr"}:
+            raise HTTPException(404, "证据不存在")
+        rows = a.get("preparation_attempt", {}).get("diagnostics", {}).get("recovery", {}).get("regions", [])
+        row = next((r for r in rows if r["id"] == region_id), {})
+        media = row.get(kind+"_media")
+        if not media:
+            raise HTTPException(404, "证据不存在")
+        path = self.s._text_v2_media_path(owner, identity, media["filename"])
+        return self.s._text_v2_read_verified(str(path), owner, identity, expected_sha256=media["sha256"])
 
 
 def register(namespace):
@@ -339,5 +396,10 @@ def register(namespace):
     @app.get("/api/text-inspection/standards/{identity}/preparation/{asset_id}/{revision_id}/{kind}")
     def media(identity: str, asset_id: str, revision_id: str, kind: str):
         data = jobs.media(identity, owner(), asset_id, revision_id, kind)
+        return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+    @app.get("/api/text-inspection/standards/{identity}/preparation/{asset_id}/recovery/{region_id}/{kind}")
+    def recovery_media(identity: str, asset_id: str, region_id: str, kind: str):
+        data = jobs.recovery_media(identity, owner(), asset_id, region_id, kind)
         return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
     return jobs

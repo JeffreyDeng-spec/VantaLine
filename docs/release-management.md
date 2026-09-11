@@ -22,6 +22,9 @@ fixtures and isolated PostgreSQL concurrent-claim/atomic-publication tests.
 `scripts/test_standard_preparation_ui.cjs` is the local real-React mock-HTTP browser
 acceptance runner. Customer-image cleaning and OCR accuracy remain separate from
 these contracts, and the new preparation/MATCH allowlists default off.
+The gate also covers local missing-region OCR geometry, strict no-generated-text
+validation, owned evidence and late-result rejection after interruption. Real-image
+coverage and local OCR accuracy remain independent commissioning requirements.
 
 For PLC automatic-capture changes, the required frontend job executes `test:plc-capture` before typecheck and production build. Reset-before-arm, sustained-trigger latching, and reset/retrigger failures block merge and release.
 

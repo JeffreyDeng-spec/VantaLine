@@ -50,7 +50,7 @@ class Contracts(unittest.TestCase):
 
     def test_id_schema(self):
         _, elements = fixture()
-        value = dict(kind="label_design", coverage_complete=True, reason="fixture", elements=[dict(id=e["id"], state=e["state"], reason="fixture") for e in elements])
+        value = dict(kind="label_design", coverage_complete=True, missing_regions=[], reason="fixture", elements=[dict(id=e["id"], state=e["state"], reason="fixture") for e in elements])
         self.assertEqual(engine.classify(value, elements)[1]["text"], elements[1]["text"])
         value["elements"][0]["text"] = "rewritten"
         with self.assertRaises(ValueError): engine.classify(value, elements)
