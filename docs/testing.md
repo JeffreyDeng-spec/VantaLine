@@ -68,7 +68,8 @@ CI uploads the screenshots as `navigation-ui`.
 Coverage includes public pages without auth dependencies, retryable auth errors,
 old links with query/hash, safe login returns, login/logout failure and success,
 ordinary-user permission denial, account-cache separation, session expiration,
-404 behavior, new-tab documentation without reloading the workbench, keyboard
+404 behavior, website/documentation cards only inside About (no duplicate sidebar
+links), both cards opening new tabs without reloading About, keyboard
 guide navigation, desktop/mobile overflow and absence of camera/model/PLC writes.
 `test_navigation_paths.cjs` executes the actual TypeScript path helpers with
 malicious, encoded and malformed redirect fixtures. Production endpoint handling

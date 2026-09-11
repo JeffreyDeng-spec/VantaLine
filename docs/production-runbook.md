@@ -34,8 +34,9 @@ Before merging camera-selector or upload-surface changes, run the browser-media 
 For the public/workspace navigation release, verify `/` stays the introduction,
 `/docs` is the public user guide, and `/workspace` plus a functional deep link
 refresh correctly. An unauthenticated deep link must go directly to login and
-return to the same target; an authenticated `/` must remain public. About and
-sidebar website/docs links open another tab. Admin Swagger is now `/api/docs`,
+return to the same target; an authenticated `/` must remain public. Website/docs
+links live inside About, open another tab, and are not duplicated in the sidebar.
+Admin Swagger is now `/api/docs`,
 not `/docs`; verify ordinary/anonymous users cannot read API documentation.
 Check legacy task links, account switching, version consistency and that viewing
 help does not replace the active workbench. No DNS, cookies, provider keys,

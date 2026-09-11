@@ -626,10 +626,6 @@ export function AppShell() {
             </div>
           ) : null}
 
-          <div className="sidebar-resource-links">
-            <Link to="/" target="_blank" rel="noopener noreferrer" aria-label="产品官网（新标签页）">产品官网 ↗</Link>
-            <Link to="/docs" target="_blank" rel="noopener noreferrer" aria-label="使用文档（新标签页）">使用文档 ↗</Link>
-          </div>
 
           <div className="account-card compact-account-card" title={accountDisplayName}>
             <span className="account-avatar" style={{ backgroundColor: userAvatarColor(accountDisplayName) }} aria-hidden="true">
