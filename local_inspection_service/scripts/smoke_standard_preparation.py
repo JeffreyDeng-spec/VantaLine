@@ -28,6 +28,36 @@ def fixture():
 
 
 class Contracts(unittest.TestCase):
+    def test_edge_and_protected_subtraction(self):
+        cases = {
+            "top": (10, 0, 30, 12), "bottom": (10, 88, 30, 100),
+            "left": (0, 10, 12, 30), "right": (88, 10, 100, 30),
+            "corner": (0, 0, 20, 20), "overlap": (30, 30, 60, 60),
+            "contained": (42, 42, 48, 48), "touch": (20, 40, 40, 60),
+        }
+        for name, rect in cases.items():
+            for protected_state in ("keep", "uncertain"):
+                with self.subTest(name=name, protected_state=protected_state):
+                    image = Image.new("RGBA", (100, 100), "white")
+                    data = np.asarray(image).copy()
+                    x1, y1, x2, y2 = rect
+                    data[y1:y2, x1:x2] = [0, 0, 0, 255]
+                    data[40:60, 40:60] = [30, 60, 90, 123]
+                    image = Image.fromarray(data)
+                    elements = [dict(id="e1", type="text", text="note", state="exclude", confidence=1,
+                                     box=[x1/100, y1/100, (x2-x1)/100, (y2-y1)/100]),
+                                dict(id="e2", type="text", text="MODEL", state=protected_state, confidence=1,
+                                     box=[.4, .4, .2, .2])]
+                    output, result = engine.clean(image, elements, crop_box=[0, 0, 1, 1], human=True)
+                    self.assertFalse(any("unsafe" in r or "overlap_or_edge" in r for r in result["reasons"]))
+                    expected = data.copy()
+                    ex1, ey1, ex2, ey2 = engine.pixels(elements[0]["box"], image.size)
+                    expected[ey1:ey2, ex1:ex2] = 255
+                    expected[40:60, 40:60] = data[40:60, 40:60]
+                    self.assertTrue(np.array_equal(np.asarray(Image.open(io.BytesIO(output))), expected))
+                    self.assertEqual(result["removed"][0]["erased_pixel_count"],
+                                     (ex2-ex1)*(ey2-ey1)-max(0, min(ex2, 60)-max(ex1, 40))*max(0, min(ey2, 60)-max(ey1, 40)))
+
     def test_pixels_and_reuse(self):
         image, elements = fixture()
         output, result = engine.clean(image, elements)
