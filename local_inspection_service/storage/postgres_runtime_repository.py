@@ -115,17 +115,8 @@ def _missing_present_values(values: Mapping[str, Any], required_columns: tuple[s
 
 
 def _text_standard_asset_snapshot(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    selected = [item for item in assets if item.get("status") in {"candidate", "page"}]
-    selected.sort(key=lambda item: int(item.get("ordinal") or 0))
-    return [
-        {
-            "id": item["id"],
-            "sha256": item.get("sha256", ""),
-            "ordinal": int(item.get("ordinal") or 0),
-            "mime_type": item.get("mime_type", ""),
-        }
-        for item in selected
-    ]
+    from local_inspection_service.standard_preparation_jobs import snapshot
+    return snapshot(assets)
 
 
 def _legacy_text_standard_snapshot(standard: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -497,6 +488,8 @@ class PostgresRuntimeRepository:
                 if isinstance(value, dict):
                     existing_assets.append(value)
             next_asset = dict(asset)
+            if standard.get("preparation_required"):
+                next_asset["preparation_required"] = True
             next_asset["ordinal"] = max((int(item.get("ordinal") or 0) for item in existing_assets), default=0) + 1
             cursor.execute(
                 f"INSERT INTO {assets} (id, standard_id, owner_user_id, asset_kind, ordinal, status, sha256, created_at, updated_at, raw_json) "
@@ -542,7 +535,7 @@ class PostgresRuntimeRepository:
             if callable(close):
                 close()
 
-    def mutate_text_document(self, standard_id, owner_user_id, change):
+    def mutate_text_document(self, standard_id, owner_user_id, change, *, revision_action=None):
         """Serialize document jobs/deletion with all human standard edits."""
         cursor = self._cursor()
         try:
@@ -557,6 +550,20 @@ class PostgresRuntimeRepository:
             before_standard = _json_parameter(standard)
             before_assets = {a['id']: _json_parameter(a) for a in assets}
             result = change(standard, assets)
+            if revision_action and result.get("published"):
+                import uuid
+                import time
+                number = int(standard.get("revision_number") or 0)
+                if number == 0 and standard.get("confirmed_assets"):
+                    self._insert_text_standard_revision(cursor, _legacy_text_standard_baseline_revision(standard, int(time.time())))
+                    number = 1
+                selected = _text_standard_asset_snapshot(assets)
+                revision = dict(id="rev_"+uuid.uuid4().hex, standard_id=standard_id, owner_user_id=owner_user_id,
+                    revision_number=number+1, action=revision_action, asset_id="", confirmed_assets=selected,
+                    confirmed_asset_ids=[a["id"] for a in selected], created_at=int(time.time()))
+                self._insert_text_standard_revision(cursor, revision)
+                standard.update(revision_number=number+1, current_revision_id=revision["id"],
+                    confirmed_assets=selected, confirmed_asset_ids=revision["confirmed_asset_ids"], asset_count=len(selected))
             if _json_parameter(standard) != before_standard:
                 cursor.execute(f"UPDATE {self._qualified_table('text_inspection_standards')} SET status = %s, updated_at = %s, raw_json = %s::jsonb WHERE id = %s AND owner_user_id = %s",
                     (standard['status'], standard.get('updated_at', 0), _json_parameter(standard), standard_id, owner_user_id))

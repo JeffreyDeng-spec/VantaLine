@@ -1,5 +1,47 @@
 # Text inspection v2
 
+## Activation-time standard preparation (gated experiment)
+
+POST standard `/confirm` delegates to preparation for allowlisted label accounts.
+GET/POST `/api/text-inspection/standards/{id}/preparation` query/start durable work;
+POST `.../preparation/{asset}/confirm` validates the expected draft/source hash,
+records human element edits and publishes an immutable version without model calls.
+GET `.../preparation/{asset}/{revision}/{clean|overlay}` serves owner-only evidence.
+The existing comparison endpoint consumes prepared snapshots automatically and
+returns a task record. GET `/api/text-inspection/prepared-comparisons/{id}` polls
+that record; its `/media/reference` serves the standard-element result overlay.
+The old image-comparison and original asset-media interfaces remain compatible.
+
+Automatic cleaning only erases classified external text whose perimeter is white
+and disjoint from retained elements; it never inpaints. Whitespace trimming uses
+all remaining ink, not the text bounding box. Uncertain/mixed boxes, low OCR
+confidence, non-label/multiple designs and complex backgrounds require review.
+The VLM must explicitly assess whether visible text regions are covered by OCR;
+missing/uncertain coverage cannot auto-activate even if every returned ID matches.
+This semantic flag is not a proof of completeness and needs independent acceptance.
+The v4 response adds strict `missing_regions` entries (normalized xywh, state,
+reason; no recognized text). `coverage_complete` now means existing OCR boxes plus
+these proposals cover all visible text. At most eight proposals, each <=20% and
+sum <=40% of source area, are accepted. Non-label sources get no supplemental OCR.
+Each local crop is scaled at most 3x with 2048-edge/4MP bounds and measured boxes
+map through the actual rounded crop/resize dimensions. Only local OCR supplies
+new text/IDs; proposals themselves are never erasure masks. Duplicate same-text,
+same-state boxes with >=0.8 IoU are deduplicated, while overlaps/conflicts remain
+uncertain and do not overwrite earlier evidence. Empty, timed-out or edge-touching
+reads block automatic publication. Low-confidence retained readings still need review.
+After clearing, a fully blank stripe >=max(12 pixels,4% of the corresponding image
+dimension) separating remaining ink groups requires review, even if one group has
+no OCR elements. This is an ambiguity guard, not a rule for deleting text: legitimate
+borderless white layouts may also require human confirmation. It prevents the
+known separated-size-note failure from being automatically accepted.
+GET `.../preparation/{asset}/recovery/{region}/{region|ocr}` serves owned local
+input/overlay evidence; progress and Raw Output include these images. The shared
+60-second supplementation budget includes local OCR queueing; no full-page rerun
+or second VLM call is performed. Human adjustments remain model-free.
+The template keeps excluded elements and raw observations for audit. Scope is text
+and decoded codes; graphics are explicitly unchecked. Missing observations are not
+proof of missing print, and MATCH needs separate local-pipeline commissioning.
+
 **Status: Authoritative**
 
 Label import accepts `.doc` and `.docx` in the chooser, drag/drop and API. Legacy

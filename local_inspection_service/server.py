@@ -37518,8 +37518,14 @@ def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
     result.pop("source_path", None)
     result.pop("media_path", None)
     result.pop("annotated_path", None)
+    result.pop("reference_overlay_path", None)
     if result.get("id") and result.get("asset_kind"):
         result["content_url"] = f"/api/text-inspection/assets/{quote(str(result['id']))}/content"
+        result["original_url"] = result["content_url"]
+        active = result.get("active_preparation")
+        result["comparison_ready"] = not result.get("preparation_required") or bool(active or result.get("preparation_previous_snapshot"))
+        if active:
+            result["content_url"] = f"/api/text-inspection/standards/{result['standard_id']}/preparation/{result['id']}/{active['id']}/clean"
     return result
 
 
@@ -37559,15 +37565,8 @@ def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
 
 
 def _text_v2_confirmed_snapshot(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    selected = [item for item in assets if item.get("status") in {"candidate", "page"}]
-    selected.sort(key=lambda item: int(item.get("ordinal") or 0))
-    return [
-        {
-            "id": item["id"], "sha256": item.get("sha256", ""),
-            "ordinal": int(item.get("ordinal") or 0), "mime_type": item.get("mime_type", ""),
-        }
-        for item in selected
-    ]
+    from local_inspection_service.standard_preparation_jobs import snapshot
+    return snapshot(assets)
 
 
 def _text_v2_expected_revision(value: Any) -> int | None:
@@ -37770,6 +37769,8 @@ async def add_text_inspection_standard_asset(
         "created_at": now, "updated_at": now,
     }
     _text_v2_write(media_path, contents)
+    if standard.get("preparation_required"):
+        asset["preparation_required"] = True
     repository = runtime_postgres_repository_or_none()
     try:
         if repository is not None:
@@ -37877,6 +37878,10 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     standard = _text_v2_owned("standards", standard_id, owner_user_id)
     if not standard:
         raise HTTPException(status_code=404, detail="标准不存在")
+    from local_inspection_service.standard_preparation_jobs import enabled as preparation_enabled
+    if standard.get("standard_type") == "label" and (preparation_enabled(owner_user_id) or standard.get("preparation_required")):
+        standard_preparation_jobs.start(standard_id, owner_user_id)
+        return _text_v2_public(_text_v2_owned("standards", standard_id, owner_user_id) or standard)
     repository = runtime_postgres_repository_or_none()
     if repository is not None:
         try:
@@ -38118,6 +38123,8 @@ from local_inspection_service.agent_api import register as register_agent_api
 from local_inspection_service.document_import_jobs import register as register_document_import_jobs
 
 document_import_jobs = register_document_import_jobs(globals())
+from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
+standard_preparation_jobs = register_standard_preparation(globals())
 
 resolve_label_extraction = register_label_extraction(globals())
 register_agent_api(globals())
@@ -38147,6 +38154,10 @@ async def compare_text_inspection_label(
         captured_upload, extraction = resolve_label_extraction(extraction_id, owner_user_id, standard_asset_id, standard)
     else:
         captured_upload = await captured_file.read(10 * 1024 * 1024 + 1)
+    if confirmed_snapshot.get("preparation"):
+        from local_inspection_service.standard_preparation_compare import submit
+        return submit(globals(), standard_preparation_jobs, owner_user_id, owner_username,
+                      standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
     captured_upload_sha256 = sha256_bytes(captured_upload)
     captured, captured_mime, source_suffix, captured_source_format = _text_v2_prepare_image(captured_upload, max_bytes=100 * 1024 * 1024 if extraction else 10 * 1024 * 1024)
     asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}

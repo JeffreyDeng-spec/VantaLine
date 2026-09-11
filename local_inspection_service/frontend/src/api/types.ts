@@ -722,6 +722,10 @@ export interface TextInspectionDiagnostics {
 }
 
 export interface TextCompareBetaResult {
+  id?: string;
+  status?: string;
+  preparation_compare?: boolean;
+  reference_overlay_url?: string;
   comparison_id: string;
   decision: "MATCH" | "DIFFERENCES" | "REVIEW_REQUIRED";
   message: string;
@@ -737,6 +741,10 @@ export interface TextCompareBetaResult {
 }
 
 export interface TextInspectionAsset {
+  preparation_required?: boolean;
+  comparison_ready?: boolean;
+  active_preparation?: { id: string; sha256: string };
+  original_url?: string;
   id: string;
   standard_id: string;
   asset_kind: "label_candidate" | "manual_page";
