@@ -37,7 +37,8 @@ guide, irrespective of login state. Neither mounts the authentication gate or
 workspace data queries. `/workspace` is the protected dashboard; all functional
 pages and pinned task URLs live under `/workspace/*`. `/workspace/about` is
 available to every signed-in user and links to the public site and guide in new
-tabs. Sidebar public-resource shortcuts also preserve the active workbench.
+tabs. These workspace resource links live only inside About; the sidebar retains
+the About entry without duplicate website/documentation shortcuts.
 
 The React router keeps a root production basename, separate public/login/app
 layouts, and one release bundle (including the existing PLC bundle contract).

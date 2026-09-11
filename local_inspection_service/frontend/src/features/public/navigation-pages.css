@@ -27,8 +27,6 @@
 .navigation-not-found { padding: 64px 24px; max-width: 720px; margin: auto; }
 .navigation-not-found a { display: inline-block; margin: 16px 24px 0 0; color: #155cc5; }
 .app-shell .brand-block { color: inherit; text-decoration: none; }
-.sidebar-resource-links { display: flex; gap: 16px; padding: 10px 16px; font-size: 13px; }
-.sidebar-resource-links a { color: #b9c7d8; }
 @media (max-width: 700px) {
   .docs-header { padding: 20px 16px; flex-wrap: wrap; }
   .docs-header nav { gap: 16px; }

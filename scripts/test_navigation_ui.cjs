@@ -91,18 +91,28 @@ let browser;
   assert.equal(page.url(), base+target);
   await page.getByText('订单-operator-a', { exact: true }).waitFor();
   assert.equal(await page.getByRole('link', { name: '文字检验', exact: true }).getAttribute('aria-current'), 'page');
-  // Docs opens another page and leaves the current workbench intact.
-  await page.evaluate(() => { window.__navigationSentinel = 'unsaved-work'; });
-  const popupWait = context.waitForEvent('page');
-  await page.getByRole('link', { name: '使用文档（新标签页）' }).click();
-  const popup = await popupWait;
-  await popup.getByRole('heading', { name: '从第一张图片开始' }).waitFor();
-  assert.equal(page.url(), base+target);
-  assert.equal(await page.evaluate(() => window.__navigationSentinel), 'unsaved-work');
-  assert.equal(await popup.evaluate(() => window.opener === null), true);
-  await popup.close();
+  // Public resources live only inside About, not as duplicate sidebar links.
+  assert.equal(await page.getByRole('link', { name: /产品官网|使用文档/ }).count(), 0);
   await page.getByRole('link', { name: '关于与帮助', exact: true }).click();
   await page.getByText('fixture-commit', { exact: true }).waitFor();
+  assert.equal(await page.locator('.sidebar').getByRole('link', { name: /产品官网|使用文档/ }).count(), 0);
+  // Both About cards open new tabs without replacing the About page.
+  await page.evaluate(() => { window.__navigationSentinel = 'unsaved-work'; });
+  for (const [name, destination, ready] of [
+    ['使用文档', '/docs', 'h1'], ['产品官网', '/', '#hero-title']
+  ]) {
+    const link = page.locator('.about-resources').getByRole('link', { name: new RegExp(name) });
+    assert.equal(await link.count(), 1);
+    const popupWait = context.waitForEvent('page');
+    await link.click();
+    const popup = await popupWait;
+    await popup.locator(ready).waitFor();
+    assert.equal(new URL(popup.url()).pathname, destination);
+    assert.equal(page.url(), base+'/workspace/about');
+    assert.equal(await page.evaluate(() => window.__navigationSentinel), 'unsaved-work');
+    assert.equal(await popup.evaluate(() => window.opener === null), true);
+    await popup.close();
+  }
   await page.screenshot({ path: path.join(output, '03-about-desktop.png'), fullPage: true });
   await page.reload();
   await page.getByText('fixture-commit', { exact: true }).waitFor();
