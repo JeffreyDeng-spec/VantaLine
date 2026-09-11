@@ -17,6 +17,10 @@ overlays and unrelated OLE files are deliberately not composited/exported.
 pixel provenance, coordinate transforms, strict ID-only classification, unsafe
 background rejection and numeric boundaries. It prints a temporary directory
 with original/clean/element-overlay PNGs and JSON. These are synthetic evidence.
+Edge-cleaning regression covers all four image edges, corner contact, partial
+overlap, touching and fully contained exclusions, and keep/uncertain protection.
+Full-image RGBA equality checks prove only unprotected exclusion pixels change;
+complex-background and unsafe-crop rejection remain tested.
 `python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints`
 runs authenticated routes with fake OCR/VLM, verifying pre-call persistence,
 dedup, immutable manual revisions, stale edits, owner-only media, saved-template

@@ -12,8 +12,15 @@ returns a task record. GET `/api/text-inspection/prepared-comparisons/{id}` poll
 that record; its `/media/reference` serves the standard-element result overlay.
 The old image-comparison and original asset-media interfaces remain compatible.
 
-Automatic cleaning only erases classified external text whose perimeter is white
-and disjoint from retained elements; it never inpaints. Whitespace trimming uses
+Automatic and human-confirmed cleaning clip the three-pixel background-check
+perimeter to the source image. Image-edge contact alone does not reject cleaning.
+Keep/uncertain element rectangles are subtracted from both the erasure and perimeter
+checks: overlapping pixels (including alpha) remain unchanged, while the rest of
+the excluded text rectangle is filled white. Complete overlap is a no-op, not an
+error. The remaining existing perimeter must still be white; complex backgrounds
+and code erasure remain blocked. Evidence records the candidate rectangle,
+protected intersections and actual erased pixel count, including zero. No inpainting
+or new model call is involved; historical versions are unchanged. Whitespace trimming uses
 all remaining ink, not the text bounding box. Uncertain/mixed boxes, low OCR
 confidence, non-label/multiple designs and complex backgrounds require review.
 The VLM must explicitly assess whether visible text regions are covered by OCR;

@@ -34,8 +34,11 @@ Account-gated standard preparation runs on activation: one local OCR prediction
 and local code decoding, VLM classification of existing element IDs plus bounded
 missing-region localization, optional local-only supplemental OCR, deterministic white
 background clearing, safe all-ink whitespace trimming, then atomic publication
-of a cleaned PNG and immutable element template. Original pixels, observations,
-excluded elements and previous active snapshots remain available. Partial success
+of a cleaned PNG and immutable element template.
+Clearing clips checks to image bounds and subtracts all keep/uncertain rectangles
+from erasure and background checks. Overlap pixels remain byte-identical; edge
+contact is allowed. Other unsafe-background and code-erasure guards remain.
+Original pixels, observations, excluded elements and previous active snapshots remain available. Partial success
 publishes only ready assets; uncertain images require explicit human correction.
 Prepared comparisons read the saved template and recognize only the actual image.
 They check text/decoded codes, not icons or logos. A separate commissioning gate
