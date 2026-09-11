@@ -17,6 +17,12 @@ registry lifecycle and browser-test waiting regressions. Experimental native
 WebMCP browser acceptance remains a separate explicitly recorded check; this
 unit-test gate does not certify full-platform Agent coverage.
 
+The backend comparison gate includes standard-preparation geometry, real-route
+fixtures and isolated PostgreSQL concurrent-claim/atomic-publication tests.
+`scripts/test_standard_preparation_ui.cjs` is the local real-React mock-HTTP browser
+acceptance runner. Customer-image cleaning and OCR accuracy remain separate from
+these contracts, and the new preparation/MATCH allowlists default off.
+
 For PLC automatic-capture changes, the required frontend job executes `test:plc-capture` before typecheck and production build. Reset-before-arm, sustained-trigger latching, and reset/retrigger failures block merge and release.
 
 For text-inspection changes, required CI runs the comparison/source contract, dependency-light document contract, endpoint smoke in fail-closed, external-only and enabled modes, the PostgreSQL revision contract, and the legacy incoming-text rollback suite. The gate must prove account isolation, append-only numbered standard revisions, reversible soft deletion, exact comparison-to-revision binding and preservation of the previous readable workflow; a frontend build alone is not sufficient.

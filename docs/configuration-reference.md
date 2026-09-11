@@ -36,6 +36,18 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 ## Text inspection v2
 
+`VANTALINE_STANDARD_PREPARATION_ACCOUNTS` is a default-empty account allowlist for
+activation-time cleaning and reusable text/code templates. It additionally requires
+the existing external-media authorization and configured visual model. Each source
+gets at most one classification call; unknown calls are never replayed. Manual
+edits call no external service. `VANTALINE_STANDARD_OCR_MODEL_DIR` must contain the
+existing `PP-OCRv6_medium_det`, `PP-OCRv6_medium_rec` and
+`PP-LCNet_x1_0_textline_ori` directories with inference.yml/json/pdiparams. Models
+are not downloaded by requests. Missing local models leave the source reviewable.
+`VANTALINE_STANDARD_ELEMENTS_MATCH_ACCOUNTS` separately commissions local MATCH;
+keep it empty until independent accuracy and runtime gates pass. Neither switch
+authorizes graphic matching or alters PLC/other inspection configurations.
+
 `VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS` is a default-empty account allowlist
 for DOC/DOCX classification. It also requires the external-media gate and the
 existing configured Qwen visual model/key from `ai_detection_settings()`.

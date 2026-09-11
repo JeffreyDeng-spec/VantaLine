@@ -1,5 +1,28 @@
 # Text inspection v2
 
+## Activation-time standard preparation (gated experiment)
+
+POST standard `/confirm` delegates to preparation for allowlisted label accounts.
+GET/POST `/api/text-inspection/standards/{id}/preparation` query/start durable work;
+POST `.../preparation/{asset}/confirm` validates the expected draft/source hash,
+records human element edits and publishes an immutable version without model calls.
+GET `.../preparation/{asset}/{revision}/{clean|overlay}` serves owner-only evidence.
+The existing comparison endpoint consumes prepared snapshots automatically and
+returns a task record. GET `/api/text-inspection/prepared-comparisons/{id}` polls
+that record; its `/media/reference` serves the standard-element result overlay.
+The old image-comparison and original asset-media interfaces remain compatible.
+
+Automatic cleaning only erases classified external text whose perimeter is white
+and disjoint from retained elements; it never inpaints. Whitespace trimming uses
+all remaining ink, not the text bounding box. Uncertain/mixed boxes, low OCR
+confidence, non-label/multiple designs and complex backgrounds require review.
+The VLM must explicitly assess whether visible text regions are covered by OCR;
+missing/uncertain coverage cannot auto-activate even if every returned ID matches.
+This semantic flag is not a proof of completeness and needs independent acceptance.
+The template keeps excluded elements and raw observations for audit. Scope is text
+and decoded codes; graphics are explicitly unchecked. Missing observations are not
+proof of missing print, and MATCH needs separate local-pipeline commissioning.
+
 **Status: Authoritative**
 
 Label import accepts `.doc` and `.docx` in the chooser, drag/drop and API. Legacy

@@ -55,6 +55,15 @@ Do not place real hosts, usernames, keys, or DSNs in commands committed to this 
 
 ## Deployment behavior
 
+Standard preparation remains off until real document-image acceptance, PostgreSQL
+transaction tests and browser review pass. Provision only the existing local OCR
+artifacts through `VANTALINE_STANDARD_OCR_MODEL_DIR`; no new GPU or model subscription
+is part of this change. Then allowlist the trial account, verify activation progress,
+clean image/template version binding and actual-only OCR. Keep its independent MATCH
+allowlist empty until independent negative samples pass. Restarted/unknown paid
+attempts stay reviewable; never resend them from a recovery script. Roll back the
+entire immutable release and retain all source/derived media and revision JSONB.
+
 Keep `VANTALINE_LABEL_BBOX_ACCOUNTS` empty until real-image rectangle localization is accepted. The method reuses resolved Qwen comparison credentials, not the generation service. Review the saved model input and crop before enabling any account; failure or timeout never falls back to a whole-sheet comparison. Roll back the complete release, retaining prior extraction evidence, if integration regressions occur.
 
 A successful push CI for `main` triggers `Release and deploy production` automatically. The workflow creates one immutable artifact, verifies checksums/version/protocol, uploads it through the restricted account, runs the installer, atomically switches `current`, restarts once, and performs acceptance. GitHub Release publication occurs only after acceptance.

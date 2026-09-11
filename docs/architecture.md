@@ -30,6 +30,19 @@ is a tombstone: future list/edit/compare use stops; media and history stay owned
 
 ## Components and boundaries
 
+Account-gated standard preparation runs on activation: one local OCR prediction
+and local code decoding, ID-only VLM element classification, deterministic white
+background clearing, safe all-ink whitespace trimming, then atomic publication
+of a cleaned PNG and immutable element template. Original pixels, observations,
+excluded elements and previous active snapshots remain available. Partial success
+publishes only ready assets; uncertain images require explicit human correction.
+Prepared comparisons read the saved template and recognize only the actual image.
+They check text/decoded codes, not icons or logos. A separate commissioning gate
+controls MATCH; missing evidence and numeric conflicts require review.
+This experimental path is not commissioned by synthetic tests. OCR runs in an
+isolated, two-thread CPU worker with explicit local model paths and hard timeout;
+no request downloads models or invokes image generation. Existing flows are unchanged.
+
 ### Public site and workspace routing
 
 `/` always serves the product introduction and `/docs` the curated public user

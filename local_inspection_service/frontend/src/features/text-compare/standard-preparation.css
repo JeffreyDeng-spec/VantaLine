@@ -1,0 +1,21 @@
+.standard-preparation { padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin: 8px 0; }
+.standard-preparation button { padding: 8px 12px; border: 1px solid #94a3b8; border-radius: 6px; }
+.standard-preparation-item { margin-top: 10px; border-top: 1px solid #cbd5e1; padding-top: 8px; }
+.standard-preparation summary { cursor: pointer; padding: 6px; }
+.standard-preparation-images { display: flex; gap: 8px; overflow-x: auto; }
+.standard-preparation-images button { min-width: 100px; flex: 1; }
+.standard-preparation-images img { width: 100%; height: 140px; object-fit: contain; }
+.standard-preparation-images span { display: block; font-size: 12px; }
+.standard-preparation-elements { max-height: 360px; overflow: auto; }
+.standard-preparation-elements > div { border-bottom: 1px solid #e2e8f0; padding: 10px 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.standard-preparation label { display: flex; gap: 6px; align-items: center; }
+.standard-preparation input:not([type=checkbox]) { min-width: 60px; max-width: 100%; border: 1px solid #94a3b8; padding: 6px; }
+.standard-preparation .element-state.keep { color: #166534; }
+.standard-preparation .element-state.exclude { color: #b91c1c; }
+.standard-preparation .element-state.uncertain { color: #9a3412; }
+.standard-preparation pre { max-height: 260px; white-space: pre-wrap; overflow: auto; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .standard-preparation-images button { min-width: 200px; flex: 0 0 200px; }
+  .standard-preparation-elements label { width: 100%; }
+  .standard-preparation-elements label input { flex: 1; width: 0; }
+}

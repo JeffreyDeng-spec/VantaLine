@@ -13,6 +13,30 @@ overlays and unrelated OLE files are deliberately not composited/exported.
 
 ## Classification-only document experiment
 
+`python -m local_inspection_service.scripts.smoke_standard_preparation` checks
+pixel provenance, coordinate transforms, strict ID-only classification, unsafe
+background rejection and numeric boundaries. It prints a temporary directory
+with original/clean/element-overlay PNGs and JSON. These are synthetic evidence.
+`python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints`
+runs authenticated routes with fake OCR/VLM, verifying pre-call persistence,
+dedup, immutable manual revisions, stale edits, owner-only media, saved-template
+comparison, no VLM during comparison and request identity conflicts. Actual OCR,
+semantic cleaning, PostgreSQL concurrency and browser acceptance remain separate
+release gates; these fixtures cannot justify production enablement.
+
+`PREPARATION_TEST_DATABASE_URL=<isolated-test-database> python -m
+local_inspection_service.scripts.smoke_standard_preparation_postgres` verifies
+concurrent claims, atomic publication, immutable history and rollback in a unique
+temporary schema; it must not be pointed at the production database.
+Run `scripts/test_standard_preparation_ui.cjs` against Vite on loopback port 5189
+(or `REVIEW_UI_BASE`), with `PLAYWRIGHT_MODULE` where needed. It outputs desktop,
+mobile and reload/no-resubmission evidence in a new temporary directory.
+`scripts/accept_standard_preparation.py` is a separately consented paid read-only
+probe using runtime account ownership/configuration. It writes each image's OCR,
+original/clean/overlay PNGs, pre-call claim and sanitized provider response to a
+new directory, never the standard library. Explicit `--ocr-cache` requires matching
+source hashes; a new prompt experiment is not an automatic retry of an unknown call.
+
 The review interface now accepts imperfect classification with explicit human
 correction, not silent image removal. Run
 `python3 local_inspection_service/scripts/smoke_document_review.py` for extracted
