@@ -2,7 +2,7 @@
 import difflib
 import re
 
-VERSION = "evidence-matching-v1"
+VERSION = "evidence-matching-v2-existence"
 MAX_UNMATCHED = 40
 MAX_CANDIDATES = 12
 MAX_PROMPT_CHARS = 45_000
@@ -73,10 +73,15 @@ def direct(elements, observations):
             row["evidence"].extend(span(observation, a, b) for a, b in matches)
             if element["type"] == "text" and parameter_conflict(row["expected"], observation["text"]):
                 row["conflicts"].append(span(observation, 0, len(observation["text"])))
-        if row["conflicts"]:
-            row.update(state="difference", reason="parameter_conflict_requires_review")
-        elif row["evidence"]:
+        # Presence, not per-instance print inspection. Keep contradictory reads
+        # for audit, but a verified occurrence satisfies the standard element.
+        if row["evidence"]:
+            row["exact_occurrence_count"] = len(row["evidence"])
+            row["evidence"] = row["evidence"][:1]
             row.update(state="matched", reason="exact_characters")
+        elif row["conflicts"]:
+            # Still allow local multi-box evidence to establish an exact match.
+            row.update(reason="parameter_difference_without_exact_match")
         rows.append(row)
     return rows
 
@@ -97,7 +102,8 @@ def adjacent(a, b):
 
 
 def candidates(rows, observations):
-    remaining = [r for r in rows if r["state"] == "review" and r["reason"] == "not_observed" and r.get("type") == "text"]
+    remaining = [r for r in rows if r["state"] == "review" and r["reason"] in
+                 ("not_observed", "parameter_difference_without_exact_match") and r.get("type") == "text"]
     selected, used, omitted = [], {}, []
     for row in remaining:
         if len(selected) >= MAX_UNMATCHED:

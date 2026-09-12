@@ -10,6 +10,10 @@ full-site action manifest or a coverage percentage.
 
 ## Implemented behavior
 
+The text workspace now submits the full captured file against a prepared template.
+`text_compare` no longer accepts an extraction ID, and the obsolete `text_set_guide`
+action is removed from this page. Legacy extraction HTTP APIs remain unchanged.
+
 Public-site separation keeps the provider mounted only inside an authenticated
 workspace. Agent `open_workspace`, context domains and task navigation use the
 same `/workspace/*` route helpers as the UI; overview is `/workspace`, never the

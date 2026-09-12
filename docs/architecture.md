@@ -12,6 +12,14 @@ processed_text's internal coordinates are not used. Missing scores remain null.
 Exact character matching precedes at most one text-only LLM correspondence request;
 IDs, character spans, boundaries and local adjacency are checked by the backend.
 Saved templates are not re-OCRed or corrected. Codes require local decoder evidence.
+The workspace compares the entire uploaded/captured image without mandatory mask
+generation or crop confirmation. Standards must have a prepared element template;
+opted-in accounts without one get 409 rather than silently using legacy VLM comparison.
+Matching v2 checks sheet-level element presence: one exact occurrence satisfies an
+element even if other occurrences differ. Other reads and conflicts remain audit
+evidence, not vetoes. Unmatched parameters can still use validated local multi-box
+correspondence. No distant stitching or partial numeric matching is permitted.
+This does not check individual labels for omissions, misprints or mixed variants.
 The account-owned `text_ocr_evidence` insert-once claim/cache prevents repeated OCR
 on the same input hash/model/preprocessing version. Unknown claims are not replayed;
 a new comparison cannot silently retry an unknown cache entry. There is currently

@@ -8,7 +8,7 @@
 protocol and strict matching fixtures. It checks the pinned model/task, independent
 image-only OCR input, nullable scores, original-coordinate bounds, duplicate text
 positions, truncation rejection, no HTTP retry/redirect, whitespace-only matching,
-parameter conflicts, code provenance, candidate capacity, forged IDs, Unicode
+one exact occurrence despite conflicting repeats, code provenance, candidate capacity, forged IDs, Unicode
 character offsets, local reading order, skipped/reused characters and distant joins.
 `PREPARATION_TEST_QWEN=1 python -m
 local_inspection_service.scripts.smoke_standard_preparation_endpoints` additionally
@@ -16,6 +16,16 @@ tests real authenticated routes with fake providers: pre-call claims, same-image
 cache, request identity conflicts, no late settlement and account-isolated source
 media. The PostgreSQL preparation smoke checks insert-once cache and owner/status
 CAS. Frontend typecheck/build are required. No fake-provider result certifies OCR.
+Existence-rule regressions also cover reversed observation order, absent MODEL,
+numeric boundaries, local exact multi-box matches despite conflicting instances,
+and display of matching rather than contradictory evidence. Full-sheet UI tests
+must enable legacy extraction capability and still submit `captured_file` without
+any extraction request; standards without templates cannot start comparison.
+`scripts/accept_sheet_existence_replay.py --evidence <private-saved-probe-dir>
+--output <new-private-dir>` replays complete real OCR evidence without a paid call.
+It saves input/boxes, temporary expected-text templates, explicit synthetic
+duplicate/negative cases and per-case PNGs plus JSON/Markdown results. These
+regressions are not independent OCR accuracy, dense-sheet or automatic-MATCH gates.
 The real synthetic probe verified min_pixels=3072, words_info locations, nullable
 scores and HTTP 200; it does not establish dense-sheet accuracy or latency.
 `scripts/test_qwen_evidence_ui.cjs` uses the same local Vite/Playwright variables
@@ -104,12 +114,11 @@ undimmed zoom and mobile overflow. Human corrections are not model successes.
 Also verify retained/pending/excluded display order, stable source ordinals within
 groups, newly uploaded retained images ahead of exclusions, both toggle directions,
 and the same order after reload. PDF/manual pages must retain their page order.
-`scripts/test_label_confirm_flow.cjs` uses the same local Vite page and screenshot
-output variables with isolated HTTP fixtures. It covers crop save before order
-selection, draft activation, explicit reference selection, confirmation followed
-by crop-ID-only comparison, reference switching without crop loss, and the dirty
-contour gate. These browser fixtures plus real-route extraction smoke tests prove
-the integration contract, not live model accuracy or a production comparison.
+`scripts/test_label_confirm_flow.cjs` is a historical fixture for the retired
+mandatory-crop workspace; use `scripts/test_qwen_evidence_ui.cjs` for the current
+full-sheet page. Real-route extraction smoke tests still cover legacy confirmed
+crop IDs, ownership and dirty/version gates for API compatibility, not live model
+accuracy or a production comparison.
 `smoke_document_review_postgres.py` exercises pending/cross-owner rejection,
 reversible states and immutable snapshots on real PostgreSQL in an isolated
 temporary schema. CI runs it plus a Java 17 helper build/hash validation job.

@@ -5,7 +5,6 @@ import { addTextInspectionStandardAsset, classifyTextInspectionStandard, deleteT
 import type { TextCompareBetaResult, TextInspectionAsset } from "../../api/types";
 import { FileDropZone } from "../../components/FileDropZone";
 import { apiClient } from "../../api/client";
-import { DEFAULT_GUIDE, GuideOverlay, LabelExtractionPanel, type Guide } from "./LabelExtraction";
 import { useAgentActions } from "../agent/useAgentActions";
 import { getFile, rememberFile } from "../agent/files";
 import { useAgentState } from "../agent/useAgentState";
@@ -97,9 +96,6 @@ export function TextCompareBetaPage() {
   const [importMaterial, setImportMaterial] = useState("");
   const [importVersion, setImportVersion] = useState("V1");
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [guide, setGuide] = useState<Guide>([...DEFAULT_GUIDE]);
-  const capabilities = useQuery({ queryKey: ["text-inspection", "extraction-capabilities"], queryFn: () => apiClient.get<{ enabled: boolean; ai_available: boolean; bbox_enabled?: boolean; bbox_available?: boolean }>("/api/text-inspection/extraction-capabilities") });
-  const extractionConfigured = capabilities.data?.enabled === true;
   const providerDiagnostics = result?.diagnostics?.provider_result;
   const rawProviderOutput = providerDiagnostics?.response_preview !== undefined
     ? providerDiagnostics.response_preview
@@ -116,12 +112,6 @@ export function TextCompareBetaPage() {
   }, onError: (error: Error) => setInputError(error.message) });
   const selectedAsset = standardQuery.data?.status === "confirmed"
     ? standardQuery.data.assets?.find((asset) => asset.id === selectedAssetId && isActiveAsset(asset) && asset.comparison_ready !== false) : undefined;
-  const extractionEnabled = extractionConfigured && !selectedAsset?.active_preparation;
-  const standardBlockReason = !selectedStandardId ? "请先在左侧展开一个标签订单，再选择对比标准。"
-    : standardQuery.isLoading ? "正在读取标准订单…"
-    : standardQuery.isError ? "标准订单读取失败，请重新展开订单。"
-    : standardQuery.data?.status !== "confirmed" ? "订单尚未启用：请在左侧处理待定图片，点击“确认保留并启用”，再选择一张标准。"
-    : !selectedAsset ? "请在左侧点击一张标签的“用作对比标准”；绿色“已保留”只表示纳入标准库，不代表已选中。" : "";
   const importMutation = useMutation({
     mutationFn: () => {
       if (!importFile || !importName.trim() || !importMaterial.trim() || !importVersion.trim()) throw new Error("请填写标准名称、物料编码、版本并选择 DOC、DOCX 或 PDF。");
@@ -343,9 +333,10 @@ export function TextCompareBetaPage() {
     canvas.toBlob((blob) => blob ? resolve(new File([blob], "capture-" + Date.now() + ".jpg", { type: "image/jpeg" })) : reject(new Error("拍照失败，请重试。")), "image/jpeg", 0.94);
   });
   const mutation = useMutation({
-    mutationFn: async (extractionId: string | void) => {
+    mutationFn: async () => {
       if (!selectedAsset) throw new Error("请先在左侧订单画廊中选择一张已启用的标签图片。");
       if (standardQuery.data?.status !== "confirmed") throw new Error("这个订单还没有启用，请先保存并启用标准。");
+      if (!selectedAsset.active_preparation) throw new Error("请先在左侧启用标准并完成元素模板准备；无需提取实拍标签。");
       if (inputMode === "image" && !captured) throw new Error("请先上传需要对比的实物图片。");
       const actual = captured || await captureFrame();
       if (!captured) {
@@ -358,9 +349,6 @@ export function TextCompareBetaPage() {
         comparisonIdentityRef.current = identity;
       }
       const form = new FormData(); form.set("captured_file", actual);
-      if (extractionId) { form.delete("captured_file"); form.set("extraction_id", extractionId); }
-      else if (extractionEnabled) throw new Error("请先提取并确认完整标签。");
-      if (extractionId) identity.id = "cmp_" + extractionId;
       form.set("comparison_id", identity.id);
       form.set("standard_asset_id", selectedAsset.id);
       let response = await compareTextInspectionLabel(form);
@@ -445,12 +433,11 @@ export function TextCompareBetaPage() {
   useAgentActions([
     {name:"text_prepare_import",domain:"text",description:"Open the document import form and optionally select a file handle. Edit fields with text_import_set_fields, then submit with text_import_current.",readOnly:false,inputSchema:{type:"object",properties:{file_id:{type:"string"}},additionalProperties:false},execute:input=>{setShowImport(true);if(input.file_id)setImportFile(getFile(String(input.file_id)));}},
     {name:"text_filter_assets",domain:"text",description:"Filter the current standard gallery using the same status filter as the page.",readOnly:false,inputSchema:{type:"object",properties:{filter:{type:"string",enum:["all","candidate","excluded","needs_confirmation","pending","page"]}},required:["filter"],additionalProperties:false},execute:input=>setAssetFilter(String(input.filter))},
-    {name:"text_get_state",domain:"text",description:"Read the current standard, selected reference, captured asset and comparison evidence.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({mode,inputMode,selectedStandardId,selectedAssetId,guide,captured_file_id:captured ? rememberFile(captured) : null,result,inputError,cameraError,busy:mutation.isPending})},
+    {name:"text_get_state",domain:"text",description:"Read the current standard, selected reference, captured asset and comparison evidence.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({mode,inputMode,selectedStandardId,selectedAssetId,captured_file_id:captured ? rememberFile(captured) : null,result,inputError,cameraError,busy:mutation.isPending})},
     {name:"text_select_standard",domain:"text",description:"Select a standard and invalidate stale comparison state using the existing workspace action.",readOnly:false,inputSchema:{type:"object",properties:{standard_id:{type:"string"}},required:["standard_id"],additionalProperties:false},execute:input=>{const id=String(input.standard_id);if(!standardsQuery.data?.items.some(item=>item.id===id)) throw new Error("Standard is not in the current authorized library");chooseStandard(id);}},
     {name:"text_select_asset",domain:"text",description:"Select a confirmed enabled reference asset from the current standard.",readOnly:false,inputSchema:{type:"object",properties:{asset_id:{type:"string"}},required:["asset_id"],additionalProperties:false},execute:input=>{const asset=visibleAssets.find(item=>item.id===input.asset_id);if(!asset || !isActiveAsset(asset) || standardQuery.data?.status!=="confirmed")throw new Error("Reference is not confirmed and enabled");chooseAsset(asset);}},
     {name:"text_set_actual_image",domain:"text",description:"Use an explicitly selected file as the actual image and clear stale comparison results.",readOnly:false,inputSchema:{type:"object",properties:{file_id:{type:"string"}},required:["file_id"],additionalProperties:false},execute:input=>{switchInputMode("image");replaceCaptured(getFile(String(input.file_id)));}},
-    {name:"text_set_guide",domain:"text",description:"Set normalized x, y, width, height of the extraction guide, relative to the source image.",readOnly:false,inputSchema:{type:"object",properties:{rect:{type:"array",items:{type:"number",minimum:0,maximum:1},minItems:4,maxItems:4}},required:["rect"],additionalProperties:false},execute:input=>{const rect=input.rect as Guide;if(rect[2]<=0||rect[3]<=0||rect[0]+rect[2]>1||rect[1]+rect[3]>1)throw new Error("Guide exceeds source image bounds");setGuide(rect);}},
-    {name:"text_compare",domain:"text",description:"Run the current text comparison through its existing identity, reference and extraction validation.",readOnly:false,inputSchema:{type:"object",properties:{extraction_id:{type:"string"}},additionalProperties:false},available:()=>mutation.isPending ? "Comparison is already running" : null,execute:input=>mutation.mutateAsync(input.extraction_id as string | undefined)},
+    {name:"text_compare",domain:"text",description:"Compare the full actual image against saved standard elements; no extraction required.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},available:()=>mutation.isPending ? "Comparison is already running" : null,execute:()=>mutation.mutateAsync()},
     {name:"text_import_current",domain:"text",description:"Import the document selected in the current standard form using its validated fields.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>importMutation.mutateAsync()},
     {name:"text_start_camera",domain:"text",description:"Start a camera for text inspection; the browser may request native permission.",readOnly:false,inputSchema:{type:"object",properties:{device_id:{type:"string"}},additionalProperties:false},execute:async input=>{if(!streamRef.current && await cameraPermissionRequired())return {status:"requires_user_input",data:{instruction:"Authorize the camera using the visible camera control."},next_action:"text_get_state"};if(inputMode!=="camera")switchInputMode("camera",String(input.device_id||selectedDeviceId));else await startCamera(String(input.device_id||selectedDeviceId));return {status:"accepted",next_action:"text_get_state"};}},
     {name:"text_stop_camera",domain:"text",description:"Stop the text inspection camera.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:stopCamera}
@@ -500,12 +487,11 @@ export function TextCompareBetaPage() {
         <div className={"text-compare-stage " + inputMode + " " + (resultImage ? "has-image" : "")}>
           {resultImage ? <button className="text-compare-zoom-trigger" type="button" onClick={() => openZoom(resultImage, "实物文字对比结果")}><img src={resultImage} alt="实物文字对比结果" /><span>点击放大查看</span></button> : inputMode === "camera" ? <video ref={videoRef} playsInline muted /> : <FileDropZone className="text-compare-empty text-compare-upload-fill" disabled={mutation.isPending} accept={IMAGE_ACCEPT} ariaLabel="拖拽或选择实物图片" onFiles={(files) => { const file = files[0]; if (!file) return; try { replaceCaptured(file); } catch (error) { setInputError((error as Error).message); } }}><ImagePlus size={38} /><strong>上传实物图片</strong><span>支持常见图片格式，也可以直接拖入；系统会按实际内容识别</span><em><Upload size={15} />选择图片</em></FileDropZone>}
           {inputMode === "camera" && cameraError && !captured ? <div className="text-compare-camera-error"><AlertTriangle size={28} /><strong>摄像头不可用</strong><span>{cameraError}</span></div> : null}
-          {extractionEnabled && !result && (captured || inputMode === "camera") ? <GuideOverlay value={guide} onChange={setGuide} disabled={mutation.isPending} /> : null}
         </div>
-        {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} bboxEnabled={capabilities.data?.bbox_enabled === true} bboxAvailable={capabilities.data?.bbox_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} standardBlockReason={standardBlockReason} onSelectStandard={() => { const library = document.getElementById("text-standard-library-panel"); library?.scrollIntoView({ behavior: "smooth", block: "start" }); library?.querySelector<HTMLButtonElement>(".text-standard-select-reference, .text-standard-order-toggle, .text-standard-import-button")?.focus({ preventScroll: true }); }} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
     <div className="text-compare-action-row">
-      {capabilities.data?.enabled === false || selectedAsset?.active_preparation ? <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? `${comparisonPhase || "正在逐字严格对比"}…` : "开始文字对比"}</button> : null}
-      {capabilities.isError ? <button type="button" onClick={() => void capabilities.refetch()}>提取配置读取失败，点击重试</button> : null}
+      <button className="text-compare-primary" type="button" disabled={!selectedAsset?.active_preparation || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? `${comparisonPhase || "正在逐字严格对比"}…` : "开始文字对比"}</button>
+      <p>整页核对：每个标准元素找到一次严格匹配即可；不检查每枚标签的漏印或混印，图形未检查。</p>
+      {selectedAsset && !selectedAsset.active_preparation ? <p role="status">此标准尚无元素模板，请在左侧启用标准并完成准备；不需要对实拍图抠图。</p> : null}
       {captured && result && result.status !== "attempting" ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
     </div>
       </article> : null}
