@@ -743,7 +743,8 @@ export interface TextCompareBetaResult {
 export interface TextInspectionAsset {
   preparation_required?: boolean;
   comparison_ready?: boolean;
-  active_preparation?: { id: string; sha256: string };
+  active_preparation?: { id: string; sha256: string; text_comparison_supported?: boolean; graphics_only?: boolean };
+  comparison_unavailable_reason?: string;
   original_url?: string;
   id: string;
   standard_id: string;

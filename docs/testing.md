@@ -21,6 +21,14 @@ Edge-cleaning regression covers all four image edges, corner contact, partial
 overlap, touching and fully contained exclusions, and keep/uncertain protection.
 Full-image RGBA equality checks prove only unprotected exclusion pixels change;
 complex-background and unsafe-crop rejection remain tested.
+Additional contracts cover adjacent exclusion unions, order-independent pixels,
+bounded black/gray fringe removal, whole-group rejection around unknown objects,
+zero-element graphics confirmation, transparent/white outputs, blank manual crops,
+and legacy empty versus nonempty comparison templates. Real-route fixtures verify
+explicit/strict graphics confirmation, failed-model/recovery rejection, account
+isolation, stale saves, non-comparable public assets and direct compare rejection
+without OCR/VLM. Browser fixtures cover the opt-in checkbox, persisted unsupported
+badge, and preventing recognition failure from becoming a graphics-only save.
 `python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints`
 runs authenticated routes with fake OCR/VLM, verifying pre-call persistence,
 dedup, immutable manual revisions, stale edits, owner-only media, saved-template

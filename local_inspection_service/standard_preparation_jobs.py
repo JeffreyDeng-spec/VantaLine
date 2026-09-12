@@ -307,8 +307,21 @@ class PreparationJobs:
                     raise HTTPException(400, "排除元素必须填写原因")
                 edited.append({**initial, "text": update["text"], "state": update["state"], "reason": str(update.get("reason", "人工确认"))[:1000],
                                "box": engine.box(update.get("box", initial["box"]))})
+            graphics_only = body.get("allow_graphics_only", False)
+            if not isinstance(graphics_only, bool):
+                raise HTTPException(400, "纯图形确认必须是布尔值")
+            if not engine.supports_text_comparison({"elements": edited}):
+                attempt = a.get("preparation_attempt", {})
+                result = attempt.get("result") or {}
+                diagnostics = attempt.get("diagnostics") or {}
+                if not graphics_only:
+                    raise HTTPException(409, "没有可对比文字，请明确确认仅保存为纯图形标准")
+                if (result.get("kind") != "label_design" or result.get("coverage_complete") is not True
+                        or diagnostics.get("ok") is not True or diagnostics.get("failure") or diagnostics.get("timed_out")
+                        or diagnostics.get("recovery", {}).get("reasons")):
+                    raise HTTPException(409, "识别失败或覆盖不完整，不能按纯图形标准保存")
             image = engine.decode(self.s._text_v2_asset_bytes(a, owner))
-            revision = self.store(identity, owner, a, image, edited, crop_box=body.get("crop_box"), human=True)
+            revision = self.store(identity, owner, a, image, edited, crop_box=body.get("crop_box"), human=True, allow_graphics_only=graphics_only)
             if revision["reasons"]:
                 raise HTTPException(409, "清理仍不安全："+", ".join(revision["reasons"]))
             a.setdefault("preparation_revisions", []).append(revision)

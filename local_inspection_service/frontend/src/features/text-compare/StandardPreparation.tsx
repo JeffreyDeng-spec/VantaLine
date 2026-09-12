@@ -6,7 +6,7 @@ import "./standard-preparation.css";
 type Element = { id: string; text: string; type: string; box: number[]; state: "keep" | "exclude" | "uncertain"; reason: string };
 type Revision = { id: string; clean_url: string; elements: Element[]; reasons: string[] };
 type Item = { id: string; ordinal: number; source_sha256: string; original_url: string; draft?: string; active?: string;
-  revisions: Revision[]; attempt?: { state: string; elements?: Element[]; diagnostics?: { recovery?: { regions: { id: string; region_url?: string; ocr_url?: string }[] }; [key: string]: unknown } } };
+  revisions: Revision[]; attempt?: { state: string; elements?: Element[]; result?: { kind?: string; coverage_complete?: boolean }; diagnostics?: { recovery?: { reasons?: string[]; regions: { id: string; region_url?: string; ocr_url?: string }[] }; [key: string]: unknown } } };
 type Progress = { job: { state?: string; reason?: string }; items: Item[] };
 export type PreparationPreview = { id: string; url: string; title: string };
 const phases: Record<string, string> = { recognizing: "提取文字与编码", classifying: "判断保留与排除", supplementing: "局部补识别", ready: "已启用", review: "待确认" };
@@ -21,6 +21,7 @@ function Review({ item, current, standardId, remaining, queued, onClose, onSaved
   const [elements, setElements] = useState<Element[]>(latest?.elements || item.attempt?.elements || []);
   const [selected, setSelected] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [graphicsConfirmed, setGraphicsConfirmed] = useState(false);
   const [scale, setScale] = useState(1);
   const [preview, setPreview] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -30,7 +31,7 @@ function Review({ item, current, standardId, remaining, queued, onClose, onSaved
   const stale = !current || identity(current) !== identity(item);
   const busy = !!current && processingItem(current);
   const save = useMutation({ mutationFn: () => apiClient.post(`/api/text-inspection/standards/${standardId}/preparation/${item.id}/confirm`, {
-    source_sha256: item.source_sha256, expected_draft: item.draft ?? null, elements
+    source_sha256: item.source_sha256, expected_draft: item.draft ?? null, elements, allow_graphics_only: graphicsConfirmed
   }), onSuccess: async () => { await cache.invalidateQueries({ queryKey: ["text-inspection"] }); onSaved(); } });
   const close = () => { if (!save.isPending && (!dirty || window.confirm("修改尚未保存，确定关闭并放弃修改？"))) onClose(); };
   const closeRef = useRef(close); closeRef.current = close;
@@ -51,10 +52,12 @@ function Review({ item, current, standardId, remaining, queued, onClose, onSaved
     document.addEventListener("keydown", keydown);
     return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", keydown); if (previous?.isConnected) previous.focus(); };
   }, []);
-  const update = (id: string, value: Partial<Element>) => { setDirty(true); setElements(rows => rows.map(e => e.id === id ? { ...e, ...value } : e)); };
+  const update = (id: string, value: Partial<Element>) => { setDirty(true); setGraphicsConfirmed(false); setElements(rows => rows.map(e => e.id === id ? { ...e, ...value } : e)); };
   const target = elements.find(e => e.id === selected);
   const disabled = busy || save.isPending || stale;
   const uncertain = elements.filter(e => e.state === "uncertain").length;
+  const noRequired = !elements.some(e => e.state === "keep");
+  const graphicsEligible = item.attempt?.result?.kind === "label_design" && item.attempt?.result?.coverage_complete === true && item.attempt?.diagnostics?.ok === true && !item.attempt?.diagnostics?.failure && !item.attempt?.diagnostics?.timed_out && !item.attempt?.diagnostics?.recovery?.reasons?.length;
   return <div className="standard-review-backdrop"><div ref={dialog} className="standard-review-dialog" role="dialog" aria-modal="true" aria-label={`第 ${item.ordinal} 张标签元素确认`} tabIndex={-1}>
     <header><div><strong>第 {item.ordinal} 张 · {queued ? "确认标签元素" : "查看与编辑标签"}</strong><small>{queued ? `按原图顺序确认 · 剩余 ${remaining} 张` : "修改后保存为新版本，不覆盖历史记录"}</small></div><button type="button" aria-label="关闭元素编辑" disabled={save.isPending} onClick={close}>×</button></header>
     <div className="standard-review-tools"><span>点击框切换：<b className="keep">绿＝保留</b> / <b className="exclude">红＝排除</b> / <b className="uncertain">橙＝待定（首次点击保留）</b></span><div>
@@ -70,6 +73,7 @@ function Review({ item, current, standardId, remaining, queued, onClose, onSaved
     </div></div>
     {!loaded ? <p role="status">图片加载中或加载失败，请检查网络后重新打开；暂不可保存。</p> : null}
     <div className="standard-review-details">
+      {noRequired && !uncertain ? graphicsEligible ? <label><input type="checkbox" checked={graphicsConfirmed} disabled={disabled} onChange={event => { setGraphicsConfirmed(event.currentTarget.checked); setDirty(true); }} />确认主体仅含图形，保存到标准库（当前不支持文字对比）</label> : <p role="alert">没有可核对元素且识别未完整完成，不能将识别失败当作纯图形标准。</p> : null}
       {target ? <label>{target.id} 识别内容<input aria-label="选中元素识别内容" disabled={disabled} value={target.text} onChange={event => update(target.id, { text: event.currentTarget.value })} /></label> : <span>点击元素框即可编辑；放大后可更容易选中细小文字。</span>}
       <details><summary>文字与范围调整</summary>{elements.map(e => <div key={e.id} className="standard-element-fields"><strong>{e.id} · {e.state === "keep" ? "保留" : e.state === "exclude" ? "排除" : "待定"}</strong>
         <label>识别内容<input disabled={disabled} value={e.text} onChange={event => update(e.id, { text: event.currentTarget.value })} /></label>
@@ -84,7 +88,7 @@ function Review({ item, current, standardId, remaining, queued, onClose, onSaved
     <footer><span>{busy ? phases[current?.attempt?.state || ""] : uncertain ? `还有 ${uncertain} 个橙色框待确认` : "保存即确认这是完整标签且元素归属正确；图形未检查。"}</span>
       {queued && remaining > 1 ? <button type="button" disabled={save.isPending} onClick={() => { if (!dirty || window.confirm("跳过此张将放弃未保存修改，之后仍可继续确认。")) onSkip(); }}>先看下一张</button> : null}
       <button type="button" disabled={save.isPending} onClick={close}>{queued ? "稍后继续" : "取消"}</button>
-      <button className="primary" type="button" disabled={disabled || !loaded || !elements.length || uncertain > 0 || !elements.some(e => e.state === "keep")} onClick={() => save.mutate()}>{save.isPending ? "保存中…" : queued ? "确认保存并继续" : "保存"}</button>
+      <button className="primary" type="button" disabled={disabled || !loaded || uncertain > 0 || (noRequired && !(graphicsEligible && graphicsConfirmed))} onClick={() => save.mutate()}>{save.isPending ? "保存中…" : queued ? "确认保存并继续" : "保存"}</button>
     </footer>
   </div></div>;
 }

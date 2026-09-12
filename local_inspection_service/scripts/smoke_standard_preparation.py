@@ -28,6 +28,45 @@ def fixture():
 
 
 class Contracts(unittest.TestCase):
+    def test_group_cleanup_and_fringe(self):
+        image = Image.new("RGBA", (100,100), "white")
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((10,10,29,19), fill="black")
+        draw.rectangle((10,22,29,29), fill="black")
+        draw.point((30,12), fill="black")  # tight OCR misses a one-pixel fringe
+        draw.point((30,13), fill=(247,247,247,255))  # antialiased fringe must not remain after trim
+        draw.rectangle((60,60,89,89), fill="black")
+        elements = [dict(id="a", text="note", type="text", state="exclude", confidence=1, box=[.1,.1,.2,.1]),
+                    dict(id="b", text="size", type="text", state="exclude", confidence=1, box=[.1,.22,.2,.08]),
+                    dict(id="c", text="MODEL", type="text", state="keep", confidence=1, box=[.6,.6,.3,.3])]
+        out, info = engine.clean(image,elements,human=True,crop_box=[0,0,1,1])
+        self.assertFalse(info["reasons"])
+        expected=np.asarray(image).copy(); expected[10:30,10:31]=255
+        self.assertTrue(np.array_equal(np.asarray(Image.open(io.BytesIO(out))),expected))
+        reverse=engine.clean(image,list(reversed(elements)),human=True,crop_box=[0,0,1,1])[0]
+        self.assertEqual(out,reverse,"exclusion order does not affect pixels")
+        # A real adjacent unclassified object beyond the bounded fringe blocks
+        # the WHOLE group, rather than partially clearing a dependency.
+        draw.rectangle((32,10,40,20),fill="black")
+        _,blocked=engine.clean(image,elements,human=True)
+        self.assertIn("a:unsafe_background_or_code",blocked["reasons"])
+        self.assertIn("b:unsafe_background_or_code",blocked["reasons"])
+        self.assertFalse(blocked["removed"])
+
+    def test_graphics_only_explicit_and_empty_guards(self):
+        image=Image.new("RGBA",(100,100),"white")
+        ImageDraw.Draw(image).rectangle((30,30,60,60),fill="black")
+        self.assertIn("no_required_elements",engine.clean(image,[])[1]["reasons"])
+        self.assertIn("no_required_elements",engine.clean(image,[],allow_graphics_only=True)[1]["reasons"])
+        out,info=engine.clean(image,[],human=True,allow_graphics_only=True)
+        self.assertFalse(info["reasons"]); self.assertFalse(info["text_comparison_supported"])
+        self.assertTrue(info["graphics_only"]); self.assertFalse(engine.supports_text_comparison(info))
+        for blank in (Image.new("RGBA",(100,100),"white"),Image.new("RGBA",(100,100),(0,0,0,0))):
+            self.assertIn("no_visible_label_content",engine.clean(blank,[],human=True,allow_graphics_only=True)[1]["reasons"])
+        self.assertIn("no_visible_label_content",engine.clean(image,[],human=True,allow_graphics_only=True,crop_box=[0,0,.1,.1])[1]["reasons"])
+        self.assertFalse(engine.supports_text_comparison({"elements":[]}))
+        self.assertTrue(engine.supports_text_comparison({"elements":[{"state":"keep","type":"text","text":"MODEL"}]}))
+
     def test_edge_and_protected_subtraction(self):
         cases = {
             "top": (10, 0, 30, 12), "bottom": (10, 88, 30, 100),

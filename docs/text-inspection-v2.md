@@ -28,17 +28,30 @@ Unknown elements block saving; changed draft/source identities require reopening
 and dirty modal closure requires confirmation. All saves use existing authenticated,
 optimistically versioned endpoints; no extra model call or changed matching rule.
 
-Automatic and human-confirmed cleaning clip the three-pixel background-check
-perimeter to the source image. Image-edge contact alone does not reject cleaning.
-Keep/uncertain element rectangles are subtracted from both the erasure and perimeter
-checks: overlapping pixels (including alpha) remain unchanged, while the rest of
-the excluded text rectangle is filled white. Complete overlap is a no-op, not an
-error. The remaining existing perimeter must still be white; complex backgrounds
-and code erasure remain blocked. Evidence records the candidate rectangle,
-protected intersections and actual erased pixel count, including zero. No inpainting
+Automatic and human-confirmed cleaning group nearby excluded text rectangles and
+check their union, not each neighbor as foreign ink. A maximum three-source-pixel
+fringe removes tight-OCR edge ink (including antialiasing below 250); the next
+three-pixel existing perimeter must contain no ink below 245. Checks clip to the
+image; lack of any checkable perimeter cannot justify nonempty erasure. A failed
+group is left intact, while independent safe groups can still produce previews.
+Keep/uncertain and code rectangles are subtracted from erasure and checking masks;
+protected RGBA pixels remain byte-identical. No unbounded dilation, largest-component
+selection or arbitrary noise tolerance is used. Group IDs, source boxes, bounded
+expansion, protected intersections and targeted pixel counts remain evidence. No inpainting
 or new model call is involved; historical versions are unchanged. Whitespace trimming uses
 all remaining ink, not the text bounding box. Uncertain/mixed boxes, low OCR
 confidence, non-label/multiple designs and complex backgrounds require review.
+Pure-graphics standards need explicit human `allow_graphics_only: true` confirmation
+after successful single-label classification and complete recognition coverage.
+Unknown/failed OCR, provider failure, incomplete recovery, unknown element states,
+and blank/nearly blank output (fewer than 16 visible pixels) cannot use that path.
+This visibility bound is a sanity check, not semantic proof of a label. Zero OCR
+elements are allowed only with the same verified pipeline and explicit confirmation.
+Published revisions record `graphics_only` and `text_comparison_supported: false`.
+The gallery displays a non-comparable reason; direct comparison requests also
+return 409 before recognition or task creation. Legacy empty templates are rejected
+by contents even without the new flag; queued empty-template work stays review-only
+without OCR. Existing request identities and historical evidence are not overwritten.
 The VLM must explicitly assess whether visible text regions are covered by OCR;
 missing/uncertain coverage cannot auto-activate even if every returned ID matches.
 This semantic flag is not a proof of completeness and needs independent acceptance.
