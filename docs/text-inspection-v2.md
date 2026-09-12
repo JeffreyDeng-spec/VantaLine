@@ -80,6 +80,21 @@ proof of missing print, and MATCH needs separate local-pipeline commissioning.
 
 **Status: Authoritative**
 
+## Opt-in Qwen actual-image evidence
+
+Prepared comparisons may use the separate default-off Qwen OCR account allowlist.
+This path reuses saved standard elements, performs independent positioned OCR,
+strict direct matching and at most one text-only correspondence request. A durable
+owner/image/model cache prevents repeated OCR; unknown outcomes never replay.
+The comparison stays review-required in this release, even on exact matches.
+The start button is beside the actual image with polled stages. Completed results
+offer clickable standard boxes and authenticated actual-image evidence, expected
+and observed text, plus default-folded OCR/mapping diagnostics. Green denotes
+character evidence, yellow uncertainty and red candidate differences requiring
+human verification. Graphics remain unchecked. Existing APIs/history are retained;
+`prepared-comparisons/{id}/media/source` adds an authenticated normalized source
+preview. Invalid/expired results cannot silently become an automatic pass.
+
 Label import accepts `.doc` and `.docx` in the chooser, drag/drop and API. Legacy
 DOC directly exports embedded pictures with POI HWPF, without rendering pages or
 merging Word overlays. Missing helper/JRE returns 503; extraction failure returns

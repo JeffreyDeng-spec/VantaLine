@@ -36,6 +36,19 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 ## Text inspection v2
 
+`VANTALINE_QWEN_OCR_ACCOUNTS` is a separate default-empty allowlist selecting the
+actual-image Qwen OCR evidence path. It also requires the existing external-media
+gate and resolved Qwen credentials. It does not change standard preparation or
+other model settings. The existing Key must explicitly permit both the pinned
+OCR model and the configured correspondence model. Only approved HTTPS Beijing
+DashScope/workspace endpoints are accepted, with redirects/retries disabled.
+`min_pixels=3072` is required by the verified OCR API; the 12,582,912-pixel bound
+is explicit. Invalid, incomplete or unavailable results remain review-required.
+This release intentionally cannot emit automatic MATCH for this provider; the
+older local MATCH allowlist does not commission it. Keep recognition disabled
+until approved real-image testing and release verification. Unknown cache entries
+are retained and block paid replay; changing the standard is not a retry consent.
+
 `VANTALINE_STANDARD_PREPARATION_ACCOUNTS` is a default-empty account allowlist for
 activation-time cleaning and reusable text/code templates. It additionally requires
 the existing external-media authorization and configured visual model. Each source

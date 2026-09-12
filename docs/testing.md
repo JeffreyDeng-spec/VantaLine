@@ -2,6 +2,33 @@
 
 **Status: Authoritative**
 
+## Qwen OCR evidence comparison (not commissioned)
+
+`python -m local_inspection_service.scripts.smoke_qwen_ocr_evidence` runs offline
+protocol and strict matching fixtures. It checks the pinned model/task, independent
+image-only OCR input, nullable scores, original-coordinate bounds, duplicate text
+positions, truncation rejection, no HTTP retry/redirect, whitespace-only matching,
+parameter conflicts, code provenance, candidate capacity, forged IDs, Unicode
+character offsets, local reading order, skipped/reused characters and distant joins.
+`PREPARATION_TEST_QWEN=1 python -m
+local_inspection_service.scripts.smoke_standard_preparation_endpoints` additionally
+tests real authenticated routes with fake providers: pre-call claims, same-image
+cache, request identity conflicts, no late settlement and account-isolated source
+media. The PostgreSQL preparation smoke checks insert-once cache and owner/status
+CAS. Frontend typecheck/build are required. No fake-provider result certifies OCR.
+The real synthetic probe verified min_pixels=3072, words_info locations, nullable
+scores and HTTP 200; it does not establish dense-sheet accuracy or latency.
+`scripts/test_qwen_evidence_ui.cjs` uses the same local Vite/Playwright variables
+as the standard-preparation UI test. Its synthetic fixture checks the actual-side
+start action, phase polling, next-image visibility, clickable evidence, folded
+diagnostics and mobile overflow, saving desktop/mobile screenshots.
+`scripts/probe_qwen_ocr.py` requires explicit paid-call consent and a new output
+directory; it saves input, pre-call claim, raw output and actual-image box evidence.
+Private image external disclosure requires explicit approval before execution.
+Nine-image coverage, independent positives/negatives, 30 uncached full comparisons,
+P50/P95, cost and template verification remain outstanding. Never count synthetic
+authentication tests as full comparisons or enable automatic MATCH from them.
+
 `python3 local_inspection_service/scripts/smoke_doc_images.py` checks direct DOC
 extraction bounds, malformed output, missing runtime, timeout cleanup, temporary
 cleanup and concurrency with process doubles. Real acceptance separately runs

@@ -29,6 +29,7 @@ JSON_COLUMNS = frozenset(
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
 PRIMARY_KEY_COLUMNS = {
+    "text_ocr_evidence": ("id",),
     "agent_policies": ("id",),
     "agent_operations": ("id",),
     "agent_operation_attempts": ("id",),
@@ -348,6 +349,26 @@ class PostgresRuntimeRepository:
             close = getattr(cursor, "close", None)
             if callable(close):
                 close()
+
+    def update_text_attempt(self, table_name: str, row: Mapping[str, Any], expected_status: str) -> bool:
+        """Account-scoped CAS: a timeout/human settlement cannot be overwritten."""
+        if table_name not in {"text_ocr_evidence", "text_inspection_records"}:
+            raise PostgresRuntimeRepositoryError("Unsupported attempt table")
+        columns = columns_for_table(table_name)
+        updates = [c for c in columns if c not in {"id", "owner_user_id", "created_at"}]
+        sql = ", ".join(quote_ident(c) + (" = %s::jsonb" if c in JSON_COLUMNS else " = %s") for c in updates)
+        params = tuple(_adapt_value(c, row[c]) for c in updates) + (row['id'], row['owner_user_id'], expected_status)
+        cursor = self._cursor()
+        try:
+            cursor.execute(f"UPDATE {self._qualified_table(table_name)} SET {sql} WHERE id = %s AND owner_user_id = %s AND status = %s", params)
+            changed = cursor.rowcount == 1
+            self.connection.commit()
+            return changed
+        except Exception:
+            self.connection.rollback()
+            raise
+        finally:
+            cursor.close()
 
     def insert_row_once(self, table_name: str, row: Mapping[str, Any], *, commit: bool = True) -> bool:
         """Insert an immutable/runtime-authority row without overwriting a conflict."""

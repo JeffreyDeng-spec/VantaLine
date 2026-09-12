@@ -15,6 +15,14 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Ownership and compatibility
 
+`2026_09_12_text_ocr_evidence.sql` adds account-owned OCR claims/cache. Deterministic
+IDs bind owner, source hash, pinned model and preprocessing version. Insert-once
+precedes external OCR; only completed results are reusable. Unknown or interrupted
+claims are retained. `update_text_attempt` uses owner/status predicates for both
+cache and comparison records, preventing late completion after terminal settlement.
+Legacy record raw_json encoding is preserved; cache raw_json is a JSONB object.
+No old table or customer evidence is rewritten; previous releases ignore this table.
+
 Standard preparation adds asset/standard JSONB fields, not new tables. Attempts
 are claimed under the standard advisory lock before paid I/O. Immutable preparation
 revisions contain the source hash, elements, cleaning evidence, and derivative hash.

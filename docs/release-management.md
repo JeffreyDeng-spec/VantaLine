@@ -6,6 +6,12 @@
 
 ## Change and release flow
 
+The Qwen evidence gate adds offline parser/matcher tests and authenticated
+fake-provider comparison/cache tests to required backend CI; the PostgreSQL gate
+also checks cache insert-once and owner/status CAS. These checks permit shipping
+disabled code, not enabling actual-image processing or automatic MATCH without
+the separately documented real-image acceptance.
+
 1. Create `feature/*`, `fix/*`, `hotfix/*`, or `docs/*` from current `origin/main`.
 2. Open a pull request using the production-change template and update mapped authoritative docs.
 3. Merge only after every required CI job passes.

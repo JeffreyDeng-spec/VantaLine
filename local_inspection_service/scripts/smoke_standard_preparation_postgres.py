@@ -18,6 +18,13 @@ def main():
         try:
             with psycopg.connect(dsn) as connection:
                 repo = PostgresRuntimeRepository(connection, "test", schema)
+                claim = dict(id="ocr-test",owner_user_id="owner",status="attempting",created_at=1,raw_json={"state":"attempting"})
+                assert repo.insert_row_once("text_ocr_evidence",claim)
+                assert not repo.insert_row_once("text_ocr_evidence",claim)
+                assert not repo.update_text_attempt("text_ocr_evidence",{**claim,"owner_user_id":"other","status":"completed"},"attempting")
+                assert repo.update_text_attempt("text_ocr_evidence",{**claim,"status":"unknown"},"attempting")
+                assert not repo.update_text_attempt("text_ocr_evidence",{**claim,"status":"completed"},"attempting")
+                assert repo.fetch_one_by_columns("text_ocr_evidence",{"id":"ocr-test","owner_user_id":"other"}) is None
                 standard = dict(id="std", owner_user_id="owner", standard_type="label", status="draft", revision_number=0)
                 asset = dict(id="asset", standard_id="std", owner_user_id="owner", status="candidate", ordinal=1, sha256="a"*64, preparation_required=True)
                 repo.upsert_row("text_inspection_standards", dict(**standard, name="test", material_code="test", version_label="1", source_sha256="b"*64, created_at=1, updated_at=1, raw_json=standard))

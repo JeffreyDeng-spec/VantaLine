@@ -8,16 +8,20 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 from . import standard_preparation as engine
+from . import qwen_evidence_jobs
 
 _slots = threading.BoundedSemaphore(1)
 
 
 def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, request_id, extraction):
     s = SimpleNamespace(**namespace)
+    use_qwen = qwen_evidence_jobs.enabled(owner)
     binding = dict(standard_asset_id=asset["id"], standard_revision_id=standard.get("current_revision_id"),
         template_revision=snapshot["preparation"]["id"], reference_sha256=snapshot["preparation"]["sha256"],
         source_sha256=s.sha256_bytes(upload), version=engine.VERSION,
         extraction_id=(extraction or {}).get("id"))
+    if use_qwen:
+        binding["actual_provider"] = qwen_evidence_jobs.VERSION
     fingerprint = s.sha256_bytes(json.dumps(binding, sort_keys=True).encode())
     def existing():
         value = next((r for r in s._text_v2_load("records") if r.get("owner_user_id") == owner and r.get("comparison_id") == request_id), None)
@@ -27,6 +31,10 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     prior = existing()
     if prior:
         return s._text_v2_public(prior)
+    try:
+        resolved = qwen_evidence_jobs.settings(s, owner) if use_qwen else None
+    except ValueError as error:
+        raise HTTPException(409, "当前账户的 Qwen OCR 配置或外发授权不可用") from error
     if not engine.supports_text_comparison(snapshot["preparation"]):
         raise HTTPException(409, "该标准仅含图形，没有可核对文字或编码，当前不支持文字对比")
     # Decode/verify input before registering work; bytes stored exactly once.
@@ -42,12 +50,16 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     path = s._text_v2_media_path(owner, standard["id"], record["id"]+"-source.bin")
     s._text_v2_write(path, upload)
     record["source_path"] = str(path)
+    if use_qwen:
+        record.update(ocr_provider="qwen_ocr", deadline_at=time.time()+120)
+        record["diagnostics"].update(provider="qwen_ocr", version=qwen_evidence_jobs.VERSION)
     if not s._text_v2_save("records", record, insert_only=True):
         prior = existing()
         if prior:
             return s._text_v2_public(prior)
         raise HTTPException(409, "比较任务冲突")
-    threading.Thread(target=run, args=(s, jobs, record, upload), daemon=True).start()
+    threading.Thread(target=qwen_evidence_jobs.run if use_qwen else run,
+        args=(s, jobs, record, upload, resolved) if use_qwen else (s, jobs, record, upload), daemon=True).start()
     return s._text_v2_public(record)
 
 

@@ -115,6 +115,27 @@ def main():
     other_login = other.post("/api/auth/login", json=dict(username="other", password=PASSWORD)).json()
     assert_status(other.get(base+"/preparation"), 404, "cross owner status")
     assert_status(other.get(detail["assets"][0]["content_url"]), 404, "cross owner media")
+    qwen_mode = os.getenv("PREPARATION_TEST_QWEN")
+    qwen_calls = []
+    if qwen_mode:
+        from local_inspection_service import qwen_evidence_jobs as qj
+        os.environ["VANTALINE_QWEN_OCR_ACCOUNTS"] = owner
+        server.ai_detection_settings = lambda: dict(provider="qwen", model="fixture", api_key="private-fixture", base_url="https://dashscope.aliyuncs.com")
+        def remote_ocr(settings, blob, size, timeout):
+            claims = server._text_v2_load("ocr_evidence")
+            assert len(claims) == 1 and claims[0]["status"] == "attempting"
+            qwen_calls.append("ocr")
+            result = []
+            for index, e in enumerate(elements):
+                x,y,w,h = e["box"]
+                result.append(dict(id=f"o{index}", type="text", text=e["text"], box=[x,y,x+w,y+h], confidence=None, provenance="qwen_ocr"))
+            return result, dict(model=qj.ocr.MODEL, usage={})
+        def mapping(settings, request, timeout):
+            assert any(r.get("diagnostics",{}).get("llm_call",{}).get("state") == "attempting" for r in server._text_v2_load("records"))
+            qwen_calls.append("llm")
+            return {"mappings":[]}, dict(model="fixture", usage={})
+        qj.ocr.recognize = remote_ocr
+        qj.llm = mapping
     response = admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"], comparison_id="prepared_test_001"), files={"captured_file": ("actual.png", data)})
     assert_status(response, 200, "prepared comparison")
     record = response.json()
@@ -127,6 +148,43 @@ def main():
     assert len(calls) == 1, "comparison must not send another VLM request"
     assert_status(admin.get(record["reference_overlay_url"]), 200, "reference evidence")
     assert_status(other.get(record["reference_overlay_url"]), 404, "cross owner evidence")
+    if qwen_mode:
+        assert qwen_calls.count("ocr") == 1
+        assert record["diagnostics"]["provider"] == "qwen_ocr"
+        source_url = f"/api/text-inspection/prepared-comparisons/{record['id']}/media/source"
+        assert_status(admin.get(source_url),200,"actual source evidence")
+        assert_status(other.get(source_url),404,"cross owner actual evidence")
+        duplicate = admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"],comparison_id="prepared_test_001"), files={"captured_file":("actual.png",data)}).json()
+        assert duplicate["id"] == record["id"] and qwen_calls.count("ocr") == 1
+        cached = admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"],comparison_id="prepared_test_cached"), files={"captured_file":("actual.png",data)}).json()
+        for _ in range(200):
+            cached = admin.get(f"/api/text-inspection/prepared-comparisons/{cached['id']}").json()
+            if cached["status"] != "attempting": break
+            time.sleep(.02)
+        assert cached["status"] == "completed" and cached["diagnostics"]["cache_hit"]
+        assert qwen_calls.count("ocr") == 1
+        late = copy.deepcopy(server._text_v2_owned("records",record["id"],owner))
+        late.update(status="attempting",decision="MATCH")
+        assert server._text_v2_update_attempt("records",late) is False
+        assert server._text_v2_owned("records",record["id"],owner)["decision"] == "REVIEW_REQUIRED"
+        claim = server._text_v2_load("ocr_evidence")[0]
+        claim["status"] = "unknown"
+        server._text_v2_save("ocr_evidence",claim)  # Isolated fixture only.
+        before_calls = len(qwen_calls)
+        unknown = admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"],comparison_id="prepared_test_unknown"), files={"captured_file":("actual.png",data)}).json()
+        for _ in range(200):
+            unknown = admin.get(f"/api/text-inspection/prepared-comparisons/{unknown['id']}").json()
+            if unknown["status"] != "attempting": break
+            time.sleep(.02)
+        assert unknown["status"] == "review_required" and len(qwen_calls) == before_calls
+        assert unknown["diagnostics"]["error"] == "prior_ocr_pending_or_unknown_not_replayed"
+        interrupted = server._text_v2_owned("records",unknown["id"],owner)
+        interrupted.update(status="attempting",created_at=int(time.time())-121,deadline_at=time.time()-1)
+        server._text_v2_save("records",interrupted)
+        expired = admin.get(f"/api/text-inspection/prepared-comparisons/{unknown['id']}").json()
+        assert expired["status"] == "review_required" and expired["diagnostics"]["phase"] == "timeout"
+        assert not server._text_v2_update_attempt("records",{**interrupted,"status":"completed","decision":"MATCH"})
+        assert len(qwen_calls) == before_calls, "restart/status must not replay calls"
     assert_status(admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"], comparison_id="prepared_test_001"), files={"captured_file": ("actual.png", png(image.resize((300,250))))}), 409, "comparison identity conflict")
     # Isolated graphics-only fixture, including zero recognized text. Never
     # confuse a provider failure with an intentionally non-comparable template.

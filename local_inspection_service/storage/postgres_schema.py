@@ -26,6 +26,7 @@ BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passe
 INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "text_ocr_evidence": ("id",),
     "agent_policies": ("id",),
     "agent_operations": ("id",),
     "agent_operation_attempts": ("id",),
