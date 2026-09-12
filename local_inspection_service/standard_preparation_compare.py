@@ -27,6 +27,8 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     prior = existing()
     if prior:
         return s._text_v2_public(prior)
+    if not engine.supports_text_comparison(snapshot["preparation"]):
+        raise HTTPException(409, "该标准仅含图形，没有可核对文字或编码，当前不支持文字对比")
     # Decode/verify input before registering work; bytes stored exactly once.
     engine.decode(upload)
     record = dict(id="ins_"+uuid.uuid4().hex, owner_user_id=owner, owner_username=username,
@@ -53,6 +55,11 @@ def run(s, jobs, record, upload):
     start = time.monotonic()
     acquired = False
     try:
+        if not engine.supports_text_comparison(record["diagnostics"]["template"]):
+            record.update(status="review_required", decision="REVIEW_REQUIRED", auto_decision="REVIEW_REQUIRED",
+                          message="纯图形或空模板不支持文字对比；未执行识别，不能判定通过。")
+            record["diagnostics"]["phase"] = "unsupported_template"
+            return
         acquired = _slots.acquire(timeout=120)
         if not acquired or time.monotonic()-start >= 120:
             raise TimeoutError("queue_timeout")

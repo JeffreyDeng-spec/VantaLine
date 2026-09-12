@@ -38,6 +38,12 @@ of a cleaned PNG and immutable element template.
 Clearing clips checks to image bounds and subtracts all keep/uncertain rectangles
 from erasure and background checks. Overlap pixels remain byte-identical; edge
 contact is allowed. Other unsafe-background and code-erasure guards remain.
+Nearby exclusions share a union/perimeter check and a bounded three-pixel ink
+fringe, so neighboring removable text cannot veto itself. Unsafe groups are not
+partially erased. Pure-graphics revisions require explicit human confirmation and
+successful complete source recognition; they remain viewable standards but carry
+no text-comparison capability. Both public readiness and the backend submit/worker
+guards reject empty or non-comparable templates, including legacy records.
 Original pixels, observations, excluded elements and previous active snapshots remain available. Partial success
 publishes only ready assets; uncertain images require explicit human correction.
 Prepared comparisons read the saved template and recognize only the actual image.

@@ -37525,6 +37525,10 @@ def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
         active = result.get("active_preparation")
         result["comparison_ready"] = not result.get("preparation_required") or bool(active or result.get("preparation_previous_snapshot"))
         if active:
+            from .standard_preparation import supports_text_comparison
+            if not supports_text_comparison(active):
+                result["comparison_ready"] = False
+                result["comparison_unavailable_reason"] = "纯图形标准：已保存，当前不支持文字对比"
             result["content_url"] = f"/api/text-inspection/standards/{result['standard_id']}/preparation/{result['id']}/{active['id']}/clean"
     return result
 

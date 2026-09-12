@@ -182,7 +182,7 @@ export function TextCompareBetaPage() {
 
   const chooseAsset = (asset: TextInspectionAsset) => {
     if (!asset.content_url || asset.status === "excluded") return;
-    if (asset.comparison_ready === false) { setInputError("此图片尚未完成标准准备，请先查看处理进度或确认异常项。"); return; }
+    if (asset.comparison_ready === false) { setInputError(asset.comparison_unavailable_reason || "此图片尚未完成标准准备，请先查看处理进度或确认异常项。"); return; }
     if (standardQuery.data?.status !== "confirmed") {
       setInputError("这个订单还没有启用。请先启用候选图片并保存订单，再开始对比。");
       return;
@@ -407,6 +407,7 @@ export function TextCompareBetaPage() {
         <em>{asset.ordinal}</em>
         {selectable ? <i>{selected ? "已选标准" : "点击选中"}</i> : null}
       </button>
+      {asset.comparison_unavailable_reason ? <small role="status">{asset.comparison_unavailable_reason}</small> : null}
       <div className="text-standard-asset-copy"><span className="text-standard-classification-badge">{asset.status === "needs_confirmation" ? <AlertTriangle size={15} /> : isActiveAsset(asset) ? <CheckCircle2 size={15} /> : <X size={15} />}{assetStatusCopy(asset)}</span><strong>{CATEGORY_LABELS[asset.category || ""] || "标准图片"}</strong><small>{asset.classification_source === "human" ? "人工已修改" : "系统建议，尚未经人工确认"}{asset.context ? ` · ${asset.context}` : ""}</small>{asset.classification_reason ? <details><summary>查看分类依据</summary><p>{asset.classification_reason}</p></details> : null}</div>
       <div className="text-standard-asset-actions">
         {asset.content_url ? <button type="button" onClick={() => openStandardPreview(asset)}><Expand size={14} />查看大图</button> : null}
