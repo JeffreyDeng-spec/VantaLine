@@ -121,6 +121,17 @@ def main():
         from local_inspection_service import qwen_evidence_jobs as qj
         os.environ["VANTALINE_QWEN_OCR_ACCOUNTS"] = owner
         server.ai_detection_settings = lambda: dict(provider="qwen", model="fixture", api_key="private-fixture", base_url="https://dashscope.aliyuncs.com")
+        original_standard = copy.deepcopy(server._text_v2_owned("standards", standard["id"], owner))
+        unprepared = copy.deepcopy(original_standard)
+        for snapshot in unprepared["confirmed_assets"]:
+            snapshot.pop("preparation", None)
+        server._text_v2_save("standards", unprepared)
+        try:
+            assert_status(admin.post("/api/text-inspection/label/compare", data=dict(
+                standard_asset_id=asset["id"], comparison_id="no_template_guard"),
+                files={"captured_file": ("actual.png", data)}), 409, "no legacy fallback without template")
+        finally:
+            server._text_v2_save("standards", original_standard)
         def remote_ocr(settings, blob, size, timeout):
             claims = server._text_v2_load("ocr_evidence")
             assert len(claims) == 1 and claims[0]["status"] == "attempting"
@@ -150,6 +161,7 @@ def main():
     assert_status(other.get(record["reference_overlay_url"]), 404, "cross owner evidence")
     if qwen_mode:
         assert qwen_calls.count("ocr") == 1
+        assert record["diagnostics"]["matching_policy"] == "evidence-matching-v2-existence"
         assert record["diagnostics"]["provider"] == "qwen_ocr"
         source_url = f"/api/text-inspection/prepared-comparisons/{record['id']}/media/source"
         assert_status(admin.get(source_url),200,"actual source evidence")

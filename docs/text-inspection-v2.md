@@ -87,6 +87,17 @@ This path reuses saved standard elements, performs independent positioned OCR,
 strict direct matching and at most one text-only correspondence request. A durable
 owner/image/model cache prevents repeated OCR; unknown outcomes never replay.
 The comparison stays review-required in this release, even on exact matches.
+The current workspace no longer requires actual-image extraction: upload/capture
+the full sheet and start comparison. A missing prepared template is explained at
+the start action; finish standard activation first. Old extraction APIs/evidence
+remain compatible, but are no longer the primary workspace flow.
+`evidence-matching-v2-existence` accepts a standard element after any one strict
+occurrence; different repeated reads are retained and do not veto that element.
+Direct-match display selects one occurrence, never concatenates repeated copies.
+All observations remain stored. `element_presence_satisfied` reports whether all
+required elements matched, independently of the still-disabled automatic MATCH.
+This scope deliberately cannot certify every individual label or detect mixed
+variants when correct content exists elsewhere. No-match remains reviewable.
 The start button is beside the actual image with polled stages. Completed results
 offer clickable standard boxes and authenticated actual-image evidence, expected
 and observed text, plus default-folded OCR/mapping diagnostics. Green denotes

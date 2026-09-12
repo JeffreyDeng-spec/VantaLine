@@ -87,9 +87,27 @@ class MatchingTests(unittest.TestCase):
             with self.subTest(expected=expected,actual=actual):
                 self.assertEqual(matching.direct([element(expected)],[observation(actual)])[0]["state"]=="matched",ok)
 
-    def test_conflict_not_hidden_by_correct_repeat(self):
+    def test_one_exact_occurrence_satisfies_despite_conflicting_repeats(self):
         rows=matching.direct([element("20V")],[observation("20V"),observation("120V Max","o2")])
-        self.assertEqual(rows[0]["state"],"difference");self.assertTrue(rows[0]["conflicts"])
+        self.assertEqual(rows[0]["state"],"matched");self.assertTrue(rows[0]["conflicts"])
+        self.assertEqual(rows[0]["evidence"][0]["evidence_id"],"o1")
+        self.assertFalse(matching.candidates(rows,[])['elements'])
+
+    def test_repeats_order_and_missing_element(self):
+        obs=[observation("120V","wrong"),observation("20V","correct"),observation("20v","case")]
+        for order in (obs,list(reversed(obs))):
+            rows=matching.direct([element("20V"),element("MODEL: X1",identity="e2")],order)
+            self.assertEqual([r['state'] for r in rows],['matched','review'])
+        self.assertEqual(matching.direct([element("20V")],obs[:1])[0]['state'],'review')
+
+    def test_local_exact_combination_overrides_other_instance_difference(self):
+        obs=[observation("20V Max","bad"),observation("20V","a",[.1,.1,.2,.12]),
+             observation("Pack","b",[.21,.1,.3,.12]),observation("120V Pack","conflict")]
+        rows=matching.direct([element("20V Pack")],obs)
+        self.assertTrue(rows[0]['conflicts'])
+        proposal={'mappings':[{'element_id':'e1','spans':[{'evidence_id':'a','start':0,'end':3},
+            {'evidence_id':'b','start':0,'end':4}]}]}
+        self.assertEqual(matching.validate(proposal,matching.candidates(rows,obs),rows)[0]['state'],'matched')
 
     def test_payload_code_not_vlm_text(self):
         value=observation("url",kind="code")

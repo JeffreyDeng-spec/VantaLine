@@ -48,6 +48,10 @@ This release intentionally cannot emit automatic MATCH for this provider; the
 older local MATCH allowlist does not commission it. Keep recognition disabled
 until approved real-image testing and release verification. Unknown cache entries
 are retained and block paid replay; changing the standard is not a retry consent.
+Matching policy v2 changes request fingerprints, not the OCR cache identity:
+complete image-only evidence can be reused under the new existence rule, while
+historical comparison results are never reinterpreted in place. Opted-in accounts
+require a saved standard template; missing templates return 409 before model I/O.
 
 `VANTALINE_STANDARD_PREPARATION_ACCOUNTS` is a default-empty account allowlist for
 activation-time cleaning and reusable text/code templates. It additionally requires

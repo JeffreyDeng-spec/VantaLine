@@ -10,7 +10,7 @@ from . import evidence_matching as matching
 from . import qwen_ocr_evidence as ocr
 from . import standard_preparation as engine
 
-VERSION = "qwen-evidence-jobs-v1"
+VERSION = "qwen-evidence-jobs-v2-existence"
 _slots = threading.BoundedSemaphore(1)
 
 
@@ -167,7 +167,9 @@ def run(s, jobs, record, upload, resolved):
             message="已检查文字与编码均有字符匹配证据；自动通过尚未验收，请确认。图形未检查。" if rows and all(r["state"] == "matched" for r in rows)
             else "请复核标注元素：未检出不等于漏印，红色差异仍需核实。图形未检查。")
         record["diagnostics"].update(phase="completed", normalized_response={"elements":rows,"observations":observations,"graphics_checked":False},
-            automatic_match_enabled=False)
+            automatic_match_enabled=False, matching_policy=matching.VERSION,
+            element_presence_satisfied=bool(rows) and all(r["state"] == "matched" for r in rows),
+            inspection_scope="sheet_element_presence_not_each_label")
     except Exception as error:
         record.update(status="review_required", decision="REVIEW_REQUIRED", auto_decision="REVIEW_REQUIRED", message="文字提取或核对未完成，请人工复核；未重试或切换模型。")
         record["diagnostics"].update(phase="failed", error_type=type(error).__name__,

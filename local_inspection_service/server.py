@@ -38183,6 +38183,9 @@ async def compare_text_inspection_label(
         from local_inspection_service.standard_preparation_compare import submit
         return submit(globals(), standard_preparation_jobs, owner_user_id, owner_username,
                       standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
+    from local_inspection_service.qwen_evidence_jobs import enabled as qwen_evidence_enabled
+    if qwen_evidence_enabled(owner_user_id):
+        raise HTTPException(status_code=409, detail="该标准尚未生成元素模板，请先在标准库启用并完成标准准备；无需提取实拍标签。")
     captured_upload_sha256 = sha256_bytes(captured_upload)
     captured, captured_mime, source_suffix, captured_source_format = _text_v2_prepare_image(captured_upload, max_bytes=100 * 1024 * 1024 if extraction else 10 * 1024 * 1024)
     asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
