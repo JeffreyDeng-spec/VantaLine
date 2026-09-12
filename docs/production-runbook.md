@@ -55,6 +55,15 @@ Do not place real hosts, usernames, keys, or DSNs in commands committed to this 
 
 ## Deployment behavior
 
+Qwen OCR evidence is a default-off account trial. Deploy its additive migration
+with the immutable release, then verify required fake-provider/real PostgreSQL
+checks and explicitly authorized real-image evidence before changing the separate
+`VANTALINE_QWEN_OCR_ACCOUNTS` allowlist. Key authorization alone does not enable
+this pipeline. This release has no automatic MATCH commissioning path. Keep the
+allowlist empty if private-image approval or validation is missing. Rollback clears
+the allowlist and restores a whole release; retain cache claims and all evidence,
+including unknown calls, rather than clearing them to force a paid retry.
+
 Standard preparation remains off until real document-image acceptance, PostgreSQL
 transaction tests and browser review pass. Provision only the existing local OCR
 artifacts through `VANTALINE_STANDARD_OCR_MODEL_DIR`; no new GPU or model subscription

@@ -11,6 +11,7 @@ import { getFile, rememberFile } from "../agent/files";
 import { useAgentState } from "../agent/useAgentState";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { StandardPreparation, type PreparationPreview } from "./StandardPreparation";
+import { EvidenceResults } from "./EvidenceResults";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,.gif,.tif,.tiff";
@@ -78,6 +79,7 @@ export function TextCompareBetaPage() {
   const [inputError, setInputError] = useState("");
   const [inputMode, setInputMode] = useState<"camera" | "image">("camera");
   const [result, setResult] = useState<TextCompareBetaResult | null>(null);
+  const [comparisonPhase, setComparisonPhase] = useState("");
   const [activeDifference, setActiveDifference] = useState("");
   const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
@@ -103,7 +105,7 @@ export function TextCompareBetaPage() {
     ? providerDiagnostics.response_preview
     : providerDiagnostics?.parsed_response;
   const normalizedOutput = result?.diagnostics?.normalized_response;
-  const hasDiagnosticOutput = rawProviderOutput !== undefined || normalizedOutput !== undefined;
+  const hasDiagnosticOutput = rawProviderOutput !== undefined || normalizedOutput !== undefined || result?.diagnostics?.provider === "qwen_ocr";
   const standardsQuery = useQuery({ queryKey: ["text-inspection", "standards"], queryFn: listTextInspectionStandards });
   const standardQuery = useQuery({ queryKey: ["text-inspection", "standard", selectedStandardId], queryFn: () => getTextInspectionStandard(selectedStandardId), enabled: !!selectedStandardId, refetchInterval: (query) => query.state.data?.classification?.state === "processing" ? 2000 : false });
   const selectedOrderRef = useRef(selectedStandardId); selectedOrderRef.current = selectedStandardId;
@@ -362,21 +364,28 @@ export function TextCompareBetaPage() {
       form.set("comparison_id", identity.id);
       form.set("standard_asset_id", selectedAsset.id);
       let response = await compareTextInspectionLabel(form);
+      const showPhase = (value: TextCompareBetaResult) => {
+        if (comparisonIdentityRef.current?.id !== identity.id) return;
+        const labels: Record<string, string> = { queued: "排队", extracting_text: "提取文字", direct_matching: "直接核对", mapping_unmatched: "疑难对应", verifying_saving: "验证保存", recognizing: "识别文字" };
+        setComparisonPhase(labels[String(value.diagnostics?.phase)] || "等待结果");
+      };
+      showPhase(response);
       const deadline = Date.now() + 125000;
       while (response.preparation_compare && response.status === "attempting" && response.id && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 1500));
         if (comparisonIdentityRef.current?.id !== identity.id) return response;
         response = await apiClient.get<TextCompareBetaResult>(`/api/text-inspection/prepared-comparisons/${response.id}`);
+        showPhase(response);
       }
       return response;
     },
-    onMutate: () => { busyRef.current = true; },
+    onMutate: () => { busyRef.current = true; setComparisonPhase("上传图片"); },
     onSuccess: (value) => {
       if (comparisonIdentityRef.current?.id !== value.comparison_id) return;
       setResult(value); setActiveDifference(value.differences[0]?.id || "");
     },
     onError: (error: Error) => setInputError(error.message),
-    onSettled: () => { busyRef.current = false; }
+    onSettled: () => { busyRef.current = false; setComparisonPhase(""); }
   });
   const resultImage = result?.annotated_image_data_url || capturedUrl;
   const tone = result?.decision === "MATCH" ? "match" : result?.decision === "DIFFERENCES" ? "differences" : "review";
@@ -494,24 +503,26 @@ export function TextCompareBetaPage() {
           {extractionEnabled && !result && (captured || inputMode === "camera") ? <GuideOverlay value={guide} onChange={setGuide} disabled={mutation.isPending} /> : null}
         </div>
         {extractionEnabled ? <LabelExtractionPanel aiAvailable={capabilities.data?.ai_available === true} bboxEnabled={capabilities.data?.bbox_enabled === true} bboxAvailable={capabilities.data?.bbox_available === true} onInvalidate={() => { comparisonIdentityRef.current = null; setResult(null); }} file={captured} capture={captureFrame} onCaptured={replaceCaptured} onSourceReady={setCapturedUrl} guide={guide} onGuide={setGuide} standardId={selectedAsset?.id || ""} standardRevision={String(standardQuery.data?.revision_number || "")} standardBlockReason={standardBlockReason} onSelectStandard={() => { const library = document.getElementById("text-standard-library-panel"); library?.scrollIntoView({ behavior: "smooth", block: "start" }); library?.querySelector<HTMLButtonElement>(".text-standard-select-reference, .text-standard-order-toggle, .text-standard-import-button")?.focus({ preventScroll: true }); }} onCompare={(id) => { comparisonIdentityRef.current = null; setResult(null); mutation.mutate(id); }} comparing={mutation.isPending} onZoom={openZoom} /> : null}
+    <div className="text-compare-action-row">
+      {capabilities.data?.enabled === false || selectedAsset?.active_preparation ? <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? `${comparisonPhase || "正在逐字严格对比"}…` : "开始文字对比"}</button> : null}
+      {capabilities.isError ? <button type="button" onClick={() => void capabilities.refetch()}>提取配置读取失败，点击重试</button> : null}
+      {captured && result && result.status !== "attempting" ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
+    </div>
       </article> : null}
     </div>
     {mode === "manual" ? <div className="text-compare-alert"><AlertTriangle size={18} />说明书逐页会话后端已启用；页面拍摄与自动页匹配正在灰度验收，系统不会在证据不足时返回通过。</div> : null}
     {mode === "label" ? <>
-    <div className="text-compare-action-row">
-      {capabilities.data?.enabled === false || selectedAsset?.active_preparation ? <button className="text-compare-primary" type="button" disabled={!selectedAsset || mutation.isPending || (inputMode === "camera" ? ((cameraStarting || !!cameraError) && !captured) : !captured)} onClick={() => { setInputError(""); mutation.mutate(); }}><ScanText size={22} />{mutation.isPending ? "正在逐字严格对比…" : "开始文字对比"}</button> : null}
-      {capabilities.isError ? <button type="button" onClick={() => void capabilities.refetch()}>提取配置读取失败，点击重试</button> : null}
-      {captured ? <button className="text-compare-next" type="button" disabled={mutation.isPending} onClick={clearCaptured}>{inputMode === "camera" ? <Camera size={18} /> : <FileImage size={18} />}{inputMode === "camera" ? "拍下一件" : "选择下一张"}</button> : null}
-    </div>
     {inputError ? <div className="text-compare-alert"><AlertTriangle size={18} />{inputError}</div> : null}
     {result ? <section className={"text-compare-result " + tone}>
       <div className="text-compare-result-summary">{tone === "match" ? <CheckCircle2 /> : <AlertTriangle />}<div><small>辅助对比结果</small><strong>{result.decision === "MATCH" ? "未发现文字差异" : result.decision === "DIFFERENCES" ? "发现疑似差异" : "无法可靠判断"}</strong><p>{result.message}</p></div></div>
       {qualityCopy(result.captured_quality?.reasons) ? <div className="text-compare-quality">拍摄提示：{qualityCopy(result.captured_quality?.reasons)}</div> : null}
+      {result.diagnostics?.provider === "qwen_ocr" && result.reference_overlay_url && result.id ? <EvidenceResults key={result.id} value={normalizedOutput} reference={result.reference_overlay_url} source={`/api/text-inspection/prepared-comparisons/${result.id}/media/source`} /> : null}
       {result.reference_overlay_url ? <button type="button" onClick={() => openZoom(result.reference_overlay_url!, "标准元素：绿色已匹配，黄色待复核")}><img src={result.reference_overlay_url} alt="标准元素核对结果：绿色已匹配，黄色待复核" style={{ maxWidth: "100%", maxHeight: 320 }} />查看标准元素核对图（图形未检查）</button> : null}
       {result.differences.length ? <div className="text-compare-differences">{result.differences.map((difference, index) => <button className={activeDifference === difference.id ? "active" : ""} onClick={() => setActiveDifference(difference.id)} key={difference.id}><span>{index + 1}</span><div><small>{difference.type === "missing" ? "可能漏印" : difference.type === "extra" ? "可能多印" : "文字不同"}</small><strong>标准：{difference.reference_text || "（无）"}</strong><strong>实物：{difference.actual_text || "（无）"}</strong></div><em>{Math.round(difference.confidence * 100)}%</em></button>)}</div> : null}
       {hasDiagnosticOutput ? <details className="text-compare-raw-output">
         <summary><ChevronRight size={15} /><span>Raw Output（调试信息）</span><small>默认折叠</small></summary>
         <div className="text-compare-raw-output-body">
+          {result.diagnostics?.provider === "qwen_ocr" ? <section><header><strong>OCR 与证据匹配诊断</strong></header><pre>{formatDiagnosticOutput(result.diagnostics)}</pre></section> : null}
           {rawProviderOutput !== undefined ? <section><header><strong>模型原始输出</strong><small>{providerDiagnostics?.response_preview !== undefined ? "原始文本预览" : "解析后的 JSON"}</small></header><pre>{formatDiagnosticOutput(rawProviderOutput)}</pre></section> : null}
           {normalizedOutput !== undefined ? <section><header><strong>系统适配结果</strong><small>进入业务校验前的数据</small></header><pre>{formatDiagnosticOutput(normalizedOutput)}</pre></section> : null}
         </div>

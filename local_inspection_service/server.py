@@ -37405,6 +37405,7 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
 TEXT_INSPECTION_TABLES = {
+    "ocr_evidence": "text_ocr_evidence",
     "extractions": "text_label_extractions",
     "standards": "text_inspection_standards",
     "assets": "text_inspection_assets",
@@ -37430,6 +37431,7 @@ def _text_v2_load(kind: str) -> list[dict[str, Any]]:
 def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     fields = {
+        "ocr_evidence": ("id", "owner_user_id", "status", "created_at"),
         "extractions": ("id", "owner_user_id", "created_at"),
         "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
         "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
@@ -37441,7 +37443,7 @@ def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
     }[kind]
     # Extraction queries index fields inside JSONB: write an object, not a
     # JSON-encoded string (legacy tables retain their existing representation).
-    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind == "extractions" else raw}
+    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind in {"extractions", "ocr_evidence"} else raw}
 
 
 def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
@@ -37473,7 +37475,26 @@ def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False
         return True
 
 
+def _text_v2_update_attempt(kind: str, value: dict[str, Any], expected_status: str = "attempting") -> bool:
+    if kind not in {"records", "ocr_evidence"}:
+        raise ValueError("unsupported_attempt_kind")
+    repository = runtime_postgres_repository_or_none()
+    if repository is not None:
+        return repository.update_text_attempt(TEXT_INSPECTION_TABLES[kind], _text_v2_row(kind, value), expected_status)
+    with _incoming_text_store_lock:
+        previous = _text_v2_owned(kind, value["id"], value["owner_user_id"])
+        if previous is None or previous.get("status") != expected_status:
+            return False
+        return _text_v2_save(kind, value)
+
+
 def _text_v2_owned(kind: str, record_id: str, owner_user_id: str) -> dict[str, Any] | None:
+    if kind in {"ocr_evidence", "records"}:
+        repository = runtime_postgres_repository_or_none()
+        if repository is not None:
+            row = repository.fetch_one_by_columns(TEXT_INSPECTION_TABLES[kind], {"id": record_id, "owner_user_id": owner_user_id})
+            values = row_raw_json_list([row]) if row else []
+            return values[0] if values else None
     return next((item for item in _text_v2_load(kind) if str(item.get("id")) == record_id and str(item.get("owner_user_id")) == owner_user_id), None)
 
 

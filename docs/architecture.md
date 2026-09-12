@@ -2,6 +2,26 @@
 
 **Status: Authoritative**
 
+### Qwen OCR evidence comparison — opt-in, not commissioned
+
+`VANTALINE_QWEN_OCR_ACCOUNTS` selects `qwen_evidence_jobs.py` at prepared-comparison
+submission; other accounts keep local OCR. The pinned `qwen-vl-ocr-2025-11-20`
+uses `advanced_recognition`, image-only input, min_pixels=3072 and explicit original
+resolution bounds. The original-coordinate words_info output is authoritative;
+processed_text's internal coordinates are not used. Missing scores remain null.
+Exact character matching precedes at most one text-only LLM correspondence request;
+IDs, character spans, boundaries and local adjacency are checked by the backend.
+Saved templates are not re-OCRed or corrected. Codes require local decoder evidence.
+The account-owned `text_ocr_evidence` insert-once claim/cache prevents repeated OCR
+on the same input hash/model/preprocessing version. Unknown claims are not replayed;
+a new comparison cannot silently retry an unknown cache entry. There is currently
+no public cache retry endpoint. Complete evidence can be reused with another template.
+Record CAS settlement prevents a 120-second timeout from being overwritten by late
+workers. Restarted tasks are queried/expired, never automatically submitted again.
+This first opt-in release always requires human review, even on exact matches;
+independent accuracy, template verification and 30-run performance gates remain.
+There is no automatic model replacement, local full-sheet OCR fallback or PLC I/O.
+
 Legacy DOC import extracts embedded image payloads directly using a versioned
 Apache POI HWPF helper; it does not convert DOCX, render pages, merge overlaid Word
 text/shapes, apply Word crop settings or follow external links. Original DOC and

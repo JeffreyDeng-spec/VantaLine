@@ -151,6 +151,8 @@ jobs:
           python -m local_inspection_service.scripts.smoke_standard_preparation
           python -m local_inspection_service.scripts.smoke_standard_preparation_recovery
           python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
+          python -m local_inspection_service.scripts.smoke_qwen_ocr_evidence
+          PREPARATION_TEST_QWEN=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
           PREPARATION_TEST_INCOMPLETE=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
           for mode in success timeout interrupted; do
             PREPARATION_TEST_RECOVERY="$mode" python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints

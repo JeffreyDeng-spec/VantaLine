@@ -375,6 +375,11 @@ def register(namespace):
         if not record or not record.get("preparation_compare"):
             raise HTTPException(404, "比较记录不存在")
         if record.get("status") == "attempting" and time.time()-record["created_at"] > 120:
+            if record.get("ocr_provider") == "qwen_ocr":
+                from .qwen_evidence_jobs import timeout
+                from types import SimpleNamespace
+                timeout(SimpleNamespace(**namespace), record)
+                return namespace["_text_v2_public"](namespace["_text_v2_owned"]("records", record_id, uid))
             record.update(status="review_required", decision="REVIEW_REQUIRED", message="任务超时或服务重启，请复核；未自动重跑。")
             namespace["_text_v2_save"]("records", record)
         return namespace["_text_v2_public"](record)
@@ -383,8 +388,12 @@ def register(namespace):
     def comparison_media(record_id: str, kind: str):
         uid = owner()
         record = namespace["_text_v2_owned"]("records", record_id, uid)
-        if not record or not record.get("preparation_compare") or kind != "reference":
+        if not record or not record.get("preparation_compare") or kind not in {"reference", "source"}:
             raise HTTPException(404, "比较证据不存在")
+        if kind == "source":
+            from .standard_preparation import decode, png
+            data = png(decode(namespace["_text_v2_read_verified"](record.get("source_path", ""), uid, record["standard_id"], expected_sha256=record.get("source_sha256", ""))))
+            return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
         data = namespace["_text_v2_read_verified"](record.get("reference_overlay_path", ""), uid, record["standard_id"], expected_sha256=record.get("reference_overlay_sha256", ""))
         return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
