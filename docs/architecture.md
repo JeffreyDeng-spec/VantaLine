@@ -41,6 +41,11 @@ contact is allowed. Other unsafe-background and code-erasure guards remain.
 Original pixels, observations, excluded elements and previous active snapshots remain available. Partial success
 publishes only ready assets; uncertain images require explicit human correction.
 Prepared comparisons read the saved template and recognize only the actual image.
+Activation owns the preparation UI lifecycle: a compact progress indicator and
+an ordered review-modal queue replace the standalone preparation panel. Gallery
+zoom uses that same original-coordinate element editor, with immutable save,
+stale-version blocking and explicit dirty-close protection. Plain unprepared
+images keep read-only zoom. No new model or preparation endpoints are introduced.
 They check text/decoded codes, not icons or logos. A separate commissioning gate
 controls MATCH; missing evidence and numeric conflicts require review.
 This experimental path is not commissioned by synthetic tests. OCR runs in an

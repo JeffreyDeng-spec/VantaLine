@@ -35,6 +35,10 @@ temporary schema; it must not be pointed at the production database.
 Run `scripts/test_standard_preparation_ui.cjs` against Vite on loopback port 5189
 (or `REVIEW_UI_BASE`), with `PLAYWRIGHT_MODULE` where needed. It outputs desktop,
 mobile and reload/no-resubmission evidence in a new temporary directory.
+The real-page fixture also verifies activation without a second prepare POST,
+source-order modal sequencing, click/keyboard state cycling, save failure retaining
+edits, pause/resume, gallery editing through the same modal, dirty-close confirmation,
+mobile zoom without document overflow and disabled edits during processing.
 `scripts/accept_standard_preparation.py` is a separately consented paid read-only
 probe using runtime account ownership/configuration. It writes each image's OCR,
 original/clean/overlay PNGs, pre-call claim and sanitized provider response to a
