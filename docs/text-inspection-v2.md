@@ -12,6 +12,22 @@ returns a task record. GET `/api/text-inspection/prepared-comparisons/{id}` poll
 that record; its `/media/reference` serves the standard-element result overlay.
 The old image-comparison and original asset-media interfaces remain compatible.
 
+The gallery activation action starts preparation directly; there is no separate
+preparation panel or second start action. Progress is restored by GET polling,
+never by resubmitting work. Once the batch finishes, unresolved images open in
+source-ordinal order, one modal at a time. Closing pauses the queue; Continue
+resumes it; Next can defer a difficult image without accepting it. Saving confirms label completeness and ownership in one action, then
+advances only after a successful immutable publication. Failed saves preserve edits.
+Gallery full-size preview reuses the same element editor for prepared images;
+unprepared/excluded images remain read-only. Original-image normalized boxes are
+clickable and keyboard operable: uncertain -> keep -> exclude -> keep. Both color
+and check/cross/question marks identify states. Keep/uncertain source pixels are
+never erased by the browser. The saved cleaned-image preview is explicitly separate
+from unsaved edits. Text/box adjustments and bounded Raw Output stay available.
+Unknown elements block saving; changed draft/source identities require reopening,
+and dirty modal closure requires confirmation. All saves use existing authenticated,
+optimistically versioned endpoints; no extra model call or changed matching rule.
+
 Automatic and human-confirmed cleaning clip the three-pixel background-check
 perimeter to the source image. Image-edge contact alone does not reject cleaning.
 Keep/uncertain element rectangles are subtracted from both the erasure and perimeter

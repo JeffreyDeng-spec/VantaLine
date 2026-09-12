@@ -10,7 +10,7 @@ import { useAgentActions } from "../agent/useAgentActions";
 import { getFile, rememberFile } from "../agent/files";
 import { useAgentState } from "../agent/useAgentState";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
-import { StandardPreparation } from "./StandardPreparation";
+import { StandardPreparation, type PreparationPreview } from "./StandardPreparation";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,.gif,.tif,.tiff";
@@ -81,6 +81,8 @@ export function TextCompareBetaPage() {
   const [activeDifference, setActiveDifference] = useState("");
   const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
+  const [preparationPreview, setPreparationPreview] = useState<PreparationPreview | null>(null);
+  const [activation, setActivation] = useState(0);
   const [mode, setMode] = useState<"label" | "manual">("label");
   const [selectedStandardId, setSelectedStandardId] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
@@ -161,7 +163,7 @@ export function TextCompareBetaPage() {
     onSuccess: () => { setAssetUploadFile(null); resetComparison(); void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); },
     onError: (error: Error) => setInputError(error.message)
   });
-  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { resetComparison(); void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); }, onError: (error: Error) => setInputError(error.message) });
+  const confirmMutation = useMutation({ mutationFn: () => confirmTextInspectionStandard(selectedStandardId), onSuccess: () => { resetComparison(); setActivation(v => v + 1); void queryClient.invalidateQueries({ queryKey: ["text-inspection"] }); }, onError: (error: Error) => setInputError(error.message) });
 
   const resetComparison = (options: { clearCaptured?: boolean } = {}) => {
     comparisonIdentityRef.current = null;
@@ -277,6 +279,13 @@ export function TextCompareBetaPage() {
     setZoomScale(1);
     setZoomedImage({ src, alt });
   };
+  const openStandardPreview = (asset: TextInspectionAsset) => {
+    if (!asset.content_url) return;
+    const title = `${CATEGORY_LABELS[asset.category || ""] || "标准图片"} ${asset.ordinal}`;
+    if (mode === "label") setPreparationPreview({ id: asset.id, url: asset.content_url, title });
+    else openZoom(asset.content_url, title);
+  };
+  useEffect(() => { setPreparationPreview(null); }, [selectedStandardId, mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -400,7 +409,7 @@ export function TextCompareBetaPage() {
       </button>
       <div className="text-standard-asset-copy"><span className="text-standard-classification-badge">{asset.status === "needs_confirmation" ? <AlertTriangle size={15} /> : isActiveAsset(asset) ? <CheckCircle2 size={15} /> : <X size={15} />}{assetStatusCopy(asset)}</span><strong>{CATEGORY_LABELS[asset.category || ""] || "标准图片"}</strong><small>{asset.classification_source === "human" ? "人工已修改" : "系统建议，尚未经人工确认"}{asset.context ? ` · ${asset.context}` : ""}</small>{asset.classification_reason ? <details><summary>查看分类依据</summary><p>{asset.classification_reason}</p></details> : null}</div>
       <div className="text-standard-asset-actions">
-        {asset.content_url ? <button type="button" onClick={() => openZoom(asset.content_url!, `${CATEGORY_LABELS[asset.category || ""] || "标准图片"} ${asset.ordinal}`)}><Expand size={14} />查看大图</button> : null}
+        {asset.content_url ? <button type="button" onClick={() => openStandardPreview(asset)}><Expand size={14} />查看大图</button> : null}
         {selectable ? <button type="button" disabled={mutation.isPending} onClick={() => chooseAsset(asset)} aria-pressed={selected} className="text-standard-select-reference">{selected ? "已选为对比标准" : "用作对比标准"}</button> : null}
         {mode === "label" ? <div className={`text-standard-retention-control retention-${asset.status}`}>
         <span className="text-standard-retention-state">{asset.status === "candidate" ? <CheckCircle2 size={16} /> : asset.status === "excluded" ? <X size={16} /> : <AlertTriangle size={16} />}{asset.status === "candidate" ? "已保留" : asset.status === "excluded" ? "未保留" : "待确认"}</span>
@@ -466,7 +475,7 @@ export function TextCompareBetaPage() {
               </div> : null}
               {standardQuery.data?.standard_type === "label" ? <div className="text-standard-inline-controls"><FileDropZone className="text-standard-add-asset-drop" accept={IMAGE_ACCEPT} disabled={assetUploadMutation.isPending} ariaLabel="拖拽或选择单张标准图片" onFiles={(files) => { setAssetUploadFile(files[0] || null); setInputError(""); }}><ImagePlus size={16} /><span>{assetUploadFile ? assetUploadFile.name : "拖拽或选择单张图片"}</span></FileDropZone><button type="button" disabled={!assetUploadFile || assetUploadMutation.isPending} onClick={() => assetUploadMutation.mutate()}>{assetUploadMutation.isPending ? "添加中…" : "添加到标准"}</button></div> : null}
               {standardQuery.isError ? <div className="text-standard-empty error"><AlertTriangle size={22} /><strong>订单内容加载失败</strong><button type="button" onClick={() => void standardQuery.refetch()}>重试</button></div> : renderAssetCards()}
-              {mode === "label" ? <StandardPreparation key={standard.id} standardId={standard.id} onZoom={openZoom} /> : null}
+              {mode === "label" ? <StandardPreparation key={standard.id} standardId={standard.id} onZoom={openZoom} activation={activation} preview={preparationPreview} onPreviewHandled={() => setPreparationPreview(null)} confirmed={standardQuery.data?.status === "confirmed"} disabled={reviewBusy || pendingAssetCount > 0 || !retainedAssetCount} onActivate={() => confirmMutation.mutate()} /> : null}
               {inputError ? <div className="text-standard-form-error"><AlertTriangle size={16} />{inputError}</div> : null}
               {standardQuery.data?.status === "draft" ? <div className="text-standard-inline-footer"><span>{pendingAssetCount ? `还有 ${pendingAssetCount} 张待定图片，请选择保留或排除。` : `将保留 ${retainedAssetCount} 张，排除 ${excludedAssetCount} 张；排除的图片仍可恢复。`}</span>{pendingAssetCount ? <button type="button" onClick={() => setAssetFilter("needs_confirmation")}>查看待定项</button> : null}<button type="button" disabled={!retainedAssetCount || pendingAssetCount > 0 || reviewBusy || classification?.state === "processing"} onClick={() => confirmMutation.mutate()}>{confirmMutation.isPending ? "正在保存…" : `确认保留 ${retainedAssetCount} 张并启用`}</button></div> : null}
             </div> : null}
