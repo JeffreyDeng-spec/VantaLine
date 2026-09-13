@@ -227,6 +227,15 @@ camera/serial permission origins and model/PLC configuration are unchanged.
 
 ## Deployment and data ownership
 
+Text comparison UI uses `useComparisonTask` for a single POST and independent
+1.5-second GET polling. `ComparisonDialog` owns presentation only: closing it
+never cancels the backend job. Account-keyed sessionStorage stores identifiers,
+binding metadata, start time and visibility, never image bytes, credentials or
+result logs. Account changes remount the workspace; changed input fences stale
+responses. Refresh performs owner-authorized lookup by request ID when the POST
+acknowledgment was lost, and never resubmits an uncertain paid operation.
+The existing backend deadline and OCR/matching paths are unchanged.
+
 `main` is packaged into `/opt/vantaline/releases/<release-id>` and production `current` atomically points to one immutable release. Mutable data, environment configuration, model artifacts, and database state remain outside release directories. A release contains backend source, one production frontend bundle, migration definitions, locked dependencies, `VERSION.json`, and `SHA256SUMS`.
 
 The browser cookie identifies a workstation independently of login. User permissions still gate configuration, connection, camera inspection, attempt, and receipt operations. Secrets remain in GitHub Environment secrets or restricted server environment files and are never represented by real values in Git.

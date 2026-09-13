@@ -40,12 +40,18 @@ def main():
     frontend = (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text(encoding="utf-8")
     styles = (APP_DIR / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
     assert "getUserMedia" in frontend and "track.stop()" in frontend
-    assert "comparisonIdentityRef" in frontend and "disabled={mutation.isPending}" in frontend
-    assert 'useState<"camera" | "image">("camera")' in frontend
+    lifecycle = (APP_DIR / "frontend/src/features/text-compare/useComparisonTask.ts").read_text()
+    dialog = (APP_DIR / "frontend/src/features/text-compare/ComparisonDialog.tsx").read_text()
+    assert "comparison.start" in frontend and "inputEpoch.current !== epoch" in frontend
+    assert "current.current?.requestId !== requestId" in lifecycle
+    assert 'useState<"camera" | "image">(comparison.task ? "image" : "camera")' in frontend
+    assert "sessionStorage.setItem" in lifecycle and "by-request/" in lifecycle
+    assert "showModal()" in dialog and "onCancel" in dialog and "进度为估算" in dialog
+    assert "查看结果" in frontend and "对比中 · 查看进度" in frontend
     assert 'const IMAGE_ACCEPT = "image/*' in frontend
     assert "ACCEPTED_TYPES" not in frontend and "仅支持 PNG、JPG 或 WEBP 图片。" not in frontend
     assert "支持常见图片格式" in frontend
-    assert "上传实物图片" in frontend and "请先上传需要对比的实物图片" in frontend
+    assert "上传实物图片" in frontend and "请先上传实物图片" in frontend
     assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "查看大图" in frontend
     # Standard-library navigation and inspection stays in the order detail: users
     # should not have to enter a second manager dialog to edit the same standard.
@@ -68,14 +74,14 @@ def main():
     assert "showManager" not in frontend and "管理标准" not in frontend
     # Label comparison accepts only an enabled gallery asset as its standard.
     # Changing that selection clears stale output but preserves the actual image.
-    assert "const resetComparison" in frontend and "comparisonIdentityRef.current = null" in frontend
+    assert "const resetComparison" in frontend and "comparison.reset()" in frontend
     assert 'resetComparison();\n    setSelectedAssetId(asset.id);' in frontend
     assert 'setSelectedStandardId(nextId); setSelectedAssetId(""); setAssetUploadFile(null);\n    resetComparison();' in frontend
-    assert "standardAssetId: selectedAsset.id" in frontend
+    assert "assetId: selectedAsset.id" in frontend
     assert 'form.set("standard_asset_id", selectedAsset.id)' in frontend
     assert "analyzeTextCompareBeta" not in frontend and "replaceReference" not in frontend
     assert 'ariaLabel="拖拽或选择标准图片"' not in frontend
-    assert "请先在左侧订单画廊中选择一张已启用的标签图片" in frontend
+    assert "请先选择已启用并完成元素准备的标准" in frontend
     assert "function isActiveAsset" in frontend
     # Colored current state is distinct from the one-click destination action.
     # Pending/excluded become retained; retained becomes excluded.

@@ -159,6 +159,15 @@ def main():
         if record["status"] != "attempting": break
         time.sleep(.02)
     assert record["status"] == "completed", record
+    recovery_url = "/api/text-inspection/prepared-comparisons/by-request/prepared_test_001"
+    before_recovery = copy.deepcopy(server._text_v2_owned("records", record["id"], owner))
+    recovered = admin.get(recovery_url)
+    assert_status(recovered, 200, "request recovery")
+    assert recovered.json()["id"] == record["id"]
+    assert_status(other.get(recovery_url), 404, "request recovery account isolation")
+    assert_status(admin.get(recovery_url+"_absent"), 404, "missing upload not replayed")
+    assert_status(TestClient(server.app).get(recovery_url), 401, "request recovery requires login")
+    assert server._text_v2_owned("records", record["id"], owner) == before_recovery, "lookup is read only"
     assert record["decision"] == "REVIEW_REQUIRED"  # Edited 21V is not present.
     assert len(calls) == 1, "comparison must not send another VLM request"
     assert_status(admin.get(record["reference_overlay_url"]), 200, "reference evidence")
