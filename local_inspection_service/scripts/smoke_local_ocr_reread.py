@@ -107,7 +107,7 @@ class Tests(unittest.TestCase):
                     reread_version=reread.VERSION if enabled else None))
             save('records', record)
             with patch.object(ocr, 'recognize', recognize), patch.object(jobs, 'llm', return_value=({'mappings': []}, {})):
-                jobs.run(namespace, SimpleNamespace(media=lambda *args: blob), record, blob, dict(model='test'))
+                jobs.run(namespace, SimpleNamespace(media=lambda *args: blob), record, blob, dict(model='test',api_key='fixture'))
             return store['records', identity]
         first = run('first')
         self.assertEqual(len(calls), 3)

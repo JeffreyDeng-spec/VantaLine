@@ -11,8 +11,9 @@ from . import local_evidence_search
 from . import local_ocr_reread as reread
 from . import qwen_ocr_evidence as ocr
 from . import standard_preparation as engine
+from . import model_call_audit
 
-VERSION = "qwen-evidence-jobs-v6-independent-observations"
+VERSION = "qwen-evidence-jobs-v7-audited-json"
 _slots = threading.BoundedSemaphore(1)
 
 
@@ -30,25 +31,42 @@ def settings(s, owner):
     return resolved
 
 
-def llm(resolved, request, timeout):
+def llm(resolved, request, timeout, *, audit=None, structured=True):
     import requests
     payload = dict(model=resolved["model"], input={"messages": [
         {"role": "system", "content": [{"text": matching.PROMPT}]},
         {"role": "user", "content": [{"text": json.dumps(request, ensure_ascii=False)}]}]},
         parameters={"enable_thinking": False, "temperature": 0, "max_tokens": 4096})
-    response = requests.post(ocr.endpoint(resolved["base_url"]),
-        headers={"Authorization": "Bearer " + resolved["api_key"]}, json=payload,
-        timeout=max(.1, timeout), allow_redirects=False, stream=True)
+    if structured:
+        payload['parameters']['response_format'] = {'type': 'json_object'}
+    if audit:
+        audit('request', dict(payload=payload, prompt_version=matching.VERSION))
+    network_started = time.monotonic()
     try:
-        if response.status_code != 200:
-            raise ocr.EvidenceError("mapping_http_" + str(response.status_code))
+        response = requests.post(ocr.endpoint(resolved["base_url"]),
+            headers={"Authorization": "Bearer " + resolved["api_key"]}, json=payload,
+            timeout=max(.1, timeout), allow_redirects=False, stream=True)
+    except Exception as error:
+        if audit: audit('transport_error', dict(error_type=type(error).__name__, elapsed_ms=round((time.monotonic()-network_started)*1000)))
+        raise
+    headers_ms = round((time.monotonic()-network_started)*1000)
+    try:
         chunks, count = [], 0
         for chunk in response.iter_content(65536):
             count += len(chunk)
             if count > 500_000:
+                if audit:
+                    audit('response', dict(http_status=response.status_code, truncated=True,
+                        body=(b''.join(chunks)+chunk)[:500_000].decode('utf-8', errors='replace')))
                 raise ocr.EvidenceError("mapping_response_capacity")
             chunks.append(chunk)
         body = b"".join(chunks)
+        if audit:
+            audit('response', dict(http_status=response.status_code, truncated=False,
+                body=body.decode('utf-8', errors='replace'), response_sha256=hashlib.sha256(body).hexdigest(),
+                headers_ms=headers_ms, network_ms=round((time.monotonic()-network_started)*1000)))
+        if response.status_code != 200:
+            raise ocr.EvidenceError("mapping_http_" + str(response.status_code))
         raw = json.loads(body)
         if not isinstance(raw, dict):
             raise ocr.EvidenceError('mapping_invalid_response_envelope')
@@ -56,15 +74,26 @@ def llm(resolved, request, timeout):
         choices = raw.get("output", {}).get("choices", [])
         if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
             raise ocr.EvidenceError("mapping_incomplete",metadata)
-        text = "".join(c.get("text", "") for c in choices[0].get("message", {}).get("content", []))
+        text = "".join(c.get("text", "") for c in choices[0].get("message", {}).get("content", [])).strip()
         if text.startswith("```json\n") and text.rstrip().endswith("```"):
             text = text[8:text.rfind("```")].strip()
         try:
             proposal = json.loads(text)
-        except ValueError:
+        except json.JSONDecodeError as error:
+            metadata['parse_error'] = dict(message=error.msg, line=error.lineno, column=error.colno, position=error.pos)
+            if audit:
+                audit('parse', dict(state='invalid_json', **metadata['parse_error']))
             raise ocr.EvidenceError('mapping_invalid_json',metadata) from None
+        if audit:
+            audit('parse', dict(state='parsed', proposal=proposal))
         return proposal, {"model": resolved["model"], "prompt_version": matching.VERSION,
             **metadata, "request_id": raw.get("request_id")}
+    except Exception as error:
+        if audit:
+            audit('failure', dict(error_type=type(error).__name__,
+                elapsed_ms=round((time.monotonic()-network_started)*1000),
+                received_prefix=b''.join(chunks).decode('utf-8',errors='replace') if 'chunks' in locals() else ''))
+        raise
     finally:
         response.close()
 
@@ -123,7 +152,8 @@ def run(s, jobs, record, upload, resolved):
             record["diagnostics"]["ocr_call"] = {"state": "attempting", "model": ocr.MODEL}
             save("extracting_text")
             try:
-                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved, blob, image.size, remaining(),presence_evidence=True))
+                audit = model_call_audit.recorder(s, record, 'ocr', save, resolved['api_key'])
+                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved, blob, image.size, remaining(),presence_evidence=True, audit=audit))
                 cache.update(status="completed", observations=observations, diagnostics=diagnostic)
                 s._text_v2_update_attempt("ocr_evidence", cache)
             except Exception as error:
@@ -161,10 +191,12 @@ def run(s, jobs, record, upload, resolved):
             record["diagnostics"]["external_calls"] += 1
             save("mapping_unmatched")  # Durable claim BEFORE the one text-only call.
             try:
-                proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining()))
+                audit = model_call_audit.recorder(s, record, 'mapping', save, resolved['api_key'])
+                proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining(), audit=audit))
                 remaining()
                 record["diagnostics"]["llm_call"].update(**metadata)
                 rows, validation = matching.validate_independently(proposal, request, rows)
+                audit('validation', validation)
                 record["diagnostics"]["llm_call"].update(
                     state="completed_with_rejections" if validation["rejected_mappings"] else "completed",
                     **validation)
@@ -203,8 +235,9 @@ def run(s, jobs, record, upload, resolved):
                         if winner:
                             record['diagnostics']['external_calls'] += 1
                             save(phase)  # Persist each paid claim before sending image-only input.
+                            audit = model_call_audit.recorder(s, record, identity, save, resolved['api_key'])
                             raw, metadata = ocr.recognize(resolved, region['blob'], region['input_size'], remaining(),
-                                presence_evidence=True, region_text=mode == 'text_recognition')
+                                presence_evidence=True, region_text=mode == 'text_recognition', audit=audit)
                             claim.update(status='completed', observations=raw, diagnostics=metadata)
                             s._text_v2_update_attempt('ocr_evidence', claim)
                         else:

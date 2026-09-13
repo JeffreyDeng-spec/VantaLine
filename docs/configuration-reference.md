@@ -44,6 +44,14 @@ The current preset is `mitsubishi_fx3ga_40mr` over browser Web Serial with fixed
 
 ## Text inspection v2
 
+Prepared Qwen comparisons request `response_format={"type":"json_object"}` with
+thinking disabled on the existing correspondence model; unsupported models fail
+without fallback. No extra provider/key or automatic retry is added. Full call
+evidence is stored under existing account media ownership, with bounded bodies,
+redaction and authenticated attachment downloads. No secrets enter application logs.
+Display previews use a fixed 1600px longest edge, JPEG quality 85, 4:4:4; this does
+not change OCR input resolution/encoding or the original evidence archive.
+
 `VANTALINE_QWEN_OCR_ACCOUNTS` is a separate default-empty allowlist selecting the
 actual-image Qwen OCR evidence path. It also requires the existing external-media
 gate and resolved Qwen credentials. It does not change standard preparation or

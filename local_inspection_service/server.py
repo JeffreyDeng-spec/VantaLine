@@ -37537,6 +37537,10 @@ def _text_v2_read_verified(path_value: str, owner_user_id: str, standard_id: str
 def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
     result = copy.deepcopy(value)
     result.pop("source_path", None)
+    result.pop("source_preview_path", None)
+    for audit in result.get('diagnostics', {}).get('model_audits', []):
+        for evidence in audit.get('files', {}).values():
+            evidence.pop('path', None)
     result.pop("media_path", None)
     result.pop("annotated_path", None)
     result.pop("reference_overlay_path", None)

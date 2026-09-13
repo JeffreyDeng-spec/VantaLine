@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import math
+import time
 from urllib.parse import urlparse
 
 MODEL = "qwen-vl-ocr-2025-11-20"
@@ -170,7 +171,7 @@ def validated_subset(response, size, *, allow_empty=False):
     return valid,rejected
 
 
-def recognize(settings, blob, size, timeout, post=None, *, allow_rejected_words=False, auto_rotate=False, presence_evidence=False, region_text=False):
+def recognize(settings, blob, size, timeout, post=None, *, allow_rejected_words=False, auto_rotate=False, presence_evidence=False, region_text=False, audit=None):
     import requests
     if type(presence_evidence) is not bool:
         raise EvidenceError('ocr_invalid_presence_option')
@@ -182,19 +183,38 @@ def recognize(settings, blob, size, timeout, post=None, *, allow_rejected_words=
     request = payload(blob, auto_rotate=auto_rotate)
     if region_text:
         request['parameters']['ocr_options']['task'] = 'text_recognition'
+    if audit:
+        import copy
+        audit('input_image', blob)
+        logged = copy.deepcopy(request)
+        logged['input']['messages'][0]['content'][0]['image'] = dict(sha256=hashlib.sha256(blob).hexdigest(), bytes=len(blob))
+        audit('request', dict(payload=logged, preprocess_version=VERSION, source_size=list(size)))
     # Explicit no redirects; requests' default adapter does not retry POST.
-    response = post(endpoint(settings["base_url"]), headers={"Authorization": "Bearer "+settings["api_key"]},
-                    json=request, timeout=max(.1, timeout), allow_redirects=False, stream=True)
+    network_started = time.monotonic()
     try:
-        if response.status_code != 200:
-            raise EvidenceError("ocr_http_"+str(response.status_code))
+        response = post(endpoint(settings["base_url"]), headers={"Authorization": "Bearer "+settings["api_key"]},
+                        json=request, timeout=max(.1, timeout), allow_redirects=False, stream=True)
+    except Exception as error:
+        if audit: audit('transport_error', dict(error_type=type(error).__name__,elapsed_ms=round((time.monotonic()-network_started)*1000)))
+        raise
+    headers_ms = round((time.monotonic()-network_started)*1000)
+    try:
         chunks, total = [], 0
         for chunk in response.iter_content(65536):
             total += len(chunk)
             if total > MAX_RESPONSE:
+                if audit:
+                    audit('response', dict(http_status=response.status_code, truncated=True,
+                        body=(b''.join(chunks)+chunk)[:MAX_RESPONSE].decode('utf-8', errors='replace')))
                 raise EvidenceError("ocr_response_capacity")
             chunks.append(chunk)
         body = b"".join(chunks)
+        if audit:
+            audit('response', dict(http_status=response.status_code, truncated=False,
+                body=body.decode('utf-8', errors='replace'), response_sha256=hashlib.sha256(body).hexdigest(),
+                headers_ms=headers_ms, network_ms=round((time.monotonic()-network_started)*1000)))
+        if response.status_code != 200:
+            raise EvidenceError("ocr_http_"+str(response.status_code))
         try:
             raw = json.loads(body)
         except (ValueError, UnicodeError):
@@ -235,5 +255,11 @@ def recognize(settings, blob, size, timeout, post=None, *, allow_rejected_words=
         # Do not retain arbitrary provider fields (could echo credentials/input).
         return observations, dict(model=MODEL, preprocess_version=VERSION,
             **metadata, words_info=observations)
+    except Exception as error:
+        if audit:
+            audit('failure', dict(error_type=type(error).__name__,
+                parse_error=getattr(error,'diagnostics',{}), elapsed_ms=round((time.monotonic()-network_started)*1000),
+                received_prefix=b''.join(chunks).decode('utf-8',errors='replace') if 'chunks' in locals() else ''))
+        raise
     finally:
         response.close()

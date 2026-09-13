@@ -390,6 +390,26 @@ def register(namespace):
         record = namespace["_text_v2_owned"]("records", record_id, uid)
         if not record or not record.get("preparation_compare"):
             raise HTTPException(404, "比较证据不存在")
+        if kind.startswith('audit-'):
+            evidence = next((f for a in record.get('diagnostics', {}).get('model_audits', [])
+                for f in a.get('files', {}).values() if f.get('kind') == kind), None)
+            if not evidence:
+                raise HTTPException(404, "调用证据不存在")
+            data = namespace['_text_v2_read_verified'](evidence['path'], uid, record['standard_id'], expected_sha256=evidence['sha256'])
+            return Response(data, media_type='application/octet-stream', headers={
+                'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+                'Content-Disposition': 'attachment; filename="model-evidence.bin"'})
+        if kind == 'preview':
+            path = record.get('source_preview_path')
+            if path:
+                data = namespace['_text_v2_read_verified'](path, uid, record['standard_id'], expected_sha256=record['source_preview_sha256'])
+            else:
+                # Historical records remain immutable; no model or business edit.
+                from . import evidence_preview
+                from .standard_preparation import decode
+                source = namespace['_text_v2_read_verified'](record['source_path'], uid, record['standard_id'], expected_sha256=record['source_sha256'])
+                data, _ = evidence_preview.create(decode(source))
+            return Response(data, media_type='image/jpeg', headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
         if kind not in {"reference", "source"}:
             trace = next((t for t in record.get('diagnostics', {}).get('rereads', []) if t.get('id') == kind), None)
             if not trace:
@@ -398,8 +418,20 @@ def register(namespace):
             return Response(data, media_type='image/png', headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
         if kind == "source":
             from .standard_preparation import decode, png
-            data = png(decode(namespace["_text_v2_read_verified"](record.get("source_path", ""), uid, record["standard_id"], expected_sha256=record.get("source_sha256", ""))))
-            return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+            from PIL import Image
+            import io
+            data = namespace["_text_v2_read_verified"](record.get("source_path", ""), uid, record["standard_id"], expected_sha256=record.get("source_sha256", ""))
+            with Image.open(io.BytesIO(data)) as original:
+                orientation = original.getexif().get(274, 1)
+            if orientation != 1:
+                data, mime = png(decode(data)), 'image/png'
+            elif data.startswith(b'\xff\xd8\xff'):
+                mime = 'image/jpeg'
+            elif data.startswith(b'\x89PNG\r\n\x1a\n'):
+                mime = 'image/png'
+            else:
+                data, mime = png(decode(data)), 'image/png'
+            return Response(data, media_type=mime, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
         data = namespace["_text_v2_read_verified"](record.get("reference_overlay_path", ""), uid, record["standard_id"], expected_sha256=record.get("reference_overlay_sha256", ""))
         return Response(data, media_type="image/png", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
