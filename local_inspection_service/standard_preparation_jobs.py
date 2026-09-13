@@ -368,6 +368,26 @@ def register(namespace):
         from .standard_preparation_ocr import available
         return {"enabled": enabled(uid), "ocr_available": available(), "scope": "text_and_decoded_codes_only", "graphics_checked": False}
 
+    @app.get("/api/text-inspection/prepared-comparisons/by-request/{request_id}")
+    def comparison_by_request(request_id: str):
+        """Recover an upload acknowledgment; never submit or mutate a model job."""
+        uid = owner()
+        if not request_id or len(request_id) > 128:
+            raise HTTPException(400, "无效请求标识")
+        repository = namespace["runtime_postgres_repository_or_none"]()
+        if repository is not None:
+            row = repository.fetch_one_by_columns(namespace["TEXT_INSPECTION_TABLES"]["records"],
+                {"owner_user_id": uid, "comparison_id": request_id})
+            records = namespace["row_raw_json_list"]([row]) if row else []
+        else:
+            records = namespace["_text_v2_load"]("records")
+        record = next((r for r in records
+            if r.get("owner_user_id") == uid and r.get("comparison_id") == request_id
+            and r.get("preparation_compare")), None)
+        if not record:
+            raise HTTPException(404, "本账户未找到该比较请求")
+        return namespace["_text_v2_public"](record)
+
     @app.get("/api/text-inspection/prepared-comparisons/{record_id}")
     def comparison(record_id: str):
         uid = owner()

@@ -246,6 +246,40 @@ The first classifier is a deterministic local context classifier with manual fee
 
 ## Remaining production gates
 
+### Comparison progress and result dialog
+
+Starting a text comparison immediately opens a native modal dialog. The complete
+summary, element evidence, differences, high-resolution opt-in and collapsed Raw
+Output live there; closing keeps the task running. The workspace action becomes
+`对比中 · 查看进度` then `查看结果`; completion never reopens a dismissed dialog.
+Next image or another selected standard detaches the old task without mutating
+its historical evidence. Historical results remain readable if a standard is
+later disabled; this does not authorize a new comparison against that standard.
+
+Estimated progress uses elapsed client time: 1–35% over 10s, 35–70% over the next
+20s, 70–90% over the next 30s, then one percent per 12s up to 95%. It is explicitly
+an estimate; only a stored `completed` record displays 100%. Failed/timeout
+records show their reason. Desktop is bounded to 1200px / 90dvh; mobile is full
+screen. Escape/close restore trigger focus, backdrop clicks do not dismiss, and
+the mounted result preserves selection/scroll when returning from image zoom.
+
+`GET /api/text-inspection/prepared-comparisons/by-request/{request_id}` is a
+read-only recovery endpoint requiring inspection permission and current-owner
+binding. PostgreSQL uses the existing `(owner_user_id, comparison_id)` key; the
+fallback repository filters both fields. Unknown or other-owner requests return
+404. No model call, timeout transition or history rewrite occurs in this lookup.
+Subsequent record-ID polling retains the existing backend timeout semantics.
+
+`text-comparison:v1:<account>` sessionStorage contains only request/record IDs,
+standard/asset/image identity metadata, start time, definitive submission-rejection
+flag and dialog visibility. Definitive invalid/forbidden/conflicting uploads stop
+immediately; their rejection flag survives refresh without re-uploading. Refresh
+restores those fields and queries the server, without uploading again. Network
+errors/401 preserve the task and retry GETs; 403 or a missing known record stop
+with an access error. A missing request is queried for a 30s acknowledgment grace
+period, then asks for a new image. Files not received by the server cannot be
+recovered. Closing the browser tab ends this tab-local recovery scope.
+
 External media sending defaults off (`VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED`). Even after consent enables sending, `MATCH` remains review-only until `VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED` is set after customer samples, account budgets/rate limits, prompt/model pinning and commissioning evidence pass. Manual completion cannot return PASS until `VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED` is set after page lease/fencing and multi-tab recovery tests pass.
 
 ## Developing browser tools

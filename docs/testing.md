@@ -2,6 +2,23 @@
 
 **Status: Authoritative**
 
+## Comparison dialog regression
+
+With local Vite on port 5189, run `scripts/test_comparison_dialog_ui.cjs` and
+`scripts/test_qwen_evidence_ui.cjs` using `REVIEW_UI_BASE=http://127.0.0.1:5189/react-preview`,
+`PLAYWRIGHT_MODULE` and optionally `QWEN_TEST_BROWSER=msedge`. Synthetic HTTP
+covers single submission, close/reopen, progress boundaries/95% cap, completion,
+timeout, open/closed refresh, lost upload acknowledgment, unavailable upload,
+network recovery, 401/403, account switch and stale-response isolation. The
+evidence test checks full result migration, compressed preview, opt-in original,
+collapsed logs and mobile overflow, saving desktop/mobile screenshots.
+
+`PREPARATION_TEST_QWEN=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints`
+also checks authenticated request-ID lookup, cross-owner/missing-request rejection
+and non-mutation. These use fake providers and do not establish OCR accuracy.
+One separately authorized real comparison is required for release commissioning;
+record the exact task/version, timings and screenshots without exposing secrets.
+
 ## Qwen OCR evidence comparison (not commissioned)
 
 `python -m local_inspection_service.scripts.smoke_local_ocr_reread` verifies bounded
