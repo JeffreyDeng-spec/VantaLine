@@ -132,7 +132,8 @@ def main():
                 files={"captured_file": ("actual.png", data)}), 409, "no legacy fallback without template")
         finally:
             server._text_v2_save("standards", original_standard)
-        def remote_ocr(settings, blob, size, timeout):
+        def remote_ocr(settings, blob, size, timeout, *, presence_evidence=False):
+            assert presence_evidence is True
             claims = server._text_v2_load("ocr_evidence")
             assert len(claims) == 1 and claims[0]["status"] == "attempting"
             qwen_calls.append("ocr")
@@ -161,11 +162,25 @@ def main():
     assert_status(other.get(record["reference_overlay_url"]), 404, "cross owner evidence")
     if qwen_mode:
         assert qwen_calls.count("ocr") == 1
-        assert record["diagnostics"]["matching_policy"] == "evidence-matching-v2-existence"
+        assert record["diagnostics"]["matching_policy"] == "evidence-matching-v4-independent"
         assert record["diagnostics"]["provider"] == "qwen_ocr"
         source_url = f"/api/text-inspection/prepared-comparisons/{record['id']}/media/source"
         assert_status(admin.get(source_url),200,"actual source evidence")
         assert_status(other.get(source_url),404,"cross owner actual evidence")
+        # Isolated stored-media fixture: production routes must authorize before
+        # resolving reread files and omit internal paths from public diagnostics.
+        evidence = server._text_v2_owned('records', record['id'], owner)
+        region_id = 'ocr_' + 'a'*64
+        region_path = server._text_v2_media_path(owner, identity, record['id']+'-region.png')
+        server._text_v2_write(region_path, data)
+        evidence['diagnostics']['rereads'] = [dict(id=region_id, input_path=str(region_path), input_sha256=server.sha256_bytes(data))]
+        server._text_v2_save('records', evidence)
+        region_url = f"/api/text-inspection/prepared-comparisons/{record['id']}/media/{region_id}"
+        assert_status(admin.get(region_url),200,'reread input media')
+        assert_status(other.get(region_url),404,'cross owner reread media')
+        assert_status(admin.get(region_url+'x'),404,'unknown reread media')
+        public = admin.get(f"/api/text-inspection/prepared-comparisons/{record['id']}").json()
+        assert 'input_path' not in public['diagnostics']['rereads'][0]
         duplicate = admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"],comparison_id="prepared_test_001"), files={"captured_file":("actual.png",data)}).json()
         assert duplicate["id"] == record["id"] and qwen_calls.count("ocr") == 1
         cached = admin.post("/api/text-inspection/label/compare", data=dict(standard_asset_id=asset["id"],comparison_id="prepared_test_cached"), files={"captured_file":("actual.png",data)}).json()

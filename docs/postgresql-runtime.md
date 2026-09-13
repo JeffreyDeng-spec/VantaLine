@@ -15,6 +15,13 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Ownership and compatibility
 
+Local OCR rereads reuse the OCR evidence table with owner/source/input hash,
+mode, pinned model and preprocessing version in the cache key. Each input gets
+an insert-once claim before its paid call; only completed results are reusable.
+Unknown claims survive restart and are never automatically resent. Per-comparison
+diagnostics link owned, hash-verified input media; API responses omit disk paths.
+No schema change or historical evidence rewrite is required.
+
 `2026_09_12_text_ocr_evidence.sql` adds account-owned OCR claims/cache. Deterministic
 IDs bind owner, source hash, pinned model and preprocessing version. Insert-once
 precedes external OCR; only completed results are reusable. Unknown or interrupted

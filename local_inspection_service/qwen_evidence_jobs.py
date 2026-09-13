@@ -7,10 +7,12 @@ import threading
 import time
 
 from . import evidence_matching as matching
+from . import local_evidence_search
+from . import local_ocr_reread as reread
 from . import qwen_ocr_evidence as ocr
 from . import standard_preparation as engine
 
-VERSION = "qwen-evidence-jobs-v2-existence"
+VERSION = "qwen-evidence-jobs-v6-independent-observations"
 _slots = threading.BoundedSemaphore(1)
 
 
@@ -46,15 +48,23 @@ def llm(resolved, request, timeout):
             if count > 500_000:
                 raise ocr.EvidenceError("mapping_response_capacity")
             chunks.append(chunk)
-        raw = json.loads(b"".join(chunks))
+        body = b"".join(chunks)
+        raw = json.loads(body)
+        if not isinstance(raw, dict):
+            raise ocr.EvidenceError('mapping_invalid_response_envelope')
+        metadata = ocr.response_metadata(raw, body)
         choices = raw.get("output", {}).get("choices", [])
         if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
-            raise ocr.EvidenceError("mapping_incomplete")
+            raise ocr.EvidenceError("mapping_incomplete",metadata)
         text = "".join(c.get("text", "") for c in choices[0].get("message", {}).get("content", []))
         if text.startswith("```json\n") and text.rstrip().endswith("```"):
             text = text[8:text.rfind("```")].strip()
-        return json.loads(text), {"model": resolved["model"], "prompt_version": matching.VERSION,
-            "usage": raw.get("usage", {}), "request_id": raw.get("request_id")}
+        try:
+            proposal = json.loads(text)
+        except ValueError:
+            raise ocr.EvidenceError('mapping_invalid_json',metadata) from None
+        return proposal, {"model": resolved["model"], "prompt_version": matching.VERSION,
+            **metadata, "request_id": raw.get("request_id")}
     finally:
         response.close()
 
@@ -100,10 +110,10 @@ def run(s, jobs, record, upload, resolved):
         image = measured("decode", lambda: engine.decode(upload))
         blob, transform = ocr.prepare(image)
         record["diagnostics"]["coordinate_transform"] = transform
-        cache_id = "ocr_" + hashlib.sha256(json.dumps([record["owner_user_id"],record["source_sha256"],ocr.MODEL,ocr.VERSION]).encode()).hexdigest()
+        cache_id = "ocr_" + hashlib.sha256(json.dumps([record["owner_user_id"],record["source_sha256"],ocr.MODEL,ocr.VERSION,ocr.PRESENCE_VERSION]).encode()).hexdigest()
         cache = dict(id=cache_id, owner_user_id=record["owner_user_id"], status="attempting", created_at=int(time.time()),
             comparison_id=record["id"], model=ocr.MODEL, preprocess_version=ocr.VERSION,
-            source_sha256=record["source_sha256"])
+            source_sha256=record["source_sha256"],validation_policy=ocr.PRESENCE_VERSION)
         save("extracting_text")
         # Insert-once is shared across workers, tabs, comparisons and restarts.
         winner = s._text_v2_save("ocr_evidence", cache, insert_only=True)
@@ -113,11 +123,14 @@ def run(s, jobs, record, upload, resolved):
             record["diagnostics"]["ocr_call"] = {"state": "attempting", "model": ocr.MODEL}
             save("extracting_text")
             try:
-                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved, blob, image.size, remaining()))
+                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved, blob, image.size, remaining(),presence_evidence=True))
                 cache.update(status="completed", observations=observations, diagnostics=diagnostic)
                 s._text_v2_update_attempt("ocr_evidence", cache)
             except Exception as error:
                 cache.update(status="unknown", error_type=type(error).__name__, error=str(error) if isinstance(error, ocr.EvidenceError) else "provider_outcome_unknown")
+                if isinstance(error, ocr.EvidenceError):
+                    cache['diagnostics'] = error.diagnostics
+                    record['diagnostics']['ocr_call'].update(state='failed', **error.diagnostics)
                 s._text_v2_update_attempt("ocr_evidence", cache)
                 raise
         else:
@@ -140,6 +153,8 @@ def run(s, jobs, record, upload, resolved):
             observations.extend(measured("codes", decode_codes))
         save("direct_matching")
         rows = measured("direct_matching", lambda: matching.direct(template["elements"], observations))
+        rows, local_diagnostic = measured("local_exact_matching", lambda: local_evidence_search.complete(rows,observations))
+        record["diagnostics"]["local_exact_matching"] = local_diagnostic
         request = measured("candidate_retrieval", lambda: matching.candidates(rows, observations))
         if request["elements"]:
             record["diagnostics"].update(mapping_request=request, llm_call={"state":"attempting", "model":resolved["model"]})
@@ -148,10 +163,74 @@ def run(s, jobs, record, upload, resolved):
             try:
                 proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining()))
                 remaining()
-                rows = matching.validate(proposal, request, rows)
-                record["diagnostics"]["llm_call"] = {"state":"completed", **metadata, "validated_response":proposal}
+                record["diagnostics"]["llm_call"].update(**metadata)
+                rows, validation = matching.validate_independently(proposal, request, rows)
+                record["diagnostics"]["llm_call"].update(
+                    state="completed_with_rejections" if validation["rejected_mappings"] else "completed",
+                    **validation)
             except Exception as error:
                 record["diagnostics"]["llm_call"].update(state="unknown_or_invalid", error_type=type(error).__name__)
+                if isinstance(error,ocr.EvidenceError):
+                    record['diagnostics']['llm_call'].update(error= str(error), **error.diagnostics)
+        if record['diagnostics'].get('reread_version') == reread.VERSION and any(r['state'] != 'matched' for r in rows):
+            regions = reread.select(image, request, observations)
+            traces = record['diagnostics'].setdefault('rereads', [])
+            for mode, phase in [('advanced_recognition', 'rereading_regions'), ('text_recognition', 'transcribing_regions')]:
+                for region in regions:
+                    if not any(r['state'] != 'matched' for r in rows):
+                        break
+                    if mode == 'text_recognition' and not reread.needs_text(region, request, rows):
+                        continue
+                    if mode == 'text_recognition':
+                        region = reread.text_region(region)
+                    remaining()
+                    identity = 'ocr_' + hashlib.sha256(json.dumps([record['owner_user_id'], record['source_sha256'],
+                        region['input_sha256'], ocr.MODEL, ocr.VERSION, reread.VERSION, mode]).encode()).hexdigest()
+                    trace = {k: v for k, v in region.items() if k != 'blob'}
+                    trace.update(id=identity, mode=mode, model=ocr.MODEL, state='attempting')
+                    path = s._text_v2_media_path(record['owner_user_id'], record['standard_id'], record['id']+'-'+identity+'.png')
+                    s._text_v2_write(path, region['blob'])
+                    trace.update(input_path=str(path), input_url=f"/api/text-inspection/prepared-comparisons/{record['id']}/media/{identity}")
+                    traces.append(trace)
+                    save(phase)
+                    claim = dict(id=identity, owner_user_id=record['owner_user_id'], status='attempting',
+                        created_at=int(time.time()), comparison_id=record['id'], source_sha256=record['source_sha256'],
+                        model=ocr.MODEL, preprocess_version=reread.VERSION, mode=mode)
+                    winner = s._text_v2_save('ocr_evidence', claim, insert_only=True)
+                    trace['cache_hit'] = not winner
+                    before = time.monotonic()
+                    try:
+                        if winner:
+                            record['diagnostics']['external_calls'] += 1
+                            save(phase)  # Persist each paid claim before sending image-only input.
+                            raw, metadata = ocr.recognize(resolved, region['blob'], region['input_size'], remaining(),
+                                presence_evidence=True, region_text=mode == 'text_recognition')
+                            claim.update(status='completed', observations=raw, diagnostics=metadata)
+                            s._text_v2_update_attempt('ocr_evidence', claim)
+                        else:
+                            claim = s._text_v2_owned('ocr_evidence', identity, record['owner_user_id'])
+                            if not claim or claim.get('status') != 'completed':
+                                raise ocr.EvidenceError('prior_reread_pending_or_unknown_not_replayed')
+                            raw, metadata = copy.deepcopy(claim['observations']), copy.deepcopy(claim['diagnostics'])
+                        remaining()
+                        rows, mapped = reread.merge(rows, template['elements'], raw, region, mode, identity)
+                        observations.extend(mapped)
+                        trace.update(state='completed', diagnostics=metadata, observations=mapped)
+                    except TimeoutError:
+                        raise
+                    except Exception as error:
+                        trace.update(state='unknown_or_invalid', error_type=type(error).__name__,
+                            error=str(error) if isinstance(error, ocr.EvidenceError) else 'provider_outcome_unknown')
+                        if isinstance(error, ocr.EvidenceError):
+                            trace['diagnostics'] = error.diagnostics
+                        if winner:
+                            claim.update(status='unknown', diagnostics=trace.get('diagnostics', {}), error=trace['error'])
+                            s._text_v2_update_attempt('ocr_evidence', claim)
+                    finally:
+                        trace['elapsed_ms'] = round((time.monotonic()-before)*1000)
+                        record['diagnostics'].setdefault('stage_ms', {})[phase] = sum(
+                            t.get('elapsed_ms', 0) for t in traces if t['mode'] == mode)
+                    save(phase)
         remaining(); save("verifying_saving")
         reference = engine.decode(jobs.media(record["standard_id"], record["owner_user_id"], record["standard_asset_id"], template["id"], "clean"))
         def annotate():

@@ -388,8 +388,14 @@ def register(namespace):
     def comparison_media(record_id: str, kind: str):
         uid = owner()
         record = namespace["_text_v2_owned"]("records", record_id, uid)
-        if not record or not record.get("preparation_compare") or kind not in {"reference", "source"}:
+        if not record or not record.get("preparation_compare"):
             raise HTTPException(404, "比较证据不存在")
+        if kind not in {"reference", "source"}:
+            trace = next((t for t in record.get('diagnostics', {}).get('rereads', []) if t.get('id') == kind), None)
+            if not trace:
+                raise HTTPException(404, "比较证据不存在")
+            data = namespace['_text_v2_read_verified'](trace.get('input_path', ''), uid, record['standard_id'], expected_sha256=trace.get('input_sha256', ''))
+            return Response(data, media_type='image/png', headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
         if kind == "source":
             from .standard_preparation import decode, png
             data = png(decode(namespace["_text_v2_read_verified"](record.get("source_path", ""), uid, record["standard_id"], expected_sha256=record.get("source_sha256", ""))))

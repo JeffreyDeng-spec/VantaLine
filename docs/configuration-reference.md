@@ -6,6 +6,14 @@ This document lists ownership and names, never secret values or production endpo
 
 ## Configuration layers
 
+`VANTALINE_QWEN_REREAD_ACCOUNTS` is a separate, default-empty owner allowlist.
+It requires the existing Qwen OCR account gate and external-send authorization.
+Submission freezes the reread version in request identity. It adds at most eight
+advanced-region calls and eight text-only region calls using the pinned
+`qwen-vl-ocr-2025-11-20`, within the shared 120s deadline. It does not select
+qwen3.5, change standard preparation, or enable automatic MATCH. Empty the list
+to disable new reread submissions; existing submitted attempts retain their snapshot.
+
 - **Git-tracked defaults/contracts:** safe defaults, schemas, `release/plc-protocol.json`, dependency locks, migrations.
 - **PostgreSQL runtime settings:** shared application records and workstation-specific PLC configuration/leases.
 - **Restricted server environment:** database connection, provider credentials, runtime paths, trusted origins, release metadata overrides.

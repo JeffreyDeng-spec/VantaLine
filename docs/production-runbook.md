@@ -2,6 +2,14 @@
 
 **Status: Authoritative**
 
+For the local OCR reread trial, verify the immutable release and health first,
+then add only the authorized owner to `VANTALINE_QWEN_REREAD_ACCOUNTS` in restricted
+runtime configuration and restart via the normal service procedure. Keep automatic
+MATCH disabled. Verify the submitted task records its reread version and that all
+calls share the 120s deadline. Roll back by disabling new reread submissions and
+restoring the previous complete immutable release; retain evidence and unknown
+call claims. Never clear claims to force a paid retry.
+
 For direct DOC extraction, the release workflow builds the locked POI helper with
 Java 17 and packages its jars, licenses and checksum manifest in the immutable
 release. Configure `VANTALINE_DOC_IMAGE_BUNDLE` to

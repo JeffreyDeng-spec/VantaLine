@@ -1,8 +1,9 @@
 """Strict character matching. LLM proposals are untrusted references, not facts."""
+import copy
 import difflib
 import re
 
-VERSION = "evidence-matching-v2-existence"
+VERSION = "evidence-matching-v4-independent"
 MAX_UNMATCHED = 40
 MAX_CANDIDATES = 12
 MAX_PROMPT_CHARS = 45_000
@@ -15,7 +16,7 @@ Return no mapping when evidence is insufficient. Omit all commentary and other f
 
 
 def normalized(text):
-    return re.sub(r"\s+", " ", text).strip()
+    return index_text(text)[0]
 
 
 def index_text(text):
@@ -28,13 +29,30 @@ def index_text(text):
             chars.append(char); positions.append(index)
     if chars and chars[-1] == " ":
         chars.pop(); positions.pop()
-    return "".join(chars), positions
+    # Layout whitespace next to prose separators is not printed content.
+    # Retain separators themselves and all whitespace in numeric separators
+    # (1, 5 / 12: 30), so punctuation or parameter differences cannot disappear.
+    numeric_separators = set()
+    for i, char in enumerate(chars):
+        if char not in ",:;":
+            continue
+        left, right = i - 1, i + 1
+        while left >= 0 and chars[left] == " ": left -= 1
+        while right < len(chars) and chars[right] == " ": right += 1
+        if left >= 0 and right < len(chars) and chars[left].isdigit() and chars[right].isdigit():
+            numeric_separators.add(i)
+    keep = [i for i, char in enumerate(chars) if char != " " or not any(
+        0 <= j < len(chars) and chars[j] in ",:;" and j not in numeric_separators
+        for j in (i - 1, i + 1))]
+    return "".join(chars[i] for i in keep), [positions[i] for i in keep]
 
 
 def token_spans(expected, text, code=False):
     if code:
         return [(0, len(text))] if expected == text else []
     value, offsets = index_text(text)
+    if not normalized(expected):
+        return []
     return [(offsets[m.start()], offsets[m.end()-1]+1) for m in
             re.finditer(r"(?<![\w.])"+re.escape(normalized(expected))+r"(?![\w.])", value)]
 
@@ -104,7 +122,7 @@ def adjacent(a, b):
 def candidates(rows, observations):
     remaining = [r for r in rows if r["state"] == "review" and r["reason"] in
                  ("not_observed", "parameter_difference_without_exact_match") and r.get("type") == "text"]
-    selected, used, omitted = [], {}, []
+    selected, used, omitted, no_evidence = [], {}, [], []
     for row in remaining:
         if len(selected) >= MAX_UNMATCHED:
             omitted.append(row["element_id"]); continue
@@ -114,13 +132,17 @@ def candidates(rows, observations):
         nearby = [o for seed in seeds for o in observations if o.get("type") == "text" and
                   (adjacent(seed,o) or adjacent(o,seed))]
         group = list({o["id"]:o for o in [*seeds,*nearby]}.values())[:MAX_CANDIDATES]
+        if not group:
+            no_evidence.append(row['element_id'])
+            continue
         item = dict(element_id=row["element_id"], expected=row["expected"], evidence_ids=[o["id"] for o in group])
         proposal = {**used, **{o["id"]:o for o in group}}
         import json
         if len(json.dumps(dict(elements=[*selected,item], evidence=list(proposal.values())), ensure_ascii=False)) > MAX_PROMPT_CHARS:
             omitted.append(row["element_id"]); continue
         selected.append(item); used=proposal
-    return dict(elements=selected, evidence=list(used.values()), omitted_element_ids=omitted)
+    return dict(elements=selected, evidence=list(used.values()), omitted_element_ids=omitted,
+                no_evidence_element_ids=no_evidence)
 
 
 def validate(proposal, request, rows):
@@ -157,8 +179,60 @@ def validate(proposal, request, rows):
                     raise ValueError("nonlocal_or_skipped_combination")
             used.update((eid,i) for i in range(start,end)); texts.append(text[start:end]); previous=observation; previous_end=end
         actual = normalized(" ".join(texts)); expected=normalized(target[identity]["expected"])
-        updates.append((identity,pieces,actual,actual == expected))
-    for identity,pieces,actual,equal in updates:
-        target[identity].update(state="matched" if equal else "difference", evidence=pieces,
-            observed_text=actual, reason="validated_local_characters" if equal else "candidate_text_difference_requires_review")
+        # Valid coordinates/references do not establish field correspondence.
+        # Similarity may only downgrade a difference to review, never create a match.
+        related = difflib.SequenceMatcher(None, expected, actual, autojunk=False).ratio() >= .75
+        updates.append((identity,pieces,actual,actual == expected,related))
+    for identity,pieces,actual,equal,related in updates:
+        target[identity].update(state="matched" if equal else "difference" if related else "review", evidence=pieces,
+            observed_text=actual, reason="validated_local_characters" if equal else
+            "candidate_text_difference_requires_review" if related else "unrelated_candidate_requires_review")
     return rows
+
+
+def validate_independently(proposal, request, rows):
+    """Keep valid element evidence without trusting malformed sibling mappings.
+
+    Duplicate targets reject *all* of that target's mappings, regardless of order.
+    A structural envelope error still rejects the whole response. The strict
+    validator remains the sole authority for characters, locality and equality.
+    """
+    if (not isinstance(proposal, dict) or set(proposal) != {"mappings"}
+            or not isinstance(proposal["mappings"], list)
+            or len(proposal["mappings"]) > MAX_UNMATCHED):
+        raise ValueError("invalid_mapping_schema")
+    permitted = {e["element_id"] for e in request["elements"]}
+    targets = {r["element_id"]: r for r in rows}
+    counts = {}
+    for mapping in proposal["mappings"]:
+        identity = mapping.get("element_id") if isinstance(mapping, dict) else None
+        if isinstance(identity, str):
+            counts[identity] = counts.get(identity, 0) + 1
+    accepted, rejected = [], []
+    for index, mapping in enumerate(proposal["mappings"]):
+        identity = mapping.get("element_id") if isinstance(mapping, dict) else None
+        error = None
+        if not isinstance(identity, str) or identity not in permitted or identity not in targets:
+            error = "invalid_mapping_target"
+        elif counts[identity] != 1:
+            error = "duplicate_mapping_target"
+        elif targets[identity]["state"] != "review":
+            error = "already_settled_mapping_target"
+        else:
+            draft = copy.deepcopy(targets[identity])
+            try:
+                validate({"mappings": [mapping]}, request, [draft])
+            except ValueError as invalid:
+                error = str(invalid)
+            except (TypeError, KeyError, IndexError):
+                error = "invalid_mapping_fields"
+            else:
+                targets[identity].update(draft)
+                accepted.append(copy.deepcopy(mapping))
+        if error:
+            # Do not copy arbitrary model-authored IDs/content into diagnostics.
+            rejected.append(dict(index=index,
+                element_id=identity if isinstance(identity, str) and identity in permitted else None,
+                reason=error))
+    return rows, dict(validated_response={"mappings": accepted}, rejected_mappings=rejected,
+                      validation_policy="independent_elements_v1")
