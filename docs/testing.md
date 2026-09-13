@@ -97,7 +97,9 @@ overlap, touching and fully contained exclusions, and keep/uncertain protection.
 Full-image RGBA equality checks prove only unprotected exclusion pixels change;
 complex-background and unsafe-crop rejection remain tested.
 Additional contracts cover adjacent exclusion unions, order-independent pixels,
-bounded black/gray fringe removal, whole-group rejection around unknown objects,
+bounded black/gray fringe removal, partial erasure beside and overlapping exterior
+graphics, byte-identical white/alpha and graphic preservation, fully inseparable
+background rejection, actual modified-pixel counts,
 zero-element graphics confirmation, transparent/white outputs, blank manual crops,
 and legacy empty versus nonempty comparison templates. Real-route fixtures verify
 explicit/strict graphics confirmation, failed-model/recovery rejection, account

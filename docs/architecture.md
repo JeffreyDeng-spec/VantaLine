@@ -123,8 +123,12 @@ Clearing clips checks to image bounds and subtracts all keep/uncertain rectangle
 from erasure and background checks. Overlap pixels remain byte-identical; edge
 contact is allowed. Other unsafe-background and code-erasure guards remain.
 Nearby exclusions share a union/perimeter check and a bounded three-pixel ink
-fringe, so neighboring removable text cannot veto itself. Unsafe groups are not
-partially erased. Pure-graphics revisions require explicit human confirmation and
+fringe, so neighboring removable text cannot veto itself. Local nonwhite connected
+components reaching the unprotected perimeter are preserved, while separable
+excluded ink is erased. White pixels (including alpha) remain unchanged. Entirely
+inseparable nonwhite candidates and missing checkable perimeter still require review;
+per-group evidence counts retained exterior pixels and actual erased pixels.
+Pure-graphics revisions require explicit human confirmation and
 successful complete source recognition; they remain viewable standards but carry
 no text-comparison capability. Both public readiness and the backend submit/worker
 guards reject empty or non-comparable templates, including legacy records.
