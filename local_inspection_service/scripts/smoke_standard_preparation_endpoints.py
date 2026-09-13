@@ -132,17 +132,20 @@ def main():
                 files={"captured_file": ("actual.png", data)}), 409, "no legacy fallback without template")
         finally:
             server._text_v2_save("standards", original_standard)
-        def remote_ocr(settings, blob, size, timeout, *, presence_evidence=False):
+        def remote_ocr(settings, blob, size, timeout, *, presence_evidence=False, audit=None):
             assert presence_evidence is True
             claims = server._text_v2_load("ocr_evidence")
             assert len(claims) == 1 and claims[0]["status"] == "attempting"
             qwen_calls.append("ocr")
+            if audit:
+                audit('request', {'fixture': True})
+                audit('response', {'body': 'fixture response'})
             result = []
             for index, e in enumerate(elements):
                 x,y,w,h = e["box"]
                 result.append(dict(id=f"o{index}", type="text", text=e["text"], box=[x,y,x+w,y+h], confidence=None, provenance="qwen_ocr"))
             return result, dict(model=qj.ocr.MODEL, usage={})
-        def mapping(settings, request, timeout):
+        def mapping(settings, request, timeout, **kwargs):
             assert any(r.get("diagnostics",{}).get("llm_call",{}).get("state") == "attempting" for r in server._text_v2_load("records"))
             qwen_calls.append("llm")
             return {"mappings":[]}, dict(model="fixture", usage={})
@@ -167,6 +170,16 @@ def main():
         source_url = f"/api/text-inspection/prepared-comparisons/{record['id']}/media/source"
         assert_status(admin.get(source_url),200,"actual source evidence")
         assert_status(other.get(source_url),404,"cross owner actual evidence")
+        preview_url = source_url.replace('/source', '/preview')
+        preview_response = admin.get(preview_url)
+        assert_status(preview_response,200,'compressed preview')
+        assert preview_response.headers['content-type'] == 'image/jpeg'
+        assert_status(other.get(preview_url),404,'cross owner preview')
+        assert 'source_preview_path' not in record
+        audit_file = record['diagnostics']['model_audits'][0]['files']['response']
+        assert 'path' not in audit_file
+        assert_status(admin.get(audit_file['url']),200,'private model response')
+        assert_status(other.get(audit_file['url']),404,'cross owner model response')
         # Isolated stored-media fixture: production routes must authorize before
         # resolving reread files and omit internal paths from public diagnostics.
         evidence = server._text_v2_owned('records', record['id'], owner)

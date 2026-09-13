@@ -43,8 +43,19 @@ required elements in review and schedules no LLM. A rejected unrelated border wo
 must not discard an independently valid expected value; partial status and rejected
 indices remain visible. Cache keys separate the presence parser from old strict
 results; no unknown old request is automatically replayed during recovery.
-Malformed LLM proposal tests preserve allowlisted billing diagnostics without raw
-content or secrets, and verify that the invalid proposal still fails closed.
+Malformed LLM proposal tests preserve allowlisted billing diagnostics and verify
+that invalid proposals fail closed. Full provider bodies are separate private
+evidence, not inline diagnostic payloads or service logs.
+`python -m local_inspection_service.scripts.smoke_model_audit_preview` covers
+JSON Object requests, raw malformed response retention, parse offsets, one-call
+behavior, key/media redaction, immutable audit events and original-pixel-preserving
+display derivatives. Endpoint fixtures cover preview/audit ownership and path
+redaction. Run frontend typecheck/build for preview and on-demand original controls.
+`scripts/probe_mapping_audit.py` requires explicit two-call consent, an owned saved
+comparison and an exclusive output folder. It compares prompt-only and JSON Object
+requests using the same saved OCR evidence, with no new OCR or business writes.
+It is not a reconstruction of an unrecorded historical model response, nor an
+end-to-end OCR accuracy or latency benchmark.
 Auto-rotation fixtures verify an explicit boolean option, default-off behavior and
 unchanged original-input coordinates on nonsquare images. Real returned boxes on
 rotated images must be inspected separately before enabling a production caller.

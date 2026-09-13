@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from . import standard_preparation as engine
 from . import qwen_evidence_jobs
 from . import local_ocr_reread
+from . import evidence_preview
 
 _slots = threading.BoundedSemaphore(1)
 
@@ -40,7 +41,7 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     if not engine.supports_text_comparison(snapshot["preparation"]):
         raise HTTPException(409, "该标准仅含图形，没有可核对文字或编码，当前不支持文字对比")
     # Decode/verify input before registering work; bytes stored exactly once.
-    engine.decode(upload)
+    image = engine.decode(upload)
     record = dict(id="ins_"+uuid.uuid4().hex, owner_user_id=owner, owner_username=username,
         standard_id=standard["id"], standard_asset_id=asset["id"], comparison_id=request_id,
         standard_revision_id=standard.get("current_revision_id", ""), standard_revision_number=standard.get("revision_number", 0),
@@ -52,6 +53,9 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     path = s._text_v2_media_path(owner, standard["id"], record["id"]+"-source.bin")
     s._text_v2_write(path, upload)
     record["source_path"] = str(path)
+    before_preview = time.monotonic()
+    evidence_preview.save(s, record, image)
+    record['diagnostics']['preview_ms'] = round((time.monotonic()-before_preview)*1000)
     if use_qwen:
         record.update(ocr_provider="qwen_ocr", deadline_at=time.time()+120)
         record["diagnostics"].update(provider="qwen_ocr", version=qwen_evidence_jobs.VERSION,

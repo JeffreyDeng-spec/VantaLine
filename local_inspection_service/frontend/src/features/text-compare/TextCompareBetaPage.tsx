@@ -12,6 +12,7 @@ import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { StandardPreparation, type PreparationPreview } from "./StandardPreparation";
 import { EvidenceResults } from "./EvidenceResults";
 import { RereadEvidence } from "./RereadEvidence";
+import { ModelAuditLinks } from "./ModelAuditLinks";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,.gif,.tif,.tiff";
@@ -509,6 +510,7 @@ export function TextCompareBetaPage() {
       {hasDiagnosticOutput ? <details className="text-compare-raw-output">
         <summary><ChevronRight size={15} /><span>Raw Output（调试信息）</span><small>默认折叠</small></summary>
         <div className="text-compare-raw-output-body">
+          {result.id ? <ModelAuditLinks value={result.diagnostics?.model_audits} recordId={result.id} /> : null}
           {result.id ? <RereadEvidence value={result.diagnostics?.rereads} recordId={result.id} /> : null}
           {result.diagnostics?.provider === "qwen_ocr" ? <section><header><strong>OCR 与证据匹配诊断</strong></header><pre>{formatDiagnosticOutput(result.diagnostics)}</pre></section> : null}
           {rawProviderOutput !== undefined ? <section><header><strong>模型原始输出</strong><small>{providerDiagnostics?.response_preview !== undefined ? "原始文本预览" : "解析后的 JSON"}</small></header><pre>{formatDiagnosticOutput(rawProviderOutput)}</pre></section> : null}

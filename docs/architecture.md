@@ -59,8 +59,21 @@ Mappings are validated independently: an invalid sibling cannot discard another
 element's valid evidence. Duplicate targets reject all proposals for that target;
 malformed envelopes remain whole-response failures. Diagnostics preserve usage,
 accepted references and bounded per-mapping rejection reasons. No extra call is made.
-Text-only LLM responses retain allowlisted usage/finish/hash metadata even when
-their JSON proposal is malformed; invalid content is not repaired or retried.
+Text-only LLM requests use non-thinking JSON Object output; backend envelope,
+ID, span and character validation remains mandatory. Private per-call evidence
+files retain requests (image bytes separately referenced), response bodies,
+HTTP status, network timing and parse location on failure. Keys/authorization
+headers are never stored; known-key echoes and inline image data are redacted.
+Response caps remain enforced and partial reads are explicitly marked. Polling
+returns only metadata and authenticated download links, never full raw bodies.
+Invalid content is not repaired or retried. Historical missing raw bodies cannot
+be reconstructed. Cache hits do not create fake new provider responses.
+Prepared comparisons precompute a display-only 1600px JPEG preview once; OCR and
+matching still use the full original. Evidence UI defaults to the preview and
+loads full resolution only on request. Normal-orientation JPEG/PNG source media
+is served verbatim; other orientations/formats retain normalization. Legacy
+records generate previews on demand without rewriting business history. All
+media remains account-authorized with private/no-store responses (no shared cache).
 Legal references alone cannot establish corresponding fields: unequal text with
 character-sequence similarity below 0.75 stays review rather than becoming a red
 difference. This heuristic only downgrades differences, never authorizes matches;

@@ -8,6 +8,7 @@ type Evidence = { elements: Element[]; observations: Observation[] };
 
 export function EvidenceResults({ value, reference, source }: { value: unknown; reference: string; source: string }) {
   const [selected, select] = useState("");
+  const [highResolution, setHighResolution] = useState(false);
   if (!value || typeof value !== "object" || !("elements" in value) || !("observations" in value) || !Array.isArray(value.elements) || !Array.isArray(value.observations)) return null;
   const data = value as Evidence;
   if (!data.elements.every(e => typeof e.element_id === "string" && Array.isArray(e.standard_box) && e.standard_box.length === 4 && Array.isArray(e.evidence))) return null;
@@ -31,7 +32,7 @@ export function EvidenceResults({ value, reference, source }: { value: unknown; 
         <small>{element?.reason}</small>
         {observation?.coordinate_precision === "crop_region_only" ? <p>该证据来自局部文字复读；蓝框表示输入区域，不是逐字定位。请结合原图确认。</p> : null}
         {element?.state === "matched" && !!element.conflicts?.length ? <p>其他位置有不同识别结果，已保留在诊断中；不影响此元素已找到的严格匹配。</p> : null}
-        {actualBox ? <div style={{ position: "relative", marginTop: 12 }}><img src={source} alt="实拍匹配证据，点击图片可通过浏览器查看原图" style={{ width: "100%", display: "block" }} /><span style={{ pointerEvents: "none", position: "absolute", ...placement(actualBox), border: "3px solid #2563eb" }} /></div> : null}
+        {actualBox ? <><button type="button" onClick={() => setHighResolution(v => !v)}>{highResolution ? "返回快速预览" : "加载原图检查小字"}</button><div style={{ position: "relative", marginTop: 12 }}><img src={highResolution ? source : source.replace(/\/source$/, "/preview")} alt={highResolution ? "原分辨率实拍证据" : "压缩预览，检查小字请加载原图"} style={{ width: "100%", display: "block" }} /><span style={{ pointerEvents: "none", position: "absolute", ...placement(actualBox), border: "3px solid #2563eb" }} /></div></> : null}
       </div>
     </div>
   </section>;

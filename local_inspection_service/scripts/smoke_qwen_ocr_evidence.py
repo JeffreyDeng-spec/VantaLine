@@ -201,6 +201,7 @@ class ProtocolTests(unittest.TestCase):
         calls=[]
         class Reply:
             status_code=403
+            def iter_content(self,n): return iter([b'{"error":"forbidden"}'])
             def close(self):pass
         def post(*a,**kw):calls.append(kw);return Reply()
         with self.assertRaisesRegex(ocr.EvidenceError,"ocr_http_403"):

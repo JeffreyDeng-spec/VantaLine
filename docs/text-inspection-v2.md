@@ -1,5 +1,22 @@
 # Text inspection v2
 
+## Private call audit and lightweight evidence previews
+
+New prepared comparisons save a display-only 1600px JPEG once. The result panel
+loads this preview by default with proportional evidence overlays; the explicit
+original-image control loads full resolution. Original files and OCR inputs are
+unchanged. Existing comparisons can obtain an on-demand preview without changing
+their decision/history. Normal-orientation original JPEG/PNG downloads no longer
+re-encode the source as PNG. No shared/public image cache is introduced.
+
+Qwen correspondence uses JSON Object output with thinking off and strict local
+evidence validation. Default-folded Raw Output links to private per-call request,
+input-image, raw response and parsing/failure evidence. Polling excludes raw bodies
+and filesystem paths. Keys and authorization headers are excluded; known-key
+echoes and inline Base64 media are redacted. Requests remain at-most-once; response
+capacity/transport failures retain explicit partial evidence and require review.
+Old responses that were never recorded cannot be reconstructed by this feature.
+
 ## Activation-time standard preparation (gated experiment)
 
 An independent actual-image reread allowlist adds polled phases
