@@ -11,6 +11,7 @@ export interface ComparisonSession {
   photoId: string;
   startedAt: number;
   open: boolean;
+  rejected?: boolean;
 }
 export function estimatedProgress(seconds: number) {
   const s = Math.max(0, seconds);
@@ -32,6 +33,7 @@ export function useComparisonTask(owner: string) {
       return t?.owner === owner && typeof t.requestId === "string" && t.requestId.length < 128
         && typeof t.standardId === "string" && typeof t.assetId === "string"
         && typeof t.photoId === "string" && typeof t.open === "boolean"
+        && (t.rejected === undefined || typeof t.rejected === "boolean")
         && (t.recordId === undefined || typeof t.recordId === "string")
         && Number.isFinite(t.startedAt) && t.startedAt > 0 ? t : null;
     } catch { return null; }
@@ -58,13 +60,13 @@ export function useComparisonTask(owner: string) {
     setPhase(phases[String(value.diagnostics?.phase)] || "等待结果");
   }
   useEffect(() => {
-    if (!task) return;
+    if (!task || task.rejected) return;
     const requestId = task.requestId;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
     async function poll() {
-      if (disposed || current.current?.requestId !== requestId) return;
+      if (disposed || current.current?.requestId !== requestId || current.current.rejected) return;
       if (uploading.current === requestId) { timer = setTimeout(poll, 1500); return; }
       const snapshot = current.current;
       controller = new AbortController();
@@ -103,13 +105,16 @@ export function useComparisonTask(owner: string) {
     try { accept(await submit(requestId), requestId); }
     catch (error) {
       if (alive.current && (current.current as ComparisonSession | null)?.requestId === requestId) {
-        setNotice(`${(error as Error).message}。正在查询提交结果，不自动重试上传。`);
+        if (error instanceof ApiError && [400, 403, 404, 409, 413, 415, 422].includes(error.status)) {
+          save({ ...current.current!, rejected: true });
+          setBlocked(true); setNotice(`提交被拒绝：${error.message}。请重新选择图片或标准。`);
+        } else setNotice(`${(error as Error).message}。正在查询提交结果，不自动重试上传。`);
       }
     } finally { if (uploading.current === requestId) uploading.current = ""; }
   }
   function reset() { save(null); setResult(null); setNotice(""); setBlocked(false); }
-  return { task, result, notice, blocked, phase, start, reset,
-    busy: !!task && !blocked && (!result || result.status === "attempting"),
+  return { task, result, notice: notice || (task?.rejected ? "提交未成功，请重新选择图片或标准；不会自动重试。" : ""), blocked, phase, start, reset,
+    busy: !!task && !task.rejected && !blocked && (!result || result.status === "attempting"),
     setOpen: (open: boolean) => { if (current.current) save({ ...current.current, open }); }
   };
 }

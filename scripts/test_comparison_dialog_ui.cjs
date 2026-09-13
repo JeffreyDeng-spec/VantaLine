@@ -10,7 +10,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const svg='<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="white"/></svg>';
     const standard={id:'std',name:'Dialog fixture',material_code:'TEST',version_label:'1',standard_type:'label',status:'confirmed',asset_count:1};
     const asset={id:'asset',standard_id:'std',asset_kind:'label_candidate',ordinal:1,status:'candidate',content_url:'/fixture/source',comparison_ready:true,active_preparation:{id:'prep',sha256:'fixture'}};
-    let submitted=0, polls=0, state='attempting', failure=0, held=false, lookupMissing=false, identity='';
+    let submitted=0, polls=0, state='attempting', failure=0, postFailure=0, held=false, lookupMissing=false, identity='';
     let releasePost;
     const result=()=>({id:'record',comparison_id:identity,preparation_compare:true,status:state,decision:'REVIEW_REQUIRED',differences:[],message:state==='review_required'?'任务超时，请复核':'测试结果',diagnostics:{phase:state==='attempting'?'extracting_text':state}});
     await page.route('**/fixture/**', r=>r.fulfill({contentType:'image/svg+xml',body:svg}));
@@ -23,6 +23,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       if(url.endsWith('/preparation')) return r.fulfill({json:{job:{},items:[]}});
       if(url.endsWith('/label/compare')) {
         submitted++; identity=r.request().postData().match(/name="comparison_id"\r\n\r\n([^\r]+)/)[1];
+        if(postFailure) return r.fulfill({status:postFailure,json:{detail:'invalid input'}});
         if(held) await new Promise(resolve=>releasePost=resolve);
         return r.fulfill({json:result()}).catch(()=>{});
       }
@@ -40,7 +41,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const close=()=>page.getByRole('button',{name:'关闭对比窗口'}).click();
     const main=page.locator('.text-compare-primary');
     async function fresh() {
-      state='attempting'; failure=0; held=false; lookupMissing=false;
+      state='attempting'; failure=0; postFailure=0; held=false; lookupMissing=false;
       await page.evaluate(()=>sessionStorage.clear()); await page.reload();
       await page.getByRole('button',{name:/Dialog fixture/}).click();
       await page.getByRole('button',{name:'选择第 1 张标签作为对比标准'}).click();
@@ -92,6 +93,12 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     // Switching account cannot recover another owner's task or display its evidence.
     await page.evaluate(()=>sessionStorage.setItem('fixture-owner','other-owner')); await page.reload();
     assert.equal(await dialog.count(),0); assert.equal(await main.innerText(),'开始文字对比');
+    // Definitively rejected uploads terminate immediately and remain rejected on refresh.
+    await fresh(); postFailure=422; await main.click(); await page.getByText(/提交被拒绝/).waitFor();
+    assert.equal(await dialog.locator('progress').count(),0);
+    const rejectedPolls=polls, rejectedPosts=submitted;
+    await page.reload(); await page.getByText(/提交未成功/).waitFor();
+    await page.waitForTimeout(1700); assert.equal(polls,rejectedPolls); assert.equal(submitted,rejectedPosts);
     // Explicit inaccessible record; stop polling (not a retry storm).
     await fresh(); await main.click(); await page.getByText('提取文字',{exact:true}).waitFor();
     failure=403; await page.getByText(/当前账户无法访问/).waitFor();

@@ -22,8 +22,8 @@ export function ComparisonDialog({ open, startedAt, busy, phase, notice, onClose
   }, [open]);
   useEffect(() => {
     if (!busy || !open) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 500);
+    setNow(current => Math.max(current, Date.now()));
+    const timer = setInterval(() => setNow(current => Math.max(current, Date.now())), 500);
     return () => clearInterval(timer);
   }, [busy, open]);
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));

@@ -271,7 +271,9 @@ fallback repository filters both fields. Unknown or other-owner requests return
 Subsequent record-ID polling retains the existing backend timeout semantics.
 
 `text-comparison:v1:<account>` sessionStorage contains only request/record IDs,
-standard/asset/image identity metadata, start time and dialog visibility. Refresh
+standard/asset/image identity metadata, start time, definitive submission-rejection
+flag and dialog visibility. Definitive invalid/forbidden/conflicting uploads stop
+immediately; their rejection flag survives refresh without re-uploading. Refresh
 restores those fields and queries the server, without uploading again. Network
 errors/401 preserve the task and retry GETs; 403 or a missing known record stop
 with an access error. A missing request is queried for a 30s acknowledgment grace
