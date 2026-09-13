@@ -3,7 +3,7 @@ import { useState } from "react";
 type Box = [number, number, number, number];
 type Span = { evidence_id: string; start: number; end: number };
 type Element = { element_id: string; expected: string; standard_box: Box; state: string; reason: string; evidence: Span[]; conflicts?: Span[] };
-type Observation = { id: string; text: string; type: string; box: Box };
+type Observation = { id: string; text: string; type: string; box: Box; coordinate_precision?: string };
 type Evidence = { elements: Element[]; observations: Observation[] };
 
 export function EvidenceResults({ value, reference, source }: { value: unknown; reference: string; source: string }) {
@@ -29,6 +29,7 @@ export function EvidenceResults({ value, reference, source }: { value: unknown; 
         <p>标准：{element?.expected}</p>
         <p>实拍：{spans.length ? spans.map(s => data.observations.find(o => o.id === s.evidence_id)?.text.slice(s.start, s.end) || "").join(" ") : "未找到可靠对应证据"}</p>
         <small>{element?.reason}</small>
+        {observation?.coordinate_precision === "crop_region_only" ? <p>该证据来自局部文字复读；蓝框表示输入区域，不是逐字定位。请结合原图确认。</p> : null}
         {element?.state === "matched" && !!element.conflicts?.length ? <p>其他位置有不同识别结果，已保留在诊断中；不影响此元素已找到的严格匹配。</p> : null}
         {actualBox ? <div style={{ position: "relative", marginTop: 12 }}><img src={source} alt="实拍匹配证据，点击图片可通过浏览器查看原图" style={{ width: "100%", display: "block" }} /><span style={{ pointerEvents: "none", position: "absolute", ...placement(actualBox), border: "3px solid #2563eb" }} /></div> : null}
       </div>

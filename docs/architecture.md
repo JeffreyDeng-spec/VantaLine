@@ -1,5 +1,22 @@
 # Architecture
 
+## Bounded actual-image reread trial
+
+The separately account-gated local reread follows whole-image OCR, deterministic
+matching and the existing one text-only LLM mapping. A frozen first-pass candidate
+list chooses at most eight source regions (top two candidates per unresolved
+element, character similarity >=0.35). Each crop has 20% line-height context,
+at most 4x resize and 64px white padding for advanced recognition. Still-unmatched
+regions may receive one unpadded text-recognition call. Both use the pinned OCR
+model, never standard answers as OCR input. Different views satisfy elements
+independently; characters cannot be stitched across views. Source geometry is
+mapped only after strict local matching. Text-only evidence has coarse crop bounds.
+An advanced OCR box with at least 90% bounding-area overlap with real crop pixels
+may also be retained as coarse crop evidence when it overhangs white padding;
+it is never clamped into a purported word polygon. Padding-only evidence is rejected.
+All stages share the existing 120s deadline and at most 16 additional paid calls.
+Results remain REVIEW_REQUIRED; the synthetic experiment does not commission MATCH.
+
 **Status: Authoritative**
 
 ### Qwen OCR evidence comparison — opt-in, not commissioned
@@ -8,14 +25,53 @@
 submission; other accounts keep local OCR. The pinned `qwen-vl-ocr-2025-11-20`
 uses `advanced_recognition`, image-only input, min_pixels=3072 and explicit original
 resolution bounds. The original-coordinate words_info output is authoritative;
+OCR transport v2 bounds Base64 to 9 MB below the provider's 10 MB limit. PNG is
+preferred; oversized PNGs use a same-resolution JPEG copy (quality 95/92/90/85,
+no chroma subsampling), never downscaling or replacing the archived original.
+Encoding, lossy status, byte counts and input hash are recorded; images still
+too large fail before external I/O. The preprocessing version separates caches.
+Rejected OCR responses retain allowlisted token counts, termination reason and
+response byte count/hash in the failed call and cache diagnostics, not arbitrary
+provider content. Interrupted or rejected calls remain non-replayable.
+The presence-comparison caller retains independently validated word rows from a
+complete response while recording rejected row indices/reasons and `scan_complete=false`.
+It never clamps invalid coordinates, accepts an all-invalid nonempty response, or
+salvages truncated responses. A valid empty words array yields zero evidence and
+yellow review markers, not a provider error or a claim of proven absence. Missing
+schema/over-capacity responses remain failures. No-evidence elements skip the LLM.
+The default adapter remains strict for other callers. Presence evidence has a
+separate validation-policy cache namespace; partial evidence must not be described
+as a complete page scan. A completed claim means processing finished, not full
+coverage. One independently valid exact occurrence can still support an element;
+the whole comparison continues to require human review.
+The OCR adapter also accepts experimental explicit auto-rotation (default false).
+It uses provider original-input word coordinates without a second client rotation;
+diagnostics record the option. Experimental callers must isolate caches by this
+option. Production callers remain unchanged until real coordinate/accuracy tests.
 processed_text's internal coordinates are not used. Missing scores remain null.
 Exact character matching precedes at most one text-only LLM correspondence request;
+before that request, bounded deterministic local multi-box search attempts exact
+paths using only existing OCR characters. It preserves whitespace/punctuation rules,
+uses the same strict span validator, rejects intervening OCR words, and records
+search limits. It never produces a difference or invents missing characters.
 IDs, character spans, boundaries and local adjacency are checked by the backend.
+Mappings are validated independently: an invalid sibling cannot discard another
+element's valid evidence. Duplicate targets reject all proposals for that target;
+malformed envelopes remain whole-response failures. Diagnostics preserve usage,
+accepted references and bounded per-mapping rejection reasons. No extra call is made.
+Text-only LLM responses retain allowlisted usage/finish/hash metadata even when
+their JSON proposal is malformed; invalid content is not repaired or retried.
+Legal references alone cannot establish corresponding fields: unequal text with
+character-sequence similarity below 0.75 stays review rather than becoming a red
+difference. This heuristic only downgrades differences, never authorizes matches;
+even related differences still require human verification.
 Saved templates are not re-OCRed or corrected. Codes require local decoder evidence.
 The workspace compares the entire uploaded/captured image without mandatory mask
 generation or crop confirmation. Standards must have a prepared element template;
 opted-in accounts without one get 409 rather than silently using legacy VLM comparison.
-Matching v2 checks sheet-level element presence: one exact occurrence satisfies an
+Matching v3 ignores layout whitespace beside prose commas, colons and semicolons,
+while preserving the punctuation, word spaces, numeric-separator spaces and original
+character offsets. It checks sheet-level element presence: one exact occurrence satisfies an
 element even if other occurrences differ. Other reads and conflicts remain audit
 evidence, not vetoes. Unmatched parameters can still use validated local multi-box
 correspondence. No distant stitching or partial numeric matching is permitted.

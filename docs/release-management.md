@@ -6,6 +6,11 @@
 
 ## Change and release flow
 
+Local OCR reread releases run offline independent-view/cache/geometry tests in
+CI. The reread allowlist is separate from automatic acceptance; deploy the whole
+immutable release before enabling an authorized trial account. Synthetic accuracy
+is not a production acceptance gate or permission to enable automatic MATCH.
+
 The Qwen evidence gate adds offline parser/matcher tests and authenticated
 fake-provider comparison/cache tests to required backend CI; the PostgreSQL gate
 also checks cache insert-once and owner/status CAS. These checks permit shipping

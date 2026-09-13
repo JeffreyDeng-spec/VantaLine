@@ -4,12 +4,50 @@
 
 ## Qwen OCR evidence comparison (not commissioned)
 
+`python -m local_inspection_service.scripts.smoke_local_ocr_reread` verifies bounded
+candidate selection, outward crop coordinates, padding rejection, explicit coarse
+text bounds, strict independent-view matching, account-scoped cache reuse,
+unknown-outcome no-replay and review-only completion with stubbed paid calls.
+The two-round local experiment scored 257/330 (77.9%) on a same-image synthetic
+text subset; 44 unsupported cases are excluded, not successes. This does not
+certify independent accuracy or production latency. Deployment retains human review.
+
+`python -m local_inspection_service.scripts.smoke_local_evidence_search` checks
+deterministic exact multi-box paths, wrapped lines, original spans, skipped NOT,
+distant/reversed pieces, strict numeric/punctuation/case rules and bounded search.
+Real saved OCR replays measure recovered evidence separately from new OCR accuracy.
+
 `python -m local_inspection_service.scripts.smoke_qwen_ocr_evidence` runs offline
 protocol and strict matching fixtures. It checks the pinned model/task, independent
 image-only OCR input, nullable scores, original-coordinate bounds, duplicate text
 positions, truncation rejection, no HTTP retry/redirect, whitespace-only matching,
 one exact occurrence despite conflicting repeats, code provenance, candidate capacity, forged IDs, Unicode
 character offsets, local reading order, skipped/reused characters and distant joins.
+Spacing regressions cover prose comma/colon spacing with source-offset preservation,
+numeric separators, decimal points, missing punctuation, NOT and strict unit boundaries.
+Independent-mapping regressions cover valid/invalid siblings, duplicate-target
+order independence, malformed envelopes and ranges, protected settled matches,
+and retention of valid differences without weakening strict character validation.
+An unrelated but legally referenced title must remain review when proposed for a
+warning or origin field; similarity can never promote unequal text to matched.
+Transport fixtures check bounded Base64, JPEG MIME, unchanged source pixels and
+dimensions, and rejection before submission when no permitted encoding fits.
+Real-image OCR accuracy after lossy transport must be measured separately.
+Truncation tests retain safe usage and finish metadata while excluding provider
+content and unknown usage keys from failure diagnostics.
+Tile-subset fixtures reject out-of-image words without clamping, preserve valid
+rows and original ordering, and still reject truncated responses as a whole.
+Presence-mode fixtures additionally distinguish a valid empty array from missing
+schema, over-capacity, truncated and all-invalid output. Empty evidence leaves all
+required elements in review and schedules no LLM. A rejected unrelated border word
+must not discard an independently valid expected value; partial status and rejected
+indices remain visible. Cache keys separate the presence parser from old strict
+results; no unknown old request is automatically replayed during recovery.
+Malformed LLM proposal tests preserve allowlisted billing diagnostics without raw
+content or secrets, and verify that the invalid proposal still fails closed.
+Auto-rotation fixtures verify an explicit boolean option, default-off behavior and
+unchanged original-input coordinates on nonsquare images. Real returned boxes on
+rotated images must be inspected separately before enabling a production caller.
 `PREPARATION_TEST_QWEN=1 python -m
 local_inspection_service.scripts.smoke_standard_preparation_endpoints` additionally
 tests real authenticated routes with fake providers: pre-call claims, same-image

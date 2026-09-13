@@ -11,6 +11,7 @@ import { useAgentState } from "../agent/useAgentState";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { StandardPreparation, type PreparationPreview } from "./StandardPreparation";
 import { EvidenceResults } from "./EvidenceResults";
+import { RereadEvidence } from "./RereadEvidence";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,.gif,.tif,.tiff";
@@ -354,7 +355,7 @@ export function TextCompareBetaPage() {
       let response = await compareTextInspectionLabel(form);
       const showPhase = (value: TextCompareBetaResult) => {
         if (comparisonIdentityRef.current?.id !== identity.id) return;
-        const labels: Record<string, string> = { queued: "排队", extracting_text: "提取文字", direct_matching: "直接核对", mapping_unmatched: "疑难对应", verifying_saving: "验证保存", recognizing: "识别文字" };
+        const labels: Record<string, string> = { queued: "排队", extracting_text: "提取文字", direct_matching: "直接核对", mapping_unmatched: "疑难对应", rereading_regions: "局部文字复读（第1轮）", transcribing_regions: "局部文字复读（第2轮）", verifying_saving: "验证保存", recognizing: "识别文字" };
         setComparisonPhase(labels[String(value.diagnostics?.phase)] || "等待结果");
       };
       showPhase(response);
@@ -508,6 +509,7 @@ export function TextCompareBetaPage() {
       {hasDiagnosticOutput ? <details className="text-compare-raw-output">
         <summary><ChevronRight size={15} /><span>Raw Output（调试信息）</span><small>默认折叠</small></summary>
         <div className="text-compare-raw-output-body">
+          {result.id ? <RereadEvidence value={result.diagnostics?.rereads} recordId={result.id} /> : null}
           {result.diagnostics?.provider === "qwen_ocr" ? <section><header><strong>OCR 与证据匹配诊断</strong></header><pre>{formatDiagnosticOutput(result.diagnostics)}</pre></section> : null}
           {rawProviderOutput !== undefined ? <section><header><strong>模型原始输出</strong><small>{providerDiagnostics?.response_preview !== undefined ? "原始文本预览" : "解析后的 JSON"}</small></header><pre>{formatDiagnosticOutput(rawProviderOutput)}</pre></section> : null}
           {normalizedOutput !== undefined ? <section><header><strong>系统适配结果</strong><small>进入业务校验前的数据</small></header><pre>{formatDiagnosticOutput(normalizedOutput)}</pre></section> : null}

@@ -37540,6 +37540,8 @@ def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
     result.pop("media_path", None)
     result.pop("annotated_path", None)
     result.pop("reference_overlay_path", None)
+    for trace in result.get('diagnostics', {}).get('rereads', []):
+        trace.pop('input_path', None)
     if result.get("id") and result.get("asset_kind"):
         result["content_url"] = f"/api/text-inspection/assets/{quote(str(result['id']))}/content"
         result["original_url"] = result["content_url"]

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 from . import standard_preparation as engine
 from . import qwen_evidence_jobs
+from . import local_ocr_reread
 
 _slots = threading.BoundedSemaphore(1)
 
@@ -22,6 +23,7 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
         extraction_id=(extraction or {}).get("id"))
     if use_qwen:
         binding["actual_provider"] = qwen_evidence_jobs.VERSION
+        binding["local_reread"] = local_ocr_reread.VERSION if local_ocr_reread.enabled(owner) else None
     fingerprint = s.sha256_bytes(json.dumps(binding, sort_keys=True).encode())
     def existing():
         value = next((r for r in s._text_v2_load("records") if r.get("owner_user_id") == owner and r.get("comparison_id") == request_id), None)
@@ -52,7 +54,8 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     record["source_path"] = str(path)
     if use_qwen:
         record.update(ocr_provider="qwen_ocr", deadline_at=time.time()+120)
-        record["diagnostics"].update(provider="qwen_ocr", version=qwen_evidence_jobs.VERSION)
+        record["diagnostics"].update(provider="qwen_ocr", version=qwen_evidence_jobs.VERSION,
+                                    reread_version=binding.get("local_reread"))
     if not s._text_v2_save("records", record, insert_only=True):
         prior = existing()
         if prior:

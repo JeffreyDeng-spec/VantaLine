@@ -2,6 +2,14 @@
 
 ## Activation-time standard preparation (gated experiment)
 
+An independent actual-image reread allowlist adds polled phases
+`rereading_regions` and `transcribing_regions` after text mapping. At most eight
+candidate regions are reread per round, under the existing total 120s deadline.
+Raw Output includes authenticated input thumbnails, per-call usage/state/timing,
+source transforms and evidence. Text-only rereads display crop-region bounds,
+not invented word boxes. Comparisons remain review-only. Standard preparation
+and its saved templates are not rerun. No characters are joined across views.
+
 POST standard `/confirm` delegates to preparation for allowlisted label accounts.
 GET/POST `/api/text-inspection/standards/{id}/preparation` query/start durable work;
 POST `.../preparation/{asset}/confirm` validates the expected draft/source hash,
