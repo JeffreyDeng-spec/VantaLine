@@ -45,13 +45,29 @@ class Contracts(unittest.TestCase):
         self.assertTrue(np.array_equal(np.asarray(Image.open(io.BytesIO(out))),expected))
         reverse=engine.clean(image,list(reversed(elements)),human=True,crop_box=[0,0,1,1])[0]
         self.assertEqual(out,reverse,"exclusion order does not affect pixels")
-        # A real adjacent unclassified object beyond the bounded fringe blocks
-        # the WHOLE group, rather than partially clearing a dependency.
+        # A neighboring graphic is retained; separable excluded text still clears.
         draw.rectangle((32,10,40,20),fill="black")
-        _,blocked=engine.clean(image,elements,human=True)
-        self.assertIn("a:unsafe_background_or_code",blocked["reasons"])
-        self.assertIn("b:unsafe_background_or_code",blocked["reasons"])
-        self.assertFalse(blocked["removed"])
+        output,partial=engine.clean(image,elements,human=True,crop_box=[0,0,1,1])
+        self.assertFalse(partial['reasons'])
+        expected[10:21,32:41] = np.asarray(image)[10:21,32:41]
+        self.assertTrue(np.array_equal(np.asarray(Image.open(io.BytesIO(output))),expected))
+        self.assertGreater(partial['removed'][0]['retained_exterior_pixel_count'],0)
+
+    def test_partial_overlap_graphic_and_white_preservation(self):
+        image = Image.new('RGBA',(100,100),(255,255,255,123))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((20,12,25,18), fill='black')  # separable note
+        draw.rectangle((28,24,70,27), fill='red')  # crosses the exclusion and ring
+        draw.point((20,19),fill=(248,248,248,255))
+        elements = [dict(id='note',text='size',type='text',state='exclude',confidence=1,box=[.15,.1,.3,.2]),
+                    dict(id='keep',text='MODEL',type='text',state='keep',confidence=1,box=[.6,.6,.2,.2])]
+        output,result = engine.clean(image,elements,human=True,crop_box=[0,0,1,1])
+        self.assertFalse(result['reasons'])
+        actual = np.asarray(Image.open(io.BytesIO(output)))
+        expected = np.asarray(image).copy(); expected[12:19,20:26]=255; expected[19,20]=255
+        self.assertTrue(np.array_equal(actual,expected),'white/alpha and red graphic pixels unchanged')
+        self.assertEqual(result['removed'][0]['erased_pixel_count'],43)
+        self.assertGreater(result['removed'][0]['retained_exterior_pixel_count'],0)
 
     def test_graphics_only_explicit_and_empty_guards(self):
         image=Image.new("RGBA",(100,100),"white")
@@ -95,7 +111,8 @@ class Contracts(unittest.TestCase):
                     expected[40:60, 40:60] = data[40:60, 40:60]
                     self.assertTrue(np.array_equal(np.asarray(Image.open(io.BytesIO(output))), expected))
                     self.assertEqual(result["removed"][0]["erased_pixel_count"],
-                                     (ex2-ex1)*(ey2-ey1)-max(0, min(ex2, 60)-max(ex1, 40))*max(0, min(ey2, 60)-max(ey1, 40)))
+                                     int(np.any(expected != data, axis=2).sum()),
+                                     "white pixels are preserved, not counted as erased")
 
     def test_pixels_and_reuse(self):
         image, elements = fixture()

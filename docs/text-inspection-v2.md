@@ -39,9 +39,12 @@ optimistically versioned endpoints; no extra model call or changed matching rule
 Automatic and human-confirmed cleaning group nearby excluded text rectangles and
 check their union, not each neighbor as foreign ink. A maximum three-source-pixel
 fringe removes tight-OCR edge ink (including antialiasing below 250); the next
-three-pixel existing perimeter must contain no ink below 245. Checks clip to the
+three-pixel existing perimeter identifies connected exterior ink below 250. Checks clip to the
 image; lack of any checkable perimeter cannot justify nonempty erasure. A failed
-group is left intact, while independent safe groups can still produce previews.
+group with no separable ink is left intact. Otherwise, exterior-connected nonwhite
+components are subtracted and only separable excluded ink is cleared; a nearby
+border no longer vetoes the whole group. White/transparent-white pixels are not
+rewritten, and diagnostics count retained exterior pixels and actual cleared pixels.
 Keep/uncertain and code rectangles are subtracted from erasure and checking masks;
 protected RGBA pixels remain byte-identical. No unbounded dilation, largest-component
 selection or arbitrary noise tolerance is used. Group IDs, source boxes, bounded
