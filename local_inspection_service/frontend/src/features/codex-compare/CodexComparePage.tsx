@@ -13,7 +13,7 @@ import { LabelReport, ReferenceRegion } from './LabelReport';
 const date = (value: number) => new Date(value * 1000).toLocaleString();
 const message = (error: unknown) => error instanceof Error ? error.message : '请求失败，请重试';
 
-function Capture({ onCapture }: { onCapture: (file: File) => void }) {
+export function Capture({ onCapture }: { onCapture: (file: File) => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const generation = useRef(0);
   const stream = useRef<MediaStream | null>(null);
@@ -76,7 +76,7 @@ function LocatedImage({ task, side, box }: { task: Task; side: 'reference'|'actu
     </span></a><figcaption>{side === 'reference' ? '标准' : '实拍'} · 点击查看原图</figcaption></figure>;
 }
 
-function Detail({ id, owner }: { id: string; owner: string }) {
+export function Detail({ id, owner }: { id: string; owner: string }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');

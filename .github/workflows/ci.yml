@@ -108,6 +108,7 @@ jobs:
           trap 'kill "$preview_pid"' EXIT
           curl --retry 10 --retry-delay 1 --retry-connrefused --fail http://127.0.0.1:5190/react-preview/tests/codex-compare.html >/dev/null
           PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_codex_compare_ui.cjs
+          PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_label_batch_ui.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

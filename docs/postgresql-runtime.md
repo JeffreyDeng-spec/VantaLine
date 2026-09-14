@@ -108,3 +108,12 @@ migration or new database permission is required. Checklist updates only append
 new IDs and cannot remove pending work or reset recorded results. Geometry,
 references, coverage, idempotency and attempt revocation are validated within the
 existing serialized transaction. Missing report_version identifies historical v1.
+
+Batch-v3 uses the same additive JSONB task/event tables and advisory lock. Draft
+status is never claimed. Draft file writes and submission have request fingerprints;
+queued input cannot change. labels/references are nested per-batch projections with
+immutable actual IDs after submission, independent review histories and append-only
+revisions. Child cards do not have queue rows or their own sessions. The worker
+credential is still task/attempt-scoped, and validates label scope on every write.
+No DDL or database role expansion is required. Drain all v3 queue rows before
+rolling back to workers without the batch contract.

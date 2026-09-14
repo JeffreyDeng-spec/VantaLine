@@ -13,6 +13,7 @@ import { AgentToolsProvider } from "../agent/AgentToolsProvider";
 import { actionRegistry } from "../agent/registry";
 import { clearFiles } from "../agent/files";
 
+import { BatchWorkspace } from '../codex-compare/BatchWorkspace';
 import { AppShell } from "../../components/AppShell";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -113,7 +114,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
       }}
     >
       <AgentToolsProvider key={`agent:${identity}`} />
-      <AppShell key={`workspace:${identity}`} />
+      {location.pathname.replace(/\/$/, '') === '/workspace/text-compare-codex' ? <BatchWorkspace key={`batch:${identity}`} /> : <AppShell key={`workspace:${identity}`} />}
     </AuthContext.Provider>
   );
 }

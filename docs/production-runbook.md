@@ -145,3 +145,10 @@ before checks and produces visible issue annotations. Keep originals, selected
 reference bounds and all v1/v2 history on rollback. An older worker must not claim
 queued label-v2 cards; cancel/drain queued v2 work before rolling back. The decoder
 uses the release Python/OpenCV locally; unsupported/unreadable codes remain uncertain.
+
+For label-batch-v3, disable admission and drain the queue before the immutable
+release switch, then restart the independent worker against current. Commission a
+real batch with multiple actuals and record a single session ID, early matching,
+per-label CLI findings, safe uncertain matching and partial-report behavior. Preserve
+all draft/terminal v3 records and media on rollback; cancel/drain queued v3 tasks
+before starting an older worker. The 600-second limit applies to the entire batch.

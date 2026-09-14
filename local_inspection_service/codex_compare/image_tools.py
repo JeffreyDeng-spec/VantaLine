@@ -24,7 +24,7 @@ def local_image(args):
         raise ValueError('Output must be inside /work')
     if not math.isfinite(args.scale) or not 0 < args.scale <= 8:
         raise ValueError('Scale must be in (0,8]')
-    with Image.open('/input/'+args.source+'.png') as image:
+    with Image.open(getattr(args, 'input_file', '/input/'+args.source+'.png')) as image:
         x,y,w,h = b
         pixels = [round(x*image.width), round(y*image.height), round((x+w)*image.width), round((y+h)*image.height)]
         size = [round((pixels[2]-pixels[0])*args.scale), round((pixels[3]-pixels[1])*args.scale)]

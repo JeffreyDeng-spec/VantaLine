@@ -93,3 +93,8 @@ acceptance gate enabling accounts. See [Codex beta](codex-text-compare.md).
 Label-v2 CI additionally runs local QR decoding against frozen pixels using the
 locked OpenCV package, and verifies the readonly skill mount in Linux namespaces.
 The same immutable artifact carries CLI, skill and report schema changes.
+
+The frontend CI job includes the synthetic full-screen batch workspace acceptance
+runner. The Codex PostgreSQL job includes batch-v3 draft/scope/one-session tests.
+Release and rollback must drain queued v3 work before switching worker versions;
+passing deterministic gates does not establish real photographed-label accuracy.

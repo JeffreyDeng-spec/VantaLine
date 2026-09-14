@@ -72,6 +72,9 @@ def summary(value):
 
 
 def validate_report(task):
+    if task.get('report_version') == 'label-batch-v3':
+        from .batch_contracts import validate
+        return validate(task)
     if task.get('report_version') == 'label-v2':
         from .label_contracts import validate
         return validate(task)

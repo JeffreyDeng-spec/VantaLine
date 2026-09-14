@@ -285,7 +285,7 @@ excluded. The independently managed proxy stays outside the filesystem namespace
 
 ### Codex label inspection cards v2
 
-New Codex Beta submissions use `label-v2` reports with frozen original-coordinate
+The legacy single-label task endpoint creates `label-v2` reports with frozen original-coordinate
 reference selection. The website calls the existing task API; all agent writes
 remain on the private task socket. Elements, additive checklists, per-dimension
 results, issues and local decoding evidence are append-only events with current
@@ -299,3 +299,22 @@ limit and never follows payload URLs. No old OCR/Qwen pipeline or PLC is invoked
 Label annotation SVGs use the original image aspect ratio so marker text scales
 uniformly; issue and element labels use separate vertical anchors. Skill v2.2
 requires Chinese report prose while preserving the source label's language.
+
+### Order batch inspection v3
+
+The Codex entry now mounts an authenticated full-screen workspace at the existing
+/workspace/text-compare-codex URL, outside AppShell, with main-page back navigation.
+Drafts, uploaded photos and imported references live in the task store. Word import
+reuses direct DOC/DOCX embedded-image extraction and the owned standard library,
+without activating the standard or launching old Qwen/OCR preparation. Identical
+reference bytes are deduplicated with source occurrences retained.
+
+One label-batch-v3 task owns all uploaded actual label cards and exactly one exec
+session with a shared 600-second deadline. Import/queue time precedes that deadline.
+The model publishes standard regions and correspondence, then per-label v2 element
+plans, checks, issues and summaries. Unused document images are outside scope; every
+actual stays present, with ambiguous correspondence requiring human confirmation.
+CLI operations explicitly name a label; geometry/evidence use its frozen originals.
+The batch overview contains summaries/counts only; detailed child reports are fetched
+separately. Problem cards precede uncertainty, pending and passing cards. A manual
+correction or selected rerun creates a linked fresh batch, never resumes a session.

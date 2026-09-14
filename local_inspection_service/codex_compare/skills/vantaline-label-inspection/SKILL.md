@@ -1,13 +1,26 @@
 ---
 name: vantaline-label-inspection
-description: Inspect one VantaLine label against its frozen reference, decompose elements, publish a multidimensional checklist and image-located evidence through the task-bound vantaline CLI. Use only for a VantaLine inspection card.
+description: Inspect a VantaLine order batch or legacy single label against frozen references, decompose elements, publish a multidimensional checklist and image-located evidence through the task-bound vantaline CLI. Use only for a VantaLine inspection card.
 ---
 
 # VantaLine label inspection
 
 **Status: Authoritative**
 
-Read [CLI contract](references/cli.md). Use `vantaline card show` to obtain the current
+Read `vantaline batch show` first. If report_version is `label-batch-v3`, read
+[batch CLI contract](references/batch.md) and /input/batch.json. One batch is one
+session: publish all matches, then all matched-label element plans, then inspect.
+Use the common dimensions below for EACH matched label and --label on its commands.
+A standard may correspond to several actual labels. Unused standard images are
+out of scope, not missing labels. Do not require pixel similarity: wrong text,
+color or mirrored printing may be a defect in the corresponding label, not a
+reason to silently discard the actual. Ambiguity must be recorded via CLI.
+For v3, leave checks that were not inspected pending at the deadline; do not
+convert them to uncertainty simply to finalize. The legacy completion shortcut
+below applies only to v2. Reference regions may be proposed before matching;
+never mutate a region or correspondence after inspecting it.
+
+For legacy v2 cards, read [CLI contract](references/cli.md). Use `vantaline card show` to obtain the current
 card and `inputs.reference_region` (normalized XYWH; defaults to the whole reference).
 Inspect /input/reference.png and /input/actual.png using image tools. Preserve originals.
 
