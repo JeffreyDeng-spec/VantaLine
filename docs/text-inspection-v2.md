@@ -248,6 +248,11 @@ The first classifier is a deterministic local context classifier with manual fee
 
 ### Comparison progress and result dialog
 
+The result contains one standard image. Its upper-right zoom button opens the
+existing in-dialog viewer; element clicks still select actual-image evidence.
+Returning preserves element selection. Older/malformed element output retains
+one zoomable standard image instead of hiding the reference or duplicating it.
+
 Starting a text comparison immediately opens a native modal dialog. The complete
 summary, element evidence, differences, high-resolution opt-in and collapsed Raw
 Output live there; closing keeps the task running. The workspace action becomes
