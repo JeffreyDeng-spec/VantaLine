@@ -41,18 +41,23 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.getByRole('button',{name:'加载更早任务'}).click();await page.locator('.bw-task-row').filter({hasText:'更早检查任务'}).waitFor();
   await page.getByRole('button',{name:'新建任务',exact:true}).click();
   await page.getByRole('heading',{name:'新建任务',exact:true}).waitFor();assert.equal(created,0);
-  assert.deepEqual(await page.locator('.bw-panel-heading h2').allTextContents(),['订单','标准图','实拍标签']);
+  assert.deepEqual(await page.locator('.bw-panel-heading h2').allTextContents(),['订单','实拍标签']);
   for(const width of [1920,1440,1024,768,390]){
    await page.setViewportSize({width,height:1000});
    const panels=await page.locator('.bw-bench>.bw-panel').evaluateAll(nodes=>nodes.map(n=>({width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height})));
-   assert.equal(panels.length,3);assert.ok(Math.max(...panels.map(p=>p.width))-Math.min(...panels.map(p=>p.width))<1,`Unequal panels at ${width}`);
-   assert.ok(panels.every(p=>p.height>=440));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+   assert.equal(panels.length,2);assert.ok(Math.max(...panels.map(p=>p.width))-Math.min(...panels.map(p=>p.width))<1,`Unequal panels at ${width}`);
+   assert.ok(panels.every(p=>p.height>=440));
+   assert.ok(await page.locator('.bw-bench').evaluate(n=>n.scrollWidth<=n.clientWidth+1),`Bench overflow at ${width}`);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   }
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('combobox',{name:'选择订单',exact:true}).selectOption('std');
   await page.getByRole('textbox',{name:'批次订单名称',exact:true}).waitFor();assert.equal(created,1);
   await page.locator('input[accept=".doc,.docx"]').setInputFiles({name:'订单.docx',mimeType:'application/octet-stream',buffer:Buffer.from('fixture')});
-  await page.getByText('文档及提取图片已保存',{exact:true}).waitFor();
+  await page.locator('.bw-order').getByText('文档及提取图片已保存',{exact:true}).waitFor();
+  await page.locator('.bw-order .bw-standard-gallery figure').first().waitFor();
+  assert.equal(await page.locator('.bw-standard').count(),0);
+  assert.equal(await page.getByRole('tab').count(),0);
+  await page.screenshot({path:out+'/order-import-inline.png',fullPage:true});
   await page.locator('input[accept="image/*"]').setInputFiles([1,2,3].map(i=>({name:'label'+i+'.png',mimeType:'image/png',buffer:Buffer.from(svg)})));
   await page.locator('.bw-actual-gallery figure').nth(2).waitFor();assert.equal(uploads,3);
   await page.reload();await page.locator('.bw-actual-gallery figure').nth(2).waitFor();assert.equal(uploads,3);

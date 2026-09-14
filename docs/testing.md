@@ -367,8 +367,9 @@ synthetic executable and are not real Codex quality evidence.
 The required frontend job also runs scripts/test_label_batch_ui.cjs against
 tests/label-batch.html: list-first entry despite a saved last-batch preference,
 unified legacy/current task rows and earlier-page loading, new-task preparation
-without empty-record creation, parent returns and draft reopening, three equal
-panel widths at 1920/1440/1024/768/390 pixels with increased height, batch Word
+without empty-record creation, parent returns and draft reopening, two equal
+panel widths at 1920/1440/1024/768/390 pixels with increased height and no workbench
+overflow, extracted images inside the order panel without a separate tab, batch Word
 upload, multi-image upload, refresh restoration,
 single submit, frozen-task upload absence, problem ordering, preserved problem filter on
 label return, separate label details, source markers, literal
