@@ -357,3 +357,24 @@ private runtime storage, never Git. The script's input contract is in its docstr
 
 Label UI acceptance also asserts that the SVG viewBox follows image aspect ratio
 and coincident issue/element markers have distinct label anchors.
+
+Batch-v3 adds tests/codex_compare/test_batch.py to the existing PostgreSQL/CLI gate.
+It checks durable drafts, idempotent uploads/submission, deduplicated references,
+owner isolation, frozen media, selected human-corrected retries, scope validation
+and one harness launch for batches of 1/5/10 actuals. Those harness tests use a
+synthetic executable and are not real Codex quality evidence.
+
+The required frontend job also runs scripts/test_label_batch_ui.cjs against
+tests/label-batch.html: batch Word upload, multi-image upload, refresh restoration,
+single submit, problem ordering, separate label details, source markers, literal
+injected text, account isolation and narrow-screen overflow. Screenshots use only
+synthetic fixtures. Real batches separately measure correspondence accuracy,
+manual-confirmation rate, per-dimension false results and completion within 600s.
+
+`scripts/evaluate_label_batches.py` evaluates raw private batch task exports with
+explicit label-to-standard and dimension annotations. It requires annotations for
+every uploaded actual; unresolved matching stays in the accuracy denominator.
+It reports wrong correspondence, confirmation and fully-checked proportions plus
+per-dimension outcomes and elapsed batch time, grouped by sample kind. Do not mix
+controlled source mutations with real photographed labels or claim a population
+accuracy estimate from a small commissioning set.

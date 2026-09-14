@@ -33,7 +33,7 @@ from ..storage.runtime_selector import build_runtime_repository
 
 MODULE = Path(__file__).parent
 SKILL = MODULE/'skills'/'vantaline-label-inspection'
-SKILL_VERSION = 'label-inspection-v2.2'
+SKILL_VERSION = 'label-inspection-v3.0'
 
 
 def repository():
@@ -143,16 +143,28 @@ def broker(task, token, media, path, auth_path=None):
                     current = repo.get(task['owner_user_id'], task['id'])
                     if not current or current['status'] != 'running' or time.time() >= current['deadline'] or current.get('attempt_id') != task['attempt_id']:
                         raise OperationDenied('Task ended')
+                    is_batch = current.get('report_version') == 'label-batch-v3'
+                    lid = payload.get('label_id') if isinstance(payload, dict) else None
                     if kind == 'show':
+                        if is_batch and lid:
+                            from .batch_contracts import public_label
+                            return public_label(current, lid, True)
                         return public(current)
+                    scoped = payload.get('value') if is_batch and lid else payload
+                    target = current
+                    if is_batch and kind in {'artifact', 'decode'}:
+                        from .batch_contracts import require_matched
+                        target = require_matched(current, lid)
                     if kind == 'decode':
-                        value = decode(media, task['owner_user_id'], task, payload)
+                        value = decode(media, task['owner_user_id'], target, scoped)
                     elif kind == 'artifact':
-                        value = artifact(media, task['owner_user_id'], task, payload)
+                        value = artifact(media, task['owner_user_id'], target, scoped)
                     else:
                         if len(raw) > 65536:
                             raise ValueError('Report payload too large')
                         value = payload
+                    if is_batch and kind in {'artifact', 'decode'}:
+                        value = {'label_id': lid, 'value': value}
                     result = repo.write_report(task['owner_user_id'], task['id'], task['attempt_id'], token, request['key'], kind, value)
                     return {**result, kind: value} if kind in {'artifact', 'decode'} else result
                 result = with_repo(operation)
@@ -240,6 +252,35 @@ def stop_process(process):
             process.wait(timeout=3)
 
 
+def prepare_batch_input(task, directory, media):
+    """Materialize bounded original files and paginated navigation-only contact sheets."""
+    from PIL import ImageDraw
+    (directory/'media').mkdir()
+    entries = [(rid, r.get('media')) for rid, r in task['inputs']['references'].items()]
+    entries += [(lid, e['actual']) for lid, e in task['labels'].items()]
+    pages = []
+    for offset in range(0, len(entries), 12):
+        sheet = Image.new('RGB', (1000, 750), 'white')
+        draw = ImageDraw.Draw(sheet)
+        for index, (identifier, evidence) in enumerate(entries[offset:offset+12]):
+            x, y = (index % 4)*250, (index//4)*250
+            if evidence:
+                path = directory/'media'/(evidence['image']+'.png')
+                if not path.exists():
+                    path.write_bytes(media.read(task['owner_user_id'], evidence['image']))
+                with Image.open(path) as source:
+                    thumb = source.copy()
+                    thumb.thumbnail((240, 215))
+                    sheet.paste(thumb, (x, y))
+            draw.text((x+2, y+218), identifier, fill='black')
+        filename = 'index-%03d.jpg' % (offset//12+1)
+        sheet.save(directory/filename, quality=85)
+        pages.append(filename)
+    (directory/'batch.json').write_text(encode({'id': task['id'], 'labels': [{'id': lid, 'name': e['name'], 'image': '/input/media/'+e['actual']['image']+'.png', 'match': e['match']} for lid,e in task['labels'].items()],
+        'references': task['inputs']['references'], 'index_pages': pages,
+        'deadline': task['deadline'], 'path_rule': '/input/media/{image_sha256}.png'}))
+
+
 def execute(task, token, config, media):
     base = Path(config['work_root'])
     base.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -254,22 +295,26 @@ def execute(task, token, config, media):
     try:
         for name in ('input', 'work', 'bin', 'auth'):
             (directory/name).mkdir(mode=0o700)
-        for side in ('reference', 'actual'):
-            (directory/'input'/f'{side}.png').write_bytes(media.read(task['owner_user_id'], task['inputs'][side]['image']))
-        (directory/'input'/'task.json').write_text(encode({'id': task['id'], 'inputs': task['inputs'], 'prompt_version': SKILL_VERSION if task.get('report_version') == 'label-v2' else PROMPT_VERSION}))
+        if task.get('report_version') == 'label-batch-v3':
+            prepare_batch_input(task, directory/'input', media)
+        else:
+            for side in ('reference', 'actual'):
+                (directory/'input'/f'{side}.png').write_bytes(media.read(task['owner_user_id'], task['inputs'][side]['image']))
+        (directory/'input'/'task.json').write_text(encode({'id': task['id'], 'inputs': task['inputs'], 'prompt_version': SKILL_VERSION if task.get('report_version') in {'label-v2', 'label-batch-v3'} else PROMPT_VERSION}))
         (directory/'bin'/'vantaline').write_text('#!/bin/sh\nexec /usr/bin/python3 /tools/cli.py "$@"\n')
         (directory/'bin'/'vantaline').chmod(0o755)
         shutil.copyfile(Path(config['auth_home'])/'auth.json', directory/'auth'/'auth.json')
         (directory/'auth'/'config.toml').write_text('model = '+json.dumps(config['model'])+'\nmodel_reasoning_effort = "high"\nweb_search = "disabled"\n')
         server = broker(task, token, media, socket_directory/'report.sock', directory/'auth'/'auth.json')
         threading.Thread(target=server.serve_forever, daemon=True).start()
-        if task.get('report_version') == 'label-v2':
+        if task.get('report_version') in {'label-v2', 'label-batch-v3'}:
             skill_body = (SKILL/'SKILL.md').read_bytes()
-            skill_meta = {'skill_version': SKILL_VERSION, 'skill_sha256': digest(skill_body), 'tool_version': 'vantaline-cli-v2'}
+            skill_meta = {'skill_version': SKILL_VERSION, 'skill_sha256': digest(skill_body), 'tool_version': 'vantaline-cli-v3'}
             with_repo(lambda r: r.pulse(task['owner_user_id'], task['id'], task['attempt_id'], skill_meta))
             # Include the exact skill bytes as well as an explicit named invocation;
             # loading never depends solely on implicit model skill discovery.
-            prompt = (MODULE/'label_prompt.md').read_bytes() + b'\n\n' + skill_body
+            prompt_file = 'batch_prompt.md' if task.get('report_version') == 'label-batch-v3' else 'label_prompt.md'
+            prompt = (MODULE/prompt_file).read_bytes() + b'\n\n' + skill_body
         else:
             prompt = (MODULE/'prompt.md').read_bytes()
         command = sandbox_command(directory, directory/'auth', Path(config['binary']), token, config['model'], socket_directory/'report.sock', proxy_url=config.get('proxy_url', ''))

@@ -24,6 +24,9 @@ def configured():
 
 
 def public(task, detail=True):
+    if task.get('report_version') == 'label-batch-v3':
+        from .batch_contracts import public_batch
+        return public_batch(task)
     fields = ('id', 'status', 'created_at', 'updated_at', 'started_at', 'finished_at', 'parent_id',
               'model', 'reasoning_effort', 'runner_version', 'session_id', 'usage', 'sequence', 'error', 'finalized', 'report_version', 'skill_version', 'skill_sha256', 'tool_version')
     result = {k: task[k] for k in fields if k in task}
@@ -75,12 +78,17 @@ def register(ns):
     def call(fn):
         try:
             return fn()
+        except KeyError as exc:
+            raise HTTPException(404, '任务或标签不存在') from exc
         except OperationConflict as exc:
             raise HTTPException(409, str(exc)) from exc
         except OperationDenied as exc:
             raise HTTPException(403, str(exc)) from exc
         except (ValueError, OSError) as exc:
-            raise HTTPException(422, '输入或证据无效：' + type(exc).__name__) from exc
+            raise HTTPException(422, str(exc)[:300] if isinstance(exc, ValueError) else '输入或证据文件无法读取') from exc
+
+    from .batch_api import register as register_batches
+    register_batches(ns, context, enabled, owned, call)
 
     @app.get(PREFIX + '/capabilities')
     def capabilities():
@@ -150,6 +158,8 @@ def register(ns):
         owner, repo, _ = context()
         enabled(owner)
         task = owned(repo, owner, identifier)
+        if task.get('report_version') == 'label-batch-v3':
+            raise HTTPException(409, '请使用批次重跑接口')
         from .contracts import TERMINAL
         if task['status'] not in TERMINAL:
             raise HTTPException(409, '请等待或取消当前任务')
@@ -165,7 +175,11 @@ def register(ns):
     def image(identifier: str, sha: str):
         owner, repo, media = context()
         task = owned(repo, owner, identifier)
-        allowed = {x[k] for x in [task['inputs']['reference'], task['inputs']['actual'], *task['artifacts'].values()] for k in ('original', 'image', 'preview')}
+        if task.get('report_version') == 'label-batch-v3':
+            from .batch_contracts import media_hashes
+            allowed = media_hashes(task)
+        else:
+            allowed = {x[k] for x in [task['inputs']['reference'], task['inputs']['actual'], *task['artifacts'].values()] for k in ('original', 'image', 'preview')}
         if sha not in allowed:
             raise HTTPException(404, '证据不存在')
         data = call(lambda: media.read(owner, sha))

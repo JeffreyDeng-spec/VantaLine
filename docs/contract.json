@@ -14,6 +14,8 @@
     "local_inspection_service/docs/runpod-yolo-train-worker.md",
     "local_inspection_service/workers/vantaline_yolo_train_worker/README.md", "models/README.md", "docs/codex-text-compare.md", "local_inspection_service/codex_compare/prompt.md",
     "local_inspection_service/codex_compare/label_prompt.md",
+    "local_inspection_service/codex_compare/batch_prompt.md",
+    "local_inspection_service/codex_compare/skills/vantaline-label-inspection/references/batch.md",
     "local_inspection_service/codex_compare/skills/vantaline-label-inspection/SKILL.md",
     "local_inspection_service/codex_compare/skills/vantaline-label-inspection/references/cli.md"
   ],

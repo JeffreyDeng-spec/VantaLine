@@ -150,7 +150,7 @@ active work. No global OS or website proxy change is required.
 
 ## Label-v2 multidimensional workflow
 
-New cards are label-v2; the public route stays compatible and is labelled 标签检查
+Legacy single-label cards are label-v2; the public route stays compatible and is labelled 标签检查
 Beta. Freeze one selected label region plus both full originals. Packaging dielines,
 manuals and whole-product inspection are excluded; known non-label categories are
 filtered and rejected, and the skill must report uncertainty for misclassified
@@ -198,3 +198,55 @@ User-facing v2 findings, progress and summaries are written in Simplified Chines
 inspected source text remains verbatim. Original-aspect SVG overlays preserve
 legible marker text on long/thin labels, with issue IDs placed separately from
 element IDs when their regions overlap.
+
+## Order batch workspace (label-batch-v3)
+
+The main beta entry is an immersive authenticated page without AppShell sidebar.
+Left: one order and its Word embedded images. Right: all actual photos, one label
+per photo. Bottom: batch label cards ordered differences, confirmation, unfinished,
+match. Details, raw checks and source annotations open per label; overview polling
+does not include those collections. Uploaded drafts and selected order persist on
+the server. The same browser restores the last selected batch, otherwise the latest
+batch is opened. Uploads that have not returned success are never presented as saved.
+
+DOC is bounded by the existing 30 MiB helper; DOCX by the existing 100 MiB importer.
+This import path stores owned draft standards with filename-derived names and an
+internal material identifier, but never confirms them or invokes old Qwen/OCR jobs.
+Word text/drawing composition is not rendered. Exact embedded duplicates retain
+all source occurrences; unsupported images show an explicit preview error.
+A draft allows at most 50 actuals (usual usage 1–10), each 10 MiB/16MP, and 500
+reference image/region entries. Repeated actual bytes require explicit acceptance
+as another sample. A single task remains queued/running regardless of photo count.
+
+New APIs under /api/text-compare-codex:
+- POST /batches with request_id creates a durable draft; GET /batches pages by before.
+- GET /batches/{id} returns the overview; GET /batches/{id}/labels/{label} gives detail.
+- POST /batches/{id}/document: file and request_id; import state is pollable.
+- POST /batches/{id}/order: standard_id and request_id; stores source snapshots.
+- POST /batches/{id}/name: name and request_id; changes draft report display name.
+- POST /batches/{id}/photos: file, request_id, allow_duplicate=false.
+- POST /batches/{id}/labels/{label}/remove: request_id, draft only.
+- POST /batches/{id}/submit: request_id; rejects changed orders and freezes input.
+- POST /batches/{id}/labels/{label}/review: separate decision/note/request_id.
+- POST /batches/{id}/retry: request_id, label_ids, optional matches mapping each
+  selected label to asset_id/region; creates and queues a fresh linked batch.
+Existing /tasks/{id}/events, /cancel and private /media/{sha} apply to batches.
+Legacy /tasks endpoints and saved v1/v2 reports remain supported. No v3 data rewrite.
+
+See the release-bundled batch CLI reference for commands and schemas. Every scoped
+operation includes --label, including local crop, decode and evidence. Reference
+regions cannot change after inspection starts. Human-selected retry correspondences
+are frozen. The broker reconstructs each evidence crop from the current label's
+immutable source. It never accepts a different label's evidence IDs as proof.
+Batch limits preserve per-label v2 caps plus 20,000 total events; JSON writes remain
+64 KiB. A batch-wide summary must disclose every actual's outcome. Pending matches
+or checks prevent finalize; unresolved matching may finish processing only with
+REVIEW_REQUIRED, never MATCH. Timeout keeps pending work and partial reports.
+
+The updated skill is explicitly invoked and mounted read-only for every session.
+Navigation contact sheets are separate from full-resolution inspection files.
+The entire batch shares one 600-second session; no automatic child session, retry,
+external OCR, old classification or PLC action is introduced. An ambiguous actual
+must remain a visible confirmation card, while unused document photos are not
+missing-label defects. Real quality and deadline completion require measured
+commissioning; synthetic UI/harness evidence does not certify accuracy.

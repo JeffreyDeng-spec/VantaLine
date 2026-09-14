@@ -69,7 +69,7 @@ class CodexComparisonsRepository:
             return self.rows(c)
 
     def create(self, owner, key, inputs, *, parent_id=None, report_version=None):
-        if report_version not in (None, 'label-v2'):
+        if report_version not in (None, 'label-v2', 'label-batch-v3'):
             raise ValueError('Unsupported report version')
         fingerprint = digest({'inputs': inputs, 'parent_id': parent_id, **({'report_version': report_version} if report_version else {})})
         with self.tx() as c:
@@ -85,7 +85,13 @@ class CodexComparisonsRepository:
                     'summary': None, 'reviews': [], 'finalized': False}
             if report_version == 'label-v2':
                 task.update(report_version=report_version, elements={}, checks={}, issues={}, decodes={})
-            self.event(c, task, 'queued', {})
+            if report_version == 'label-batch-v3':
+                from ..codex_compare.batch_contracts import new_label
+                task.update(report_version=report_version, status='draft', references=inputs.get('regions', {}).copy(),
+                            labels={lid: new_label(lid, a['media'], a['name']) for lid, a in inputs.get('actuals', {}).items()})
+                for lid, match in inputs.get('human_matches', {}).items():
+                    task['labels'][lid].update(match=match, human_match=True)
+            self.event(c, task, task['status'], {})
             self.save(c, task)
             return task
 
@@ -134,7 +140,7 @@ class CodexComparisonsRepository:
             if not task:
                 raise KeyError(identifier)
             if task['status'] not in TERMINAL:
-                task['status'] = 'cancelled' if task['status'] == 'queued' else 'cancel_requested'
+                task['status'] = 'cancelled' if task['status'] in {'queued', 'draft'} else 'cancel_requested'
                 task['token_hash'] = ''
                 self.event(c, task, task['status'], {})
                 self.save(c, task)
@@ -155,9 +161,12 @@ class CodexComparisonsRepository:
                 return {'sequence': previous[0]['sequence']}
             if task['finalized']:
                 raise OperationConflict('Report already finalized')
-            if task['sequence'] >= 2000:
+            if task['sequence'] >= (20000 if task.get('report_version') == 'label-batch-v3' else 2000):
                 raise ValueError('Report event limit reached')
-            if kind == 'progress':
+            if task.get('report_version') == 'label-batch-v3':
+                from ..codex_compare.batch_contracts import apply
+                payload = apply(task, kind, payload)
+            elif kind == 'progress':
                 from ..codex_compare.contracts import text
                 payload = {'message': text(payload.get('message'), 1000)}
             elif kind in {'element', 'checklist', 'check', 'issue'}:
@@ -228,5 +237,46 @@ class CodexComparisonsRepository:
                 raise ValueError('Review history limit reached')
             task['reviews'].append({'key': key, 'value': value, 'created_at': time.time(), 'actor_id': owner})
             self.event(c, task, 'review', value)
+            self.save(c, task)
+            return task
+
+    def edit_draft(self, owner, identifier, key, kind, payload, mutate):
+        """CAS/idempotent draft updates. Nothing can mutate frozen queued input."""
+        fingerprint = digest({'kind': kind, 'payload': payload})
+        with self.tx() as c:
+            task = self.read(c, owner, identifier)
+            if not task or task.get('report_version') != 'label-batch-v3':
+                raise KeyError(identifier)
+            c.execute(f'SELECT raw_json FROM {self.table(EVENTS)} WHERE task_id=%s AND idempotency_key=%s', (identifier, key))
+            previous = self.rows(c)
+            if previous:
+                if previous[0]['payload'].get('fingerprint') != fingerprint:
+                    raise OperationConflict('Draft request key reused with different input')
+                return task
+            if task['status'] != 'draft':
+                raise OperationConflict('Batch inputs are frozen; create a new batch')
+            mutate(task)
+            self.event(c, task, kind, {'value': payload, 'fingerprint': fingerprint}, key)
+            self.save(c, task)
+            return task
+
+    def review_label(self, owner, identifier, lid, value, key):
+        from ..codex_compare.batch_contracts import get_label
+        with self.tx() as c:
+            task = self.read(c, owner, identifier)
+            if not task:
+                raise KeyError(identifier)
+            entry = get_label(task, lid)
+            if task['status'] not in TERMINAL:
+                raise OperationConflict('任务结束后才能保存人工复核')
+            previous = next((x for x in entry['reviews'] if x['key'] == key), None)
+            if previous:
+                if previous['value'] != value:
+                    raise OperationConflict('Review key conflict')
+                return task
+            if len(entry['reviews']) >= 100:
+                raise ValueError('Review history limit reached')
+            entry['reviews'].append({'key': key, 'value': value, 'actor_id': owner, 'created_at': time.time()})
+            self.event(c, task, 'label_review', {'label_id': lid, 'value': value})
             self.save(c, task)
             return task
