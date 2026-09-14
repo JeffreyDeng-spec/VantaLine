@@ -201,13 +201,28 @@ element IDs when their regions overlap.
 
 ## Order batch workspace (label-batch-v3)
 
-The main beta entry is an immersive authenticated page without AppShell sidebar.
-Left: one order and its Word embedded images. Right: all actual photos, one label
-per photo. Bottom: batch label cards ordered differences, confirmation, unfinished,
-match. Details, raw checks and source annotations open per label; overview polling
-does not include those collections. Uploaded drafts and selected order persist on
-the server. The same browser restores the last selected batch, otherwise the latest
-batch is opened. Uploads that have not returned success are never presented as saved.
+The main beta entry is an immersive authenticated task list without AppShell sidebar.
+It uses the existing owner-scoped /tasks listing to show active sessions, drafts and
+historical v1/v2/v3 tasks together, with paginated earlier records. Old single-label
+reports have no separate menu and are not rewritten. The bare entry always opens
+the list, including when a last-batch browser preference exists. Saved direct batch
+and legacy task links still open the corresponding detail; task=history opens the list.
+
+New task opens a separate preparation page (view=new), with existing order selection
+or direct Word import. Merely opening that page does not create an empty database
+record. The first selected order or upload creates a server draft and binds its URL.
+Returning from the list to a draft resumes editing; submission opens task detail.
+Each level has a parent return: main page, task list, task overview, label detail.
+List scroll and label filters/overview scroll are retained for in-page return.
+
+Order, reference gallery and actual-label gallery are three equal-width panels with
+viewport-based increased height. Narrow screens horizontally scroll this equal-width
+bench, preserving usable controls; the rest of the page fits the viewport. Bottom:
+label cards ordered differences, confirmation, unfinished, match. Details, raw checks
+and source annotations open per label; overview polling excludes those collections.
+Uploaded drafts and selected order persist on the server. Uploads that have not
+returned success are never presented as saved. Frozen task detail has no upload or
+camera controls; adding inputs starts through New task and leaves the original intact.
 
 DOC is bounded by the existing 30 MiB helper; DOCX by the existing 100 MiB importer.
 This import path stores owned draft standards with filename-derived names and an
