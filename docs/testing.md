@@ -365,8 +365,13 @@ and one harness launch for batches of 1/5/10 actuals. Those harness tests use a
 synthetic executable and are not real Codex quality evidence.
 
 The required frontend job also runs scripts/test_label_batch_ui.cjs against
-tests/label-batch.html: batch Word upload, multi-image upload, refresh restoration,
-single submit, problem ordering, separate label details, source markers, literal
+tests/label-batch.html: list-first entry despite a saved last-batch preference,
+unified legacy/current task rows and earlier-page loading, new-task preparation
+without empty-record creation, parent returns and draft reopening, three equal
+panel widths at 1920/1440/1024/768/390 pixels with increased height, batch Word
+upload, multi-image upload, refresh restoration,
+single submit, frozen-task upload absence, problem ordering, preserved problem filter on
+label return, separate label details, source markers, literal
 injected text, account isolation and narrow-screen overflow. Screenshots use only
 synthetic fixtures. Real batches separately measure correspondence accuracy,
 manual-confirmation rate, per-dimension false results and completion within 600s.

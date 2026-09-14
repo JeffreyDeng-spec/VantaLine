@@ -303,7 +303,14 @@ requires Chinese report prose while preserving the source label's language.
 ### Order batch inspection v3
 
 The Codex entry now mounts an authenticated full-screen workspace at the existing
-/workspace/text-compare-codex URL, outside AppShell, with main-page back navigation.
+/workspace/text-compare-codex URL, outside AppShell. Its bare entry lists active,
+draft and historical tasks through the existing owner-scoped /tasks pagination,
+including single-label reports with no separate legacy menu or data migration.
+Explicit new-task, task-detail and label-detail views have parent navigation;
+entering the list never redirects to the last batch. Draft URLs resume editing,
+while submitted task inputs stay read-only. The preparation/detail bench has three
+equal-width, viewport-height panels for order, references and actual labels;
+narrow screens scroll the bench horizontally without overflowing the page.
 Drafts, uploaded photos and imported references live in the task store. Word import
 reuses direct DOC/DOCX embedded-image extraction and the owned standard library,
 without activating the standard or launching old Qwen/OCR preparation. Identical

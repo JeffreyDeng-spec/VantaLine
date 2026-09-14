@@ -101,7 +101,7 @@ export function Detail({ id, owner }: { id: string; owner: string }) {
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
   return <section className="cc-detail">
-    <Link to={workspacePath('/text-compare-codex')}>← 返回任务卡片</Link>
+    <Link to={workspacePath('/text-compare-codex')}>← 返回任务列表</Link>
     {task.error && <p role="alert">{message(task.error)} <button onClick={() => void task.refetch()}>重新读取</button></p>}
     {!value ? <p>正在读取报告…</p> : <>
       <header><div><h2>{value.inputs.standard_name}</h2><p>{date(value.created_at)} · 标准版本 {value.inputs.standard_revision_number} · {labels[value.status]}</p></div>

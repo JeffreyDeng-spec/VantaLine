@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, RefreshCw, ScanLine, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../../api/client';
@@ -20,6 +20,7 @@ interface BatchLabel {
   inputs: Task['inputs']; elements?: Task['elements']; checks?: Task['checks']; issues?: Task['issues']; artifacts?: Task['artifacts']; reviews?: Task['reviews'];
 }
 interface Batch {
+  report_version: 'label-batch-v3';
   id: string; status: string; sequence: number; created_at: number; parent_id?: string; error?: string; import_state?: string;
   model?: string; session_id?: string; skill_version?: string; skill_sha256?: string; summary: Task['summary']; progress_message?: string;
   inputs: { standard_id?: string; standard_name?: string; standard_revision_number?: number; references: Record<string, Reference> };
@@ -31,6 +32,27 @@ const stateName = (s: string) => ({draft: '草稿', extracting: '正在提取图
 const errorText = (e: unknown) => e instanceof Error ? e.message : '操作失败，请重试';
 const request = () => ({request_id: crypto.randomUUID()});
 const rank: Record<string, number> = {difference: 0, uncertain: 1, pending: 2, match: 3};
+type InspectionTask = Batch | Task;
+const isBatch = (task: InspectionTask): task is Batch => task.report_version === 'label-batch-v3';
+const taskParams = (task: InspectionTask): Record<string,string> => isBatch(task) ? {batch:task.id, ...(task.status==='draft'?{view:'new'}:{})} : {task:task.id};
+
+function TaskList({items, loading, onSelect, onNew, canCreate}: {items:InspectionTask[]; loading:boolean; onSelect:(task:InspectionTask)=>void; onNew:()=>void; canCreate:boolean}) {
+  const active = (task:InspectionTask) => !terminal(task.status) && task.status!=='draft';
+  const ordered=[...items].sort((a,b)=>Number(active(b))-Number(active(a))||b.created_at-a.created_at);
+  return <section className="bw-task-list">
+    <header className="bw-list-heading"><div><span className="bw-eyebrow">标签检查 BETA</span><h1>任务列表</h1><p>查看正在进行的检查、继续草稿，或打开历史报告。</p></div><button className="bw-primary" disabled={!canCreate} onClick={onNew}><Plus size={18}/>新建任务</button></header>
+    <div className="bw-task-rows">{ordered.map(task=>{
+      const count=isBatch(task)?task.labels.length:1;
+      const progress=isBatch(task)?task.labels.reduce((p,e)=>({total:p.total+e.progress.total,settled:p.settled+e.progress.settled}),{total:0,settled:0}):task.progress||{total:Object.values(task.counts).reduce((a,b)=>a+b,0),settled:task.counts.match+task.counts.difference+task.counts.uncertain};
+      return <button className="bw-task-row" key={task.id} onClick={()=>onSelect(task)}>
+        <span className="bw-task-title"><strong>{task.inputs.standard_name||'未命名任务'}</strong><small>{new Date(task.created_at*1000).toLocaleString()} · {count} 枚标签</small></span>
+        <span className="bw-task-result">{task.summary?.message||task.error||(task.status==='draft'?'继续选择订单与上传实拍':active(task)?'检查进行中，点击查看实时进展':'查看已保存的检查报告')}<small>{progress&&progress.total>0?`已处理 ${progress.settled}/${progress.total} 项`:'尚无检查项'}</small></span>
+        <span className={`bw-badge ${active(task)?'active':task.status}`}>{stateName(task.status)}</span><span className="bw-task-open">{task.status==='draft'?'继续编辑':'查看详情'} →</span>
+      </button>;
+    })}</div>
+    {!items.length&&<p className="bw-empty">{loading?'正在读取任务…':'还没有检查任务，点击“新建任务”开始。'}</p>}
+  </section>;
+}
 
 function LabelDetail({batch, lid, onBack, onRerun}: {batch: Batch; lid: string; onBack:()=>void; onRerun:(ids:string[], matches?:Record<string,unknown>)=>Promise<void>}) {
   const owner = useAuth().user.id;
@@ -76,34 +98,28 @@ export function BatchWorkspace() {
   const [params,setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const cap = useQuery({queryKey:['codex-capabilities',owner],queryFn:capabilities,retry:false});
-  const [cursor,setCursor] = useState('');
-  const history = useQuery({queryKey:['batches',owner,'list',cursor],queryFn:()=>apiClient.get<{items:Batch[];next_cursor:string|null}>(`${BATCHES}?before=${encodeURIComponent(cursor)}`),enabled:cap.isSuccess,refetchInterval:5000});
   const bid = params.get('batch') || '';
   const lid = params.get('label') || '';
-  const legacy = params.get('task');
+  const legacy = params.get('task') === 'history' ? '' : params.get('task');
+  const creating = params.get('view')==='new';
+  const listing = !bid && !legacy && !creating;
+  const history = useInfiniteQuery({queryKey:['inspection-tasks',owner],initialPageParam:'',queryFn:({pageParam})=>apiClient.get<{items:InspectionTask[];next_cursor:string|null}>(`${ROOT}/tasks?before=${encodeURIComponent(pageParam)}`),getNextPageParam:last=>last.next_cursor||undefined,enabled:cap.isSuccess&&listing,refetchInterval:listing?5000:false});
   const batchQuery = useQuery({queryKey:['batches',owner,bid],queryFn:()=>apiClient.get<Batch>(`${BATCHES}/${bid}`),enabled:!!bid&&cap.isSuccess,refetchInterval:q=>terminal(q.state.data?.status||'')?false:2000,retry:false});
-  const standards = useQuery({queryKey:['batch-orders',owner],queryFn:listTextInspectionStandards,enabled:cap.isSuccess});
+  const standards = useQuery({queryKey:['batch-orders',owner],queryFn:listTextInspectionStandards,enabled:cap.isSuccess&&(creating||!!bid)});
   const [busy,setBusy] = useState(false), [error,setError] = useState(''), [uploadNote,setUploadNote] = useState('');
   const [filter,setFilter] = useState('all');
   const [rename,setRename] = useState('');
   const [failedUploads,setFailedUploads] = useState<{file:File;key:string;reason:string}[]>([]);
   const main = useRef<HTMLElement>(null);
   const scroll = useRef(0);
-  const restored = useRef(false);
+  const listScroll = useRef(0);
   const createKey = useRef(request());
   const submitKey = useRef(request());
   const retryKey = useRef(request());
   const batch = batchQuery.data;
   const draft = batch?.status==='draft';
   const editable = !busy && !!cap.data?.enabled;
-  useEffect(()=>{
-    if(!history.data||restored.current||bid||legacy)return;
-    restored.current=true;
-    const saved=localStorage.getItem('vantaline-batch:'+owner);
-    const target=history.data.items.find(t=>t.id===saved)?.id||history.data.items[0]?.id;
-    if(target)setParams({batch:target},{replace:true});
-  },[history.data,bid,legacy,owner,setParams]);
-  useEffect(()=>{if(bid)localStorage.setItem('vantaline-batch:'+owner,bid);submitKey.current=request();retryKey.current=request();setFailedUploads([]);},[bid,owner]);
+  useEffect(()=>{submitKey.current=request();retryKey.current=request();setFailedUploads([]);setFilter('all');scroll.current=0;},[bid,owner]);
   useEffect(()=>{if(batch?.inputs.standard_name)setRename(batch.inputs.standard_name);},[batch?.inputs.standard_name]);
   useEffect(()=>{
     const pending=sessionStorage.getItem('vantaline-upload:'+owner);
@@ -111,13 +127,16 @@ export function BatchWorkspace() {
   },[owner]);
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(busy){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[busy]);
   useEffect(()=>{if(!lid&&main.current)requestAnimationFrame(()=>main.current?.scrollTo({top:scroll.current}));},[lid]);
-  async function accept(value:Batch) {queryClient.setQueryData(['batches',owner,value.id],value);await queryClient.invalidateQueries({queryKey:['batches',owner,'list']});}
+  useEffect(()=>{if(listing)requestAnimationFrame(()=>main.current?.scrollTo({top:listScroll.current}));},[listing]);
+  async function accept(value:Batch) {queryClient.setQueryData(['batches',owner,value.id],value);await queryClient.invalidateQueries({queryKey:['inspection-tasks',owner]});}
   async function operation(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError(errorText(e));}finally{setBusy(false);}}
   async function ensureDraft():Promise<Batch>{
     if(batch?.status==='draft')return batch;
-    const next=await apiClient.post<Batch>(BATCHES,createKey.current);createKey.current=request();await accept(next);setParams({batch:next.id});return next;
+    const next=await apiClient.post<Batch>(BATCHES,createKey.current);createKey.current=request();await accept(next);setParams({view:'new',batch:next.id},{replace:true});return next;
   }
-  async function newBatch(){await operation(async()=>{const next=await apiClient.post<Batch>(BATCHES,createKey.current);createKey.current=request();await accept(next);setParams({batch:next.id});scroll.current=0;});}
+  function newBatch(){if(listing)listScroll.current=main.current?.scrollTop||0;setParams({view:'new'});setError('');setUploadNote('');setFailedUploads([]);setRename('');main.current?.scrollTo({top:0});}
+  function openTask(task:InspectionTask){listScroll.current=main.current?.scrollTop||0;setParams(taskParams(task));main.current?.scrollTo({top:0});}
+  function back(){setParams(lid?{batch:bid}:{});}
   async function order(standard_id:string){if(!standard_id)return;await operation(async()=>{const target=await ensureDraft();await accept(await apiClient.post<Batch>(`${BATCHES}/${target.id}/order`,{...request(),standard_id}));});}
   async function document(file:File){await operation(async()=>{
     const target=await ensureDraft();const form=new FormData();form.set('file',file);form.set('request_id',crypto.randomUUID());
@@ -138,34 +157,38 @@ export function BatchWorkspace() {
   const cards = [...(batch?.labels||[])].filter(e=>filter==='all'||e.outcome===filter).sort((a,b)=>rank[a.outcome]-rank[b.outcome]);
   const actualCount=batch?.labels.length||0;
   return <div className="bw-shell">
-    <header className="bw-topbar"><Link className="bw-back" to={workspacePath()}><ArrowLeft size={18}/><span>返回主界面</span></Link><div className="bw-brand"><ScanLine size={20}/><strong>标签检查</strong><span className="bw-beta">BETA</span></div>
-      <span className="bw-session">整批 1 个 session · 最多 10 分钟</span><button disabled={!editable} onClick={()=>void newBatch()}><Plus size={16}/>新建批次</button></header>
-    <div className="bw-toolbar"><label>检查记录<select aria-label="检查记录" disabled={busy} value={bid} onChange={e=>{setParams({batch:e.target.value});scroll.current=0;}}><option value="">选择批次</option>{history.data?.items.map(t=><option key={t.id} value={t.id}>{t.inputs.standard_name||'未命名草稿'} · {stateName(t.status)} · {new Date(t.created_at*1000).toLocaleString()}</option>)}{bid&&!history.data?.items.some(x=>x.id===bid)&&<option value={bid}>{batch?.inputs.standard_name||'当前批次'}</option>}</select></label>
-      {history.data?.next_cursor&&<button disabled={busy} onClick={()=>setCursor(history.data!.next_cursor!)}>更早记录</button>}{cursor&&<button onClick={()=>setCursor('')}>最近记录</button>}
-      <Link to="?task=history">旧版单枚报告</Link><span className="bw-saved">{busy?'正在保存…':'已上传的输入与检查进度保存在服务器'}</span></div>
+    <header className="bw-topbar">{listing?<Link className="bw-back" aria-label="返回主界面" to={workspacePath()}><ArrowLeft size={18}/><span>返回主界面</span></Link>:<button className="bw-back" aria-label={lid?'返回任务详情':'返回任务列表'} disabled={busy} onClick={back}><ArrowLeft size={18}/><span>{lid?'返回任务详情':'返回任务列表'}</span></button>}<div className="bw-brand"><ScanLine size={20}/><strong>标签检查</strong><span className="bw-beta">BETA</span></div>
+      <span className="bw-session">整批 1 个 session · 最多 10 分钟</span>{!listing&&<button disabled={!editable} onClick={newBatch}><Plus size={16}/>新建任务</button>}</header>
+    <nav className="bw-toolbar" aria-label="任务导航">{listing?<strong>任务列表</strong>:<><button disabled={busy} onClick={()=>setParams({})}>任务列表</button><span>/</span>{lid?<><button disabled={busy} onClick={()=>setParams({batch:bid})}>任务详情</button><span>/</span><strong>标签详情</strong></>:<strong>{creating||draft?'新建任务':'任务详情'}</strong>}</>}<span className="bw-saved">{busy?'正在保存…':'已上传的输入与检查进度保存在服务器'}</span></nav>
     <main className="bw-main" ref={main}>
-      {(error||cap.error||history.error||batchQuery.error)&&<div role="alert" className="bw-error">{error||errorText(cap.error||history.error||batchQuery.error)}<button onClick={()=>{setError('');void batchQuery.refetch();}}>重新读取</button></div>}
+      {(error||cap.error||(listing&&history.error)||batchQuery.error)&&<div role="alert" className="bw-error">{error||errorText(cap.error||(listing&&history.error)||batchQuery.error)}<button onClick={()=>{setError('');if(listing)void history.refetch();else if(bid)void batchQuery.refetch();else void cap.refetch();}}>重新读取</button></div>}
       {cap.isSuccess&&!cap.data.enabled&&<p className="cc-notice">当前账号暂未开放新检查；历史报告仍可读取。</p>}
-      {legacy&&legacy!=='history'?<Detail id={legacy} owner={owner}/>:legacy==='history'?<LegacyHistory onSelect={id=>setParams({task:id})}/>:batch&&lid?<LabelDetail key={batch.id+lid} batch={batch} lid={lid} onBack={()=>setParams({batch:bid})} onRerun={rerun}/>:<>
-        <section className="bw-bench">
-          <div className="bw-panel bw-order"><div className="bw-panel-heading"><span className="bw-step">01</span><h2>订单与标准图</h2><span>{Object.keys(batch?.inputs.references||{}).length} 张</span></div>
-            <select aria-label="选择订单" value={batch?.inputs.standard_id||''} disabled={!editable||!!batch&&!draft} onChange={e=>void order(e.target.value)}><option value="">选择已有标签订单</option>{standards.data?.items.filter(s=>s.standard_type==='label').map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+      {listing?<><TaskList items={[...new Map(history.data?.pages.flatMap(p=>p.items).map(t=>[t.id,t])).values()]} loading={history.isFetching} onSelect={openTask} onNew={newBatch} canCreate={editable}/>{history.hasNextPage&&<button className="bw-load-more" disabled={history.isFetchingNextPage} onClick={()=>void history.fetchNextPage()}>{history.isFetchingNextPage?'正在读取…':'加载更早任务'}</button>}</>:legacy?<Detail key={legacy} id={legacy} owner={owner}/>:batch&&lid?<LabelDetail key={batch.id+lid} batch={batch} lid={lid} onBack={()=>setParams({batch:bid})} onRerun={rerun}/>:bid&&!batch?<p className="bw-empty">{batchQuery.isError?'任务暂时无法读取，请重试或返回任务列表。':'正在读取任务…'}</p>:<>
+        <header className="bw-page-heading"><div><span className="bw-eyebrow">{draft||creating?'准备检查':'检查任务'}</span><h1>{draft||creating?'新建任务':batch?.inputs.standard_name||'任务详情'}</h1><p>{draft||creating?'选择已有订单批次，或拖入 Word 新建订单，再上传本次要检查的标签。':`${stateName(batch?.status||'')} · ${actualCount} 枚标签 · 输入已冻结`}</p></div></header>
+        <p className="bw-narrow-hint">左右滑动查看订单、标准图和实拍标签</p>
+        <section className="bw-bench" aria-label="订单与标签工作区" tabIndex={0}>
+          <div className="bw-panel bw-order"><div className="bw-panel-heading"><span className="bw-step">01</span><h2>订单</h2></div>
+            {(!batch||draft)&&standards.error&&<p role="alert" className="bw-error">{errorText(standards.error)}<button onClick={()=>void standards.refetch()}>重新读取订单</button></p>}
+            {(!batch||draft)&&<select aria-label="选择订单" value={batch?.inputs.standard_id||''} disabled={!editable||!!batch&&!draft} onChange={e=>void order(e.target.value)}><option value="">选择已有标签订单</option>{standards.data?.items.filter(s=>s.standard_type==='label').map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
             {(!batch||draft)&&<FileDropZone accept=".doc,.docx" disabled={!editable} ariaLabel="拖入 Word 订单" onFiles={files=>{if(files[0])void document(files[0]);}}><strong>拖入 DOC / DOCX</strong><span>自动提取内嵌图片，文件名作为订单名称</span></FileDropZone>}
-            {batch?.inputs.standard_name&&<div className="bw-order-name"><input aria-label="批次订单名称" value={rename} disabled={!draft||!editable} onChange={e=>setRename(e.target.value)}/>{draft&&rename!==batch.inputs.standard_name&&<button disabled={!editable||!rename.trim()} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/name`,{...request(),name:rename}));})}>保存名称</button>}</div>}
-            {batch?.import_state&&<p className="bw-muted">{stateName(batch.import_state)}</p>}
+            {draft&&batch?.inputs.standard_name&&<div className="bw-order-name"><input aria-label="批次订单名称" value={rename} disabled={!draft||!editable} onChange={e=>setRename(e.target.value)}/>{draft&&rename!==batch.inputs.standard_name&&<button disabled={!editable||!rename.trim()} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/name`,{...request(),name:rename}));})}>保存名称</button>}</div>}
+            {draft&&batch?.import_state&&<p className="bw-muted">{stateName(batch.import_state)}</p>}
+            <div className="bw-order-info"><h3>{batch?.inputs.standard_name||'选择或新建订单批次'}</h3><p>{batch?.inputs.standard_name?'订单及已上传文件保存在当前任务中，可返回任务列表后继续。':'支持选择已有订单，或直接拖入 DOC / DOCX 提取内嵌图片。'}</p>{batch&&<dl><div><dt>任务状态</dt><dd>{stateName(batch.status)}</dd></div><div><dt>标准图片</dt><dd>{Object.keys(batch.inputs.references).length} 张</dd></div><div><dt>实拍标签</dt><dd>{actualCount} 枚</dd></div><div><dt>创建时间</dt><dd>{new Date(batch.created_at*1000).toLocaleString()}</dd></div></dl>}</div>
+          </div>
+          <div className="bw-panel bw-standard"><div className="bw-panel-heading"><span className="bw-step">02</span><h2>标准图</h2><span>{Object.keys(batch?.inputs.references||{}).length} 张</span></div>
             <div className="bw-gallery bw-standard-gallery">{Object.values(batch?.inputs.references||{}).map(r=><figure key={r.id}>{r.media?<a target="_blank" rel="noreferrer" href={mediaURL(bid,r.media.image)}><img src={mediaURL(bid,r.media.preview)} alt={r.name}/></a>:<div className="bw-image-error"><AlertTriangle size={22}/>{r.error}</div>}<figcaption>{r.name}{r.sources.length>1&&` · ${r.sources.length} 处引用`}</figcaption></figure>)}</div>
             {!Object.keys(batch?.inputs.references||{}).length&&<p className="bw-empty">选择一个订单，或拖入 Word 开始。只检查实拍对应的标签，其他文档图片不计入范围。</p>}
           </div>
-          <div className="bw-panel bw-actual"><div className="bw-panel-heading"><span className="bw-step">02</span><h2>实拍标签</h2><span>{actualCount} 枚</span></div>
-            <FileDropZone multiple accept="image/*" disabled={!editable} ariaLabel="批量上传实拍标签" onFiles={files=>void photos(files)}><strong>将所有实拍图拖到这里，或点击多选</strong><span>每张一枚标签 · 通常 1–10 张 · 每张不超过 10 MB{batch&&!draft?' · 新图片将保存到新批次':''}</span></FileDropZone>
-            {!busy&&cap.data?.enabled&&<Capture onCapture={file=>void photos([file])}/>}
+          <div className="bw-panel bw-actual"><div className="bw-panel-heading"><span className="bw-step">03</span><h2>实拍标签</h2><span>{actualCount} 枚</span></div>
+            {(!batch||draft)&&<><FileDropZone multiple accept="image/*" disabled={!editable} ariaLabel="批量上传实拍标签" onFiles={files=>void photos(files)}><strong>将所有实拍图拖到这里，或点击多选</strong><span>每张一枚标签 · 通常 1–10 张 · 每张不超过 10 MB</span></FileDropZone>
+            {!busy&&cap.data?.enabled&&<Capture onCapture={file=>void photos([file])}/>}</>}
             {uploadNote&&<p role="status" className="bw-muted">{uploadNote}</p>}
-            {failedUploads.map(x=><div className="bw-upload-error" key={x.key}><strong>{x.file.name}</strong><span>{x.reason}</span><button disabled={!editable} onClick={()=>void photos([x.file],false,x.key)}>重试上传</button>{x.reason.includes('同一文件')&&<button disabled={!editable} onClick={()=>void photos([x.file],true)}>保留为另一枚样品</button>}</div>)}
+            {(!batch||draft)&&failedUploads.map(x=><div className="bw-upload-error" key={x.key}><strong>{x.file.name}</strong><span>{x.reason}</span><button disabled={!editable} onClick={()=>void photos([x.file],false,x.key)}>重试上传</button>{x.reason.includes('同一文件')&&<button disabled={!editable} onClick={()=>void photos([x.file],true)}>保留为另一枚样品</button>}</div>)}
             <div className="bw-gallery bw-actual-gallery">{batch?.labels.map((e,i)=><figure key={e.id}><a href={mediaURL(bid,e.actual.image)} target="_blank" rel="noreferrer"><img src={mediaURL(bid,e.actual.preview)} alt={e.name}/></a><figcaption><span>{i+1}. {e.name}</span>{draft?<button aria-label={`删除 ${e.name}`} disabled={!editable} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/labels/${e.id}/remove`,request()));})}>删除</button>:<span className={`bw-dot ${e.outcome}`}>{stateName(e.outcome)}</span>}</figcaption></figure>)}</div>
           </div>
         </section>
         <section className="bw-results"><header className="bw-results-heading"><div><span className="bw-eyebrow">检查报告</span><h2>{batch?.inputs.standard_name||'订单批量检查'}</h2><p>{batch?`${stateName(batch.status)} · ${actualCount} 枚标签`:'上传订单与实拍后开始检查'}{batch?.parent_id&&<> · <Link to={`?batch=${batch.parent_id}`}>查看原批次</Link></>}</p></div>
-          {draft?<button className="bw-primary" disabled={!editable||!actualCount||batch.import_state!=='ready'} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/submit`,submitKey.current));})}><ScanLine size={18}/>开始检查整批</button>:batch&&!terminal(batch.status)?<button disabled={busy} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${ROOT}/tasks/${bid}/cancel`));})}>取消整批</button>:batch&&actualCount>0?<button disabled={!editable} onClick={()=>void rerun(batch.labels.map(e=>e.id))}>整批重新检查</button>:null}</header>
+          {draft?<button className="bw-primary" disabled={!editable||!actualCount||batch.import_state!=='ready'} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/submit`,submitKey.current));setParams({batch:bid},{replace:true});})}><ScanLine size={18}/>开始检查整批</button>:batch&&!terminal(batch.status)?<button disabled={busy} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${ROOT}/tasks/${bid}/cancel`));})}>取消整批</button>:batch&&actualCount>0?<button disabled={!editable} onClick={()=>void rerun(batch.labels.map(e=>e.id))}>整批重新检查</button>:null}</header>
           {batch?.error&&<p role="alert" className="bw-error">{batch.error}</p>}{batch?.progress_message&&<p role="status">{batch.progress_message}</p>}
           {batch?.summary&&<p className="bw-summary">{batch.summary.message}{batch.summary.unchecked_scope&&<span>未确认：{batch.summary.unchecked_scope}</span>}</p>}
           <div className="bw-filters">{[['all','全部'],['difference','存在差异'],['uncertain','需要确认'],['pending','未完成'],['match','一致']].map(([key,name])=><button key={key} className={filter===key?'active':''} onClick={()=>setFilter(key)}>{name}<strong>{key==='all'?actualCount:batch?.counts[key]||0}</strong></button>)}</div>
@@ -179,10 +202,4 @@ export function BatchWorkspace() {
       </>}
     </main>
   </div>;
-}
-
-function LegacyHistory({onSelect}:{onSelect:(id:string)=>void}){
-  const owner=useAuth().user.id;const [cursor,setCursor]=useState('');
-  const q=useQuery({queryKey:['legacy-codex',owner,cursor],queryFn:()=>apiClient.get<{items:Task[];next_cursor:string|null}>(`${ROOT}/tasks?before=${cursor}`)});
-  return <section className="bw-results"><h1>旧版单枚报告</h1><Link to="?">返回批次工作区</Link>{q.error&&<p role="alert">{errorText(q.error)}</p>}{q.data?.items.filter(t=>t.report_version!=='label-batch-v3').map(t=><button className="bw-legacy" key={t.id} onClick={()=>onSelect(t.id)}>{t.inputs.standard_name} · {stateName(t.status)} · {new Date(t.created_at*1000).toLocaleString()}</button>)}{q.data?.next_cursor&&<button onClick={()=>setCursor(q.data!.next_cursor!)}>更早报告</button>}</section>;
 }
