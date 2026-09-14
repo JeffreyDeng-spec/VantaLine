@@ -2,11 +2,11 @@ import { useRef, useState, type PointerEvent } from 'react';
 import { labels, mediaURL, type Box, type Region, type Task } from './api';
 export const dimensions: Record<string,string> = {text:'文字内容', typography:'字体外观', color:'颜色', graphics:'图案与符号', completeness:'数量与完整性', orientation:'方向与顺序', shape:'形状与边框', layout:'布局与比例', codes:'二维码与条码', print:'可见印刷异常'};
 const categories: Record<string,string> = {text:'文字',logo:'标志',symbol:'符号',diagram:'图案',code:'条码',color_block:'色块',outline:'轮廓',engineering:'工程要求'};
-function Geometry({region, text, selected, onSelect}: {region: Region; text: string; selected: boolean; onSelect:()=>void}) {
+function Geometry({region, text, selected, onSelect, height, bottom=false}: {region: Region; text: string; selected: boolean; onSelect:()=>void; height:number; bottom?:boolean}) {
   const [x,y,w,h] = region.box;
   return <g role="button" tabIndex={0} aria-label={`定位 ${text}`} className={selected?'selected':''} onClick={onSelect} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onSelect();}}}>
-    {region.polygon ? <polygon points={region.polygon.map(p=>`${p[0]*1000},${p[1]*1000}`).join(' ')}/> : <rect x={x*1000} y={y*1000} width={w*1000} height={h*1000}/>}
-    <text x={Math.min(x*1000+3,930)} y={Math.max(20,y*1000+20)}>{text}</text>
+    {region.polygon ? <polygon points={region.polygon.map(p=>`${p[0]*1000},${p[1]*height}`).join(' ')}/> : <rect x={x*1000} y={y*height} width={w*1000} height={h*height}/>}
+    <text x={Math.min(x*1000+3,930)} y={Math.max(28,(bottom?y+h:y)*height+(bottom?-5:28))}>{text}</text>
   </g>;
 }
 function Crops({task, ids}: {task:Task; ids:string[]}) {
@@ -24,10 +24,10 @@ export function LabelReport({task}: {task:Task}) {
     <p className="cc-muted">已处理包含待确认和不适用，不代表全部通过。灰色项目尚未检查。</p>
     <div className="cc-filters"><label><input type="checkbox" checked={problemsOnly} onChange={e=>setProblemsOnly(e.target.checked)}/>仅显示问题与待确认</label><select aria-label="检查维度" value={dimension} onChange={e=>setDimension(e.target.value)}><option value="">全部维度</option>{Object.entries(dimensions).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select><button onClick={()=>setSelected('')}>显示全部元素</button></div>
     <div className="cc-pair">{(['reference','actual'] as const).map(side=><figure key={side}><div className="cc-image"><img src={mediaURL(task.id,task.inputs[side].preview)} alt={side==='reference'?'标准标签元素':'实拍标签元素'}/>
-      <svg className="cc-overlay" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label={side==='reference'?'标准元素标注':'实拍元素标注'}>
-        {side==='reference'&&task.inputs.reference_region&&<g className="cc-roi"><Geometry region={{box:task.inputs.reference_region}} text="标签范围" selected={false} onSelect={()=>setSelected('')}/></g>}
-        {visibleElements.map(e=>e[side]&&<Geometry key={e.id} region={e[side]!} text={e.id} selected={linked.includes(e.id)} onSelect={()=>setSelected(e.id)}/>)}
-        {active.filter(i=>!dimension||checks.find(c=>c.id===i.check_id)?.dimension===dimension).map(i=>i[side]&&<g key={i.id} className="cc-issue-mark"><Geometry region={i[side]!} text={i.id} selected={selected===i.id||selected===i.check_id} onSelect={()=>setSelected(i.id)}/></g>)}
+      <svg className="cc-overlay" viewBox={`0 0 1000 ${1000*task.inputs[side].size[1]/task.inputs[side].size[0]}`} aria-label={side==='reference'?'标准元素标注':'实拍元素标注'}>
+        {side==='reference'&&task.inputs.reference_region&&<g className="cc-roi"><Geometry height={1000*task.inputs[side].size[1]/task.inputs[side].size[0]} region={{box:task.inputs.reference_region}} text="标签范围" selected={false} onSelect={()=>setSelected('')}/></g>}
+        {visibleElements.map(e=>e[side]&&<Geometry height={1000*task.inputs[side].size[1]/task.inputs[side].size[0]} key={e.id} region={e[side]!} text={e.id} selected={linked.includes(e.id)} onSelect={()=>setSelected(e.id)}/>)}
+        {active.filter(i=>!dimension||checks.find(c=>c.id===i.check_id)?.dimension===dimension).map(i=>i[side]&&<g key={i.id} className="cc-issue-mark"><Geometry height={1000*task.inputs[side].size[1]/task.inputs[side].size[0]} bottom region={i[side]!} text={i.id} selected={selected===i.id||selected===i.check_id} onSelect={()=>setSelected(i.id)}/></g>)}
       </svg></div><figcaption>{side==='reference'?'标准':'实拍'} · <a href={mediaURL(task.id,task.inputs[side].image)} target="_blank" rel="noreferrer">放大原图</a></figcaption></figure>)}</div>
     {!elements.length&&<p>等待 Codex 发布元素拆解…</p>}
     <div className="cc-elements">{visibleElements.map(e=><button key={e.id} aria-pressed={linked.includes(e.id)} onClick={()=>setSelected(e.id)}><strong>{e.id} · {e.name}</strong><span>{categories[e.category]||e.category} · {e.description}</span>{(!e.reference||!e.actual)&&<small>部分位置缺失或无法可靠定位</small>}</button>)}</div>

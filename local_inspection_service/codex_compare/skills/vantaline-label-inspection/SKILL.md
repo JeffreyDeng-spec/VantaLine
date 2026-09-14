@@ -11,6 +11,10 @@ Read [CLI contract](references/cli.md). Use `vantaline card show` to obtain the 
 card and `inputs.reference_region` (normalized XYWH; defaults to the whole reference).
 Inspect /input/reference.png and /input/actual.png using image tools. Preserve originals.
 
+Write all user-facing element names, descriptions, progress, observations, issue
+titles and summaries in Simplified Chinese. Preserve inspected label text verbatim
+in its original language; JSON keys, enum values and CLI commands stay unchanged.
+
 ## Work order
 
 1. Read both full images independently. Confirm a single label and usable capture.

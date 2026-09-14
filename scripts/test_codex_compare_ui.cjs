@@ -63,6 +63,8 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.getByRole('button',{name:'I1 · 电压错误',exact:true}).click();
   assert.equal(await page.locator('.cc-issue-mark .selected').count(),2);
   assert.equal(await page.locator('.cc-issue-mark polygon').count(),1);
+  assert.equal(await page.locator('.cc-overlay').first().getAttribute('viewBox'),'0 0 1000 520');
+  assert.notEqual(await page.locator('.cc-overlay').first().locator('text').first().getAttribute('y'),await page.locator('.cc-issue-mark text').first().getAttribute('y'));
   await page.getByLabel('仅显示问题与待确认').check();
   assert.equal(await page.getByRole('button',{name:'待检 · 颜色 · 标签整体',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>window.evil),undefined);
