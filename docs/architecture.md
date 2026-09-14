@@ -227,7 +227,11 @@ camera/serial permission origins and model/PLC configuration are unchanged.
 
 ## Deployment and data ownership
 
-Text comparison UI uses `useComparisonTask` for a single POST and independent
+Text comparison UI presents results in one modal. The reference image is rendered once by `EvidenceResults`,
+with element hit targets and an overlaid zoom action; legacy/unparseable evidence
+keeps that same single reference image without element targets. No duplicate
+reference panel or new recognition request is introduced. `useComparisonTask` owns
+a single POST and independent
 1.5-second GET polling. `ComparisonDialog` owns presentation only: closing it
 never cancels the backend job. Account-keyed sessionStorage stores identifiers,
 binding metadata, start time and visibility, never image bytes, credentials or

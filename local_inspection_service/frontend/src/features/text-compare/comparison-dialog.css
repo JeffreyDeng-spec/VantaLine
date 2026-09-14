@@ -6,6 +6,8 @@
 .comparison-dialog-body { overflow: auto; padding: 20px; min-height: 0; overscroll-behavior: contain; overflow-wrap: anywhere; }
 .comparison-dialog-body > .text-compare-result { margin: 0; }
 .comparison-dialog img { max-width: 100%; }
+.text-compare-reference-expand { position: absolute; top: 6px; right: 6px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fffffff2; color: #334155; box-shadow: 0 1px 4px #0f172a20; }
+.text-compare-reference-expand:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .comparison-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .comparison-progress { min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; }
 .comparison-progress strong { font-size: 36px; font-variant-numeric: tabular-nums; }
