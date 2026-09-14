@@ -23,7 +23,7 @@ import time
 from http.server import BaseHTTPRequestHandler
 from PIL import Image
 from .api import enabled_owners, public
-from .contracts import MAX_BYTES, PROMPT_VERSION, box, digest, encode
+from .contracts import MAX_BYTES, PROMPT_VERSION, TERMINAL, box, digest, encode
 from .media import MediaStore
 from ..storage.codex_comparisons import CodexComparisonsRepository
 from ..storage.agent_operations import OperationDenied, OperationConflict
@@ -191,6 +191,7 @@ def execute(task, token, config, media):
     base.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory = Path(tempfile.mkdtemp(prefix=task['id']+'-', dir=base))
     socket_directory = Path(tempfile.mkdtemp(prefix='vc-', dir='/tmp'))
+    (directory/'owner.json').write_text(encode({'id': task['id'], 'owner': task['owner_user_id'], 'attempt': task['attempt_id'], 'socket_directory': str(socket_directory.resolve())}))
     process = None
     server = None
     watchdog_stop = threading.Event()
@@ -292,6 +293,33 @@ def execute(task, token, config, media):
         shutil.rmtree(socket_directory)
 
 
+def cleanup_finished(config):
+    """Collect only our recorded terminal scratch after hard process death."""
+    base = Path(config['work_root']).resolve()
+    if not base.is_dir():
+        return
+    for directory in base.glob('cc_*'):
+        if directory.is_symlink() or not directory.is_dir():
+            continue
+        marker = directory/'owner.json'
+        if marker.is_symlink() or not marker.is_file() or marker.stat().st_size > 4096:
+            continue
+        try:
+            value = json.loads(marker.read_text())
+            if not isinstance(value, dict) or any(not isinstance(value.get(k), str) for k in ('owner', 'id', 'attempt', 'socket_directory')):
+                continue
+        except (ValueError, OSError):
+            continue
+        task = with_repo(lambda r: r.get(value['owner'], value['id']))
+        if not task or task.get('attempt_id') != value['attempt'] or task['status'] not in TERMINAL:
+            continue
+        socket_directory = Path(value['socket_directory'])
+        if (socket_directory.parent == Path('/tmp').resolve() and socket_directory.name.startswith('vc-')
+                and not socket_directory.is_symlink() and socket_directory.is_dir()):
+            shutil.rmtree(socket_directory)
+        shutil.rmtree(directory)
+
+
 def load_config():
     config = {key: os.environ.get('VANTALINE_CODEX_COMPARE_'+key.upper(), '').strip()
               for key in ('model', 'binary', 'auth_home', 'work_root', 'media_root')}
@@ -319,6 +347,7 @@ def main():
     while True:
         try:
             with_repo(lambda r: r.recover())
+            cleanup_finished(config)
             claimed = with_repo(lambda r: r.claim(enabled_owners(), config['model'], version))
             if claimed:
                 execute(*claimed, config, media)

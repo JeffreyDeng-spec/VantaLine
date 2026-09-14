@@ -58,7 +58,8 @@ Cancellation revokes writes immediately and kills the process group. A ten-minut
 watchdog applies independently of DB I/O; loss of successful heartbeat for twenty
 seconds also kills the subprocess. Stale thirty-second heartbeats become
 interrupted, never queued. No automatic restart of an uncertain model session.
-Scratch is removed after terminal settlement; persistent media/reports are not
+Scratch is removed after terminal settlement; after hard process death, the
+worker also collects only recorded scratch belonging to terminal attempts; persistent media/reports are not
 subject to automatic deletion in this release.
 
 ## API and limits

@@ -182,3 +182,18 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':12,'output_tok
     assert 'test-sensitive-auth-value' not in str(repo.events('a',task['id'],0))
     assert list((tmp_path/'work').iterdir())==[]
     if mode=='complete':assert result['usage']['input_tokens']==12
+
+
+def test_hard_restart_cleans_only_terminal_owned_scratch(storage,tmp_path,monkeypatch):
+    repo=storage();repo.create('a','cleanup-request',{})
+    task,token=repo.claim({'a'},'fixture','fixture-v1')
+    work=tmp_path/'work';work.mkdir()
+    own=work/'cc_owned';own.mkdir()
+    (own/'owner.json').write_text(__import__('json').dumps({'id':task['id'],'owner':'a','attempt':task['attempt_id'],'socket_directory':'/not-a-task-socket'}))
+    unrelated=work/'unrelated';unrelated.mkdir()
+    broken=work/'cc_broken';broken.mkdir();(broken/'owner.json').write_text('{')
+    monkeypatch.setattr(worker,'with_repo',lambda fn:fn(storage()))
+    worker.cleanup_finished({'work_root':str(work)});assert own.exists()
+    repo.settle('a',task['id'],task['attempt_id'],'interrupted')
+    worker.cleanup_finished({'work_root':str(work)})
+    assert not own.exists() and unrelated.exists() and broken.exists()
