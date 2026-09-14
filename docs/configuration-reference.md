@@ -121,3 +121,13 @@ The new migration must exist before an account is allowlisted. Keep production
 activation off: existing business/worker paths do not yet all enforce this policy.
 A persisted budget or provider ID list is not a platform-wide safety guarantee.
 See [implementation status](agent-platform.md) for the remaining release gates.
+
+## Codex comparison worker
+
+`VANTALINE_CODEX_COMPARE_ACCOUNTS` defaults empty. `VANTALINE_CODEX_COMPARE_MODEL`
+is a deployment-pinned concrete account model; effort is high. Worker-only
+`VANTALINE_CODEX_COMPARE_BINARY`, `_AUTH_HOME`, `_WORK_ROOT`, `_MEDIA_ROOT`
+configure native runtime, private login, scratch and shared evidence. PostgreSQL
+uses the existing `VANTALINE_DATA_STORE`/`DATABASE_URL` selector. No API key is
+injected into the child. Full paths, auth and isolation requirements are in
+[Codex beta](codex-text-compare.md); examples contain no secret values.

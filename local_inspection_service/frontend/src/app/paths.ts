@@ -1,7 +1,7 @@
 /** Router paths exclude the optional preview basename. API/media URLs never use this helper. */
 export const WORKSPACE_PATH = "/workspace";
 export const legacyWorkspacePages = [
-  "status", "inspect", "text-compare-beta", "ai-inspect", "accessories",
+  "status", "inspect", "text-compare-beta", "text-compare-codex", "ai-inspect", "accessories",
   "training-library", "tasks", "pipeline", "rules", "users", "data-analysis"
 ] as const;
 

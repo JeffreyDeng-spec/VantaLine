@@ -39,6 +39,7 @@ import { TaskDetailRoute, TaskInspectionRoute } from "../features/incoming-text/
 import { useTaskNavigationPreferences } from "../features/tasks/useTaskNavigationPreferences";
 import { TrainingLibraryPage } from "../features/training/TrainingLibraryPage";
 import { UsersPage } from "../features/users/UsersPage";
+import { CodexComparePage } from "../features/codex-compare/CodexComparePage";
 import { TextCompareBetaPage } from "../features/text-compare/TextCompareBetaPage";
 import {
   taskEntriesFromTrainingResources,
@@ -671,6 +672,7 @@ export function AppShell() {
         ) : null}
 
         <Routes>
+          <Route path="text-compare-codex" element={<PermissionRoute permission="inspection"><CodexComparePage /></PermissionRoute>} />
           <Route index element={<Dashboard />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="status" element={<Navigate to={`${workspacePath()}${location.search}${location.hash}`} replace />} />

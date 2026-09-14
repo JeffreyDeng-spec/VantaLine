@@ -76,3 +76,11 @@ Single-label extraction adds required geometry and real-route smoke checks to CI
 An unchanged failed workflow job may be rerun only after its external gate is safely corrected, such as restoring disk capacity or deployment connectivity. Never rebuild locally to bypass failure. Acceptance failure automatically points `current` back to the prior release and restarts. A post-acceptance regression is handled by a complete revert/release or previous immutable artifact, never a partial file rollback.
 
 Protocol or bundle mismatch keeps ordinary website functions available but disables PLC leases and physical actions. See [Production runbook](production-runbook.md) for diagnosis.
+
+## Optional Codex comparison worker
+
+The release includes default-disabled comparison source and additive migrations.
+The same-host systemd template is commissioned separately; it must point at the
+selected immutable release and be drained/stopped before a release switch.
+Linux isolation/transaction tests gate code; real-session and sample accuracy
+acceptance gate enabling accounts. See [Codex beta](codex-text-compare.md).

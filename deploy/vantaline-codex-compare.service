@@ -1,0 +1,28 @@
+[Unit]
+Description=VantaLine one-shot Codex text comparison worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vantaline-codex
+Group=vantaline
+WorkingDirectory=/opt/vantaline/current
+EnvironmentFile=/opt/vantaline/shared/codex-worker.env
+ExecStart=/opt/vantaline/current/.venv/bin/python -m local_inspection_service.codex_compare.worker
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=10
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/vantaline/shared/codex /opt/vantaline/shared/data/codex_comparisons
+NoNewPrivileges=true
+MemoryMax=2G
+TasksMax=96
+CPUQuota=150%
+
+[Install]
+WantedBy=multi-user.target

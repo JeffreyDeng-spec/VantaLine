@@ -119,3 +119,13 @@ the experimental Agent account allowlist or establish native-browser, physical
 PLC or full-platform acceptance. Native lifecycle evidence and remaining rollout
 constraints are recorded in `docs/agent-platform.md`; the whole-release rollback
 procedure remains unchanged.
+
+## Codex text comparison beta
+
+Keep its account allowlist empty until the dedicated server login, native Codex
+binary, Linux namespace test, shared private-media permissions and a real
+one-shot report have passed. Follow [the commissioning sequence](codex-text-compare.md).
+The service template is not an automatic host installer. Disable new submissions
+and drain active work before moving releases; stop its entire process group when
+interruption is necessary. Roll back the complete release, retaining all new
+tables, reports, media and unknown outcomes.

@@ -303,3 +303,18 @@ verified Playwright version it can finish with a false resolved value. The share
 helper awaits observations, has negative timeout coverage, and retries no business
 operations. Native suites are not yet CI gates; keep their browser version and
 repeat-run evidence explicit.
+
+## Codex comparison beta
+
+Run `python -m pytest tests/codex_compare -q` with an explicit
+`CODEX_TEST_DATABASE_URL` pointing to disposable PostgreSQL. Tests create random
+schemas and cover concurrent admission/claim, writes, revisions, cross-owner
+media, immutable snapshots, cancellation, stale recovery and CLI subprocess
+lifecycle. No production DATABASE_URL fallback exists. The Linux CI job additionally
+executes real bubblewrap isolation; macOS skips this Linux-only check.
+Run `scripts/test_codex_compare_ui.cjs` against local Vite with `REVIEW_UI_BASE`,
+`PLAYWRIGHT_MODULE` and optionally `QWEN_TEST_BROWSER`; all HTTP is synthetic.
+It covers repeated-submit identity, refresh, incremental results, safe text,
+evidence focus, review, account changes and mobile overflow, with screenshots.
+Run frontend typecheck/build, existing text regression and docs/migration checks.
+Real Codex/host and labeled-image commissioning remain separate requirements.

@@ -23,9 +23,11 @@ JSONB_COLUMNS = frozenset(
 
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
-INTEGER_COLUMNS = frozenset({"config_generation", "lease_epoch", "ordinal", "revision_number"})
+INTEGER_COLUMNS = frozenset({"sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "codex_comparison_tasks": ("id",),
+    "codex_comparison_events": ("id",),
     "text_ocr_evidence": ("id",),
     "agent_policies": ("id",),
     "agent_operations": ("id",),
@@ -62,6 +64,8 @@ PRIMARY_KEY_COLUMNS = {
 }
 
 UNIQUE_COLUMNS = {
+    "codex_comparison_tasks": (("owner_user_id", "idempotency_key"),),
+    "codex_comparison_events": (("task_id", "idempotency_key"), ("task_id", "sequence")),
     "agent_operations": (("owner_user_id", "idempotency_key"),),
     "users": (("username",),),
     "incoming_text_reference_versions": (("owner_user_id", "task_id", "version_label"),),

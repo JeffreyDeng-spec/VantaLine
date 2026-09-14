@@ -255,3 +255,11 @@ JavaScript task after callbacks settle, avoiding premature native cancellation o
 Chrome 152. Revocation still blocks new execution immediately. Browser tests await
 resolved discovery snapshots; a Promise-valued polling predicate is not a ready
 signal. See the lifecycle investigation in the Agent implementation document.
+
+## Codex text comparison beta
+
+An independent default-off workspace submits frozen label inputs to a PostgreSQL
+queue. A separate same-host worker owns one isolated Codex session per task; its
+Unix-socket CLI adds versioned report items and source-derived evidence. Reports
+remain advisory, with separate human review and no PLC path. Existing OCR/Qwen
+flows are unchanged. See [Codex beta](codex-text-compare.md) for boundaries.
