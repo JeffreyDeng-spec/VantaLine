@@ -14,6 +14,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const standard={id:'std',name:'OCR evidence fixture',material_code:'TEST',version_label:'1',standard_type:'label',status:'confirmed',asset_count:1,revision_number:1};
     const asset={id:'asset',standard_id:'std',asset_kind:'label_candidate',ordinal:1,status:'candidate',content_url:'/fixture/source',comparison_ready:true,active_preparation:{id:'prep',sha256:'fixture'}};
     let submitted=0,polls=0,identity='',extractionRequests=0,previewRequests=0,originalRequests=0;
+    let evidenceMode='valid';
     const result=()=>({id:'record',comparison_id:identity,preparation_compare:true,status:'completed',decision:'REVIEW_REQUIRED',differences:[],message:'需要人工确认，图形未检查',reference_overlay_url:'/fixture/reference',diagnostics:{provider:'qwen_ocr',phase:'completed',normalized_response:{elements:[{element_id:'e1',type:'text',expected:'MODEL TEST',standard_box:[.1,.25,.5,.2],state:'matched',reason:'exact_characters',conflicts:[{evidence_id:'wrong',start:0,end:11}],evidence:[{evidence_id:'o1',start:0,end:10}]}],observations:[{id:'wrong',type:'text',text:'MODEL WRONG',box:[.6,.6,.9,.9]},{id:'o1',type:'text',text:'MODEL TEST',box:[.1,.25,.6,.45]}]}}});
     await page.route('**/fixture/**',r=>r.fulfill({contentType:'image/svg+xml',body:svg}));
     await page.route('**/api/**',r=>{
@@ -33,7 +34,12 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       }
       if(url.endsWith('/media/preview')){previewRequests++;return r.fulfill({contentType:'image/svg+xml',body:svg});}
       if(url.endsWith('/media/source')){originalRequests++;return r.fulfill({contentType:'image/svg+xml',body:svg});}
-      if(url.endsWith('/prepared-comparisons/record')){polls++;return r.fulfill({json:result()});}
+      if(url.endsWith('/prepared-comparisons/record')){
+        polls++; const value=result();
+        if(evidenceMode==='malformed') value.diagnostics.normalized_response={elements:[null],observations:[]};
+        if(evidenceMode==='legacy') value.diagnostics={provider:'legacy'};
+        return r.fulfill({json:value});
+      }
       return r.fulfill({status:404,json:{detail:'fixture'}});
     });
     await page.goto((process.env.REVIEW_UI_BASE||'http://127.0.0.1:5189')+'/tests/document-review.html');
@@ -48,6 +54,11 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('提取文字',{exact:true}).waitFor();
     await page.getByRole('button',{name:'查看元素 e1: MODEL TEST',exact:true}).click();
     await page.getByText('实拍：MODEL TEST',{exact:true}).waitFor();
+    assert.equal(await page.locator('.text-compare-result img[src="/fixture/reference"]').count(),1,'one standard image only');
+    await page.getByRole('button',{name:'查看标准元素核对图',exact:true}).click();
+    await page.locator('.comparison-dialog .text-compare-lightbox').waitFor();
+    await page.getByRole('button',{name:'关闭放大预览',exact:true}).click();
+    assert.equal(await page.getByRole('button',{name:'查看元素 e1: MODEL TEST',exact:true}).getAttribute('aria-pressed'),'true');
     await page.getByAltText('压缩预览，检查小字请加载原图').waitFor();
     assert.equal(originalRequests,0);
     await page.getByRole('button',{name:'加载原图检查小字',exact:true}).click();
@@ -62,6 +73,14 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.screenshot({path:path.join(output,'mobile.png'),fullPage:true});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     assert.equal(await page.locator('.comparison-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+    for(const mode of ['malformed','legacy']) {
+      evidenceMode=mode; await page.reload();
+      await page.locator('.comparison-dialog').getByAltText('标准元素位置',{exact:true}).waitFor();
+      assert.equal(await page.locator('.text-compare-result img[src="/fixture/reference"]').count(),1);
+      await page.getByRole('button',{name:'查看标准元素核对图',exact:true}).click();
+      await page.locator('.comparison-dialog .text-compare-lightbox').waitFor();
+      await page.getByRole('button',{name:'关闭放大预览',exact:true}).click();
+    }
     await page.getByRole('button',{name:'关闭对比窗口'}).click();
     await page.getByRole('button',{name:'选择下一张',exact:true}).click();
     asset.active_preparation=undefined;

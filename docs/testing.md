@@ -4,6 +4,9 @@
 
 ## Comparison dialog regression
 
+The evidence UI suite also asserts exactly one result reference image, the
+overlaid zoom action and preserved element selection after returning from zoom.
+
 With local Vite on port 5189, run `scripts/test_comparison_dialog_ui.cjs` and
 `scripts/test_qwen_evidence_ui.cjs` using `REVIEW_UI_BASE=http://127.0.0.1:5189/react-preview`,
 `PLAYWRIGHT_MODULE` and optionally `QWEN_TEST_BROWSER=msedge`. Synthetic HTTP
