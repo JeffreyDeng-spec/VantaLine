@@ -126,3 +126,22 @@ extra text, case, numbers, units, punctuation, rotation, blur, glare and crop lo
 Report false positives/negatives and latency; synthetic tests or a zero exit code
 are not accuracy acceptance. Record production version, task ID and evidence
 without including secrets or customer media in Git.
+
+## Optional dedicated local proxy
+
+Set worker-only `VANTALINE_CODEX_COMPARE_PROXY_URL=http://127.0.0.1:PORT`
+when this host uses an independently managed local HTTP proxy. Only this explicit
+credential-free loopback URL is forwarded as upper/lowercase HTTP(S) proxy
+variables through bubblewrap's cleared environment. Generic host proxy variables
+are not inherited. Localhost bypass is fixed; the task report Unix socket is
+unaffected. The proxy and upstream credentials remain outside the namespace.
+This does not enforce a network allowlist or transparently redirect other tools.
+
+Keep the proxy bound to loopback and managed by its existing service, independently
+of a developer laptop. Verify login and a real isolated Codex turn through it
+before enabling admission. A proxy outage fails the session normally; no automatic
+resubmission or configured direct fallback is added. Use the same HTTP(S) proxy
+variables for the dedicated account's device login. Keep subscriptions and node
+secrets in restricted host configuration, never in Git. Unset the worker-specific
+variable to restore the original direct behavior, then restart only after draining
+active work. No global OS or website proxy change is required.

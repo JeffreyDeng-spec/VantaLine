@@ -168,7 +168,7 @@ call('report','summary','set','--file',str(p))
 if mode!='no_finalize':call('report','finalize')
 print(json.dumps({'type':'turn.completed','usage':{'input_tokens':12,'output_tokens':5}}),flush=True)
 ''')
-    def command(directory,auth_dir,runtime,t,model,socket_path):
+    def command(directory,auth_dir,runtime,t,model,socket_path,proxy_url=''):
         # Stub replaces Codex only in this test; production has no escape flag.
         return [sys.executable,str(fake),str(socket_path),t,str(cli),mode,str(directory/'work')]
     monkeypatch.setattr(worker,'sandbox_command',command)

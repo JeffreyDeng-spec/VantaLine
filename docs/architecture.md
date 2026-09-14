@@ -263,3 +263,7 @@ queue. A separate same-host worker owns one isolated Codex session per task; its
 Unix-socket CLI adds versioned report items and source-derived evidence. Reports
 remain advisory, with separate human review and no PLC path. Existing OCR/Qwen
 flows are unchanged. See [Codex beta](codex-text-compare.md) for boundaries.
+
+The worker may explicitly expose a dedicated loopback HTTP proxy to its Codex
+child through `VANTALINE_CODEX_COMPARE_PROXY_URL`; website/DB environment remains
+excluded. The independently managed proxy stays outside the filesystem namespace.

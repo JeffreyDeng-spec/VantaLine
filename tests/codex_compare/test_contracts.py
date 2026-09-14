@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 from local_inspection_service.codex_compare.contracts import box, item, summary, validate_report, normalize_image
 from local_inspection_service.codex_compare.media import MediaStore
-from local_inspection_service.codex_compare.worker import artifact, sandbox_command
+from local_inspection_service.codex_compare.worker import artifact, sandbox_command, proxy_environment
 
 
 def png(text_color='white'):
@@ -56,3 +56,17 @@ def test_cli_help():
     cli = Path(__file__).resolve().parents[2]/'local_inspection_service/codex_compare/cli.py'
     value = subprocess.run([sys.executable,str(cli),'--help'], capture_output=True,text=True)
     assert value.returncode == 0 and 'report' in value.stdout
+
+
+def test_explicit_local_proxy_contract():
+    assert proxy_environment('') == {}
+    values = proxy_environment('http://127.0.0.1:17890/')
+    assert values['HTTPS_PROXY'] == values['http_proxy'] == 'http://127.0.0.1:17890'
+    assert values['NO_PROXY'] == 'localhost,127.0.0.1,::1'
+    for invalid in ('https://127.0.0.1:17890', 'http://example.com:17890',
+                    'http://user:password@127.0.0.1:17890', 'http://127.0.0.1',
+                    'http://127.0.0.1:0', 'http://127.0.0.1:99999',
+                    'http://127.0.0.1:17890/path', 'http://127.0.0.1:17890?token=x',
+                    'http://127.0.0.1:17890\n'):
+        with pytest.raises(RuntimeError):
+            proxy_environment(invalid)

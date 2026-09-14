@@ -318,3 +318,8 @@ It covers repeated-submit identity, refresh, incremental results, safe text,
 evidence focus, review, account changes and mobile overflow, with screenshots.
 Run frontend typecheck/build, existing text regression and docs/migration checks.
 Real Codex/host and labeled-image commissioning remain separate requirements.
+
+Proxy coverage validates explicit credential-free loopback configuration and real
+Linux sandbox propagation, while rejecting inheritance of unrelated host proxy
+variables. Commission actual device login and a real Codex turn on the target
+host separately; proxy connectivity alone does not establish report accuracy.
