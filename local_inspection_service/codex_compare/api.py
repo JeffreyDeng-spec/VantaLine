@@ -1,5 +1,6 @@
 """Owner-scoped website API. Agent writes are exposed only by the worker's task socket."""
 from __future__ import annotations
+import json
 import os
 import re
 from fastapi import File, Form, HTTPException, Query, UploadFile
@@ -8,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 from ..storage.codex_comparisons import CodexComparisonsRepository
 from ..storage.agent_operations import OperationConflict, OperationDenied
-from .contracts import MAX_BYTES, digest
+from .contracts import MAX_BYTES, digest, box
 from .media import MediaStore
 
 PREFIX = '/api/text-compare-codex'
@@ -24,11 +25,15 @@ def configured():
 
 def public(task, detail=True):
     fields = ('id', 'status', 'created_at', 'updated_at', 'started_at', 'finished_at', 'parent_id',
-              'model', 'reasoning_effort', 'runner_version', 'session_id', 'usage', 'sequence', 'error', 'finalized')
+              'model', 'reasoning_effort', 'runner_version', 'session_id', 'usage', 'sequence', 'error', 'finalized', 'report_version', 'skill_version', 'skill_sha256', 'tool_version')
     result = {k: task[k] for k in fields if k in task}
     result['inputs'] = task['inputs']
     result['summary'] = task['summary']
-    result['counts'] = {state: sum(x['status'] == state for x in task['items'].values()) for state in ('match', 'difference', 'uncertain')}
+    result['counts'] = {state: sum(x['status'] == state for x in task.get('checks', task['items']).values()) for state in ('pending', 'running', 'match', 'difference', 'uncertain', 'not_applicable')}
+    if task.get('report_version') == 'label-v2':
+        result['progress'] = {'total': len(task['checks']), 'settled': sum(c['status'] not in {'pending', 'running'} for c in task['checks'].values()), 'elements': len(task['elements'])}
+        if detail:
+            result.update({key: list(task[key].values()) for key in ('elements', 'checks', 'issues', 'decodes')})
     if detail:
         result.update(items=list(task['items'].values()), artifacts=list(task['artifacts'].values()), reviews=task['reviews'])
     return result
@@ -85,7 +90,7 @@ def register(ns):
 
     @app.post(PREFIX + '/tasks')
     async def create(captured_file: UploadFile = File(...), standard_asset_id: str = Form(...),
-                     request_id: str = Form(...), expected_revision: str = Form(...)):
+                     request_id: str = Form(...), expected_revision: str = Form(...), reference_region: str = Form('[0,0,1,1]')):
         captured = await captured_file.read(MAX_BYTES + 1)
         def submit():
             owner, repo, media = context()
@@ -102,11 +107,18 @@ def register(ns):
             reference = ns['_text_v2_asset_bytes']({**asset, 'sha256': snapshot['sha256']}, owner)
             if digest(reference) != snapshot['sha256']:
                 raise HTTPException(409, '标准原图校验失败')
-            inputs = {'standard_id': standard['id'], 'standard_asset_id': standard_asset_id,
+            if len(reference_region) > 200:
+                raise ValueError('Invalid reference region')
+            region = box(json.loads(reference_region))
+            if region is None:
+                raise ValueError('Select one label region')
+            if asset.get('category') in {'packaging', 'manual', 'document', 'product'}:
+                raise HTTPException(422, '仅支持标签，请选择标签素材')
+            inputs = {'reference_region': region, 'standard_id': standard['id'], 'standard_asset_id': standard_asset_id,
                       'standard_name': standard['name'], 'standard_revision_id': expected_revision,
                       'standard_revision_number': standard.get('revision_number', 0),
                       'reference': media.image(owner, reference), 'actual': media.image(owner, captured)}
-            return public(repo.create(owner, request_id, inputs))
+            return public(repo.create(owner, request_id, inputs, report_version='label-v2'))
         import asyncio
         return await asyncio.to_thread(lambda: call(submit))
 
@@ -141,7 +153,7 @@ def register(ns):
         from .contracts import TERMINAL
         if task['status'] not in TERMINAL:
             raise HTTPException(409, '请等待或取消当前任务')
-        return call(lambda: public(repo.create(owner, body.request_id, task['inputs'], parent_id=identifier)))
+        return call(lambda: public(repo.create(owner, body.request_id, task['inputs'], parent_id=identifier, report_version=task.get('report_version'))))
 
     @app.post(PREFIX + '/tasks/{identifier}/review')
     def review(identifier: str, body: Review):

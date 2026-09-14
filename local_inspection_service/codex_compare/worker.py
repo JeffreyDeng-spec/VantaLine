@@ -17,6 +17,7 @@ import shutil
 import signal
 import socketserver
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -31,6 +32,8 @@ from ..storage.agent_operations import OperationDenied, OperationConflict
 from ..storage.runtime_selector import build_runtime_repository
 
 MODULE = Path(__file__).parent
+SKILL = MODULE/'skills'/'vantaline-label-inspection'
+SKILL_VERSION = 'label-inspection-v2.1'
 
 
 def repository():
@@ -81,6 +84,29 @@ def artifact(media, owner, task, payload):
     return value
 
 
+def decode(media, owner, task, payload):
+    if not isinstance(payload, dict) or set(payload) != {'source', 'box'} or payload['source'] not in {'reference', 'actual'}:
+        raise ValueError('Decode needs source and original box')
+    bounds = box(payload['box'])
+    if bounds is None:
+        raise ValueError('Decode bounds required')
+    with Image.open(io.BytesIO(media.read(owner, task['inputs'][payload['source']]['image']))) as im:
+        x,y,w,h = bounds
+        pixels = [round(x*im.width), round(y*im.height), round((x+w)*im.width), round((y+h)*im.height)]
+        if pixels[2] <= pixels[0] or pixels[3] <= pixels[1]:
+            raise ValueError('Empty decode crop')
+        output = io.BytesIO()
+        im.crop(pixels).save(output, 'PNG')
+    try:
+        process = subprocess.run([sys.executable, str(MODULE/'decode_helper.py')], input=output.getvalue(),
+                                 capture_output=True, timeout=15, env={'PATH': '/usr/bin:/bin'})
+        result = json.loads(process.stdout) if process.returncode == 0 else {'values': [], 'error': 'local_decoder_unavailable'}
+    except (subprocess.TimeoutExpired, ValueError):
+        result = {'values': [], 'error': 'local_decoder_timeout_or_invalid'}
+    return {**result, 'source': payload['source'], 'box': bounds,
+            'id': 'dc_'+digest(payload)[:32]}
+
+
 def broker(task, token, media, path, auth_path=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -119,14 +145,16 @@ def broker(task, token, media, path, auth_path=None):
                         raise OperationDenied('Task ended')
                     if kind == 'show':
                         return public(current)
-                    if kind == 'artifact':
+                    if kind == 'decode':
+                        value = decode(media, task['owner_user_id'], task, payload)
+                    elif kind == 'artifact':
                         value = artifact(media, task['owner_user_id'], task, payload)
                     else:
                         if len(raw) > 65536:
                             raise ValueError('Report payload too large')
                         value = payload
                     result = repo.write_report(task['owner_user_id'], task['id'], task['attempt_id'], token, request['key'], kind, value)
-                    return {**result, 'artifact': value} if kind == 'artifact' else result
+                    return {**result, kind: value} if kind in {'artifact', 'decode'} else result
                 result = with_repo(operation)
                 status = 200
             except (ValueError, TypeError, KeyError, OSError) as exc:
@@ -186,6 +214,9 @@ def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None,
                 '--ro-bind', str(task_dir/'input'), '/input', '--bind', str(task_dir/'work'), '/work',
                 '--bind', str(auth_dir), '/codex', '--dir', '/tools', '--ro-bind', str(MODULE/'cli.py'), '/tools/cli.py',
                 '--ro-bind', str(task_dir/'bin'), '/tools/bin',
+                '--ro-bind', str(MODULE/'image_tools.py'), '/tools/image_tools.py',
+                '--dir', '/work/.agents', '--dir', '/work/.agents/skills',
+                '--ro-bind', str(SKILL), '/work/.agents/skills/vantaline-label-inspection',
                 '--bind', str(socket_path or task_dir/'report.sock'), '/run/vantaline.sock', '--chdir', '/work']
     env = {'PATH': '/tools/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': '/work', 'CODEX_HOME': '/codex',
            'LANG': 'C.UTF-8', 'VANTALINE_TASK_SOCKET': '/run/vantaline.sock', 'VANTALINE_TASK_TOKEN': token}
@@ -225,13 +256,22 @@ def execute(task, token, config, media):
             (directory/name).mkdir(mode=0o700)
         for side in ('reference', 'actual'):
             (directory/'input'/f'{side}.png').write_bytes(media.read(task['owner_user_id'], task['inputs'][side]['image']))
-        (directory/'input'/'task.json').write_text(encode({'id': task['id'], 'inputs': task['inputs'], 'prompt_version': PROMPT_VERSION}))
+        (directory/'input'/'task.json').write_text(encode({'id': task['id'], 'inputs': task['inputs'], 'prompt_version': SKILL_VERSION if task.get('report_version') == 'label-v2' else PROMPT_VERSION}))
         (directory/'bin'/'vantaline').write_text('#!/bin/sh\nexec /usr/bin/python3 /tools/cli.py "$@"\n')
         (directory/'bin'/'vantaline').chmod(0o755)
         shutil.copyfile(Path(config['auth_home'])/'auth.json', directory/'auth'/'auth.json')
         (directory/'auth'/'config.toml').write_text('model = '+json.dumps(config['model'])+'\nmodel_reasoning_effort = "high"\nweb_search = "disabled"\n')
         server = broker(task, token, media, socket_directory/'report.sock', directory/'auth'/'auth.json')
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        if task.get('report_version') == 'label-v2':
+            skill_body = (SKILL/'SKILL.md').read_bytes()
+            skill_meta = {'skill_version': SKILL_VERSION, 'skill_sha256': digest(skill_body), 'tool_version': 'vantaline-cli-v2'}
+            with_repo(lambda r: r.pulse(task['owner_user_id'], task['id'], task['attempt_id'], skill_meta))
+            # Include the exact skill bytes as well as an explicit named invocation;
+            # loading never depends solely on implicit model skill discovery.
+            prompt = (MODULE/'label_prompt.md').read_bytes() + b'\n\n' + skill_body
+        else:
+            prompt = (MODULE/'prompt.md').read_bytes()
         command = sandbox_command(directory, directory/'auth', Path(config['binary']), token, config['model'], socket_directory/'report.sock', proxy_url=config.get('proxy_url', ''))
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    start_new_session=True, env={'PATH': '/usr/bin:/bin'})
@@ -241,7 +281,7 @@ def execute(task, token, config, media):
                     stop_process(process)
                     return
         threading.Thread(target=watchdog, daemon=True).start()
-        process.stdin.write((MODULE/'prompt.md').read_bytes())
+        process.stdin.write(prompt)
         process.stdin.close()
         events = queue.Queue(maxsize=100)
         def read_events():
@@ -352,6 +392,11 @@ def load_config():
     proxy_environment(config['proxy_url'])
     if not (Path(config['auth_home'])/'auth.json').is_file():
         raise RuntimeError('Dedicated Codex account login is required')
+    if not (Path(config['binary']).parent/'codex-code-mode-host').is_file():
+        raise RuntimeError('Complete pinned Codex runtime including codex-code-mode-host is required')
+    for required in (SKILL/'SKILL.md', SKILL/'references'/'cli.md', MODULE/'label_prompt.md'):
+        if not required.is_file():
+            raise RuntimeError('Versioned label inspection skill is missing')
     if not shutil.which('bwrap'):
         raise RuntimeError('Linux bubblewrap is required; no unisolated fallback')
     return config

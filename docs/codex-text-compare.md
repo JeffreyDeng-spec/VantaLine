@@ -1,4 +1,4 @@
-# Codex text comparison beta
+# Codex label inspection beta
 
 **Status: Authoritative — implemented, default disabled; production/model accuracy not commissioned**
 
@@ -13,9 +13,8 @@ standard membership remain managed by the existing standard library.
 Cards and `?task=<id>` links survive browser closure/reload. Running report items
 are preliminary. Terminal failed/cancelled/interrupted/timed-out jobs retain
 partial evidence. Summary decisions are advisory; append-only human reviews do
-not overwrite them or generate PLC actions. Graphics/colors/print quality are
-outside scope. MATCH requires a nonempty fully located match-only report and no
-unverified text scope; this structural validation does not establish accuracy.
+not overwrite them or generate PLC actions. New label-v2 reports cover the ten visual dimensions below. Legacy v1 reports
+remain text-only. Structural coverage validation does not establish accuracy.
 
 ## Execution and storage
 
@@ -44,7 +43,8 @@ Runtime metadata stores session ID, installed CLI version and bounded usage.
 `vantaline task show`, `report progress`, `report item upsert`, `report summary set`,
 `artifact add`, and `report finalize` use the task socket with a bearer scoped to
 one attempt. `--request-id` supports replay of identical writes; changed payloads
-conflict. JSON schema examples live in `codex_compare/prompt.md`. Validation
+conflict. Legacy examples live in `codex_compare/prompt.md`; v2 examples live in the
+versioned task skill under `codex_compare/skills/vantaline-label-inspection`. Validation
 failures are returned for correction within the same session. No arbitrary HTML
 or script is rendered. Boxes are original-normalized xywh. Evidence needs
 `--source reference|actual --box '[x,y,w,h]'`; the server reconstructs the stated
@@ -70,7 +70,8 @@ explicit commissioning allowlist and configured model. GET capabilities does
 not query new tables, so default-off rollback remains safe.
 
 - POST `/api/text-compare-codex/tasks`: multipart `captured_file`,
-  `standard_asset_id`, `expected_revision` (immutable revision ID), `request_id`.
+  `standard_asset_id`, `expected_revision` (immutable revision ID), `request_id`,
+  optional `reference_region` (JSON normalized XYWH, defaults to whole image).
 - GET `/tasks`: 30-item pages, opaque `before` cursor. GET `/tasks/{id}`: report.
 - GET `/tasks/{id}/events?after=N`: up to 100 ordered revisions.
 - POST `/tasks/{id}/cancel`, `/retry` (`request_id`), `/review`
@@ -145,3 +146,50 @@ variables for the dedicated account's device login. Keep subscriptions and node
 secrets in restricted host configuration, never in Git. Unset the worker-specific
 variable to restore the original direct behavior, then restart only after draining
 active work. No global OS or website proxy change is required.
+
+
+## Label-v2 multidimensional workflow
+
+New cards are label-v2; the public route stays compatible and is labelled 标签检查
+Beta. Freeze one selected label region plus both full originals. Packaging dielines,
+manuals and whole-product inspection are excluded; known non-label categories are
+filtered and rejected, and the skill must report uncertainty for misclassified
+or ambiguous inputs. Multi-label reference images require selection before submit.
+
+The CLI exposes `card show/progress/summary set/finalize`, `element upsert`,
+`checklist set`, `check upsert`, `issue upsert` and existing `artifact add`.
+The task-card identity is provided by the website, never chosen by the agent.
+Ten dimensions: text, typography, color, graphics, completeness, orientation,
+shape, layout, codes, print. Type-specific element checks supplement all ten
+whole-label checks. Engineering notes are separate requirements, not printed
+content; uncalibrated photos cannot prove exact color, material or millimetres.
+
+Checklist IDs preserve element references, dimension and expectation. Later sets
+append only; results can be revised until finalization with full event history.
+Pending/running checks cannot finalize; uncertain and not_applicable require an
+observation and explanation. MATCH requires verified scope and no open issues;
+DIFFERENCES requires a difference check with an issue. Processed counts include
+uncertainty/inapplicability and are explicitly distinct from successful checks.
+
+Elements and issues carry nullable original-normalized rectangles/polygons; the
+website renders controlled SVG/text, not generated markup. Selecting a check or
+issue highlights the relevant sides. Missing elements never require invented
+actual coordinates. Crop helpers return original transforms, and uploaded crop
+pixels are reconstructed server-side. `image map` maps normalized crop rectangles
+to originals. `image decode` invokes a bounded local OpenCV subprocess and persists
+its payload evidence. Unsupported codes, decode failure and blur stay uncertain;
+code MATCH requires nonempty equal locally decoded payload sets on both sides.
+
+The release-bundled skill is mounted read-only at
+`/work/.agents/skills/vantaline-label-inspection`. Every new session explicitly
+mentions `$vantaline-label-inspection`, asks it to read SKILL.md and includes the
+exact SKILL.md body as task context. The worker records its hash/version and CLI
+version; this is runtime provenance, not proof of model obedience. Tests and real
+session observations establish actual CLI behavior. Existing v1 tasks retain the
+legacy prompt and contract. No personal skills or project history are imported.
+
+Limits add 200 elements, 500 checks/issues and 200 decoder records to existing
+bounds. Every task still has a 600-second total deadline and global concurrency 1.
+Early decomposition/plan publication is required; timed-out cards retain pending
+work. Finalization cannot create a false pass by dropping checks. Human review
+remains independent and no dimension produces automatic business/PLC actions.

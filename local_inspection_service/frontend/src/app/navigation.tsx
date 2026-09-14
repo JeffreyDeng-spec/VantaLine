@@ -55,7 +55,7 @@ export const textCompareBetaNavItem: NavItem = {
 };
 
 export const codexCompareNavItem: NavItem = {
-  label: "文字对比 Beta", path: workspacePath("/text-compare-codex"), view: "codexCompare",
+  label: "标签检查 Beta", path: workspacePath("/text-compare-codex"), view: "codexCompare",
   permission: "inspection", icon: Sparkles, phase: "phase-3"
 };
 
