@@ -89,3 +89,7 @@ The same-host systemd template is commissioned separately; it must point at the
 selected immutable release and be drained/stopped before a release switch.
 Linux isolation/transaction tests gate code; real-session and sample accuracy
 acceptance gate enabling accounts. See [Codex beta](codex-text-compare.md).
+
+Label-v2 CI additionally runs local QR decoding against frozen pixels using the
+locked OpenCV package, and verifies the readonly skill mount in Linux namespaces.
+The same immutable artifact carries CLI, skill and report schema changes.

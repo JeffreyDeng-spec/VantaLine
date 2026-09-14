@@ -335,3 +335,22 @@ Proxy coverage validates explicit credential-free loopback configuration and rea
 Linux sandbox propagation, while rejecting inheritance of unrelated host proxy
 variables. Commission actual device login and a real Codex turn on the target
 host separately; proxy connectivity alone does not establish report accuracy.
+
+Label-v2 tests additionally enforce additive checklist updates, immutable check
+identity, full dimension coverage, linked issues, uncertain outcomes, dual-side
+code evidence and original-normalized polygon bounds. The browser fixture covers
+both legacy reports and incremental v2 elements, issue selection, polygon overlays,
+problem filtering, literal injected text and mobile layout. The same disposable
+PostgreSQL suite checks v2 revision/idempotency and retained selected reference bounds.
+Real-library and intentionally modified samples must be reported separately from
+real photographed pairs; neither synthetic tests nor successful exec establishes
+conformity accuracy. Preserve per-dimension false-positive, false-negative,
+uncertainty and elapsed-time measurements in private commissioning records.
+
+`scripts/evaluate_label_cards.py private-cases.json` scores explicitly annotated
+expected dimensions in exported reports. It separates real_photo, source_mutation
+and synthetic samples and reports false positives/negatives among decided outcomes,
+uncertainty, uninspected dimensions and mean elapsed time. Conditional precision/
+recall must always be read alongside uncertainty and uninspected counts; they are
+not full-population accuracy. Keep manifests, customer pixels and task exports in
+private runtime storage, never Git. The script's input contract is in its docstring.

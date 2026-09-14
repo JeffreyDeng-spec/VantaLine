@@ -32,6 +32,13 @@ try:
     raise AssertionError('input was writable')
 except OSError:
     pass
+skill = pathlib.Path('/work/.agents/skills/vantaline-label-inspection/SKILL.md')
+assert 'name: vantaline-label-inspection' in skill.read_text()
+try:
+    skill.write_text('bad')
+    raise AssertionError('skill was writable')
+except OSError:
+    pass
 pathlib.Path('/work/result').write_text('allowed')
 print(json.dumps({'ok':True}))
 ''')

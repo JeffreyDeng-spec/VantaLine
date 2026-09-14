@@ -227,5 +227,5 @@ jobs:
         with:
           python-version: '3.10'
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
-      - run: pip install -c requirements-production.lock pillow 'psycopg[binary]' fastapi python-multipart httpx pytest
+      - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart httpx pytest
       - run: python -m pytest tests/codex_compare -q
