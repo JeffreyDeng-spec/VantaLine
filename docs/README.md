@@ -41,3 +41,7 @@ This is the single index for current project knowledge. Documents marked **Autho
 
 - [Codex text comparison beta](codex-text-compare.md) — one-shot sessions, private report cards, worker isolation and commissioning.
 - [Codex runtime prompt](../local_inspection_service/codex_compare/prompt.md) — bounded inspection and CLI report contract.
+
+- [Label task prompt](../local_inspection_service/codex_compare/label_prompt.md)
+- [Label inspection skill](../local_inspection_service/codex_compare/skills/vantaline-label-inspection/SKILL.md)
+- [Label CLI contract](../local_inspection_service/codex_compare/skills/vantaline-label-inspection/references/cli.md)

@@ -24,6 +24,25 @@ def main():
     groups = parser.add_subparsers(dest='group', required=True)
     task = groups.add_parser('task').add_subparsers(dest='action', required=True)
     task.add_parser('show')
+    card = groups.add_parser('card').add_subparsers(dest='action', required=True)
+    card.add_parser('show')
+    card.add_parser('progress').add_argument('--message', required=True)
+    card.add_parser('finalize')
+    card.add_parser('summary').add_subparsers(dest='verb', required=True).add_parser('set').add_argument('--file', required=True)
+    for group, verb in [('element', 'upsert'), ('checklist', 'set'), ('check', 'upsert'), ('issue', 'upsert')]:
+        groups.add_parser(group).add_subparsers(dest='action', required=True).add_parser(verb).add_argument('--file', required=True)
+    images = groups.add_parser('image').add_subparsers(dest='action', required=True)
+    decode = images.add_parser('decode')
+    decode.add_argument('--source', required=True, choices=['reference', 'actual'])
+    decode.add_argument('--box', default='[0,0,1,1]')
+    crop = images.add_parser('crop')
+    crop.add_argument('--source', required=True, choices=['reference', 'actual'])
+    crop.add_argument('--box', required=True, help='Original normalized XYWH')
+    crop.add_argument('--file', required=True)
+    crop.add_argument('--scale', type=float, default=1)
+    coords = images.add_parser('map')
+    coords.add_argument('--box', required=True, help='Normalized XYWH within crop')
+    coords.add_argument('--crop', required=True, help='Original normalized crop XYWH')
     report = groups.add_parser('report').add_subparsers(dest='action', required=True)
     report.add_parser('progress').add_argument('--message', required=True)
     for name, verb in [('item', 'upsert'), ('summary', 'set')]:
@@ -35,8 +54,15 @@ def main():
     artifact.add_argument('--box', required=True, help='Original normalized [x,y,width,height] crop bounds')
     args = parser.parse_args()
     payload = {}
-    if args.group == 'task':
+    if args.group == 'image' and args.action in {'crop', 'map'}:
+        from image_tools import local_image
+        print(json.dumps(local_image(args)))
+        return
+    if args.group == 'task' or (args.group == 'card' and args.action == 'show'):
         kind = 'show'
+    elif args.group == 'image':
+        kind = 'decode'
+        payload = {'source': args.source, 'box': json.loads(args.box)}
     elif args.group == 'artifact':
         kind = 'artifact'
         path = Path(args.file).resolve()
@@ -44,8 +70,8 @@ def main():
             raise ValueError('Evidence must be a bounded file inside /work')
         payload = {'data': base64.b64encode(path.read_bytes()).decode(), 'source': args.source, 'box': json.loads(args.box)}
     else:
-        kind = args.action
-        if kind in {'item', 'summary'}:
+        kind = args.group if args.group in {'element', 'checklist', 'check', 'issue'} else args.action
+        if kind in {'item', 'summary', 'element', 'checklist', 'check', 'issue'}:
             path = Path(args.file)
             if path.stat().st_size > 65536:
                 raise ValueError('JSON payload too large')

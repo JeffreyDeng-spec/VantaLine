@@ -197,3 +197,80 @@ def test_hard_restart_cleans_only_terminal_owned_scratch(storage,tmp_path,monkey
     repo.settle('a',task['id'],task['attempt_id'],'interrupted')
     worker.cleanup_finished({'work_root':str(work)})
     assert not own.exists() and unrelated.exists() and broken.exists()
+
+
+def test_label_card_revisions_and_frozen_scope(storage):
+    from local_inspection_service.codex_compare.label_contracts import DIMENSIONS
+    repo=storage()
+    inputs={'reference_region':[0,0,1,1]}
+    task=repo.create('a','label-request',inputs,report_version='label-v2')
+    assert repo.create('a','label-request',inputs,report_version='label-v2')['id']==task['id']
+    with pytest.raises(OperationConflict):repo.create('a','label-request',{'reference_region':[.1,.2,.5,.4]},report_version='label-v2')
+    task,token=repo.claim({'a'},'fixture','fixture')
+    args=('a',task['id'],task['attempt_id'],token)
+    e={'id':'E1','name':'outline','category':'outline','description':'label border','reference':{'box':[0,0,1,1]},'actual':None}
+    repo.write_report(*args,'element-1','element',e)
+    planned=[{'id':d,'element_ids':[],'dimension':d,'expected':'Inspect '+d} for d in DIMENSIONS]
+    planned += [{'id':'e'+d,'element_ids':['E1'],'dimension':d,'expected':'Inspect outline '+d} for d in ('shape','completeness','layout')]
+    repo.write_report(*args,'plan-001','checklist',{'checks':planned})
+    first={**planned[0],'status':'uncertain','observed':'glare','explanation':'unreadable'}
+    result=repo.write_report(*args,'check-001','check',first)
+    assert repo.write_report(*args,'check-001','check',first)==result
+    repo.write_report(*args,'plan-002','checklist',{'checks':planned[:1]})
+    current=repo.get('a',task['id']);assert len(current['checks'])==13 and current['checks']['text']['status']=='uncertain'
+    assert api.public(current)['progress']['settled']==1
+    with pytest.raises(ValueError):repo.write_report(*args,'final-001','finalize',{})
+    for i,c in enumerate(planned):
+        repo.write_report(*args,'result-'+str(i),'check',{**c,'status':'uncertain','observed':'glare','explanation':'not reliably visible'})
+    repo.write_report(*args,'summary-1','summary',{'decision':'REVIEW_REQUIRED','message':'recapture','checked_scope':'all planned dimensions assessed','unchecked_scope':'glare prevents verification'})
+    repo.write_report(*args,'final-002','finalize',{})
+    repo.settle('a',task['id'],task['attempt_id'],'completed')
+    current=repo.get('a',task['id']);assert current['summary']['decision']=='REVIEW_REQUIRED'
+    assert current['inputs']==inputs
+    with pytest.raises(OperationDenied):repo.write_report(*args,'late-001','element',e)
+    assert len([x for x in repo.events('a',task['id'],0) if x['kind']=='checklist'])==2
+
+
+def test_v2_worker_explicit_skill_and_cli(storage,tmp_path,monkeypatch):
+    import sys
+    import json
+    from local_inspection_service.codex_compare.media import MediaStore
+    from local_inspection_service.codex_compare.label_contracts import DIMENSIONS
+    media=MediaStore(tmp_path/'media')
+    buffer=io.BytesIO();Image.new('RGB',(100,100),'white').save(buffer,'PNG')
+    evidence=media.image('a',buffer.getvalue())
+    repo=storage();repo.create('a','v2-worker-request',{'reference':evidence,'actual':evidence},report_version='label-v2')
+    task,token=repo.claim({'a'},'fixture','fixture')
+    auth=tmp_path/'auth';auth.mkdir();(auth/'auth.json').write_text('{}')
+    fake=tmp_path/'fake.py'
+    fake.write_text('''import json,os,subprocess,sys
+from pathlib import Path
+socket,token,cli,work=sys.argv[1:]
+prompt=sys.stdin.read()
+assert '$vantaline-label-inspection' in prompt and '## Work order' in prompt
+os.environ.update(VANTALINE_TASK_SOCKET=socket,VANTALINE_TASK_TOKEN=token)
+print(json.dumps({'type':'thread.started','thread_id':'v2-skill-fixture'}),flush=True)
+def call(*args):
+ r=subprocess.run([sys.executable,cli,*args],capture_output=True,text=True)
+ assert r.returncode==0,r.stdout
+ return json.loads(r.stdout)
+def write(group,verb,value):
+ p=Path(work)/'write.json';p.write_text(json.dumps(value));return call(group,verb,'--file',str(p))
+assert call('card','show')['report_version']=='label-v2'
+write('element','upsert',{'id':'E1','category':'outline','name':'Label','description':'unclear outline','reference':None,'actual':None})
+dimensions='text typography color graphics completeness orientation shape layout codes print'.split()
+checks=[{'id':d,'dimension':d,'element_ids':[],'expected':'inspect '+d} for d in dimensions]
+checks += [{'id':'e'+d,'dimension':d,'element_ids':['E1'],'expected':'outline '+d} for d in ['shape','layout','completeness']]
+write('checklist','set',{'checks':checks})
+for c in checks:write('check','upsert',{**c,'status':'uncertain','observed':'blank fixture','explanation':'not visible'})
+p=Path(work)/'summary.json';p.write_text(json.dumps({'decision':'REVIEW_REQUIRED','message':'recapture','checked_scope':'assessed all dimensions','unchecked_scope':'blank source'}))
+call('card','summary','set','--file',str(p));call('card','finalize')
+print(json.dumps({'type':'turn.completed','usage':{}}),flush=True)
+''')
+    monkeypatch.setattr(worker,'sandbox_command',lambda directory,auth_dir,runtime,t,model,socket_path,proxy_url='':[sys.executable,str(fake),str(socket_path),t,str(Path(worker.__file__).with_name('cli.py')),str(directory/'work')])
+    monkeypatch.setattr(worker,'with_repo',lambda fn:fn(storage()))
+    worker.execute(task,token,{'work_root':str(tmp_path/'work'),'auth_home':str(auth),'model':'fixture','binary':'unused'},media)
+    result=repo.get('a',task['id'])
+    assert result['status']=='completed' and result['skill_sha256']==digest((worker.SKILL/'SKILL.md').read_bytes())
+    assert len(result['checks'])==13
+    assert result['summary']['decision']=='REVIEW_REQUIRED'

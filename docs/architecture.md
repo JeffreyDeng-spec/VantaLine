@@ -271,3 +271,16 @@ flows are unchanged. See [Codex beta](codex-text-compare.md) for boundaries.
 The worker may explicitly expose a dedicated loopback HTTP proxy to its Codex
 child through `VANTALINE_CODEX_COMPARE_PROXY_URL`; website/DB environment remains
 excluded. The independently managed proxy stays outside the filesystem namespace.
+
+### Codex label inspection cards v2
+
+New Codex Beta submissions use `label-v2` reports with frozen original-coordinate
+reference selection. The website calls the existing task API; all agent writes
+remain on the private task socket. Elements, additive checklists, per-dimension
+results, issues and local decoding evidence are append-only events with current
+JSONB projections. The ten overall dimensions and category-specific element
+coverage are validated before finalization. Historical v1 text reports retain
+v1 validation and rendering. The readonly task-scoped label inspection skill is
+explicitly named and included in the fresh exec input; version/hash are recorded.
+The independent decoder subprocess receives only a frozen crop, has a 15-second
+limit and never follows payload URLs. No old OCR/Qwen pipeline or PLC is invoked.

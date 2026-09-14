@@ -8,6 +8,7 @@ import { FileDropZone } from '../../components/FileDropZone';
 import { workspacePath } from '../../app/paths';
 import { capabilities, getTask, labels, listTasks, mediaURL, post, ROOT, terminal, type Box, type Decision, type Task } from './api';
 import './codex-compare.css';
+import { LabelReport, ReferenceRegion } from './LabelReport';
 
 const date = (value: number) => new Date(value * 1000).toLocaleString();
 const message = (error: unknown) => error instanceof Error ? error.message : '请求失败，请重试';
@@ -108,14 +109,14 @@ function Detail({ id, owner }: { id: string; owner: string }) {
       {value.status !== 'completed' && <p className="cc-notice">{terminal(value.status) ? '本次未完成；以下为已保留的部分报告。' : '初步结果 · 内容会随核对进展更新'}</p>}
       {value.error && <p role="alert">{value.error}</p>}
       {value.parent_id && <Link to={`?task=${value.parent_id}`}>查看上一次报告</Link>}
-      <div className="cc-summary"><h3>{value.summary ? labels[value.summary.decision] : '等待核对结果'}</h3><p>{value.summary?.message}</p><p>已检查：{value.summary?.checked_scope || '尚未提交范围'}</p><p>未确认：{value.summary?.unchecked_scope || (value.summary ? '无未确认文字范围' : '尚未提交')}</p><small>Codex 建议仅供人工复核；图形、颜色和印刷质量不在本次结论范围。</small></div>
-      <div className="cc-pair"><LocatedImage task={value} side="reference" box={selectedItem?.reference_box}/><LocatedImage task={value} side="actual" box={selectedItem?.actual_box}/></div>
+      <div className="cc-summary"><h3>{value.summary ? labels[value.summary.decision] : '等待核对结果'}</h3><p>{value.summary?.message}</p><p>已检查：{value.summary?.checked_scope || '尚未提交范围'}</p><p>未确认：{value.summary?.unchecked_scope || (value.summary ? '无未确认范围' : '尚未提交')}</p><small>{value.report_version === 'label-v2' ? '视觉检查建议仅供人工复核；待确认不代表通过，不承诺精确色差或实际毫米尺寸。' : '历史文字报告：图形、颜色和印刷质量不在结论范围。'}</small></div>
+      {value.report_version === 'label-v2' ? <LabelReport task={value}/> : <><div className="cc-pair"><LocatedImage task={value} side="reference" box={selectedItem?.reference_box}/><LocatedImage task={value} side="actual" box={selectedItem?.actual_box}/></div>
       <div className="cc-items">{value.items?.map(entry => <article key={entry.id} className={`cc-item ${entry.status} ${selected === entry.id ? 'selected' : ''}`}>
         <button onClick={() => setSelected(entry.id)} aria-pressed={selected === entry.id}>{labels[entry.status]} · {entry.reference_text || '（标准无此文字）'}</button>
         <p>实拍：{entry.actual_text || '（未读到文字）'}</p><p>{entry.explanation}</p>
         {(!entry.reference_box || !entry.actual_box) && <small>部分位置无法可靠定位</small>}
         <div className="cc-crops">{entry.artifact_ids.map(aid => { const a = value.artifacts?.find(x => x.id === aid); return a ? <a key={aid} href={mediaURL(id,a.image)} target="_blank" rel="noreferrer"><img src={mediaURL(id,a.preview)} alt={`${a.source === 'reference' ? '标准' : '实拍'}局部证据`} /><span>{a.source === 'reference' ? '标准' : '实拍'}</span></a> : null; })}</div>
-      </article>)}</div>
+      </article>)}</div></>}
       <details><summary>核对进展与运行信息</summary><p>模型：{value.model || '排队等待分配'} · 会话：{value.session_id || '尚未启动'}</p><ol>{events.data?.items.map(e => <li key={e.sequence}>{date(e.created_at)} · {e.kind === 'progress' ? e.payload.value?.message : labels[e.kind] || e.kind}</li>)}</ol></details>
       <section><h3>人工复核</h3>{value.reviews?.map(review => <p key={review.key}>{date(review.created_at)} · {labels[review.value.decision]} · {review.value.note}</p>)}
         <select aria-label="人工结论" value={decision} disabled={!terminal(value.status) || busy} onChange={e => {setDecision(e.target.value as Decision);reviewKey.current = crypto.randomUUID();}}>{(['REVIEW_REQUIRED','MATCH','DIFFERENCES'] as const).map(x => <option key={x} value={x}>{labels[x]}</option>)}</select>
@@ -131,6 +132,7 @@ function Workspace({ owner }: { owner: string }) {
   const taskId = params.get('task');
   const [standardId, setStandardId] = useState('');
   const [assetId, setAssetId] = useState('');
+  const [region, setRegion] = useState<Box>([0,0,1,1]);
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
@@ -147,25 +149,26 @@ function Workspace({ owner }: { owner: string }) {
   async function submit() {
     if (!file || !assetId || !standard.data?.current_revision_id || busy) return;
     setBusy(true);setError('');
-    const form = new FormData();form.set('captured_file',file);form.set('standard_asset_id',assetId);form.set('request_id',requestId.current);form.set('expected_revision',standard.data.current_revision_id);
+    const form = new FormData();form.set('reference_region',JSON.stringify(region));form.set('captured_file',file);form.set('standard_asset_id',assetId);form.set('request_id',requestId.current);form.set('expected_revision',standard.data.current_revision_id);
     try { const result = await apiClient.upload<Task>(`${ROOT}/tasks`,form); await queryClient.invalidateQueries({queryKey:['codex-compare',owner]}); setParams({task:result.id}); }
     catch(e) {setError(message(e));} finally {setBusy(false);}
   }
   if (taskId) return <Detail key={taskId} id={taskId} owner={owner}/>;
   return <>
-    <header><div><h1>文字对比 <span className="cc-beta">Beta</span></h1><p>一枚标签，一份可追溯的证据报告。</p></div><Link to={workspacePath('/text-compare-beta')}>管理标准库</Link></header>
+    <header><div><h1>标签检查 <span className="cc-beta">Beta</span></h1><p>一枚标签，一份可追溯的证据报告。</p></div><Link to={workspacePath('/text-compare-beta')}>管理标准库</Link></header>
     {cap.error && <p role="alert">{message(cap.error)}</p>}
     {cap.data?.enabled ? <section className="cc-compose"><div><h2>1. 选择标准标签</h2><select aria-label="标准订单" value={standardId} disabled={busy} onChange={e => {setStandardId(e.target.value);setAssetId('');requestId.current=crypto.randomUUID();}}><option value="">选择已确认订单</option>{standards.data?.items.filter(x=>x.status==='confirmed' && x.standard_type==='label').map(x=><option value={x.id} key={x.id}>{x.name}</option>)}</select>
       {standard.error && <p role="alert">{message(standard.error)}</p>}
-      <div className="cc-gallery">{standard.data?.assets?.filter(x=>x.status==='candidate').map(x=><button key={x.id} aria-label={`选择标准标签 ${x.ordinal}`} disabled={busy} aria-pressed={x.id===assetId} onClick={()=>{setAssetId(x.id);requestId.current=crypto.randomUUID();}}>{x.content_url && <img src={x.original_url || x.content_url} alt={`标准标签 ${x.ordinal}`}/>}标签 {x.ordinal}</button>)}</div></div>
+      <div className="cc-gallery">{standard.data?.assets?.filter(x=>x.status==='candidate' && !['packaging','manual','document','product'].includes(x.category || '')).map(x=><button key={x.id} aria-label={`选择标准标签 ${x.ordinal}`} disabled={busy} aria-pressed={x.id===assetId} onClick={()=>{setAssetId(x.id);setRegion([0,0,1,1]);requestId.current=crypto.randomUUID();}}>{x.content_url && <img src={x.original_url || x.content_url} alt={`标准标签 ${x.ordinal}`}/>}标签 {x.ordinal}</button>)}</div>
+      {assetId && <ReferenceRegion key={assetId} url={standard.data?.assets?.find(x=>x.id===assetId)?.original_url || standard.data?.assets?.find(x=>x.id===assetId)?.content_url || ''} value={region} disabled={busy} onChange={value=>{setRegion(value);requestId.current=crypto.randomUUID();}}/>}</div>
       <div><h2>2. 拍摄或上传实拍图</h2>{!busy && <Capture onCapture={selectFile}/>}
         <FileDropZone accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.avif" disabled={busy} onFiles={files=>{if(files[0])selectFile(files[0]);}}><p>拖入一张单枚标签图片，或点击选择</p></FileDropZone>
         {url && <img className="cc-upload-preview" src={url} alt="待对比实拍图"/>}
         <button className="cc-primary" disabled={busy||!file||!assetId||!standard.data?.current_revision_id} onClick={()=>void submit()}>{busy?'正在提交…':'开始对比'}</button><p>单任务最多 10 分钟，结果需人工复核。</p>
       </div></section> : <p className="cc-notice">此账号尚未启用新任务，已有报告仍可查看。</p>}
     {error && <p role="alert">{error}（重新提交会复用本次请求标识）</p>}
-    <h2>对比报告</h2>{tasks.error && <p role="alert">{message(tasks.error)}</p>}
-    <div className="cc-cards">{tasks.data?.items.map(task=><Link className="cc-card" key={task.id} to={`?task=${task.id}`}><div className="cc-thumbs">{(['reference','actual'] as const).map(side=><img key={side} src={mediaURL(task.id,task.inputs[side].preview)} alt={side==='reference'?'标准':'实拍'}/>)}</div><h3>{task.inputs.standard_name}</h3><p>{labels[task.status]} · {date(task.created_at)}</p><p>差异 {task.counts.difference} · 待确认 {task.counts.uncertain}</p><p>{task.summary?.message || '报告正在准备中'}</p><strong>查看详情 →</strong></Link>)}</div>
+    <h2>检查报告</h2>{tasks.error && <p role="alert">{message(tasks.error)}</p>}
+    <div className="cc-cards">{tasks.data?.items.map(task=><Link className="cc-card" key={task.id} to={`?task=${task.id}`}><div className="cc-thumbs">{(['reference','actual'] as const).map(side=><img key={side} src={mediaURL(task.id,task.inputs[side].preview)} alt={side==='reference'?'标准':'实拍'}/>)}</div><h3>{task.inputs.standard_name}</h3><p>{labels[task.status]} · {date(task.created_at)}</p><p>{task.progress && `检查 ${task.progress.settled}/${task.progress.total} · 元素 ${task.progress.elements} · `}差异 {task.counts.difference} · 待确认 {task.counts.uncertain}</p><p>{task.summary?.message || '报告正在准备中'}</p><strong>查看详情 →</strong></Link>)}</div>
     {tasks.data?.items.length===0 && <p>还没有对比报告。</p>}
     <div className="cc-pagination">{cursor && <button onClick={()=>setCursor('')}>最新任务</button>}{tasks.data?.next_cursor && <button onClick={()=>setCursor(tasks.data!.next_cursor!)}>更早任务</button>}</div>
   </>;

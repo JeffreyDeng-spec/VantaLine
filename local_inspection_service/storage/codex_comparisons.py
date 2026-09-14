@@ -68,8 +68,10 @@ class CodexComparisonsRepository:
             c.execute(f'SELECT raw_json FROM {self.table(EVENTS)} WHERE owner_user_id=%s AND task_id=%s AND sequence>%s ORDER BY sequence LIMIT 100', (owner, identifier, after))
             return self.rows(c)
 
-    def create(self, owner, key, inputs, *, parent_id=None):
-        fingerprint = digest({'inputs': inputs, 'parent_id': parent_id})
+    def create(self, owner, key, inputs, *, parent_id=None, report_version=None):
+        if report_version not in (None, 'label-v2'):
+            raise ValueError('Unsupported report version')
+        fingerprint = digest({'inputs': inputs, 'parent_id': parent_id, **({'report_version': report_version} if report_version else {})})
         with self.tx() as c:
             c.execute(f'SELECT raw_json FROM {self.table(TASKS)} WHERE owner_user_id=%s AND idempotency_key=%s', (owner, key))
             existing = self.rows(c)
@@ -81,6 +83,8 @@ class CodexComparisonsRepository:
                     'idempotency_key': key, 'fingerprint': fingerprint, 'inputs': inputs, 'parent_id': parent_id,
                     'status': 'queued', 'created_at': time.time(), 'sequence': 0, 'items': {}, 'artifacts': {},
                     'summary': None, 'reviews': [], 'finalized': False}
+            if report_version == 'label-v2':
+                task.update(report_version=report_version, elements={}, checks={}, issues={}, decodes={})
             self.event(c, task, 'queued', {})
             self.save(c, task)
             return task
@@ -120,7 +124,7 @@ class CodexComparisonsRepository:
                 return None
             task['heartbeat'] = time.time()
             if metadata:
-                task.update({k: v for k, v in metadata.items() if k in {'session_id', 'usage'}})
+                task.update({k: v for k, v in metadata.items() if k in {'session_id', 'usage', 'skill_version', 'skill_sha256', 'tool_version'}})
             self.save(c, task)
             return task
 
@@ -156,7 +160,16 @@ class CodexComparisonsRepository:
             if kind == 'progress':
                 from ..codex_compare.contracts import text
                 payload = {'message': text(payload.get('message'), 1000)}
+            elif kind in {'element', 'checklist', 'check', 'issue'}:
+                from ..codex_compare.label_contracts import apply
+                payload = apply(task, kind, payload)
+            elif kind == 'decode':
+                if task.get('report_version') != 'label-v2' or len(task['decodes']) >= 200:
+                    raise ValueError('Invalid decode operation or limit reached')
+                task['decodes'][payload['id']] = payload
             elif kind == 'item':
+                if task.get('report_version') == 'label-v2':
+                    raise ValueError('Use checklist/check on label-v2 cards')
                 payload = item(payload)
                 if len(task['items']) >= 500 and payload['id'] not in task['items']:
                     raise ValueError('At most 500 items')

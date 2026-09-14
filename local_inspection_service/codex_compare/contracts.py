@@ -72,6 +72,9 @@ def summary(value):
 
 
 def validate_report(task):
+    if task.get('report_version') == 'label-v2':
+        from .label_contracts import validate
+        return validate(task)
     report = task.get('summary')
     items = list(task.get('items', {}).values())
     if not report or not items:

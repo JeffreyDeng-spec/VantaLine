@@ -94,3 +94,10 @@ active claim across workers. Report projection plus event revision are atomic.
 Stale active attempts are interrupted, never replayed; late writes fail. The
 previous release ignores the new tables. Preserve them and source-hash media
 during rollback. See [Codex beta](codex-text-compare.md).
+
+Codex label-v2 cards extend the existing comparison task/event JSONB projections
+with report_version, elements, checks, issues and decoder evidence; no destructive
+migration or new database permission is required. Checklist updates only append
+new IDs and cannot remove pending work or reset recorded results. Geometry,
+references, coverage, idempotency and attempt revocation are validated within the
+existing serialized transaction. Missing report_version identifies historical v1.

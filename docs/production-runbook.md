@@ -129,3 +129,12 @@ The service template is not an automatic host installer. Disable new submissions
 and drain active work before moving releases; stop its entire process group when
 interruption is necessary. Roll back the complete release, retaining all new
 tables, reports, media and unknown outcomes.
+
+For label-v2 upgrades, drain admission and stop the independent Codex worker
+before switching the whole immutable release, then restart it against `current`.
+The release must contain the task skill, CLI helpers and matching report contract.
+Verify an actual fresh session records the skill version/hash, writes elements
+before checks and produces visible issue annotations. Keep originals, selected
+reference bounds and all v1/v2 history on rollback. An older worker must not claim
+queued label-v2 cards; cancel/drain queued v2 work before rolling back. The decoder
+uses the release Python/OpenCV locally; unsupported/unreadable codes remain uncertain.
