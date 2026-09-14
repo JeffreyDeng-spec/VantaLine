@@ -12,7 +12,7 @@
     "docs/production-runbook.md", "docs/postgresql-runtime.md", "docs/new-maintainer-checklist.md",
     "docs/production-baseline-202608.md", "docs/text-inspection-v2.md", "local_inspection_service/README.md",
     "local_inspection_service/docs/runpod-yolo-train-worker.md",
-    "local_inspection_service/workers/vantaline_yolo_train_worker/README.md", "models/README.md"
+    "local_inspection_service/workers/vantaline_yolo_train_worker/README.md", "models/README.md", "docs/codex-text-compare.md", "local_inspection_service/codex_compare/prompt.md"
   ],
   "historical_docs": {
     "local_inspection_service/docs/plc-phase2-address-capture-coordination.md": "docs/plc-web-serial-v4.md",
@@ -59,6 +59,20 @@
       "name": "Browser agent platform",
       "paths": ["local_inspection_service/agent_api.py", "local_inspection_service/frontend/src/features/agent/**", "local_inspection_service/frontend/scripts/generate-agent-tools.mjs"],
       "required_docs": ["docs/agent-platform.md", "docs/architecture.md", "docs/testing.md"]
+    },
+    {
+      "name": "Codex text comparison",
+      "paths": [
+        "local_inspection_service/codex_compare/**",
+        "local_inspection_service/storage/codex_comparisons.py",
+        "local_inspection_service/frontend/src/features/codex-compare/**",
+        "deploy/vantaline-codex-compare.service"
+      ],
+      "required_docs": [
+        "docs/codex-text-compare.md",
+        "docs/architecture.md",
+        "docs/testing.md"
+      ]
     }
   ]
 }

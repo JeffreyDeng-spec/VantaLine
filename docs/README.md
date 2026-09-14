@@ -38,3 +38,6 @@ This is the single index for current project knowledge. Documents marked **Autho
 [Archive index](archive/README.md) lists superseded PLC phases, migrations, commissioning packets, and implementation evidence. Never implement an archived document without first promoting it through a reviewed proposal that updates this index.
 
 `contract.json` is the machine-readable registry used by CI to protect this structure.
+
+- [Codex text comparison beta](codex-text-compare.md) — one-shot sessions, private report cards, worker isolation and commissioning.
+- [Codex runtime prompt](../local_inspection_service/codex_compare/prompt.md) — bounded inspection and CLI report contract.

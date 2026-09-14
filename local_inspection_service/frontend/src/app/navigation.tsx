@@ -54,6 +54,11 @@ export const textCompareBetaNavItem: NavItem = {
   phase: "phase-3"
 };
 
+export const codexCompareNavItem: NavItem = {
+  label: "文字对比 Beta", path: workspacePath("/text-compare-codex"), view: "codexCompare",
+  permission: "inspection", icon: Sparkles, phase: "phase-3"
+};
+
 export const dataAnalysisNavItem: NavItem = {
   label: "数据分析",
   path: workspacePath("/data-analysis"),
@@ -137,10 +142,10 @@ export const hiddenToolNavItems: NavItem[] = [
   }
 ];
 
-export const fixedNavItems = [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem, dataAnalysisNavItem, ...systemNavItems];
+export const fixedNavItems = [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem, codexCompareNavItem, dataAnalysisNavItem, ...systemNavItems];
 
 export const navGroups: NavGroup[] = [
-  { items: [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem] },
+  { items: [overviewNavItem, detectionCenterNavItem, textCompareBetaNavItem, codexCompareNavItem] },
   { label: "训练与资产", items: trainingAssetNavItems },
   { items: [dataAnalysisNavItem] },
   { label: "系统", items: systemNavItems }
@@ -150,6 +155,7 @@ export const navItems = [
   overviewNavItem,
   detectionCenterNavItem,
   textCompareBetaNavItem,
+  codexCompareNavItem,
   dataAnalysisNavItem,
   ...systemNavItems,
   ...trainingAssetNavItems,

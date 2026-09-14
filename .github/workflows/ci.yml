@@ -98,6 +98,22 @@ jobs:
           name: navigation-ui
           path: ${{ runner.temp }}/navigation-ui
           if-no-files-found: ignore
+      - name: Verify Codex comparison report UI
+        env:
+          REVIEW_UI_BASE: http://127.0.0.1:5190/react-preview
+          CODEX_UI_OUTPUT: ${{ runner.temp }}/codex-ui
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5190 > "$RUNNER_TEMP/codex-vite.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          curl --retry 10 --retry-delay 1 --retry-connrefused --fail http://127.0.0.1:5190/react-preview/tests/codex-compare.html >/dev/null
+          PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_codex_compare_ui.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codex-report-ui
+          path: ${{ runner.temp }}/codex-ui
+          if-no-files-found: ignore
       - run: npm run test:agent
       - run: npm run typecheck
       - run: npm run build:production-cutover
@@ -188,3 +204,27 @@ jobs:
           python local_inspection_service/scripts/smoke_incoming_text_postgres.py
       - name: Validate generated schema with PostgreSQL 16
         run: python local_inspection_service/scripts/smoke_postgres_schema_real_engine.py --postgres-bin-dir /usr/lib/postgresql/16/bin
+
+  codex-comparison:
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U vantaline"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CODEX_TEST_DATABASE_URL: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - run: pip install -c requirements-production.lock pillow 'psycopg[binary]' fastapi python-multipart httpx pytest
+      - run: python -m pytest tests/codex_compare -q

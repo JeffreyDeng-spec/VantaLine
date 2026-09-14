@@ -85,3 +85,12 @@ These primitives are not yet connected to production business submission or
 provider settlement. Previous releases ignore the new tables; retain them on
 rollback. Real PostgreSQL concurrency tests and current limitations are recorded
 in [Agent platform implementation status](agent-platform.md).
+
+## Codex comparison storage
+
+`2026_09_14_codex_comparisons.sql` adds tasks and append-only events. Owner/request
+uniqueness and a global advisory transaction lock enforce idempotency and one
+active claim across workers. Report projection plus event revision are atomic.
+Stale active attempts are interrupted, never replayed; late writes fail. The
+previous release ignores the new tables. Preserve them and source-hash media
+during rollback. See [Codex beta](codex-text-compare.md).

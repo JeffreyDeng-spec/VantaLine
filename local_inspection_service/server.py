@@ -2604,6 +2604,8 @@ def route_required_permission(path: str, method: str) -> str | None:
         return "user_management"
     if clean_path.startswith("/api/windows-worker"):
         return "worker_settings"
+    if clean_path.startswith("/api/text-compare-codex"):
+        return "inspection"
     if clean_path.startswith("/api/agent"):
         return "agent_config"
     if clean_path.startswith("/api/admin"):
@@ -38159,6 +38161,8 @@ standard_preparation_jobs = register_standard_preparation(globals())
 
 resolve_label_extraction = register_label_extraction(globals())
 register_agent_api(globals())
+from local_inspection_service.codex_compare.api import register as register_codex_compare
+register_codex_compare(globals())
 
 
 @app.post("/api/text-inspection/label/compare")
