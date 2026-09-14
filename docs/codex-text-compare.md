@@ -193,3 +193,8 @@ bounds. Every task still has a 600-second total deadline and global concurrency 
 Early decomposition/plan publication is required; timed-out cards retain pending
 work. Finalization cannot create a false pass by dropping checks. Human review
 remains independent and no dimension produces automatic business/PLC actions.
+
+User-facing v2 findings, progress and summaries are written in Simplified Chinese;
+inspected source text remains verbatim. Original-aspect SVG overlays preserve
+legible marker text on long/thin labels, with issue IDs placed separately from
+element IDs when their regions overlap.

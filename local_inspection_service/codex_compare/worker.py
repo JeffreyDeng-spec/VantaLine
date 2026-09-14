@@ -33,7 +33,7 @@ from ..storage.runtime_selector import build_runtime_repository
 
 MODULE = Path(__file__).parent
 SKILL = MODULE/'skills'/'vantaline-label-inspection'
-SKILL_VERSION = 'label-inspection-v2.1'
+SKILL_VERSION = 'label-inspection-v2.2'
 
 
 def repository():

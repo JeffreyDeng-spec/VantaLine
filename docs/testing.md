@@ -354,3 +354,6 @@ uncertainty, uninspected dimensions and mean elapsed time. Conditional precision
 recall must always be read alongside uncertainty and uninspected counts; they are
 not full-population accuracy. Keep manifests, customer pixels and task exports in
 private runtime storage, never Git. The script's input contract is in its docstring.
+
+Label UI acceptance also asserts that the SVG viewBox follows image aspect ratio
+and coincident issue/element markers have distinct label anchors.

@@ -295,3 +295,7 @@ v1 validation and rendering. The readonly task-scoped label inspection skill is
 explicitly named and included in the fresh exec input; version/hash are recorded.
 The independent decoder subprocess receives only a frozen crop, has a 15-second
 limit and never follows payload URLs. No old OCR/Qwen pipeline or PLC is invoked.
+
+Label annotation SVGs use the original image aspect ratio so marker text scales
+uniformly; issue and element labels use separate vertical anchors. Skill v2.2
+requires Chinese report prose while preserving the source label's language.
