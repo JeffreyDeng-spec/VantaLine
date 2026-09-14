@@ -4,6 +4,15 @@
 
 ## Comparison dialog regression
 
+Run `python -m local_inspection_service.scripts.smoke_comparison_history` for
+real-route account isolation, stable pagination/search, missing/deleted standard
+evidence, old formats, on-demand logs and non-mutation without model calls.
+The preparation PostgreSQL smoke additionally covers both raw_json encodings,
+SQL projection, cursor/search/decision filtering and owner isolation.
+Run `scripts/test_comparison_history_ui.cjs` with the existing Vite/Playwright
+variables for list/detail/Back, filtering, current-task isolation, zoom, lazy logs,
+mobile layout and screenshots. These are synthetic UI fixtures, not OCR tests.
+
 The evidence UI suite also asserts exactly one result reference image, the
 overlaid zoom action and preserved element selection after returning from zoom.
 

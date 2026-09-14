@@ -9,9 +9,8 @@ import { getFile, rememberFile } from "../agent/files";
 import { useAgentState } from "../agent/useAgentState";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { StandardPreparation, type PreparationPreview } from "./StandardPreparation";
-import { EvidenceResults } from "./EvidenceResults";
-import { RereadEvidence } from "./RereadEvidence";
-import { ModelAuditLinks } from "./ModelAuditLinks";
+import { ComparisonResult } from "./ComparisonResult";
+import { ComparisonHistory } from "./ComparisonHistory";
 import { useAuth } from "../auth/auth-context";
 import { useComparisonTask } from "./useComparisonTask";
 import { ComparisonDialog } from "./ComparisonDialog";
@@ -21,24 +20,6 @@ const IMAGE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif,.mpo,.bmp,
 function validateImage(file: File) {
   if (!file.size || file.size > MAX_FILE_BYTES) throw new Error("图片必须小于 10MB。");
 }
-function qualityCopy(reasons?: string[]) {
-  const labels: Record<string, string> = { resolution_too_low: "分辨率太低", blurred: "画面模糊", underexposed: "画面太暗", overexposed_or_glare: "过曝或反光明显" };
-  return (reasons || []).map((reason) => labels[reason] || reason).join("、");
-}
-
-const MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000;
-function formatDiagnosticOutput(value: unknown) {
-  let output: string;
-  if (typeof value === "string") output = value;
-  else {
-    try { output = JSON.stringify(value, null, 2) ?? String(value); }
-    catch { output = String(value); }
-  }
-  return output.length > MAX_DIAGNOSTIC_OUTPUT_CHARS
-    ? `${output.slice(0, MAX_DIAGNOSTIC_OUTPUT_CHARS)}\n…（显示内容已截断）`
-    : output;
-}
-
 const CATEGORY_LABELS: Record<string, string> = {
   label: "标签",
   label_design: "标签设计图",
@@ -89,7 +70,6 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
   const [inputError, setInputError] = useState("");
   const [inputMode, setInputMode] = useState<"camera" | "image">(comparison.task ? "image" : "camera");
   const result = comparison.result?.status === "attempting" ? null : comparison.result;
-  const [activeDifference, setActiveDifference] = useState("");
   const [zoomedImage, setZoomedImage] = useState<{ src: string; alt: string } | null>(null);
   const [zoomScale, setZoomScale] = useState(1);
   const zoomTrigger = useRef<HTMLElement | null>(null);
@@ -107,12 +87,6 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
   const [importMaterial, setImportMaterial] = useState("");
   const [importVersion, setImportVersion] = useState("V1");
   const [importFile, setImportFile] = useState<File | null>(null);
-  const providerDiagnostics = result?.diagnostics?.provider_result;
-  const rawProviderOutput = providerDiagnostics?.response_preview !== undefined
-    ? providerDiagnostics.response_preview
-    : providerDiagnostics?.parsed_response;
-  const normalizedOutput = result?.diagnostics?.normalized_response;
-  const hasDiagnosticOutput = rawProviderOutput !== undefined || normalizedOutput !== undefined || result?.diagnostics?.provider === "qwen_ocr";
   const standardsQuery = useQuery({ queryKey: ["text-inspection", "standards"], queryFn: listTextInspectionStandards });
   const standardQuery = useQuery({ queryKey: ["text-inspection", "standard", selectedStandardId], queryFn: () => getTextInspectionStandard(selectedStandardId), enabled: !!selectedStandardId, refetchInterval: (query) => query.state.data?.classification?.state === "processing" ? 2000 : false });
   const selectedOrderRef = useRef(selectedStandardId); selectedOrderRef.current = selectedStandardId;
@@ -171,7 +145,7 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
   const resetComparison = (options: { clearCaptured?: boolean } = {}) => {
     inputEpoch.current++;
     comparison.reset();
-    setActiveDifference(""); setInputError("");
+    setInputError("");
     if (options.clearCaptured) {
       setCaptured(null);
       setCapturedUrl((current) => { if (current.startsWith("blob:")) URL.revokeObjectURL(current); return ""; });
@@ -198,14 +172,13 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
     inputEpoch.current++;
     validateImage(file); setCaptured(file);
     setCapturedUrl((current) => { if (current) URL.revokeObjectURL(current); return URL.createObjectURL(file); });
-    comparison.reset(); setActiveDifference("");
+    comparison.reset();
   };
   const clearCaptured = () => {
     inputEpoch.current++;
     comparison.reset();
     setCaptured(null);
     setCapturedUrl((current) => { if (current) URL.revokeObjectURL(current); return ""; });
-    setActiveDifference("");
   };
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -370,7 +343,6 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
     onError: (error: Error) => setInputError(error.message)
   });
   const resultImage = capturedUrl || (comparison.task?.recordId ? `/api/text-inspection/prepared-comparisons/${comparison.task.recordId}/media/preview` : "");
-  const tone = result?.decision === "MATCH" ? "match" : result?.decision === "DIFFERENCES" ? "differences" : "review";
   const visibleStandards = (standardsQuery.data?.items || []).filter((item) => item.standard_type === mode);
   const visibleAssets = standardQuery.data?.assets || [];
   const retainedAssetCount = visibleAssets.filter(isActiveAsset).length;
@@ -442,6 +414,7 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
       <header className="text-compare-beta-header">
         <div><span className="eyebrow">账号专属标准库</span><h2>文字检验</h2><p>标签严格对比与说明书逐页检验集中在一个工作台。</p></div>
       </header>
+      <ComparisonHistory owner={owner} />
       <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
         <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
         <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
@@ -495,24 +468,7 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
     {mode === "label" ? <>
     {inputError ? <div className="text-compare-alert"><AlertTriangle size={18} />{inputError}</div> : null}
     {comparison.task ? <ComparisonDialog open={comparison.task.open} startedAt={comparison.task.startedAt} busy={comparison.busy} phase={comparison.phase} notice={comparison.notice} onClose={() => { zoomTrigger.current = null; setZoomedImage(null); comparison.setOpen(false); }} trigger={primaryRef}>
-    {result ? <section ref={node => { if (node) node.inert = !!zoomedImage; }} className={"text-compare-result " + tone}>
-      {result.status === "completed" ? <small>100% · 结果已保存</small> : null}
-      <div className="text-compare-result-summary">{tone === "match" ? <CheckCircle2 /> : <AlertTriangle />}<div><small>辅助对比结果</small><strong>{result.decision === "MATCH" ? "未发现文字差异" : result.decision === "DIFFERENCES" ? "发现疑似差异" : "无法可靠判断"}</strong><p>{result.message}</p></div></div>
-      {qualityCopy(result.captured_quality?.reasons) ? <div className="text-compare-quality">拍摄提示：{qualityCopy(result.captured_quality?.reasons)}</div> : null}
-      {result.annotated_image_data_url ? <button type="button" onClick={() => openZoom(result.annotated_image_data_url!, "实拍标注结果")}><img src={result.annotated_image_data_url} alt="实拍标注结果" />点击放大实拍标注</button> : null}
-      {result.reference_overlay_url ? <EvidenceResults key={result.id} value={result.diagnostics?.provider === "qwen_ocr" && result.id ? normalizedOutput : undefined} reference={result.reference_overlay_url} source={result.id ? `/api/text-inspection/prepared-comparisons/${result.id}/media/source` : ""} onZoom={openZoom} /> : null}
-      {result.differences.length ? <div className="text-compare-differences">{result.differences.map((difference, index) => <button className={activeDifference === difference.id ? "active" : ""} onClick={() => setActiveDifference(difference.id)} key={difference.id}><span>{index + 1}</span><div><small>{difference.type === "missing" ? "可能漏印" : difference.type === "extra" ? "可能多印" : "文字不同"}</small><strong>标准：{difference.reference_text || "（无）"}</strong><strong>实物：{difference.actual_text || "（无）"}</strong></div><em>{Math.round(difference.confidence * 100)}%</em></button>)}</div> : null}
-      {hasDiagnosticOutput ? <details className="text-compare-raw-output">
-        <summary><ChevronRight size={15} /><span>Raw Output（调试信息）</span><small>默认折叠</small></summary>
-        <div className="text-compare-raw-output-body">
-          {result.id ? <ModelAuditLinks value={result.diagnostics?.model_audits} recordId={result.id} /> : null}
-          {result.id ? <RereadEvidence value={result.diagnostics?.rereads} recordId={result.id} onZoom={openZoom} /> : null}
-          {result.diagnostics?.provider === "qwen_ocr" ? <section><header><strong>OCR 与证据匹配诊断</strong></header><pre>{formatDiagnosticOutput(result.diagnostics)}</pre></section> : null}
-          {rawProviderOutput !== undefined ? <section><header><strong>模型原始输出</strong><small>{providerDiagnostics?.response_preview !== undefined ? "原始文本预览" : "解析后的 JSON"}</small></header><pre>{formatDiagnosticOutput(rawProviderOutput)}</pre></section> : null}
-          {normalizedOutput !== undefined ? <section><header><strong>系统适配结果</strong><small>进入业务校验前的数据</small></header><pre>{formatDiagnosticOutput(normalizedOutput)}</pre></section> : null}
-        </div>
-      </details> : null}
-    </section> : null}
+    {result ? <ComparisonResult key={result.id || result.comparison_id} result={result} onZoom={openZoom} obscured={!!zoomedImage} /> : null}
     {comparison.task.open && zoomedImage ? renderZoom() : null}
     </ComparisonDialog> : <div className="text-compare-hint"><FileImage size={19} />{inputMode === "camera" ? "标准图会保留；检查下一件时只需重新拍照。" : "标准图会保留；检查下一件时只需选择新的实物图片。"}</div>}
     </> : null}

@@ -210,6 +210,26 @@ The formal **文字检验** entry is account scoped and independent from product
 
 ## API
 
+### Comparison history
+
+The title-right History entry lists only this account's label comparisons, not
+manual sessions, legacy incoming-material tasks or the separate Codex beta.
+`GET /api/text-inspection/history?q=&result=all&limit=20&cursor=` returns summaries
+and an opaque next cursor; supported result filters are MATCH, DIFFERENCES and
+REVIEW_REQUIRED. Execution state (processing/completed/failed/timeout/review)
+is separate from the comparison decision. Limit is capped at 100.
+`GET /history/{id}` returns the saved result and element evidence;
+`GET /history/{id}/diagnostics` loads sanitized logs only on disclosure.
+`GET /history/{id}/media/{thumbnail|preview|source|reference|annotated-preview}`
+rechecks ownership and hashes. Missing historical media is not replaced with a
+current standard. New records snapshot order/material/version/ordinal metadata;
+older current-name lookups are labelled, including for deleted orders.
+No history GET starts OCR, resubmits, edits a decision or clears an unknown claim.
+The same modal switches list/detail and preserves filters/list scroll on Back.
+Results reuse the live presentation; zoom keeps selection, logs are collapsed,
+and full-resolution sources require explicit action. History is independent from
+the active workbench task. There is no delete/export/recompare action in v1.
+
 ### Single-label extraction
 
 An additional account-gated experimental `method=vlm_bbox` searches the **whole** image, canonicalizing target to `[0,0,1,1]`; guide coordinates do not select its target. Capabilities expose `bbox_enabled` and `bbox_available`. Its prompt is the original colleague multi-label layout prompt, ported to Qwen: normalized `cropRect` values are validated strictly, not clamped. Single/no-label replies without a rectangle fail closed rather than silently comparing the whole photograph. The known prompt limitation (no single-label coordinates requested) is preserved for the first baseline, not hidden by a second paid call.

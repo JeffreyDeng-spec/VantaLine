@@ -11,6 +11,7 @@ from . import standard_preparation as engine
 from . import qwen_evidence_jobs
 from . import local_ocr_reread
 from . import evidence_preview
+from .comparison_history import display_snapshot
 
 _slots = threading.BoundedSemaphore(1)
 
@@ -44,6 +45,7 @@ def submit(namespace, jobs, owner, username, standard, asset, snapshot, upload, 
     image = engine.decode(upload)
     record = dict(id="ins_"+uuid.uuid4().hex, owner_user_id=owner, owner_username=username,
         standard_id=standard["id"], standard_asset_id=asset["id"], comparison_id=request_id,
+        history_display=display_snapshot(standard, asset),
         standard_revision_id=standard.get("current_revision_id", ""), standard_revision_number=standard.get("revision_number", 0),
         reference_sha256=binding["reference_sha256"], fingerprint=fingerprint, fingerprint_components=binding,
         source_sha256=binding["source_sha256"], source_format="image", status="attempting", decision="REVIEW_REQUIRED",

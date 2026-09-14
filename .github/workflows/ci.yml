@@ -179,6 +179,7 @@ jobs:
           python local_inspection_service/scripts/smoke_document_review.py
           python local_inspection_service/scripts/smoke_document_review_postgres.py
           python local_inspection_service/scripts/smoke_text_compare_beta.py
+          python -m local_inspection_service.scripts.smoke_comparison_history
           python scripts/smoke_text_inspection_v2.py
           python local_inspection_service/scripts/smoke_label_extraction.py
           python local_inspection_service/scripts/smoke_label_extraction_endpoints.py

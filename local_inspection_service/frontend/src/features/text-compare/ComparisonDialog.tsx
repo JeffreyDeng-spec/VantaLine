@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { RefreshCcw, X } from "lucide-react";
 import { estimatedProgress } from "./useComparisonTask";
 import "./comparison-dialog.css";
 
-export function ComparisonDialog({ open, startedAt, busy, phase, notice, onClose, trigger, children }: {
+export function ComparisonDialog({ open, startedAt, busy, phase, notice, onClose, trigger, children, title, className = "" }: {
   open: boolean; startedAt: number; busy: boolean; phase: string; notice: string;
-  onClose: () => void; trigger: RefObject<HTMLButtonElement>; children: ReactNode;
+  onClose: () => void; trigger: RefObject<HTMLButtonElement>; children: ReactNode; title?: string; className?: string;
 }) {
+  const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -27,9 +28,9 @@ export function ComparisonDialog({ open, startedAt, busy, phase, notice, onClose
     return () => clearInterval(timer);
   }, [busy, open]);
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
-  return <dialog ref={ref} className="comparison-dialog" aria-labelledby="comparison-dialog-title"
+  return <dialog ref={ref} className={`comparison-dialog ${className}`} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); onClose(); }}>
-    <header><strong id="comparison-dialog-title">{busy ? "文字对比进行中" : "文字对比结果"}</strong>
+    <header><strong id={titleId}>{title || (busy ? "文字对比进行中" : "文字对比结果")}</strong>
       <button type="button" aria-label="关闭对比窗口" onClick={onClose} autoFocus><X size={22} /></button></header>
     <div className="comparison-dialog-body">
       {notice ? <p role="status" className="text-compare-alert">{notice}</p> : null}

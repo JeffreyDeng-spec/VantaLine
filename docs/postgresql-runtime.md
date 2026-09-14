@@ -15,6 +15,13 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 
 ## Ownership and compatibility
 
+Comparison history uses the existing owner/created_at index and a bounded SQL
+summary projection with stable created_at/id cursor ordering. It accepts raw_json
+objects and historical JSON-encoded strings. Display snapshots are additive JSONB
+fields on new records only; existing records/images are not migrated or copied.
+Historical standard media resolves immutable revision evidence. Missing snapshots
+remain explicit. Current name lookups are display-only and labelled as such.
+
 Local OCR rereads reuse the OCR evidence table with owner/source/input hash,
 mode, pinned model and preprocessing version in the cache key. Each input gets
 an insert-once claim before its paid call; only completed results are reusable.

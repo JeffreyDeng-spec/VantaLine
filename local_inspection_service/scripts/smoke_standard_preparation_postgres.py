@@ -1,5 +1,6 @@
 """Real PostgreSQL in an explicitly supplied test database and disposable schema."""
 import copy
+import json
 import os
 import threading
 import uuid
@@ -29,6 +30,24 @@ def main():
                 asset = dict(id="asset", standard_id="std", owner_user_id="owner", status="candidate", ordinal=1, sha256="a"*64, preparation_required=True)
                 repo.upsert_row("text_inspection_standards", dict(**standard, name="test", material_code="test", version_label="1", source_sha256="b"*64, created_at=1, updated_at=1, raw_json=standard))
                 repo.upsert_row("text_inspection_assets", dict(**{k:v for k,v in asset.items() if k != "preparation_required"}, asset_kind="label_candidate", created_at=1, updated_at=1, raw_json=asset))
+                # History uses server-side projection and supports both historical JSON encodings.
+                for index in range(25):
+                    value = dict(id=f"history-{index:02}", owner_user_id="owner" if index < 24 else "other",
+                        standard_id="std", comparison_id=f"request-{index}", status="completed", auto_decision="MATCH",
+                        final_decision="", source_sha256="a"*64, created_at=1, updated_at=1)
+                    raw = {**value, "source_path":"private", "diagnostics":{"phase":"completed", "huge":"x"*10000}}
+                    if index % 2:
+                        raw["history_display"] = dict(name="frozen", material_code="OLD", version_label="V1")
+                    repo.upsert_row("text_inspection_records", {**value, "raw_json":json.dumps(raw) if index % 2 else raw})
+                page = repo.list_text_comparison_history("owner", "", "all", None, 20)
+                assert len(page) == 20 and page[0]["id"] == "history-23", [(r.get("id"), r.get("status")) for r in page]
+                assert "diagnostics" not in page[0] and page[0]["display"]["name"] == "frozen"
+                assert page[0]["metadata_source"] == "snapshot" and page[1]["metadata_source"] == "current"
+                more = repo.list_text_comparison_history("owner", "", "all", [1, page[-1]["id"]], 20)
+                assert len(more) == 4
+                assert len(repo.list_text_comparison_history("owner", "frozen", "MATCH", None, 20)) == 12
+                assert repo.list_text_comparison_history("owner", "%' OR 1=1", "all", None, 20) == []
+                assert repo.list_text_comparison_history("owner", "", "DIFFERENCES", None, 20) == []
                 winners = []
                 def worker():
                     with psycopg.connect(dsn) as conn:

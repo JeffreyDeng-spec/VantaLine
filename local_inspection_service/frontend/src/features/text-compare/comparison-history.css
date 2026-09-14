@@ -1,0 +1,26 @@
+.text-history-entry { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 8px 12px; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.text-history-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.text-history-filters input { flex: 1 1 220px; min-width: 0; }
+.text-history-filters input, .text-history-filters select, .text-history-filters button { min-height: 40px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.text-history-list { max-height: 62dvh; overflow: auto; overscroll-behavior: contain; }
+.text-history-row { display: flex; align-items: center; gap: 14px; padding: 14px; width: 100%; border: 1px solid #e2e8f0; border-radius: 10px; margin: 8px 0; text-align: left; background: #fff; }
+.text-history-row:hover, .text-history-row:focus-visible { background: #f1f5f9; outline: 2px solid #0f766e; }
+.text-history-thumbnail { width: 84px; height: 76px; object-fit: contain; flex-shrink: 0; background: #f1f5f9; border-radius: 6px; font-size: 12px; }
+.text-history-description { flex: 1; min-width: 0; display: grid; gap: 5px; overflow-wrap: anywhere; }
+.text-history-description small, .text-history-description time, .text-history-caption small { color: #64748b; }
+.text-history-status { display: grid; gap: 6px; min-width: 100px; color: #334155; }
+.text-history-status.failed, .text-history-status.timeout { color: #b45309; }
+.text-history-caption { display: grid; gap: 6px; margin: 16px 0; }
+.text-history-detail > button { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.text-history-zoom { position: absolute; inset: 0; background: #fff; z-index: 3; display: flex; flex-direction: column; }
+.text-history-zoom header { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; align-items: center; }
+.text-history-zoom header strong { flex: 1; }
+.text-history-zoom > div { overflow: auto; flex: 1; }
+.text-history-zoom section img, .text-history-zoom section button { width: 100%; }
+@media (max-width: 640px) {
+  .text-history-entry { font-size: 13px; }
+  .text-history-row { gap: 8px; padding: 10px; flex-wrap: wrap; }
+  .text-history-thumbnail { width: 60px; height: 60px; }
+  .text-history-status { width: 100%; display: flex; flex-wrap: wrap; font-size: 13px; }
+  .text-history-description { font-size: 13px; }
+}

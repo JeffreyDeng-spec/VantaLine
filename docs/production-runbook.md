@@ -39,6 +39,13 @@ Before merging camera-selector or upload-surface changes, run the browser-media 
 
 ## Read-only diagnosis first
 
+After a history release, verify the title-bar entry, current-owner pagination,
+one saved result and its private thumbnail/reference/source access. Compare it
+with the same saved record, without submitting a paid comparison. Cross-owner
+requests must return 404. No new schema, account flag, model setting or retention
+job is required. Whole-release rollback preserves all historical evidence and
+ignores the additive display metadata.
+
 For the public/workspace navigation release, verify `/` stays the introduction,
 `/docs` is the public user guide, and `/workspace` plus a functional deep link
 refresh correctly. An unauthenticated deep link must go directly to login and

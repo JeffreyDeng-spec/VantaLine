@@ -38158,6 +38158,8 @@ from local_inspection_service.document_import_jobs import register as register_d
 document_import_jobs = register_document_import_jobs(globals())
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
 standard_preparation_jobs = register_standard_preparation(globals())
+from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
+register_comparison_history(globals())
 
 resolve_label_extraction = register_label_extraction(globals())
 register_agent_api(globals())
@@ -38280,6 +38282,7 @@ async def compare_text_inspection_label(
     if extraction:
         diagnostics["extraction"] = extraction
     record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": TEXT_INSPECTION_PROMPT_VERSION, "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
+    record["history_display"] = comparison_display_snapshot(standard, asset)
     source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
     _text_v2_write(source_path, captured)
     record["source_path"] = str(source_path)
