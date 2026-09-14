@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlsplit
 from PIL import Image
 from .api import enabled_owners, public
 from .contracts import MAX_BYTES, PROMPT_VERSION, TERMINAL, box, digest, encode
@@ -147,7 +148,28 @@ def broker(task, token, media, path, auth_path=None):
     return server
 
 
-def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None):
+def proxy_environment(value):
+    """Only an explicit, credential-free local HTTP proxy enters the task."""
+    if not value:
+        return {}
+    try:
+        parsed = urlsplit(value)
+        valid = (parsed.scheme == 'http' and parsed.hostname == '127.0.0.1'
+                 and parsed.port is not None and 1 <= parsed.port <= 65535
+                 and parsed.username is None and parsed.password is None
+                 and parsed.path in ('', '/') and not parsed.query and not parsed.fragment
+                 and not any(c.isspace() for c in value))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise RuntimeError('Codex proxy must be a credential-free http://127.0.0.1:PORT URL')
+    canonical = f'http://127.0.0.1:{parsed.port}'
+    return {'HTTP_PROXY': canonical, 'HTTPS_PROXY': canonical,
+            'http_proxy': canonical, 'https_proxy': canonical,
+            'NO_PROXY': 'localhost,127.0.0.1,::1', 'no_proxy': 'localhost,127.0.0.1,::1'}
+
+
+def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None, proxy_url=''):
     executable = shutil.which('bwrap')
     if not executable or not runtime.is_file():
         raise RuntimeError('Linux bubblewrap and pinned native Codex binary are required')
@@ -167,6 +189,7 @@ def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None)
                 '--bind', str(socket_path or task_dir/'report.sock'), '/run/vantaline.sock', '--chdir', '/work']
     env = {'PATH': '/tools/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': '/work', 'CODEX_HOME': '/codex',
            'LANG': 'C.UTF-8', 'VANTALINE_TASK_SOCKET': '/run/vantaline.sock', 'VANTALINE_TASK_TOKEN': token}
+    env.update(proxy_environment(proxy_url))
     for k, v in env.items():
         command += ['--setenv', k, v]
     # Bubblewrap is the outer sandbox; do not depend on nested Landlock support.
@@ -209,7 +232,7 @@ def execute(task, token, config, media):
         (directory/'auth'/'config.toml').write_text('model = '+json.dumps(config['model'])+'\nmodel_reasoning_effort = "high"\nweb_search = "disabled"\n')
         server = broker(task, token, media, socket_directory/'report.sock', directory/'auth'/'auth.json')
         threading.Thread(target=server.serve_forever, daemon=True).start()
-        command = sandbox_command(directory, directory/'auth', Path(config['binary']), token, config['model'], socket_directory/'report.sock')
+        command = sandbox_command(directory, directory/'auth', Path(config['binary']), token, config['model'], socket_directory/'report.sock', proxy_url=config.get('proxy_url', ''))
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    start_new_session=True, env={'PATH': '/usr/bin:/bin'})
         def watchdog():
@@ -325,6 +348,8 @@ def load_config():
               for key in ('model', 'binary', 'auth_home', 'work_root', 'media_root')}
     if not all(config.values()):
         raise RuntimeError('Missing Codex comparison worker configuration')
+    config['proxy_url'] = os.environ.get('VANTALINE_CODEX_COMPARE_PROXY_URL', '').strip()
+    proxy_environment(config['proxy_url'])
     if not (Path(config['auth_home'])/'auth.json').is_file():
         raise RuntimeError('Dedicated Codex account login is required')
     if not shutil.which('bwrap'):

@@ -131,3 +131,8 @@ configure native runtime, private login, scratch and shared evidence. PostgreSQL
 uses the existing `VANTALINE_DATA_STORE`/`DATABASE_URL` selector. No API key is
 injected into the child. Full paths, auth and isolation requirements are in
 [Codex beta](codex-text-compare.md); examples contain no secret values.
+
+Optional worker-only `VANTALINE_CODEX_COMPARE_PROXY_URL` accepts only a credential-free
+`http://127.0.0.1:PORT` local proxy. It explicitly enters the cleared sandbox as
+HTTP(S) proxy variables with fixed localhost bypass; generic host proxies are not
+inherited. Empty preserves direct behavior. See the Codex commissioning guide.
