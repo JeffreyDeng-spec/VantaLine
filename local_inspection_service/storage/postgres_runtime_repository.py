@@ -810,6 +810,41 @@ class PostgresRuntimeRepository:
             if callable(close):
                 close()
 
+    def list_text_comparison_history(self, owner, query, decision, before, limit):
+        """Project only summaries; legacy raw_json may contain a JSON string."""
+        records = self._qualified_table("text_inspection_records")
+        standards = self._qualified_table("text_inspection_standards")
+        conditions = ["r.owner_user_id = %s"]
+        params = [owner]
+        if before:
+            conditions.append("(r.created_at, r.id) < (%s, %s)")
+            params.extend(before)
+        raw = "CASE WHEN jsonb_typeof(r.raw_json) = 'string' THEN (r.raw_json #>> '{}')::jsonb ELSE r.raw_json END"
+        result = "COALESCE(NULLIF(r.final_decision, ''), NULLIF(j->>'decision', ''), NULLIF(r.auto_decision, ''), 'REVIEW_REQUIRED')"
+        if decision != "all":
+            conditions.append(result + " = %s")
+            params.append(decision)
+        if query:
+            conditions.append("strpos(lower(concat_ws(' ', r.standard_id, COALESCE(j->'history_display'->>'name', s.name), COALESCE(j->'history_display'->>'material_code', s.material_code), COALESCE(j->'history_display'->>'version_label', s.version_label))), lower(%s)) > 0")
+            params.append(query)
+        cursor = self._cursor()
+        try:
+            cursor.execute(f"""SELECT r.id, r.standard_id, r.created_at, r.status,
+                {result} AS decision, j->'standard_revision_number' AS standard_revision_number,
+                COALESCE(j->'history_display', jsonb_build_object('name', s.name, 'material_code', s.material_code, 'version_label', s.version_label)) AS display,
+                CASE WHEN j->'history_display' IS NOT NULL THEN 'snapshot' WHEN s.id IS NOT NULL THEN 'current' ELSE 'unavailable' END AS metadata_source,
+                j->'diagnostics'->>'phase' AS phase, j->'diagnostics'->>'error_type' AS error_type,
+                j->'diagnostics'->'elapsed_ms' AS elapsed_ms,
+                COALESCE(j->>'source_path', '') <> '' AS has_source
+                FROM {records} r CROSS JOIN LATERAL (SELECT {raw} AS j) decoded
+                LEFT JOIN {standards} s ON s.id = r.standard_id AND s.owner_user_id = r.owner_user_id
+                WHERE {' AND '.join(conditions)} ORDER BY r.created_at DESC, r.id DESC LIMIT %s""",
+                (*params, max(1, min(101, int(limit)))))
+            return [self._row_to_dict(cursor, row) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            self._end_read_transaction()
+
     def list_incoming_text_inspections(
         self,
         *,

@@ -37,7 +37,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       }
       return r.fulfill({status:404,json:{detail:'fixture'}});
     });
-    const dialog=page.locator('.comparison-dialog');
+    const dialog=page.locator('.comparison-dialog:not(.comparison-history-dialog)');
     const close=()=>page.getByRole('button',{name:'关闭对比窗口'}).click();
     const main=page.locator('.text-compare-primary');
     async function fresh() {

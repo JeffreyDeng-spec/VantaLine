@@ -227,6 +227,17 @@ camera/serial permission origins and model/PLC configuration are unchanged.
 
 ## Deployment and data ownership
 
+Text comparison history reads the existing account-owned records, not a second
+store. The title-bar entry opens a separate list/detail dialog sharing
+`ComparisonResult` with live results; it never changes current inputs, polling or
+sessionStorage. PostgreSQL projects bounded summaries with owner filtering and
+stable `(created_at,id)` descending pagination; diagnostics/media load on demand.
+New submissions snapshot display metadata. Older names are explicitly current
+lookup metadata, never claimed as historical names. Images resolve recorded
+revisions/hashes, not current activation. Missing evidence is visible as missing.
+History GETs do not settle/replay jobs; stale attempts are displayed as timeout.
+240px list thumbnails and 1600px detail previews are private display derivatives.
+
 Text comparison UI presents results in one modal. The reference image is rendered once by `EvidenceResults`,
 with element hit targets and an overlaid zoom action; legacy/unparseable evidence
 keeps that same single reference image without element targets. No duplicate

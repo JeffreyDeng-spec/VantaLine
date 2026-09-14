@@ -38,6 +38,7 @@ def main():
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in source
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in source
     frontend = (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text(encoding="utf-8")
+    frontend += (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "ComparisonResult.tsx").read_text(encoding="utf-8")
     styles = (APP_DIR / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
     assert "getUserMedia" in frontend and "track.stop()" in frontend
     lifecycle = (APP_DIR / "frontend/src/features/text-compare/useComparisonTask.ts").read_text()
@@ -109,7 +110,7 @@ def main():
     assert "standard_revision_id" in source and "standard_revision_number" in source
     assert '"revisions": "text_inspection_standard_revisions"' in source
     assert "仅辅助检查文字" not in frontend and "颜色、材质与印刷质量仍需肉眼确认" not in frontend
-    assert '<details className="text-compare-raw-output">' in frontend
+    assert '<details className="text-compare-raw-output"' in frontend
     assert "Raw Output（调试信息）" in frontend and "默认折叠" in frontend
     assert "parsed_response" in frontend and "response_preview" in frontend and "normalized_response" in frontend
     assert "MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000" in frontend and "formatDiagnosticOutput" in frontend

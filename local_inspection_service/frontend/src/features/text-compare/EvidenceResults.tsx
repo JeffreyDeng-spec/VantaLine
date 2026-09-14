@@ -10,12 +10,14 @@ type Evidence = { elements: Element[]; observations: Observation[] };
 export function EvidenceResults({ value, reference, source, onZoom }: { value: unknown; reference: string; source: string; onZoom: (src: string, alt: string) => void }) {
   const [selected, select] = useState("");
   const [highResolution, setHighResolution] = useState(false);
+  const [referenceFailed, setReferenceFailed] = useState(false);
+  const [sourceFailed, setSourceFailed] = useState(false);
   const color = (state: string) => state === "matched" ? "#16a34a" : state === "difference" ? "#dc2626" : "#d97706";
   const placement = ([x, y, w, h]: Box) => ({ left: `${100*x}%`, top: `${100*y}%`, width: `${100*w}%`, height: `${100*h}%` });
   const referenceImage = (elements: Element[] = [], active?: Element) => <div style={{ position: "relative", width: 360, maxWidth: "100%" }}>
-    <img src={reference} alt="标准元素位置" style={{ width: "100%", display: "block" }} />
-    {elements.map(e => <button key={e.element_id} type="button" title={e.expected} aria-label={`查看元素 ${e.element_id}: ${e.expected}`} aria-pressed={active === e} onClick={() => select(e.element_id)} style={{ position: "absolute", ...placement(e.standard_box), border: `2px solid ${color(e.state)}`, background: "transparent", cursor: "pointer", padding: 0, outline: active === e ? "2px solid #2563eb" : undefined }} />)}
-    <button className="text-compare-reference-expand" type="button" aria-label="查看标准元素核对图" title="放大标准元素核对图（图形未检查）" onClick={() => onZoom(reference, "标准元素核对图（图形未检查）")}><Expand size={16} />放大</button>
+    {referenceFailed ? <p role="status">当次标准图片不可用或未留存</p> : <img src={reference} alt="标准元素位置" onError={() => setReferenceFailed(true)} style={{ width: "100%", display: "block" }} />}
+    {!referenceFailed && elements.map(e => <button key={e.element_id} type="button" title={e.expected} aria-label={`查看元素 ${e.element_id}: ${e.expected}`} aria-pressed={active === e} onClick={() => select(e.element_id)} style={{ position: "absolute", ...placement(e.standard_box), border: `2px solid ${color(e.state)}`, background: "transparent", cursor: "pointer", padding: 0, outline: active === e ? "2px solid #2563eb" : undefined }} />)}
+    {!referenceFailed ? <button className="text-compare-reference-expand" type="button" aria-label="查看标准元素核对图" title="放大标准元素核对图（图形未检查）" onClick={() => onZoom(reference, "标准元素核对图（图形未检查）")}><Expand size={16} />放大</button> : null}
   </div>;
   if (!value || typeof value !== "object" || !("elements" in value) || !("observations" in value) || !Array.isArray(value.elements) || !Array.isArray(value.observations)) return referenceImage();
   const data = value as Evidence;
@@ -35,7 +37,7 @@ export function EvidenceResults({ value, reference, source, onZoom }: { value: u
         <small>{element?.reason}</small>
         {observation?.coordinate_precision === "crop_region_only" ? <p>该证据来自局部文字复读；蓝框表示输入区域，不是逐字定位。请结合原图确认。</p> : null}
         {element?.state === "matched" && !!element.conflicts?.length ? <p>其他位置有不同识别结果，已保留在诊断中；不影响此元素已找到的严格匹配。</p> : null}
-        {actualBox ? <><button type="button" onClick={() => setHighResolution(v => !v)}>{highResolution ? "返回快速预览" : "加载原图检查小字"}</button><div style={{ position: "relative", marginTop: 12 }}><img src={highResolution ? source : source.replace(/\/source$/, "/preview")} alt={highResolution ? "原分辨率实拍证据" : "压缩预览，检查小字请加载原图"} style={{ width: "100%", display: "block" }} /><span style={{ pointerEvents: "none", position: "absolute", ...placement(actualBox), border: "3px solid #2563eb" }} /></div></> : null}
+        {sourceFailed ? <p role="status">实拍证据不可用或未留存</p> : actualBox ? <><button type="button" onClick={() => setHighResolution(v => !v)}>{highResolution ? "返回快速预览" : "加载原图检查小字"}</button><div style={{ position: "relative", marginTop: 12 }}><img onError={() => setSourceFailed(true)} src={highResolution ? source : source.replace(/\/source$/, "/preview")} alt={highResolution ? "原分辨率实拍证据" : "压缩预览，检查小字请加载原图"} style={{ width: "100%", display: "block" }} /><span style={{ pointerEvents: "none", position: "absolute", ...placement(actualBox), border: "3px solid #2563eb" }} /></div></> : null}
       </div>
     </div>
   </section>;

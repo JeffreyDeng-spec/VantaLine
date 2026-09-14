@@ -6,6 +6,11 @@
 
 ## Change and release flow
 
+The backend CI gate includes comparison-history route authorization and
+non-mutation tests; the PostgreSQL preparation suite verifies summary projection
+and cursor pagination against both existing JSON encodings. History commissioning
+reads saved production evidence only, without paid inference or record migration.
+
 Local OCR reread releases run offline independent-view/cache/geometry tests in
 CI. The reread allowlist is separate from automatic acceptance; deploy the whole
 immutable release before enabling an authorized trial account. Synthetic accuracy
