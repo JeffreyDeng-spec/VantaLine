@@ -215,9 +215,11 @@ Returning from the list to a draft resumes editing; submission opens task detail
 Each level has a parent return: main page, task list, task overview, label detail.
 List scroll and label filters/overview scroll are retained for in-page return.
 
-Order, reference gallery and actual-label gallery are three equal-width panels with
-viewport-based increased height. Narrow screens horizontally scroll this equal-width
-bench, preserving usable controls; the rest of the page fits the viewport. Bottom:
+The workbench has two equal-width panels with viewport-based increased height.
+The left Order panel contains order selection, DOC/DOCX upload, extraction progress
+and the resulting reference-image gallery together; there is no separate standard
+panel or tab. Actual photos occupy the right half. Both halves fit the viewport,
+with compact controls and galleries on narrow screens. Bottom:
 label cards ordered differences, confirmation, unfinished, match. Details, raw checks
 and source annotations open per label; overview polling excludes those collections.
 Uploaded drafts and selected order persist on the server. Uploads that have not

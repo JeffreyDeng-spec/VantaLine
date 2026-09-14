@@ -308,9 +308,10 @@ draft and historical tasks through the existing owner-scoped /tasks pagination,
 including single-label reports with no separate legacy menu or data migration.
 Explicit new-task, task-detail and label-detail views have parent navigation;
 entering the list never redirects to the last batch. Draft URLs resume editing,
-while submitted task inputs stay read-only. The preparation/detail bench has three
-equal-width, viewport-height panels for order, references and actual labels;
-narrow screens scroll the bench horizontally without overflowing the page.
+while submitted task inputs stay read-only. The preparation/detail bench has two
+equal-width, viewport-height panels: order selection and Word import display their
+extracted references inline on the left; actual labels occupy the right. There is
+no separate reference tab or panel. Narrow controls adapt within the two halves.
 Drafts, uploaded photos and imported references live in the task store. Word import
 reuses direct DOC/DOCX embedded-image extraction and the owned standard library,
 without activating the standard or launching old Qwen/OCR preparation. Identical

@@ -108,6 +108,7 @@ export function BatchWorkspace() {
   const standards = useQuery({queryKey:['batch-orders',owner],queryFn:listTextInspectionStandards,enabled:cap.isSuccess&&(creating||!!bid)});
   const [busy,setBusy] = useState(false), [error,setError] = useState(''), [uploadNote,setUploadNote] = useState('');
   const [filter,setFilter] = useState('all');
+  const [uploadTarget,setUploadTarget] = useState<'order'|'actual'>('actual');
   const [rename,setRename] = useState('');
   const [failedUploads,setFailedUploads] = useState<{file:File;key:string;reason:string}[]>([]);
   const main = useRef<HTMLElement>(null);
@@ -123,7 +124,7 @@ export function BatchWorkspace() {
   useEffect(()=>{if(batch?.inputs.standard_name)setRename(batch.inputs.standard_name);},[batch?.inputs.standard_name]);
   useEffect(()=>{
     const pending=sessionStorage.getItem('vantaline-upload:'+owner);
-    if(pending)setUploadNote('上次有文件未确认上传完成，请核对图库并重新上传缺少的文件。');
+    if(pending){setUploadTarget(/\.docx?$/i.test(pending)?'order':'actual');setUploadNote('上次有文件未确认上传完成，请核对图库并重新上传缺少的文件。');}
   },[owner]);
   useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(busy){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[busy]);
   useEffect(()=>{if(!lid&&main.current)requestAnimationFrame(()=>main.current?.scrollTo({top:scroll.current}));},[lid]);
@@ -138,12 +139,12 @@ export function BatchWorkspace() {
   function openTask(task:InspectionTask){listScroll.current=main.current?.scrollTop||0;setParams(taskParams(task));main.current?.scrollTo({top:0});}
   function back(){setParams(lid?{batch:bid}:{});}
   async function order(standard_id:string){if(!standard_id)return;await operation(async()=>{const target=await ensureDraft();await accept(await apiClient.post<Batch>(`${BATCHES}/${target.id}/order`,{...request(),standard_id}));});}
-  async function document(file:File){await operation(async()=>{
+  async function document(file:File){setUploadTarget('order');await operation(async()=>{
     const target=await ensureDraft();const form=new FormData();form.set('file',file);form.set('request_id',crypto.randomUUID());
     sessionStorage.setItem('vantaline-upload:'+owner,file.name);setUploadNote('正在上传并提取 '+file.name+'…');
     await accept(await apiClient.upload<Batch>(`${BATCHES}/${target.id}/document`,form));sessionStorage.removeItem('vantaline-upload:'+owner);setUploadNote('文档及提取图片已保存');await queryClient.invalidateQueries({queryKey:['batch-orders',owner]});
   });}
-  async function photos(files:File[], retain=false, existingKey?:string){if(!files.length)return;await operation(async()=>{
+  async function photos(files:File[], retain=false, existingKey?:string){if(!files.length)return;setUploadTarget('actual');await operation(async()=>{
     const target=await ensureDraft();
     for(let i=0;i<files.length;i++){
       const file=files[i],key=existingKey||crypto.randomUUID();const form=new FormData();form.set('file',file);form.set('request_id',key);form.set('allow_duplicate',String(retain));
@@ -165,24 +166,22 @@ export function BatchWorkspace() {
       {cap.isSuccess&&!cap.data.enabled&&<p className="cc-notice">当前账号暂未开放新检查；历史报告仍可读取。</p>}
       {listing?<><TaskList items={[...new Map(history.data?.pages.flatMap(p=>p.items).map(t=>[t.id,t])).values()]} loading={history.isFetching} onSelect={openTask} onNew={newBatch} canCreate={editable}/>{history.hasNextPage&&<button className="bw-load-more" disabled={history.isFetchingNextPage} onClick={()=>void history.fetchNextPage()}>{history.isFetchingNextPage?'正在读取…':'加载更早任务'}</button>}</>:legacy?<Detail key={legacy} id={legacy} owner={owner}/>:batch&&lid?<LabelDetail key={batch.id+lid} batch={batch} lid={lid} onBack={()=>setParams({batch:bid})} onRerun={rerun}/>:bid&&!batch?<p className="bw-empty">{batchQuery.isError?'任务暂时无法读取，请重试或返回任务列表。':'正在读取任务…'}</p>:<>
         <header className="bw-page-heading"><div><span className="bw-eyebrow">{draft||creating?'准备检查':'检查任务'}</span><h1>{draft||creating?'新建任务':batch?.inputs.standard_name||'任务详情'}</h1><p>{draft||creating?'选择已有订单批次，或拖入 Word 新建订单，再上传本次要检查的标签。':`${stateName(batch?.status||'')} · ${actualCount} 枚标签 · 输入已冻结`}</p></div></header>
-        <p className="bw-narrow-hint">左右滑动查看订单、标准图和实拍标签</p>
         <section className="bw-bench" aria-label="订单与标签工作区" tabIndex={0}>
-          <div className="bw-panel bw-order"><div className="bw-panel-heading"><span className="bw-step">01</span><h2>订单</h2></div>
+          <div className="bw-panel bw-order"><div className="bw-panel-heading"><span className="bw-step">01</span><h2>订单</h2><span>{Object.keys(batch?.inputs.references||{}).length} 张图片</span></div>
             {(!batch||draft)&&standards.error&&<p role="alert" className="bw-error">{errorText(standards.error)}<button onClick={()=>void standards.refetch()}>重新读取订单</button></p>}
             {(!batch||draft)&&<select aria-label="选择订单" value={batch?.inputs.standard_id||''} disabled={!editable||!!batch&&!draft} onChange={e=>void order(e.target.value)}><option value="">选择已有标签订单</option>{standards.data?.items.filter(s=>s.standard_type==='label').map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>}
             {(!batch||draft)&&<FileDropZone accept=".doc,.docx" disabled={!editable} ariaLabel="拖入 Word 订单" onFiles={files=>{if(files[0])void document(files[0]);}}><strong>拖入 DOC / DOCX</strong><span>自动提取内嵌图片，文件名作为订单名称</span></FileDropZone>}
             {draft&&batch?.inputs.standard_name&&<div className="bw-order-name"><input aria-label="批次订单名称" value={rename} disabled={!draft||!editable} onChange={e=>setRename(e.target.value)}/>{draft&&rename!==batch.inputs.standard_name&&<button disabled={!editable||!rename.trim()} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/name`,{...request(),name:rename}));})}>保存名称</button>}</div>}
             {draft&&batch?.import_state&&<p className="bw-muted">{stateName(batch.import_state)}</p>}
-            <div className="bw-order-info"><h3>{batch?.inputs.standard_name||'选择或新建订单批次'}</h3><p>{batch?.inputs.standard_name?'订单及已上传文件保存在当前任务中，可返回任务列表后继续。':'支持选择已有订单，或直接拖入 DOC / DOCX 提取内嵌图片。'}</p>{batch&&<dl><div><dt>任务状态</dt><dd>{stateName(batch.status)}</dd></div><div><dt>标准图片</dt><dd>{Object.keys(batch.inputs.references).length} 张</dd></div><div><dt>实拍标签</dt><dd>{actualCount} 枚</dd></div><div><dt>创建时间</dt><dd>{new Date(batch.created_at*1000).toLocaleString()}</dd></div></dl>}</div>
-          </div>
-          <div className="bw-panel bw-standard"><div className="bw-panel-heading"><span className="bw-step">02</span><h2>标准图</h2><span>{Object.keys(batch?.inputs.references||{}).length} 张</span></div>
+            {uploadNote&&uploadTarget==='order'&&<p role="status" className="bw-muted">{uploadNote}</p>}
+            {!draft&&batch?.inputs.standard_name&&<p className="bw-order-title">{batch.inputs.standard_name}</p>}
             <div className="bw-gallery bw-standard-gallery">{Object.values(batch?.inputs.references||{}).map(r=><figure key={r.id}>{r.media?<a target="_blank" rel="noreferrer" href={mediaURL(bid,r.media.image)}><img src={mediaURL(bid,r.media.preview)} alt={r.name}/></a>:<div className="bw-image-error"><AlertTriangle size={22}/>{r.error}</div>}<figcaption>{r.name}{r.sources.length>1&&` · ${r.sources.length} 处引用`}</figcaption></figure>)}</div>
             {!Object.keys(batch?.inputs.references||{}).length&&<p className="bw-empty">选择一个订单，或拖入 Word 开始。只检查实拍对应的标签，其他文档图片不计入范围。</p>}
           </div>
-          <div className="bw-panel bw-actual"><div className="bw-panel-heading"><span className="bw-step">03</span><h2>实拍标签</h2><span>{actualCount} 枚</span></div>
+          <div className="bw-panel bw-actual"><div className="bw-panel-heading"><span className="bw-step">02</span><h2>实拍标签</h2><span>{actualCount} 枚</span></div>
             {(!batch||draft)&&<><FileDropZone multiple accept="image/*" disabled={!editable} ariaLabel="批量上传实拍标签" onFiles={files=>void photos(files)}><strong>将所有实拍图拖到这里，或点击多选</strong><span>每张一枚标签 · 通常 1–10 张 · 每张不超过 10 MB</span></FileDropZone>
             {!busy&&cap.data?.enabled&&<Capture onCapture={file=>void photos([file])}/>}</>}
-            {uploadNote&&<p role="status" className="bw-muted">{uploadNote}</p>}
+            {uploadNote&&uploadTarget==='actual'&&<p role="status" className="bw-muted">{uploadNote}</p>}
             {(!batch||draft)&&failedUploads.map(x=><div className="bw-upload-error" key={x.key}><strong>{x.file.name}</strong><span>{x.reason}</span><button disabled={!editable} onClick={()=>void photos([x.file],false,x.key)}>重试上传</button>{x.reason.includes('同一文件')&&<button disabled={!editable} onClick={()=>void photos([x.file],true)}>保留为另一枚样品</button>}</div>)}
             <div className="bw-gallery bw-actual-gallery">{batch?.labels.map((e,i)=><figure key={e.id}><a href={mediaURL(bid,e.actual.image)} target="_blank" rel="noreferrer"><img src={mediaURL(bid,e.actual.preview)} alt={e.name}/></a><figcaption><span>{i+1}. {e.name}</span>{draft?<button aria-label={`删除 ${e.name}`} disabled={!editable} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/labels/${e.id}/remove`,request()));})}>删除</button>:<span className={`bw-dot ${e.outcome}`}>{stateName(e.outcome)}</span>}</figcaption></figure>)}</div>
           </div>
