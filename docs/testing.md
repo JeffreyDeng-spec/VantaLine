@@ -4,6 +4,9 @@
 
 ## A + Evolving label acceptance
 
+Verify the upper-left Beta-style back control from the list, import, task and
+result views, including refreshed result links and phone-width accessible labels.
+
 Run `VANTALINE_POSTGRES_DSN=... python local_inspection_service/scripts/smoke_label_inspection.py`
 against an isolated real PostgreSQL database. The script creates/drops a unique
 schema and uses fake provider responses: direct DOCX import, repeated/invalid/empty

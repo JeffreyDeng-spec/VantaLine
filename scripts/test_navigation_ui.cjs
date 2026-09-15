@@ -92,7 +92,7 @@ let browser;
   assert.equal(page.url(), base+'/workspace/label-inspection');
   await page.getByText('订单-operator-a', { exact: true }).waitFor();
   assert.equal(await page.locator('.sidebar').count(), 0);
-  await page.getByRole('link',{name:'返回主平台',exact:true}).click();
+  await page.locator('.li-header').getByRole('link',{name:'返回主界面',exact:true}).click();
   // Public resources live only inside About, not as duplicate sidebar links.
   assert.equal(await page.getByRole('link', { name: /产品官网|使用文档/ }).count(), 0);
   await page.getByRole('link', { name: '关于与帮助', exact: true }).click();

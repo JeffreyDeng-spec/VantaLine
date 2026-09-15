@@ -6,6 +6,11 @@ Evolving module; those older pipelines are not part of its execution path.
 
 ## Production label mode: A + Evolving
 
+The upper-left back control matches Beta: arrow, text, and right divider;
+the list returns to the platform, task/import returns to the task list, and a
+result returns to task details. On narrow phones the text is hidden while the
+accessible label remains. Pending writes disable the in-workspace back button.
+
 The primary label UI is `/workspace/label-inspection`. One DOC (30 MiB) or DOCX
 (100 MiB) creates one named task, up to 500 embedded-image entries. No OCR,
 classification, cleaning or standard-activation job is launched. A user selects a

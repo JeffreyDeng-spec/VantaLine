@@ -6,6 +6,9 @@ This document lists ownership and names, never secret values or production endpo
 
 ## Independent A + Evolving label detection
 
+The Beta-style hierarchical back control uses frontend routes and requires no
+runtime configuration or model setting changes.
+
 - `VANTALINE_LABEL_INSPECTION_ENABLED=true`: enables new paid submissions/claims.
   Disabled or unavailable credentials still allow task/history reads and maintenance.
 - `VANTALINE_LABEL_INSPECTION_KEY_FILE`: absolute restricted runtime file containing
