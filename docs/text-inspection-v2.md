@@ -398,3 +398,9 @@ the fitted image rectangle. The top-right thumbnail CircleMinus control hides a
 standard and RotateCcw restores it, using existing immutable-version operations;
 they cannot select the thumbnail. Invalid images keep their reason and no action.
 Icons have names/tooltips and 32px desktop/44px coarse-pointer hit areas.
+
+Native file pickers can exit browser fullscreen (including macOS Edge). The label
+workspace remembers fullscreen only for that picker gesture and attempts restoration
+on file selection while transient user activation is available. Cancellation, explicit
+exit and navigation clear that intent; upload completion never forces fullscreen.
+When restoration is unavailable the fixed viewport and manual toggle remain usable.
