@@ -55,10 +55,10 @@ def asset(media, owner, data, identity, ordinal, metadata=None):
     }
     try:
         value["media"] = image(media, owner, data)
-    except Exception:
+    except Exception as exc:
         value.update(
             enabled=False,
-            error="无法解析图片，或超过 10 MiB / 1600 万像素限制",
+            error=str(exc)[:250] if isinstance(exc, ValueError) else "图片内容无法解码",
             original=media.put(owner, data),
         )
     return value

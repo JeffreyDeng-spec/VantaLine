@@ -363,3 +363,10 @@ use source-normalized guide and polygon coordinates, not viewport pixels.
 The native browser fixture covers selection and import-field state; complete
 workflow equivalence and all inspection modes remain separate acceptance work.
 Activation and limitations are documented in [Agent platform status](agent-platform.md).
+
+Asynchronous import/continuation/submission responses may update navigation only
+while the originating account component and view are still current. Leaving the
+page or signing out never lets a late response return the browser to an old task.
+
+Invalid imported images remain visible by default with their decoding/limit reason
+and cannot be selected for detection; hiding valid standards remains reversible.

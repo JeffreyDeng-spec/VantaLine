@@ -407,3 +407,9 @@ It reports wrong correspondence, confirmation and fully-checked proportions plus
 per-dimension outcomes and elapsed batch time, grouped by sample kind. Do not mix
 controlled source mutations with real photographed labels or claim a population
 accuracy estimate from a small commissioning set.
+
+The label browser fixture also delays a Word import response, leaves for the list,
+and verifies that completion cannot pull navigation back to the abandoned task.
+
+Invalid-image tiles are shown without enabling the hidden-standard filter and
+remain non-selectable; limit failures retain their specific validation reason.

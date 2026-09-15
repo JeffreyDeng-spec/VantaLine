@@ -356,3 +356,6 @@ CLI operations explicitly name a label; geometry/evidence use its frozen origina
 The batch overview contains summaries/counts only; detailed child reports are fetched
 separately. Problem cards precede uncertainty, pending and passing cards. A manual
 correction or selected rerun creates a linked fresh batch, never resumes a session.
+
+The independent label workspace binds async navigation to its mounted account
+and initiating view; late responses cannot navigate after a view change/logout.
