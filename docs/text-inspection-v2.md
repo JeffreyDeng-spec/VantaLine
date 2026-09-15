@@ -375,3 +375,26 @@ page or signing out never lets a late response return the browser to an old task
 
 Invalid imported images remain visible by default with their decoding/limit reason
 and cannot be selected for detection; hiding valid standards remains reversible.
+
+
+### Fixed fullscreen task workspace
+
+Task views fill the viewport without document scrolling. Desktop images share equal
+columns; below 850px standard/actual tabs replace the two columns, and selecting a
+standard opens the actual tab. Camera and actual-image preview occupy one stage.
+The compact header contains Beta-style back navigation, task-name rename dialog,
+version, fullscreen toggle and a more menu. Existing-task and new-task clicks request
+browser fullscreen before asynchronous work; import-to-task transitions retain the
+root. Esc/manual exit never forces reentry. Reloads, deep links, denied/unsupported
+fullscreen retain the fixed viewport and a usable manual toggle. All dialogs remain
+inside the fullscreen root. Only this module's fullscreen is exited on leave.
+
+The result/history dock defaults to 28% and has pointer/keyboard resizing from
+20% to 45%, with a small-viewport minimum so its scrollable body remains reachable.
+Detection and summary controls remain outside scrolling bodies. Gallery, issues,
+history, diagnostics and lengthy notices scroll locally without chaining to the page.
+Images use measured available space and intrinsic aspect ratio; crop overlays share
+the fitted image rectangle. The top-right thumbnail CircleMinus control hides a
+standard and RotateCcw restores it, using existing immutable-version operations;
+they cannot select the thumbnail. Invalid images keep their reason and no action.
+Icons have names/tooltips and 32px desktop/44px coarse-pointer hit areas.

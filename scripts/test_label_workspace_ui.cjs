@@ -11,6 +11,15 @@ let browser;
  for(let i=0;i<100;i++){try{if((await fetch(base)).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await chromium.launch({headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});
  const context=await browser.newContext({viewport:{width:1440,height:1000},permissions:['camera']});const page=await context.newPage();page.setDefaultTimeout(15000);
+ await context.addInitScript(() => {
+  const original = Element.prototype.requestFullscreen;
+  window.__fullscreenRequests = 0;
+  Element.prototype.requestFullscreen = function(...args) {
+   window.__fullscreenRequests++;
+   if(window.__denyFullscreen)return Promise.reject(new Error('fixture denied'));
+   return original.apply(this,args);
+  };
+ });
  const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE ERROR',e.message);});
  page.on('console',m=>{if(m.type()==='error')console.error(m.text());});
  const media={original:'o',image:'i',preview:'p',size:[600,400]};
@@ -21,7 +30,7 @@ let browser;
   const req=route.request(),u=new URL(req.url()),p=u.pathname;if(!p.startsWith('/api/'))return route.continue();const reply=(v,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(v)});
   if(p==='/api/auth/status')return reply({authenticated:true,setup_required:false,user:{id:'fixture',username:'fixture',role:'user',permissions:['inspection']},features:{},default_user_permissions:[]});
   if(p==='/api/label-inspection/capabilities')return reply({enabled:true});
-  if(p.includes('/media/'))return route.fulfill({contentType:'image/png',body:png});
+  if(p.includes('/media/'))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#ddd"/><text x="40" y="100" font-size="32">MODEL: TEST</text></svg>'});
   if(p==='/api/label-inspection/tasks'){
    if(req.method()==='POST'){docs++;if(holdImport)await new Promise(resolve=>{releaseImport=resolve;});return reply(task);}
    return reply({items:docs?[{id:task.id,name:task.name,source:'word',standard_count:1,run_count:task.runs.length,updated_at:1,status:'ready',decision:'REVIEW_REQUIRED'}]:[],next_cursor:null});
@@ -38,13 +47,13 @@ let browser;
   return reply({items:[],enabled:false});
  });
  await page.goto(base+'/workspace/label-inspection');await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();assert.equal(await page.locator('.sidebar').count(),0);
- await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();
+ await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();await page.waitForFunction(()=>document.fullscreenElement?.classList.contains('label-workspace'));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),1);
  await page.locator('input[type=file]').setInputFiles({name:'test.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('fixture')});
- await page.getByRole('heading',{name:'测试订单',exact:true}).waitFor();await page.getByText('图片内容无法解码',{exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'选择标准 2',exact:true}).isDisabled());
+ await page.getByRole('button',{name:/测试订单.*标准版本/}).waitFor();assert.ok(await page.evaluate(()=>document.fullscreenElement?.classList.contains('label-workspace')));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),1);await page.getByText('图片内容无法解码',{exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'选择标准 2',exact:true}).isDisabled());
  await page.getByRole('button',{name:'选择标准 1',exact:true}).click();await page.getByRole('button',{name:'返回缩略图'}).waitFor();
  await page.getByLabel('上传实物照片').locator('input').setInputFiles({name:'actual.png',mimeType:'image/png',buffer:png});
  await page.getByRole('button',{name:'开始检测',exact:true}).dblclick();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);
- await page.reload();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);assert.equal(diagnostics,0);
+ await page.reload();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);assert.equal(diagnostics,0);assert.equal(await page.evaluate(()=>window.__fullscreenRequests),0);
  task.runs[0]={...task.runs[0],status:'completed',phase:'completed',decision:'DIFFERENCES',elapsed:18,crop:[60,40,300,200],scope:'仅检测选中标签',result:{decision:'DIFFERENCES',similarity:85,issues:[{id:1,type:'missing_line',description:'缺少 MODEL 行',standardText:'MODEL: TEST',actualText:'',severity:'high',confidence:'',position_note:'无法可靠定位'}]}};
  await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();await page.getByText('模型置信度：未提供',{exact:false}).waitFor();assert.equal(await page.locator('.li-crop').count(),1);
  await page.getByText('调用诊断（默认折叠）',{exact:true}).click();await page.waitForFunction(()=>document.querySelector('.li-results pre')?.textContent.includes('calls'));assert.equal(diagnostics,1);
@@ -52,10 +61,53 @@ let browser;
  await page.getByRole('button',{name:'放大实物图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),0);
  await page.getByRole('button',{name:'检测下一件',exact:true}).click();await page.getByRole('button',{name:'开始检测',exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'开始检测',exact:true}).isDisabled());
  await page.getByRole('button',{name:'开启摄像头 / 重拍',exact:true}).click();await page.getByRole('button',{name:'拍照',exact:true}).waitFor();await page.getByRole('button',{name:'拍照',exact:true}).click();await page.getByText('重新上传 · 实物拍照.jpg',{exact:true}).waitFor();assert.equal(await page.locator('video:visible').count(),0);
- await page.getByRole('button',{name:'返回缩略图'}).click();await page.getByRole('button',{name:'隐藏标准',exact:true}).click();await page.getByLabel('显示已隐藏 / 无效标准').check();await page.getByRole('button',{name:'恢复标准',exact:true}).click();assert.equal(task.revision,3);assert.equal(task.runs[0].revision,1);
+ await page.getByRole('button',{name:'返回缩略图'}).click();await page.getByRole('button',{name:'隐藏标准',exact:true}).click();await page.getByLabel('显示已隐藏 / 无效标准').check();await page.getByRole('button',{name:'恢复标准',exact:true}).click();assert.equal(task.revision,3);assert.equal(task.runs[0].revision,1);assert.ok(await page.locator('.li-gallery').isVisible());
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'mobile-workbench.png'),fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
- await page.getByRole('button',{name:/旧文字检验|Evolving.*版本/}).click();await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(submits,1);
- holdImport=true;await page.getByRole('link',{name:'新建任务',exact:true}).click();
+ await page.getByRole('tab',{name:/历史记录/}).click();await page.getByRole('button',{name:/旧文字检验|Evolving.*版本/}).click();await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(submits,1);
+ // Fixed geometry, actual image/overlay fit and local overflow across target sizes.
+ const cases=[[1920,1080],[1440,900],[1366,768],[1024,768],[390,844],[683,384]];
+ for(const [width,height] of cases){
+  await page.setViewportSize({width,height});await page.waitForTimeout(120);
+  const geometry=await page.evaluate(()=>{
+   const shell=document.querySelector('.li-fixed'), button=document.querySelector('.li-result-summary button');
+   const images=[...document.querySelectorAll('.li-image img')].filter(e=>e.getBoundingClientRect().width>0);
+   return {height:innerHeight,scrollY,bodyHeight:document.documentElement.scrollHeight,shell:shell.getBoundingClientRect().height,
+    contentHeight:document.querySelector(".li-result-content").clientHeight,buttonBottom:button.getBoundingClientRect().bottom,ratio:images.map(i=>{const r=i.getBoundingClientRect();return r.width/r.height/(i.naturalWidth/i.naturalHeight);})};
+  });
+  assert.ok(geometry.bodyHeight<=height+1,JSON.stringify(geometry));assert.equal(geometry.scrollY,0);assert.ok(geometry.buttonBottom<=height);assert.ok(geometry.contentHeight>=25,JSON.stringify(geometry));
+  assert.ok(geometry.ratio.every(r=>Math.abs(r-1)<.01),JSON.stringify(geometry));
+  await page.screenshot({path:path.join(output,`fixed-${width}x${height}.png`),fullPage:true});
+ }
+ await page.setViewportSize({width:1366,height:768});
+ await page.getByRole('button',{name:/测试订单.*标准版本/}).click();await page.getByRole('dialog').waitFor();
+ await page.getByLabel('任务名称',{exact:true}).fill('测试订单-改名');await page.getByRole('button',{name:'保存名称',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});assert.equal(task.name,'测试订单-改名');
+ await page.getByRole('separator',{name:'调整结果面板高度'}).focus();await page.keyboard.press('ArrowUp');assert.equal(await page.getByRole('separator').getAttribute('aria-valuenow'),'30');
+ const split=await page.getByRole('separator').boundingBox();await page.mouse.move(split.x+split.width/2,split.y+split.height/2);await page.mouse.down();await page.mouse.move(split.x+split.width/2,split.y-500);await page.mouse.up();assert.equal(await page.getByRole('separator').getAttribute('aria-valuenow'),'45');
+ await page.getByRole('button',{name:'进入全屏',exact:true}).click();await page.waitForFunction(()=>!!document.fullscreenElement);
+ await page.getByRole('button',{name:'退出全屏',exact:true}).click();await page.waitForFunction(()=>!document.fullscreenElement);
+ // Rejection remains usable, without retrying on render.
+ await page.evaluate(()=>{window.__denyFullscreen=true;});await page.getByRole('button',{name:'进入全屏',exact:true}).click();await page.getByRole('status').filter({hasText:'未能进入浏览器全屏'}).waitFor();
+ const attempts=await page.evaluate(()=>window.__fullscreenRequests);await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>window.__fullscreenRequests),attempts);
+ await page.getByRole('button',{name:'关闭全屏提示'}).click();await page.evaluate(()=>{window.__denyFullscreen=false;});
+ // Hundreds of standards/results/history must overflow only their respective panes.
+ const saved=structuredClone(task.runs[0]);
+ task.assets=Array.from({length:500},(_,i)=>({id:'a'+(i+1),name:'标准 '+(i+1),ordinal:i+1,enabled:true,media}));
+ task.runs=Array.from({length:60},(_,i)=>({...structuredClone(saved),id:'history-'+i}));
+ task.runs[0].result.issues=Array.from({length:100},(_,i)=>({...saved.result.issues[0],id:i+1,description:'长问题说明'.repeat(100)}));
+ await page.goto(base+'/workspace/label-inspection?task=test-task');await page.getByRole('button',{name:'选择标准 500',exact:true}).waitFor();
+ assert.ok(await page.locator('.li-gallery').evaluate(e=>e.scrollHeight>e.clientHeight));
+ await page.locator('.li-gallery').hover();await page.mouse.wheel(0,30000);assert.equal(await page.evaluate(()=>scrollY),0);
+ await page.getByRole('tab',{name:/历史记录/}).click();assert.ok(await page.locator('.li-history').evaluate(e=>e.scrollHeight>e.clientHeight));
+ await page.locator('.li-history button').first().click();await page.getByText('长问题说明'.repeat(100),{exact:true}).first().waitFor();
+ assert.ok(await page.locator('.li-result-content').evaluate(e=>e.scrollHeight>e.clientHeight));
+ await page.locator('.li-result-content').hover();await page.mouse.wheel(0,30000);assert.equal(await page.evaluate(()=>scrollY),0);
+ task.runs[0].error='长错误说明'.repeat(300);task.runs[0].status='failed';task.runs[0].result=null;
+ await page.reload();await page.getByRole('alert').filter({hasText:'长错误说明'}).waitFor();assert.ok(await page.locator('.li-result-content').evaluate(e=>e.scrollHeight>e.clientHeight));assert.equal(await page.evaluate(()=>scrollY),0);
+ await page.getByRole('button',{name:'返回任务详情',exact:true}).click();await page.getByRole('button',{name:'返回任务列表',exact:true}).click();await page.getByRole('heading',{name:'检测任务'}).waitFor();
+ assert.equal(await page.evaluate(()=>!!document.fullscreenElement),false);assert.equal(await page.evaluate(()=>document.body.style.overflow),'');
+ await page.getByRole('link',{name:'测试订单-改名',exact:true}).click();await page.waitForFunction(()=>!!document.fullscreenElement);
+ assert.equal(submits,1);
+ holdImport=true;await page.getByRole('button',{name:'更多操作',exact:true}).click();await page.getByRole('link',{name:'新建任务',exact:true}).click();
  await page.locator('input[type=file]').setInputFiles({name:'delayed.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('fixture')});
  await page.getByText('正在提取图片…',{exact:true}).waitFor();await page.getByRole('link',{name:'← 返回任务列表',exact:true}).click();await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();
  assert.ok(releaseImport);releaseImport();await page.waitForTimeout(600);assert.equal(new URL(page.url()).search,'');assert.equal(await page.getByRole('heading',{name:'检测任务',exact:true}).count(),1);

@@ -1,6 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type CSSProperties,
+} from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleMinus,
+  RotateCcw,
+  Maximize,
+  Minimize,
+  MoreHorizontal,
+} from "lucide-react";
 import { workspacePath } from "../../app/paths";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
@@ -134,17 +147,44 @@ function Evidence({
   onZoom: (url: string) => void;
 }) {
   const [bad, setBad] = useState(false);
-  useEffect(() => setBad(false), [url]);
+  const frame = useRef<HTMLButtonElement>(null);
+  const [natural, setNatural] = useState<[number, number]>([1, 1]);
+  const [space, setSpace] = useState<[number, number]>([1, 1]);
+  useEffect(() => {
+    setBad(false);
+    setNatural([1, 1]);
+  }, [url]);
+  useEffect(() => {
+    if (!frame.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setSpace([r.width, r.height]);
+    });
+    observer.observe(frame.current);
+    return () => observer.disconnect();
+  }, [bad]);
+  const scale = Math.min(space[0] / natural[0], space[1] / natural[1]);
   return bad ? (
     <p role="status">图片缺失或无法读取</p>
   ) : (
     <button
+      ref={frame}
       className="li-image"
       onClick={() => onZoom(url)}
       aria-label={`放大${title}`}
     >
-      <span>
-        <img src={url} alt={title} onError={() => setBad(true)} />
+      <span style={{ width: natural[0] * scale, height: natural[1] * scale }}>
+        <img
+          src={url}
+          alt={title}
+          onLoad={(e) =>
+            setNatural([
+              e.currentTarget.naturalWidth,
+              e.currentTarget.naturalHeight,
+            ])
+          }
+          onError={() => setBad(true)}
+        />
         {(crop && size) || box ? (
           <svg
             viewBox="0 0 1000 1000"
@@ -177,9 +217,13 @@ function Evidence({
 function Camera({
   onPhoto,
   onError,
+  preview,
+  tools,
 }: {
   onPhoto: (file: File) => void;
   onError: (e: unknown) => void;
+  preview: ReactNode;
+  tools: ReactNode;
 }) {
   const video = useRef<HTMLVideoElement>(null),
     stream = useRef<MediaStream | null>(null),
@@ -270,8 +314,12 @@ function Camera({
   }
   return (
     <div className="li-camera">
-      <video ref={video} muted playsInline hidden={!active && !starting} />
-      <div className="li-actions">
+      <div className="li-visual">
+        <video ref={video} muted playsInline hidden={!active && !starting} />
+        {!active && !starting ? preview : null}
+      </div>
+      <div className="li-tools">
+        {tools}
         <select
           aria-label="选择摄像头"
           value={device}
@@ -338,6 +386,57 @@ function LegacyResult({
     <p role="status">{result.isError ? "旧记录读取失败" : "正在读取旧结果…"}</p>
   );
 }
+function RenameDialog({
+  error,
+  name,
+  busy,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  name: string;
+  error: string;
+  busy: boolean;
+  onChange: (v: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="li-rename-dialog"
+      onCancel={onClose}
+      onClose={onClose}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave();
+        }}
+      >
+        <h2>重命名任务</h2>
+        {error && <p role="alert">{error}</p>}
+        <input
+          autoFocus
+          aria-label="任务名称"
+          maxLength={200}
+          value={name}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <div className="li-actions">
+          <button type="button" disabled={busy} onClick={onClose}>
+            取消
+          </button>
+          <button disabled={busy || !name.trim()}>保存名称</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
 export function LabelWorkspace() {
   const { user, logout } = useAuth();
   const cache = useQueryClient();
@@ -365,6 +464,89 @@ export function LabelWorkspace() {
   activeView.current = params.toString();
   const mounted = useRef(true),
     submission = useRef(false);
+  const shell = useRef<HTMLElement>(null),
+    bench = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false),
+    [fullscreenNote, setFullscreenNote] = useState("");
+  const [renameOpen, setRenameOpen] = useState(false),
+    [more, setMore] = useState(false);
+  const [panel, setPanel] = useState<"result" | "history">("result");
+  const [imageTab, setImageTab] = useState<"standard" | "actual">("standard");
+  const [dock, setDock] = useState(28);
+  const fullscreenRequest = useRef(0);
+  function leaveFullscreen() {
+    ++fullscreenRequest.current;
+    if (document.fullscreenElement === shell.current)
+      void document.exitFullscreen().catch(() => {});
+  }
+  function enterFullscreen() {
+    const root = shell.current;
+    if (!root || document.fullscreenElement === root) return;
+    if (!root.requestFullscreen || document.fullscreenEnabled === false) {
+      setFullscreenNote("浏览器不支持全屏，已使用固定窗口工作台。");
+      return;
+    }
+    const token = ++fullscreenRequest.current;
+    void root
+      .requestFullscreen()
+      .then(() => {
+        if (
+          (!mounted.current || token !== fullscreenRequest.current) &&
+          document.fullscreenElement === root
+        )
+          void document.exitFullscreen().catch(() => {});
+      })
+      .catch(() => {
+        if (mounted.current && token === fullscreenRequest.current)
+          setFullscreenNote(
+            "未能进入浏览器全屏，可点击右上角重试；工作台仍可正常使用。",
+          );
+      });
+  }
+  useEffect(() => {
+    const root = shell.current;
+    const changed = () => {
+      setFullscreen(document.fullscreenElement === root);
+      setFullscreenNote("");
+    };
+    document.addEventListener("fullscreenchange", changed);
+    return () => {
+      ++fullscreenRequest.current;
+      document.removeEventListener("fullscreenchange", changed);
+      if (document.fullscreenElement === root)
+        void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+  useEffect(() => {
+    setMore(false);
+    setRenameOpen(false);
+    if (!taskId && !isNew) leaveFullscreen();
+  }, [taskId, isNew]);
+  useEffect(() => {
+    if (!taskId) return;
+    const old = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = old;
+    };
+  }, [taskId]);
+  useEffect(() => {
+    setPanel("result");
+    setImageTab("standard");
+  }, [taskId]);
+  useEffect(() => {
+    setPanel("result");
+  }, [runId]);
+  function resizeDock(clientY: number) {
+    const rect = bench.current?.getBoundingClientRect();
+    if (rect?.height)
+      setDock(
+        Math.max(
+          20,
+          Math.min(45, ((rect.bottom - clientY) / rect.height) * 100),
+        ),
+      );
+  }
   const pendingKey = `label-submit:${user.id}:${taskId}`;
   const [pending, setPending] = useState("");
   useEffect(
@@ -469,7 +651,8 @@ export function LabelWorkspace() {
   }
   async function perform(fn: (isCurrent: () => boolean) => Promise<void>) {
     const submittedView = activeView.current;
-    const isCurrent = () => mounted.current && activeView.current === submittedView;
+    const isCurrent = () =>
+      mounted.current && activeView.current === submittedView;
     if (submission.current) return;
     submission.current = true;
     setBusy(true);
@@ -514,11 +697,39 @@ export function LabelWorkspace() {
   const permitted =
     user.role === "admin" || (user.permissions || []).includes("inspection");
   return (
-    <main className="label-workspace">
+    <main
+      ref={shell}
+      className={`label-workspace ${taskId ? "li-fixed" : ""}`}
+      onClickCapture={(event) => {
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        const link = (event.target as HTMLElement).closest("a");
+        if (!link || link.target === "_blank") return;
+        const url = new URL(link.href, window.location.href);
+        if (
+          url.pathname === PAGE &&
+          (url.searchParams.has("task") ||
+            url.searchParams.get("view") === "new")
+        )
+          enterFullscreen();
+        else leaveFullscreen();
+      }}
+    >
       <header className="li-header">
         {!taskId && !isNew ? (
-          <Link className="li-back" aria-label="返回主界面" to={workspacePath()}>
-            <ArrowLeft size={18} /><span>返回主界面</span>
+          <Link
+            className="li-back"
+            aria-label="返回主界面"
+            to={workspacePath()}
+          >
+            <ArrowLeft size={18} />
+            <span>返回主界面</span>
           </Link>
         ) : (
           <button
@@ -542,53 +753,112 @@ export function LabelWorkspace() {
         >
           文字检验
         </Link>
-        <span>标签对比</span>
-        <nav>
-          <Link to={`${PAGE}?view=new`}>新建任务</Link>
-          <Link to="/workspace/text-compare-beta?mode=manual">说明书检验</Link>
-          <button onClick={() => void logout().catch(fail)}>退出登录</button>
-        </nav>
+        {taskId ? (
+          <button
+            className="li-task-name"
+            disabled={!value?.revision}
+            onClick={() => setRenameOpen(true)}
+            title="重命名任务"
+          >
+            <strong>{value?.name || "正在加载任务…"}</strong>
+            <small>
+              标准版本 {value?.revision || "旧版"} · {value?.assets.length ?? 0}{" "}
+              张
+            </small>
+          </button>
+        ) : (
+          <span>标签对比</span>
+        )}
+        <div className="li-header-actions">
+          {(taskId || isNew) && (
+            <button
+              aria-label={fullscreen ? "退出全屏" : "进入全屏"}
+              title={fullscreen ? "退出全屏" : "进入全屏"}
+              onClick={() =>
+                fullscreen ? leaveFullscreen() : enterFullscreen()
+              }
+            >
+              {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            </button>
+          )}
+          {taskId && (
+            <button
+              aria-label="更多操作"
+              aria-expanded={more}
+              onClick={() => setMore(!more)}
+            >
+              <MoreHorizontal size={20} />
+            </button>
+          )}
+          <nav className={taskId ? "li-more" : ""} hidden={!!taskId && !more}>
+            <Link to={`${PAGE}?view=new`}>新建任务</Link>
+            <Link to="/workspace/text-compare-beta?mode=manual">
+              说明书检验
+            </Link>
+            <button
+              onClick={() => {
+                leaveFullscreen();
+                void logout().catch(fail);
+              }}
+            >
+              退出登录
+            </button>
+          </nav>
+        </div>
       </header>
+      {fullscreenNote && (
+        <div className="li-fullscreen-note" role="status">
+          {fullscreenNote}
+          <button
+            aria-label="关闭全屏提示"
+            onClick={() => setFullscreenNote("")}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {!permitted ? (
         <p role="alert">当前账号没有文字检验权限</p>
       ) : (
         <>
-          {pending ? (
-            <p className="li-warning">
-              正在查询上次提交状态，页面刷新不会再次调用模型。
-              <button onClick={() => void recovery.refetch()}>
-                查询提交状态
-              </button>
-              {!busy && recovery.data && !recovery.data.run ? (
+          <div className="li-notices">
+            {pending ? (
+              <p className="li-warning">
+                正在查询上次提交状态，页面刷新不会再次调用模型。
+                <button onClick={() => void recovery.refetch()}>
+                  查询提交状态
+                </button>
+                {!busy && recovery.data && !recovery.data.run ? (
+                  <button
+                    onClick={() => {
+                      setPending("");
+                    }}
+                  >
+                    尚未找到记录，手动重新提交同一请求
+                  </button>
+                ) : null}
+              </p>
+            ) : null}
+            {error || list.error || task.error ? (
+              <div className="li-error" role="alert">
+                {error || (task.error || list.error)?.message}
                 <button
                   onClick={() => {
-                    setPending("");
+                    setError("");
+                    void task.refetch();
+                    void list.refetch();
                   }}
                 >
-                  尚未找到记录，手动重新提交同一请求
+                  刷新
                 </button>
-              ) : null}
-            </p>
-          ) : null}
-          {error || list.error || task.error ? (
-            <div className="li-error" role="alert">
-              {error || (task.error || list.error)?.message}
-              <button
-                onClick={() => {
-                  setError("");
-                  void task.refetch();
-                  void list.refetch();
-                }}
-              >
-                刷新
-              </button>
-            </div>
-          ) : null}
-          {capabilities.data && !capabilities.data.enabled ? (
-            <p className="li-warning">
-              新检测服务暂不可用，您仍可管理任务和查看历史。
-            </p>
-          ) : null}
+              </div>
+            ) : null}
+            {capabilities.data && !capabilities.data.enabled ? (
+              <p className="li-warning">
+                新检测服务暂不可用，您仍可管理任务和查看历史。
+              </p>
+            ) : null}
+          </div>
           {!taskId && !isNew ? (
             <section className="li-list">
               <div className="li-title">
@@ -717,358 +987,510 @@ export function LabelWorkspace() {
           {taskId && !value ? <p>正在读取任务…</p> : null}
           {value ? (
             <>
-              <section className="li-title">
-                <div>
-                  <Link to={PAGE}>← 任务列表</Link>
-                  <h1>{value.name}</h1>
-                  <span>
-                    标准版本 {value.revision || "旧版"} · {value.assets.length}{" "}
-                    张标准 · {value.runs.length} 次检测
-                  </span>
+              {!value.revision && (
+                <div className="li-legacy-tools">
+                  {" "}
+                  <button
+                    disabled={busy || !!value.missing}
+                    onClick={() =>
+                      void perform(async (isCurrent) => {
+                        const continued = await apiClient.post<Task>(
+                          `${API}/tasks/${encodeURIComponent(value.id)}/continue`,
+                        );
+                        if (isCurrent()) openTask(continued.id);
+                      })
+                    }
+                  >
+                    继续检测（建立标准快照）
+                  </button>
                 </div>
-                <div className="li-actions">
-                  {value.revision ? (
-                    <>
-                      <input
-                        aria-label="任务名称"
-                        value={rename}
-                        onChange={(e) => setRename(e.target.value)}
-                        maxLength={200}
-                      />
-                      <button
-                        disabled={busy || !rename.trim()}
-                        onClick={() => void perform(() => edit("name", rename))}
-                      >
-                        保存名称
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      disabled={busy || !!value.missing}
-                      onClick={() =>
-                        void perform(async (isCurrent) => {
-                          const continued = await apiClient.post<Task>(
-                            `${API}/tasks/${encodeURIComponent(value.id)}/continue`,
-                          );
-                          if (isCurrent()) openTask(continued.id);
-                        })
-                      }
-                    >
-                      继续检测（建立标准快照）
-                    </button>
-                  )}
+              )}
+              {value.missing && (
+                <p className="li-task-warning" role="alert">
+                  {value.missing}
+                </p>
+              )}
+              <div
+                className="li-bench"
+                ref={bench}
+                style={
+                  {
+                    "--li-dock": `${dock}fr`,
+                    "--li-images": `${100 - dock}fr`,
+                  } as CSSProperties
+                }
+              >
+                <div
+                  className="li-image-tabs"
+                  role="tablist"
+                  aria-label="图片视图"
+                >
+                  <button
+                    role="tab"
+                    aria-selected={imageTab === "standard"}
+                    onClick={() => setImageTab("standard")}
+                  >
+                    标准
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={imageTab === "actual"}
+                    onClick={() => setImageTab("actual")}
+                  >
+                    实物
+                  </button>
                 </div>
-              </section>
-              {value.missing ? <p role="alert">{value.missing}</p> : null}
-              <div className="li-columns">
-                <section className="li-panel">
-                  <header>
-                    <h2>标准标签</h2>
-                    <span>
-                      {run
-                        ? `本次检测冻结版本 ${run.revision}`
-                        : "手动选择标准"}
-                    </span>
-                    {!run && !gallery ? (
-                      <button onClick={() => setGallery(true)}>
-                        返回缩略图
-                      </button>
-                    ) : null}
-                  </header>
-                  {reference && (run || !gallery) ? (
-                    <>
-                      <Evidence
-                        url={
-                          reference.media
-                            ? mediaURL(value.id, reference.media.image)
-                            : reference.legacy_url || ""
-                        }
-                        title="标准图"
-                        onZoom={setZoom}
-                        box={activeIssue?.reference_box}
-                      />
-                      <p>{reference.name}</p>
-                    </>
-                  ) : (
-                    <div className="li-gallery">
-                      {value.assets
-                        .filter((a) => hidden || a.enabled || !!a.error || !value.revision)
-                        .map((a) => (
-                          <article
-                            key={a.id}
-                            className={selected === a.id ? "selected" : ""}
-                          >
-                            <button
-                              aria-label={`选择标准 ${a.ordinal}`}
-                              disabled={!!run || (!a.media && !a.legacy_url)}
-                              onClick={() => {
-                                setSelected(a.id);
-                                setGallery(false);
-                              }}
-                            >
-                              {a.media || a.legacy_url ? (
-                                <img
-                                  loading="lazy"
-                                  src={
-                                    a.media
-                                      ? mediaURL(value.id, a.media.preview)
-                                      : a.legacy_url
-                                  }
-                                  alt={a.name}
-                                />
-                              ) : (
-                                <span>无法读取图片</span>
-                              )}
-                              <strong>
-                                {a.ordinal}. {a.name}
-                              </strong>
-                            </button>
-                            {a.error ? <small>{a.error}</small> : null}
-                            {a.duplicate_of ? (
-                              <small>重复出现的图片</small>
-                            ) : null}
-                            {value.revision ? (
-                              <button
-                                disabled={
-                                  busy || !!run || (!a.enabled && !a.media)
-                                }
-                                onClick={() =>
-                                  void perform(() =>
-                                    edit(a.enabled ? "hide" : "restore", a.id),
-                                  )
-                                }
+                <div className={`li-columns li-show-${imageTab}`}>
+                  <section className="li-panel li-standard-panel">
+                    <header>
+                      <h2>标准标签</h2>
+                      <span>
+                        {run
+                          ? `本次检测冻结版本 ${run.revision}`
+                          : "手动选择标准"}
+                      </span>
+                      {!run && !gallery ? (
+                        <button onClick={() => setGallery(true)}>
+                          返回缩略图
+                        </button>
+                      ) : null}
+                    </header>
+                    <div className="li-visual">
+                      {reference && (run || !gallery) ? (
+                        <>
+                          <Evidence
+                            url={
+                              reference.media
+                                ? mediaURL(value.id, reference.media.image)
+                                : reference.legacy_url || ""
+                            }
+                            title="标准图"
+                            onZoom={setZoom}
+                            box={activeIssue?.reference_box}
+                          />
+                          <p>{reference.name}</p>
+                        </>
+                      ) : (
+                        <div className="li-gallery">
+                          {value.assets
+                            .filter(
+                              (a) =>
+                                hidden ||
+                                a.enabled ||
+                                !!a.error ||
+                                !value.revision,
+                            )
+                            .map((a) => (
+                              <article
+                                key={a.id}
+                                className={selected === a.id ? "selected" : ""}
                               >
-                                {a.enabled ? "隐藏标准" : a.media ? "恢复标准" : "图片不可用"}
-                              </button>
-                            ) : null}
-                          </article>
-                        ))}
+                                <button
+                                  aria-label={`选择标准 ${a.ordinal}`}
+                                  disabled={
+                                    !!run || (!a.media && !a.legacy_url)
+                                  }
+                                  onClick={() => {
+                                    setSelected(a.id);
+                                    setGallery(false);
+                                    setImageTab("actual");
+                                  }}
+                                >
+                                  {a.media || a.legacy_url ? (
+                                    <img
+                                      loading="lazy"
+                                      src={
+                                        a.media
+                                          ? mediaURL(value.id, a.media.preview)
+                                          : a.legacy_url
+                                      }
+                                      alt={a.name}
+                                    />
+                                  ) : (
+                                    <span>无法读取图片</span>
+                                  )}
+                                  <strong>
+                                    {a.ordinal}. {a.name}
+                                  </strong>
+                                </button>
+                                {a.error ? <small>{a.error}</small> : null}
+                                {a.duplicate_of ? (
+                                  <small>重复出现的图片</small>
+                                ) : null}
+                                {value.revision && a.media && !a.error ? (
+                                  <button
+                                    className="li-hide-standard"
+                                    aria-label={
+                                      a.enabled ? "隐藏标准" : "恢复标准"
+                                    }
+                                    title={a.enabled ? "隐藏标准" : "恢复标准"}
+                                    disabled={
+                                      busy || !!run || (!a.enabled && !a.media)
+                                    }
+                                    onClick={() =>
+                                      void perform(() =>
+                                        edit(
+                                          a.enabled ? "hide" : "restore",
+                                          a.id,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {a.enabled ? (
+                                      <CircleMinus size={18} />
+                                    ) : (
+                                      <RotateCcw size={18} />
+                                    )}
+                                  </button>
+                                ) : null}
+                              </article>
+                            ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {!run && !!value.revision ? (
-                    <>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={hidden}
-                          onChange={(e) => setHidden(e.target.checked)}
-                        />{" "}
-                        显示已隐藏 / 无效标准
-                      </label>
-                      <FileDropZone
-                        accept="image/*"
-                        disabled={busy}
-                        ariaLabel="追加标准图片"
-                        onFiles={(files) => {
-                          if (files[0])
-                            void perform(async () => {
-                              await apiClient.upload(
-                                `${API}/tasks/${value.id}/assets`,
-                                form(files[0], { revision: value.revision }),
-                              );
-                            });
-                        }}
-                      >
-                        ＋ 追加标准图片（创建新版本）
-                      </FileDropZone>
-                    </>
-                  ) : null}
-                </section>
-                <section className="li-panel">
-                  <header>
-                    <h2>实物标签</h2>
-                    <span>{run ? "历史原图" : "拍照或上传一张实物照片"}</span>
-                  </header>
-                  {run?.actual ? (
-                    <Evidence
-                      url={mediaURL(value.id, run.actual.image)}
-                      title="实物图"
-                      onZoom={setZoom}
-                      size={run.actual.size}
-                      crop={run.crop}
-                      box={activeIssue?.actual_box}
-                    />
-                  ) : preview ? (
-                    <Evidence
-                      url={preview}
-                      title="待检实物图"
-                      onZoom={setZoom}
-                    />
-                  ) : (
-                    <div className="li-placeholder">等待实物照片</div>
-                  )}
-                  {run?.scope ? (
-                    <p className={run.crop ? "li-warning" : ""}>
-                      {run.scope}
-                      {run.crop ? "；框外其他标签没有检测。" : ""}
-                    </p>
-                  ) : null}
-                  {!run && !!value.revision ? (
-                    <>
-                      <FileDropZone
-                        accept="image/*"
-                        disabled={busy || !!running}
-                        ariaLabel="上传实物照片"
-                        onFiles={(files) => {
-                          if (files[0]) photo(files[0]);
-                        }}
-                      >
-                        {actual
-                          ? `重新上传 · ${actual.name}`
-                          : "拖入实物图片，或点击上传（≤ 10 MiB / 1600 万像素）"}
-                      </FileDropZone>
+                    {!run && !!value.revision ? (
+                      <div className="li-tools">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={hidden}
+                            onChange={(e) => setHidden(e.target.checked)}
+                          />{" "}
+                          显示已隐藏 / 无效标准
+                        </label>
+                        <FileDropZone
+                          accept="image/*"
+                          disabled={busy}
+                          ariaLabel="追加标准图片"
+                          onFiles={(files) => {
+                            if (files[0])
+                              void perform(async () => {
+                                await apiClient.upload(
+                                  `${API}/tasks/${value.id}/assets`,
+                                  form(files[0], { revision: value.revision }),
+                                );
+                              });
+                          }}
+                        >
+                          ＋ 追加标准图片
+                        </FileDropZone>
+                      </div>
+                    ) : null}
+                  </section>
+                  <section className="li-panel li-actual-panel">
+                    <header>
+                      <h2>实物标签</h2>
+                      <span>{run ? "历史原图" : "拍照或上传一张实物照片"}</span>
+                    </header>
+                    {run ? (
+                      <div className="li-visual">
+                        {run.actual ? (
+                          <Evidence
+                            url={mediaURL(value.id, run.actual.image)}
+                            title="实物图"
+                            onZoom={setZoom}
+                            size={run.actual.size}
+                            crop={run.crop}
+                            box={activeIssue?.actual_box}
+                          />
+                        ) : (
+                          <div className="li-placeholder">原图缺失</div>
+                        )}
+                        {run.scope && (
+                          <p className={run.crop ? "li-warning" : ""}>
+                            {run.scope}
+                            {run.crop ? "；框外其他标签没有检测。" : ""}
+                          </p>
+                        )}
+                      </div>
+                    ) : value.revision ? (
                       <Camera
                         key={taskId + runId}
                         onPhoto={photo}
                         onError={fail}
+                        preview={
+                          preview ? (
+                            <Evidence
+                              url={preview}
+                              title="待检实物图"
+                              onZoom={setZoom}
+                            />
+                          ) : (
+                            <div className="li-placeholder">等待实物照片</div>
+                          )
+                        }
+                        tools={
+                          <FileDropZone
+                            accept="image/*"
+                            disabled={busy || !!running}
+                            ariaLabel="上传实物照片"
+                            onFiles={(files) => {
+                              if (files[0]) photo(files[0]);
+                            }}
+                          >
+                            {actual
+                              ? `重新上传 · ${actual.name}`
+                              : "拖入实物图片，或点击上传（≤ 10 MiB / 1600 万像素）"}
+                          </FileDropZone>
+                        }
                       />
-                    </>
-                  ) : null}
-                </section>
-              </div>
-              {!run ? (
-                <div className="li-detect">
-                  <button
-                    className="li-primary"
-                    disabled={
-                      busy ||
-                      !!pending ||
-                      !!running ||
-                      !reference?.enabled ||
-                      !actual ||
-                      !capabilities.data?.enabled
-                    }
-                    onClick={() =>
-                      void perform(async (isCurrent) => {
-                        if (!actual || !reference) return;
-                        const requestId =
-                          sessionStorage.getItem(pendingKey) || key();
-                        sessionStorage.setItem(pendingKey, requestId);
-                        setPending(requestId);
-                        const created = await apiClient.upload<Run>(
-                          `${API}/tasks/${value.id}/runs`,
-                          form(actual, {
-                            request_id: requestId,
-                            revision: value.revision,
-                            asset_id: reference.id,
-                            parent_id: parent,
-                          }),
-                        );
-                        sessionStorage.removeItem(pendingKey);
-                        if (!isCurrent()) return;
-                        setPending("");
-                        setParams({ task: value.id, run: created.id });
-                      })
-                    }
-                  >
-                    {busy
-                      ? "正在提交…"
-                      : running
-                        ? "任务已有检测进行中"
-                        : "开始检测"}
-                  </button>
-                  <p>自动选择一张标签，检查文字、大小写、图标和外形。</p>
-                  {running ? (
-                    <button
-                      onClick={() =>
-                        setParams({ task: value.id, run: running.id })
-                      }
-                    >
-                      查看进行中的检测
-                    </button>
-                  ) : null}
+                    ) : (
+                      <div className="li-placeholder">
+                        继续检测后可上传实物照片
+                      </div>
+                    )}
+                  </section>
                 </div>
-              ) : null}
-              {run ? (
-                <section className="li-results">
-                  <header>
-                    <h2
-                      className={
-                        run.status === "completed" && run.decision === "MATCH"
-                          ? "li-pass"
-                          : run.decision === "DIFFERENCES"
-                            ? "li-diff"
-                            : ""
-                      }
-                    >
-                      {run.status === "completed"
-                        ? text(run.decision)
-                        : text(run.status)}
-                    </h2>
-                    <span>
-                      {when(run.created_at)} · {run.elapsed?.toFixed(1) ?? "—"}{" "}
-                      秒
-                    </span>
-                    <button
-                      disabled={["queued", "running"].includes(run.status)}
-                      onClick={fresh}
-                    >
-                      检测下一件
-                    </button>
-                  </header>
-                  {run.error ? <p role="alert">{run.error}</p> : null}
-                  {["queued", "running"].includes(run.status) ? (
-                    <p role="status">
-                      {text(run.phase || run.status)}…
-                      可以关闭页面，结果会自动保存，请勿重复提交。
-                    </p>
-                  ) : null}
-                  {run.legacy_record_id ? (
-                    <LegacyResult id={run.legacy_record_id} onZoom={setZoom} />
-                  ) : null}
-                  {run.result ? (
-                    <>
-                      <p>
-                        {run.result.issues.length} 项差异 · 模型评分{" "}
-                        {run.result.similarity} / 100（不是系统准确率）
-                      </p>
-                      {run.result.issues.map((i) => (
+                <div
+                  className="li-resizer"
+                  role="separator"
+                  aria-label="调整结果面板高度"
+                  aria-orientation="horizontal"
+                  aria-valuemin={20}
+                  aria-valuemax={45}
+                  aria-valuenow={Math.round(dock)}
+                  tabIndex={0}
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    resizeDock(e.clientY);
+                  }}
+                  onPointerMove={(e) => {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId))
+                      resizeDock(e.clientY);
+                  }}
+                  onPointerUp={(e) => {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId))
+                      e.currentTarget.releasePointerCapture(e.pointerId);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setDock((v) =>
+                        Math.max(
+                          20,
+                          Math.min(45, v + (e.key === "ArrowUp" ? 2 : -2)),
+                        ),
+                      );
+                    }
+                  }}
+                />
+                <div className="li-dock">
+                  {!run ? (
+                    <div className="li-detect">
+                      <button
+                        className="li-primary"
+                        disabled={
+                          busy ||
+                          !!pending ||
+                          !!running ||
+                          !reference?.enabled ||
+                          !actual ||
+                          !capabilities.data?.enabled
+                        }
+                        onClick={() =>
+                          void perform(async (isCurrent) => {
+                            if (!actual || !reference) return;
+                            const requestId =
+                              sessionStorage.getItem(pendingKey) || key();
+                            sessionStorage.setItem(pendingKey, requestId);
+                            setPending(requestId);
+                            const created = await apiClient.upload<Run>(
+                              `${API}/tasks/${value.id}/runs`,
+                              form(actual, {
+                                request_id: requestId,
+                                revision: value.revision,
+                                asset_id: reference.id,
+                                parent_id: parent,
+                              }),
+                            );
+                            sessionStorage.removeItem(pendingKey);
+                            if (!isCurrent()) return;
+                            setPending("");
+                            setParams({ task: value.id, run: created.id });
+                          })
+                        }
+                      >
+                        {busy
+                          ? "正在提交…"
+                          : running
+                            ? "任务已有检测进行中"
+                            : "开始检测"}
+                      </button>
+                      <p>自动选择一张标签，检查文字、大小写、图标和外形。</p>
+                      {running ? (
                         <button
-                          className={`li-issue ${issue === i.id ? "selected" : ""}`}
-                          key={i.id}
-                          onClick={() => setIssue(i.id)}
+                          onClick={() =>
+                            setParams({ task: value.id, run: running.id })
+                          }
                         >
-                          <strong>
-                            {i.id}. {text(i.type)} · 严重程度：
-                            {text(i.severity) || "未提供"} · 模型置信度：
-                            {text(i.confidence) || "未提供"}
-                          </strong>
-                          <span>
-                            标准：{i.standardText || "未提供"}　实物：
-                            {i.actualText || "未提供"}
-                          </span>
-                          <p>{i.description}</p>
-                          {i.position_note ? (
-                            <small>{i.position_note}</small>
-                          ) : null}
+                          查看进行中的检测
                         </button>
-                      ))}
-                    </>
+                      ) : null}
+                    </div>
                   ) : null}
-                  {!run.legacy_record_id ? <Diagnostics id={run.id} /> : null}
-                </section>
-              ) : runId ? (
-                <p role="alert">当前任务内不存在该检测记录。</p>
-              ) : null}
-              <section className="li-history">
-                <h2>任务内历史</h2>
-                {value.runs.map((r) => (
-                  <button
-                    className={r.id === runId ? "selected" : ""}
-                    key={r.id}
-                    onClick={() => setParams({ task: value.id, run: r.id })}
+                  {run && (
+                    <header className="li-result-summary">
+                      <h2
+                        className={
+                          run.status === "completed" && run.decision === "MATCH"
+                            ? "li-pass"
+                            : run.decision === "DIFFERENCES"
+                              ? "li-diff"
+                              : ""
+                        }
+                      >
+                        {run.status === "completed"
+                          ? text(run.decision)
+                          : text(run.status)}
+                      </h2>
+                      <span>
+                        {when(run.created_at)} ·{" "}
+                        {run.elapsed?.toFixed(1) ?? "—"} 秒
+                        {run.result
+                          ? ` · ${run.result.issues.length} 项差异`
+                          : ""}
+                      </span>
+                      <button
+                        disabled={["queued", "running"].includes(run.status)}
+                        onClick={fresh}
+                      >
+                        检测下一件
+                      </button>
+                    </header>
+                  )}
+                  <div
+                    className="li-result-tabs"
+                    role="tablist"
+                    aria-label="检测信息"
                   >
-                    {when(r.created_at)} ·{" "}
-                    {r.legacy_record_id ? "旧文字检验" : "Evolving"} ·{" "}
-                    {text(r.decision)} · {text(r.status)} · 版本{" "}
-                    {r.revision ?? "未留存"}
-                  </button>
-                ))}
-                {!value.runs.length ? <p>还没有检测记录。</p> : null}
-              </section>
+                    <button
+                      id="li-result-tab"
+                      role="tab"
+                      aria-controls="li-result-panel"
+                      aria-selected={panel === "result"}
+                      onClick={() => setPanel("result")}
+                    >
+                      检测结果
+                    </button>
+                    <button
+                      id="li-history-tab"
+                      role="tab"
+                      aria-controls="li-history-panel"
+                      aria-selected={panel === "history"}
+                      onClick={() => setPanel("history")}
+                    >
+                      历史记录（{value.runs.length}）
+                    </button>
+                  </div>
+                  <div
+                    className="li-result-content"
+                    id="li-result-panel"
+                    role="tabpanel"
+                    aria-labelledby="li-result-tab"
+                    hidden={panel !== "result"}
+                  >
+                    {run ? (
+                      <section className="li-results">
+                        {run.error ? <p role="alert">{run.error}</p> : null}
+                        {["queued", "running"].includes(run.status) ? (
+                          <p role="status">
+                            {text(run.phase || run.status)}…
+                            可以关闭页面，结果会自动保存，请勿重复提交。
+                          </p>
+                        ) : null}
+                        {run.legacy_record_id ? (
+                          <LegacyResult
+                            id={run.legacy_record_id}
+                            onZoom={setZoom}
+                          />
+                        ) : null}
+                        {run.result ? (
+                          <>
+                            <p>
+                              {run.result.issues.length} 项差异 · 模型评分{" "}
+                              {run.result.similarity} / 100（不是系统准确率）
+                            </p>
+                            {run.result.issues.map((i) => (
+                              <button
+                                className={`li-issue ${issue === i.id ? "selected" : ""}`}
+                                key={i.id}
+                                onClick={() => setIssue(i.id)}
+                              >
+                                <strong>
+                                  {i.id}. {text(i.type)} · 严重程度：
+                                  {text(i.severity) || "未提供"} · 模型置信度：
+                                  {text(i.confidence) || "未提供"}
+                                </strong>
+                                <span>
+                                  标准：{i.standardText || "未提供"}　实物：
+                                  {i.actualText || "未提供"}
+                                </span>
+                                <p>{i.description}</p>
+                                {i.position_note ? (
+                                  <small>{i.position_note}</small>
+                                ) : null}
+                              </button>
+                            ))}
+                          </>
+                        ) : null}
+                        {!run.legacy_record_id ? (
+                          <Diagnostics id={run.id} />
+                        ) : null}
+                      </section>
+                    ) : runId ? (
+                      <p role="alert">当前任务内不存在该检测记录。</p>
+                    ) : null}
+                    {!run && !runId && (
+                      <p className="li-empty-result">
+                        选择标准并上传或拍摄实物图，点击开始检测。
+                      </p>
+                    )}
+                  </div>
+                  <section
+                    className="li-history"
+                    id="li-history-panel"
+                    role="tabpanel"
+                    aria-labelledby="li-history-tab"
+                    hidden={panel !== "history"}
+                  >
+                    <h2>任务内历史</h2>
+                    {value.runs.map((r) => (
+                      <button
+                        className={r.id === runId ? "selected" : ""}
+                        key={r.id}
+                        onClick={() => {
+                          setPanel("result");
+                          setParams({ task: value.id, run: r.id });
+                        }}
+                      >
+                        {when(r.created_at)} ·{" "}
+                        {r.legacy_record_id ? "旧文字检验" : "Evolving"} ·{" "}
+                        {text(r.decision)} · {text(r.status)} · 版本{" "}
+                        {r.revision ?? "未留存"}
+                      </button>
+                    ))}
+                    {!value.runs.length ? <p>还没有检测记录。</p> : null}
+                  </section>
+                </div>
+              </div>
             </>
           ) : null}
         </>
+      )}
+      {renameOpen && value && (
+        <RenameDialog
+          error={error}
+          name={rename}
+          busy={busy}
+          onChange={setRename}
+          onClose={() => setRenameOpen(false)}
+          onSave={() =>
+            void perform(async () => {
+              await edit("name", rename);
+              setRenameOpen(false);
+            })
+          }
+        />
       )}
       {zoom ? (
         <div

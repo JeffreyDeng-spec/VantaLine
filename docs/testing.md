@@ -416,3 +416,13 @@ and verifies that completion cannot pull navigation back to the abandoned task.
 
 Invalid-image tiles are shown without enabling the hidden-standard filter and
 remain non-selectable; limit failures retain their specific validation reason.
+
+
+The label workspace browser fixture exercises native fullscreen entry before import,
+root continuity, reload without an automatic request, explicit exit, denied fullscreen
+without render retries, return-to-list cleanup, rename, and keyboard dock resizing.
+Validate 1920x1080, 1440x900, 1366x768, 1024x768, 390x844 and a 683x384 effective
+viewport (200% zoom equivalent): no document overflow, reachable result body/action,
+and image aspect ratio preservation. Fixtures include 500 standards, 100 long issues,
+60 histories and local scroll-boundary checks. Fullscreen actual device/Edge behavior,
+OS Escape and native file pickers are additionally checked on release.

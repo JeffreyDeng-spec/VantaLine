@@ -363,3 +363,11 @@ correction or selected rerun creates a linked fresh batch, never resumes a sessi
 
 The independent label workspace binds async navigation to its mounted account
 and initiating view; late responses cannot navigate after a view change/logout.
+
+
+The task workspace is a fixed 100dvh shell: compact header, contained image stage,
+resizable result/history dock, and independently scrollable panes. Import and task
+navigation retain the same Fullscreen API root. Only explicit task/new-task clicks
+request fullscreen; direct links/reloads use the fixed viewport fallback. Owned
+fullscreen exits on list/external navigation or unmount, and camera capture uses
+the actual-image stage rather than a second vertically stacked preview.
