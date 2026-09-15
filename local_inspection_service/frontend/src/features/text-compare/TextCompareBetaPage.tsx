@@ -75,7 +75,7 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
   const zoomTrigger = useRef<HTMLElement | null>(null);
   const [preparationPreview, setPreparationPreview] = useState<PreparationPreview | null>(null);
   const [activation, setActivation] = useState(0);
-  const [mode, setMode] = useState<"label" | "manual">("label");
+  const [mode, setMode] = useState<"label" | "manual">(() => new URLSearchParams(window.location.search).get("mode") === "manual" ? "manual" : "label");
   const [selectedStandardId, setSelectedStandardId] = useState(comparison.task?.standardId || "");
   const [selectedAssetId, setSelectedAssetId] = useState(comparison.task?.assetId || "");
   const [showImport, setShowImport] = useState(false);
@@ -416,7 +416,7 @@ function TextCompareWorkspace({ owner }: { owner: string }) {
       </header>
       <ComparisonHistory owner={owner} />
       <div className="sidebar-task-type-switch" role="tablist" aria-label="文字检验模式">
-        <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "label") { setMode("label"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); if (inputMode === "camera") { cameraSurfaceActiveRef.current = true; void startCamera(); } } }}>标签对比</button>
+        <button className={mode === "label" ? "active" : ""} role="tab" aria-selected={mode === "label"} aria-controls="text-standard-library-panel" type="button" onClick={() => window.location.assign("/workspace/label-inspection")}>标签对比</button>
         <button className={mode === "manual" ? "active" : ""} role="tab" aria-selected={mode === "manual"} aria-controls="text-standard-library-panel" type="button" onClick={() => { if (mode !== "manual") { setMode("manual"); setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true }); cameraSurfaceActiveRef.current = false; ++cameraRequestRef.current; stopCamera(); setCameraStarting(false); } }}>说明书逐页检验</button>
       </div>
     </div>

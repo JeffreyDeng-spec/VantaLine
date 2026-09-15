@@ -55,6 +55,7 @@ HISTORICAL_RUNTIME_STATUSES = frozenset(
 
 OWNER_REQUIRED_TABLES = frozenset(
     {
+        "label_inspection_objects",
         "text_ocr_evidence",
         "text_label_extractions",
         "accessories",
@@ -648,6 +649,7 @@ TABLES = (
             "CREATE INDEX IF NOT EXISTS idx_plc_web_serial_dispatch_status ON plc_web_serial_dispatches (station_id, status, created_at)",
         ),
     ),
+    TableSchema('label_inspection_objects', ('id','owner_user_id','task_id','kind','status','created_at','updated_at','idempotency_key','raw_json'), 'CREATE TABLE IF NOT EXISTS label_inspection_objects (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, idempotency_key TEXT NOT NULL, raw_json TEXT NOT NULL, UNIQUE(owner_user_id,kind,idempotency_key))', ('CREATE INDEX IF NOT EXISTS idx_label_objects_owner ON label_inspection_objects(owner_user_id,kind,updated_at,id)', 'CREATE INDEX IF NOT EXISTS idx_label_objects_task ON label_inspection_objects(owner_user_id,task_id,kind,created_at,id)', 'CREATE INDEX IF NOT EXISTS idx_label_objects_queue ON label_inspection_objects(kind,status,created_at)')),
     TableSchema('codex_comparison_tasks', ('id', 'owner_user_id', 'created_at', 'updated_at', 'status', 'idempotency_key', 'raw_json'), 'CREATE TABLE IF NOT EXISTS codex_comparison_tasks (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, status TEXT NOT NULL, idempotency_key TEXT NOT NULL, raw_json TEXT NOT NULL, UNIQUE(owner_user_id,idempotency_key))', ('CREATE INDEX IF NOT EXISTS idx_codex_tasks_owner ON codex_comparison_tasks(owner_user_id,id)', 'CREATE INDEX IF NOT EXISTS idx_codex_tasks_queue ON codex_comparison_tasks(status,id)')),
     TableSchema('codex_comparison_events', ('id', 'owner_user_id', 'task_id', 'sequence', 'idempotency_key', 'created_at', 'raw_json'), 'CREATE TABLE IF NOT EXISTS codex_comparison_events (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, task_id TEXT NOT NULL, sequence INTEGER NOT NULL, idempotency_key TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL, UNIQUE(task_id,idempotency_key), UNIQUE(task_id,sequence))', ('CREATE INDEX IF NOT EXISTS idx_codex_events_task ON codex_comparison_events(owner_user_id,task_id,sequence)',)),
     TableSchema('agent_policies', ('id', 'owner_user_id', 'created_at', 'raw_json'), "CREATE TABLE IF NOT EXISTS agent_policies (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL)", ('CREATE INDEX IF NOT EXISTS idx_agent_policies_owner ON agent_policies (owner_user_id, created_at)',)),

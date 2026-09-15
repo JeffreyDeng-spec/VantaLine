@@ -1,3 +1,4 @@
+import { LabelWorkspace } from '../label-inspection/LabelWorkspace';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { getAuthStatus, queryKeys } from "../../api/queries";
@@ -114,7 +115,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
       }}
     >
       <AgentToolsProvider key={`agent:${identity}`} />
-      {location.pathname.replace(/\/$/, '') === '/workspace/text-compare-codex' ? <BatchWorkspace key={`batch:${identity}`} /> : <AppShell key={`workspace:${identity}`} />}
+      {location.pathname.replace(/\/$/, '') === '/workspace/label-inspection' ? <LabelWorkspace key={`label:${identity}`} /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-beta' && new URLSearchParams(location.search).get('mode') !== 'manual' ? <Navigate to='/workspace/label-inspection' replace /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-codex' ? <BatchWorkspace key={`batch:${identity}`} /> : <AppShell key={`workspace:${identity}`} />}
     </AuthContext.Provider>
   );
 }

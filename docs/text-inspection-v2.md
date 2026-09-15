@@ -1,5 +1,53 @@
 # Text inspection v2
 
+The original preparation/OCR APIs documented below remain for compatibility and
+historical readers. New primary label submissions use only the following A +
+Evolving module; those older pipelines are not part of its execution path.
+
+## Production label mode: A + Evolving
+
+The primary label UI is `/workspace/label-inspection`. One DOC (30 MiB) or DOCX
+(100 MiB) creates one named task, up to 500 embedded-image entries. No OCR,
+classification, cleaning or standard-activation job is launched. A user selects a
+visible valid standard before submitting one uploaded/captured actual image
+(maximum 10 MiB / 16 million pixels). Rename, append, hide and restore preserve
+immutable standard revisions and historical run evidence. Invalid embedded images
+remain listed with a reason; no detection can use missing evidence.
+
+The independent `/api/label-inspection` API provides capabilities, task list/import,
+task detail/rename/standard edits, lazy legacy continuation, run submission/read,
+on-demand call diagnostics and hash-verified private images. Every route requires
+inspection permission and scopes all reads/writes to the current account. Imports
+and mutations are idempotent; active runs serialize per task. Refresh only reads.
+All media and run snapshots are private and preserved in runtime storage.
+
+`label_inspection/prompts.json` contains the original A prompts unchanged. Both
+images are EXIF-transposed for orientation, with originals and transforms retained.
+Model inputs use longest edge 1600, bicubic resize and JPEG quality 90. Call one
+classifies the actual-image layout (512 output tokens). Multi-label images use A's
+integer pixel crop/clamp calculation and explicitly check only that selected label.
+Call two compares the standard with the full/cropped actual image (8192 tokens).
+Both use `doubao-seed-evolving`, temperature 0.1, `thinking.type=disabled` and a
+180-second stage timeout. Normal completion makes exactly two paid calls; invalid
+layout stops before call two. Network errors, 429, invalid JSON, truncated output,
+invalid crop and inconsistent hasDiff/issues cannot produce a passing result.
+
+The original prompt defines issue boxes relative to the label body, without
+providing its extent within a full standard/photo. These suggested coordinates
+are retained in evidence but are not presented as reliable image annotations.
+The UI shows textual issues and the verified multi-label crop rectangle; its
+linked overlay renderer only accepts reliably mapped boxes. Missing confidence
+is displayed as not supplied. Similarity is explicitly a model score, never system
+accuracy. Valid empty issues show green “未发现差异”; failures remain review-required.
+
+The task list unifies account-owned old text orders and native Beta tasks without
+content-similarity merging or model reruns. Old records keep original conclusions
+and existing evidence reader. Continuing an old order takes a fresh original-image
+snapshot, leaving old rows untouched; missing orders/images are explicit. The
+manual route remains `/workspace/text-compare-beta?mode=manual`, and the Beta route
+and continuation rules remain unchanged.
+
+
 ## Private call audit and lightweight evidence previews
 
 New prepared comparisons save a display-only 1600px JPEG once. The result panel

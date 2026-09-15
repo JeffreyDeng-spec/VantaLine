@@ -90,7 +90,7 @@ jobs:
       - name: Verify public/workspace navigation
         env:
           NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
-        run: npm run test:navigation
+        run: npm run test:navigation && node ../../scripts/test_label_workspace_ui.cjs
       - name: Upload navigation evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -162,6 +162,7 @@ jobs:
       - run: python local_inspection_service/scripts/smoke_postgres_runtime_repository.py
       - name: Verify text inspection comparison and document contracts
         run: |
+          python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_doc_images.py
           python local_inspection_service/scripts/smoke_document_label_classifier.py
           python local_inspection_service/scripts/smoke_document_jobs_endpoints.py

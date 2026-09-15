@@ -98,3 +98,5 @@ The frontend CI job includes the synthetic full-screen batch workspace acceptanc
 runner. The Codex PostgreSQL job includes batch-v3 draft/scope/one-session tests.
 Release and rollback must drain queued v3 work before switching worker versions;
 passing deterministic gates does not establish real photographed-label accuracy.
+
+The backend CI additionally exercises A + Evolving label task persistence and its two-call fail-closed contract in a disposable PostgreSQL schema, without a live provider key.

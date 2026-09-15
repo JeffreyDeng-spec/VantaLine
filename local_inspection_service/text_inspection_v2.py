@@ -137,7 +137,7 @@ def _classify(context: str, width: int, height: int) -> tuple[str, str, float]:
     return "needs_confirmation", "other", 0.35
 
 
-def extract_docx_candidates(contents: bytes) -> tuple[list[dict[str, Any]], list[bytes]]:
+def extract_docx_candidates(contents: bytes, *, raw_only: bool = False) -> tuple[list[dict[str, Any]], list[bytes]]:
     if len(contents) > DOCUMENT_MAX_BYTES or not contents.startswith(b"PK"):
         raise UnsafeDocument("不是有效的 DOCX 文件或文件过大")
     try:
@@ -166,10 +166,13 @@ def extract_docx_candidates(contents: bytes) -> tuple[list[dict[str, Any]], list
                 if not target or target not in members or not target.startswith("word/media/"):
                     raise UnsafeDocument("图片关系无效")
                 blob = archive.read(target)
-                width, height, mime = _image_metadata(blob)
+                if raw_only:
+                    width, height, mime = 0, 0, "application/octet-stream"
+                else:
+                    width, height, mime = _image_metadata(blob)
                 digest = sha256_bytes(blob)
                 context = " / ".join(recent_text)
-                status, category, confidence = _classify(context, width, height)
+                status, category, confidence = ("unclassified", "", 0) if raw_only else _classify(context, width, height)
                 asset_id = f"asset_{len(metadata) + 1:04d}_{digest[:12]}"
                 metadata.append({
                     "asset_id": asset_id, "ordinal": len(metadata) + 1, "sha256": digest,
@@ -177,11 +180,13 @@ def extract_docx_candidates(contents: bytes) -> tuple[list[dict[str, Any]], list
                     "source_part": target, "paragraph_index": paragraph_index,
                     "context": context[:1000], "status": status, "category": category,
                     "classification_confidence": confidence,
-                    "classification_reason": "document_context_local_v1",
+                    "classification_reason": "raw_embedded_image" if raw_only else "document_context_local_v1",
                     "duplicate_of": seen.get(digest, ""),
                 })
                 seen.setdefault(digest, asset_id)
                 blobs.append(blob)
+                if raw_only and len(metadata) > 500:
+                    raise UnsafeDocument("每任务最多 500 个标准图片条目")
         if not metadata:
             raise UnsafeDocument("DOCX 中没有可提取图片")
         return metadata, blobs

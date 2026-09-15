@@ -47,7 +47,7 @@ export const detectionCenterNavItem: NavItem = {
 
 export const textCompareBetaNavItem: NavItem = {
   label: "文字检验",
-  path: workspacePath("/text-compare-beta"),
+  path: workspacePath("/label-inspection"),
   view: "textCompareBeta",
   permission: "inspection",
   icon: ScanText,
