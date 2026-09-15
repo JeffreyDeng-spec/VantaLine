@@ -1,9 +1,7 @@
 """Account-owned label tasks and a read-only adapter for pre-existing histories."""
 
 import asyncio
-import base64
 import io
-import json
 import time
 from pathlib import Path
 from fastapi import File, Form, HTTPException, Query, UploadFile
@@ -236,6 +234,9 @@ def register(ns):
         owner, repo, _ = context()
 
         def work():
+            filters = {"q": q, "source": source, "result": result}
+            if cursor:
+                return repo.page(owner, [], filters, limit, cursor)
             current = repo.list(owner, "task")
             standards, records = legacy_data(repo, owner)
             extended = {x.get("legacy_id") for x in current}
@@ -294,29 +295,7 @@ def register(ns):
                 and (result == "all" or result == x["decision"])
             ]
             rows.sort(key=lambda x: (x["updated_at"], x["id"]), reverse=True)
-            if cursor:
-                try:
-                    stamp, identity = json.loads(base64.urlsafe_b64decode(cursor))
-                    if type(stamp) not in (int, float) or not isinstance(identity, str):
-                        raise ValueError()
-                    rows = [
-                        x
-                        for x in rows
-                        if (x["updated_at"], x["id"]) < (stamp, identity)
-                    ]
-                except Exception:
-                    raise ValueError("分页位置无效") from None
-            selected = rows[:limit]
-            next_cursor = (
-                base64.urlsafe_b64encode(
-                    json.dumps(
-                        [selected[-1]["updated_at"], selected[-1]["id"]]
-                    ).encode()
-                ).decode()
-                if len(rows) > limit
-                else None
-            )
-            return {"items": selected, "next_cursor": next_cursor}
+            return repo.page(owner, rows, filters, limit)
 
         return call(work)
 

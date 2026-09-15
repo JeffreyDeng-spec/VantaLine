@@ -9,7 +9,7 @@ against an isolated real PostgreSQL database. The script creates/drops a unique
 schema and uses fake provider responses: direct DOCX import, repeated/invalid/empty
 images, upload limits, owner/permission gates, immutable reference snapshots,
 idempotency, strict two-call settings, fail-closed responses, expiration without
-replay, global concurrency and pagination. It does not use a real API key.
+replay, global concurrency and pagination during concurrent task updates. It does not use a real API key.
 
 Run `node scripts/test_label_workspace_ui.cjs` for the actual React workspace with synthetic API/camera fixtures, then frontend typecheck/build, navigation tests, existing manual/Beta and camera/file
 contracts. The independent page must support list-first navigation, login returns,

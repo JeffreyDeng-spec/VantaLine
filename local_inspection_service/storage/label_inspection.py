@@ -100,6 +100,53 @@ class LabelRepository:
             raise OperationConflict("同一请求标识对应不同内容，请重新操作")
         return rows[0] if rows else None
 
+    def page(self, owner, rows, filters, limit, cursor=""):
+        """Stable cross-source traversal even when a task moves during pagination."""
+        with self.tx() as c:
+            offset = 0
+            if cursor:
+                try:
+                    identity, raw_offset = cursor.rsplit(".", 1)
+                    offset = int(raw_offset)
+                    if offset < 0:
+                        raise ValueError()
+                except Exception:
+                    raise ValueError("分页位置无效") from None
+                snapshot = self.read(c, owner, identity, "page")
+                if not snapshot:
+                    raise KeyError(identity)
+                if snapshot["filters"] != digest(filters):
+                    raise ValueError("分页筛选条件已变化，请刷新列表")
+                if snapshot["created_at"] + 900 < time.time():
+                    raise ValueError("分页已过期，请刷新列表")
+                rows = snapshot["items"]
+            elif len(rows) > limit:
+                c.execute(
+                    f"DELETE FROM {self.table} WHERE kind='page' AND created_at < %s",
+                    (int(time.time()) - 900,),
+                )
+                snapshot = self.new(
+                    owner,
+                    "",
+                    "page",
+                    uuid.uuid4().hex,
+                    filters=digest(filters),
+                    items=rows,
+                )
+                self.put(c, snapshot, True)
+            else:
+                return {"items": rows, "next_cursor": None}
+            selected = rows[offset : offset + limit]
+            next_offset = offset + len(selected)
+            return {
+                "items": selected,
+                "next_cursor": (
+                    f"{snapshot['id']}.{next_offset}"
+                    if next_offset < len(rows)
+                    else None
+                ),
+            }
+
     def request_run(self, owner, key):
         with self.tx() as c:
             c.execute(

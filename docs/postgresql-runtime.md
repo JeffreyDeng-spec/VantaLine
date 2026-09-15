@@ -18,7 +18,10 @@ PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL
 `2026_09_15_label_inspection.sql` adds `label_inspection_objects` through the normal
 immutable-release migration installer. The shared runtime repository owns its
 connection. Object kinds are task, immutable revision, run, paid call, and edit
-receipt. Owner/kind/idempotency-key uniqueness and a global transaction advisory
+receipt, plus short-lived owner-scoped pagination snapshots. Snapshot cursors
+keep cross-source traversal stable while tasks receive new activity; expired page
+objects are pruned after 15 minutes without touching historical records.
+Owner/kind/idempotency-key uniqueness and a global transaction advisory
 lock serialize submissions and claims; queue indexes support global concurrency two.
 Runs freeze source hashes and prompt/model versions. Call evidence is inserted
 before provider I/O. There is no automatic retry of a claimed or unknown paid stage.

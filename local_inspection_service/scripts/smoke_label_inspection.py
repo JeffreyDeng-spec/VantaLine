@@ -375,6 +375,39 @@ def main():
                 ]
                 == []
             )
+            first = check(client.get(PREFIX + "/tasks", params={"limit": 2}))
+            target = next(
+                r for r in rows if r["id"] not in {x["id"] for x in first["items"]}
+            )
+            old_task = check(client.get(PREFIX + "/tasks/" + target["id"]))
+            check(
+                client.patch(
+                    PREFIX + "/tasks/" + target["id"],
+                    json={
+                        "request_id": key(),
+                        "revision": old_task["revision"],
+                        "operation": "name",
+                        "value": "moved during pagination",
+                    },
+                )
+            )
+            stable = first["items"]
+            token = first["next_cursor"]
+            while token:
+                page = check(
+                    client.get(PREFIX + "/tasks", params={"limit": 2, "cursor": token})
+                )
+                stable += page["items"]
+                token = page["next_cursor"]
+            assert len(stable) == len({x["id"] for x in stable}) == 6
+            check(
+                client.get(
+                    PREFIX + "/tasks",
+                    params={"cursor": first["next_cursor"]},
+                    headers={"x-test-owner": "bob"},
+                ),
+                404,
+            )
             from local_inspection_service.storage.schema import TABLE_BY_NAME
 
             def seed(table, value):
