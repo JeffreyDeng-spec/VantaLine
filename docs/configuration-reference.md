@@ -163,3 +163,9 @@ Fixed/fullscreen label workspace layout requires no server settings. Browser ful
 is gesture-gated; its refusal does not disable detection. The 28% result-dock size is
 local component state and bounded to 20-45% when resized, with a small viewport minimum.
 No model, prompt, storage or shared Fullscreen API permission configuration is changed.
+
+Native file pickers can exit browser fullscreen (including macOS Edge). The label
+workspace remembers fullscreen only for that picker gesture and attempts restoration
+on file selection while transient user activation is available. Cancellation, explicit
+exit and navigation clear that intent; upload completion never forces fullscreen.
+When restoration is unavailable the fixed viewport and manual toggle remain usable.

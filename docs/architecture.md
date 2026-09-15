@@ -371,3 +371,9 @@ navigation retain the same Fullscreen API root. Only explicit task/new-task clic
 request fullscreen; direct links/reloads use the fixed viewport fallback. Owned
 fullscreen exits on list/external navigation or unmount, and camera capture uses
 the actual-image stage rather than a second vertically stacked preview.
+
+Native file pickers can exit browser fullscreen (including macOS Edge). The label
+workspace remembers fullscreen only for that picker gesture and attempts restoration
+on file selection while transient user activation is available. Cancellation, explicit
+exit and navigation clear that intent; upload completion never forces fullscreen.
+When restoration is unavailable the fixed viewport and manual toggle remain usable.

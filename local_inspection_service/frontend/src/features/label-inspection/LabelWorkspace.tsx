@@ -474,7 +474,9 @@ export function LabelWorkspace() {
   const [imageTab, setImageTab] = useState<"standard" | "actual">("standard");
   const [dock, setDock] = useState(28);
   const fullscreenRequest = useRef(0);
+  const pickerFullscreen = useRef(false);
   function leaveFullscreen() {
+    pickerFullscreen.current = false;
     ++fullscreenRequest.current;
     if (document.fullscreenElement === shell.current)
       void document.exitFullscreen().catch(() => {});
@@ -503,8 +505,19 @@ export function LabelWorkspace() {
           );
       });
   }
+  function resumeAfterPicker() {
+    const restore = pickerFullscreen.current;
+    pickerFullscreen.current = false;
+    // Native file dialogs may leave fullscreen. Restore only within the file
+    // selection gesture, never from an asynchronous upload completion.
+    if (restore && navigator.userActivation?.isActive) enterFullscreen();
+  }
   useEffect(() => {
     const root = shell.current;
+    const cancelPicker = () => {
+      pickerFullscreen.current = false;
+    };
+    root?.addEventListener("cancel", cancelPicker, true);
     const changed = () => {
       setFullscreen(document.fullscreenElement === root);
       setFullscreenNote("");
@@ -513,6 +526,7 @@ export function LabelWorkspace() {
     return () => {
       ++fullscreenRequest.current;
       document.removeEventListener("fullscreenchange", changed);
+      root?.removeEventListener("cancel", cancelPicker, true);
       if (document.fullscreenElement === root)
         void document.exitFullscreen().catch(() => {});
     };
@@ -700,6 +714,9 @@ export function LabelWorkspace() {
     <main
       ref={shell}
       className={`label-workspace ${taskId ? "li-fixed" : ""}`}
+      onKeyDownCapture={(event) => {
+        if (event.key === "Escape") pickerFullscreen.current = false;
+      }}
       onClickCapture={(event) => {
         if (
           event.button !== 0 ||
@@ -709,7 +726,14 @@ export function LabelWorkspace() {
           event.altKey
         )
           return;
-        const link = (event.target as HTMLElement).closest("a");
+        const target = event.target as HTMLElement;
+        const picker = target.closest("[data-file-drop-zone]");
+        if (picker && picker.getAttribute("aria-disabled") !== "true") {
+          pickerFullscreen.current =
+            document.fullscreenElement === shell.current;
+          return;
+        }
+        const link = target.closest("a");
         if (!link || link.target === "_blank") return;
         const url = new URL(link.href, window.location.href);
         if (
@@ -967,6 +991,7 @@ export function LabelWorkspace() {
                 disabled={busy}
                 ariaLabel="导入 Word 创建任务"
                 onFiles={(files) => {
+                  resumeAfterPicker();
                   if (files[0])
                     void perform(async (isCurrent) => {
                       const created = await apiClient.upload<Task>(
@@ -1163,6 +1188,7 @@ export function LabelWorkspace() {
                           disabled={busy}
                           ariaLabel="追加标准图片"
                           onFiles={(files) => {
+                            resumeAfterPicker();
                             if (files[0])
                               void perform(async () => {
                                 await apiClient.upload(
@@ -1225,6 +1251,7 @@ export function LabelWorkspace() {
                             disabled={busy || !!running}
                             ariaLabel="上传实物照片"
                             onFiles={(files) => {
+                              resumeAfterPicker();
                               if (files[0]) photo(files[0]);
                             }}
                           >
