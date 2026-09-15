@@ -157,3 +157,9 @@ inherited. Empty preserves direct behavior. See the Codex commissioning guide.
 
 Label import decoding/size failures are user-visible validation results and do not
 change model configuration or trigger any provider request.
+
+
+Fixed/fullscreen label workspace layout requires no server settings. Browser fullscreen
+is gesture-gated; its refusal does not disable detection. The 28% result-dock size is
+local component state and bounded to 20-45% when resized, with a small viewport minimum.
+No model, prompt, storage or shared Fullscreen API permission configuration is changed.
