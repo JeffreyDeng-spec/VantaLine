@@ -37,6 +37,27 @@ Before enabling text inspection v2, confirm account isolation, the customer DOCX
 
 Before merging camera-selector or upload-surface changes, run the browser-media input smoke plus frontend typecheck and production build. Confirm every file chooser also accepts a validated drop, single/multiple and disabled semantics are preserved, and dragged media cannot acquire camera or PLC provenance. For the text-comparison selector, additionally verify stale camera requests are discarded, removed devices fall back only while that surface is active, and permission denial leaves capture disabled with image upload still available.
 
+## A + Evolving label rollout and rollback
+
+Deploy label inspection only through a reviewed PR, required CI and one immutable
+frontend/backend release. Provision the authorized Ark experiment key in a
+restricted runtime file readable by the service account, then configure the two
+`VANTALINE_LABEL_INSPECTION_*` variables independently of existing providers.
+Never print the secret or copy it into a release. The normal installer applies the
+additive label object table migration before service cutover.
+
+After deployment verify `/api/version` consistency and perform one real Word
+import, detection, saved-result read and continuation. Verify that the text entry
+has no main sidebar and that manuals and Beta still open. Test control images must
+be clearly named and must not be treated as production accuracy measurements.
+
+Rollback uses the previous complete immutable release, disabling new label
+submissions/claims first. Keep all new tables, immutable revisions, calls and media;
+do not reverse the additive migration or replay unknown calls. Submitted runs that
+lost their worker remain unknown until deadline expiration when the new service
+resumes, and require a user-created linked retry.
+
+
 ## Read-only diagnosis first
 
 After a history release, verify the title-bar entry, current-owner pagination,

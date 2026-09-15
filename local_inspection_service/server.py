@@ -38166,6 +38166,9 @@ register_agent_api(globals())
 from local_inspection_service.codex_compare.api import register as register_codex_compare
 register_codex_compare(globals())
 
+from .label_inspection.api import register as register_label_inspection
+register_label_inspection(globals())
+
 
 @app.post("/api/text-inspection/label/compare")
 async def compare_text_inspection_label(

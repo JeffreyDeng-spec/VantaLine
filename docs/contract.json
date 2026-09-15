@@ -78,6 +78,20 @@
         "docs/architecture.md",
         "docs/testing.md"
       ]
+    },
+    {
+      "name": "A Evolving label inspection",
+      "paths": [
+        "local_inspection_service/label_inspection/**",
+        "local_inspection_service/frontend/src/features/label-inspection/**",
+        "local_inspection_service/scripts/smoke_label_inspection.py"
+      ],
+      "required_docs": [
+        "docs/text-inspection-v2.md",
+        "docs/architecture.md",
+        "docs/testing.md",
+        "docs/configuration-reference.md"
+      ]
     }
   ]
 }

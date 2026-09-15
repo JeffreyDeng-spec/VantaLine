@@ -4,6 +4,21 @@
 
 This document lists ownership and names, never secret values or production endpoints.
 
+## Independent A + Evolving label detection
+
+- `VANTALINE_LABEL_INSPECTION_ENABLED=true`: enables new paid submissions/claims.
+  Disabled or unavailable credentials still allow task/history reads and maintenance.
+- `VANTALINE_LABEL_INSPECTION_KEY_FILE`: absolute restricted runtime file containing
+  the explicitly authorized experiment Ark key. The shared billing account serves
+  all users with inspection permission. Never include the key in frontend, Git,
+  reports, diagnostics or request logs.
+
+The endpoint is fixed to Ark Beijing `/api/v3/chat/completions`; the model alias is
+`doubao-seed-evolving`. No browser credentials or per-user model override is exposed.
+Temperature, thinking, tokens and stage timeout are fixed in the module. This
+configuration does not change manuals, OCR preparation or Codex Beta settings.
+
+
 ## Configuration layers
 
 `VANTALINE_QWEN_REREAD_ACCOUNTS` is a separate, default-empty owner allowlist.

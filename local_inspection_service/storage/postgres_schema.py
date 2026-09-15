@@ -26,6 +26,7 @@ BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passe
 INTEGER_COLUMNS = frozenset({"sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "label_inspection_objects": ("id",),
     "codex_comparison_tasks": ("id",),
     "codex_comparison_events": ("id",),
     "text_ocr_evidence": ("id",),
@@ -64,6 +65,7 @@ PRIMARY_KEY_COLUMNS = {
 }
 
 UNIQUE_COLUMNS = {
+    "label_inspection_objects": (("owner_user_id", "kind", "idempotency_key"),),
     "codex_comparison_tasks": (("owner_user_id", "idempotency_key"),),
     "codex_comparison_events": (("task_id", "idempotency_key"), ("task_id", "sequence")),
     "agent_operations": (("owner_user_id", "idempotency_key"),),

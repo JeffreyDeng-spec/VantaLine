@@ -1,7 +1,7 @@
 /** Router paths exclude the optional preview basename. API/media URLs never use this helper. */
 export const WORKSPACE_PATH = "/workspace";
 export const legacyWorkspacePages = [
-  "status", "inspect", "text-compare-beta", "text-compare-codex", "ai-inspect", "accessories",
+  "label-inspection", "status", "inspect", "text-compare-beta", "text-compare-codex", "ai-inspect", "accessories",
   "training-library", "tasks", "pipeline", "rules", "users", "data-analysis"
 ] as const;
 
@@ -43,7 +43,7 @@ export function loginPath(next: string) {
 
 // Agent navigation and UI navigation must use the same protected route boundary.
 export const workspaceSections: Record<string, string> = Object.fromEntries(Object.entries({
-  detection: "/inspect", accessories: "/accessories", text: "/text-compare-beta",
+  detection: "/inspect", accessories: "/accessories", text: "/label-inspection",
   training: "/training-library", pipeline: "/pipeline", analysis: "/data-analysis",
   settings: "/rules", users: "/users", overview: "/"
 }).map(([name, path]) => [name, workspacePath(path)]));

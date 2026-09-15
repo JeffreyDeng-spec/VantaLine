@@ -1,5 +1,35 @@
 # Architecture
 
+## Label inspection A + Evolving workspace
+
+The production text-inspection label entry opens `/workspace/label-inspection`
+in the same tab without the platform sidebar. Its default view is an account-owned
+task list; `?view=new`, `?task=ID`, and `?task=ID&run=ID` preserve navigation and
+login return locations. Manuals remain at `/workspace/text-compare-beta?mode=manual`;
+Codex Beta keeps its native routes and execution engine.
+
+`label_inspection/api.py` composes an independent service and durable PostgreSQL
+repository. Each Word import creates one task containing all embedded images,
+including duplicates and invalid-image placeholders. Selection is manual. Standard
+edits create immutable revisions; submission freezes reference bytes/hashes,
+revision, model and prompt hash. Ordinary uploads and this camera never create PLC
+plans. The existing storage connection selector and Word extractors are reused.
+
+Two worker threads claim durable queued runs under one database advisory lock,
+with global concurrency two and at most one active run per task. A paid stage is
+recorded before external I/O, cannot be replayed, and is not retried after unknown
+outcomes. A 420-second run deadline invalidates late results. Service restart does
+not requeue claimed runs; expired runs require an explicit new linked detection.
+The two calls use the fixed Evolving alias and original A layout/comparison prompts.
+See [text inspection](text-inspection-v2.md) for exact parameters and coordinate limits.
+
+Old text records are read without rewriting conclusions and grouped by original
+standard ID. Missing-order records stay visible separately. First continuation
+creates an owner-scoped extension and original-image snapshot. Beta batch/single
+histories keep their native structure and links. New records use the new engine;
+manual inspection and Beta configuration are independent.
+
+
 ## Bounded actual-image reread trial
 
 The separately account-gated local reread follows whole-image OCR, deterministic

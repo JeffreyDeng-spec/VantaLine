@@ -13,6 +13,27 @@ JSONB job/attempt/deletion fields require no new table; snapshots stay immutable
 
 PostgreSQL is the production shared runtime store. Historical JSON-to-PostgreSQL preparation packets are migration evidence and must not be used to switch production back to JSON.
 
+## Additive label-inspection objects
+
+`2026_09_15_label_inspection.sql` adds `label_inspection_objects` through the normal
+immutable-release migration installer. The shared runtime repository owns its
+connection. Object kinds are task, immutable revision, run, paid call, and edit
+receipt, plus short-lived owner-scoped pagination snapshots. Snapshot cursors
+keep cross-source traversal stable while tasks receive new activity; expired page
+objects are pruned after 15 minutes without touching historical records.
+Owner/kind/idempotency-key uniqueness and a global transaction advisory
+lock serialize submissions and claims; queue indexes support global concurrency two.
+Runs freeze source hashes and prompt/model versions. Call evidence is inserted
+before provider I/O. There is no automatic retry of a claimed or unknown paid stage.
+A worker timeout expires the run without publishing a late result. Old text/Beta
+tables are compatibility-read only; continuation adds new objects and media.
+
+No destructive migration, old-record backfill or content-similarity deduplication
+is required. Backups must include the database and `label_inspection/media` under
+the existing runtime DATA_DIR. Diagnostic bodies may contain label text and remain
+account-private. Raw binary/image files never belong in the source release.
+
+
 ## Ownership and compatibility
 
 Comparison history uses the existing owner/created_at index and a bounded SQL

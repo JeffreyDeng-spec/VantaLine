@@ -2,6 +2,29 @@
 
 **Status: Authoritative**
 
+## A + Evolving label acceptance
+
+Run `VANTALINE_POSTGRES_DSN=... python local_inspection_service/scripts/smoke_label_inspection.py`
+against an isolated real PostgreSQL database. The script creates/drops a unique
+schema and uses fake provider responses: direct DOCX import, repeated/invalid/empty
+images, upload limits, owner/permission gates, immutable reference snapshots,
+idempotency, strict two-call settings, fail-closed responses, expiration without
+replay, global concurrency and pagination during concurrent task updates. It does not use a real API key.
+
+Run `node scripts/test_label_workspace_ui.cjs` for the actual React workspace with synthetic API/camera fixtures, then frontend typecheck/build, navigation tests, existing manual/Beta and camera/file
+contracts. The independent page must support list-first navigation, login returns,
+refresh/history deep links, task continuation, standard version changes, image zoom,
+camera stop on unmount/hidden tab, and non-PLC ordinary capture. Test 429, invalid
+JSON, truncation, duplicate click and restart without a false pass or duplicate call.
+Original A prompt boxes are label-relative without a trustworthy full-image extent;
+verify the UI explicitly omits uncertain issue boxes and shows the selected crop.
+
+For a live release, separately record results for the existing known missing-model
+line and sixth-icon defects, plus named normal/defective control samples. Preserve
+sample identities and call/token/timing evidence privately. This small controlled
+verification does not estimate real production accuracy.
+
+
 ## Comparison dialog regression
 
 Run `python -m local_inspection_service.scripts.smoke_comparison_history` for
