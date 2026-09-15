@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { workspacePath } from "../../app/paths";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { FileDropZone } from "../../components/FileDropZone";
@@ -514,7 +516,24 @@ export function LabelWorkspace() {
   return (
     <main className="label-workspace">
       <header className="li-header">
+        {!taskId && !isNew ? (
+          <Link className="li-back" aria-label="返回主界面" to={workspacePath()}>
+            <ArrowLeft size={18} /><span>返回主界面</span>
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="li-back"
+            aria-label={runId ? "返回任务详情" : "返回任务列表"}
+            disabled={busy}
+            onClick={() => setParams(runId ? { task: taskId } : {})}
+          >
+            <ArrowLeft size={18} />
+            <span>{runId ? "返回任务详情" : "返回任务列表"}</span>
+          </button>
+        )}
         <Link
+          className="li-brand"
           to={PAGE}
           onClick={() => {
             setRows([]);
@@ -527,7 +546,6 @@ export function LabelWorkspace() {
         <nav>
           <Link to={`${PAGE}?view=new`}>新建任务</Link>
           <Link to="/workspace/text-compare-beta?mode=manual">说明书检验</Link>
-          <Link to="/workspace">返回主平台</Link>
           <button onClick={() => void logout().catch(fail)}>退出登录</button>
         </nav>
       </header>

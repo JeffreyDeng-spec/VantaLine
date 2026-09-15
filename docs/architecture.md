@@ -8,6 +8,10 @@ task list; `?view=new`, `?task=ID`, and `?task=ID&run=ID` preserve navigation an
 login return locations. Manuals remain at `/workspace/text-compare-beta?mode=manual`;
 Codex Beta keeps its native routes and execution engine.
 
+The label workspace shares Beta's upper-left hierarchical back navigation:
+list to platform, task/import to list, and result to task. It uses explicit router
+destinations rather than browser history, including on refreshed deep links.
+
 `label_inspection/api.py` composes an independent service and durable PostgreSQL
 repository. Each Word import creates one task containing all embedded images,
 including duplicates and invalid-image placeholders. Selection is manual. Standard
