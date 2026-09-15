@@ -151,5 +151,5 @@ def register(ns):
                 target=loop, name=f"label-inspection-{index}", daemon=True
             ).start()
 
-    ns["app"].add_event_handler("startup", start)
-    ns["app"].add_event_handler("shutdown", stop.set)
+    ns["app"].on_event("startup")(start)
+    ns["app"].on_event("shutdown")(stop.set)
