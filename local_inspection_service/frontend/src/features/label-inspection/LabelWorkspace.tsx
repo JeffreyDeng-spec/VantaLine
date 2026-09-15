@@ -359,6 +359,8 @@ export function LabelWorkspace() {
     [decision, setDecision] = useState("all"),
     [cursor, setCursor] = useState(""),
     [rows, setRows] = useState<Row[]>([]);
+  const activeView = useRef(params.toString());
+  activeView.current = params.toString();
   const mounted = useRef(true),
     submission = useRef(false);
   const pendingKey = `label-submit:${user.id}:${taskId}`;
@@ -463,17 +465,19 @@ export function LabelWorkspace() {
   function fail(e: unknown) {
     setError(e instanceof Error ? e.message : "操作失败，请重试");
   }
-  async function perform(fn: () => Promise<void>) {
+  async function perform(fn: (isCurrent: () => boolean) => Promise<void>) {
+    const submittedView = activeView.current;
+    const isCurrent = () => mounted.current && activeView.current === submittedView;
     if (submission.current) return;
     submission.current = true;
     setBusy(true);
     setError("");
     try {
-      await fn();
+      await fn(isCurrent);
       await cache.invalidateQueries({ queryKey: ["label-task"] });
       await cache.invalidateQueries({ queryKey: ["label-list"] });
     } catch (e) {
-      fail(e);
+      if (isCurrent()) fail(e);
     } finally {
       submission.current = false;
       if (mounted.current) setBusy(false);
@@ -676,12 +680,12 @@ export function LabelWorkspace() {
                 ariaLabel="导入 Word 创建任务"
                 onFiles={(files) => {
                   if (files[0])
-                    void perform(async () => {
+                    void perform(async (isCurrent) => {
                       const created = await apiClient.upload<Task>(
                         `${API}/tasks`,
                         form(files[0]),
                       );
-                      openTask(created.id);
+                      if (isCurrent()) openTask(created.id);
                     });
                 }}
               >
@@ -724,11 +728,11 @@ export function LabelWorkspace() {
                     <button
                       disabled={busy || !!value.missing}
                       onClick={() =>
-                        void perform(async () => {
+                        void perform(async (isCurrent) => {
                           const continued = await apiClient.post<Task>(
                             `${API}/tasks/${encodeURIComponent(value.id)}/continue`,
                           );
-                          openTask(continued.id);
+                          if (isCurrent()) openTask(continued.id);
                         })
                       }
                     >
@@ -770,7 +774,7 @@ export function LabelWorkspace() {
                   ) : (
                     <div className="li-gallery">
                       {value.assets
-                        .filter((a) => hidden || a.enabled || !value.revision)
+                        .filter((a) => hidden || a.enabled || !!a.error || !value.revision)
                         .map((a) => (
                           <article
                             key={a.id}
@@ -778,7 +782,7 @@ export function LabelWorkspace() {
                           >
                             <button
                               aria-label={`选择标准 ${a.ordinal}`}
-                              disabled={!!run}
+                              disabled={!!run || (!a.media && !a.legacy_url)}
                               onClick={() => {
                                 setSelected(a.id);
                                 setGallery(false);
@@ -816,7 +820,7 @@ export function LabelWorkspace() {
                                   )
                                 }
                               >
-                                {a.enabled ? "隐藏标准" : "恢复标准"}
+                                {a.enabled ? "隐藏标准" : a.media ? "恢复标准" : "图片不可用"}
                               </button>
                             ) : null}
                           </article>
@@ -917,7 +921,7 @@ export function LabelWorkspace() {
                       !capabilities.data?.enabled
                     }
                     onClick={() =>
-                      void perform(async () => {
+                      void perform(async (isCurrent) => {
                         if (!actual || !reference) return;
                         const requestId =
                           sessionStorage.getItem(pendingKey) || key();
@@ -933,6 +937,7 @@ export function LabelWorkspace() {
                           }),
                         );
                         sessionStorage.removeItem(pendingKey);
+                        if (!isCurrent()) return;
                         setPending("");
                         setParams({ task: value.id, run: created.id });
                       })
