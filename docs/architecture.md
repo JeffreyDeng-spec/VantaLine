@@ -24,7 +24,7 @@ with global concurrency two and at most one active run per task. A paid stage is
 recorded before external I/O, cannot be replayed, and is not retried after unknown
 outcomes. A 420-second run deadline invalidates late results. Service restart does
 not requeue claimed runs; expired runs require an explicit new linked detection.
-The two calls use the fixed Evolving alias and original A layout/comparison prompts.
+The two calls use the fixed Evolving alias and original A layout prompt and A comparison rules with versioned full-input image coordinates.
 See [text inspection](text-inspection-v2.md) for exact parameters and coordinate limits.
 
 Old text records are read without rewriting conclusions and grouped by original

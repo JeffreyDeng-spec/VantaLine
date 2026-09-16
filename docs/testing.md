@@ -434,3 +434,5 @@ exit and navigation clear that intent; upload completion never forces fullscreen
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
 
 Compact issue regression verifies six visible rows at 1920x1080 and five at 1440x900, 16px single-line descriptions, full details including unlocated evidence, numbered existing boxes and selected-row highlight. Existing small-screen, local overflow, fullscreen, history, camera and navigation regressions remain required.
+
+Run `python local_inspection_service/scripts/smoke_label_coordinates.py` for full-image/crop mapping, EXIF orientation, invisible sides, missing contract markers, nonfinite/out-of-bounds geometry and independent valid siblings. The PostgreSQL label smoke invokes these checks too. Before release, inspect real same-photo, rotated and multi-label outputs in the actual React workspace, preserving raw responses and overlays outside Git. Successful API responses alone do not establish localization quality.

@@ -14,6 +14,7 @@ MODEL = "doubao-seed-evolving"
 URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 PROMPTS = json.loads(Path(__file__).with_name("prompts.json").read_text())
 PROMPT_HASH = digest(PROMPTS)
+COORDINATE_SPACE = "image_input_normalized_v2"
 MAX_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 16_000_000
 
@@ -171,6 +172,7 @@ def result(value, crop, size):
         or not 0 <= score <= 100
     ):
         raise ValueError("模型评分无效")
+    image_coordinates = value.get("coordinateSpace") == COORDINATE_SPACE
     parsed = []
     for i, issue in enumerate(issues):
         if (
@@ -215,11 +217,18 @@ def result(value, crop, size):
             ]
         item["suggested_reference_box"] = item["reference_box"]
         item["suggested_actual_box"] = box
-        item["reference_box"] = None
-        item["actual_box"] = None
-        item["position_note"] = (
-            "原提示词返回标签内相对位置，缺少标签边界，暂不绘制不可靠标注"
-        )
+        if image_coordinates:
+            item["actual_box"] = box
+            missing = []
+            if item["reference_box"] is None:
+                missing.append("标准侧无可见或有效定位")
+            if item["actual_box"] is None:
+                missing.append("实物侧无可见或有效定位")
+            item["position_note"] = "；".join(missing) or "模型定位框，已映射至显示原图；请结合图像复核"
+        else:
+            item["reference_box"] = None
+            item["actual_box"] = None
+            item["position_note"] = "旧版或未声明坐标规范，无法可靠映射；重新检测可生成新版标注"
         parsed.append(item)
     consistent = value.get("consistentItems", [])
     if (
@@ -231,6 +240,7 @@ def result(value, crop, size):
     return {
         "decision": "DIFFERENCES" if parsed else "MATCH",
         "issues": parsed,
+        "coordinate_space": COORDINATE_SPACE if image_coordinates else "unknown",
         "similarity": score,
         "consistent_items": consistent,
     }

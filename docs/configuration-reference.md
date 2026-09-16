@@ -171,3 +171,5 @@ exit and navigation clear that intent; upload completion never forces fullscreen
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
 
 Compact label issue rows and numbered overlays are frontend presentation only and require no new settings. They preserve saved model results, confidence, evidence coordinates and prompts; details are available from each row.
+
+Label comparison now declares image_input_normalized_v2 in its prompt and result. No new environment setting is needed. Prompt hashes freeze this contract at submission; new runs use the corrected coordinates, while legacy results retain their original evidence. Model, two-call count and limits are unchanged.
