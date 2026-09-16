@@ -1,5 +1,10 @@
 # Configuration reference
 
+Image-job metadata extraction adds no setting or ID conversion. Existing task,
+model and secret-version references remain unchanged. New source fingerprints use
+manifest v3, including `accessories/image_job_metadata.py`; historical fingerprints
+are never rewritten. Guide insertion/limits and strict file-read errors are preserved.
+
 Gallery extraction adds no settings. Existing preview dimensions, alpha/gray
 conversion, source/pose/sprite ordering, duplicate suppression, reference selection,
 audit fields, metadata limits and per-request redaction are unchanged. Asset
@@ -22,7 +27,7 @@ provider execution is unchanged. Existing task model references are preserved.
 
 Accessory catalog extraction introduces no settings. Existing member/admin
 visibility, full-versus-summary payloads, source redaction, defaults and physical
-dimensions are unchanged. New task prompt provenance uses source manifest v2,
+dimensions are unchanged. Task prompt provenance uses the versioned source manifest,
 including the extracted policy source; existing snapshots keep their old reference.
 
 Record access extraction adds no settings. Only administrators may assign another

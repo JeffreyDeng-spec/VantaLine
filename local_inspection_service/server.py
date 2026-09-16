@@ -7468,40 +7468,33 @@ def load_preview_asset(item: dict[str, Any]) -> np.ndarray | None:
     return loaded[0] if loaded else None
 
 
+from .accessories.image_job_metadata import (
+    ImageJobMetadata, ProvenanceDependencies,
+    candidate_image_jobs as _image_metadata_jobs,
+    deterministic_task_id as _image_metadata_task_id,
+    ensure_image_job_task_id as _image_metadata_ensure_id,
+)
+_image_job_metadata = ImageJobMetadata(
+    ProvenanceDependencies(
+        hash_file=lambda path: file_sha256(path),
+        policy_version=lambda: ANCHOR_POLICY_VERSION,
+        guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
+        max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
+    ),
+    lambda: resolve_model_profiles(),
+)
+
+
 def candidate_image_jobs(candidate: dict[str, Any]) -> list[dict[str, Any]]:
-    jobs = candidate.get("codex_image_jobs")
-    if isinstance(jobs, list) and jobs:
-        return [job for job in jobs if isinstance(job, dict)]
-    job = candidate.get("codex_image_job")
-    return [job] if isinstance(job, dict) and job else []
+    return _image_metadata_jobs(candidate)
 
 
 def deterministic_task_id(candidate: dict[str, Any], job: dict[str, Any]) -> str:
-    raw = "|".join(
-        [
-            str(job.get("job_id") or ""),
-            str(candidate.get("id") or job.get("candidate_id") or ""),
-            str(job.get("pose_family") or ""),
-            str(job.get("created_at") or candidate.get("created_at") or ""),
-            str(job.get("output_path") or ""),
-        ]
-    )
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
-    return f"task_{digest}"
+    return _image_metadata_task_id(candidate, job)
 
 
 def ensure_image_job_task_id(candidate: dict[str, Any], job: dict[str, Any]) -> bool:
-    changed = False
-    if not job.get("job_id"):
-        job["job_id"] = f"imgjob_{candidate.get('id', deterministic_task_id(candidate, job))}"
-        changed = True
-    if not job.get("candidate_id") and candidate.get("id"):
-        job["candidate_id"] = candidate.get("id")
-        changed = True
-    if not job.get("task_id"):
-        job["task_id"] = deterministic_task_id(candidate, job)
-        changed = True
-    return changed
+    return _image_metadata_ensure_id(candidate, job)
 
 
 def image_job_matches(candidate: dict[str, Any], job: dict[str, Any], lookup_id: str) -> bool:
@@ -7521,80 +7514,15 @@ def file_sha256(path: Path) -> str | None:
 
 
 def ensure_anchor_image_provenance(job: dict[str, Any]) -> bool:
-    if job.get("generation_step") != "anchor_replacement":
-        return False
-    changed = False
-    anchor_path = Path(str(job.get("anchor_image_path") or ""))
-    if anchor_path.name and not job.get("anchor_image_basename"):
-        job["anchor_image_basename"] = anchor_path.name
-        changed = True
-    if "anchor_image_sha256" not in job:
-        output_path = Path(str(job.get("output_path") or ""))
-        output_predates_anchor = False
-        try:
-            output_predates_anchor = output_path.exists() and anchor_path.exists() and output_path.stat().st_mtime < anchor_path.stat().st_mtime
-        except OSError:
-            output_predates_anchor = False
-        if job.get("status") == "completed" or output_predates_anchor:
-            job["anchor_image_sha256"] = None
-            job["anchor_provenance"] = "legacy_path_only"
-        else:
-            job["anchor_image_sha256"] = file_sha256(anchor_path)
-            job["anchor_policy_version"] = ANCHOR_POLICY_VERSION
-            job["anchor_provenance"] = "sha256"
-        changed = True
-    elif job.get("anchor_image_sha256"):
-        if not job.get("anchor_policy_version"):
-            job["anchor_policy_version"] = ANCHOR_POLICY_VERSION
-            changed = True
-        if not job.get("anchor_provenance"):
-            job["anchor_provenance"] = "sha256"
-            changed = True
-    elif not job.get("anchor_provenance"):
-        job["anchor_provenance"] = "legacy_path_only"
-        changed = True
-    return changed
+    return _image_job_metadata.ensure_anchor_image_provenance(job)
 
 
 def ensure_image_job_target_guides(job: dict[str, Any]) -> bool:
-    pose_family = str(job.get("pose_family") or "")
-    guides = [path for path in POSE_TARGET_GUIDE_IMAGES.get(pose_family, []) if path.exists()]
-    if not guides:
-        return False
-    changed = False
-    input_files = [str(item) for item in job.get("input_files", []) or []]
-    anchor_path = str(job.get("anchor_image_path") or "")
-    insert_at = 1 if anchor_path and input_files and input_files[0] == anchor_path else 0
-    for guide in guides:
-        guide_text = str(guide)
-        if guide_text not in input_files:
-            input_files.insert(insert_at, guide_text)
-            insert_at += 1
-            changed = True
-    target_paths = [str(path) for path in guides]
-    target_hashes = {path.name: file_sha256(path) for path in guides}
-    if job.get("target_guide_paths") != target_paths:
-        job["target_guide_paths"] = target_paths
-        changed = True
-    if job.get("target_guide_sha256") != target_hashes:
-        job["target_guide_sha256"] = target_hashes
-        changed = True
-    if changed:
-        job["input_files"] = input_files[:MAX_IMAGE_WORKER_INPUTS]
-    return changed
+    return _image_job_metadata.ensure_image_job_target_guides(job)
 
 
 def ensure_candidate_image_job_task_ids(candidate: dict[str, Any]) -> bool:
-    changed = False
-    jobs = candidate_image_jobs(candidate)
-    for job in jobs:
-        changed = ensure_image_job_task_id(candidate, job) or changed
-        changed = ensure_anchor_image_provenance(job) or changed
-        changed = ensure_image_job_target_guides(job) or changed
-    if jobs:
-        candidate["codex_image_jobs"] = jobs
-        candidate["codex_image_job"] = jobs[0]
-    return changed
+    return _image_job_metadata.ensure_candidate_image_job_task_ids(candidate)
 
 
 from .model_profiles.snapshots import freeze_record as freeze_model_record, pinned as pinned_model_profiles
@@ -7610,25 +7538,7 @@ def record_model_call(settings, elapsed_ms, ok, usage):
 
 
 def store_candidate_image_job(candidate: dict[str, Any], updated_job: dict[str, Any]) -> None:
-    freeze_model_record(resolve_model_profiles, updated_job)
-    ensure_image_job_task_id(candidate, updated_job)
-    ensure_anchor_image_provenance(updated_job)
-    ensure_image_job_target_guides(updated_job)
-    job_id = str(updated_job.get("job_id", ""))
-    jobs = candidate_image_jobs(candidate)
-    replaced = False
-    next_jobs = []
-    for job in jobs:
-        ensure_image_job_task_id(candidate, job)
-        if str(job.get("job_id", "")) == job_id:
-            next_jobs.append(updated_job)
-            replaced = True
-        else:
-            next_jobs.append(job)
-    if not replaced:
-        next_jobs.append(updated_job)
-    candidate["codex_image_jobs"] = next_jobs
-    candidate["codex_image_job"] = next_jobs[0] if next_jobs else None
+    return _image_job_metadata.store_candidate_image_job(candidate, updated_job)
 
 
 def accessory_image_paths(item: dict[str, Any]) -> list[Path]:

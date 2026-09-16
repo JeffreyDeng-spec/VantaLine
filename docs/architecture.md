@@ -1,5 +1,13 @@
 # Architecture
 
+`accessories.image_job_metadata` owns deterministic job identity, candidate job
+aliases, anchor/guide provenance and update binding. Its service receives an
+explicit model-resolver provider and narrow provenance capabilities. Freeze still
+precedes ID/file mutation, and existing snapshot references remain untouched.
+The root intentionally injects its final `file_sha256` binding: the later strict
+implementation overrides an earlier definition, and I/O errors must still propagate.
+Source manifest v3 includes the actual migrated metadata file for new task evidence.
+
 `accessories.gallery.AccessoryGallery` owns public detail projection, preview
 image writes and gallery assembly. Asset lookup, output storage and display
 capabilities are explicit and share the existing accessory projection. Detail
@@ -33,7 +41,7 @@ Each service receives only its required capabilities. Detail still calls the
 gallery service, which may write previews, only after authorization.
 Candidate/image generation and the remaining write HTTP workflows stay in the root.
 Four constant aliases and fourteen compatibility helpers preserve existing callers.
-Prompt source manifest v2 includes `accessories/policy.py`; old task fingerprints
+The source manifest includes `accessories/policy.py`; old task fingerprints
 are unchanged. This is a structure change without policy or model changes.
 
 `records.access.RecordAccess` owns request owner fields, administrator owner

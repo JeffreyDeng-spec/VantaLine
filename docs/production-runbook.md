@@ -1,5 +1,10 @@
 # Production runbook
 
+Image-job metadata uses ordinary complete-release restart and rollback. Preserve
+existing task IDs, old model/secret references and anchor/guide evidence, including
+partial metadata left after a file-read error. New tasks use source manifest v3;
+rollback does not rewrite their snapshots or regenerate/requeue paid work.
+
 Gallery extraction uses ordinary whole-release restart and rollback. Verify
 authorized detail previews with synthetic media. Preserve existing generated
 previews and task/source files during rollback; a failed detail request may already
@@ -22,7 +27,7 @@ anchor provenance and model snapshots, including repairs already persisted durin
 reads. Do not regenerate images or replay provider calls when rolling back.
 
 Accessory catalog extraction uses the ordinary complete-release restart. Check
-owner/shared/admin listing and details. New tasks record the v2 prompt-source
+owner/shared/admin listing and details. New tasks record the current prompt-source
 manifest; retain old snapshots and paid-call evidence on complete-release rollback.
 No record-ID conversion, image regeneration or data migration is required.
 
