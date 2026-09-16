@@ -184,6 +184,61 @@ def check_all(client, check, repo, media, close_connections):
             if decision == "REVIEW_REQUIRED"
             else final["result"]
         )
+    # A shared credential profile can name a different model; PDF transport AND
+    # accounting must consistently retain the frozen Evolving model.
+    from unittest.mock import patch
+
+    run = repo.submit(
+        "alice",
+        task["id"],
+        uuid.uuid4().hex,
+        1,
+        ready["assets"][0]["id"],
+        actual,
+        model.MODEL,
+        manual.PROMPT_HASH,
+    )
+    accounts = []
+    calls = []
+
+    def routed(body, settings):
+        assert settings["model"] == model.MODEL and settings["timeout_seconds"] == 180
+        calls.append(body)
+        value = (
+            good
+            if len(calls) == 1
+            else {
+                "reviewRequired": False,
+                "hasDiff": False,
+                "similarity": 100,
+                "issues": [],
+            }
+        )
+        return 200, json.dumps(
+            {
+                "choices": [
+                    {"finish_reason": "stop", "message": {"content": json.dumps(value)}}
+                ]
+            }
+        )
+
+    with patch("local_inspection_service.model_profiles.transport.invoke", routed):
+        process(
+            repo,
+            media,
+            repo.claim(),
+            "test",
+            resolved={
+                "model": "old-profile-model",
+                "provider": "doubao",
+                "timeout_seconds": 30,
+            },
+            record_call=lambda settings, *_: accounts.append(settings["model"]),
+        )
+    assert (
+        accounts == [model.MODEL, model.MODEL]
+        and repo.get("alice", run["id"])["decision"] == "MATCH"
+    )
     bad = copy.deepcopy(actual)
     bad["original"] = media.put("alice", b"corrupt")
     run = repo.submit(

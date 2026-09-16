@@ -15,6 +15,8 @@ def process(
 ):
     owner, identity = run["owner_user_id"], run["id"]
     is_pdf = run.get("strategy") == manual.VERSION
+    if is_pdf and resolved:
+        resolved = {**resolved, "model": model.MODEL, "timeout_seconds": 180}
     engine = manual if is_pdf else model
     started = time.monotonic()
 
