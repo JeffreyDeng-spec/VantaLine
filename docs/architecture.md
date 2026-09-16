@@ -1,5 +1,11 @@
 # Architecture
 
+The label result page exposes a detection ID for support, with no call-diagnostic
+control or diagnostic fetch. Normal run responses omit model/prompt/layout/transform
+internals and retain only a quality-check presence marker. Full evidence remains in
+durable storage; the diagnostics endpoint additionally requires administrator role and
+retains current-account ownership checks.
+
 ## Label inspection A + Evolving workspace
 
 The production text-inspection label entry opens `/workspace/label-inspection`

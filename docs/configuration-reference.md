@@ -1,5 +1,10 @@
 # Configuration reference
 
+Label call diagnostics have no user-facing toggle or new environment flag. The existing
+administrator-role check protects the diagnostics endpoint before repository access;
+account ownership and inspection permission still apply. Runtime call evidence is
+retained unchanged.
+
 **Status: Authoritative**
 
 This document lists ownership and names, never secret values or production endpoints.
