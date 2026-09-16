@@ -1009,8 +1009,7 @@ export function LabelWorkspace() {
           >
             <strong>{value?.name || "正在加载任务…"}</strong>
             <small>
-              标准版本 {value?.revision || "旧版"} · {value?.assets.length ?? 0}{" "}
-              张
+              {value?.import && !value.revision ? `正在准备标准 · ${value.import.completed} / ${value.import.total}` : `标准版本 ${value?.revision || "旧版"} · ${value?.assets.length ?? 0} 张`}
             </small>
           </button>
         ) : (
@@ -1234,8 +1233,8 @@ export function LabelWorkspace() {
             </section>
           ) : null}
           {taskId && !value ? <p>正在读取任务…</p> : null}
-          {value?.read_only && value.manual_history ? <ManualHistory taskId={value.id} history={value.manual_history} /> : value?.import && value.revision === 0 ? (
-            <section className="li-manual-history" role="status"><h2>{text(value.status || "import_queued")}</h2><p>已处理 {value.import.completed} / {value.import.total} 个标准条目。可以关闭页面，导入会在后台继续。</p>{value.import.error && <p role="alert">{value.import.error}</p>}<Link to={`${PAGE}?view=new`}>重新创建任务</Link></section>
+          {value?.read_only && value.manual_history ? <ManualHistory taskId={value.id} history={value.manual_history} missing={value.missing} /> : value?.import && value.revision === 0 ? (
+            <section className="li-manual-history" role="status"><h2>{text(value.status || "import_queued")}</h2><p>已处理 {value.import.completed} / {value.import.total} 个标准条目。可以关闭页面，导入会在后台继续。</p>{value.import.error && <p role="alert">{value.import.error}</p>}{value.status === "import_failed" && <Link to={`${PAGE}?view=new`}>重新创建任务</Link>}</section>
           ) : value ? (
             <>
               {!value.revision && (

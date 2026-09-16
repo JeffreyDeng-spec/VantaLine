@@ -53,7 +53,7 @@ def main() -> None:
         "locate anything": FRONTEND / "features" / "locate" / "LocateAnythingPage.tsx",
         "training pipeline": FRONTEND / "features" / "pipeline" / "TrainingPipelinePage.tsx",
         "label sheet": FRONTEND / "features" / "label" / "LabelSheetPage.tsx",
-        "text comparison": FRONTEND / "features" / "text-compare" / "TextCompareBetaPage.tsx",
+        "text comparison": FRONTEND / "features" / "label-inspection" / "LabelWorkspace.tsx",
     }
     for label, path in upload_surfaces.items():
         source = path.read_text(encoding="utf-8")
@@ -82,50 +82,24 @@ def main() -> None:
     require(
         text_compare,
         {
-            "order asset drop": 'ariaLabel="拖拽或选择单张标准图片"',
-            "actual image drop": 'ariaLabel="拖拽或选择实物图片"',
-            "actual image validation": "replaceCaptured(file)",
-            "camera enumeration": "navigator.mediaDevices?.enumerateDevices",
-            "video-only devices": 'device.kind === "videoinput"',
-            "selected exact device": "deviceId: { exact: deviceId }",
-            "actual device reconciliation": "getSettings().deviceId",
-            "request generation": "cameraRequestRef.current",
-            "stale stream rejection": "requestId !== cameraRequestRef.current",
-            "stale track stop": "stream.getTracks().forEach((track) => track.stop())",
-            "device change listener": 'addEventListener?.("devicechange"',
-            "device change cleanup": 'removeEventListener?.("devicechange"',
-            "permission denial": 'cameraFailure.name === "NotAllowedError"',
-            "missing selected device": 'cameraFailure.name === "OverconstrainedError"',
-            "removed device": 'cameraFailure.name === "NotFoundError"',
-            "no-device fallback": "未检测到可用摄像头",
-            "label fallback": "摄像头 ${index + 1}",
-            "accessible selector": 'aria-label="选择摄像头设备"',
-            "selector startup guard": "disabled={cameraStarting || !cameraDevices.length}",
-            "selection clears capture": "setSelectedDeviceId(deviceId); clearCaptured(); void startCamera(deviceId)",
-            "capture startup guard": "disabled={cameraStarting}",
-            "changed input fences pending capture": "inputEpoch.current !== epoch",
-            "changed input detaches task": "comparison.reset()",
-            "image mode cancels camera": "++cameraRequestRef.current;",
+            "unified PDF upload": 'accept=".doc,.docx,.pdf,.jpg,.jpeg,.png,.webp,.bmp"',
+            "camera enumeration": "navigator.mediaDevices.enumerateDevices()",
+            "video-only devices": 'x.kind === "videoinput"',
+            "selected exact device": "deviceId: { exact: device }",
+            "request generation": "const token = generation.current",
+            "stale stream rejection": "token !== generation.current",
+            "stale track stop": "s.getTracks().forEach((t) => t.stop())",
+            "hidden window stop": "if (document.hidden) stop()",
+            "read-only stop": "if (readOnly || disabled) stop()",
+            "removed device": "摄像头已断开，请重新开启",
+            "accessible selector": 'aria-label="选择摄像头"',
+            "capture generation guard": "blob && token === generation.current",
+            "selection from grid": "setSelected(a.id)",
         },
-        "text comparison camera picker",
+        "unified comparison camera and PDF picker",
     )
-    if 'ariaLabel="拖拽或选择标准图片"' in text_compare or "replaceReference(file)" in text_compare:
-        raise AssertionError("text comparison must select its reference from the order gallery")
-    device_change = text_compare[
-        text_compare.index("const handleDeviceChange"):
-        text_compare.index('addEventListener?.("devicechange"')
-    ]
-    if "!streamRef.current" in device_change:
-        raise AssertionError("devicechange must recover a device lost while getUserMedia is still pending")
-    require(
-        device_change,
-        {
-            "active surface guard": "cameraSurfaceActiveRef.current",
-            "live track check": 'track.readyState === "live"',
-            "available-device fallback": "startCamera(next.selectedId)",
-        },
-        "camera devicechange fallback",
-    )
+    retired = (FRONTEND / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text()
+    require(retired, {"read-only redirect": "LegacyManualRedirect"}, "retired manual entry")
 
     print("smoke_frontend_media_inputs: ok")
 

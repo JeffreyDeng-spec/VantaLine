@@ -4,12 +4,12 @@ export type ManualHistoryData = {
   pages: Array<{ id: string; session_id?: string; standard_asset_id?: string; decision?: string; status?: string; message?: string; differences?: unknown[]; final_decision?: string; review_reason?: string; has_photo: boolean }>;
   standards: Array<{ id: string; ordinal: number; url: string }>;
 };
-export function ManualHistory({ taskId, history }: { taskId: string; history: ManualHistoryData }) {
+export function ManualHistory({ taskId, history, missing }: { taskId: string; history: ManualHistoryData; missing?: string }) {
   const [imageError, setImageError] = useState(false);
   const [image, setImage] = useState("");
   const show = (url: string) => { setImageError(false); setImage(url); };
   return <section className="li-manual-history">
-    <h2>历史记录（只读）</h2>
+    <h2>历史记录（只读）</h2>{missing && <p role="alert">{missing}</p>}
     <p>保留原有检测结论。继续检测请新建任务并重新导入 PDF。</p>
     <details><summary>原标准页面（{history.standards.length}）</summary>
       {history.standards.map(a => <button key={a.id} onClick={() => show(a.url)}>原标准第 {a.ordinal} 页</button>)}
