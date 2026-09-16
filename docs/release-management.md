@@ -1,7 +1,11 @@
 # VantaLine release management
 
+Preparation CI adds synthetic workflow contracts and source manifest v4 includes
+the migrated prompt producer. Ship services and manifest together in the complete
+immutable release. Existing snapshots are not rewritten during deployment or rollback.
+
 Image-job metadata CI adds runtime contract checks and advances source provenance
-to manifest v3. Package the new metadata source with the complete immutable release.
+to the versioned source manifest. Package the new metadata source with the complete immutable release.
 No schema, prompt algorithm, concurrency or process topology change is introduced.
 
 Gallery CI adds synthetic HTTP/image-byte contracts. Whole immutable releases

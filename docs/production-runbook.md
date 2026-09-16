@@ -1,8 +1,13 @@
 # Production runbook
 
+Preparation extraction uses the normal whole-release restart and rollback.
+Candidate preparation can leave frames or thumbnails before a later failure, as
+before; preserve these files and task evidence. No database migration, automatic
+model retry or worker-topology cutover is part of this extraction.
+
 Image-job metadata uses ordinary complete-release restart and rollback. Preserve
 existing task IDs, old model/secret references and anchor/guide evidence, including
-partial metadata left after a file-read error. New tasks use source manifest v3;
+partial metadata left after a file-read error. New tasks use the versioned source manifest;
 rollback does not rewrite their snapshots or regenerate/requeue paid work.
 
 Gallery extraction uses ordinary whole-release restart and rollback. Verify

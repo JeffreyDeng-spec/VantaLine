@@ -1,8 +1,13 @@
 # Configuration reference
 
+Source preparation adds no configuration or prompt-content change. New task source
+fingerprints use manifest v4, which includes the actual `accessories/preparation.py`
+producer. Historical source fingerprints and model/secret references remain unchanged.
+Existing crop limits, source ordering, default sizes and profile call flags remain.
+
 Image-job metadata extraction adds no setting or ID conversion. Existing task,
 model and secret-version references remain unchanged. New source fingerprints use
-manifest v3, including `accessories/image_job_metadata.py`; historical fingerprints
+the versioned source manifest, including `accessories/image_job_metadata.py`; historical fingerprints
 are never rewritten. Guide insertion/limits and strict file-read errors are preserved.
 
 Gallery extraction adds no settings. Existing preview dimensions, alpha/gray
