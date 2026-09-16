@@ -4,7 +4,7 @@ import copy
 import json
 import threading
 import time
-from . import model
+from . import model, quality
 from ..storage.label_inspection import LabelRepository
 from ..codex_compare.media import MediaStore
 
@@ -55,7 +55,14 @@ def process(repo, media, run, key, invoke=model.invoke):
             raise ValueError("模型服务未返回 JSON")
         return model.parse(response)
 
+    quality_record = copy.deepcopy(run.get("quality") or {})
+
+    def quality_save():
+        repo.update_run(owner, identity, quality=quality_record)
+
     try:
+        if quality_record.get("policy") != quality.POLICY:
+            raise quality.Rejected("QUALITY_POLICY_CHANGED")
         if run["model"] != model.MODEL or run["prompt_hash"] != model.PROMPT_HASH:
             raise ValueError("提交后的模型或提示词版本发生变化，请手动重新检测")
         reference, ref_transform = model.decode(
@@ -68,6 +75,15 @@ def process(repo, media, run, key, invoke=model.invoke):
             identity,
             transformations={"reference": ref_transform, "actual": transform},
         )
+        repo.update_run(owner, identity, phase="quality")
+        try:
+            quality_record["preflight"] = quality.inspect(actual_input, actual.size)
+        except Exception:
+            raise quality.Rejected("QUALITY_UNAVAILABLE") from None
+        quality_save()
+        if not quality_record["preflight"]["passed"]:
+            raise quality.Rejected(quality_record["preflight"]["code"])
+        repo.update_run(owner, identity, phase="layout")
         layout = stage("layout", [actual_input])
         crop = model.crop_rect(layout, actual.size)
         if crop:
@@ -82,6 +98,41 @@ def process(repo, media, run, key, invoke=model.invoke):
             coordinate_space=model.COORDINATE_SPACE,
             scope="仅检测选中标签" if crop else "检测实物图中的单张标签",
         )
+        repo.update_run(owner, identity, phase="quality_selected")
+        selected_started = time.monotonic()
+        target = quality.selected(quality_record["preflight"], crop, actual.size)
+        quality_record["selected"] = {
+            "passed": bool(target and target["passed"]),
+            "code": (
+                None
+                if target and target["passed"]
+                else (
+                    "QUALITY_SELECTED_REJECTED"
+                    if target
+                    else "QUALITY_TARGET_UNCERTAIN"
+                )
+            ),
+            "candidate": target,
+            "crop": crop,
+        }
+        if target and target["passed"] and crop:
+            try:
+                quality_record["selected"]["recheck"] = quality.recheck(
+                    actual_input, target, crop, actual.size
+                )
+            except Exception:
+                raise quality.Rejected("QUALITY_UNAVAILABLE") from None
+            if not quality_record["selected"]["recheck"]["passed"]:
+                quality_record["selected"].update(
+                    passed=False, code="QUALITY_SELECTED_REJECTED"
+                )
+        quality_record["selected"]["elapsed_ms"] = round(
+            (time.monotonic() - selected_started) * 1000, 2
+        )
+        quality_save()
+        if not quality_record["selected"]["passed"]:
+            raise quality.Rejected(quality_record["selected"]["code"])
+        repo.update_run(owner, identity, phase="compare")
         value = stage("compare", [reference_input, actual_input], bool(crop))
         result = model.result(value, crop, actual.size)
         repo.update_run(
@@ -111,6 +162,8 @@ def process(repo, media, run, key, invoke=model.invoke):
                 finished_at=time.time(),
                 elapsed=time.monotonic() - started,
                 error=error.replace(key, "[REDACTED]"),
+                error_code=exc.code if isinstance(exc, quality.Rejected) else None,
+                quality=quality_record,
             )
         except Exception:
             pass  # Expiration is authoritative; late completion cannot turn green.

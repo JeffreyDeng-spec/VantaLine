@@ -542,6 +542,7 @@ def register(ns):
         def work():
             run = require(repo, owner, identity, "run")
             return {
+                "quality": run.get("quality"),
                 "calls": [
                     public(c)
                     for c in repo.list(owner, "call", run["task_id"])

@@ -70,6 +70,8 @@ type Run = {
   crop?: number[];
   scope?: string;
   error?: string;
+  error_code?: string;
+  quality?: { policy?: { version: string; config_hash: string } };
   legacy_record_id?: string;
   result?: { decision: string; similarity: number; issues: Issue[] };
 };
@@ -99,6 +101,8 @@ const labels: Record<string, string> = {
   MATCH: "未发现差异",
   DIFFERENCES: "发现差异",
   REVIEW_REQUIRED: "待复核",
+  quality: "检查照片质量",
+  quality_selected: "复核选中标签质量",
   queued: "排队中",
   running: "检测中",
   ready: "未检测",
@@ -385,7 +389,7 @@ function Diagnostics({ id }: { id: string }) {
   });
   return (
     <details onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>调用诊断（默认折叠）</summary>
+      <summary>质量与调用诊断（默认折叠）</summary>
       {open ? (
         <pre>
           {data.isError ? "诊断读取失败" : JSON.stringify(data.data, null, 2)}
@@ -1303,8 +1307,9 @@ export function LabelWorkspace() {
                         )}
                         {run.scope && (
                           <p className={run.crop ? "li-warning" : ""}>
-                            {run.scope}
-                            {run.crop ? "；框外其他标签没有检测。" : ""}
+                            {run.error_code?.startsWith("QUALITY_")
+                              ? "尚未完成比对；框线仅表示布局选中范围。"
+                              : `${run.scope}${run.crop ? "；框外其他标签没有检测。" : ""}`}
                           </p>
                         )}
                       </div>
@@ -1445,7 +1450,9 @@ export function LabelWorkspace() {
                               : ""
                         }
                       >
-                        {run.status === "completed"
+                        {run.error_code?.startsWith("QUALITY_")
+                          ? "照片质量未通过"
+                          : run.status === "completed"
                           ? text(run.decision)
                           : text(run.status)}
                       </h2>
@@ -1466,7 +1473,7 @@ export function LabelWorkspace() {
                         disabled={["queued", "running"].includes(run.status)}
                         onClick={fresh}
                       >
-                        检测下一件
+                        {run.error_code?.startsWith("QUALITY_") ? "重新拍照 / 重新上传" : "检测下一件"}
                       </button>
                     </header>
                   )}
@@ -1503,7 +1510,7 @@ export function LabelWorkspace() {
                   >
                     {run ? (
                       <section className="li-results">
-                        {run.error ? <p role="alert">{run.error}</p> : null}
+                        {run.error ? <p role="alert">{run.error_code?.startsWith("QUALITY_") ? "尚未完成比对。" : ""}{run.error}</p> : null}
                         {["queued", "running"].includes(run.status) ? (
                           <p role="status">
                             {text(run.phase || run.status)}…
@@ -1554,6 +1561,7 @@ export function LabelWorkspace() {
                             ))}
                           </>
                         ) : null}
+                        {!run.quality && !["queued", "running"].includes(run.status) ? <p className="li-quality-history">当时未执行质量筛选</p> : null}
                         {!run.legacy_record_id ? (
                           <Diagnostics id={run.id} />
                         ) : null}
@@ -1586,7 +1594,7 @@ export function LabelWorkspace() {
                       >
                         {when(r.created_at)} ·{" "}
                         {r.legacy_record_id ? "旧文字检验" : "Evolving"} ·{" "}
-                        {text(r.decision)} · {text(r.status)} · 版本{" "}
+                        {r.error_code?.startsWith("QUALITY_") ? "照片质量未通过" : text(r.decision)} · {text(r.status)} · 版本{" "}
                         {r.revision ?? "未留存"}
                       </button>
                     ))}
