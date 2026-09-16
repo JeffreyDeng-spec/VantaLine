@@ -26,6 +26,7 @@ BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passe
 INTEGER_COLUMNS = frozenset({"sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "model_profile_objects": ("id",),
     "label_inspection_objects": ("id",),
     "codex_comparison_tasks": ("id",),
     "codex_comparison_events": ("id",),

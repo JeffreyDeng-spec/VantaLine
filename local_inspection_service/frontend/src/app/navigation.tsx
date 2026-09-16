@@ -73,7 +73,7 @@ export const systemNavItems: NavItem[] = [
     label: "设置",
     path: workspacePath("/rules"),
     view: "rules",
-    permission: "system_settings",
+    permission: "inspection",
     icon: Settings,
     phase: "phase-2"
   },

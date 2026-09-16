@@ -16,7 +16,7 @@ def main():
     owner = user['id']
     os.environ['VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS'] = owner
     server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = True
-    server.ai_detection_settings = lambda: dict(provider='qwen', model='fixture-vl', api_key='never-log-this', base_url='https://fixture.invalid')
+    server.ai_detection_settings = lambda *args: dict(provider='qwen', model='fixture-vl', api_key='never-log-this', base_url='https://fixture.invalid')
     blobs = [picture('LABEL'), picture('LABEL'), picture('PRODUCT')]
     server.extract_doc_images = lambda data: ([dict(ordinal=i+1, sha256=server.sha256_bytes(b), mime_type='image/png') for i,b in enumerate(blobs)], blobs)
     calls = []

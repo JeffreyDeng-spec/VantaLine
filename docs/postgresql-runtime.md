@@ -149,3 +149,14 @@ needed. Request identity remains based on user intent, so an identical request I
 returns the original policy snapshot even across releases. New retries get fresh
 policy snapshots and retain parent_id. Quality evidence shares existing owner
 isolation and backups; no raw quality media enters application logs or Git.
+
+## Model configuration registry
+
+`2026_09_16_model_profiles.sql` adds `model_profile_objects`. JSONB rows hold
+append-only profile versions, audit/usage events, per-version connection-test
+status and one binding state with optimistic revision. An advisory transaction
+lock serializes migration and writes across processes. Keys/proxy credentials
+are stored only in restricted server secret storage; metadata stores references.
+The registry requires PostgreSQL and has no JSON runtime fallback. Initial
+migration is idempotent; original settings and immutable secret versions remain
+for complete-release rollback. Never remove a secret used by unfinished work.

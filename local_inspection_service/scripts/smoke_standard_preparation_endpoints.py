@@ -13,7 +13,7 @@ def main():
     owner = admin.post("/api/auth/bootstrap", json=dict(username="admin", password=PASSWORD)).json()["user"]["id"]
     os.environ["VANTALINE_STANDARD_PREPARATION_ACCOUNTS"] = owner
     server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = True
-    server.ai_detection_settings = lambda: dict(configured=True, provider="qwen", model="fixture", api_key="private-fixture")
+    server.ai_detection_settings = lambda *args: dict(configured=True, provider="qwen", model="fixture", api_key="private-fixture")
     image, elements = fixture()
     calls = []
     recovery_mode = os.environ.get("PREPARATION_TEST_RECOVERY")
@@ -120,7 +120,7 @@ def main():
     if qwen_mode:
         from local_inspection_service import qwen_evidence_jobs as qj
         os.environ["VANTALINE_QWEN_OCR_ACCOUNTS"] = owner
-        server.ai_detection_settings = lambda: dict(provider="qwen", model="fixture", api_key="private-fixture", base_url="https://dashscope.aliyuncs.com")
+        server.ai_detection_settings = lambda *args: dict(provider="qwen", model="qwen-vl-ocr-2025-11-20" if args and args[0] == "ocr" else "fixture", api_key="private-fixture", base_url="https://dashscope.aliyuncs.com")
         original_standard = copy.deepcopy(server._text_v2_owned("standards", standard["id"], owner))
         unprepared = copy.deepcopy(original_standard)
         for snapshot in unprepared["confirmed_assets"]:

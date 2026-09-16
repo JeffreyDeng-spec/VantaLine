@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 import threading
 import time
 from . import model, quality
@@ -9,12 +10,14 @@ from ..storage.label_inspection import LabelRepository
 from ..codex_compare.media import MediaStore
 
 
-def process(repo, media, run, key, invoke=model.invoke):
+def process(repo, media, run, key, invoke=model.invoke, resolved=None, record_call=None):
     owner, identity = run["owner_user_id"], run["id"]
     started = time.monotonic()
 
     def stage(name, images, cropped=False):
         body = model.payload(name, images, cropped)
+        if resolved:
+            body["model"] = resolved["model"]
         audit = copy.deepcopy(body)
         hashes = [media.put(owner, data) for data in images]
         iterator = iter(hashes)
@@ -23,8 +26,20 @@ def process(repo, media, run, key, invoke=model.invoke):
                 part["image_url"] = {"sha256": next(iterator), "encoding": "JPEG"}
         call = repo.begin_call(owner, identity, name, audit, hashes)
         start = time.monotonic()
+        response = None
+        def account(ok):
+            if record_call and resolved:
+                try:
+                    record_call(resolved, round((time.monotonic()-start)*1000), ok, response.get("usage", {}) if isinstance(response,dict) else {})
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).warning("Model usage accounting unavailable")
         try:
-            status, raw = invoke(body, key)
+            if resolved:
+                from ..model_profiles.transport import invoke as profile_invoke
+                status, raw = profile_invoke(body, resolved)
+            else:
+                status, raw = invoke(body, key)
             # Persist evidence before parsing; failures remain inspectable without replay.
             response = None
             try:
@@ -41,6 +56,7 @@ def process(repo, media, run, key, invoke=model.invoke):
                 usage=response.get("usage", {}) if isinstance(response, dict) else {},
             )
         except Exception:
+            account(False)
             repo.finish_call(
                 owner,
                 call["id"],
@@ -49,11 +65,17 @@ def process(repo, media, run, key, invoke=model.invoke):
                 error="网络中断或响应超限，调用结果未知；不会自动重试",
             )
             raise ValueError("模型调用结果未知；请查看诊断后手动重新检测") from None
-        if status != 200:
-            raise ValueError(f"模型服务返回 HTTP {status}；未自动重试")
-        if not isinstance(response, dict):
-            raise ValueError("模型服务未返回 JSON")
-        return model.parse(response)
+        try:
+            if status != 200:
+                raise ValueError(f"模型服务返回 HTTP {status}；未自动重试")
+            if not isinstance(response, dict):
+                raise ValueError("模型服务未返回 JSON")
+            parsed = model.parse(response)
+        except Exception:
+            account(False)
+            raise
+        account(True)
+        return parsed
 
     quality_record = copy.deepcopy(run.get("quality") or {})
 
@@ -63,7 +85,7 @@ def process(repo, media, run, key, invoke=model.invoke):
     try:
         if quality_record.get("policy") != quality.POLICY:
             raise quality.Rejected("QUALITY_POLICY_CHANGED")
-        if run["model"] != model.MODEL or run["prompt_hash"] != model.PROMPT_HASH:
+        if (not resolved and run["model"] != model.MODEL) or run["prompt_hash"] != model.PROMPT_HASH:
             raise ValueError("提交后的模型或提示词版本发生变化，请手动重新检测")
         reference, ref_transform = model.decode(
             media.read(owner, run["reference"]["media"]["original"])
@@ -176,20 +198,23 @@ def register(ns):
         while not stop.is_set():
             run = None
             try:
-                config = model.settings()
-                if config["enabled"]:
+                if os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower() == "true":
                     raw_repo = ns["runtime_postgres_repository_or_none"]()
                     if raw_repo:
                         repo = LabelRepository(raw_repo)
                         run = repo.claim()
                         if run:
+                            reference = run.get("profile_snapshot") or ns["model_profile_service"].snapshot_for_record(run).get("label")
+                            resolved = ns["model_profile_service"].resolve("label", reference) if reference else None
                             process(
                                 repo,
                                 MediaStore(
                                     ns["DATA_DIR"] / "label_inspection" / "media"
                                 ),
                                 run,
-                                config["key"],
+                                resolved["api_key"] if resolved else "",
+                                resolved=resolved,
+                                record_call=ns["model_profile_service"].record_call,
                             )
             except Exception:
                 pass  # Transient DB/config failures must not replay a claimed run.

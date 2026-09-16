@@ -126,6 +126,9 @@ def validate(value):
             "status": "candidate" if category == "label_design" else "needs_confirmation" if category == "uncertain" else "excluded"}
 
 
+from .model_profiles.audit import metered_function
+
+@metered_function(2)
 def classify_once(preview: bytes, context, settings: dict, transport):
     started = time.monotonic()
     diagnostic = {"prompt_version": VERSION, "model": settings["model"],

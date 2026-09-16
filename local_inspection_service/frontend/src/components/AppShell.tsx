@@ -743,7 +743,7 @@ export function AppShell() {
           <Route
             path="rules"
             element={
-              <PermissionRoute permission="system_settings">
+              <PermissionRoute permission="inspection">
                 <RulesPage />
               </PermissionRoute>
             }

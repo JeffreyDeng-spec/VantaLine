@@ -299,6 +299,7 @@ class LabelRepository:
         model,
         prompt_hash,
         parent="",
+        profile_snapshot=None,
     ):
         from ..label_inspection.quality import POLICY
 
@@ -352,6 +353,7 @@ class LabelRepository:
                 reference=copy.deepcopy(ref),
                 actual=actual,
                 model=model,
+                profile_snapshot=copy.deepcopy(profile_snapshot),
                 prompt_hash=prompt_hash,
                 parent_id=parent,
                 decision="REVIEW_REQUIRED",

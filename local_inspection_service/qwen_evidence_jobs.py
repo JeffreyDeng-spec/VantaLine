@@ -24,13 +24,20 @@ def enabled(owner):
 def settings(s, owner):
     if not enabled(owner) or not s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
         raise ValueError("ocr_external_authorization_unavailable")
-    resolved = s.ai_detection_settings()
+    resolved = s.ai_detection_settings("document")
+    resolved["ocr_settings"] = s.ai_detection_settings("ocr")
     if resolved.get("provider") != "qwen" or not resolved.get("api_key"):
         raise ValueError("qwen_credentials_unavailable")
-    ocr.endpoint(resolved["base_url"])
+    dedicated = resolved["ocr_settings"]
+    if dedicated.get("provider") != "qwen" or not dedicated.get("api_key") or dedicated.get("model") != "qwen-vl-ocr-2025-11-20":
+        raise ValueError("qwen_ocr_credentials_unavailable")
+    ocr.endpoint(dedicated["base_url"])
     return resolved
 
 
+from .model_profiles.audit import metered_function
+
+@metered_function(0)
 def llm(resolved, request, timeout, *, audit=None, structured=True):
     import requests
     payload = dict(model=resolved["model"], input={"messages": [
@@ -152,8 +159,8 @@ def run(s, jobs, record, upload, resolved):
             record["diagnostics"]["ocr_call"] = {"state": "attempting", "model": ocr.MODEL}
             save("extracting_text")
             try:
-                audit = model_call_audit.recorder(s, record, 'ocr', save, resolved['api_key'])
-                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved, blob, image.size, remaining(),presence_evidence=True, audit=audit))
+                audit = model_call_audit.recorder(s, record, 'ocr', save, resolved.get('ocr_settings', resolved)['api_key'])
+                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved.get("ocr_settings", resolved), blob, image.size, remaining(),presence_evidence=True, audit=audit))
                 cache.update(status="completed", observations=observations, diagnostics=diagnostic)
                 s._text_v2_update_attempt("ocr_evidence", cache)
             except Exception as error:
@@ -235,8 +242,8 @@ def run(s, jobs, record, upload, resolved):
                         if winner:
                             record['diagnostics']['external_calls'] += 1
                             save(phase)  # Persist each paid claim before sending image-only input.
-                            audit = model_call_audit.recorder(s, record, identity, save, resolved['api_key'])
-                            raw, metadata = ocr.recognize(resolved, region['blob'], region['input_size'], remaining(),
+                            audit = model_call_audit.recorder(s, record, identity, save, resolved.get('ocr_settings', resolved)['api_key'])
+                            raw, metadata = ocr.recognize(resolved.get("ocr_settings", resolved), region['blob'], region['input_size'], remaining(),
                                 presence_evidence=True, region_text=mode == 'text_recognition', audit=audit)
                             claim.update(status='completed', observations=raw, diagnostics=metadata)
                             s._text_v2_update_attempt('ocr_evidence', claim)

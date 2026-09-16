@@ -125,6 +125,11 @@ class TableSchema:
 
 TABLES = (
     TableSchema(
+        "model_profile_objects", ("id", "kind", "created_at", "raw_json"),
+        "CREATE TABLE IF NOT EXISTS model_profile_objects (id TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at INTEGER NOT NULL, raw_json TEXT NOT NULL)",
+        ("CREATE INDEX IF NOT EXISTS idx_model_profile_kind ON model_profile_objects(kind,created_at)",),
+    ),
+    TableSchema(
         "schema_migrations",
         ("version", "applied_at", "metadata_json"),
         """

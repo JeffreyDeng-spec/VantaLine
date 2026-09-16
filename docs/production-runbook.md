@@ -188,3 +188,17 @@ manual retry. After immutable release/version acceptance, verify clear/blurred
 submissions, mixed-label selection and owned history in the browser. Restore the
 previous complete release to roll back; preserve all task, quality and call data.
 The previous release does not enforce this quality gate.
+
+## Model profile rollout
+
+Before merge, run the registry PostgreSQL regression, settings browser acceptance,
+frontend typecheck/build and existing text/PLC gates. Apply the additive registry
+migration via the immutable installer. On first authenticated admin settings read,
+verify migrated purpose bindings and masked keys without printing credentials.
+Check the training assistant connection status and recent recorded calls separately:
+a configured code path is not proof of recent use. Unknown prices display 未计价.
+Verify `/api/version`, admin-only settings access and preserved account feature gates.
+Do not send customer images merely to validate settings or credential connectivity.
+Rollback restores the previous complete immutable release and legacy settings;
+retain the new table and all secret versions. Do not reverse migrations or replay
+uncertain paid calls. New-library edits are not written back into legacy settings.

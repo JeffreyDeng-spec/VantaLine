@@ -75,7 +75,7 @@ class PreparationJobs:
             raise HTTPException(404, "标准不存在")
         if not enabled(owner):
             raise HTTPException(409, "标准自动准备尚未启用")
-        settings = self.s.ai_detection_settings()
+        settings = self.s.ai_detection_settings("document")
         if not self.s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED or not settings.get("configured"):
             raise HTTPException(409, "请先配置并授权当前账户的视觉模型")
         if not self.slots.acquire(blocking=False):
@@ -99,6 +99,7 @@ class PreparationJobs:
                 return False
             standard["preparation_required"] = True
             standard["preparation_job"] = dict(id=job_id, state="processing", heartbeat=time.time())
+            standard["preparation_job"]["profile_snapshot"] = {"id":settings.get("profile_id"),"version":settings.get("profile_version")}
             for a in assets:
                 previous = next((v for v in standard.get("confirmed_assets", []) if v["id"] == a["id"]), None)
                 if previous and not a.get("active_preparation"):

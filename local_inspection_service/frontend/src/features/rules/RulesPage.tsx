@@ -1,1203 +1,734 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { useAgentActions } from "../agent/useAgentActions";
-import { KeyRound, PlugZap, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { hasPermission } from "../../app/permissions";
-import {
-  deleteActiveAiKey,
-  getAgentConfig,
-  getAiConfig,
-  getApiCostLedger,
-  getPlcWorkstation,
-  listPlcWorkstations,
-  pairPlcWorkstation,
-  queryKeys,
-  saveAgentConfig,
-  saveAiConfig,
-  savePlcWorkstationConfig,
-  testAgentConfig,
-  verifyPlcWorkstationProfile,
-} from "../../api/queries";
-import type { AgentConfigResponse, AiConfigResponse, AiKeySummary, ApiCostDailyPoint, ApiCostLedgerResponse, PlcWebSerialConfig } from "../../api/types";
+import { FormEvent, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useSearchParams } from "react-router-dom";
+import { apiClient } from "../../api/client";
+import { workspacePath } from "../../app/paths";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
-import { MetricCard } from "../../components/MetricCard";
-import { useToast } from "../../components/ToastProvider";
-import { toneForStatus } from "../../utils/format";
 import { useAuth } from "../auth/auth-context";
+import { useToast } from "../../components/ToastProvider";
+import { DeviceSettings, LegacyCostLedger } from "./DeviceSettings";
+import "./settings.css";
 
-const AI_PROVIDER_OPTIONS = [
-  { value: "gemini", label: "Gemini" },
-  { value: "qwen", label: "Qwen" }
-];
-
-const IMAGE_PROVIDER_OPTIONS = [
-  { value: "gemini", label: "Gemini" },
-  { value: "agnes", label: "Agnes Image" },
-  { value: "qwen_image", label: "Qwen Image" }
-];
-
-const AGENT_PROVIDER_OPTIONS = [
-  { value: "openai_compatible", label: "OpenAI 兼容" },
-  { value: "cursor", label: "Cursor" }
-];
-
-const IMAGE_PROVIDER_DEFAULTS: Record<string, { model: string; base_url: string }> = {
-  gemini: {
-    model: "gemini-3.1-flash-image",
-    base_url: "https://generativelanguage.googleapis.com/v1beta"
-  },
-  agnes: {
-    model: "agnes-image-2.0-flash",
-    base_url: "https://apihub.agnes-ai.com/v1/images/generations"
-  },
-  qwen_image: {
-    model: "qwen-image-2.0-pro",
-    base_url: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-  }
+const API = "/api/admin/model-profiles";
+type Profile = {
+  id: string;
+  version: number;
+  name: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  timeout_seconds: number;
+  enabled: boolean;
+  pending: boolean;
+  masked_key: string;
+  capabilities: string[];
+  used_by: string[];
+  connection_status: string;
 };
-
-const AI_PROVIDER_DEFAULTS: Record<string, { model: string; base_url: string }> = {
-  gemini: {
-    model: "gemini-2.5-flash",
-    base_url: "https://generativelanguage.googleapis.com/v1beta"
-  },
-  qwen: {
-    model: "qwen3-vl-flash",
-    base_url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
-  }
+type Purpose = {
+  id: string;
+  label: string;
+  capability: string;
+  advanced: boolean;
 };
-
-type SettingsTab = "ai" | "image" | "agent" | "plc" | "cost-ledger";
-type ApiKeyDialogTarget = "ai" | "image" | "agent";
-
-const SETTINGS_TABS: Array<{ value: SettingsTab; label: string }> = [
-  { value: "ai", label: "AI 检测" },
-  { value: "image", label: "图片生成" },
-  { value: "agent", label: "Agent 接入" },
-  { value: "plc", label: "PLC 同步" },
-  { value: "cost-ledger", label: "成本账本" }
-];
-
-function formatUsd(value?: number) {
-  const amount = Number(value || 0);
-  if (amount >= 100) return `$${amount.toFixed(2)}`;
-  if (amount >= 1) return `$${amount.toFixed(3)}`;
-  return `$${amount.toFixed(6)}`;
-}
-
-function formatDateTime(seconds?: number) {
-  if (!seconds) return "-";
-  return new Date(seconds * 1000).toLocaleString("zh-CN", { hour12: false });
-}
-
-function CostTrendChart({ points }: { points: ApiCostDailyPoint[] }) {
-  const maxCost = Math.max(...points.map((point) => Number(point.total_cost_usd || 0)), 0.000001);
-  const ticks = [1, 0.75, 0.5, 0.25, 0].map((ratio) => ({
-    ratio,
-    value: maxCost * ratio
-  }));
-  if (!points.length) {
-    return <div className="cost-empty-state">还没有可计价的 API 调用记录。</div>;
-  }
-  return (
-    <div className="cost-chart-frame" role="img" aria-label="每日 API 支出趋势，横轴为日期，纵轴为美元成本">
-      <div className="cost-axis-title y">成本 / 美元</div>
-      <div className="cost-chart-body">
-        <div className="cost-y-axis" aria-hidden="true">
-          {ticks.map((tick) => (
-            <span key={tick.ratio}>{formatUsd(tick.value)}</span>
-          ))}
-        </div>
-        <div className="cost-trend-chart">
-          <div className="cost-grid-lines" aria-hidden="true">
-            {ticks.map((tick) => (
-              <span key={tick.ratio} />
-            ))}
-          </div>
-          {points.map((point) => {
-            const height = Math.max(4, Math.round((Number(point.total_cost_usd || 0) / maxCost) * 100));
-            return (
-              <div className="cost-trend-column" key={point.date} title={`${point.date} · ${formatUsd(point.total_cost_usd)} · ${point.call_count} 次`}>
-                <div className="cost-trend-bar" style={{ height: `${height}%` }} />
-                <span>{point.date.slice(5)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="cost-axis-title x">日期</div>
-    </div>
-  );
-}
-
-function CostLedgerPanel({ ledger }: { ledger: ApiCostLedgerResponse }) {
-  const summary = ledger.summary;
-  return (
-    <div className="cost-ledger-stack">
-      <div className="metric-grid">
-        <MetricCard label="实际总成本" value={formatUsd(summary.total_cost_usd)} detail={`已记录 ${summary.call_count} 次含 usage 的 API 调用`} />
-        <MetricCard label="做一张图均价" value={formatUsd(summary.avg_image_generation_cost_usd)} detail="生图 / AI mask 平均" />
-        <MetricCard label="单次调用均价" value={formatUsd(summary.avg_cost_per_call_usd)} detail="所有可计价调用平均" />
-        <MetricCard label="训练样本摊薄" value={formatUsd(summary.avg_cost_per_training_sample_usd)} detail={`${summary.training_sample_count} 张可训练样本`} />
-      </div>
-      <div className="cost-ledger-note">
-        <span>更新时间：{formatDateTime(ledger.updated_at)}</span>
-        <span>实际 usage {formatUsd(summary.known_cost_usd)} · 未计价 {summary.unpriced_call_count} 次 · 不做估算</span>
-      </div>
-      <section className="cost-ledger-section">
-        <div className="section-title compact">
-          <h4>API 分类总结</h4>
-        </div>
-        <div className="cost-category-grid">
-          {ledger.categories.map((category) => (
-            <article className="cost-category-card" key={category.key}>
-              <div>
-                <h5>{category.label}</h5>
-                <strong>{formatUsd(category.cost_usd)}</strong>
-              </div>
-              <p>
-                {category.call_count} 次含 usage 调用 · 均价 {formatUsd(category.avg_cost_usd)}
-              </p>
-              <div className="cost-subcategory-list">
-                {(category.subcategories || []).slice(0, 4).map((item) => (
-                  <span key={item.label}>
-                    {item.label} · {item.call_count} · {formatUsd(item.cost_usd)}
-                  </span>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="cost-ledger-section">
-        <div className="section-title compact">
-          <h4>每日支出趋势</h4>
-        </div>
-        <CostTrendChart points={ledger.daily || []} />
-      </section>
-      <section className="cost-ledger-section">
-        <div className="section-title compact">
-          <h4>最近调用</h4>
-          <span className="muted-text">只展示最近 80 条</span>
-        </div>
-        <div className="cost-call-table">
-          <div className="cost-call-row head">
-            <span>日期</span>
-            <span>类别</span>
-            <span>模型</span>
-            <span>成本</span>
-          </div>
-          {(ledger.recent_calls || []).slice(0, 12).map((call) => (
-            <div className="cost-call-row" key={call.id}>
-              <span>{call.day}</span>
-              <span>{call.subcategory}</span>
-              <span>{call.model}</span>
-              <strong>{formatUsd(call.cost_usd)}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function compactKeySource(value?: string) {
-  const text = String(value || "").trim();
-  if (text.length <= 18) return text;
-  return `${text.slice(0, 11)}...${text.slice(-4)}`;
-}
-
-function providerLabel(provider: string | undefined, options: Array<{ value: string; label: string }>) {
-  return options.find((option) => option.value === provider)?.label || "";
-}
-
-function keyProviderLabel(key: AiKeySummary) {
-  const provider = String(key.provider || "").trim();
-  return (
-    providerLabel(provider, IMAGE_PROVIDER_OPTIONS) ||
-    providerLabel(provider, AI_PROVIDER_OPTIONS) ||
-    providerLabel(provider, AGENT_PROVIDER_OPTIONS)
-  );
-}
-
-function keyOptionLabel(key: AiKeySummary) {
-  const source = compactKeySource(key.env_name || key.masked_key || "");
-  const provider = keyProviderLabel(key);
-  const prefix = provider && !key.label.toLowerCase().includes(provider.toLowerCase()) ? `${provider} · ` : "";
-  return source ? `${prefix}${key.label} · ${source}` : `${prefix}${key.label}`;
-}
-
-function keysForProvider(keys: AiKeySummary[] | undefined, provider: string) {
-  const cleanProvider = String(provider || "").trim();
-  return (keys || []).filter((key) => String(key.provider || "").trim() === cleanProvider);
-}
-
-function defaultAiKeyEnv(provider: string) {
-  if (provider === "qwen") return "DASHSCOPE_API_KEY";
-  return "GEMINI_API_KEY";
-}
-
-function defaultImageKeyEnv(provider: string) {
-  if (provider === "agnes") return "AGNES_API_KEY";
-  return "GEMINI_IMAGE_API_KEY";
-}
-
-function defaultAgentKeyEnv(provider: string) {
-  return provider === "cursor" ? "CURSOR_API_KEY" : "VANTALINE_AGENT_API_KEY";
-}
-
-function readAgentPayload(form: HTMLFormElement) {
-  const data = new FormData(form);
-  const payload: Partial<AgentConfigResponse> & { api_key?: string } = {
-    enabled: true,
-    provider: String(data.get("provider") || "openai_compatible"),
-    base_url: String(data.get("base_url") || "").trim(),
-    model: String(data.get("model") || "").trim(),
-    timeout_seconds: Number(data.get("timeout_seconds") || 45),
-    auto_advance_default: data.get("auto_advance_default") === "on"
-  };
-  const apiKeyEnv = data.get("api_key_env");
-  if (apiKeyEnv !== null) payload.api_key_env = String(apiKeyEnv || "").trim();
-  const apiKey = String(data.get("api_key") || "").trim();
-  if (apiKey) payload.api_key = apiKey;
-  return payload;
-}
-
-function readAiPayload(form: HTMLFormElement, initialProvider = "") {
-  const data = new FormData(form);
-  const selectedProvider = String(data.get("provider") || "").trim();
-  const normalizedInitialProvider = String(initialProvider || "").trim();
-  const payload: Partial<AiConfigResponse> & { api_key?: string } = {
-    model: String(data.get("model") || "").trim(),
-    base_url: String(data.get("base_url") || "").trim(),
-    timeout_seconds: Number(data.get("timeout_seconds") || 10)
-  };
-  const apiKeyEnv = data.get("api_key_env");
-  if (apiKeyEnv !== null) payload.api_key_env = String(apiKeyEnv || "").trim();
-  if (selectedProvider && selectedProvider !== normalizedInitialProvider) {
-    payload.provider = selectedProvider;
-  }
-  const apiKey = String(data.get("api_key") || "").trim();
-  if (apiKey) payload.api_key = apiKey;
-  return payload;
-}
-
-function readImagePayload(form: HTMLFormElement) {
-  const data = new FormData(form);
-  const payload: {
-    image_provider: string;
-    image_model: string;
-    image_base_url: string;
-    image_timeout_seconds: number;
-    image_api_key_env?: string;
-    image_api_key?: string;
-  } = {
-    image_provider: String(data.get("image_provider") || "gemini").trim(),
-    image_model: String(data.get("image_model") || "").trim(),
-    image_base_url: String(data.get("image_base_url") || "").trim(),
-    image_timeout_seconds: Number(data.get("image_timeout_seconds") || 120)
-  };
-  const apiKeyEnv = data.get("image_api_key_env");
-  if (apiKeyEnv !== null) payload.image_api_key_env = String(apiKeyEnv || "").trim();
-  const apiKey = String(data.get("image_api_key") || "").trim();
-  if (apiKey) payload.image_api_key = apiKey;
-  return payload;
-}
-
-function readPlcPayload(form: HTMLFormElement): PlcWebSerialConfig {
-  const data = new FormData(form);
-  return {
-    schema_version: 5,
-    transport_mode: "web_serial",
-    profile_id: "mitsubishi_fx3ga_40mr",
-    enabled: data.get("enabled") === "on",
-    protocol: "fx_programming_port_ascii",
-    checksum_mode: "include_etx",
-    baudrate: 9600,
-    parity: "E",
-    data_bits: 7,
-    stop_bits: 1,
-    result_register: String(data.get("result_register") || "D206").trim().toUpperCase(),
-    output_control_point: String(data.get("output_control_point") ?? "").trim().toUpperCase(),
-    capture_trigger_enabled: data.get("capture_trigger_enabled") === "on",
-    capture_input_register: String(data.get("capture_input_register") || "D205").trim().toUpperCase(),
-    capture_trigger_value: Number(data.get("capture_trigger_value") ?? 1),
-    capture_poll_interval_ms: 200,
-    ack_timeout_ms: 500,
-    retries: 0
-  };
-}
-
-function plcStatusLabel(status?: string) {
-  if (status === "acknowledged") return "已确认";
-  if (status === "partial_success") return "部分成功";
-  if (status === "uncertain") return "结果不确定";
-  if (status === "browser_attempt_declared") return "浏览器正在执行";
-  if (status === "planned") return "待浏览器执行";
-  if (status === "failed") return "失败";
-  if (status === "sent") return "已发送";
-  if (status === "attempting") return "正在尝试";
-  if (status === "queued") return "排队中";
-  if (status === "disabled") return "未启用";
-  return status || "暂无记录";
-}
+type Registry = {
+  revision: number;
+  bindings: Record<string, string>;
+  profiles: Profile[];
+  purposes: Purpose[];
+  providers: { id: string; model: string; base_url: string }[];
+};
+type Engine = { name: string; engine: string; status: string; path: string };
+type Call = {
+  profile_id: string;
+  version: number;
+  purpose: string;
+  model: string;
+  elapsed_ms: number;
+  ok: boolean;
+  usage: Record<string, number>;
+  priced: boolean;
+  cost: number | null;
+  at: number;
+};
 
 export function RulesPage() {
-  const auth = useAuth();
-  const queryClient = useQueryClient();
-  const { notify } = useToast();
-  const agentFormRef = useRef<HTMLFormElement>(null);
-  const aiFormRef = useRef<HTMLFormElement>(null);
-  const imageFormRef = useRef<HTMLFormElement>(null);
-  const plcFormRef = useRef<HTMLFormElement>(null);
-  const [aiProviderDraft, setAiProviderDraft] = useState("gemini");
-  const [imageProvider, setImageProvider] = useState("gemini");
-  const [agentProviderDraft, setAgentProviderDraft] = useState("openai_compatible");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("ai");
-  const [apiKeyDialog, setApiKeyDialog] = useState<ApiKeyDialogTarget | null>(null);
-
-  const agentAllowed = hasPermission(auth.user, "agent_config");
-  const aiAllowed = hasPermission(auth.user, "ai_config");
-  const adminAllowed = auth.user?.role === "admin";
-  const systemAllowed = hasPermission(auth.user, "system_settings");
-
-  const agentQuery = useQuery({
-    queryKey: queryKeys.agentConfig,
-    queryFn: getAgentConfig,
-    enabled: agentAllowed
-  });
-  const aiQuery = useQuery({
-    queryKey: queryKeys.aiConfig,
-    queryFn: getAiConfig,
-    enabled: aiAllowed
-  });
-  const plcQuery = useQuery({
-    queryKey: queryKeys.plcWorkstation,
-    queryFn: getPlcWorkstation,
-    enabled: systemAllowed
-  });
-  const plcWorkstationsQuery = useQuery({
-    queryKey: queryKeys.plcWorkstations,
-    queryFn: listPlcWorkstations,
-    enabled: systemAllowed && settingsTab === "plc"
-  });
-  const costLedgerQuery = useQuery({
-    queryKey: queryKeys.apiCostLedger,
-    queryFn: getApiCostLedger,
-    enabled: adminAllowed && settingsTab === "cost-ledger",
-    refetchInterval: settingsTab === "cost-ledger" ? 30_000 : false
-  });
-
-  const agentMutation = useMutation({
-    mutationFn: saveAgentConfig,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.agentConfig });
-      notify({ title: "Agent 设置已保存", tone: "success" });
-      const key = agentFormRef.current?.elements.namedItem("api_key");
-      if (key instanceof HTMLInputElement) key.value = "";
-    },
-    onError: (error: Error) => notify({ title: "Agent 保存失败", description: error.message, tone: "error" })
-  });
-
-  const agentTestMutation = useMutation({
-    mutationFn: async () => {
-      if (agentFormRef.current) await saveAgentConfig(readAgentPayload(agentFormRef.current));
-      return testAgentConfig();
-    },
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.agentConfig });
-      notify({ title: result.ok ? "Agent 连接成功" : "Agent 连接失败", description: result.message, tone: result.ok ? "success" : "error" });
-    },
-    onError: (error: Error) => notify({ title: "Agent 测试失败", description: error.message, tone: "error" })
-  });
-
-  const aiMutation = useMutation({
-    mutationFn: saveAiConfig,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiConfig });
-      notify({ title: "AI 设置已保存", tone: "success" });
-      if (aiFormRef.current) {
-        const key = aiFormRef.current.elements.namedItem("api_key");
-        if (key instanceof HTMLInputElement) key.value = "";
-      }
-    },
-    onError: (error: Error) => notify({ title: "AI 保存失败", description: error.message, tone: "error" })
-  });
-
-  const imageMutation = useMutation({
-    mutationFn: saveAiConfig,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiConfig });
-      notify({ title: "图片生成设置已保存", tone: "success" });
-      if (imageFormRef.current) {
-        const key = imageFormRef.current.elements.namedItem("image_api_key");
-        if (key instanceof HTMLInputElement) key.value = "";
-      }
-    },
-    onError: (error: Error) => notify({ title: "图片生成保存失败", description: error.message, tone: "error" })
-  });
-
-  const plcMutation = useMutation({
-    mutationFn: savePlcWorkstationConfig,
-    onSuccess: async (saved) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.plcWorkstation });
-      await plcQuery.refetch();
-      notify({
-        title: "PLC 设置已保存",
-        description: saved.config?.enabled ? "联动已允许；检测人员仍需在本机点击连接 PLC。" : "配置已保存，PLC 联动尚未启用。",
-        tone: "success"
-      });
-    },
-    onError: (error: Error) => notify({ title: "PLC 保存失败", description: error.message, tone: "error" })
-  });
-
-  const plcPairMutation = useMutation({
-    mutationFn: pairPlcWorkstation,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.plcWorkstation });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.plcWorkstations });
-      notify({ title: "本机工作站已绑定", description: "退出账号不会删除此电脑的工作站绑定。", tone: "success" });
-    },
-    onError: (error: Error) => notify({ title: "工作站绑定失败", description: error.message, tone: "error" })
-  });
-
-  const plcVerifyMutation = useMutation({
-    mutationFn: verifyPlcWorkstationProfile,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.plcWorkstation });
-      notify({ title: "PLC 验证状态已更新", tone: "success" });
-    },
-    onError: (error: Error) => notify({ title: "验证状态更新失败", description: error.message, tone: "error" })
-  });
-
-  const aiKeyDeleteMutation = useMutation({
-    mutationFn: deleteActiveAiKey,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiConfig });
-      notify({ title: "API Key 已删除", tone: "success" });
-    },
-    onError: (error: Error) => notify({ title: "API Key 删除失败", description: error.message, tone: "error" })
-  });
-  function handleAgentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    agentMutation.mutate(readAgentPayload(event.currentTarget));
-  }
-
-  function handleAiSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    aiMutation.mutate(readAiPayload(event.currentTarget, ai?.provider));
-  }
-
-  function handleImageSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    imageMutation.mutate(readImagePayload(event.currentTarget));
-  }
-
-  function handlePlcSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const payload = readPlcPayload(event.currentTarget);
-    if (payload.enabled) {
-      const summary = [
-        `检测结果将写入 ${payload.result_register}`,
-        payload.output_control_point ? `将直接控制 ${payload.output_control_point}` : "不会直接控制流水线",
-        payload.capture_trigger_enabled
-          ? `从 ${payload.capture_input_register}=${payload.capture_trigger_value} 接收拍照信号`
-          : "不会自动读取到位信号",
-        "只有本机摄像头检测会生成指令"
-      ].join("；");
-      if (!window.confirm(`${summary}。请确认这些地址已经由 PLC 编程人员分配且未被占用。`)) return;
-    }
-    plcMutation.mutate(payload);
-  }
-
-  function handleAiActiveKeyChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    aiMutation.mutate({ provider: aiProviderDraft, active_key_id: event.currentTarget.value });
-  }
-
-  function handleAiProviderChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const nextProvider = event.currentTarget.value;
-    setAiProviderDraft(nextProvider);
-    const defaults = AI_PROVIDER_DEFAULTS[nextProvider];
-    if (!defaults || !aiFormRef.current) return;
-    const model = aiFormRef.current.elements.namedItem("model");
-    const baseUrl = aiFormRef.current.elements.namedItem("base_url");
-    if (model instanceof HTMLInputElement) model.value = defaults.model;
-    if (baseUrl instanceof HTMLInputElement) baseUrl.value = defaults.base_url;
-  }
-
-  function handleAgentActiveKeyChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    agentMutation.mutate({ provider: agentProviderDraft, active_key_id: event.currentTarget.value });
-  }
-
-  function handleImageActiveKeyChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    imageMutation.mutate({ image_provider: imageProvider, image_active_key_id: event.currentTarget.value });
-  }
-
-  function handleImageProviderChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const nextProvider = event.currentTarget.value;
-    setImageProvider(nextProvider);
-    const defaults = IMAGE_PROVIDER_DEFAULTS[nextProvider];
-    if (!defaults || !imageFormRef.current) return;
-    const model = imageFormRef.current.elements.namedItem("image_model");
-    const baseUrl = imageFormRef.current.elements.namedItem("image_base_url");
-    if (model instanceof HTMLInputElement) model.value = defaults.model;
-    if (baseUrl instanceof HTMLInputElement) baseUrl.value = defaults.base_url;
-  }
-
-  function handleApiKeyDialogSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!apiKeyDialog) return;
-    const data = new FormData(event.currentTarget);
-    const envName = String(data.get("api_key_env") || "").trim();
-    const apiKey = String(data.get("api_key") || "").trim();
-    if (!apiKey) {
-      notify({ title: "请输入 API Key", tone: "error" });
-      return;
-    }
-    if (apiKeyDialog === "ai") {
-      const payload = aiFormRef.current ? readAiPayload(aiFormRef.current, ai?.provider) : {};
-      aiMutation.mutate({ ...payload, api_key_env: envName, api_key: apiKey }, { onSuccess: () => setApiKeyDialog(null) });
-      return;
-    }
-    if (apiKeyDialog === "image") {
-      const payload = imageFormRef.current
-        ? readImagePayload(imageFormRef.current)
-        : {
-            image_provider: imageProvider,
-            image_model: IMAGE_PROVIDER_DEFAULTS[imageProvider]?.model || IMAGE_PROVIDER_DEFAULTS.gemini.model,
-            image_base_url: IMAGE_PROVIDER_DEFAULTS[imageProvider]?.base_url || IMAGE_PROVIDER_DEFAULTS.gemini.base_url,
-            image_timeout_seconds: image?.timeout_seconds || 120
-          };
-      imageMutation.mutate(
-        { ...payload, image_api_key_env: envName, image_api_key: apiKey },
-        { onSuccess: () => setApiKeyDialog(null) }
-      );
-      return;
-    }
-    const payload = agentFormRef.current ? readAgentPayload(agentFormRef.current) : {};
-    agentMutation.mutate({ ...payload, api_key_env: envName, api_key: apiKey }, { onSuccess: () => setApiKeyDialog(null) });
-  }
-
-  const agent = agentQuery.data;
-  const ai = aiQuery.data;
-  const image = ai?.image_generation;
-  const plcResponse = plcQuery.data;
-  const plc = plcResponse?.config;
-  const latestPlcDispatch = plcResponse?.recent_dispatches?.[0];
-  const costLedger = costLedgerQuery.data;
-  const agentBusy = agentMutation.isPending || agentTestMutation.isPending;
-  const aiBusy = aiMutation.isPending || aiKeyDeleteMutation.isPending;
-  const imageBusy = imageMutation.isPending;
-  const agentStatusLabel = agent?.connection_status || "检查中";
-  const aiProvider = ai?.provider || "gemini";
-  const agentProvider = agent?.provider || "openai_compatible";
-  const aiProviderIsKnown = AI_PROVIDER_OPTIONS.some((option) => option.value === aiProviderDraft);
-  const imageProviderIsKnown = IMAGE_PROVIDER_OPTIONS.some((option) => option.value === imageProvider);
-  const agentProviderIsKnown = AGENT_PROVIDER_OPTIONS.some((option) => option.value === agentProviderDraft);
-  const selectedAiProviderLabel = providerLabel(aiProviderDraft, AI_PROVIDER_OPTIONS) || aiProviderDraft;
-  const selectedAgentProviderLabel = providerLabel(agentProviderDraft, AGENT_PROVIDER_OPTIONS) || agentProviderDraft;
-  const savedImageProvider = image?.provider || "gemini";
-  const aiProviderSaved = aiProviderDraft === aiProvider;
-  const imageProviderSaved = imageProvider === savedImageProvider;
-  const agentProviderSaved = agentProviderDraft === agentProvider;
-  const selectedImageProviderLabel = IMAGE_PROVIDER_OPTIONS.find((option) => option.value === imageProvider)?.label || imageProvider;
-  const selectedImageProviderDefaults = IMAGE_PROVIDER_DEFAULTS[imageProvider] || IMAGE_PROVIDER_DEFAULTS.gemini;
-  const selectedAiProviderDefaultEnv = defaultAiKeyEnv(aiProviderDraft);
-  const selectedImageProviderDefaultEnv = defaultImageKeyEnv(imageProvider);
-  const selectedAgentProviderDefaultEnv = defaultAgentKeyEnv(agentProviderDraft);
-  const visibleAiKeys = keysForProvider(ai?.api_keys, aiProviderDraft);
-  const visibleAiActiveKeyId = aiProviderSaved ? ai?.active_key_id || "" : "";
-  const visibleImageKeys = keysForProvider(image?.api_keys, imageProvider);
-  const visibleImageActiveKeyId = imageProviderSaved ? image?.active_key_id || "" : "";
-  const visibleAgentKeys = keysForProvider(agent?.api_keys, agentProviderDraft);
-  const visibleAgentActiveKeyId = agentProviderSaved ? agent?.active_key_id || "" : "";
-  const imageStatusLabel = imageProviderSaved ? image?.status || "检查中" : "未保存";
-  const imageStatusTone = imageProviderSaved ? toneForStatus(image?.status) : "neutral";
-  const apiKeyDialogTitle = apiKeyDialog === "ai" ? "添加 AI 检测 API Key" : apiKeyDialog === "image" ? "添加图片生成 API Key" : "添加 Agent API Key";
-  const apiKeyDialogEnv =
-    apiKeyDialog === "ai"
-      ? selectedAiProviderDefaultEnv
-      : apiKeyDialog === "image"
-        ? selectedImageProviderDefaultEnv
-        : selectedAgentProviderDefaultEnv;
-  const apiKeyDialogHint =
-    apiKeyDialog === "ai"
-      ? `${selectedAiProviderLabel} AI 检测 Key 会保存到该环境变量，并在保存后成为当前 active key。`
-      : apiKeyDialog === "image"
-      ? `${selectedImageProviderLabel} AI mask / 图片生成 Key 会保存到该环境变量，并在保存后成为当前 image active key；不会修改 AI 检测 Key。`
-      : `${selectedAgentProviderLabel} Key 会保存到该环境变量，并在保存后成为当前 active key。`;
-  const apiKeyDialogBusy = apiKeyDialog === "ai" ? aiBusy : apiKeyDialog === "image" ? imageBusy : agentBusy;
-
-  useEffect(() => {
-    setAiProviderDraft(ai?.provider || "gemini");
-  }, [ai?.provider]);
-
-  useEffect(() => {
-    setImageProvider(image?.provider || "gemini");
-  }, [image?.provider]);
-
-  useEffect(() => {
-    setAgentProviderDraft(agent?.provider || "openai_compatible");
-  }, [agent?.provider]);
-
-  useEffect(() => {
-    if (!aiAllowed && systemAllowed && (settingsTab === "ai" || settingsTab === "image")) setSettingsTab("plc");
-  }, [aiAllowed, settingsTab, systemAllowed]);
-
-  useAgentActions([
-    {name:"settings_get_state",domain:"settings",description:"Read the active settings section and credential-input workflow status. Secret values and form contents are never returned.",readOnly:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({tab:settingsTab,credential_input:apiKeyDialog,save_status:{ai:aiMutation.status,image:imageMutation.status,agent:agentMutation.status}})},
-    {name:"settings_open_credential_input",domain:"settings",description:"Open the existing secure API-key entry dialog for the selected provider section. The user enters the secret in the site; query settings_get_state after submission.",readOnly:false,inputSchema:{type:"object",properties:{target:{type:"string",enum:["ai","image","agent"]}},required:["target"],additionalProperties:false},execute:input=>{const target=input.target as ApiKeyDialogTarget;if(target==="agent"?!agentAllowed:!aiAllowed)throw new Error("Provider configuration permission required");setSettingsTab(target);setApiKeyDialog(target);return {status:"requires_user_input",next_action:"settings_get_state"};}},
-    {name:"settings_select_section",domain:"settings",description:"Select an authorized settings section.",readOnly:false,inputSchema:{type:"object",properties:{section:{type:"string",enum:SETTINGS_TABS.map(tab=>tab.value)}},required:["section"],additionalProperties:false},execute:input=>{const tab=input.section as SettingsTab;const allowed=tab==="agent"?agentAllowed:tab==="plc"?systemAllowed:tab==="cost-ledger"?adminAllowed:aiAllowed;if(!allowed)throw new Error("Settings section permission required");setSettingsTab(tab);}}
-  ]);
-
-  return (
+  const { user } = useAuth();
+  return user?.role === "admin" ? (
+    <AdminSettings />
+  ) : (
     <section className="view active">
       <header className="page-head">
-        <div>
-          <h2>设置</h2>
-          <p className="page-desc">管理 AI Provider 与流水线 Agent 接入参数。</p>
-        </div>
+        <h2>个人与设备</h2>
+      </header>
+      <section className="panel page-panel">
+        <h3>本机设备</h3>
+        <p>相机选择与获授权的 PLC 连接操作在检测工作页进行。</p>
+        <Link to={workspacePath("/inspect")}>打开检测中心</Link>
+      </section>
+    </section>
+  );
+}
+
+function AdminSettings() {
+  const { notify } = useToast();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("section") || "models";
+  const editor = params.get("profile");
+  const purpose = params.get("purpose") || "pipeline";
+  const query = useQuery({
+    queryKey: ["modelProfiles"],
+    queryFn: () => apiClient.get<Registry>(API),
+    refetchOnWindowFocus: false,
+  });
+  const engines = useQuery({
+    queryKey: ["modelEngines"],
+    queryFn: () => apiClient.get<{ items: Engine[] }>(API + "/engines"),
+  });
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [revision, setRevision] = useState(0);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (query.data && revision === 0) {
+      setDraft(query.data.bindings);
+      setRevision(query.data.revision);
+    }
+  }, [query.data, revision]);
+  const data = query.data;
+  const dirty = Boolean(
+    data && JSON.stringify(draft) !== JSON.stringify(data.bindings),
+  );
+  async function save() {
+    setBusy(true);
+    try {
+      const value = await apiClient.put<Registry>(API + "/bindings", {
+        revision,
+        bindings: draft,
+      });
+      setDraft(value.bindings);
+      setRevision(value.revision);
+      await query.refetch();
+      notify({ title: "设置已保存，仅对新任务生效", tone: "success" });
+    } catch (e) {
+      notify({
+        title: "保存失败",
+        description: (e as Error).message,
+        tone: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  function cancel() {
+    if (data) {
+      setDraft(data.bindings);
+      setRevision(data.revision);
+    }
+  }
+  function open(p: string, id = "new") {
+    setParams({ section: "models", profile: id, purpose: p });
+  }
+  async function saved(id: string) {
+    const result = await query.refetch();
+    if (result.data) {
+      if (
+        JSON.stringify(result.data.bindings) === JSON.stringify(data?.bindings)
+      )
+        setRevision(result.data.revision);
+      if (editor === "new") setDraft((d) => ({ ...d, [purpose]: id }));
+    }
+    setParams({ section: "models" });
+  }
+  function row(p: Purpose) {
+    const selected = data?.profiles.find((x) => x.id === draft[p.id]);
+    return (
+      <div className="model-setting-row" key={p.id}>
+        <label htmlFor={"model-" + p.id}>{p.label}</label>
+        <select
+          id={"model-" + p.id}
+          value={draft[p.id] || ""}
+          disabled={busy}
+          onChange={(e) => setDraft({ ...draft, [p.id]: e.target.value })}
+        >
+          <option value="">未配置</option>
+          {data?.profiles
+            .filter(
+              (x) =>
+                x.id === draft[p.id] ||
+                (x.enabled &&
+                  !x.pending &&
+                  x.capabilities.includes(p.capability)),
+            )
+            .map((x) => (
+              <option value={x.id} key={x.id}>
+                {x.name} · {x.model || "待完善"} · {x.masked_key}
+              </option>
+            ))}
+        </select>
         <button
           className="secondary compact-action"
           type="button"
-          onClick={() => {
-            agentQuery.refetch();
-            aiQuery.refetch();
-            plcQuery.refetch();
-            costLedgerQuery.refetch();
-          }}
+          disabled={busy}
+          onClick={() => open(p.id)}
         >
-          <RefreshCw size={16} aria-hidden="true" />
-          刷新
+          添加 key
         </button>
+        <span className="muted-text">
+          {draft[p.id] !== data?.bindings[p.id]
+            ? "待保存"
+            : selected
+              ? "已配置"
+              : "未配置"}
+        </span>
+      </div>
+    );
+  }
+  if (editor && data)
+    return (
+      <ProfileEditor
+        key={editor}
+        data={data}
+        purpose={purpose}
+        profile={data.profiles.find((x) => x.id === editor)}
+        onBack={() => setParams({ section: "models" })}
+        onSaved={saved}
+      />
+    );
+  return (
+    <section className="view active settings-workspace">
+      <header className="page-head">
+        <div>
+          <h2>设置</h2>
+          <p className="page-desc">管理模型用途、设备和 API 用量。</p>
+        </div>
       </header>
-
-      <div className="mode-tabs settings-tabs" role="tablist" aria-label="设置分页">
-        {SETTINGS_TABS.filter((tab) => {
-          if (tab.value === "agent") return agentAllowed;
-          if (tab.value === "plc") return systemAllowed;
-          if (tab.value === "cost-ledger") return adminAllowed;
-          return aiAllowed;
-        }).map((tab) => (
+      <div
+        className="mode-tabs settings-tabs"
+        role="tablist"
+        aria-label="设置分页"
+      >
+        {[
+          ["models", "模型与 API"],
+          ["devices", "设备与运行"],
+          ["usage", "用量与成本"],
+        ].map(([id, label]) => (
           <button
-            className={`mode-tab ${settingsTab === tab.value ? "active" : ""}`}
             type="button"
             role="tab"
-            aria-selected={settingsTab === tab.value}
-            key={tab.value}
-            onClick={() => setSettingsTab(tab.value)}
+            aria-selected={tab === id}
+            className={"mode-tab " + (tab === id ? "active" : "")}
+            key={id}
+            onClick={() => setParams({ section: id })}
           >
-            {tab.label}
+            {label}
           </button>
         ))}
       </div>
-
-      {aiAllowed && (settingsTab === "ai" || settingsTab === "image") ? (
+      {tab === "models" && (
         <section className="panel page-panel">
-          <div className="section-title">
-            <h3>{settingsTab === "ai" ? "AI 检测配置" : "图片生成配置"}</h3>
-            <span className={`pill ${settingsTab === "ai" ? toneForStatus(ai?.status) : imageStatusTone}`}>
-              {settingsTab === "ai" ? ai?.status || "检查中" : imageStatusLabel}
-            </span>
-          </div>
-          {aiQuery.isLoading ? (
-            <LoadingState label="正在加载 AI 设置" />
-          ) : aiQuery.isError ? (
-            <ErrorState error={aiQuery.error} />
-          ) : (
+          {query.isLoading ? (
+            <LoadingState label="正在加载模型配置" />
+          ) : query.isError ? (
+            <ErrorState error={query.error} />
+          ) : data ? (
             <>
-            {settingsTab === "ai" ? (
-            <>
-            <div className="settings-subhead">
-              <div>
-                <h4>AI 检测</h4>
-                <p>检测工作台和资料卡画像使用，Provider 与图片生成独立。</p>
-              </div>
-              <span className={`pill ${toneForStatus(ai?.status)}`}>{ai?.status || "检查中"}</span>
-            </div>
-            <form className="settings-form" ref={aiFormRef} onSubmit={handleAiSubmit}>
-              <div className="form-grid">
-                <label className="field">
-                  Provider
-                  <select name="provider" value={aiProviderDraft} onChange={handleAiProviderChange}>
-                    {!aiProviderIsKnown ? (
-                      <option value={aiProviderDraft}>{ai?.provider_label || aiProviderDraft}</option>
-                    ) : null}
-                    {AI_PROVIDER_OPTIONS.map((option) => (
-                      <option value={option.value} key={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Model
-                  <input name="model" list="ai-model-options" defaultValue={ai?.model || AI_PROVIDER_DEFAULTS.gemini.model} />
-                  <datalist id="ai-model-options">
-                    {(ai?.model_options || []).map((option) => (
-                      <option value={option.id} key={option.id}>
-                        {option.label || option.id}
-                      </option>
-                    ))}
-                  </datalist>
-                </label>
-                <label className="field">
-                  Base URL
-                  <input name="base_url" type="url" defaultValue={ai?.base_url || ""} />
-                </label>
-                <label className="field">
-                  Timeout
-                  <input name="timeout_seconds" type="number" min="0.5" max="300" step="0.5" defaultValue={ai?.timeout_seconds || 10} />
-                </label>
-              </div>
-              <div className="form-grid key-grid action">
-                <label className="field">
-                  Active API Key
-                  <select value={visibleAiActiveKeyId} onChange={handleAiActiveKeyChange} disabled={aiBusy || !visibleAiKeys.length}>
-                    <option value="">{visibleAiKeys.length ? "环境变量 / 未选择" : `${selectedAiProviderLabel} 暂无 Key`}</option>
-                    {visibleAiKeys.map((key) => (
-                      <option value={key.id} key={key.id}>
-                        {keyOptionLabel(key)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="field key-action-field">
-                  API Key
-                  <button className="secondary compact-action" type="button" onClick={() => setApiKeyDialog("ai")} disabled={aiBusy}>
-                    <Plus size={16} aria-hidden="true" />
-                    添加 API Key
-                  </button>
-                </div>
-              </div>
-              {!aiProviderSaved ? (
-                <p className="hint-line">当前正在编辑 {selectedAiProviderLabel}；新增或选择 Key 会同时切换到该 Provider。</p>
-              ) : null}
-              <div className="button-row">
-                <button className="primary compact-action" type="submit" disabled={aiBusy}>
-                  <Save size={16} aria-hidden="true" />
-                  保存 AI 设置
-                </button>
-                <button
-                  className="secondary icon-label danger"
-                  type="button"
-                  disabled={aiBusy || !aiProviderSaved || !visibleAiActiveKeyId}
-                  onClick={() => {
-                    if (window.confirm("确认删除当前 API Key？")) aiKeyDeleteMutation.mutate();
-                  }}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                  删除当前 Key
-                </button>
-              </div>
-            </form>
-            </>
-            ) : null}
-            {settingsTab === "image" ? (
-            <>
-            <div className="settings-subhead">
-              <div>
-                <h4>图片生成</h4>
-                <p>任务流水线生成样本素材时使用，和 AI 检测 Provider 分开配置。</p>
-              </div>
-              <span className={`pill ${imageStatusTone}`}>{imageStatusLabel}</span>
-            </div>
-            <form className="settings-form" ref={imageFormRef} onSubmit={handleImageSubmit}>
-              <div className="form-grid">
-                <label className="field">
-                  Provider
-                  <select name="image_provider" value={imageProvider} onChange={handleImageProviderChange}>
-                    {!imageProviderIsKnown ? (
-                      <option value={imageProvider}>{image?.provider_label || imageProvider}</option>
-                    ) : null}
-                    {IMAGE_PROVIDER_OPTIONS.map((option) => (
-                      <option value={option.value} key={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Model
-                  <input name="image_model" list="image-model-options" defaultValue={image?.model || selectedImageProviderDefaults.model} />
-                  <datalist id="image-model-options">
-                    {(image?.model_options || []).map((option) => (
-                      <option value={option.id} key={option.id}>
-                        {option.label || option.id}
-                      </option>
-                    ))}
-                  </datalist>
-                </label>
-                <label className="field">
-                  Base URL
-                  <input name="image_base_url" type="url" defaultValue={image?.base_url || selectedImageProviderDefaults.base_url} />
-                </label>
-                <label className="field">
-                  Timeout
-                  <input name="image_timeout_seconds" type="number" min="10" max="300" step="5" defaultValue={image?.timeout_seconds || 120} />
-                </label>
-              </div>
-              <div className="form-grid key-grid action">
-                <label className="field">
-                  Active API Key
-                  <select value={visibleImageActiveKeyId} onChange={handleImageActiveKeyChange} disabled={imageBusy || !visibleImageKeys.length}>
-                    <option value="">{visibleImageKeys.length ? "环境变量 / 未选择" : `${selectedImageProviderLabel} 暂无 Key`}</option>
-                    {visibleImageKeys.map((key) => (
-                      <option value={key.id} key={key.id}>
-                        {keyOptionLabel(key)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="field key-action-field">
-                  API Key
-                  <button className="secondary compact-action" type="button" onClick={() => setApiKeyDialog("image")} disabled={imageBusy}>
-                    <Plus size={16} aria-hidden="true" />
-                    添加 API Key
-                  </button>
-                </div>
-              </div>
-              {!imageProviderSaved ? (
-                <p className="hint-line">当前正在编辑 {selectedImageProviderLabel}；新增或选择 Key 会同时切换到该 Provider。</p>
-              ) : image?.message ? (
-                <p className="hint-line">{image.message}</p>
-              ) : null}
-              <div className="button-row">
-                <button className="primary compact-action" type="submit" disabled={imageBusy}>
-                  <Save size={16} aria-hidden="true" />
-                  保存图片生成设置
-                </button>
-              </div>
-            </form>
-            </>
-            ) : null}
-            </>
-          )}
-        </section>
-      ) : null}
-
-      {systemAllowed && settingsTab === "plc" ? (
-        <section className="panel page-panel">
-          <div className="section-title">
-            <h3>本机 PLC 结果同步</h3>
-            <span className={`pill ${plcResponse?.effective_enabled ? toneForStatus(latestPlcDispatch?.status) : "neutral"}`}>
-              {plcResponse?.effective_enabled ? "本机浏览器已连接" : "当前未连接"}
-            </span>
-          </div>
-          {plcQuery.isLoading ? (
-            <LoadingState label="正在加载 PLC 设置" />
-          ) : plcQuery.isError ? (
-            <ErrorState error={plcQuery.error} />
-          ) : !plcResponse?.paired ? (
-            <form
-              className="settings-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget);
-                const name = String(data.get("station_name") || "").trim();
-                const stationId = String(data.get("station_id") || "").trim();
-                if (name) plcPairMutation.mutate({ name, station_id: stationId || undefined });
-              }}
-            >
-              <div className="settings-subhead">
-                <div>
-                  <h4>首次绑定这台产线电脑</h4>
-                  <p>配置保存在工作站记录中，不跟登录账号走；退出并重新登录后仍会读取这台电脑的设置。</p>
-                </div>
-                <span className="pill neutral">未绑定</span>
-              </div>
-              <label className="field">
-                本机工作站名称
-                <input name="station_name" required minLength={1} maxLength={80} placeholder="例如：一号流水线电脑" />
-              </label>
-              {plcWorkstationsQuery.data?.items.length ? (
-                <label className="field">
-                  更换浏览器时重新绑定已有工作站（可不选）
-                  <select name="station_id" defaultValue="">
-                    <option value="">创建新工作站</option>
-                    {plcWorkstationsQuery.data.items.map((item) => (
-                      <option value={item.id} key={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                  <span className="field-hint">选择后会使旧 Edge / Chrome 的绑定和活动租约立即失效。</span>
-                </label>
-              ) : null}
-              <div className="button-row">
-                <button className="primary compact-action" type="submit" disabled={plcPairMutation.isPending}>绑定本机工作站</button>
-              </div>
-            </form>
-          ) : plc ? (
-            <>
-              <div className="settings-subhead">
-                <div>
-                  <h4>{plcResponse.station?.name}</h4>
-                  <p>Edge / Chrome 网页直接连接这台电脑上的 PLC；服务器永远不会打开串口。</p>
-                </div>
-                <span className={`pill ${plcResponse.station?.profile_verified ? "ok" : "neutral"}`}>
-                  {plcResponse.station?.profile_verified ? "正式 PLC（已验证）" : "测试 PLC（未验证）"}
-                </span>
-              </div>
-              <form
-                className="settings-form"
-                ref={plcFormRef}
-                key={`${plcResponse.config_generation}-${plc.enabled}-${plc.result_register}-${plc.output_control_point}-${plc.capture_trigger_enabled}-${plc.capture_input_register}-${plc.capture_trigger_value}`}
-                onSubmit={handlePlcSubmit}
-              >
-                <div className="form-grid settings-option-grid">
-                  <label className="toggle-row">
-                    <input name="enabled" type="checkbox" defaultChecked={plc.enabled} />
-                    <span>允许这台工作站启用 PLC 联动</span>
-                  </label>
-                  <label className="toggle-row">
-                    <input name="capture_trigger_enabled" type="checkbox" defaultChecked={plc.capture_trigger_enabled} />
-                    <span>启用 PLC 到位拍照</span>
-                  </label>
-                </div>
-                <div className="form-grid">
-                  <label className="field">
-                    输出寄存器
-                    <input name="result_register" pattern="D(?:0|[1-9][0-9]{0,2})" defaultValue={plc.result_register} placeholder="例如 D206" required />
-                    <span className="field-hint">测试范围 D0–D255；通过写 1，不通过写 0。</span>
-                  </label>
-                  <label className="field">
-                    输出控制点（可不填）
-                    <input name="output_control_point" pattern="Y(?:0[0-7]|1[0-7])" defaultValue={plc.output_control_point} placeholder="例如 Y04；留空则不控制" />
-                    <span className="field-hint">测试范围 Y00–Y17（八进制）；留空时计划和串口都不会产生 Y 指令。</span>
-                  </label>
-                </div>
-                <div className="form-grid">
-                  <label className="field">
-                    输入寄存器
-                    <input name="capture_input_register" pattern="D(?:0|[1-9][0-9]{0,2})" defaultValue={plc.capture_input_register} placeholder="例如 D205" required />
-                    <span className="field-hint">FX3GA 测试范围 D0–D255；不得与输出寄存器相同。</span>
-                  </label>
-                  <label className="field">
-                    拍照触发值
-                    <input name="capture_trigger_value" type="number" min={0} max={65535} step={1} defaultValue={plc.capture_trigger_value} required />
-                    <span className="field-hint">默认 1；必须先读到其他值，再变为此值才触发一次。</span>
-                  </label>
-                </div>
-                <details className="settings-advanced">
-                  <summary>高级设置与诊断</summary>
-                  <p className="hint-line">预设 PLC：三菱 FX3GA-40MR；通信固定为 9600 / 偶校验 / 7 数据位 / 1 停止位；校验和包含 ETX；超时 500ms；自动重试 0 次。</p>
-                  <p className="hint-line">协议地址（只读）：输入寄存器 {plcResponse.resolved_addresses.capture_input_register || "—"}；输出寄存器 {plcResponse.resolved_addresses.result_register || "—"}；输出控制点 {plcResponse.resolved_addresses.output_control_point || "不控制"}。工人无需理解或填写这些数值。</p>
-                  <p className="hint-line">配置 generation：{plcResponse.config_generation}；协议版本：{plcResponse.protocol_version}。</p>
-                </details>
-                <p className="hint-line danger-text">未取得现场真实读帧、ACK 并确认安全地址前，请保持“测试 PLC”。</p>
-                <p className="hint-line">{plc.capture_trigger_enabled ? `每 200ms 读取 ${plc.capture_input_register}；先读到非 ${plc.capture_trigger_value} 后，再变为 ${plc.capture_trigger_value} 时拍照一次。` : "PLC 到位自动拍照未启用。"} 检测通过写 {plc.result_register}=1，检测不通过写 {plc.result_register}=0；{plc.output_control_point ? `D 得到 ACK 后才控制 ${plc.output_control_point}` : "不直接控制流水线"}。</p>
-                <div className="button-row">
-                  <button className="primary compact-action" type="submit" disabled={plcMutation.isPending}>
-                    <PlugZap size={16} aria-hidden="true" />
-                    保存 PLC 设置
-                  </button>
-                  <button
-                    className="secondary compact-action"
-                    type="button"
-                    disabled={plcVerifyMutation.isPending}
-                    onClick={() => {
-                      const next = !plcResponse.station?.profile_verified;
-                      if (next && !window.confirm("只应在真实 PLC 已返回 ACK、地址已由 PLC 工程师确认后标记为正式。确认继续？")) return;
-                      plcVerifyMutation.mutate(next);
-                    }}
-                  >
-                    {plcResponse.station?.profile_verified ? "改回测试 PLC" : "标记真实 ACK 已验证"}
-                  </button>
-                </div>
-              </form>
-
-              <section className="cost-ledger-section">
-                <div className="section-title compact">
-                  <h4>最近同步状态</h4>
-                  <span className="muted-text">当前显示最近 {plcResponse.recent_dispatches.length} 条</span>
-                </div>
-                <div className="cost-call-table">
-                  <div className="cost-call-row head">
-                    <span>时间</span>
-                    <span>来源</span>
-                    <span>结论</span>
-                    <span>状态</span>
-                  </div>
-                  {plcResponse.recent_dispatches.slice(0, 12).map((item) => (
-                    <div className="cost-call-row" key={item.dispatch_id}>
-                      <span>{formatDateTime(item.updated_at)}</span>
-                      <span>{item.source}</span>
-                      <span>{item.passed ? "PASS" : "FAIL"}</span>
-                      <strong className={`pill ${toneForStatus(item.status)}`}>{plcStatusLabel(item.status)}</strong>
-                    </div>
-                  ))}
-                  {!plcResponse.recent_dispatches.length ? <div className="cost-empty-state">还没有本机摄像头同步记录。</div> : null}
+              <section className="model-purpose-group">
+                <h3>文字检验</h3>
+                {data.purposes
+                  .filter((p) => ["label", "manual"].includes(p.id))
+                  .map(row)}
+                <div className="engine-summary">
+                  <strong>标签检查 Beta</strong>
+                  <span>Codex 专用引擎</span>
+                  <span>
+                    {engines.data?.items.find((x) => x.name === "标签检查 Beta")
+                      ?.status || "状态加载中"}
+                  </span>
                 </div>
               </section>
-            </>
-          ) : (
-            <div className="cost-empty-state">PLC 设置不可用。</div>
-          )}
-        </section>
-      ) : null}
-
-      {adminAllowed && settingsTab === "cost-ledger" ? (
-        <section className="panel page-panel">
-          <div className="section-title">
-            <h3>API 成本账本</h3>
-            <span className="pill neutral">管理员可见</span>
-          </div>
-          <div className="settings-subhead">
-            <div>
-              <h4>动态记账</h4>
-              <p>汇总生图、AI mask、结构化输出和 Agent 调用的成本；只统计 provider 返回并保存的实际 usage，缺 usage 的历史记录不做估算。</p>
-            </div>
-          </div>
-          {costLedgerQuery.isLoading ? (
-            <LoadingState label="正在统计 API 成本" />
-          ) : costLedgerQuery.isError ? (
-            <ErrorState error={costLedgerQuery.error} />
-          ) : costLedger ? (
-            <CostLedgerPanel ledger={costLedger} />
-          ) : (
-            <div className="cost-empty-state">还没有成本记录。</div>
-          )}
-        </section>
-      ) : null}
-
-      {agentAllowed && settingsTab === "agent" ? (
-        <section className="panel page-panel">
-          <div className="section-title">
-            <h3>Agent 接入配置</h3>
-            <span className={`pill ${toneForStatus(agent?.connection_status)}`}>{agentStatusLabel}</span>
-          </div>
-          {agentQuery.isLoading ? (
-            <LoadingState label="正在加载 Agent 设置" />
-          ) : agentQuery.isError ? (
-            <ErrorState error={agentQuery.error} />
-          ) : (
-            <>
-            <div className="settings-subhead">
-              <div>
-                <h4>Agent 接入</h4>
-                <p>任务流水线参数推荐使用；API Key 写入环境变量后在下拉框选择。</p>
-              </div>
-              <span className={`pill ${toneForStatus(agent?.connection_status)}`}>{agentStatusLabel}</span>
-            </div>
-            <form className="settings-form" ref={agentFormRef} onSubmit={handleAgentSubmit}>
-              <div className="form-grid">
-                <label className="field">
-                  Provider
-                  <select name="provider" value={agentProviderDraft} onChange={(event) => setAgentProviderDraft(event.currentTarget.value)}>
-                    {!agentProviderIsKnown ? (
-                      <option value={agentProviderDraft}>{agent?.provider_label || agentProviderDraft}</option>
-                    ) : null}
-                    {AGENT_PROVIDER_OPTIONS.map((option) => (
-                      <option value={option.value} key={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Model
-                  <input name="model" list="agent-model-options" defaultValue={agent?.model || ""} />
-                  <datalist id="agent-model-options">
-                    {(agent?.model_options || []).map((option) => (
-                      <option value={option.id} key={option.id}>
-                        {option.label || option.id}
-                      </option>
-                    ))}
-                  </datalist>
-                </label>
-                <label className="field">
-                  Base URL
-                  <input name="base_url" type="url" defaultValue={agent?.base_url || ""} placeholder="https://api.openai.com/v1" />
-                </label>
-                <label className="field">
-                  Timeout
-                  <input name="timeout_seconds" type="number" min="5" max="300" step="5" defaultValue={agent?.timeout_seconds || 45} />
-                </label>
-              </div>
-              <div className="form-grid key-grid action">
-                <label className="field">
-                  Active API Key
-                  <select value={visibleAgentActiveKeyId} onChange={handleAgentActiveKeyChange} disabled={agentBusy || !visibleAgentKeys.length}>
-                    <option value="">{visibleAgentKeys.length ? "环境变量 / 未选择" : `${selectedAgentProviderLabel} 暂无 Key`}</option>
-                    {visibleAgentKeys.map((key) => (
-                      <option value={key.id} key={key.id}>
-                        {keyOptionLabel(key)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="field key-action-field">
-                  API Key
-                  <button className="secondary compact-action" type="button" onClick={() => setApiKeyDialog("agent")} disabled={agentBusy}>
-                    <Plus size={16} aria-hidden="true" />
-                    添加 API Key
-                  </button>
+              <section className="model-purpose-group">
+                <h3>流水线检测</h3>
+                {data.purposes.filter((p) => p.id === "pipeline").map(row)}
+              </section>
+              <section className="model-purpose-group">
+                <h3>图片生成</h3>
+                {data.purposes.filter((p) => p.id === "image").map(row)}
+              </section>
+              <details className="settings-advanced">
+                <summary>高级用途与配置管理</summary>
+                {data.purposes.filter((p) => p.advanced).map(row)}
+                <p className="hint-line">
+                  训练助手用于参数建议、任务对话与阶段推进；不可用时回退规则逻辑。专用
+                  OCR 仅支持已适配的模型。
+                </p>
+                <h3>配置库</h3>
+                <p className="hint-line">
+                  同一个配置可被多个用途选用。编辑已使用配置会为新任务生成新版本，历史任务保留原版本。
+                </p>
+                <div className="profile-library">
+                  {data.profiles.map((p) => (
+                    <div className="profile-library-row" key={p.id}>
+                      <div>
+                        <strong>{p.name}</strong>
+                        <p>
+                          {p.model || "待完善模型"} · {p.masked_key}
+                        </p>
+                        <small>
+                          {p.used_by
+                            .map(
+                              (id) =>
+                                data.purposes.find((x) => x.id === id)?.label,
+                            )
+                            .join("、") || "未被使用"}{" "}
+                          · v{p.version} · {p.enabled ? "启用" : "停用"}
+                        </small>
+                      </div>
+                      <button
+                        className="secondary compact-action"
+                        type="button"
+                        onClick={() => open(p.used_by[0] || "pipeline", p.id)}
+                      >
+                        管理
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              {!agentProviderSaved ? (
-                <p className="hint-line">当前正在编辑 {selectedAgentProviderLabel}；新增或选择 Key 会同时切换到该 Provider。</p>
-              ) : null}
-              <div className="form-grid settings-option-grid">
-                <label className="toggle-row">
-                  <input name="auto_advance_default" type="checkbox" defaultChecked={Boolean(agent?.auto_advance_default)} />
-                  <span>新任务默认自动推进</span>
-                </label>
-              </div>
-              {agent?.connection_message ? <p className="hint-line">{agent.connection_message}</p> : null}
-              <div className="button-row">
-                <button className="primary compact-action" type="submit" disabled={agentBusy}>
-                  <KeyRound size={16} aria-hidden="true" />
-                  保存 Agent 设置
+              </details>
+              <div className="model-settings-footer">
+                <span>
+                  {dirty ? "有未保存的更改" : "模型选择仅对新提交的任务生效"}
+                </span>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={!dirty || busy}
+                  onClick={cancel}
+                >
+                  取消更改
                 </button>
                 <button
-                  className="secondary compact-action"
+                  className="primary"
                   type="button"
-                  disabled={agentBusy}
-                  onClick={() => agentTestMutation.mutate()}
+                  disabled={!dirty || busy}
+                  onClick={save}
                 >
-                  <PlugZap size={16} aria-hidden="true" />
-                  测试连接
+                  {busy ? "保存中…" : "保存更改"}
                 </button>
               </div>
-            </form>
             </>
-          )}
+          ) : null}
         </section>
-      ) : null}
-
-      {apiKeyDialog ? (
-        <div className="modal-backdrop" role="presentation">
-          <form className="modal-panel api-key-modal" role="dialog" aria-modal="true" aria-label={apiKeyDialogTitle} onSubmit={handleApiKeyDialogSubmit}>
-            <header className="modal-head">
-              <div>
-                <h3>{apiKeyDialogTitle}</h3>
-                <span>{apiKeyDialogHint}</span>
-              </div>
-              <button className="secondary compact-action" type="button" onClick={() => setApiKeyDialog(null)} disabled={apiKeyDialogBusy}>
-                取消
-              </button>
-            </header>
-            <div className="modal-body settings-form">
-              <label className="field">
-                保存到环境变量
-                <input name="api_key_env" type="text" defaultValue={apiKeyDialogEnv} placeholder={apiKeyDialogEnv} autoComplete="off" required />
-              </label>
-              <label className="field">
-                API Key
-                <input name="api_key" type="password" autoComplete="off" placeholder="输入新的 API Key" required autoFocus />
-              </label>
+      )}
+      {tab === "devices" && (
+        <>
+          <section className="panel page-panel">
+            <h3>运行状态</h3>
+            {engines.isError ? (
+              <ErrorState error={engines.error} />
+            ) : (
+              engines.data?.items.map((e) => (
+                <div className="engine-summary" key={e.name}>
+                  <strong>{e.name}</strong>
+                  <span>
+                    {e.engine} · {e.status}
+                  </span>
+                  <Link to={workspacePath(e.path)}>查看</Link>
+                </div>
+              ))
+            )}
+            <div className="engine-summary">
+              <strong>本机相机与连接</strong>
+              <span>由检测工作页管理</span>
+              <Link to={workspacePath("/inspect")}>打开检测中心</Link>
             </div>
-            <footer className="modal-footer">
-              <button className="secondary compact-action" type="button" onClick={() => setApiKeyDialog(null)} disabled={apiKeyDialogBusy}>
-                取消
-              </button>
-              <button className="primary compact-action" type="submit" disabled={apiKeyDialogBusy}>
-                <Save size={16} aria-hidden="true" />
-                保存 API Key
-              </button>
-            </footer>
-          </form>
+          </section>
+          <DeviceSettings />
+        </>
+      )}
+      {tab === "usage" && (
+        <Usage
+          profiles={data?.profiles || []}
+          purposes={data?.purposes || []}
+        />
+      )}
+    </section>
+  );
+}
+
+function ProfileEditor({
+  data,
+  purpose,
+  profile,
+  onBack,
+  onSaved,
+}: {
+  data: Registry;
+  purpose: string;
+  profile?: Profile;
+  onBack: () => void;
+  onSaved: (id: string) => Promise<void>;
+}) {
+  const { notify } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [test, setTest] = useState("");
+  const initial =
+    profile?.provider ||
+    (purpose === "label"
+      ? "doubao"
+      : purpose === "image"
+        ? "qwen_image"
+        : purpose === "training_assistant"
+          ? "openai_compatible"
+          : "qwen");
+  const [provider, setProvider] = useState(initial);
+  const [model, setModel] = useState(
+    profile?.model ||
+      (purpose === "ocr"
+        ? "qwen-vl-ocr-2025-11-20"
+        : data.providers.find((p) => p.id === initial)?.model || ""),
+  );
+  const [url, setUrl] = useState(
+    profile?.base_url ||
+      data.providers.find((p) => p.id === initial)?.base_url ||
+      "",
+  );
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const body = {
+        name: fields.get("name"),
+        provider,
+        model,
+        base_url: url,
+        api_key: fields.get("api_key"),
+        timeout_seconds: Number(fields.get("timeout_seconds")),
+        enabled: fields.get("enabled") === "on",
+        version: profile?.version,
+      };
+      const result = profile
+        ? await apiClient.put<{ id: string }>(API + "/" + profile.id, body)
+        : await apiClient.post<{ id: string }>(API, body);
+      notify({
+        title: profile ? "配置版本已保存" : "配置已添加，请保存用途选择",
+        tone: "success",
+      });
+      await onSaved(result.id);
+    } catch (e) {
+      notify({
+        title: "保存失败",
+        description: (e as Error).message,
+        tone: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function check() {
+    if (!profile) return;
+    setBusy(true);
+    try {
+      const r = await apiClient.post<{ message: string }>(
+        API + "/" + profile.id + "/test",
+      );
+      setTest(r.message);
+    } catch (e) {
+      setTest((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="view active settings-workspace">
+      <header className="page-head">
+        <div>
+          <button
+            className="secondary compact-action"
+            disabled={busy}
+            onClick={onBack}
+          >
+            返回模型与 API
+          </button>
+          <h2>{profile ? "管理配置" : "添加 key"}</h2>
+          <p className="page-desc">
+            一个配置包含一个模型及其 API Key，可供多个用途选用。
+          </p>
         </div>
-      ) : null}
+      </header>
+      <form
+        className="panel page-panel settings-form profile-editor"
+        onSubmit={submit}
+      >
+        <label className="field">
+          配置名称
+          <input
+            name="name"
+            required
+            maxLength={100}
+            defaultValue={profile?.name}
+            placeholder="例如：豆包 · 标签主配置"
+          />
+        </label>
+        <label className="field">
+          服务商
+          <select
+            value={provider}
+            onChange={(e) => {
+              const p = data.providers.find((p) => p.id === e.target.value)!;
+              setProvider(p.id);
+              setModel(p.model);
+              setUrl(p.base_url);
+            }}
+          >
+            {data.providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {(
+                  {
+                    doubao: "豆包 / 火山方舟",
+                    qwen: "千问 / 百炼",
+                    gemini: "Gemini",
+                    qwen_image: "千问图片生成",
+                    agnes: "Agnes Image",
+                    openai_compatible: "OpenAI 兼容",
+                    cursor: "Cursor",
+                  } as Record<string, string>
+                )[p.id] || p.id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          模型 ID
+          <input
+            required
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            maxLength={200}
+          />
+        </label>
+        <label className="field">
+          API Key
+          <input
+            name="api_key"
+            type="password"
+            autoComplete="new-password"
+            required={!profile}
+            maxLength={8192}
+            placeholder={
+              profile
+                ? "留空保留现有 Key " + profile.masked_key
+                : "输入 API Key"
+            }
+          />
+        </label>
+        <details className="settings-advanced">
+          <summary>接口地址与高级参数</summary>
+          <label className="field">
+            接口地址
+            <input
+              type="url"
+              required
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            请求超时（秒）
+            <input
+              type="number"
+              name="timeout_seconds"
+              min={1}
+              max={600}
+              defaultValue={
+                profile?.timeout_seconds || (purpose === "label" ? 180 : 30)
+              }
+            />
+          </label>
+          <label className="toggle-row">
+            <input
+              name="enabled"
+              type="checkbox"
+              defaultChecked={profile?.enabled ?? true}
+            />
+            <span>启用配置（已被使用的配置须先解除绑定才能停用）</span>
+          </label>
+        </details>
+        <p className="hint-line">
+          连接测试针对已保存版本，不会保存本页修改，也不代表检测准确率达标。
+        </p>
+        {test && <p role="status">{test}</p>}
+        <div className="button-row">
+          <button
+            type="button"
+            className="secondary"
+            disabled={!profile || busy}
+            onClick={check}
+          >
+            测试已保存配置
+          </button>
+          <button type="submit" className="primary" disabled={busy}>
+            {busy ? "保存中…" : "保存配置"}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function Usage({
+  profiles,
+  purposes,
+}: {
+  profiles: Profile[];
+  purposes: Purpose[];
+}) {
+  const query = useQuery({
+    queryKey: ["profileUsage"],
+    queryFn: () => apiClient.get<{ items: Call[] }>(API + "/usage"),
+    refetchInterval: 30000,
+  });
+  const [filter, setFilter] = useState("");
+  const [groupBy, setGroupBy] = useState("purpose");
+  const rows = (query.data?.items || []).filter(
+    (r) => !filter || r.purpose === filter,
+  );
+  const tokens = (r: Call) =>
+    r.usage.total_tokens ??
+    r.usage.totalTokenCount ??
+    (r.usage.prompt_tokens ?? r.usage.input_tokens ?? 0) +
+      (r.usage.completion_tokens ?? r.usage.output_tokens ?? 0);
+  const grouped = new Map<string, Call[]>();
+  for (const call of rows) {
+    const key =
+      groupBy === "profile"
+        ? call.profile_id
+        : groupBy === "model"
+          ? call.model
+          : call.purpose;
+    grouped.set(key, [...(grouped.get(key) || []), call]);
+  }
+  const groupLabel = (key: string) =>
+    groupBy === "profile"
+      ? profiles.find((p) => p.id === key)?.name || key
+      : groupBy === "purpose"
+        ? purposes.find((p) => p.id === key)?.label || key
+        : key;
+  return (
+    <section className="panel page-panel">
+      <h3>模型调用</h3>
+      <p className="hint-line">
+        最近 500 次已记录调用；历史成本单独显示。没有返回 usage
+        或未配置价格的调用不做估算。
+      </p>
+      <label className="field">
+        业务用途
+        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="">全部用途</option>
+          {purposes.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p>
+        {rows.length} 次调用 · {rows.filter((r) => !r.ok).length} 次失败 ·{" "}
+        {rows.reduce((n, r) => n + tokens(r), 0)} tokens
+      </p>
+      <label className="field">
+        汇总方式
+        <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
+          <option value="purpose">按业务用途</option>
+          <option value="profile">按配置对象</option>
+          <option value="model">按模型</option>
+        </select>
+      </label>
+      <div className="settings-table-scroll">
+        <table className="settings-usage-table">
+          <thead>
+            <tr>
+              <th>分组</th>
+              <th>调用 / 失败</th>
+              <th>平均耗时</th>
+              <th>Token</th>
+              <th>已计价费用</th>
+              <th>未计价调用</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...grouped].map(([key, calls]) => (
+              <tr key={key}>
+                <td>{groupLabel(key)}</td>
+                <td>
+                  {calls.length} / {calls.filter((r) => !r.ok).length}
+                </td>
+                <td>
+                  {Math.round(
+                    calls.reduce((n, r) => n + r.elapsed_ms, 0) / calls.length,
+                  )}{" "}
+                  ms
+                </td>
+                <td>{calls.reduce((n, r) => n + tokens(r), 0)}</td>
+                <td>
+                  {calls.some((r) => r.priced)
+                    ? `$${calls.reduce((n, r) => n + (r.cost ?? 0), 0).toFixed(6)}`
+                    : "未计价"}
+                </td>
+                <td>{calls.filter((r) => !r.priced).length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <details className="settings-advanced">
+        <summary>调用明细</summary>
+        {query.isError ? (
+          <ErrorState error={query.error} />
+        ) : (
+          <div className="settings-table-scroll">
+            <table className="settings-usage-table">
+              <thead>
+                <tr>
+                  <th>用途 / 配置</th>
+                  <th>模型</th>
+                  <th>耗时</th>
+                  <th>Token</th>
+                  <th>结果</th>
+                  <th>费用</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i}>
+                    <td>
+                      {purposes.find((p) => p.id === r.purpose)?.label ||
+                        r.purpose}
+                      <br />
+                      {profiles.find((p) => p.id === r.profile_id)?.name ||
+                        r.profile_id}{" "}
+                      · v{r.version}
+                    </td>
+                    <td>{r.model}</td>
+                    <td>{r.elapsed_ms} ms</td>
+                    <td>{tokens(r) || "未返回"}</td>
+                    <td>{r.ok ? "完成" : "失败"}</td>
+                    <td>
+                      {r.priced && r.cost !== null
+                        ? `$${r.cost.toFixed(6)}`
+                        : "未计价"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </details>
+      <details className="settings-advanced">
+        <summary>历史成本账本</summary>
+        <LegacyCostLedger />
+      </details>
     </section>
   );
 }

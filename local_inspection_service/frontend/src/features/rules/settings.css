@@ -1,0 +1,106 @@
+.settings-workspace {
+  max-width: 1180px;
+  margin-inline: auto;
+  width: 100%;
+}
+.model-purpose-group {
+  padding: 8px 0 22px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  margin-bottom: 20px;
+}
+.model-purpose-group h3 {
+  margin: 0 0 16px;
+}
+.model-setting-row {
+  display: grid;
+  grid-template-columns: 150px minmax(180px, 1fr) auto 65px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+}
+.model-setting-row select {
+  width: 100%;
+  min-width: 0;
+}
+.engine-summary {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 0;
+  flex-wrap: wrap;
+}
+.engine-summary strong {
+  min-width: 150px;
+}
+.engine-summary a {
+  margin-left: auto;
+}
+.model-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+  margin-top: 24px;
+}
+.model-settings-footer span {
+  margin-right: auto;
+  color: var(--text-muted, #64748b);
+}
+.profile-editor {
+  max-width: 720px;
+}
+.profile-library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+.profile-library-row p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.settings-table-scroll {
+  overflow-x: auto;
+}
+.settings-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+.settings-usage-table th,
+.settings-usage-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+@media (max-width: 680px) {
+  .model-setting-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .model-setting-row label {
+    grid-column: 1/-1;
+  }
+  .model-setting-row select {
+    grid-column: 1;
+  }
+  .model-setting-row .muted-text {
+    grid-column: 1/-1;
+  }
+  .model-settings-footer {
+    flex-wrap: wrap;
+  }
+  .model-settings-footer span {
+    width: 100%;
+  }
+  .engine-summary {
+    gap: 10px;
+  }
+  .settings-tabs {
+    flex-wrap: wrap;
+  }
+}

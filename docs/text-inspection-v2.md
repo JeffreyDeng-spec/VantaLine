@@ -469,3 +469,13 @@ and focus 200..1600 by 200 selected the lowest lexicographic feasible pair (200,
 Other colors, clipped labels and uncertain localization may require retaking.
 
 Direct standard-image import uses the same task POST and request id: JPG/JPEG, PNG, WebP or BMP, at most 10 MiB and 16 million pixels. Extension must match the decoded format; animated/multi-frame, unsupported, corrupt or oversized files fail before task creation. One complete image creates exactly one enabled standard (ordinal 1, revision 1), without label splitting, extraction calls or actual-photo quality screening. Original bytes, EXIF-normalized image and preview use existing private media storage. The task name defaults to the filename stem; source `image` is displayed/filterable as “图片上传”. Word, legacy and Beta sources remain compatible. Standard append/hide/restore and later actual-photo quality checks are unchanged.
+
+## Purpose-specific provider selection
+
+Label layout and comparison share the `label` profile. Manuals use `manual`,
+fixed when a manual session is submitted. Preparation/legacy text uses `document`;
+dedicated OCR uses `ocr`. Existing Qwen-specific paths still validate their provider
+and pinned OCR model. Label runs persist ID/version and retain the existing prompt,
+validation and at-most-once/no-automatic-retry policy. Administrators configure
+these bindings in Settings; business submissions cannot choose arbitrary keys or
+profiles. Codex Beta remains its dedicated engine and retains its existing gates.

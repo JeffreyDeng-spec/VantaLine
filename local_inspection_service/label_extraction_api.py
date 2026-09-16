@@ -146,7 +146,7 @@ def register(namespace):
             s.clear_thread_runtime_repository_selection()
 
     def bbox_settings():
-        return {**s.ai_detection_settings(), "timeout_seconds":label_bbox.TIMEOUT}
+        return {**s.ai_detection_settings("document"), "timeout_seconds":label_bbox.TIMEOUT}
 
     def bbox_enabled(uid):
         return uid in {v.strip() for v in os.environ.get("VANTALINE_LABEL_BBOX_ACCOUNTS", "").split(",") if v.strip()}
