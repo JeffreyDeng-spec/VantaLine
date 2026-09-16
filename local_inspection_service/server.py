@@ -35896,34 +35896,25 @@ def upsert_dashboard_ai_task(accessory_id: str, config: dict[str, Any]) -> dict[
     return serialize_ai_detection_task(task, config)
 
 
-@app.post("/api/accessories/{accessory_id}/route")
-def set_accessory_route(accessory_id: str, request: AccessoryRouteRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    route = str(request.route or "").strip()
-    if route == "locate":
-        removed_phase1_feature("LocateAnything accessory route")
-    if route not in ACCESSORY_DETECTION_ROUTES:
-        raise HTTPException(status_code=400, detail=f"未知的检测路线:{route}")
-    config = load_config()
-    item = next((entry for entry in config.get("accessories", []) if accessory_uid(entry) == accessory_id), None)
-    if not item:
-        raise HTTPException(status_code=404, detail="配件不存在")
-    require_record_access(item, user, write=True)
-    item["detection_route"] = route
-    result: dict[str, Any] = {"accessory_id": accessory_id, "route": route}
-    if route == "ai" and request.apply:
-        try:
-            ensure_accessory_ai_profile(item)
-            result["profile_status"] = "ready"
-        except Exception as exc:  # noqa: BLE001 - 画像生成失败不应阻塞路线切换
-            result["profile_status"] = "failed"
-            result["profile_error"] = str(exc)[:200]
-        save_accessory_item(item, config)
-        result["ai_task"] = upsert_dashboard_ai_task(accessory_id, config)
-    else:
-        save_accessory_item(item, config)
-    result["accessory"] = serialize_accessory(item)
-    return result
+from .accessories.routing import AccessoryRouting, RouteStore, RouteActions
+from .accessories.routing_api import register_routing_api
+_accessory_routing = AccessoryRouting(
+    FileAccess(
+        current_user=lambda: current_auth_user(),
+        require_access=lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
+    ),
+    RouteStore(
+        load_config=lambda: load_config(),
+        save_item=lambda item, config: save_accessory_item(item, config),
+    ),
+    RouteActions(
+        ensure_profile=lambda item: ensure_accessory_ai_profile(item),
+        upsert_task=lambda identifier, config: upsert_dashboard_ai_task(identifier, config),
+        serialize=lambda item: serialize_accessory(item),
+    ),
+    allowed_routes=lambda: ACCESSORY_DETECTION_ROUTES,
+)
+set_accessory_route = register_routing_api(app, _accessory_routing)
 
 
 REACT_PRODUCTION_ROUTE_SEGMENTS = {

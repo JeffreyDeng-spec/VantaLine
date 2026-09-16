@@ -47,6 +47,7 @@ def capture():
         assert server._image_job_metadata.model_resolver() is server.resolve_model_profiles()
         assert server._accessory_preparation.paths.normalized() == server.NORMALIZED_DIR
         assert server._candidate_factory.storage.directory() == server.ACCESSORY_CANDIDATES_DIR
+        assert server._accessory_routing.allowed_routes() is server.ACCESSORY_DETECTION_ROUTES
         assert server.add_accessory_files is server._accessory_file_routes.add_accessory_files
         assert server._candidate_repository.dependencies.lock() is server._candidate_store_lock
 

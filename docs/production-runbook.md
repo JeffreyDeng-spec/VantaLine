@@ -1,5 +1,10 @@
 # Production runbook
 
+Route-selection extraction uses ordinary immutable-release restart and rollback.
+A failed profile attempt still permits route saving and AI-task creation. A later
+AI-task or projection failure can follow a successful save; preserve that record
+and do not auto-retry inference or invent rollback of these existing partial effects.
+
 Preparation extraction uses the normal whole-release restart and rollback.
 Candidate preparation can leave frames or thumbnails before a later failure, as
 before; preserve these files and task evidence. No database migration, automatic

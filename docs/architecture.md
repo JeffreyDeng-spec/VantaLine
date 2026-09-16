@@ -1,5 +1,11 @@
 # Architecture
 
+`accessories.routing.AccessoryRouting` owns detection-route selection; `routing_api`
+registers its synchronous endpoint in the original position. Access, config storage,
+profile preparation, AI-task upsert and response projection are explicit capabilities.
+Route validation still precedes record lookup, and profile failure is deliberately
+recoverable while later save/task/projection failures propagate.
+
 Accessory source preparation now has three explicit services: `AccessoryPreparation`
 for normalization/reference expansion, `AccessoryRefresh` for post-edit preparation,
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
