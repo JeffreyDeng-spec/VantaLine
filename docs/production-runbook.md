@@ -1,5 +1,9 @@
 # Production runbook
 
+Record access uses the ordinary complete-release restart. Verify member-owned and
+shared record access and administrator assignment. On regression restore the
+previous complete release, retaining accounts, sessions and ownership records.
+
 Audit projection extraction uses the ordinary whole-release restart and rollback.
 Check displayed creation/update times and ownership in analysis and cost views.
 Restoring the previous release requires no data or timestamp conversion.

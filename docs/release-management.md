@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Record-context CI checks exercise real HTTP/thread identity plus owner assignment
+and failure behavior. The full RBAC and assembled application gates remain required;
+release topology and persistent data formats are unchanged.
+
 The audit projection gate adds synthetic timestamp and file-fallback checks.
 Existing cost, analysis and application contracts remain required. This batch
 changes no release topology, database schema or runtime configuration.

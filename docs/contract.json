@@ -34,7 +34,7 @@
   "impact_rules": [
     {
       "name": "Shared record policies",
-      "paths": ["local_inspection_service/records/**", "scripts/smoke_record_ownership.py", "scripts/smoke_record_audit.py"],
+      "paths": ["local_inspection_service/records/**", "scripts/smoke_record_ownership.py", "scripts/smoke_record_audit.py", "scripts/smoke_record_access.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {

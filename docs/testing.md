@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_record_access.py` verifies lazy administrator target lookup,
+special owner IDs, literal legacy alias lookup, renamed/deleted/inactive accounts,
+unchanged storage errors, explicit-user override, anonymous 401 and hidden 404.
+Real ASGI requests cover shared-read/write denial, concurrent thread dispatch,
+two isolated compositions and exception restoration. The assembled application
+gate asserts auth/record services share the same identity and ownership objects.
+
 `python scripts/smoke_record_audit.py` covers timestamp field priority, numeric
 coercion, zero/negative/invalid values, unchanged infinite-value exceptions,
 file errors, separate creation/update stat calls and shallow-copy behavior.

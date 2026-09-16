@@ -1,15 +1,21 @@
 # Architecture
 
+`records.access.RecordAccess` owns request owner fields, administrator owner
+assignment and hidden-resource guards. It shares the authentication identity and
+ownership policy and receives lazy current-user/target-user capabilities. It holds
+no current user or connection. The target port retains the existing full auth-store
+lookup; this extraction does not introduce indexed reads or alter write locking.
+
 `records.audit` owns timestamp coercion, field precedence, file-time fallback and
 shallow audit projection. `RecordAudit` receives the existing ownership policy;
-six root forwarding functions preserve caller signatures. Owner assignment,
-request identity and persistence retain their existing implementations.
+six root forwarding functions preserve caller signatures. Request identity and
+persistence retain their existing implementations.
 
 `records.ownership.RecordOwnership` contains five pure ownership policies shared
 by existing record callers. The root supplies the existing legacy/system identifiers and
 retains the five original function signatures as explicit forwarding adapters.
 Shared users can read; administrators or owners can write. Administrator owner
-filters remain binding. Identity, owner assignment and storage
+filters remain binding. Identity and storage
 are outside this extraction and retain their current lifecycle.
 
 The existing Codex comparison worker observes process exit once per loop, waits
