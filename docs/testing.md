@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_cost_ledger.py` uses synthetic records and temporary files
+with real cost services/adapters: token aliases, cached/image/reasoning pricing,
+unknown models, raw PostgreSQL-source precedence over stale JSON, stable call
+IDs, metadata patterns, duplicate IDs, ordering, training durations, summary
+filtering and administrator denial before any source read. It requires no paid
+provider or customer data. The full assembled HTTP baseline still checks route
+order and schema. `verify_backend_boundaries.py` includes `analytics`.
+
 `node scripts/test_label_image_reuse.cjs` exercises actual React with synthetic images
 and delayed HTTP: stable image node/source, zero actual-image downloads during a local
 submission/completion, historical preview-only reads, deferred zoom/retry, bounded

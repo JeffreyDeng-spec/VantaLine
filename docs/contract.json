@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Analytics cost ledger",
+      "paths": ["local_inspection_service/analytics/**", "scripts/smoke_cost_ledger.py"],
+      "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
+    },
+    {
       "name": "Model profile binding and source provenance",
       "paths": ["local_inspection_service/model_profiles/**", "local_inspection_service/qwen_evidence_jobs.py", "local_inspection_service/qwen_ocr_evidence.py"],
       "required_docs": ["docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md"]

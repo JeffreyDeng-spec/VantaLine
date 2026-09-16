@@ -1,5 +1,10 @@
 # Production runbook
 
+Cost-domain extraction ships in the ordinary immutable release, with no data
+migration or worker change. Revert the complete release on regression; preserve
+stored call evidence and existing metadata. There is no cost-ledger repair or
+recalculation step during deployment.
+
 Backend extraction contract checks run against a temporary test runtime before
 merge. They do not start production workers or inspect customer data. Contract-only
 releases use the existing complete-release deployment and rollback procedure.
