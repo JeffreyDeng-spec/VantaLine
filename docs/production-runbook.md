@@ -1,5 +1,10 @@
 # Production runbook
 
+Candidate extraction uses ordinary complete-release restart and rollback. Check
+candidate retrieval and existing job status display. Preserve task identifiers,
+anchor provenance and model snapshots, including repairs already persisted during
+reads. Do not regenerate images or replay provider calls when rolling back.
+
 Accessory catalog extraction uses the ordinary complete-release restart. Check
 owner/shared/admin listing and details. New tasks record the v2 prompt-source
 manifest; retain old snapshots and paid-call evidence on complete-release rollback.

@@ -34,7 +34,7 @@
   "impact_rules": [
     {
       "name": "Accessory catalog",
-      "paths": ["local_inspection_service/accessories/**", "scripts/smoke_accessory_catalog.py"],
+      "paths": ["local_inspection_service/accessories/**", "scripts/smoke_accessory_catalog.py", "scripts/smoke_accessory_candidates.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
@@ -72,7 +72,7 @@
     },
     {
       "name": "PostgreSQL and migrations",
-      "paths": ["local_inspection_service/storage/**", "local_inspection_service/runtime/connections.py", "local_inspection_service/analytics/analysis_repository.py", "local_inspection_service/analytics/analysis_publication.py", "local_inspection_service/auth/repository.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
+      "paths": ["local_inspection_service/storage/**", "local_inspection_service/runtime/connections.py", "local_inspection_service/analytics/analysis_repository.py", "local_inspection_service/analytics/analysis_publication.py", "local_inspection_service/auth/repository.py", "local_inspection_service/accessories/repository.py", "local_inspection_service/accessories/candidate_repository.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
       "required_docs": ["docs/production-runbook.md", "docs/postgresql-runtime.md"]
     },
     {

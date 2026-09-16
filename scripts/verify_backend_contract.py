@@ -37,6 +37,8 @@ def capture():
         assert server._access_control.identity is server._request_user
         assert server._record_access.ownership is server._record_ownership
         assert server._record_audit.ownership is server._record_ownership
+        assert server._candidate_queries.repository is server._candidate_repository
+        assert server._candidate_repository.dependencies.lock() is server._candidate_store_lock
 
         routes = []
         for route in server.app.routes:

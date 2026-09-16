@@ -249,6 +249,27 @@ def main() -> None:
         getattr(contract, attribute).update(getattr(accessory, attribute))
     contract.runtime_repository_entry_call_count += accessory.runtime_repository_entry_call_count
 
+    candidate_path = accessory_path.with_name("candidate_repository.py")
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "accessories.candidate_repository"
+                and any(alias.name == "CandidateRepository" for alias in node.names)
+                for node in ast.walk(tree)), "server.py missing CandidateRepository composition import")
+    candidates = SourceContract(injected_repository=True)
+    candidates.visit(ast.parse(candidate_path.read_text(encoding="utf-8"), filename=str(candidate_path)))
+    candidate_helpers = {"load_accessory_candidate", "save_accessory_candidate", "delete_accessory_candidate", "list_accessory_candidate_records"}
+    require(candidate_helpers <= candidates.functions_with_runtime_repository_entry,
+            "candidate helpers must use the injected runtime repository")
+    for name, arguments in {"load_accessory_candidate": "candidate_id", "save_accessory_candidate": "path, candidate",
+                            "delete_accessory_candidate": "candidate_id, path", "list_accessory_candidate_records": "reverse=reverse",
+                            "accessory_candidate_record_path": "candidate, fallback_id", "write_accessory_candidate_file": "path, candidate"}.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        expected = ast.parse("_candidate_repository." + name + "(" + arguments + ")", mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected), "candidate helper is not bound to repository: " + name)
+    require("accessory_candidates" in candidates.string_literals, "candidate repository missing actual table access")
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(candidates, attribute))
+    contract.runtime_repository_entry_call_count += candidates.runtime_repository_entry_call_count
     missing_adapters = sorted(REQUIRED_RUNTIME_ADAPTERS - contract.imported_names)
     require(not missing_adapters, "server.py missing runtime record adapters: " + ",".join(missing_adapters))
 

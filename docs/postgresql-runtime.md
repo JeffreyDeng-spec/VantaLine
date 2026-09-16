@@ -1,5 +1,11 @@
 # PostgreSQL runtime operations
 
+Candidate repository extraction retains existing transaction and lock placement.
+Load may repair and upsert legacy job metadata; GET holds the original outer RLock
+through authorization, refresh and final save. PG listing remains ordered by
+updated/created/id while JSON listing uses file time. No read unlock or schema
+optimization is included. A denied GET can retain its earlier load-time repair.
+
 Accessory row persistence now lives in `accessories.repository` behind a lazy
 runtime-repository factory and the existing configuration lock. JSON fallbacks,
 row-ID normalization, raw payloads and fetch/delete transaction behavior are

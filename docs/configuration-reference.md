@@ -1,5 +1,10 @@
 # Configuration reference
 
+Candidate persistence/retrieval extraction changes no setting. Load identifiers
+retain their existing exact form; deletion trims them and generated record paths
+use the existing sanitizer. GET may repair legacy job metadata before authorization;
+provider execution is unchanged. Existing task model references are preserved.
+
 Accessory catalog extraction introduces no settings. Existing member/admin
 visibility, full-versus-summary payloads, source redaction, defaults and physical
 dimensions are unchanged. New task prompt provenance uses source manifest v2,

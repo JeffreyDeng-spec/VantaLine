@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_accessory_candidates.py --postgres --root` covers JSON repair,
+atomic-file replacement failure, format/file-time ordering, exact PG lock/factory
+order, no fallback, real HTTP denial/refresh and error cleanup. Isolated PostgreSQL
+tests include concurrent repair/upserts, timestamp ordering and missing raw IDs.
+The full-runtime fixture uses actual legacy job, anchor/guide and model-freeze
+callbacks with a status-refresh substitute; it exercises the assembled root too.
+Seven migrated function bodies were compared before wiring. The source gate reads
+the actual candidate repository and validates all six root delegates; the assembled
+gate verifies the same repository and RLock. No provider or device is contacted.
+
 `python scripts/smoke_accessory_catalog.py --postgres` covers accessory policy,
 projection, JSON mutation/failure, lazy PG capability/lock ordering and real HTTP
 visibility, view modes, duplicate IDs and authorization before gallery side effects.
