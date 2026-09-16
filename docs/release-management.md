@@ -1,5 +1,8 @@
 # VantaLine release management
 
+Gallery CI adds synthetic HTTP/image-byte contracts. Whole immutable releases
+include the new gallery service; schema, prompts and process topology are unchanged.
+
 Management CI adds the synthetic creation/confirmation/removal contract gate.
 No schema, worker topology, model producer or task snapshot format changes. Keep
 ordinary complete-release validation and rollback; the phase adds no cutover step.

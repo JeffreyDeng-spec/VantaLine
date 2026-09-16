@@ -1,5 +1,10 @@
 # Production runbook
 
+Gallery extraction uses ordinary whole-release restart and rollback. Verify
+authorized detail previews with synthetic media. Preserve existing generated
+previews and task/source files during rollback; a failed detail request may already
+have written earlier previews. No image regeneration or data migration is required.
+
 Management extraction uses ordinary full-package restart. Preserve candidate and
 accessory records on rollback: confirmation can persist an accessory before a
 later candidate write fails, as before. Do not auto-retry model preparation or
