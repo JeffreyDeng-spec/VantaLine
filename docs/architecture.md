@@ -1,5 +1,12 @@
 # Architecture
 
+Codex single-image and batch registration now uses explicit account, repository,
+standard-library, media and document-import capabilities. Repository/identity lookups
+remain lazy and thread-local; source-library reads stay outside the queue transaction.
+Shared HTTP requests live in `schemas/codex_compare.py`; report value validation is
+separate from version dispatch, removing API/report cycles while preserving existing
+exports. The entire Codex package now passes dependency checks. Its worker is unchanged.
+
 Label inspection registration now takes the app separately from typed access,
 repository-lifecycle, import/media and model-provider capabilities. API and worker
 code no longer read the application's global namespace. `model.settings(provider)`

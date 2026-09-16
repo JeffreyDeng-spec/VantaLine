@@ -102,9 +102,11 @@ def test_api_isolation_snapshot_and_media(storage,tmp_path,monkeypatch):
     def permission(_):
         if not current['permission']:raise HTTPException(403,'no permission')
     app=FastAPI()
-    api.register({'app':app,'require_permission':permission,'_text_v2_owner':lambda:(current['owner'],'test'),
-                  'runtime_postgres_repository_or_none':lambda:storage().repository,'DATA_DIR':tmp_path,
-                  '_text_v2_owned':owned,'_text_v2_asset_bytes':lambda *_:data})
+    from local_inspection_service.codex_compare.dependencies import ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports
+    def unused(*args, **kwargs):raise AssertionError('single-image fixture must not use batch import capabilities')
+    api.register(app,ComparisonAccess(permission,lambda:(current['owner'],'test')),
+                 lambda:storage().repository,StandardLibrary(owned,unused,unused),
+                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused))
     client=TestClient(app)
     form={'standard_asset_id':'asset','request_id':'request-123','expected_revision':'rev-1'}
     def create():return client.post(api.PREFIX+'/tasks',data=form,files={'captured_file':('a.png',data,'image/png')})

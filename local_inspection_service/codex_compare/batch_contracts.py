@@ -1,7 +1,7 @@
 """One immutable batch/session with independently addressable label reports."""
 from copy import deepcopy
 import re
-from .contracts import box, text, summary
+from .validation import box, text, summary
 from . import label_contracts as label
 
 VERSION = 'label-batch-v3'

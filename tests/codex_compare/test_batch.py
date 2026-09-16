@@ -74,11 +74,14 @@ def test_api_import_draft_freeze_and_owner(storage,tmp_path,monkeypatch):
         calls.append('extract')
         return [{'ordinal':1,'sha256':digest(data),'mime_type':'image/png'},{'ordinal':2,'sha256':digest(data),'mime_type':'image/png'}],[data,data]
     app=FastAPI()
-    ns={'app':app,'DATA_DIR':tmp_path,'require_permission':lambda *_:None,'_text_v2_owner':lambda:(who['id'],'admin'),
-        'runtime_postgres_repository_or_none':lambda:storage().repository,'_text_v2_owned':owned,'_text_v2_load':lambda kind:list(records[kind].values()),
-        '_text_v2_save':save,'_text_v2_write':write,'_text_v2_media_path':lambda owner,std,name:tmp_path/owner/std/name,
-        '_text_v2_asset_bytes':lambda a,o:Path(a['media_path']).read_bytes(),'extract_docx_candidates':extract,'extract_doc_images':extract}
-    api.register(ns);c=TestClient(app);root=api.PREFIX+'/batches'
+    from local_inspection_service.codex_compare.dependencies import ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports
+    api.register(app,ComparisonAccess(lambda *_:None,lambda:(who['id'],'admin')),
+                 lambda:storage().repository,
+                 StandardLibrary(owned,lambda kind:list(records[kind].values()),save),
+                 ComparisonMedia(lambda:tmp_path,lambda a,o:Path(a['media_path']).read_bytes(),
+                                 lambda owner,std,name:tmp_path/owner/std/name,write),
+                 DocumentImports(extract,extract))
+    c=TestClient(app);root=api.PREFIX+'/batches'
     response=c.post(root,json={'request_id':'create-batch'});assert response.status_code==200,response.text
     bid=response.json()['id'];url=root+'/'+bid
     assert storage().claim({'a'},'m','v') is None

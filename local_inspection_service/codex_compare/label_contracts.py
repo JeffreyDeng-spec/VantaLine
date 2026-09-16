@@ -1,5 +1,5 @@
 """Version 2 label card contract; pure validation before transactional projection writes."""
-from .contracts import box, text
+from .validation import box, text
 
 VERSION = 'label-v2'
 DIMENSIONS = ('text', 'typography', 'color', 'graphics', 'completeness', 'orientation', 'shape', 'layout', 'codes', 'print')

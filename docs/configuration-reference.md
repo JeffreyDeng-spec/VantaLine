@@ -1,5 +1,11 @@
 # Configuration reference
 
+Codex dependency extraction adds no setting. Account admission and the configured
+model continue to be read dynamically; capability queries do not require PostgreSQL.
+Existing tasks remain readable/cancellable after account admission is removed, while
+new work and retry retain their existing guards. Source hashes, request defaults,
+report limits and omitted-versus-explicit import arguments are unchanged.
+
 Label dependency extraction changes no environment setting. Configuration still
 resolves `label` with an omitted reference before reading the enabled flag; submitting
 a repeated request resolves its explicit stored reference, including None. Worker
