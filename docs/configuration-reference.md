@@ -1,5 +1,10 @@
 # Configuration reference
 
+History extraction adds no configuration. The existing text-inspection permission,
+account isolation, cursor validation and page bounds remain. Historical media uses
+the bound revision/hash, private no-store caching and nosniff response headers;
+diagnostics retain the same inspection permission rather than an added admin gate.
+
 Codex dependency extraction adds no setting. Account admission and the configured
 model continue to be read dynamically; capability queries do not require PostgreSQL.
 Existing tasks remain readable/cancellable after account admission is removed, while
