@@ -35,7 +35,7 @@ class DocumentJobs:
         allowed = set(os.getenv('VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS', '').split(','))
         if owner not in allowed or not self.s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
             raise HTTPException(409, '该账户尚未启用文档图片分类或图片外发授权')
-        settings = self.s.ai_detection_settings()
+        settings = self.s.ai_detection_settings("document")
         if settings.get('provider') != 'qwen' or not settings.get('api_key') or not settings.get('base_url', '').startswith('https://'):
             raise HTTPException(409, '文档分类需要已配置的千问视觉模型和密钥')
         return settings

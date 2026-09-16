@@ -410,3 +410,21 @@ require a new linked run. Terminal history is never re-evaluated. A quality fail
 uses failed/REVIEW_REQUIRED with a QUALITY_* code, no result or model score.
 
 Label task creation accepts either Word or one static JPG/JPEG, PNG, WebP or BMP. Direct images are strictly validated before persistence and become one complete version-1 standard; they do not enter the actual-photo quality gate or any model call. Source `image` uses existing task JSON and private media fields; no schema migration or new endpoint is required.
+
+## Settings and model routing
+
+Settings groups administrative controls into 模型与 API, 设备与运行 and 用量与成本.
+`model_profiles` resolves label, manual, pipeline, image, training_assistant,
+accessory, training_vision, document and ocr independently. Provider adapters keep
+their own wire formats; labels no longer compare a queued job against a global
+model constant. Codex Beta, local OCR, YOLO and browser PLC remain separate engines.
+
+Profiles are immutable metadata versions in PostgreSQL; restricted server secret
+storage holds credentials. Submission snapshots bind profile ID/version, provider/model and a SHA-256
+fingerprint of shipped prompt-producing source (dynamic inputs stay in task
+records), and
+workers scope existing provider calls to that snapshot. Existing pre-migration
+jobs use the initial migration snapshot. Video scopes cover all frames; manual
+sessions preserve their original model binding. Public task projections remove
+private configuration references. Usage failures must not turn a successful paid
+response into a failed/retried call. No new cross-model fallback is introduced.

@@ -171,6 +171,9 @@ def validated_subset(response, size, *, allow_empty=False):
     return valid,rejected
 
 
+from .model_profiles.audit import metered_function
+
+@metered_function(0)
 def recognize(settings, blob, size, timeout, post=None, *, allow_rejected_words=False, auto_rotate=False, presence_evidence=False, region_text=False, audit=None):
     import requests
     if type(presence_evidence) is not bool:

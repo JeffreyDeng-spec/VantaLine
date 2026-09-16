@@ -200,3 +200,30 @@ implementation/scaling, not generic sharpness scores. Unsupported localization
 fails closed; expected first-release coverage is dark labels on lighter backgrounds.
 
 Label standard-image imports use fixed existing image limits: 10 MiB and 16 million pixels. Accepted static formats are JPG/JPEG, PNG, WebP and BMP with extension/decoded-format agreement; animations and HEIC/HEIF are rejected. No new runtime setting or model configuration is introduced. Word limits remain DOC 30 MiB, DOCX 100 MiB and 500 standard entries.
+
+## Versioned model profiles and purpose bindings
+
+Administrators use Settings → 模型与 API to choose one saved model/Key object
+per purpose. Creating a profile does not bind it: the main Save commits all
+purpose selections with an optimistic revision, returning 409 on stale edits.
+The advanced library supports multiple keys for the same model and shared use
+across purposes. Only administrators may list, test or mutate this library;
+legacy ai_config/agent_config permission grants do not bypass role checks.
+Old configuration writes return 409 and direct users to the profile library.
+
+`/api/admin/model-profiles` is the metadata API (GET/POST); `/{id}` PUT appends
+an immutable version, `/{id}/test` POST tests saved credentials, `/bindings` PUT
+atomically saves selections, and `/usage` GET returns the last 500 recorded calls.
+No API returns raw keys. Key/endpoint/model edits clear prior connection status.
+Unbind a profile before disabling it; old versions and secret references remain
+available to previously submitted jobs. There is no destructive secret deletion.
+
+The first read migrates effective legacy AI, image, training assistant and label
+settings, including their effective environment overrides. Remaining saved keys
+without a known model become disabled pending profiles. Migration retains the
+training assistant enabled gate and operational defaults. After migration, legacy
+settings/environment values no longer override purpose bindings. Existing external
+call/account feature gates remain authoritative and are not enabled by adding a key.
+Dedicated OCR accepts only the pinned Qwen OCR model; document preparation keeps
+its existing Qwen-compatible requirement. Existing migrated bindings are retained.
+Connection tests use metadata endpoints; success does not certify model accuracy.

@@ -25,6 +25,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from local_inspection_service.scripts import testclient_threadpool_shim  # noqa: E402
 from local_inspection_service import server  # noqa: E402
+from local_inspection_service.scripts.model_profiles_fixture import install as install_model_profiles_fixture
+install_model_profiles_fixture(server)
 
 testclient_threadpool_shim.install()
 TestClient = testclient_threadpool_shim.SmokeASGIClient

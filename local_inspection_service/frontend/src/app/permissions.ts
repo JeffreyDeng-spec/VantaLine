@@ -1,6 +1,6 @@
 import type { AuthUser } from "../api/types";
 
-export const ADMIN_ONLY_PERMISSIONS = new Set(["user_management"]);
+export const ADMIN_ONLY_PERMISSIONS = new Set(["user_management", "ai_config", "agent_config", "system_settings"]);
 
 export function hasPermission(user: AuthUser | null | undefined, permission?: string) {
   if (!permission) return true;
@@ -19,7 +19,7 @@ export function permissionForView(view: string) {
       accessories: "accessory_library",
       pipeline: "training_pipeline",
       trainingLibrary: "model_library",
-      rules: "system_settings",
+      rules: "inspection",
       userManagement: "user_management"
     } as Record<string, string>
   )[view];

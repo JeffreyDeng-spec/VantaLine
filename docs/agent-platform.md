@@ -173,3 +173,12 @@ The full browser page continues to expose everything the account can access.
 Neither a tool marker nor a confirmation proves human identity. Revoking the
 account session is required to block that browser's existing API access; hiding
 the tool menu alone is insufficient.
+
+## Model configuration administration
+
+Training assistant remains an advanced model purpose, with recommendations,
+conversation/auto-advance and existing rule fallback preserved. Configuration
+permissions `ai_config`, `agent_config`, and `system_settings` now require admin
+role in both backend checks and frontend action permissions. Legacy automation
+configuration writes are retired with 409; use the admin model profile API.
+Ordinary users retain their permitted task/device operations without library access.

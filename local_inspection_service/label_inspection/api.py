@@ -40,7 +40,7 @@ def public(value, *, diagnostic=False):
         if k not in {"owner_user_id", "idempotency_key", "parameters", "kind"}
     }
     if not diagnostic and value.get("kind") == "run":
-        for key in ("model", "prompt_hash", "layout", "transformations"):
+        for key in ("model", "prompt_hash", "layout", "transformations", "profile_snapshot"):
             result.pop(key, None)
         if result.get("error") and not result.get("error_code"):
             result["error"] = (
@@ -566,6 +566,10 @@ def register(ns):
             owner, repo, media = context()
             enabled()
             actual = image(media, owner, data)
+            # Resolve after checking idempotency: an acknowledged submission keeps its original configuration.
+            prior = repo.request_run(owner, request_id)
+            selected = prior.get("profile_snapshot") if prior else ns["model_profile_service"].snapshot().get("label")
+            resolved = ns["model_profile_service"].resolve("label", selected)
             return public(
                 repo.submit(
                     owner,
@@ -574,9 +578,10 @@ def register(ns):
                     revision,
                     asset_id,
                     actual,
-                    model.MODEL,
+                    resolved["model"],
                     model.PROMPT_HASH,
                     parent_id,
+                    profile_snapshot=selected,
                 )
             )
 

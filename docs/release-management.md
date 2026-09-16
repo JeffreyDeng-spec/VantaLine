@@ -100,3 +100,11 @@ Release and rollback must drain queued v3 work before switching worker versions;
 passing deterministic gates does not establish real photographed-label accuracy.
 
 The backend CI additionally exercises A + Evolving label task persistence and its two-call fail-closed contract in a disposable PostgreSQL schema, without a live provider key.
+
+## Model profile release gate
+
+Required CI includes isolated PostgreSQL registry tests and the real-React settings
+acceptance runner. The additive registry migration and settings frontend ship in
+one immutable artifact. Merge only after required checks and independent review
+pass; the successful main CI triggers the existing release/deploy workflow.
+No in-place production edits or separate frontend deployment are permitted.

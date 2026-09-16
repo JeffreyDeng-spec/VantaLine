@@ -356,7 +356,7 @@ try:
 except (TypeError, ValueError):
     INCOMING_TEXT_MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 AUTO_OPTIMIZE_DIR = DATA_DIR / "auto_optimize"
-AI_SUPPORTED_PROVIDERS = {"gemini", "qwen"}
+AI_SUPPORTED_PROVIDERS = {"gemini", "qwen", "doubao"}
 AI_DEFAULT_PROVIDER = "gemini"
 AI_DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
@@ -782,7 +782,7 @@ FEATURE_PERMISSIONS: dict[str, str] = {
     "user_management": "用户与权限管理",
 }
 
-ADMIN_ONLY_PERMISSIONS = {"user_management"}
+ADMIN_ONLY_PERMISSIONS = {"user_management", "ai_config", "agent_config", "system_settings"}
 
 DEFAULT_USER_PERMISSIONS = [
     "inspection",
@@ -2869,6 +2869,8 @@ async def reject_untrusted_cross_origin_writes(request: Request, call_next):
             return JSONResponse({"detail": "First admin setup required", "setup_required": True}, status_code=503)
         if not auth_user:
             return JSONResponse({"detail": "Authentication required"}, status_code=401)
+        if (path.startswith(("/api/ai/config", "/api/agent/config", "/api/admin/model-profiles"))) and not user_is_admin(auth_user):
+            return JSONResponse({"detail": "Admin role required"}, status_code=403)
         required_permissions = route_allowed_permissions(path, request.method.upper())
         if required_permissions and not any(user_has_permission(auth_user, permission) for permission in required_permissions):
             return JSONResponse(
@@ -8281,6 +8283,8 @@ def rebase_stale_local_payload_text(text: str) -> str:
 
 def public_path_sanitized(value: Any) -> Any:
     if isinstance(value, dict):
+        value = {k:v for k,v in value.items() if k not in {"model_profiles", "profile_snapshot", "secret_ref", "operational"}}
+    if isinstance(value, dict):
         return {
             rebase_stale_local_path_text(key) if isinstance(key, str) else key: public_path_sanitized(item)
             for key, item in value.items()
@@ -9075,7 +9079,11 @@ def ensure_candidate_image_job_task_ids(candidate: dict[str, Any]) -> bool:
     return changed
 
 
+from .model_profiles.snapshots import freeze_record as freeze_model_record, pinned as pinned_model_profiles
+
+
 def store_candidate_image_job(candidate: dict[str, Any], updated_job: dict[str, Any]) -> None:
+    freeze_model_record(globals(), updated_job)
     ensure_image_job_task_id(candidate, updated_job)
     ensure_anchor_image_provenance(updated_job)
     ensure_image_job_target_guides(updated_job)
@@ -10798,7 +10806,7 @@ def agent_auto_optimize_initialization_recommendation(
     expected_production_count: int,
     fallback: dict[str, Any],
 ) -> dict[str, Any]:
-    settings = ai_detection_settings()
+    settings = ai_detection_settings("training_vision")
     if not settings.get("configured"):
         return fallback
     accessories_by_id = accessory_lookup_by_id(config)
@@ -11048,6 +11056,7 @@ def load_auto_optimize_state(task_id: str) -> dict[str, Any]:
 
 
 def save_auto_optimize_state(state: dict[str, Any]) -> dict[str, Any]:
+    freeze_model_record(globals(), state)
     AUTO_OPTIMIZE_DIR.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = int(time.time())
     clean_task_id = sanitize_ai_detection_task_id(state.get("task_id")) or AI_DETECTION_MODEL_ID
@@ -11874,7 +11883,7 @@ def verify_auto_optimize_mask_sample(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     if not labels:
         return labels, [], {"enabled": True, "status": "skipped_empty"}
-    settings = ai_detection_settings()
+    settings = ai_detection_settings("training_vision")
     if not settings.get("configured"):
         failures = [
             {
@@ -12675,6 +12684,7 @@ def auto_optimize_process_label_sample(
     }
 
 
+@pinned_model_profiles("load_auto_optimize_state")
 def auto_optimize_label_worker(task_id: str) -> None:
     try:
         settings = image_generation_settings()
@@ -12852,6 +12862,7 @@ def maybe_start_auto_optimize_training_locked(state: dict[str, Any]) -> None:
     save_auto_optimize_state(state)
 
 
+@pinned_model_profiles("load_auto_optimize_state")
 def auto_optimize_training_check_worker(task_id: str, delay_seconds: float = 0.0) -> None:
     clean_task_id = sanitize_ai_detection_task_id(task_id)
     if not clean_task_id:
@@ -13656,6 +13667,7 @@ def start_auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
         thread.start()
 
 
+@pinned_model_profiles("load_auto_optimize_state")
 def auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
     try:
         time.sleep(0.1)
@@ -14657,7 +14669,20 @@ def public_data_analysis_scope_payload(record: dict[str, Any]) -> dict[str, Any]
 
 
 
-def ai_detection_settings() -> dict[str, Any]:
+def ai_detection_settings(purpose: str = "pipeline") -> dict[str, Any]:
+    return model_profile_service.resolve(purpose)
+
+
+def image_generation_settings() -> dict[str, Any]:
+    return model_profile_service.resolve("image")
+
+
+def load_agent_config() -> dict[str, Any]:
+    value = model_profile_service.resolve("training_assistant")
+    return {**DEFAULT_AGENT_CONFIG, **value, "enabled": value.get("configured", False)}
+
+
+def _legacy_ai_detection_settings() -> dict[str, Any]:
     local = load_ai_local_config()
     provider = os.environ.get("INSPECTION_AI_PROVIDER", "").strip().lower() or str(local.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
     model = os.environ.get("INSPECTION_AI_MODEL", "").strip() or str(local.get("model") or AI_DEFAULT_MODEL).strip() or AI_DEFAULT_MODEL
@@ -14874,7 +14899,7 @@ def public_config_summary_for_user(user: dict[str, Any] | None, config: dict[str
     )
 
 
-def image_generation_settings() -> dict[str, Any]:
+def _legacy_image_generation_settings() -> dict[str, Any]:
     local = load_ai_local_config()
     provider = (
         os.environ.get(IMAGE_GENERATION_PROVIDER_ENV, "").strip().lower()
@@ -15099,11 +15124,15 @@ def parse_ai_json_object(text: str) -> dict[str, Any]:
     raise AiProviderError("AI provider did not return a parseable JSON object")
 
 
+from .model_profiles.audit import metered as metered_model_call
+
+
 class OpenAICompatibleAiProvider:
     def __init__(self, settings: dict[str, Any]):
         self.settings = settings
         self.last_usage_metadata: dict[str, Any] = {}
 
+    @metered_model_call
     def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], *, max_tokens: int = 1400) -> tuple[dict[str, Any], int]:
         if not self.settings.get("configured"):
             raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
@@ -15118,6 +15147,10 @@ class OpenAICompatibleAiProvider:
                 {"role": "user", "content": user_content},
             ],
         }
+        if self.settings.get("provider") == "doubao":
+            payload["thinking"] = {"type": "disabled"}
+        elif self.settings.get("provider") == "qwen":
+            payload["enable_thinking"] = False
         request = urllib.request.Request(
             self.settings["base_url"],
             data=json.dumps(payload).encode("utf-8"),
@@ -15143,7 +15176,10 @@ class OpenAICompatibleAiProvider:
         try:
             response_json = json.loads(body)
             self.last_usage_metadata = response_json.get("usage") if isinstance(response_json.get("usage"), dict) else {}
-            content = response_json["choices"][0]["message"]["content"]
+            choices = response_json["choices"]
+            if self.settings.get("profile_id") and (len(choices) != 1 or choices[0].get("finish_reason") != "stop"):
+                raise AiProviderError("AI provider output is incomplete")
+            content = choices[0]["message"]["content"]
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             provider_error = AiProviderError("AI provider response shape was not recognized")
             provider_error.response_sha256 = sha256_bytes(body.encode("utf-8", errors="replace"))
@@ -15242,6 +15278,7 @@ class GeminiAiProvider:
             "expire_time": str(response_json.get("expireTime") or ""),
         }
 
+    @metered_model_call
     def generate_json(
         self,
         system_prompt: str,
@@ -15302,13 +15339,17 @@ class GeminiAiProvider:
         try:
             response_json = json.loads(body)
             self.last_usage_metadata = response_json.get("usageMetadata") if isinstance(response_json.get("usageMetadata"), dict) else {}
-            parts = response_json["candidates"][0]["content"]["parts"]
+            candidates = response_json["candidates"]
+            if self.settings.get("profile_id") and (len(candidates) != 1 or candidates[0].get("finishReason") != "STOP"):
+                raise AiProviderError("AI provider output is incomplete")
+            parts = candidates[0]["content"]["parts"]
             content = "\n".join(str(part.get("text", "")) for part in parts if isinstance(part, dict))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise AiProviderError("AI provider response shape was not recognized") from exc
         self.last_raw_text = str(content or "")
         return parse_ai_json_object(str(content or "")), latency_ms
 
+    @metered_model_call
     def generate_image(
         self,
         prompt: str,
@@ -15478,6 +15519,7 @@ class AgnesImageProvider:
                     raise AiProviderError(f"Agnes image provider URL download failed: {bounded_text(exc, 180)}") from exc
         raise AiProviderError("Agnes image provider did not return image bytes")
 
+    @metered_model_call
     def generate_image(
         self,
         prompt: str,
@@ -15618,6 +15660,7 @@ class QwenImageProvider:
             stack.extend(reversed(list(item.values())))
         raise AiProviderError("Qwen image provider did not return image bytes")
 
+    @metered_model_call
     def generate_image(
         self,
         prompt: str,
@@ -15671,7 +15714,7 @@ def ai_provider_from_settings(settings: dict[str, Any]) -> OpenAICompatibleAiPro
     provider = str(settings.get("provider") or "").strip()
     if provider == "gemini":
         return GeminiAiProvider(settings)
-    if provider == "qwen":
+    if provider in {"qwen", "doubao", "openai_compatible"}:
         return OpenAICompatibleAiProvider(settings)
     raise AiProviderConfigError(str(settings.get("message") or f"Unsupported AI provider: {provider or 'missing'}"))
 
@@ -15692,6 +15735,8 @@ def image_generation_provider_from_settings(settings: dict[str, Any]) -> GeminiA
 
 
 def ai_settings_match_runtime(settings: dict[str, Any]) -> bool:
+    if settings.get("profile_id"):
+        return False  # Always use the task's frozen object, never the current selection.
     runtime = ai_detection_settings()
     for key in ("provider", "model", "base_url", "api_key", "timeout_seconds", "proxy_url_raw"):
         if settings.get(key) != runtime.get(key):
@@ -15984,6 +16029,7 @@ def generate_provider_json_with_fallback(
                 and attempt_settings.get("model") != "gemini-2.5-flash-lite"
                 and not cached_content
                 and allow_overloaded_model_fallback
+                and not settings.get("profile_id")
             ):
                 fallback_model = "gemini-2.5-flash-lite"
                 fallback_reason = "provider_overloaded"
@@ -16612,7 +16658,7 @@ def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
     if "expected_count" in payload:
         item["expected_count"] = payload.get("expected_count")
     fallback = fallback_accessory_ai_profile(item)
-    settings = dict(payload.get("provider_config") or ai_detection_settings())
+    settings = dict(payload.get("provider_config") or ai_detection_settings("accessory"))
     status = profile_generation_status(settings)
     allow_provider = bool(payload.get("allow_provider", True))
     if not allow_provider or not settings.get("configured"):
@@ -17055,7 +17101,7 @@ def start_ai_mcp_warmup() -> None:
 def generate_accessory_ai_profile(item: dict[str, Any], *, allow_provider: bool = True) -> dict[str, Any]:
     result = call_ai_mcp_tool(
         "accessory.profile.generate",
-        {"accessory": item, "allow_provider": allow_provider, "provider_config": ai_detection_settings()},
+        {"accessory": item, "allow_provider": allow_provider, "provider_config": ai_detection_settings("accessory")},
     )
     item["ai_profile"] = result["profile"]
     ensure_accessory_english_name(item)
@@ -21446,6 +21492,7 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
         )
 
 
+@pinned_model_profiles(argument=2)
 def run_image_generation_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
     provider = str(job.get("provider") or "").strip()
     status = str(job.get("status") or "").strip()
@@ -21556,7 +21603,8 @@ def public_text(value: Any) -> str:
 
 
 def public_image_job(job: dict[str, Any]) -> dict[str, Any]:
-    copy = dict(job)
+    from .model_profiles.snapshots import public_record
+    copy = public_record(job)
     note = str(copy.get("note") or "")
     if "processing this image-to-image task" in note:
         copy["note"] = "系统正在处理这个图像生成任务。"
@@ -21712,6 +21760,7 @@ def load_training_task_records() -> list[dict[str, Any]]:
 
 
 def save_training_task(task: dict[str, Any]) -> None:
+    freeze_model_record(globals(), task)
     store_read_cache_invalidate("training_task_pairs")
     with _training_task_lock:
         repository = runtime_postgres_repository_or_none()
@@ -23026,6 +23075,7 @@ def validate_task_environment_background_image(task_id: str, task: dict[str, Any
     }
 
 
+@pinned_model_profiles("find_training_task")
 def run_background_set_task(job_id: str) -> None:
     task = load_training_task(training_task_path(job_id))
     if not task:
@@ -25370,6 +25420,7 @@ def start_worker_training_watcher() -> None:
     return None
 
 
+@pinned_model_profiles("find_training_task")
 def run_training_task(job_id: str) -> None:
     task = load_training_task(training_task_path(job_id))
     if not task:
@@ -27698,6 +27749,7 @@ def normalize_ai_detection_result(
     }
 
 
+@pinned_model_profiles()
 def analyze_bgr_ai_detection(
     image_bgr: np.ndarray,
     request_id: str,
@@ -27733,7 +27785,7 @@ def analyze_bgr_ai_detection(
                     "accessory": item,
                     "expected_count": expected_count,
                     "allow_provider": False,
-                    "provider_config": ai_detection_settings(),
+                    "provider_config": ai_detection_settings("accessory"),
                 },
             )
             item["ai_profile"] = profile_result["profile"]
@@ -28721,11 +28773,14 @@ def get_windows_worker_training_artifacts(job_id: str) -> dict[str, Any]:
 
 @app.get("/api/ai/config")
 def get_ai_config() -> dict[str, Any]:
+    require_admin_role()
     return public_ai_detection_status()
 
 
 @app.post("/api/ai/config")
 def update_ai_config(request: AiConfigRequest) -> dict[str, Any]:
+    require_admin_role()
+    raise HTTPException(409, "请使用模型与 API 配置库；旧配置入口已停用")
     local = load_ai_local_config()
     if request.provider is not None:
         next_provider = validate_ai_provider(request.provider)
@@ -28992,6 +29047,8 @@ def run_data_analysis_batch_locate_api() -> dict[str, Any]:
 
 @app.delete("/api/ai/config/key")
 def delete_ai_config_key() -> dict[str, Any]:
+    require_admin_role()
+    raise HTTPException(409, "请在模型配置库管理 Key")
     local = load_ai_local_config()
     provider = validate_ai_provider(local.get("provider") or AI_DEFAULT_PROVIDER)
     active_key_id = str(local.get("active_key_id") or "").strip()
@@ -30154,6 +30211,7 @@ def video_ai_summary(frames: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 @app.post("/api/analyze/video")
+@pinned_model_profiles()
 async def analyze_video(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
     ensure_dirs()
     require_analyze_model_permission(model_id)
@@ -31494,7 +31552,7 @@ def agent_recommendation_supported(config: dict[str, Any]) -> bool:
     return normalize_agent_provider(config.get("provider"), str(config.get("base_url") or "")) == AGENT_PROVIDER_OPENAI_COMPATIBLE and agent_connected(config)
 
 
-def load_agent_config() -> dict[str, Any]:
+def _legacy_load_agent_config() -> dict[str, Any]:
     merged = dict(DEFAULT_AGENT_CONFIG)
     provider_present = False
     if AGENT_LOCAL_CONFIG_PATH.exists():
@@ -31535,6 +31593,12 @@ def public_agent_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_agent_config()
     configured = agent_credentials_present(config)
     recommendation_supported = agent_recommendation_supported(config)
+    if not user_is_admin(current_auth_user()):
+        return {"enabled":bool(config.get("enabled")), "configured":configured,
+                "connection_status":config.get("connection_status","untested") if configured else "untested",
+                "recommendation_supported":recommendation_supported,
+                "auto_advance_default":bool(config.get("auto_advance_default")),
+                "mode":"agent" if recommendation_supported else "rules"}
     key_items = normalize_agent_key_items(config)
     current_key_items = agent_keys_for_provider(key_items, config["provider"])
     active_key_id = str(config.get("active_key_id") or "").strip()
@@ -31628,6 +31692,16 @@ def agent_chat_completion(messages: list[dict[str, str]], config: dict[str, Any]
     config = config or load_agent_config()
     if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) == AGENT_PROVIDER_CURSOR:
         raise RuntimeError(AGENT_CURSOR_RECOMMENDATION_MESSAGE)
+    if config.get("profile_id"):
+        if not agent_connected(config):
+            raise RuntimeError("Training assistant connection is not verified")
+        settings = dict(config)
+        if settings["provider"] == "openai_compatible":
+            settings["base_url"] = openai_compatible_chat_url(settings["base_url"])
+        system = "\n".join(m["content"] for m in messages if m["role"] == "system")
+        content = [{"type":"text", "text":m["content"]} for m in messages if m["role"] != "system"]
+        result, _, _ = generate_provider_json_with_fallback(settings, system, content, max_tokens=1400, max_attempts=1)
+        return json.dumps(result, ensure_ascii=False)
     return agent_openai_chat_completion(messages, config, require_connected=True)
 
 
@@ -31864,11 +31938,14 @@ def agent_recommendation(stage: str, accessory_ids: list[str], sample_count: int
 
 @app.get("/api/agent/config")
 def get_agent_config() -> dict[str, Any]:
+    require_admin_role()
     return public_agent_config()
 
 
 @app.post("/api/agent/config")
 def update_agent_config(request: AgentConfigRequest) -> dict[str, Any]:
+    require_admin_role()
+    raise HTTPException(409, "请使用模型与 API 配置库；旧配置入口已停用")
     config = load_agent_config()
     reset_connection = False
     clear_model_options = False
@@ -31954,6 +32031,8 @@ def update_agent_config(request: AgentConfigRequest) -> dict[str, Any]:
 
 @app.post("/api/agent/config/test")
 def test_agent_config() -> dict[str, Any]:
+    require_admin_role()
+    raise HTTPException(409, "请使用模型与 API 配置库；旧配置入口已停用")
     config = load_agent_config()
     if not agent_credentials_present(config):
         provider_label = "Cursor" if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) == AGENT_PROVIDER_CURSOR else "OpenAI 兼容"
@@ -32029,6 +32108,7 @@ def load_pipeline_task(task_id: str) -> dict[str, Any] | None:
 def save_pipeline_task(task: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(task, dict):
         return None
+    freeze_model_record(globals(), task)
     row = pipeline_task_row(task)
     if not row:
         return None
@@ -32607,6 +32687,7 @@ def pipeline_task_public(
 ) -> dict[str, Any]:
     accessories_by_id = accessory_lookup_by_id(config)
     copy = enrich_record_audit_fields(task)
+    copy.pop("model_profiles", None)
     params = copy.get("params") if isinstance(copy.get("params"), dict) else {}
     copy["detection_method"] = normalize_pipeline_detection_method(str(copy.get("detection_method") or params.get("train_mode") or params.get("route") or ""))
     copy["uses_training_flow"] = pipeline_method_uses_training(str(copy.get("detection_method") or ""))
@@ -33014,7 +33095,7 @@ def generate_accessory_pose_plan(item: dict[str, Any], *, allow_provider: bool =
         and existing.get("poses")
     ):
         return existing
-    settings = ai_detection_settings()
+    settings = ai_detection_settings("training_vision")
     if not allow_provider or not settings.get("configured"):
         plan = fallback_accessory_pose_plan(item)
         item["agent_mcp_pose_plan"] = plan
@@ -36227,6 +36308,7 @@ AGENT_PIPELINE_SYSTEM_PROMPT = (
 )
 
 
+@pinned_model_profiles()
 def agent_pipeline_decide(
     task: dict[str, Any],
     config: dict[str, Any],
@@ -36488,6 +36570,7 @@ def pipeline_task_needs_auto_agent(task: dict[str, Any]) -> bool:
     return False
 
 
+@pinned_model_profiles("load_pipeline_task")
 def _run_pipeline_auto_agent_step(task_id: str, user: dict[str, Any] | None) -> None:
     token = _request_user.set(user) if user else None
     try:
@@ -36582,6 +36665,7 @@ def advance_pipeline_task_guarded(
         )
 
 
+@pinned_model_profiles("load_pipeline_task")
 def _run_pipeline_advance(task_id: str, user: dict[str, Any] | None) -> None:
     token = _request_user.set(user) if user else None
     try:
@@ -36720,6 +36804,7 @@ def consume_pipeline_recommendation(task: dict[str, Any], stage: str) -> dict[st
     return None
 
 
+@pinned_model_profiles("load_pipeline_task")
 def _run_pipeline_recommendation_pregen(task_id: str, stage: str, user: dict[str, Any] | None) -> None:
     token = _request_user.set(user) if user else None
     try:
@@ -37537,7 +37622,9 @@ def _text_v2_read_verified(path_value: str, owner_user_id: str, standard_id: str
 
 
 def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
-    result = copy.deepcopy(value)
+    from .model_profiles.snapshots import public_record
+    result = public_record(copy.deepcopy(value))
+    result.pop("model_profiles", None)
     result.pop("source_path", None)
     result.pop("source_preview_path", None)
     for audit in result.get('diagnostics', {}).get('model_audits', []):
@@ -38206,7 +38293,7 @@ async def compare_text_inspection_label(
     asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
     reference_original = _text_v2_asset_bytes(asset, owner_user_id)
     reference, reference_mime, _, reference_source_format = _text_v2_prepare_image(reference_original)
-    settings = ai_detection_settings()
+    settings = ai_detection_settings("document")
     provider_settings = {
         **settings,
         "timeout_seconds": max(
@@ -38406,8 +38493,9 @@ async def create_text_manual_session(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="已确认说明书标准不存在")
     now = int(time.time())
     session = {"id": "man_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "standard_sha256": standard["source_sha256"], "status": "active", "created_at": now, "updated_at": now, "expected_page_count": standard.get("asset_count", 0)}
+    freeze_model_record(globals(), session)
     _text_v2_save("sessions", session, insert_only=True)
-    return session
+    return _text_v2_public(session)
 
 
 def _text_v2_similarity(left: bytes, right: bytes) -> float:
@@ -38461,6 +38549,8 @@ async def inspect_text_manual_page(
             return {"capture_id": capture_id, "decision": "REVIEW_REQUIRED", "status": "page_selection_required", "message": "自动匹配置信度不足，请从缩略图确认标准页。", "recommendations": recommendations[:6]}
     now = int(time.time())
     page = {"id": "pg_" + uuid.uuid4().hex, "session_id": session_id, "owner_user_id": owner_user_id, "capture_id": capture_id, "standard_asset_id": selected["id"], "source_sha256": source_hash, "source_format": source_format, "captured_mime": captured_mime, "status": "attempting", "decision": "REVIEW_REQUIRED", "created_at": now, "updated_at": now, "recommendations": recommendations[:6]}
+    page["model_profiles"] = session.get("model_profiles") or model_profile_service.snapshot_for_record(session)
+    page["prompt_version"] = hashlib.sha256(strict_compare_prompt().encode()).hexdigest()
     if not _text_v2_save("pages", page, insert_only=True):
         raise HTTPException(status_code=409, detail="本页正在处理")
     if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
@@ -38472,7 +38562,7 @@ async def inspect_text_manual_page(
         page["external_media_send_status"] = "attempting"
         page["external_media_sent"] = None
         _text_v2_save("pages", page)
-        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": ai_detection_settings(), "system_prompt": strict_compare_prompt(), "user_content": [{"type": "text", "text": "STANDARD_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference, "image/png"), "detail": "high"}}, {"type": "text", "text": "CAPTURED_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(contents), "detail": "high"}}], "max_tokens": 1800, "max_attempts": 1})
+        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": model_profile_service.resolve("manual", page["model_profiles"].get("manual")), "system_prompt": strict_compare_prompt(), "user_content": [{"type": "text", "text": "STANDARD_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference, "image/png"), "detail": "high"}}, {"type": "text", "text": "CAPTURED_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(contents), "detail": "high"}}], "max_tokens": 1800, "max_attempts": 1})
         page["external_media_sent"] = True
         page["external_media_send_status"] = "sent"
         if not provider.get("ok"):
@@ -38506,7 +38596,7 @@ def complete_text_manual_session(session_id: str) -> dict[str, Any]:
     can_pass = TEXT_INSPECTION_MANUAL_PASS_VERIFIED and expected and not missing and ordered and not duplicate_sources and all(item.get("decision") == "MATCH" for item in pages)
     session.update({"status": "completed", "updated_at": int(time.time()), "missing_asset_ids": missing, "observed_asset_order": observed_order, "expected_asset_order": expected_order, "duplicate_capture_detected": duplicate_sources, "order_matches": ordered, "decision": "PASS" if can_pass else "REVIEW_REQUIRED"})
     _text_v2_save("sessions", session)
-    return session
+    return _text_v2_public(session)
 
 
 @app.post("/api/text-inspection/inspections/{inspection_id}/review")
@@ -39547,6 +39637,10 @@ REACT_PRODUCTION_BLOCKED_PREFIXES = (
 
 def react_production_spa_enabled() -> bool:
     return True
+
+
+from .model_profiles.api import register as register_model_profiles
+model_profile_service = register_model_profiles(globals())
 
 
 @app.get("/{react_path:path}")

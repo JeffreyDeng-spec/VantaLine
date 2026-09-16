@@ -734,7 +734,7 @@ def main() -> None:
     response = client.patch(f"/api/pipeline/tasks/{pending_task_id}", json={"accessory_ids": ["acc_pipe"]})
     assert_status(response, 200, "pipeline user adds accessory to YOLO task")
     try:
-        server.ai_detection_settings = lambda: {
+        server.ai_detection_settings = lambda *args: {
             "configured": False,
             "provider": "gemini",
             "model": "gemini-2.5-flash",

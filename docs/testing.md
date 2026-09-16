@@ -478,3 +478,15 @@ Release acceptance also checks real clear/blurred photos, selected-label checks,
 private history readback, production version and server-side latency.
 
 The label PostgreSQL route smoke covers direct JPEG/PNG/WebP/BMP creation, Chinese filenames, original-byte preservation, EXIF orientation, transparent PNG, one-item grids/data, source filtering, idempotency, owner isolation and hide/restore revisions. Corrupt, mismatched, animated, unsupported and oversized images must return 422 without creating tasks. Workspace UI regression covers image selection/drop, image source filtering and the existing fullscreen, refresh, zoom and continuation flows. Live release acceptance imports one private standard image then checks actual-photo detection and persisted history.
+
+## Independent purpose configuration
+
+`python local_inspection_service/scripts/smoke_model_profiles.py` uses an isolated
+PostgreSQL schema through `VANTALINE_POSTGRES_DSN`. It covers role denial, effective
+migration fixtures, disabled assistant state, pending keys, same-model distinct
+objects, new-version secret retention, restart, video scopes, incompatible models,
+atomic concurrent saves, safe public projections and unpriced usage.
+`node scripts/test_settings_ui.cjs` runs the real React/router against synthetic
+HTTP fixtures: add returns to a pending selection, only Save commits bindings,
+cancel restores values, members cannot see the library, and mobile does not overflow.
+These tests make no live provider/device calls and do not certify detection accuracy.

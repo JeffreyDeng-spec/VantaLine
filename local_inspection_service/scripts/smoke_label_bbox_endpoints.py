@@ -21,7 +21,7 @@ def main():
     assert not admin.get("/api/text-inspection/extraction-capabilities").json()["bbox_enabled"]
     os.environ["VANTALINE_LABEL_BBOX_ACCOUNTS"]=uid
     server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=True
-    server.ai_detection_settings=lambda:{"configured":True,"provider":"qwen","model":"frozen-fixture","api_key":"fixture-secret","base_url":"https://fixture.invalid"}
+    server.ai_detection_settings=lambda *args:{"configured":True,"provider":"qwen","model":"frozen-fixture","api_key":"fixture-secret","base_url":"https://fixture.invalid"}
     calls=[];release=threading.Event()
     result={"isMultiLabel":True,"labelCount":6,"cropRect":{"x":.1,"y":.1,"w":.5,"h":.5}}
     def transport(request,settings,timeout):

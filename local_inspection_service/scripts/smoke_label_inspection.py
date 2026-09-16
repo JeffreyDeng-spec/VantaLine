@@ -104,6 +104,9 @@ def main():
         "clear_thread_runtime_repository_selection": lambda: None,
         "extract_docx_candidates": extract_docx_candidates,
     }
+    from types import SimpleNamespace
+    ns["model_profile_service"] = SimpleNamespace(snapshot=lambda: {"label": None}, resolve=lambda purpose, reference=None: {"model": model.MODEL})
+    model.settings = model.legacy_settings
     register(ns)
     # TestClient without lifespan: tests invoke worker explicitly; never call a live provider.
     client = TestClient(app)

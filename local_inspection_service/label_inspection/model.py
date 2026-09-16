@@ -19,7 +19,7 @@ MAX_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 16_000_000
 
 
-def settings():
+def legacy_settings():
     path = os.getenv("VANTALINE_LABEL_INSPECTION_KEY_FILE", "")
     try:
         key = Path(path).read_text().strip() if path else ""
@@ -27,6 +27,14 @@ def settings():
         key = ""
     enabled = os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower() == "true"
     return {"enabled": enabled and bool(key), "key": key}
+
+
+
+def settings():
+    from .. import server
+    configured = server.model_profile_service.resolve("label")
+    enabled = os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower() == "true"
+    return {**configured, "enabled": enabled and configured.get("configured", False), "key": configured.get("api_key", "")}
 
 
 def decode(data):

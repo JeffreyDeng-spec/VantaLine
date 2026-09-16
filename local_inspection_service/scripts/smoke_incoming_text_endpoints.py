@@ -21,6 +21,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from local_inspection_service.scripts import testclient_threadpool_shim  # noqa: E402
 from local_inspection_service import server  # noqa: E402
+from local_inspection_service.scripts.model_profiles_fixture import install as install_model_profiles_fixture
+install_model_profiles_fixture(server)
 from local_inspection_service import text_compare_beta  # noqa: E402
 from local_inspection_service.incoming_text_inspection import TextObservation  # noqa: E402
 

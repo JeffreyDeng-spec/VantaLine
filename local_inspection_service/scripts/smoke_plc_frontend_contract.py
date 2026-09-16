@@ -16,6 +16,7 @@ def require(text: str, snippets: dict[str, str]) -> None:
 
 def main() -> None:
     rules = (FRONTEND / "features" / "rules" / "RulesPage.tsx").read_text(encoding="utf-8")
+    rules += (FRONTEND / "features" / "rules" / "DeviceSettings.tsx").read_text(encoding="utf-8")
     detection = (FRONTEND / "features" / "detection" / "DetectionWorkbenchPage.tsx").read_text(encoding="utf-8")
     queries = (FRONTEND / "api" / "queries.ts").read_text(encoding="utf-8")
     types = (FRONTEND / "api" / "types.ts").read_text(encoding="utf-8")
@@ -25,7 +26,7 @@ def main() -> None:
     require(
         rules,
         {
-            "PLC settings tab": '{ value: "plc", label: "PLC 同步" }',
+            "PLC settings tab": '设备与运行',
             "server-backed workstation query": "getPlcWorkstation",
             "server-backed workstation save": "savePlcWorkstationConfig",
             "station pairing": "pairPlcWorkstation",

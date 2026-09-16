@@ -53,3 +53,11 @@ and videos still use their existing non-PLC analysis flow. Tool unregistration
 is not a verified cancellation of physical I/O and does not permit replay.
 Native browser fixture tests do not access physical devices; authorized station
 commissioning remains outstanding in [Agent platform status](agent-platform.md).
+
+## Settings location and role boundary
+
+The existing workstation pairing/configuration/verification form now lives under
+Settings → 设备与运行. Only administrators edit system parameters. Authorized
+operators still choose cameras and connect/disconnect PLC on the detection page.
+The move does not alter browser-owned serial I/O, real-ACK verification, capture
+provenance, leases, addresses or uncertain-write/no-retry behavior.
