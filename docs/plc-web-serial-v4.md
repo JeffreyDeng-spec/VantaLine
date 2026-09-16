@@ -1,5 +1,11 @@
 # PLC Web Serial v4
 
+Accessory catalog policy, projection and persistence now live in `accessories`.
+Their composition receives no PLC dispatch, workstation or serial capability.
+The adjacent capture-dispatch implementation retains browser ownership, lease
+validation, actual ACK evidence and the existing no-retry rule for uncertain writes.
+Accessory IDs, visibility and catalog payloads retain their previous contracts.
+
 The frontend/source guard inspects the actual `analyze_bgr` function after auth
 route relocation. Its prohibition on PLC dispatch inside ordinary analysis or
 video frames is unchanged; no PLC runtime behavior changes in the auth extraction.
