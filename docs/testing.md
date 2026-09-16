@@ -36,8 +36,17 @@ checks. `smoke_model_profile_routing.py` retains real provider-adapter and role 
 
 `python scripts/verify_backend_boundaries.py` rejects entry-point imports, circular
 dependencies, wildcard imports and namespace injection inside extracted packages.
-Its explicit package list currently covers `model_profiles`; each domain extraction
+Its explicit package list currently covers `model_profiles` and `runtime`; each domain extraction
 must extend it. Existing unconverted modules are not claimed compliant by this gate.
+
+`python scripts/smoke_runtime_lifecycle.py --postgres` runs native ASGI and thread-pool
+requests for two identities with separate PostgreSQL connections, plus exception
+cleanup, nested scopes, closed-connection rebuilding and generation invalidation
+during connection creation. It requires the isolated `VANTALINE_POSTGRES_DSN`; omit
+`--postgres` for the offline connection doubles. The original
+`smoke_endpoint_runtime_store_probe.py` still checks the actual Web composition's
+JSON default, redacted 503 errors, cache reuse and reset behavior. New release scopes
+are tested infrastructure; existing HTTP request caching is not yet migrated to them.
 
 `python -X utf8 scripts/verify_backend_contract.py` imports the real application in a
 temporary JSON runtime without starting lifespan hooks or provider workers. The

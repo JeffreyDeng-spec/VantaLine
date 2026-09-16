@@ -1,5 +1,12 @@
 # PostgreSQL runtime operations
 
+Repository connection selection now lives in `runtime/connections.py`. Web and
+worker callers continue using the same factory/clear interfaces: each execution
+thread owns its connection, reset advances a generation, and other threads evict
+their stale selection on next use. A closed connection is rebuilt. Explicit release
+scopes must open and close on the execution thread, including exception paths.
+This extraction changes no SQL, advisory-lock scope, pagination snapshot or schema.
+
 **Status: Authoritative**
 
 Document review uses existing asset status and JSONB fields; no migration is

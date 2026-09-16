@@ -766,7 +766,8 @@ LOGIN_RATE_LIMIT_MAX_ATTEMPTS = max(3, int(os.environ.get("VANTALINE_LOGIN_RATE_
 LOGIN_RATE_LIMIT_LOCKOUT_SECONDS = max(30, int(os.environ.get("VANTALINE_LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", "300")))
 LEGACY_OWNER_ID = "legacy_admin"
 SYSTEM_OWNER_ID = "system"
-_request_user: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("vantaline_request_user", default=None)
+from .runtime.identity import RequestIdentity
+_request_user = RequestIdentity()
 
 FEATURE_PERMISSIONS: dict[str, str] = {
     "inspection": "检测工作台",
@@ -1379,9 +1380,7 @@ def require_admin_role(detail: str = "Admin role required") -> dict[str, Any]:
 
 
 RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS: Callable[[str], Any] | None = None
-_runtime_repository_lock = threading.RLock()
-_runtime_repository_generation = 0
-_runtime_repository_thread_local = threading.local()
+from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
 
 
 def runtime_repository_cache_key() -> tuple[str, str, int | None]:
@@ -1393,70 +1392,36 @@ def runtime_repository_cache_key() -> tuple[str, str, int | None]:
 
 
 def reset_runtime_repository_cache() -> None:
-    global _runtime_repository_generation
-    with _runtime_repository_lock:
-        _runtime_repository_generation += 1
-    clear_thread_runtime_repository_selection()
+    _runtime_repositories.reset()
 
 
 def close_runtime_repository_selection(selection: Any) -> None:
-    repository = getattr(selection, "repository", None)
-    connection = getattr(repository, "connection", None)
-    close = getattr(connection, "close", None)
-    if callable(close):
-        try:
-            close()
-        except Exception:
-            pass
+    close_selection(selection)
 
 
 def runtime_repository_selection_is_usable(selection: Any) -> bool:
-    repository = getattr(selection, "repository", None)
-    connection = getattr(repository, "connection", None)
-    closed = getattr(connection, "closed", None)
-    if closed is None:
-        return True
-    try:
-        return not bool(closed)
-    except Exception:
-        return True
+    return selection_is_usable(selection)
 
 
 def clear_thread_runtime_repository_selection() -> None:
-    selection = getattr(_runtime_repository_thread_local, "selection", None)
-    if selection is not None:
-        close_runtime_repository_selection(selection)
-    for attr in ("key", "selection", "generation"):
-        try:
-            delattr(_runtime_repository_thread_local, attr)
-        except AttributeError:
-            pass
+    _runtime_repositories.clear()
 
 
 def current_runtime_repository_generation() -> int:
-    with _runtime_repository_lock:
-        return _runtime_repository_generation
+    return _runtime_repositories.generation()
+
+
+_runtime_repositories = ThreadRepositoryFactory(
+    create=lambda: build_runtime_repository(postgres_connector=RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS),
+    cache_key=lambda: runtime_repository_cache_key(),
+)
 
 
 def runtime_repository_selection() -> Any:
     """Build the explicit runtime repository selection with HTTP-safe errors."""
 
-    cache_key = runtime_repository_cache_key()
-    generation = current_runtime_repository_generation()
-    cached_selection = getattr(_runtime_repository_thread_local, "selection", None)
-    if (
-        cached_selection is not None
-        and getattr(_runtime_repository_thread_local, "key", None) == cache_key
-        and getattr(_runtime_repository_thread_local, "generation", None) == generation
-        and runtime_repository_selection_is_usable(cached_selection)
-    ):
-        return cached_selection
-
-    if cached_selection is not None:
-        clear_thread_runtime_repository_selection()
-
     try:
-        selection = build_runtime_repository(postgres_connector=RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS)
+        return _runtime_repositories.selection()
     except RuntimeStoreConfigError as exc:
         raise HTTPException(
             status_code=503,
@@ -1475,18 +1440,6 @@ def runtime_repository_selection() -> Any:
                 "json_fallback_used": False,
             },
         ) from None
-
-    # Avoid sharing a DB-API connection across worker threads while still
-    # reusing it within one thread/request path.
-    current_generation = current_runtime_repository_generation()
-    if current_generation != generation or runtime_repository_cache_key() != cache_key:
-        close_runtime_repository_selection(selection)
-        return runtime_repository_selection()
-    _runtime_repository_thread_local.key = cache_key
-    _runtime_repository_thread_local.selection = selection
-    _runtime_repository_thread_local.generation = generation
-    return selection
-
 
 def runtime_postgres_repository_or_none() -> Any | None:
     """Return the explicit PostgreSQL repository, or None for JSON runtime."""

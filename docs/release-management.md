@@ -6,6 +6,10 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+The runtime identity/connection extraction is a separate PR after model dependency
+injection. Its native thread-pool and real PostgreSQL scope tests supplement the
+unchanged HTTP baseline; no external-worker cutover occurs in this release.
+
 Model dependency extraction is a separate release after the contract baseline. It
 preserves the embedded label worker and existing database/HTTP contracts. CI also
 requires the explicit dependency smoke; no worker cutover or model change is bundled.
