@@ -12,16 +12,17 @@ PACKAGE = 'local_inspection_service'
 PACKAGES = ('model_profiles',)
 
 
-def inspect_module(source, module):
+def inspect_module(source, module, is_package=False):
     tree = ast.parse(source)
     imports, errors = set(), []
-    package = module.rsplit('.', 1)[0]
+    package = module if is_package else module.rsplit('.', 1)[0]
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             target = resolve_name('.' * node.level + (node.module or ''), package) if node.level else node.module
-            imports.add(target)
+            if target != module:
+                imports.add(target)
             if any(alias.name == '*' for alias in node.names):
                 errors.append('wildcard import')
             # Include `from package import server` as well as `from server import app`.
@@ -35,14 +36,8 @@ def inspect_module(source, module):
     return imports, errors
 
 
-def main():
-    graph, errors = {}, []
-    for package in PACKAGES:
-        for path in (ROOT / PACKAGE / package).rglob('*.py'):
-            module = '.'.join(path.relative_to(ROOT).with_suffix('').parts)
-            imports, failures = inspect_module(path.read_text(encoding='utf-8'), module)
-            graph[module] = imports
-            errors.extend(f'{path.relative_to(ROOT)}: {failure}' for failure in failures)
+def cycle_errors(graph):
+    errors = []
     done, active = set(), []
     def visit(module):
         if module in active:
@@ -57,6 +52,24 @@ def main():
         done.add(module)
     for module in sorted(graph):
         visit(module)
+    return errors
+
+
+def main():
+    graph, errors = {}, []
+    for package in PACKAGES:
+        for path in (ROOT / PACKAGE / package).rglob('*.py'):
+            is_package = path.name == '__init__.py'
+            parts = path.relative_to(ROOT).with_suffix('').parts
+            module = '.'.join(parts[:-1] if is_package else parts)
+            imports, failures = inspect_module(path.read_text(encoding='utf-8'), module, is_package)
+            graph[module] = imports
+            errors.extend(f'{path.relative_to(ROOT)}: {failure}' for failure in failures)
+    errors.extend(cycle_errors(graph))
+    fixture_package = PACKAGE + '.runtime'
+    parent, _ = inspect_module('from . import child', fixture_package, True)
+    child, _ = inspect_module('from . import shared', fixture_package + '.child')
+    assert cycle_errors({fixture_package: parent, fixture_package + '.child': child})
     for source in ('from .. import server', 'from ..server import app', 'from .service import *',
                    'register(globals())', 'vars(sys.modules[fn.__module__])'):
         assert inspect_module(source, PACKAGE + '.model_profiles.example')[1], source
