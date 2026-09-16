@@ -1,5 +1,9 @@
 # Configuration reference
 
+Authentication foundation extraction preserves password hashing format and
+iteration configuration, session expiry/cookies, permission defaults, navigation
+limits and JSON/PostgreSQL selection. No new setting or credential is introduced.
+
 Analysis projection/publication extraction changes no model, prompt, threshold,
 source-image path rule or display default. Ordinary detail responses still omit
 raw model/debug fields; only the existing administrator detail path enables them.

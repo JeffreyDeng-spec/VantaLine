@@ -137,9 +137,11 @@ def main():
         u,s,_=repository.authenticate_session(session_key_hash("fixture-cookie"),now=100,ttl=500,persist_interval=30)
         assert auth_store_from_rows([u],[s])["users"][0]["id"]==owner and s["expires_at"]==600
         source=Path(__file__).resolve().parents[1]/"server.py"
-        tree=ast.parse(source.read_text())
-        functions=[node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name in {"authenticate_request","find_user"}]
+        tree=ast.parse(source.read_text(encoding="utf-8"))
+        from local_inspection_service.auth.policy import find_user
+        functions=[node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name == "authenticate_request"]
         namespace={"Any":Any,"Request":object,"time":SimpleNamespace(time=lambda:100),"runtime_postgres_repository_or_none":lambda:repository,"session_key_hash":session_key_hash,"auth_store_from_rows":auth_store_from_rows,"AUTH_SESSION_COOKIE":"fixture","AUTH_SESSION_TTL_SECONDS":500,"AUTH_SESSION_PERSIST_INTERVAL_SECONDS":30,"public_user":lambda value:{"id":value["id"]}}
+        namespace["find_user"] = find_user
         exec(compile(ast.Module(body=functions,type_ignores=[]),str(source),"exec"),namespace)
         request=SimpleNamespace(cookies={"fixture":"fixture-cookie"})
         assert namespace["authenticate_request"](request,indexed=True)[0]["id"]==owner

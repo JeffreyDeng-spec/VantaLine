@@ -1,5 +1,10 @@
 # Production runbook
 
+Authentication foundations use the ordinary immutable-release restart. Existing
+sessions and password hashes require no conversion. Verify administrator/member
+login and navigation; rollback restores the complete prior release while retaining
+user/session tables. No session reset or database cleanup is part of deployment.
+
 Analysis projection/publication changes use the ordinary complete-release restart.
 Verify normal/admin analysis visibility and preserved history; no recomputation,
 backfill, worker mode change or database cleanup is needed. Whole-release rollback

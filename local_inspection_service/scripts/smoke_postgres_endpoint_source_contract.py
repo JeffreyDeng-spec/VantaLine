@@ -205,6 +205,28 @@ def main() -> None:
         getattr(contract, attribute).update(getattr(analysis, attribute))
     contract.runtime_repository_entry_call_count += analysis.runtime_repository_entry_call_count
 
+    auth_path = ROOT / "local_inspection_service" / "auth" / "repository.py"
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "auth.repository"
+                and any(alias.name == "AuthRepository" for alias in node.names)
+                for node in ast.walk(tree)), "server.py missing AuthRepository composition import")
+    auth = SourceContract(injected_repository=True)
+    auth.visit(ast.parse(auth_path.read_text(encoding="utf-8"), filename=str(auth_path)))
+    auth_helpers = {"load_auth_store", "save_auth_store", "save_auth_user", "delete_auth_user",
+                    "save_auth_session", "delete_auth_session", "delete_expired_auth_sessions",
+                    "delete_auth_sessions_for_user", "save_login_session", "save_auth_session_touch_or_prune"}
+    require(auth_helpers <= auth.functions_with_runtime_repository_entry,
+            "authentication persistence helpers must use the injected runtime repository")
+    for name in auth_helpers:
+        require(any(isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)
+                    and ast.dump(node.value) == ast.dump(ast.parse("_auth_repository." + name, mode="eval").body)
+                    for node in tree.body), "authentication compatibility export is not bound to repository: " + name)
+    require({"users", "auth_sessions"} <= auth.string_literals, "authentication repository missing actual table access")
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(auth, attribute))
+    contract.runtime_repository_entry_call_count += auth.runtime_repository_entry_call_count
+
     missing_adapters = sorted(REQUIRED_RUNTIME_ADAPTERS - contract.imported_names)
     require(not missing_adapters, "server.py missing runtime record adapters: " + ",".join(missing_adapters))
 
