@@ -21,6 +21,25 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 **Status: Authoritative**
 
+## Backend extraction contract
+
+`python -X utf8 scripts/verify_backend_contract.py` imports the real application in a
+temporary JSON runtime without starting lifespan hooks or provider workers. The
+checked-in `tests/backend_contract/application.json` fixes assembled route order
+(including hidden routes, mounts and the final SPA catch-all), permission routing,
+OpenAPI schemas, middleware configuration and startup/shutdown registrations.
+Real ASGI requests also freeze setup/401/403 errors, endpoint-local label guards,
+media authentication, hidden OpenAPI and cross-origin rejection. CORS is isolated
+from the host environment. Lifecycle registrations are structural evidence only;
+worker shutdown and media mount targets still require their domain smoke tests.
+The older `smoke_auth_rbac.py` currently rejects label endpoints because its central
+mapping assertion does not account for their endpoint-local guards; this is an
+existing baseline gap, not a reason to remove permission assertions.
+CI compares it and never regenerates the expected value. An intentional HTTP or
+lifecycle change requires explicit review of the fixture diff; use `--record`
+only for that maintenance operation. Existing auth, navigation, media, PostgreSQL
+and PLC tests remain mandatory; this snapshot alone does not certify behavior.
+
 ## A + Evolving label acceptance
 
 Verify the upper-left Beta-style back control from the list, import, task and

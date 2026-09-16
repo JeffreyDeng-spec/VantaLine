@@ -1,5 +1,9 @@
 # Production runbook
 
+Backend extraction contract checks run against a temporary test runtime before
+merge. They do not start production workers or inspect customer data. Contract-only
+releases use the existing complete-release deployment and rollback procedure.
+
 **Status: Authoritative**
 
 For the local OCR reread trial, verify the immutable release and health first,
