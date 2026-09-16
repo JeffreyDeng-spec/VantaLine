@@ -1,5 +1,14 @@
 # Architecture
 
+Analysis records use `analytics.analysis_records` for normalization,
+`analysis_repository` for JSON/PostgreSQL persistence, `analysis_service` for
+owner-aware access, `analysis_queries` for list/detail assembly and `analysis_api`
+for the five original routes. The composition root injects narrow factories and
+permission/presentation ports. Existing source IDs, normalization, lock placement,
+sort order, offset pagination, hidden 404s and retired 410 routes remain intact.
+Image/scope projections and detection-side record publication still use explicit
+adapters until their subsequent extraction; they are not declared migrated yet.
+
 `schemas/` contains dependency-free HTTP request models grouped into authentication,
 configuration, detection, accessories, training, pipeline and text inspection.
 The application explicitly imports these classes; business modules can depend on

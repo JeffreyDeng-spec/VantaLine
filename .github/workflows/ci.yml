@@ -165,8 +165,11 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
-            python scripts/smoke_runtime_lifecycle.py --postgres
-            python scripts/smoke_cost_ledger.py
+          python scripts/smoke_runtime_lifecycle.py --postgres
+          python scripts/smoke_cost_ledger.py
+          python scripts/smoke_analysis_records.py --postgres
+          python local_inspection_service/scripts/smoke_data_analysis.py
+          python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py
           python local_inspection_service/scripts/smoke_endpoint_runtime_store_probe.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py

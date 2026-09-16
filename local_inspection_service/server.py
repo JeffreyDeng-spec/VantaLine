@@ -9696,168 +9696,44 @@ def resize_bgr_max_side(image_bgr: np.ndarray, max_side: int) -> np.ndarray:
 
 
 
-def data_analysis_records_temp_path() -> Path:
-    return DATA_ANALYSIS_RECORDS_PATH.with_name(f"{DATA_ANALYSIS_RECORDS_PATH.name}.tmp")
+from .analytics.analysis_records import AnalysisNormalization, AnalysisNormalizer, sanitize_data_analysis_record_id
+from .analytics.analysis_repository import AnalysisStoreDependencies, AnalysisRepository
+from .analytics.analysis_service import AnalysisAccess, AnalysisRecords
+from .analytics.analysis_queries import AnalysisPresentation, AnalysisQueries
+from .analytics.analysis_api import register_analysis_api
 
+_analysis_normalizer = AnalysisNormalizer(AnalysisNormalization(
+    default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
+    clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
+    created_at=lambda record: record_created_at(record), updated_at=lambda record: record_updated_at(record),
+    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
+))
+_analysis_repository = AnalysisRepository(AnalysisStoreDependencies(
+    path=lambda: DATA_ANALYSIS_RECORDS_PATH, runtime_repository=lambda: runtime_postgres_repository_or_none(),
+    lock=lambda: _data_analysis_store_lock, ensure_dirs=lambda: ensure_dirs(),
+), normalize=_analysis_normalizer.normalize_data_analysis_record)
+_analysis_records = AnalysisRecords(_analysis_repository, AnalysisAccess(
+    is_admin=lambda user: user_is_admin(user),
+    visible=lambda record, user, target: record_visible_to_user(record, user, target),
+    require_access=lambda record, user, *, write=False: require_record_access(record, user, write=write),
+))
+_analysis_queries = AnalysisQueries(_analysis_records, AnalysisPresentation(
+    cache_scope=lambda: read_path_cache_scope(),
+    processing_items=lambda record, **kwargs: data_analysis_image_processing_items(record, **kwargs),
+    record=lambda record, **kwargs: public_data_analysis_record(record, **kwargs),
+    task_groups=lambda records, **kwargs: data_analysis_task_groups(records, **kwargs),
+    processing_summary=lambda items: image_processing_summary(items),
+), batch_limit=DATA_ANALYSIS_BATCH_LIMIT)
 
-def sanitize_data_analysis_record_id(value: Any) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value or "").strip()).strip("_")[:120]
-
-
-def normalize_data_analysis_record(raw: dict[str, Any]) -> dict[str, Any] | None:
-    if not isinstance(raw, dict):
-        return None
-    record_id = sanitize_data_analysis_record_id(raw.get("record_id") or raw.get("id"))
-    if not record_id:
-        return None
-    ai_result = raw.get("ai_detection_result") if isinstance(raw.get("ai_detection_result"), dict) else {}
-    ai_summary = raw.get("ai_summary") if isinstance(raw.get("ai_summary"), dict) else {}
-    source_image = raw.get("source_image") if isinstance(raw.get("source_image"), dict) else {}
-    model = ai_result.get("model") if isinstance(ai_result.get("model"), dict) else {}
-    task = raw.get("task") if isinstance(raw.get("task"), dict) else {}
-    image_processing_items = [item for item in raw.get("image_processing_items", []) if isinstance(item, dict)]
-    task_id = str(task.get("id") or raw.get("task_id") or model.get("task_id") or model.get("id") or AI_DETECTION_MODEL_ID).strip()
-    task_name = clean_ai_detection_task_name(task.get("name") or raw.get("task_name") or model.get("task_label") or model.get("label"), AI_DETECTION_LABEL)
-    created_at = record_created_at(raw)
-    updated_at = record_updated_at(raw)
-    if not created_at:
-        created_at = int(time.time())
-    if not updated_at:
-        updated_at = created_at
-    return {
-        "record_id": record_id,
-        "owner_user_id": record_owner_id(raw),
-        "owner_username": record_owner_username(raw),
-        "created_at": created_at,
-        "updated_at": updated_at,
-        "task": {
-            "id": task_id,
-            "name": task_name,
-            "type": str(task.get("type") or raw.get("task_type") or "ai_detection"),
-            "model_id": str(task.get("model_id") or model.get("id") or ""),
-        },
-        "source_image": {
-            "url": str(source_image.get("url") or raw.get("image_url") or raw.get("annotated_url") or ai_result.get("annotated_url") or ""),
-            "path": str(source_image.get("path") or raw.get("source_image_path") or ""),
-            "filename": str(source_image.get("filename") or raw.get("source_filename") or ""),
-        },
-        "image_url": str(raw.get("image_url") or source_image.get("url") or ai_result.get("annotated_url") or ""),
-        "ai_detection_result": ai_result,
-        "ai_summary": ai_summary,
-        "image_processing_items": image_processing_items[-200:],
-        "comparison_summary": {},
-    }
-
-
-def load_data_analysis_records() -> list[dict[str, Any]]:
-    ensure_dirs()
-    with _data_analysis_store_lock:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            raw_records = row_raw_json_list(repository.fetch_all("data_analysis_records"))
-            records = []
-            for raw in raw_records:
-                record = normalize_data_analysis_record(raw)
-                if record:
-                    records.append(record)
-            records.sort(key=lambda item: (int(item.get("created_at") or 0), str(item.get("record_id") or "")), reverse=True)
-            return records
-        if not DATA_ANALYSIS_RECORDS_PATH.exists():
-            return []
-        try:
-            data = json.loads(DATA_ANALYSIS_RECORDS_PATH.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return []
-        raw_records = data.get("records") if isinstance(data, dict) else data
-        if not isinstance(raw_records, list):
-            return []
-        records = []
-        for raw in raw_records:
-            record = normalize_data_analysis_record(raw)
-            if record:
-                records.append(record)
-        records.sort(key=lambda item: (int(item.get("created_at") or 0), str(item.get("record_id") or "")), reverse=True)
-        return records
-
-
-def save_data_analysis_records(records: list[dict[str, Any]]) -> None:
-    ensure_dirs()
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        rows = [row for record in records if isinstance(record, dict) for row in [data_analysis_record_row(record)] if row]
-        with _data_analysis_store_lock:
-            repository.replace_all("data_analysis_records", rows)
-        return
-    payload = {"records": records}
-    with _data_analysis_store_lock:
-        tmp_path = data_analysis_records_temp_path()
-        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp_path, DATA_ANALYSIS_RECORDS_PATH)
-
-
-def load_data_analysis_record(record_id: str) -> dict[str, Any] | None:
-    clean_id = sanitize_data_analysis_record_id(record_id)
-    if not clean_id:
-        return None
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_by_primary_key("data_analysis_records", {"record_id": clean_id})
-        raw_records = row_raw_json_list([row]) if row else []
-        return normalize_data_analysis_record(raw_records[0]) if raw_records else None
-    return next((record for record in load_data_analysis_records() if record.get("record_id") == clean_id), None)
-
-
-def save_data_analysis_record(record: dict[str, Any], *, prepend: bool = False, max_records: int = 5000) -> dict[str, Any] | None:
-    normalized = normalize_data_analysis_record(record)
-    if not normalized:
-        return None
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = data_analysis_record_row(normalized)
-        if row:
-            with _data_analysis_store_lock:
-                repository.upsert_row("data_analysis_records", row)
-        return normalized
-    with _data_analysis_store_lock:
-        records = load_data_analysis_records()
-        clean_id = str(normalized.get("record_id") or "")
-        for index, existing in enumerate(records):
-            if str(existing.get("record_id") or "") == clean_id:
-                records[index] = normalized
-                save_data_analysis_records(records[:max_records])
-                return normalized
-        if prepend:
-            records.insert(0, normalized)
-        else:
-            records.append(normalized)
-        save_data_analysis_records(records[:max_records])
-    return normalized
-
-
-def delete_data_analysis_record(record_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> str | None:
-    clean_id = sanitize_data_analysis_record_id(record_id)
-    if not clean_id:
-        return None
-    try:
-        record = find_data_analysis_record(clean_id, user, write=True)
-    except HTTPException as exc:
-        if missing_ok and exc.status_code == 404:
-            return None
-        raise
-    clean_id = str(record.get("record_id") or clean_id)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        repository.delete_by_primary_key("data_analysis_records", {"record_id": clean_id})
-        return clean_id
-    with _data_analysis_store_lock:
-        records = load_data_analysis_records()
-        remaining = [item for item in records if str(item.get("record_id") or "") != clean_id]
-        if len(remaining) == len(records):
-            if missing_ok:
-                return None
-            raise HTTPException(status_code=404, detail="Analysis record not found")
-        save_data_analysis_records(remaining)
-    return clean_id
+normalize_data_analysis_record = _analysis_normalizer.normalize_data_analysis_record
+data_analysis_records_temp_path = _analysis_repository.data_analysis_records_temp_path
+load_data_analysis_records = _analysis_repository.load_data_analysis_records
+save_data_analysis_records = _analysis_repository.save_data_analysis_records
+load_data_analysis_record = _analysis_repository.load_data_analysis_record
+save_data_analysis_record = _analysis_repository.save_data_analysis_record
+delete_data_analysis_record = _analysis_records.delete_data_analysis_record
+data_analysis_records_for_user = _analysis_records.data_analysis_records_for_user
+find_data_analysis_record = _analysis_records.find_data_analysis_record
 
 
 def ai_detection_summary_for_analysis(result: dict[str, Any]) -> dict[str, Any]:
@@ -13758,31 +13634,8 @@ def public_data_analysis_record(
     return payload
 
 
-def data_analysis_records_for_user(
-    user: dict[str, Any],
-    *,
-    target_user_id: str | None = None,
-    task_id: str | None = None,
-) -> list[dict[str, Any]]:
-    if target_user_id and not user_is_admin(user) and str(target_user_id) != str(user.get("id") or ""):
-        raise HTTPException(status_code=403, detail="Admin role required for user filtering")
-    clean_task_id = str(task_id or "").strip()
-    records = [
-        record
-        for record in load_data_analysis_records()
-        if record_visible_to_user(record, user, target_user_id if user_is_admin(user) else None)
-    ]
-    if clean_task_id:
-        records = [record for record in records if str((record.get("task") or {}).get("id") or "") == clean_task_id]
-    return records
 
 
-def find_data_analysis_record(record_id: str, user: dict[str, Any], *, write: bool = False) -> dict[str, Any]:
-    record = load_data_analysis_record(record_id)
-    if record is not None:
-        require_record_access(record, user, write=write)
-        return record
-    raise HTTPException(status_code=404, detail="Analysis record not found")
 
 
 def data_analysis_task_groups(records: list[dict[str, Any]], *, include_auto_optimize: bool = True) -> list[dict[str, Any]]:
@@ -28359,83 +28212,12 @@ async def locateanything_locate() -> dict[str, Any]:
 
 
 
-@app.get("/api/data-analysis/records")
-def list_data_analysis_records_api(
-    task_id: str | None = None,
-    user_id: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
-) -> dict[str, Any]:
-    user = current_auth_user()
-    bounded_limit = max(1, min(int(limit or 100), 200))
-    bounded_offset = max(0, int(offset or 0))
-    task_records = data_analysis_records_for_user(user, target_user_id=user_id)
-    records = [
-        record
-        for record in task_records
-        if not str(task_id or "").strip() or str((record.get("task") or {}).get("id") or "") == str(task_id or "").strip()
-    ]
-    page = records[bounded_offset : bounded_offset + bounded_limit]
-    # The list view must stay fast by skipping expensive required-scope rebuilds,
-    # but it still includes task-execution image processing items for manual review.
-    # The cache scope memoizes auto-optimize states and dataset manifests so each
-    # is loaded once per request instead of once per record/sample, and the items
-    # expansion below is computed once per record and shared with the page payload.
-    with read_path_cache_scope():
-        expanded = [
-            (record, data_analysis_image_processing_items(record, include_auto_optimize=True))
-            for record in records
-        ]
-        processing_items = [item for _, items in expanded for item in items]
-        items_by_identity = {id(record): items for record, items in expanded}
-        record_payloads = [
-            public_data_analysis_record(
-                record,
-                include_auto_optimize=True,
-                include_scope=False,
-                processing_items=items_by_identity.get(id(record)),
-            )
-            for record in page
-        ]
-        task_groups = data_analysis_task_groups(task_records, include_auto_optimize=False)
-    return {
-        "records": record_payloads,
-        "tasks": task_groups,
-        "total": len(records),
-        "limit": bounded_limit,
-        "offset": bounded_offset,
-        "batch_limit": DATA_ANALYSIS_BATCH_LIMIT,
-        "image_processing_summary": image_processing_summary(processing_items),
-    }
-
-
-@app.get("/api/data-analysis/records/{record_id}")
-def get_data_analysis_record_api(record_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    record = find_data_analysis_record(record_id, user)
-    with read_path_cache_scope():
-        return {"record": public_data_analysis_record(record, detail=True, include_debug=user_is_admin(user))}
-
-
-@app.delete("/api/data-analysis/records/{record_id}")
-def delete_data_analysis_record_api(record_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    deleted_record_id = delete_data_analysis_record(record_id, user)
-    return {"status": "deleted", "record_id": deleted_record_id}
-
-
-@app.post("/api/data-analysis/records/{record_id}/locate")
-def run_data_analysis_record_locate_api(record_id: str) -> dict[str, Any]:
-    removed_phase1_feature("LocateAnything data-analysis comparison")
-
-
-
-
-@app.post("/api/data-analysis/locate")
-def run_data_analysis_batch_locate_api() -> dict[str, Any]:
-    removed_phase1_feature("LocateAnything data-analysis comparison")
-
-
+_analysis_routes = register_analysis_api(app, lambda: current_auth_user(), lambda feature: removed_phase1_feature(feature), _analysis_queries)
+list_data_analysis_records_api = _analysis_routes.list_records
+get_data_analysis_record_api = _analysis_routes.get_record
+delete_data_analysis_record_api = _analysis_routes.delete_record
+run_data_analysis_record_locate_api = _analysis_routes.locate_record
+run_data_analysis_batch_locate_api = _analysis_routes.locate_batch
 
 
 @app.delete("/api/ai/config/key")

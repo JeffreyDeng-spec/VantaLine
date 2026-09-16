@@ -1,5 +1,10 @@
 # Configuration reference
 
+Analysis record extraction adds no configuration. Its list/detail/delete and
+retired LocateAnything endpoints preserve their schemas, query defaults and
+permission behavior. Cross-owner read/delete remains hidden as 404; admin user
+filters and owner-scoped media projection remain unchanged.
+
 The extracted administrator cost ledger retains `/api/admin/api-cost-ledger`,
 existing response fields and the `VANTALINE_RUNPOD_GPU_USD_PER_SECOND` override
 (default `0.00026`, invalid/nonpositive values use that default). Missing provider
