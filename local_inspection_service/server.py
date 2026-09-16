@@ -34638,7 +34638,35 @@ from local_inspection_service.label_extraction_api import register as register_l
 from local_inspection_service.agent_api import register as register_agent_api
 from local_inspection_service.document_import_jobs import register as register_document_import_jobs
 
-document_import_jobs = register_document_import_jobs(globals())
+from .text_inspection.document_ports import DocumentAccess, DocumentRecords, DocumentModels
+from .text_inspection.document_jobs import DocumentJobs
+_document_records = DocumentRecords(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    guard=lambda: _incoming_text_store_lock,
+    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    load=lambda kind: _text_v2_load(kind),
+    save=lambda kind, record: _text_v2_save(kind, record),
+    public=lambda record: _text_v2_public(record),
+)
+_document_models = DocumentModels(
+    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+    settings=lambda purpose: ai_detection_settings(purpose),
+    transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
+    record_usage=lambda settings, elapsed, ok, usage: record_model_call(settings, elapsed, ok, usage),
+)
+document_import_jobs = register_document_import_jobs(
+    app,
+    DocumentAccess(
+        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+        owner=lambda: _text_v2_owner(),
+    ),
+    _document_records,
+    DocumentJobs(
+        _document_records, _document_models,
+        asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
+        clear_repository=lambda: clear_thread_runtime_repository_selection(),
+    ),
+)
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
 standard_preparation_jobs = register_standard_preparation(globals())
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot

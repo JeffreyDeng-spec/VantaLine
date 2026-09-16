@@ -1,5 +1,11 @@
 # Production runbook
 
+Document-job extraction preserves daemon threads and normal complete-release restart.
+A thread-start failure can leave a durable claim, and unknown attempts must not be
+replayed. Existing cleanup-callback exceptions still prevent slot release; this batch
+records that boundary rather than combining an exception-policy change with extraction.
+Restore the previous complete release while retaining attempts and evidence.
+
 History extraction requires only the existing complete-release restart/rollback.
 Keep the compatibility module and new history package in the same release. No data,
 index, cursor format or worker-topology migration is introduced; preserve immutable

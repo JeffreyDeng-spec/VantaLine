@@ -1,5 +1,10 @@
 # Configuration reference
 
+Document-job extraction preserves the existing classification account allowlist,
+external-VLM flag and configured Qwen HTTPS checks. Settings are read before slot
+acquisition and the same resolved settings object is passed to the background job;
+transport and usage recording remain explicit, late-bound capabilities.
+
 History extraction adds no configuration. The existing text-inspection permission,
 account isolation, cursor validation and page bounds remain. Historical media uses
 the bound revision/hash, private no-store caching and nosniff response headers;
