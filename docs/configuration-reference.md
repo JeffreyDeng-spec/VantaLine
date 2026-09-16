@@ -1,5 +1,10 @@
 # Configuration reference
 
+Label actual-photo reuse is browser-memory-only with no configuration flag or durable
+browser cache. History uses the existing 1600px, JPEG quality-90 preview. Full-size
+normalized images remain on-demand; this does not change model input compression,
+original upload limits, provider settings, permissions or retention.
+
 Label call diagnostics have no user-facing toggle or new environment flag. The existing
 administrator-role check protects the diagnostics endpoint before repository access;
 account ownership and inspection permission still apply. Runtime call evidence is

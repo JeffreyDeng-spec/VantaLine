@@ -952,3 +952,25 @@
 .li-results [role="alert"] {
   overflow-wrap: anywhere;
 }
+
+/* Keep the preview visible while the separately requested full image decodes. */
+.li-zoom-images {
+  display: grid;
+  place-items: center;
+  max-width: 95vw;
+  max-height: 88vh;
+}
+.li-zoom-images img {
+  grid-area: 1 / 1;
+  image-orientation: from-image;
+}
+.li-zoom-status {
+  position: absolute;
+  bottom: 12px;
+  background: #111d2ef2;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+.li-image img {
+  image-orientation: from-image;
+}

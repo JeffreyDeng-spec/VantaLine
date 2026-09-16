@@ -1,5 +1,18 @@
 # Testing
 
+`node scripts/test_label_image_reuse.cjs` exercises actual React with synthetic images
+and delayed HTTP: stable image node/source, zero actual-image downloads during a local
+submission/completion, historical preview-only reads, deferred zoom/retry, bounded
+fallback, lost-acknowledgement request recovery, replacement/camera cleanup and account
+isolation. JPEG EXIF orientations 1-8 verify oriented pixels and marker geometry.
+The existing label workspace suite invokes this regression, including in CI.
+It writes request byte counts and submission/image/overlay timing to temporary JSON;
+`LABEL_IMAGE_BASELINE=1 LABEL_IMAGE_FRONTEND=/path/to/previous/frontend` measures the
+same fixture against a prior checkout. Synthetic timing is not production latency or
+inference accuracy. Preserve the existing desktop/mobile, navigation, fullscreen and
+camera/media suites; verify the deployed version and one existing result without
+paid resubmission.
+
 Private label diagnostics acceptance: ordinary and unauthenticated direct requests must
 fail before evidence access; administrators retain only owner-scoped access. Verify full
 call/quality evidence is retained for internal reads while normal run, history and
