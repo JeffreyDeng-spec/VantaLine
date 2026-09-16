@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_agent_dependencies.py` drives four original native-ASGI groups
+before and after extraction: dynamic commissioning and PostgreSQL availability,
+concurrent two-app account isolation, admin policy validation and error ordering,
+and cancel ownership/version/error behavior with public-field filtering. Existing
+real PostgreSQL operation smoke also passes before and after; only registration
+fixtures change, preserving budget, unknown-outcome, concurrency and audit assertions.
+
 `python scripts/smoke_document_job_dependencies.py` adds nine offline groups for
 native ASGI account isolation, JSON change-only writes and PG transaction forwarding,
 admission/duplicate/thread-start failure, independent slot limits, durable attempts,

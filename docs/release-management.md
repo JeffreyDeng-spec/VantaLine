@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Agent dependency CI adds native-ASGI account/policy/cancellation contracts while
+retaining the isolated PostgreSQL state-machine smoke. Complete application HTTP
+and dependency-direction gates include the new modules; release topology and
+whole-package rollback stay unchanged.
+
 Document-job dependency CI adds synthetic admission, persistence and failure contracts
 while retaining original document endpoint tests. Package the API, business and port
 modules with their compatibility export. No prompt, schema or process-topology change

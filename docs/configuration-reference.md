@@ -1,5 +1,10 @@
 # Configuration reference
 
+Agent dependency extraction adds no setting or authorization. Commissioning still
+reads `VANTALINE_WEBMCP_ACCOUNTS` dynamically and skips database access for excluded
+accounts. Policy routes retain admin checks and strict request types; operation
+inspection and cancellation keep their existing account/version constraints.
+
 Document-job extraction preserves the existing classification account allowlist,
 external-VLM flag and configured Qwen HTTPS checks. Settings are read before slot
 acquisition and the same resolved settings object is passed to the background job;

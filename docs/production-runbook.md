@@ -1,5 +1,10 @@
 # Production runbook
 
+Agent HTTP extraction uses the existing immutable-release restart and rollback.
+Include the API, dependency, schema and projection modules together. Preserve durable
+operations, reservations and unknown-outcome evidence; no new tables, workers or
+account enablement are part of this extraction.
+
 Document-job extraction preserves daemon threads and normal complete-release restart.
 A thread-start failure can leave a durable claim, and unknown attempts must not be
 replayed. Existing cleanup-callback exceptions still prevent slot release; this batch
