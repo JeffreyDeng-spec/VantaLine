@@ -232,3 +232,6 @@ Connection tests use metadata endpoints; success does not certify model accuracy
 ## Unified PDF inspection
 
 PDF import accepts at most 200 MiB and 500 split entries. Configure the site multipart request body allowance above 200 MiB (installer uses 201m); other application file limits remain enforced. PDF comparison fixes Evolving/disabled thinking/0.1/180s, 3200 JPEG90 and 1024/8192 output limits. It resolves the existing label profile credentials but requires Doubao and freezes its profile revision. The former manual profile no longer starts new comparisons.
+
+
+PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.

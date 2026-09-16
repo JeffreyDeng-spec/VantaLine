@@ -514,3 +514,6 @@ These tests make no live provider/device calls and do not certify detection accu
 ## Unified PDF inspection
 
 The real PostgreSQL smoke_label_inspection suite calls smoke_pdf_manual: synthetic rotated/landscape/portrait/square splits, atomic publication, checkpoint restart and stale-token fencing, account isolation, encrypted/invalid/excess-entry rejection and 0/1/2 provider-call contracts. It uses deterministic provider fixtures and never a paid model. Replay the private YATO source separately: 80 landscape pages must yield 160 entries left then right with helpers retained. UI checks cover PDF progress and read-only history in addition to existing fullscreen/grid/camera tests. Live rendered-photo acceptance must be labeled synthetic and record latency/tokens separately from real-photo accuracy.
+
+
+PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.

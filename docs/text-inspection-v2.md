@@ -513,3 +513,6 @@ camera are reused, with page wording and “每次只拍一页”. Old orders, s
 an owner-scoped read-only adapter; old identified URLs resolve to history, other old URLs to the task list.
 Missing photos/associations are explicitly shown. Old manual writes (including edits/reviews) are disabled;
 new work requires a new PDF import. Beta retains its own route and behavior.
+
+
+PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.

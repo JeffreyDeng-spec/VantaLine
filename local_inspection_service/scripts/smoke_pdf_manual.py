@@ -23,6 +23,30 @@ def document():
 
 
 def check_all(client, check, repo, media, close_connections):
+    agreement = {
+        "reviewRequired": False,
+        "hasDiff": False,
+        "similarity": 100,
+        "issues": [],
+        "consistentItems": [{"description": "标题一致", "type": "text"}, "页码一致"],
+    }
+    before = copy.deepcopy(agreement)
+    assert manual.result(agreement, None, (800, 1000))["consistent_items"] == [
+        "标题一致",
+        "页码一致",
+    ]
+    assert agreement == before
+    for invalid in [
+        {**agreement, "hasDiff": True},
+        {**agreement, "consistentItems": [{}]},
+        {**agreement, "consistentItems": [{"description": 42}]},
+    ]:
+        try:
+            manual.result(invalid, None, (800, 1000))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid or contradictory PDF results must not pass")
     data = document()
     entries = pdf_import.inspect(data)
     assert len(entries) == 6

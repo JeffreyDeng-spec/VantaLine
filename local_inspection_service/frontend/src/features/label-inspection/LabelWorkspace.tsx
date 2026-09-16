@@ -1480,7 +1480,7 @@ export function LabelWorkspace() {
                             <p className={run.crop ? "li-warning" : ""}>
                               {run.error_code?.startsWith("QUALITY_")
                                 ? "尚未完成比对；框线仅表示布局选中范围。"
-                                : `${run.scope}${run.crop ? "；框外其他标签没有检测。" : ""}`}
+                                : `${run.scope}${run.crop ? (isPdf ? "；框外内容未检测。" : "；框外其他标签没有检测。") : ""}`}
                             </p>
                           )}
                         </>
