@@ -348,8 +348,10 @@ def execute(task, token, config, media):
         turn_completed = False
         turn_failed = False
         while True:
-            if process.poll() is not None:
+            exit_code = process.poll()
+            if exit_code is not None:
                 reader.join(timeout=1)
+            reader_done = exit_code is not None and not reader.is_alive()
             while not events.empty():
                 event = events.get_nowait()
                 if event['type'] == 'thread.started':
@@ -367,9 +369,12 @@ def execute(task, token, config, media):
             if time.time() >= task['deadline']:
                 status, error = 'timed_out', '已达到 10 分钟时限；部分报告已保留。'
                 break
-            if process.poll() is not None:
-                # Drain reader once after process exit before deciding completion.
-                if process.returncode == 0 and turn_completed and not turn_failed and metadata.get('session_id'):
+            if reader_done:
+                # Only settle the exit observed before joining/draining the reader.
+                # An exit or reader EOF during pulse waits for the next iteration,
+                # so final session/usage metadata is drained and persisted before
+                # the terminal write.
+                if exit_code == 0 and turn_completed and not turn_failed and metadata.get('session_id'):
                     status, error = 'completed', ''
                 else:
                     status, error = 'failed', 'Codex 未正常完成；部分报告已保留。'

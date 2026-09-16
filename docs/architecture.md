@@ -1,5 +1,11 @@
 # Architecture
 
+The existing Codex comparison worker observes process exit once per loop, waits
+for its event reader and persists final session/usage metadata before settling.
+An exit during a heartbeat is handled in the next loop. Cancellation and deadline
+checks still precede completion; a reader that has not reached EOF cannot claim
+success. This is a terminal-state correctness fix, not the label-worker split.
+
 Analysis records use `analytics.analysis_records` for normalization,
 `analysis_repository` for JSON/PostgreSQL persistence, `analysis_service` for
 owner-aware access, `analysis_queries` for list/detail assembly and `analysis_api`

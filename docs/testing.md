@@ -1,5 +1,12 @@
 # Testing
 
+`tests/codex_compare/test_worker_exit.py` runs the actual worker and event reader
+under deterministic process/thread scheduling: exit before or during a heartbeat,
+delayed EOF, nonzero exit, failed/missing completion events, cancellation and
+deadline precedence. It verifies final metadata is persisted before completion and
+scratch files are cleaned. It launches no process, model or database. The original
+real PostgreSQL/CLI regression remains and includes allowlisted failure evidence.
+
 `python scripts/smoke_analysis_projections.py` exercises actual processing/scope/
 view/publication services with synthetic dependencies: manifest reuse, status
 normalization, stable item merging, scope precedence, normal/admin debug fields,
