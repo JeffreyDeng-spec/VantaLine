@@ -207,6 +207,7 @@ pid="$(systemctl show vantaline -p MainPID --value)"; ! journalctl _PID="$pid" -
 # A single state transition commits the healthy application.  Before this
 # assignment any signal performs a complete rollback; after it, cleanup must
 # preserve the verified target and installer promotion can be rerun safely.
+python3 "$target/scripts/configure_pdf_proxy.py"
 deployment_committed=1
 rm -f "$archive"
 promote_installer

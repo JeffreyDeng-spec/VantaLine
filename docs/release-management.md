@@ -108,3 +108,8 @@ acceptance runner. The additive registry migration and settings frontend ship in
 one immutable artifact. Merge only after required checks and independent review
 pass; the successful main CI triggers the existing release/deploy workflow.
 No in-place production edits or separate frontend deployment are permitted.
+
+
+## PDF multipart allowance
+
+The immutable release includes `scripts/configure_pdf_proxy.py`. It changes only enabled nginx site files proxying localhost:8765, raising existing 200m request limits to 201m for multipart overhead; application PDF bytes stay capped at 200 MiB. It validates nginx before reload and restores files on failure. The installer calls it before committing deployment. The first release introducing this installer hook requires the authorized operator to run the script from the verified installed release, since the preceding installer promotes its successor only after installation. Whole-application rollback remains unchanged; the additive request allowance is compatible with old application limits.

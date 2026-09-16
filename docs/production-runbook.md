@@ -202,3 +202,8 @@ Do not send customer images merely to validate settings or credential connectivi
 Rollback restores the previous complete immutable release and legacy settings;
 retain the new table and all secret versions. Do not reverse migrations or replay
 uncertain paid calls. New-library edits are not written back into legacy settings.
+
+
+## Unified PDF inspection
+
+For unified PDF releases, verify the actual proxy multipart allowance (201m), PDF limit 200 MiB, importer progress after refresh, complete standard count and a clearly named synthetic comparison. Confirm old manual URLs/history remain readable and Word/image/Beta flows remain available. Roll back the entire previous immutable release and stop new PDF submissions; preserve PDF tasks, assets, leases, runs and call records. Never infer real-photo accuracy from rendered-page tests.

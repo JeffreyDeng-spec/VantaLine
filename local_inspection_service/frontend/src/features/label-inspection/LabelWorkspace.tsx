@@ -24,6 +24,7 @@ import {
   type SavedComparison,
 } from "../text-compare/ComparisonResult";
 import "./label-workspace.css";
+import { ManualHistory, type ManualHistoryData } from "./ManualHistory";
 
 const API = "/api/label-inspection";
 const PAGE = "/workspace/label-inspection";
@@ -76,6 +77,11 @@ type Run = {
   result?: { decision: string; similarity: number; issues: Issue[] };
 };
 type Task = {
+  status?: string;
+  source?: { type: string };
+  read_only?: boolean;
+  manual_history?: ManualHistoryData;
+  import?: { completed: number; total: number; error?: string };
   id: string;
   name: string;
   revision: number;
@@ -97,6 +103,12 @@ type Row = {
 const labels: Record<string, string> = {
   word: "Word 导入",
   image: "图片上传",
+  pdf: "PDF 导入",
+  legacy_manual: "旧说明书历史",
+  read_only: "只读",
+  import_queued: "等待导入",
+  import_running: "正在导入",
+  import_failed: "导入失败",
   legacy: "旧文字检验",
   beta: "标签检查 Beta",
   MATCH: "未发现差异",
@@ -831,7 +843,7 @@ export function LabelWorkspace() {
     enabled: !!taskId,
     retry: false,
     refetchInterval: (query) =>
-      query.state.data?.runs.some((r) =>
+      query.state.data?.status?.startsWith("import_") && query.state.data.status !== "import_failed" || query.state.data?.runs.some((r) =>
         ["queued", "running"].includes(r.status),
       )
         ? 1500
@@ -841,6 +853,7 @@ export function LabelWorkspace() {
     run = value?.runs.find((r) => r.id === runId),
     running = value?.runs.find((r) => ["queued", "running"].includes(r.status)),
     reference = run?.reference || value?.assets.find((a) => a.id === selected);
+  const isPdf = value?.source?.type === "pdf";
   const photoLease =
     localPhoto?.owner === user.id &&
     localPhoto.task === taskId &&
@@ -996,8 +1009,7 @@ export function LabelWorkspace() {
           >
             <strong>{value?.name || "正在加载任务…"}</strong>
             <small>
-              标准版本 {value?.revision || "旧版"} · {value?.assets.length ?? 0}{" "}
-              张
+              {value?.import && !value.revision ? `正在准备标准 · ${value.import.completed} / ${value.import.total}` : `标准版本 ${value?.revision || "旧版"} · ${value?.assets.length ?? 0} 张`}
             </small>
           </button>
         ) : (
@@ -1026,9 +1038,6 @@ export function LabelWorkspace() {
           )}
           <nav className={taskId ? "li-more" : ""} hidden={!!taskId && !more}>
             <Link to={`${PAGE}?view=new`}>新建任务</Link>
-            <Link to="/workspace/text-compare-beta?mode=manual">
-              说明书检验
-            </Link>
             <button
               onClick={() => {
                 leaveFullscreen();
@@ -1098,7 +1107,7 @@ export function LabelWorkspace() {
               <div className="li-title">
                 <div>
                   <h1>检测任务</h1>
-                  <p>导入 Word 或标准图片，保存标准，持续检查每一件产品。</p>
+                  <p>导入 Word、PDF 或标准图片，保存标准，持续检查每一件产品。</p>
                 </div>
                 <Link className="li-primary" to={`${PAGE}?view=new`}>
                   ＋ 新建任务
@@ -1116,7 +1125,7 @@ export function LabelWorkspace() {
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
                 >
-                  {["all", "word", "image", "legacy", "beta"].map((x) => (
+                  {["all", "word", "image", "pdf", "legacy", "legacy_manual", "beta"].map((x) => (
                     <option key={x} value={x}>
                       {x === "all" ? "全部来源" : text(x)}
                     </option>
@@ -1194,14 +1203,17 @@ export function LabelWorkspace() {
               <Link to={PAGE}>← 返回任务列表</Link>
               <h1>新建检测任务</h1>
               <p>
-                Word 提取全部内嵌图片；标准图片完整保留为一张，不拆分标签。导入后手动选择标准检测。
+                Word 提取内嵌图片；PDF 横版左右拆页、竖版整页保留；标准图片完整保留为一张。导入后手动选择标准检测。
               </p>
               <FileDropZone
-                accept=".doc,.docx,.jpg,.jpeg,.png,.webp,.bmp"
+                accept=".doc,.docx,.pdf,.jpg,.jpeg,.png,.webp,.bmp"
                 disabled={busy}
-                ariaLabel="导入 Word 或标准图片创建任务"
+                ariaLabel="导入 Word、PDF 或标准图片创建任务"
                 onFiles={(files) => {
                   resumeAfterPicker();
+                  if (files[0]?.name.toLowerCase().endsWith(".pdf") && files[0].size > 200 * 1024 * 1024) {
+                    fail(new Error("PDF 不能超过 200 MiB")); return;
+                  }
                   if (files[0])
                     void perform(async (isCurrent) => {
                       const created = await apiClient.upload<Task>(
@@ -1213,15 +1225,17 @@ export function LabelWorkspace() {
                 }}
               >
                 <strong>
-                  {busy ? "正在创建任务…" : "拖入 Word 文档或标准图片，或点击选择"}
+                  {busy ? "正在创建任务…" : "拖入 Word、PDF 或标准图片，或点击选择"}
                 </strong>
-                <span>一次一个文件 · DOC ≤ 30 MiB · DOCX ≤ 100 MiB · 最多 500 个标准条目</span>
+                <span>一次一个文件 · PDF ≤ 200 MiB · DOC ≤ 30 MiB · DOCX ≤ 100 MiB · 最多 500 个标准条目</span>
                 <span>JPG/JPEG、PNG、WebP、BMP ≤ 10 MiB / 1600 万像素 · 不支持 HEIC/HEIF 或动画图片</span>
               </FileDropZone>
             </section>
           ) : null}
           {taskId && !value ? <p>正在读取任务…</p> : null}
-          {value ? (
+          {value?.read_only && value.manual_history ? <ManualHistory taskId={value.id} history={value.manual_history} missing={value.missing} /> : value?.import && value.revision === 0 ? (
+            <section className="li-manual-history" role="status"><h2>{text(value.status || "import_queued")}</h2><p>已处理 {value.import.completed} / {value.import.total} 个标准条目。可以关闭页面，导入会在后台继续。</p>{value.import.error && <p role="alert">{value.import.error}</p>}{value.status === "import_failed" && <Link to={`${PAGE}?view=new`}>重新创建任务</Link>}</section>
+          ) : value ? (
             <>
               {!value.revision && (
                 <div className="li-legacy-tools">
@@ -1279,7 +1293,7 @@ export function LabelWorkspace() {
                 <div className={`li-columns li-show-${imageTab}`}>
                   <section className="li-panel li-standard-panel">
                     <header>
-                      <h2>标准标签</h2>
+                      <h2>{isPdf ? "标准页面" : "标准标签"}</h2>
                       <span>
                         {run
                           ? `本次检测冻结版本 ${run.revision}`
@@ -1421,7 +1435,7 @@ export function LabelWorkspace() {
                   </section>
                   <section className="li-panel li-actual-panel">
                     <header>
-                      <h2>实物标签</h2>
+                      <h2>{isPdf ? "实物页面" : "实物标签"}</h2>
                       <span>
                         {run ? "检测照片 · 点击放大" : "拍照或上传一张实物照片"}
                       </span>
@@ -1592,7 +1606,7 @@ export function LabelWorkspace() {
                             ? "任务已有检测进行中"
                             : "开始检测"}
                       </button>
-                      <p>自动选择一张标签，检查文字、大小写、图标和外形。</p>
+                      <p>{isPdf ? "每次只拍一页，自动框选完整页面并检查文字和图示。" : "自动选择一张标签，检查文字、大小写、图标和外形。"}</p>
                       {running ? (
                         <button
                           onClick={() =>
@@ -1687,7 +1701,7 @@ export function LabelWorkspace() {
                         ) : null}
                         {["queued", "running"].includes(run.status) ? (
                           <p role="status">
-                            {text(run.phase || run.status)}…
+                            {isPdf && run.phase === "layout" ? "定位页面并检查可读性" : isPdf && run.phase === "compare" ? "对比页面" : text(run.phase || run.status)}…
                             可以关闭页面，结果会自动保存，请勿重复提交。
                           </p>
                         ) : null}

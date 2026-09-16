@@ -49,7 +49,7 @@ let browser;
  await page.goto(base+'/workspace/label-inspection');await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();assert.equal(await page.locator('.sidebar').count(),0);
  await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();await page.waitForFunction(()=>document.fullscreenElement?.classList.contains('label-workspace'));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),1);
  // Emulate the native picker leaving fullscreen; file selection is still a user gesture.
- const pickerEvent=page.waitForEvent('filechooser');await page.getByLabel('导入 Word 或标准图片创建任务').click();await pickerEvent;
+ const pickerEvent=page.waitForEvent('filechooser');await page.getByLabel('导入 Word、PDF 或标准图片创建任务').click();await pickerEvent;
  await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.fullscreenElement);
  await page.locator('input[type=file]').setInputFiles({name:'test.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('fixture')});
  await page.getByRole('button',{name:/测试订单.*标准版本/}).waitFor();assert.ok(await page.evaluate(()=>document.fullscreenElement?.classList.contains('label-workspace')));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),2);await page.getByText('图片内容无法解码',{exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'选择标准 2',exact:true}).isDisabled());
@@ -77,7 +77,8 @@ let browser;
  // Fixed geometry, actual image/overlay fit and local overflow across target sizes.
  const cases=[[1920,1080],[1440,900],[1366,768],[1024,768],[390,844],[683,384]];
  for(const [width,height] of cases){
-  await page.setViewportSize({width,height});await page.waitForTimeout(120);
+  await page.setViewportSize({width,height});
+  await page.waitForFunction(()=>[...document.querySelectorAll('.li-image img')].filter(i=>i.getBoundingClientRect().width>0).every(i=>{const r=i.getBoundingClientRect();return i.naturalWidth>0&&Math.abs(r.width/r.height/(i.naturalWidth/i.naturalHeight)-1)<.01;}));
   const geometry=await page.evaluate(()=>{
    const shell=document.querySelector('.li-fixed'), button=document.querySelector('.li-result-summary button');
    const images=[...document.querySelectorAll('.li-image img')].filter(e=>e.getBoundingClientRect().width>0);
@@ -145,8 +146,8 @@ let browser;
  // Direct image chooser/drop shares the single-file import surface and fullscreen shell.
  holdImport=false;
  await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();
- const importer=page.getByLabel('导入 Word 或标准图片创建任务');
- assert.equal(await importer.locator('input').getAttribute('accept'),'.doc,.docx,.jpg,.jpeg,.png,.webp,.bmp');
+ const importer=page.getByLabel('导入 Word、PDF 或标准图片创建任务');
+ assert.equal(await importer.locator('input').getAttribute('accept'),'.doc,.docx,.pdf,.jpg,.jpeg,.png,.webp,.bmp');
  assert.equal(await importer.locator('input').getAttribute('multiple'),null);
  assert.equal(await importer.locator('strong').evaluate(e=>getComputedStyle(e).color),'rgb(231, 238, 249)');
  await page.screenshot({path:path.join(output,'image-import.png'),fullPage:true});
@@ -161,7 +162,7 @@ let browser;
  await page.getByRole('combobox').first().selectOption('image');
  await page.getByText('图片上传',{exact:true}).last().waitFor();
  await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();
- await page.getByLabel('导入 Word 或标准图片创建任务').evaluate((element,bytes)=>{
+ await page.getByLabel('导入 Word、PDF 或标准图片创建任务').evaluate((element,bytes)=>{
   const transfer=new DataTransfer();transfer.items.add(new File([new Uint8Array(bytes)],'标准图片.png',{type:'image/png'}));
   element.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}));
  },Array.from(png));
@@ -169,6 +170,20 @@ let browser;
  await page.waitForFunction(()=>document.querySelectorAll('.li-gallery button[aria-label^="选择标准"]').length===1);
  assert.equal(await page.locator('.li-gallery button[aria-label^="选择标准"]').count(),1);
  await page.screenshot({path:path.join(output,'image-single-grid.png'),fullPage:true});
+ task.source={type:'pdf'};task.status='import_running';task.revision=0;task.assets=[];task.runs=[];task.import={completed:1,total:2};
+ await page.reload();await page.getByRole('heading',{name:'正在导入',exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'开始检测',exact:true}).count(),0);
+ await page.screenshot({path:path.join(output,'pdf-import-progress.png'),fullPage:true});
+ task.status='ready';task.revision=1;task.import.completed=2;task.assets=[{id:'pdf-left',name:'PDF 第 1 张 · 左',ordinal:1,enabled:true,media},{id:'pdf-right',name:'PDF 第 1 张 · 右',ordinal:2,enabled:true,media}];
+ await page.getByRole('heading',{name:'标准页面',exact:true}).waitFor();
+ await page.getByRole('button',{name:'选择标准 1',exact:true}).click();
+ await page.getByText('每次只拍一页',{exact:false}).waitFor();
+ await page.screenshot({path:path.join(output,'pdf-workspace.png'),fullPage:true});
+ task.read_only=true;task.manual_history={sessions:[{id:'old-session',decision:'REVIEW_REQUIRED'}],pages:[{id:'old-page',decision:'DIFFERENCES',differences:['保留原缺字结论'],has_photo:false}],standards:[]};
+ await page.reload();await page.getByRole('heading',{name:'历史记录（只读）',exact:true}).waitFor();
+ await page.getByText('原记录未保留实物照片，无法回看图片。',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'开始检测',exact:true}).count(),0);
+ await page.screenshot({path:path.join(output,'pdf-legacy-read-only.png'),fullPage:true});
  assert.deepEqual(errors,[]);console.log('label workspace UI PASS; screenshots: '+output);
  await require('./test_label_image_reuse.cjs')();
 })().catch(async e=>{console.error(e);if(browser){const p=browser.contexts()[0]?.pages()[0];if(p){console.error(await p.locator('body').innerText());await p.screenshot({path:path.join(output,'failure.png'),fullPage:true});}}process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();vite.kill();});

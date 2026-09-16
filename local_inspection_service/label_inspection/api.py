@@ -6,9 +6,9 @@ import time
 from pathlib import Path
 from PIL import Image
 from fastapi import File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
-from . import model
+from . import model, pdf_import, manual, manual_history
 from ..storage.label_inspection import LabelRepository
 from ..storage.agent_operations import OperationConflict
 from ..codex_compare.media import MediaStore
@@ -40,7 +40,13 @@ def public(value, *, diagnostic=False):
         if k not in {"owner_user_id", "idempotency_key", "parameters", "kind"}
     }
     if not diagnostic and value.get("kind") == "run":
-        for key in ("model", "prompt_hash", "layout", "transformations", "profile_snapshot"):
+        for key in (
+            "model",
+            "prompt_hash",
+            "layout",
+            "transformations",
+            "profile_snapshot",
+        ):
             result.pop(key, None)
         if result.get("error") and not result.get("error_code"):
             result["error"] = (
@@ -48,6 +54,12 @@ def public(value, *, diagnostic=False):
             )
         if result.get("quality"):
             result["quality"] = {"checked": True}
+    if "import" in result:
+        result["import"] = {
+            k: v
+            for k, v in result["import"].items()
+            if k in {"version", "completed", "total", "error"}
+        }
     return result
 
 
@@ -84,6 +96,7 @@ def asset(media, owner, data, identity, ordinal, metadata=None):
 
 def register(ns):
     app = ns["app"]
+    pdf_import.register(ns)
 
     def context():
         ns["require_permission"]("inspection")
@@ -188,6 +201,8 @@ def register(ns):
         }
 
     def resolve(repo, owner, identity):
+        if identity.startswith(manual_history.PREFIX):
+            return manual_history.resolve(repo, owner, identity)
         if identity.startswith("legacy:"):
             extension = next(
                 (
@@ -201,6 +216,8 @@ def register(ns):
         return require(repo, owner, identity)
 
     def histories(repo, owner, task):
+        if task.get("read_only"):
+            return []
         runs = (
             [public(x) for x in repo.list(owner, "run", task["id"])]
             if task["revision"]
@@ -241,7 +258,9 @@ def register(ns):
     @app.get(PREFIX + "/tasks")
     def tasks(
         q: str = Query("", max_length=200),
-        source: str = Query("all", pattern="^(all|word|image|legacy|beta)$"),
+        source: str = Query(
+            "all", pattern="^(all|word|image|pdf|legacy|legacy_manual|beta)$"
+        ),
         result: str = Query("all", pattern="^(all|MATCH|DIFFERENCES|REVIEW_REQUIRED)$"),
         cursor: str = Query("", max_length=512),
         limit: int = Query(20, ge=1, le=100),
@@ -280,7 +299,23 @@ def register(ns):
                         "standard_count": len(task["assets"]),
                         "run_count": len(runs),
                         "decision": latest.get("decision", "REVIEW_REQUIRED"),
-                        "status": latest.get("status", "ready"),
+                        "status": latest.get("status", task.get("status", "ready")),
+                    }
+                )
+            for task in manual_history.rows(repo, owner):
+                history = task["manual_history"]
+                records = history["pages"]
+                latest = max(records, key=lambda v: v.get("created_at", 0), default={})
+                rows.append(
+                    {
+                        "id": task["id"],
+                        "name": task["name"],
+                        "source": "legacy_manual",
+                        "updated_at": task["updated_at"],
+                        "standard_count": task["standard_count"],
+                        "run_count": len(records),
+                        "decision": latest.get("decision", "REVIEW_REQUIRED"),
+                        "status": "read_only",
                     }
                 )
             for beta in repo.legacy(owner, "beta"):
@@ -325,12 +360,16 @@ def register(ns):
         context()
         filename = Path(file.filename or "").name
         extension = Path(filename).suffix.lower()
-        if extension not in {*IMAGE_FORMATS, ".doc", ".docx"}:
-            raise HTTPException(422, "仅支持 DOC、DOCX、JPG/JPEG、PNG、WebP、BMP")
+        if extension not in {*IMAGE_FORMATS, ".doc", ".docx", ".pdf"}:
+            raise HTTPException(422, "仅支持 PDF、DOC、DOCX、JPG/JPEG、PNG、WebP、BMP")
         maximum = (
-            model.MAX_BYTES
-            if extension in IMAGE_FORMATS
-            else (30 if extension == ".doc" else 100) * 1024 * 1024
+            pdf_import.MAX_BYTES
+            if extension == ".pdf"
+            else (
+                model.MAX_BYTES
+                if extension in IMAGE_FORMATS
+                else (30 if extension == ".doc" else 100) * 1024 * 1024
+            )
         )
         data = await file.read(maximum + 1)
 
@@ -342,6 +381,21 @@ def register(ns):
                     if extension in IMAGE_FORMATS
                     else "文档超出上传限制"
                 )
+            if extension == ".pdf":
+                entries = pdf_import.inspect(data)
+                task = repo.create_pdf(
+                    owner,
+                    request_id,
+                    Path(filename).stem[:200] or "新任务",
+                    {
+                        "type": "pdf",
+                        "filename": filename,
+                        "document_sha256": media.put(owner, data),
+                    },
+                    entries,
+                    pdf_import.VERSION,
+                )
+                return JSONResponse(detail(repo, owner, task), status_code=202)
             if extension in IMAGE_FORMATS:
                 try:
                     with Image.open(io.BytesIO(data)) as source:
@@ -426,6 +480,8 @@ def register(ns):
 
         def work():
             task = resolve(repo, owner, identity)
+            if task.get("read_only") or task.get("import"):
+                raise ValueError("此任务不能通过旧标准续检，请新建任务导入 PDF")
             if task["revision"]:
                 return detail(repo, owner, task)
             if task["missing"]:
@@ -565,11 +621,19 @@ def register(ns):
         def work():
             owner, repo, media = context()
             enabled()
+            task = require(repo, owner, identity)
+            is_pdf = (task.get("source") or {}).get("type") == "pdf"
             actual = image(media, owner, data)
             # Resolve after checking idempotency: an acknowledged submission keeps its original configuration.
             prior = repo.request_run(owner, request_id)
-            selected = prior.get("profile_snapshot") if prior else ns["model_profile_service"].snapshot().get("label")
+            selected = (
+                prior.get("profile_snapshot")
+                if prior
+                else ns["model_profile_service"].snapshot().get("label")
+            )
             resolved = ns["model_profile_service"].resolve("label", selected)
+            if is_pdf and resolved.get("provider") != "doubao":
+                raise HTTPException(503, "PDF 检测需要已配置的豆包连接，请联系管理员")
             return public(
                 repo.submit(
                     owner,
@@ -578,8 +642,8 @@ def register(ns):
                     revision,
                     asset_id,
                     actual,
-                    resolved["model"],
-                    model.PROMPT_HASH,
+                    model.MODEL if is_pdf else resolved["model"],
+                    manual.PROMPT_HASH if is_pdf else model.PROMPT_HASH,
                     parent_id,
                     profile_snapshot=selected,
                 )
@@ -614,6 +678,45 @@ def register(ns):
                     if c["run_id"] == identity
                 ],
             }
+
+        return call(work)
+
+    @app.get(PREFIX + "/tasks/{identity}/history-media/{page_id}")
+    def manual_photo(identity: str, page_id: str):
+        owner, repo, _ = context()
+
+        def work():
+            task = manual_history.resolve(repo, owner, identity)
+            if not any(p["id"] == page_id for p in task["manual_history"]["pages"]):
+                raise KeyError(page_id)
+            page = next(
+                p
+                for p in (repo.legacy(owner, "pages") + repo.legacy(owner, "records"))
+                if p["id"] == page_id
+            )
+            session = next(
+                (
+                    s
+                    for s in repo.legacy(owner, "sessions")
+                    if s["id"] == page.get("session_id")
+                ),
+                {},
+            )
+            data = ns["_text_v2_read_verified"](
+                page.get("media_path", ""),
+                owner,
+                page.get("standard_id") or session.get("standard_id", ""),
+                expected_sha256=page.get("source_sha256", ""),
+                max_bytes=20 * 1024 * 1024,
+            )
+            return Response(
+                data,
+                media_type="image/png" if data.startswith(b"\x89PNG") else "image/jpeg",
+                headers={
+                    "Cache-Control": "private, no-store",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
 
         return call(work)
 

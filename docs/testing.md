@@ -490,3 +490,8 @@ atomic concurrent saves, safe public projections and unpriced usage.
 HTTP fixtures: add returns to a pending selection, only Save commits bindings,
 cancel restores values, members cannot see the library, and mobile does not overflow.
 These tests make no live provider/device calls and do not certify detection accuracy.
+
+
+## Unified PDF inspection
+
+The real PostgreSQL smoke_label_inspection suite calls smoke_pdf_manual: synthetic rotated/landscape/portrait/square splits, atomic publication, checkpoint restart and stale-token fencing, account isolation, encrypted/invalid/excess-entry rejection and 0/1/2 provider-call contracts. It uses deterministic provider fixtures and never a paid model. Replay the private YATO source separately: 80 landscape pages must yield 160 entries left then right with helpers retained. UI checks cover PDF progress and read-only history in addition to existing fullscreen/grid/camera tests. Live rendered-photo acceptance must be labeled synthetic and record latency/tokens separately from real-photo accuracy.

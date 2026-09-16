@@ -78,7 +78,7 @@ The task list unifies account-owned old text orders and native Beta tasks withou
 content-similarity merging or model reruns. Old records keep original conclusions
 and existing evidence reader. Continuing an old order takes a fresh original-image
 snapshot, leaving old rows untouched; missing orders/images are explicit. The
-manual route remains `/workspace/text-compare-beta?mode=manual`, and the Beta route
+old manual route redirects to unified read-only history or the task list, and the Beta route
 and continuation rules remain unchanged.
 
 
@@ -271,7 +271,7 @@ submitted call may finish but cannot change deleted membership; subsequent calls
 stop. Reimport of a deleted material/version requires a new version label because
 historical uniqueness is retained. Deletion is not disk cleanup or evidence erasure.
 
-The formal **文字检验** entry is account scoped and independent from product/YOLO tasks. It contains label comparison and a manual-page pilot. The previous `incoming_material_text` task workflow remains readable for existing records during the rollback window, but its “旧版” task-creation entry is no longer exposed; all new label comparison work starts from **文字检验**.
+The formal **文字检验** entry is account scoped and independent from product/YOLO tasks. It contains label comparison and PDF page comparison in the same task workspace. The previous `incoming_material_text` task workflow remains readable for existing records during the rollback window, but its “旧版” task-creation entry is no longer exposed; all new label comparison work starts from **文字检验**.
 
 ## Release stages
 
@@ -285,7 +285,7 @@ The formal **文字检验** entry is account scoped and independent from product
 - `owner_user_id` is always derived from the authenticated session; request IDs never select another account. Media downloads repeat the ownership check and validate the resolved path.
 - DOCX imports are size/entry/ratio bounded, reject path traversal, external relationships and macros, and read only document XML plus `word/media`. OLE payloads are quarantined and never opened. Automatic classification only changes visibility; a user can restore every extracted candidate before confirmation.
 - `.doc` uses direct POI image extraction, not LibreOffice conversion. A fixed helper bundle and Java runtime must be commissioned before production imports. Word overlays, crop settings and unrelated embedded OLE documents are not rendered or exported.
-- PDF metadata is validated synchronously, but pages are rendered lazily with page and pixel limits. The complete action is the only time missing pages are calculated.
+- PDF metadata is validated synchronously; the unified importer renders all split pages in a durable background job before publishing revision 1. Historical manual pages retain their original lazy read compatibility.
 - The external VLM receives only one confirmed standard image and one capture. The service writes an `attempting` record before the call, uses one provider attempt, and never re-calls an uncertain comparison ID. Provider/schema/prompt failures become `REVIEW_REQUIRED`.
 - Every label comparison persists a bounded diagnostic envelope in the same account-scoped record. It includes prepared image dimensions, byte counts, formats and hashes; provider/model/endpoint host and timeout; stage-by-stage timestamps; provider latency, HTTP/timeout/retry and usage metadata when returned; the parsed model response; the exact validation or post-processing failure stage and message; and a bounded raw model-text preview when JSON parsing fails. Embedded image data, authorization headers, cookies, tokens, API keys and secrets are redacted. A compact structured event is also written to the service log without model text or media. Diagnostics never authorize an automatic retry of an uncertain charged request.
 - The comparison result exposes the already-sanitized provider output in a native, default-closed `Raw Output` disclosure. Successful responses show the parsed model JSON rather than an unbounded byte-for-byte body; invalid JSON may show the bounded raw-text preview. The provider-adapted value is shown separately so operators can distinguish model output from the value entering domain validation. The UI applies an additional display limit and never renders secrets, request headers or embedded media.
@@ -328,7 +328,7 @@ Image-generation settings are independent of Qwen text-comparison settings. The 
 
 Extraction diagnostics and authenticated source/mask/crop previews are available in a default-collapsed disclosure. Used extraction evidence is retained with comparison history. Unconfirmed, unreferenced drafts older than seven days are expired lazily on account capability checks; an atomic expiration revision competes with confirmation, and confirmed roots are conservatively retained. Retention never runs from the release installer. Old request IDs remain tombstoned so expiration cannot cause automatic paid replays.
 
-The `/api/text-inspection` namespace requires `inspection`. Standards, assets, records, sessions and pages are limited to the current authenticated account. Main routes are standards import/list/detail/asset add/asset classification/confirm, label compare, manual session create/page/complete, and inspection review. Confirmed asset mutations append their revision snapshots internally in the same transaction.
+The `/api/text-inspection` namespace requires `inspection`. Standards, assets, records, sessions and pages are limited to the current authenticated account. Main routes are standards import/list/detail/asset add/asset classification/confirm, label compare, read-only manual history, and label inspection review. Old manual session create/page/complete return HTTP 410. Confirmed asset mutations append their revision snapshots internally in the same transaction.
 
 A user may add or remove images from the logical order standard at any time. The service implements that promise without rewriting audit history: the standard row represents the current logical order, while every confirmed mutation appends an immutable numbered revision containing the selected asset IDs and hashes. Delete is a reversible soft deletion and never physically removes media referenced by a revision or inspection record. Initial draft confirmation freezes revision 1; later add, remove and restore operations on the confirmed logical standard atomically advance its current revision. For confirmed standards created before the revision ledger existed, the first real edit first records the pre-edit membership as baseline revision 1, then records the requested edit as revision 2 in the same lock or transaction. Historical revisions remain read-only and available for traceability. Every comparison records the exact revision ID, revision number and reference hash that it used, and only an asset in the current confirmed snapshot may be selected for a new production comparison.
 
@@ -479,3 +479,37 @@ and pinned OCR model. Label runs persist ID/version and retain the existing prom
 validation and at-most-once/no-automatic-retry policy. Administrators configure
 these bindings in Settings; business submissions cannot choose arbitrary keys or
 profiles. Codex Beta remains its dedicated engine and retains its existing gates.
+
+
+## Unified PDF page comparison
+
+New tasks accept PDF (200 MiB) through the existing `/api/label-inspection/tasks` multipart route.
+Displayed orientation, including page rotation, decides splitting: width > height creates left then right;
+portrait and square pages stay whole. Keep original sequence, duplicates, blank pages and printing helpers.
+Each half/full-page clip is rendered directly to a 3200px longest-edge RGB image with its source page,
+rotation and display-space clip preserved. No OCR, classification, helper cleanup or automatic matching.
+The split result has at most 500 standards. Task JSON stores source `pdf` and import progress; POST returns
+202. One global leased importer checkpoints each deterministic page. Restart reclaims an expired lease;
+old tokens cannot publish. Only complete imports publish immutable revision 1. Failed imports remain
+visible and cannot submit detection. Existing image/Word limits and behavior are unchanged.
+
+PDF tasks use `pdf-page-v1`, frozen at submission together with prompt hash, quality policy and profile
+snapshot. The label credential/endpoint binding supplies transport; the PDF model is fixed to
+`doubao-seed-evolving` on Doubao, thinking disabled, temperature 0.1, 180 seconds per stage. Both stages
+use max-edge 3200 JPEG90 without upsampling. Layout (1024 tokens) receives only the actual image and
+requires exactly one complete, readable, confidently located page. Invalid bounds, multiple pages,
+missing edges and unreadable content stop after one call. Comparison (8192 tokens) receives the selected
+standard and rectangle crop from the orientation-normalized original photo. It checks all page content,
+including punctuation, case, figures, page numbers and formal footers, while ignoring print helpers
+outside the finished page and photographic distortions. Uncertain reading, contradictory results,
+truncation and invalid JSON never pass. Reliable numbered boxes map back to original image coordinates.
+No perspective correction, local black-label quality gate or uncalibrated paper blur threshold is used.
+File decode failures make zero calls; a normal inspection makes two. Existing label prompts, input bytes,
+quality gate and at-most-once call semantics are unchanged. PDF preview rendering is not a real-photo
+accuracy benchmark. Ordinary inspection never dispatches PLC operations.
+
+There are no separate manual creation entries or mode switches. The existing fullscreen task grid and
+camera are reused, with page wording and “每次只拍一页”. Old orders, sessions and pages appear through
+an owner-scoped read-only adapter; old identified URLs resolve to history, other old URLs to the task list.
+Missing photos/associations are explicitly shown. Old manual writes (including edits/reviews) are disabled;
+new work requires a new PDF import. Beta retains its own route and behavior.

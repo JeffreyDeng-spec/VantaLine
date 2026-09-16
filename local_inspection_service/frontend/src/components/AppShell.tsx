@@ -1,3 +1,4 @@
+import { LegacyManualRedirect } from "../features/label-inspection/LegacyManualRedirect";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { workspacePath } from "../app/paths";
@@ -40,7 +41,6 @@ import { useTaskNavigationPreferences } from "../features/tasks/useTaskNavigatio
 import { TrainingLibraryPage } from "../features/training/TrainingLibraryPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { CodexComparePage } from "../features/codex-compare/CodexComparePage";
-import { TextCompareBetaPage } from "../features/text-compare/TextCompareBetaPage";
 import {
   taskEntriesFromTrainingResources,
   taskStatusTone,
@@ -688,7 +688,7 @@ export function AppShell() {
             path="text-compare-beta"
             element={
               <PermissionRoute permission="inspection">
-                <TextCompareBetaPage />
+                <LegacyManualRedirect />
               </PermissionRoute>
             }
           />
