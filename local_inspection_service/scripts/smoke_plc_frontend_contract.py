@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 
@@ -85,9 +86,11 @@ def main() -> None:
     )
     if "localStorage" in rules:
         raise AssertionError("PLC settings must not use browser-only localStorage")
-    analyze_start = server.index("def analyze_bgr(")
-    auth_start = server.index('@app.get("/api/auth/status")', analyze_start)
-    if "dispatch_plc_for_detection" in server[analyze_start:auth_start]:
+    analyze_functions = [node for node in ast.parse(server).body
+                         if isinstance(node, ast.FunctionDef) and node.name == "analyze_bgr"]
+    if len(analyze_functions) != 1:
+        raise AssertionError("PLC no-dispatch contract must inspect the actual analyze_bgr implementation")
+    if "dispatch_plc_for_detection" in ast.get_source_segment(server, analyze_functions[0]):
         raise AssertionError("PLC dispatch must not run inside analyze_bgr or per video frame")
     if server.count("await dispatch_plc_for_detection_async(") != 0:
         raise AssertionError("server-side pyserial dispatch must have zero call sites")
