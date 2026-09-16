@@ -1,5 +1,10 @@
 # Production runbook
 
+The auth HTTP/service split uses ordinary complete-release restart and rollback.
+Check administrator/member login, navigation and protected media. Existing cookies,
+password hashes and account rows require no conversion or session reset. Preserve
+all runtime records when restoring the prior complete release.
+
 Request-authentication extraction retains sessions and deployment topology. After
 the ordinary complete-release restart, check login, protected API/media access and
 navigation. A regression requires complete-release rollback, preserving session,
