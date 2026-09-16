@@ -1,5 +1,11 @@
 # Production runbook
 
+Management extraction uses ordinary full-package restart. Preserve candidate and
+accessory records on rollback: confirmation can persist an accessory before a
+later candidate write fails, as before. Do not auto-retry model preparation or
+infer transaction atomicity from this structural extraction. The existing JSON
+whole-accessory deletion 404 remains a separate issue; PG deletion order is unchanged.
+
 Accessory file editing uses ordinary complete-release restart and rollback.
 Check authorized upload/crop/delete and reference selection with synthetic media.
 On regression restore the previous complete release, preserving file and task

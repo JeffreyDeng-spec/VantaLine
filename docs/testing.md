@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_accessory_management.py` exercises ten original HTTP
+contract groups before and after management wiring: owner-scoped names, global
+class allocation, upload residues, preview persistence, lock scope, active/failed
+jobs, duplicate confirmation, missing-target repair, both text rejection paths,
+profile call arguments and partial commits. PG removal branch ordering is tested
+in an isolated HTTP composition with a storage substitute; it is not a real-PG
+integration test. Full-app authentication uses a disposable real JSON store.
+Existing real-PG repository and model-binding gates remain independently required.
+
 `python scripts/smoke_accessory_files.py` runs six real-HTTP contract groups with
 disposable images and provider substitutes. The same tests passed before wiring.
 They cover shared-write denial, partial upload effects, crop limits and asymmetric

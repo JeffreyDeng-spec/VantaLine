@@ -26654,285 +26654,103 @@ def delete_image_job_candidate(candidate_id: str) -> dict[str, Any]:
     return update_codex_image_candidate(candidate_id, "delete")
 
 
-@app.post("/api/accessories")
-async def add_accessory(
-    name: str = Form(...),
-    class_id: int = Form(-1),
-    material_type: str = Form("object"),
-    material_alpha_policy: str = Form(""),
-    training_role: str = Form("detect_and_classify"),
-    pipeline_context: str = Form(""),
-    paper_preset: str = Form("A4"),
-    paper_width_mm: str = Form(""),
-    paper_height_mm: str = Form(""),
-    object_length_mm: str = Form(""),
-    object_width_mm: str = Form(""),
-    object_height_mm: str = Form(""),
-    size_reference: str = Form(""),
-    files: list[UploadFile] = File(default=[]),
-) -> dict[str, Any]:
-    user = current_auth_user()
-    if material_type not in {"text", "object"}:
-        raise HTTPException(status_code=400, detail="material_type must be text or object")
-    alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
-    if material_type == "object" and not alpha_policy:
-        raise HTTPException(status_code=400, detail="请选择物品透明或不透明")
-    if material_type == "text":
-        validate_text_accessory_uploads(files)
-    size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
-    config = load_config()
-    assert_unique_accessory_name(config, name, resource_owner_id_for_new_record(user))
-    if class_id < 0:
-        existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
-        class_id = max(existing_ids + list(CLASS_NAMES.keys())) + 1
-    saved_files = []
-    accessory_id = f"acc_{uuid.uuid4().hex[:10]}"
-    target_dir = UPLOAD_DIR / "accessories" / accessory_id
-    target_dir.mkdir(parents=True, exist_ok=True)
-    for upload in files:
-        path = target_dir / safe_name(upload.filename)
-        with path.open("wb") as f:
-            shutil.copyfileobj(upload.file, f)
-        saved_files.append(str(path))
-    expanded_source_files, extracted_video_frames = expand_accessory_reference_sources(accessory_id, saved_files)
-
-    item = {
-        "id": accessory_id,
-        "class_id": class_id,
-        "name": name,
-        "material_type": material_type,
-        "training_role": training_role,
-        "physical_size": physical_size_payload(
-            material_type,
-            paper_preset,
-            paper_width_mm,
-            paper_height_mm,
-            object_length_mm,
-            object_width_mm,
-            object_height_mm,
-        ),
-        "status": "reference_uploaded",
-        "source_files": expanded_source_files,
-        "original_source_files": saved_files,
-        "video_reference_frames": extracted_video_frames,
-        "created_at": int(time.time()),
-        **current_owner_fields(),
-    }
-    if alpha_policy:
-        item["material_alpha_policy"] = alpha_policy
-        item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
-    if material_type == "object" and size_reference_key:
-        item["size_reference"] = size_reference_key
-    if material_type == "text":
-        item.update(normalize_accessory_assets(item))
-        item["normalization_deferred"] = False
-    else:
-        defer_accessory_normalization(item)
-    ensure_default_ai_profile_reference(item)
-    ensure_accessory_ai_profile(item, allow_provider=True)
-    if material_type != "text":
-        ensure_pose_collection_image_jobs(item)
-    config["accessories"].append(item)
-    save_accessory_item(item, config)
-    if candidate_has_active_image_jobs(item):
-        start_image_worker()
-    scoped_config = scope_config_for_user(config, user)
-    response = {
-        "status": "saved",
-        "item": serialize_accessory_summary(config["accessories"][-1]),
-        "items": serialize_accessory_items(scoped_config["accessories"]),
-    }
-    if str(pipeline_context or "").strip().lower() in {"1", "true", "yes", "pipeline"}:
-        add_pipeline_accessory_id(accessory_uid(item))
-        response["pipeline"] = pipeline_accessories_payload(scoped_config, _request_user.get())
-    return response
+from .accessories.creation import AccessoryCreation
+from .accessories.creation_ports import CreationAccess, CreationStore, CreationMedia, CreationProfiles, CandidateCreation, CreationPipeline
+from .accessories.confirmation import AccessoryConfirmation
+from .accessories.confirmation_ports import ConfirmationAccess, ConfirmationStore, ConfirmationJobs, ConfirmationProfiles, ConfirmationMedia, ConfirmationPipeline
+from .accessories.management_api import register_management_api, register_removal_api
+_accessory_creation = AccessoryCreation(
+    CreationAccess(
+        current_user=lambda: current_auth_user(), owner_fields=lambda: current_owner_fields(),
+        new_owner_id=lambda user: resource_owner_id_for_new_record(user),
+        request_user=lambda: _request_user.get(),
+    ),
+    CreationStore(
+        load=lambda: load_config(), save=lambda item, config: save_accessory_item(item, config),
+        scope=lambda config, user: scope_config_for_user(config, user),
+        unique_name=lambda config, name, owner: assert_unique_accessory_name(config, name, owner),
+        class_names=lambda: CLASS_NAMES,
+    ),
+    CreationMedia(
+        upload_directory=lambda: UPLOAD_DIR, safe_name=lambda name: safe_name(name),
+        validate_text=lambda files, **kwargs: validate_text_accessory_uploads(files, **kwargs),
+        size_reference=lambda value: normalize_size_reference(value),
+        physical_size=lambda *args: physical_size_payload(*args),
+        expand_sources=lambda identifier, files: expand_accessory_reference_sources(identifier, files),
+        normalize=lambda item: normalize_accessory_assets(item),
+        defer=lambda item: defer_accessory_normalization(item),
+    ),
+    CreationProfiles(
+        ensure_reference=lambda item: ensure_default_ai_profile_reference(item),
+        ensure_profile=lambda item, **kwargs: ensure_accessory_ai_profile(item, **kwargs),
+        ensure_pose_jobs=lambda item: ensure_pose_collection_image_jobs(item),
+        has_active_jobs=lambda item: candidate_has_active_image_jobs(item),
+        start_worker=lambda: start_image_worker(),
+    ),
+    CandidateCreation(
+        create=lambda *args: create_accessory_candidate(*args),
+        save=lambda path, item: save_accessory_candidate(path, item),
+        directory=lambda: ACCESSORY_CANDIDATES_DIR,
+    ),
+    CreationPipeline(
+        add_accessory=lambda identifier: add_pipeline_accessory_id(identifier),
+        add_pending=lambda identifier: add_pipeline_pending_candidate_id(identifier),
+        payload=lambda config, user: pipeline_accessories_payload(config, user),
+    ),
+    _accessory_projection,
+)
 
 
-@app.post("/api/accessories/preview")
-async def preview_accessory(
-    name: str = Form(...),
-    material_type: str = Form("object"),
-    material_alpha_policy: str = Form(""),
-    training_role: str = Form("detect_and_classify"),
-    pipeline_context: str = Form(""),
-    paper_preset: str = Form("A4"),
-    paper_width_mm: str = Form(""),
-    paper_height_mm: str = Form(""),
-    object_length_mm: str = Form(""),
-    object_width_mm: str = Form(""),
-    object_height_mm: str = Form(""),
-    size_reference: str = Form(""),
-    files: list[UploadFile] = File(default=[]),
-) -> dict[str, Any]:
-    user = current_auth_user()
-    if material_type not in {"text", "object"}:
-        raise HTTPException(status_code=400, detail="material_type must be text or object")
-    alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
-    if material_type == "object" and not alpha_policy:
-        raise HTTPException(status_code=400, detail="请选择物品透明或不透明")
-    if material_type == "text":
-        validate_text_accessory_uploads(files)
-    size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
-    assert_unique_accessory_name(load_config(), name, resource_owner_id_for_new_record(user))
-    saved_files = []
-    if files:
-        candidate_source_dir = UPLOAD_DIR / "accessory_candidates" / f"src_{uuid.uuid4().hex[:10]}"
-        candidate_source_dir.mkdir(parents=True, exist_ok=True)
-        for upload in files:
-            path = candidate_source_dir / safe_name(upload.filename)
-            with path.open("wb") as f:
-                shutil.copyfileobj(upload.file, f)
-            saved_files.append(str(path))
-    physical_size = physical_size_payload(
-        material_type,
-        paper_preset,
-        paper_width_mm,
-        paper_height_mm,
-        object_length_mm,
-        object_width_mm,
-        object_height_mm,
-    )
-    candidate = create_accessory_candidate(name, material_type, training_role, saved_files, physical_size, alpha_policy, size_reference_key)
-    if str(pipeline_context or "").strip().lower() in {"1", "true", "yes", "pipeline"}:
-        candidate["pipeline_context"] = "pipeline"
-        save_accessory_candidate(ACCESSORY_CANDIDATES_DIR / f"{candidate['id']}.json", candidate)
-        add_pipeline_pending_candidate_id(str(candidate["id"]))
-        pipeline_payload = pipeline_accessories_payload(scope_config_for_user(load_config(), user), user)
-    else:
-        pipeline_payload = None
-    if candidate.get("codex_image_job"):
-        start_image_worker()
-    result = {"status": "candidate_ready", "candidate": candidate}
-    if pipeline_payload is not None:
-        result["pipeline"] = pipeline_payload
-    return result
 
 
-@app.post("/api/accessories/confirm/{candidate_id}")
-def confirm_accessory(candidate_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
-    with _candidate_store_lock:
-        candidate = load_accessory_candidate(candidate_id)
-        require_record_access(candidate, user, write=True)
-        confirmed_id = candidate_confirmed_accessory_id(candidate)
-        if confirmed_id:
-            config = load_config()
-            item = next((entry for entry in config.get("accessories", []) if accessory_uid(entry) == confirmed_id), None)
-            if not item:
-                for key in ("confirmed_accessory_id", "confirmed_at", "confirmed_class_id"):
-                    candidate.pop(key, None)
-                candidate["status"] = "candidate_review"
-                save_accessory_candidate(path, candidate)
-            if item and candidate.get("pipeline_context") == "pipeline":
-                add_pipeline_accessory_id(confirmed_id)
-                remove_pipeline_pending_candidate_id(candidate_id)
-            if item:
-                # Sprite generation is deferred to task start; do not build it on
-                # (re)confirmation of an already-saved accessory.
-                return {
-                    "status": "already_saved",
-                    "item": serialize_accessory_summary(item),
-                    "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
-                    "pipeline": pipeline_accessories_payload(scope_config_for_user(config, user), user),
-                }
-        material_type = accessory_material_type(candidate)
-        if material_type == "object" and not normalize_object_alpha_material_policy(candidate.get("material_alpha_policy")):
-            raise HTTPException(status_code=400, detail="确认前必须选择物品透明或不透明")
-        if material_type == "object":
-            candidate["material_alpha_policy"] = object_alpha_material_policy(candidate)
-            candidate["object_alpha_policy_label"] = object_alpha_policy_label(candidate["material_alpha_policy"])
-        job_plan_changed = ensure_candidate_image_job_task_ids(candidate)
-        job_plan_changed = ensure_pose_collection_image_jobs(candidate) or job_plan_changed
-        if job_plan_changed:
-            save_accessory_candidate(path, candidate)
-        refreshed_jobs = []
-        changed = False
-        for job in candidate_image_jobs(candidate):
-            refreshed = refresh_codex_image_job(job)
-            store_candidate_image_job(candidate, refreshed)
-            refreshed_jobs.append(refreshed)
-            changed = changed or refreshed.get("status") != job.get("status") or refreshed.get("completed_at") != job.get("completed_at")
-        if changed:
-            save_accessory_candidate(path, candidate)
-        if any(str(job.get("status", "")) in IMAGE_JOB_ACTIVE_STATUSES for job in refreshed_jobs):
-            start_image_worker()
-            raise HTTPException(status_code=409, detail="Image generation is still running. Confirm after all pose jobs complete.")
-
-        defer_accessory_normalization(candidate)
-        ensure_default_ai_profile_reference(candidate)
-        ensure_accessory_ai_profile(candidate, force=not isinstance(candidate.get("ai_profile"), dict), allow_provider=True)
-        if material_type == "text" and accessory_ai_profile_rejected(candidate):
-            text_assets = canonical_text_assets(candidate)
-            text_assets_complete = canonical_text_assets_complete(candidate, text_assets)
-            save_accessory_candidate(path, candidate)
-            raise HTTPException(
-                status_code=422,
-                detail=text_accessory_confirm_detail(
-                    candidate,
-                    text_assets,
-                    text_assets_complete,
-                    accessory_ai_profile_ready(candidate),
-                ),
-            )
-
-        config = load_config()
-        assert_unique_accessory_name(config, candidate.get("name"), record_owner_id(candidate))
-        existing_ids = [int(item.get("class_id", -1)) for item in config.get("accessories", [])]
-        original_class_id = candidate.get("class_id", -1)
-        original_candidate_id = str(candidate.get("id") or candidate_id)
-        candidate["class_id"] = max(existing_ids + list(CLASS_NAMES.keys())) + 1
-        candidate["id"] = f"acc_{uuid.uuid4().hex[:10]}"
-        candidate["status"] = candidate.get("status", "candidate_review").replace("candidate_review", "active")
-        candidate["confirmed_at"] = int(time.time())
-        ensure_default_ai_profile_reference(candidate)
-        ensure_accessory_ai_profile(candidate, force=True, allow_provider=True)
-        confirmed_item = json.loads(json.dumps(candidate))
-        if accessory_material_type(confirmed_item) == "text":
-            # Documents: crop + deskew + normalize to the chosen paper size NOW, at
-            # creation. No image generation and no task-time sprite step — the task
-            # just reuses these canonical pages.
-            confirmed_item.update(normalize_accessory_assets(confirmed_item))
-            confirmed_item["normalization_deferred"] = False
-            text_assets = canonical_text_assets(confirmed_item)
-            text_assets_complete = canonical_text_assets_complete(confirmed_item, text_assets)
-            profile_ready = accessory_ai_profile_ready(confirmed_item)
-            if not text_assets_complete or not profile_ready:
-                failed_candidate = json.loads(json.dumps(candidate))
-                failed_candidate["id"] = original_candidate_id
-                failed_candidate["class_id"] = original_class_id
-                failed_candidate["status"] = "candidate_review"
-                for key in ("confirmed_accessory_id", "confirmed_at", "confirmed_class_id"):
-                    failed_candidate.pop(key, None)
-                if isinstance(failed_candidate.get("ai_profile"), dict):
-                    failed_candidate["ai_profile"] = normalize_accessory_ai_profile(failed_candidate["ai_profile"], failed_candidate)
-                save_accessory_candidate(path, failed_candidate)
-                raise HTTPException(
-                    status_code=422,
-                    detail=text_accessory_confirm_detail(confirmed_item, text_assets, text_assets_complete, profile_ready),
-                )
-        else:
-            # Objects: defer sprite generation until a pipeline task starts.
-            defer_accessory_normalization(confirmed_item)
-        config["accessories"].append(confirmed_item)
-        save_accessory_item(confirmed_item, config)
-        candidate_record = json.loads(json.dumps(confirmed_item))
-        candidate_record["id"] = original_candidate_id
-        candidate_record["class_id"] = original_class_id
-        candidate_record["status"] = "confirmed"
-        candidate_record["confirmed_accessory_id"] = accessory_uid(confirmed_item)
-        candidate_record["confirmed_at"] = confirmed_item.get("confirmed_at") or int(time.time())
-        candidate_record["confirmed_class_id"] = confirmed_item.get("class_id")
-        save_accessory_candidate(path, candidate_record)
-        if candidate_record.get("pipeline_context") == "pipeline":
-            add_pipeline_accessory_id(accessory_uid(confirmed_item))
-            remove_pipeline_pending_candidate_id(candidate_id)
-        return {
-            "status": "saved",
-            "item": serialize_accessory_summary(confirmed_item),
-            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
-            "pipeline": pipeline_accessories_payload(scope_config_for_user(config, user), user),
-        }
+_accessory_confirmation = AccessoryConfirmation(
+    ConfirmationAccess(
+        current_user=lambda: current_auth_user(),
+        require_access=lambda record, user=None, *, write=False: require_record_access(record, user, write=write),
+        owner_id=lambda record: record_owner_id(record),
+    ),
+    ConfirmationStore(
+        directory=lambda: ACCESSORY_CANDIDATES_DIR, lock=lambda: _candidate_store_lock,
+        load_candidate=lambda identifier: load_accessory_candidate(identifier),
+        save_candidate=lambda path, item: save_accessory_candidate(path, item),
+        load_config=lambda: load_config(), save_item=lambda item, config: save_accessory_item(item, config),
+        scope=lambda config, user: scope_config_for_user(config, user),
+        unique_name=lambda config, name, owner: assert_unique_accessory_name(config, name, owner),
+        class_names=lambda: CLASS_NAMES,
+    ),
+    ConfirmationJobs(
+        ensure_ids=lambda item: ensure_candidate_image_job_task_ids(item),
+        ensure_pose=lambda item: ensure_pose_collection_image_jobs(item),
+        list_jobs=lambda item: candidate_image_jobs(item),
+        refresh=lambda job: refresh_codex_image_job(job),
+        store=lambda item, job: store_candidate_image_job(item, job),
+        active_statuses=lambda: IMAGE_JOB_ACTIVE_STATUSES, start_worker=lambda: start_image_worker(),
+    ),
+    ConfirmationProfiles(
+        ensure_reference=lambda item: ensure_default_ai_profile_reference(item),
+        ensure_profile=lambda item, **kwargs: ensure_accessory_ai_profile(item, **kwargs),
+        rejected=lambda item: accessory_ai_profile_rejected(item), ready=lambda item: accessory_ai_profile_ready(item),
+        normalize=lambda profile, item: normalize_accessory_ai_profile(profile, item),
+    ),
+    ConfirmationMedia(
+        defer=lambda item: defer_accessory_normalization(item),
+        normalize=lambda item: normalize_accessory_assets(item),
+        canonical_assets=lambda item: canonical_text_assets(item),
+        complete=lambda item, assets: canonical_text_assets_complete(item, assets),
+        error_detail=lambda item, assets, complete, ready: text_accessory_confirm_detail(item, assets, complete, ready),
+    ),
+    ConfirmationPipeline(
+        confirmed_id=lambda item: candidate_confirmed_accessory_id(item),
+        add_accessory=lambda identifier: add_pipeline_accessory_id(identifier),
+        remove_pending=lambda identifier: remove_pipeline_pending_candidate_id(identifier),
+        payload=lambda config, user: pipeline_accessories_payload(config, user),
+    ),
+    _accessory_projection,
+)
+_accessory_management_routes = register_management_api(app, _accessory_creation, _accessory_confirmation)
+add_accessory = _accessory_management_routes.add_accessory
+preview_accessory = _accessory_management_routes.preview_accessory
+confirm_accessory = _accessory_management_routes.confirm_accessory
 
 
 from .accessories.files import AccessoryFiles
@@ -26972,28 +26790,21 @@ set_accessory_ai_reference = _accessory_file_routes.set_accessory_ai_reference
 delete_accessory_file = _accessory_file_routes.delete_accessory_file
 
 
-@app.delete("/api/accessories/{accessory_id}")
-def delete_accessory(accessory_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = load_config()
-    target = next((item for item in config.get("accessories", []) if accessory_uid(item) == accessory_id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="Accessory not found")
-    require_record_access(target, user, write=True)
-    before = len(config.get("accessories", []))
-    config["accessories"] = [item for item in config.get("accessories", []) if accessory_uid(item) != accessory_id]
-    if len(config["accessories"]) == before:
-        raise HTTPException(status_code=404, detail="Accessory not found")
-    selected = config.get("training", {}).get("selected_accessory_ids", [])
-    config["training"]["selected_accessory_ids"] = [item_id for item_id in selected if item_id != accessory_id]
-    if runtime_postgres_repository_or_none() is not None:
-        if not delete_accessory_item(accessory_id):
-            raise HTTPException(status_code=404, detail="Accessory not found")
-        save_app_config(config)
-    elif not delete_accessory_item(accessory_id, config):
-        raise HTTPException(status_code=404, detail="Accessory not found")
-    remove_pipeline_accessory_id(accessory_id)
-    return {"status": "deleted", "accessory_id": accessory_id, "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"])}
+from .accessories.removal import AccessoryRemoval
+from .accessories.removal_ports import RemovalStore
+_accessory_removal = AccessoryRemoval(
+    FileAccess(lambda: current_auth_user(), lambda record, user=None, *, write=False: require_record_access(record, user, write=write)),
+    RemovalStore(
+        load=lambda: load_config(),
+        postgres_enabled=lambda: runtime_postgres_repository_or_none() is not None,
+        delete=lambda identifier, *args: delete_accessory_item(identifier, *args),
+        save_app_config=lambda config: save_app_config(config),
+        scope=lambda config, user: scope_config_for_user(config, user),
+    ),
+    lambda identifier: remove_pipeline_accessory_id(identifier),
+    _accessory_projection,
+)
+delete_accessory = register_removal_api(app, _accessory_removal)
 
 
 @app.get("/api/label-sheets/references")
