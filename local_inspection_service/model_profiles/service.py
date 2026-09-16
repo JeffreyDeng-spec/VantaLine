@@ -1,6 +1,9 @@
 """Profiles contain metadata only; immutable secret references live in the existing secret store."""
 import copy
 import json
+import hashlib
+from functools import lru_cache
+from pathlib import Path
 import os
 import time
 import uuid
@@ -60,6 +63,22 @@ def validate_binding(purpose, profile):
         raise ValueError('模型与此用途不兼容')
     if profile['provider'] == 'cursor' and purpose != 'training_assistant':
         raise ValueError('Cursor 仅用于保留的训练助手连接')
+
+
+@lru_cache(maxsize=1)
+def prompt_source_version():
+    """Fingerprint shipped prompt-producing code; task inputs remain in their records."""
+    root = Path(__file__).resolve().parents[1]
+    digest = hashlib.sha256()
+    for name in ('server.py','label_inspection/prompts.json','document_label_classifier.py',
+                 'standard_preparation.py','qwen_evidence_jobs.py','qwen_ocr_evidence.py'):
+        digest.update(name.encode())
+        digest.update((root/name).read_bytes())
+    return 'source-sha256:' + digest.hexdigest()
+
+
+def profile_reference(profile):
+    return {k:profile[k] for k in ('id','version','provider','model')} | {'prompt_version':prompt_source_version()}
 
 
 class Service:
@@ -126,7 +145,7 @@ class Service:
                     pending['pending'] = True
                     repo.put(c, f"{pending['id']}:1", 'profile', pending)
                     state['heads'][pending['id']] = 1
-            state['initial_snapshot'] = {p:{'id':i,'version':state['heads'][i]} if i else None for p,i in state['bindings'].items()}
+            state['initial_snapshot'] = {p:profile_reference(repo.get(c, f"{i}:{state['heads'][i]}")) if i else None for p,i in state['bindings'].items()}
             repo.put(c, 'state', 'state', state)
             repo.event(c, 'migration', 'initialized', {'profiles':list(state['heads'])})
 
@@ -167,7 +186,7 @@ class Service:
         repo = self.repository()
         with repo.transaction() as c:
             state = repo.state(c)
-            return {p: {'id':identity, 'version':state['heads'][identity]} if identity else None for p,identity in state['bindings'].items()}
+            return {p: profile_reference(repo.get(c, f"{identity}:{state['heads'][identity]}")) if identity else None for p,identity in state['bindings'].items()}
 
     def snapshot_for_record(self, record):
         self.initialize()

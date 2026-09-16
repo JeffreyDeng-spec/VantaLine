@@ -420,7 +420,9 @@ their own wire formats; labels no longer compare a queued job against a global
 model constant. Codex Beta, local OCR, YOLO and browser PLC remain separate engines.
 
 Profiles are immutable metadata versions in PostgreSQL; restricted server secret
-storage holds credentials. Submission snapshots bind profile ID/version, and
+storage holds credentials. Submission snapshots bind profile ID/version, provider/model and a SHA-256
+fingerprint of shipped prompt-producing source (dynamic inputs stay in task
+records), and
 workers scope existing provider calls to that snapshot. Existing pre-migration
 jobs use the initial migration snapshot. Video scopes cover all frames; manual
 sessions preserve their original model binding. Public task projections remove

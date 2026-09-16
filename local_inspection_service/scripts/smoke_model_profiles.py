@@ -66,6 +66,7 @@ def main():
             assert not service.resolve('training_assistant')['enabled']
             assert len(initial['profiles'])==3 and any(p['pending'] for p in initial['profiles'])
             old=service.snapshot()
+            assert old['pipeline']['model']=='gemini-2.5-flash' and old['pipeline']['prompt_version'].startswith('source-sha256:')
             old_id=old['pipeline']['id']
             legacy=next(p for p in initial['profiles'] if p['id']==old_id)
             body={k:legacy[k] for k in ('name','provider','model','base_url','timeout_seconds','enabled','version')}
