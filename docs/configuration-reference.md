@@ -1,5 +1,12 @@
 # Configuration reference
 
+The extracted administrator cost ledger retains `/api/admin/api-cost-ledger`,
+existing response fields and the `VANTALINE_RUNPOD_GPU_USD_PER_SECOND` override
+(default `0.00026`, invalid/nonpositive values use that default). Missing provider
+usage is not estimated and unknown models remain unpriced. No new setting or
+permission is introduced. Compatibility exports in `server` are composition
+adapters; domain tests replace typed source dependencies.
+
 Label actual-photo reuse is browser-memory-only with no configuration flag or durable
 browser cache. History uses the existing 1600px, JPEG quality-90 preview. Full-size
 normalized images remain on-demand; this does not change model input compression,

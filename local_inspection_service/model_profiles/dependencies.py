@@ -43,7 +43,7 @@ class ProfileDependencies:
 @dataclass(frozen=True)
 class ProfileApiDependencies:
     require_admin: Callable[[], Record]
-    cost_from_usage: Callable[[str, Record], tuple[float, int, bool]]
+    cost_from_usage: Callable[[str, Record], tuple[float, dict[str, int], bool]]
     cursor_api_url: Callable[[str, str], str]
     cursor_auth_headers: Callable[[str], dict[str, str]]
     model_options_from_items: Callable[..., list[Record]]

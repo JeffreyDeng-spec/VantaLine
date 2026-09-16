@@ -443,6 +443,16 @@ Label task creation accepts either Word or one static JPG/JPEG, PNG, WebP or BMP
 
 ## Settings and model routing
 
+The administrator cost ledger is assembled through `analytics.cost_api`, with
+`CostLedger` owning aggregation and `CostRepository` owning read-only source
+access. Pricing and classification live in `analytics.cost_pricing`. The root
+injects lazy path, runtime repository and existing task loader callbacks; no
+connection or request identity is stored in the ledger. PostgreSQL raw JSON
+remains authoritative, legacy source paths still define stable call IDs, and
+file metadata is read only after store-backed payloads. Existing loader locking
+and pricing are unchanged by this extraction. Other analytics endpoints remain
+in the application entry point until their own migration.
+
 Settings groups administrative controls into 模型与 API, 设备与运行 and 用量与成本.
 `model_profiles` resolves label, manual, pipeline, image, training_assistant,
 accessory, training_vision, document and ocr independently. Provider adapters keep

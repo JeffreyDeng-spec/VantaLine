@@ -1,5 +1,10 @@
 # PLC Web Serial v4
 
+The adjacent administrator cost route is now mounted through `analytics.cost_api`
+at its original application position. Cost aggregation has no PLC port, lease or
+dispatch dependency; this extraction leaves capture streaming and physical-write
+rules unchanged.
+
 **Status: Authoritative — only current PLC implementation contract**
 
 ## Ownership and profile
