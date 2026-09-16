@@ -1,5 +1,10 @@
 # Production runbook
 
+Request-authentication extraction retains sessions and deployment topology. After
+the ordinary complete-release restart, check login, protected API/media access and
+navigation. A regression requires complete-release rollback, preserving session,
+model and paid-call evidence; no account conversion or provider replay is needed.
+
 Authentication foundations use the ordinary immutable-release restart. Existing
 sessions and password hashes require no conversion. Verify administrator/member
 login and navigation; rollback restores the complete prior release while retaining

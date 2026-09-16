@@ -1,5 +1,9 @@
 # PLC Web Serial v4
 
+Authentication route policy now lives in `auth.route_permissions`; its PLC
+administrator/runtime permission alternatives are unchanged. Middleware extraction
+does not change browser ownership, leases, dispatch ACK rules or physical I/O.
+
 The adjacent administrator cost route is now mounted through `analytics.cost_api`
 at its original application position. Cost aggregation has no PLC port, lease or
 dispatch dependency; this extraction leaves capture streaming and physical-write

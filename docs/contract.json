@@ -50,7 +50,7 @@
     },
     {
       "name": "API authentication permissions and configuration",
-      "paths": ["local_inspection_service/server.py", "local_inspection_service/auth/**", "scripts/smoke_auth_foundation.py", "local_inspection_service/config/**", "local_inspection_service/schemas/**", "local_inspection_service/runtime/identity.py"],
+      "paths": ["local_inspection_service/server.py", "local_inspection_service/auth/**", "scripts/smoke_auth_foundation.py", "scripts/smoke_auth_access.py", "local_inspection_service/config/**", "local_inspection_service/schemas/**", "local_inspection_service/runtime/identity.py"],
       "server_diff_regex": "(?i)@app\\.|permission|authorize|authenticate|config|BaseModel",
       "required_any": ["docs/architecture.md", "docs/configuration-reference.md"]
     },
