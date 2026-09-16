@@ -34,7 +34,7 @@
   "impact_rules": [
     {
       "name": "Analytics domains",
-      "paths": ["local_inspection_service/analytics/**", "scripts/smoke_cost_ledger.py", "scripts/smoke_analysis_records.py"],
+      "paths": ["local_inspection_service/analytics/**", "scripts/smoke_cost_ledger.py", "scripts/smoke_analysis_records.py", "scripts/smoke_analysis_projections.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
@@ -62,7 +62,7 @@
     },
     {
       "name": "PostgreSQL and migrations",
-      "paths": ["local_inspection_service/storage/**", "local_inspection_service/runtime/connections.py", "local_inspection_service/analytics/analysis_repository.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
+      "paths": ["local_inspection_service/storage/**", "local_inspection_service/runtime/connections.py", "local_inspection_service/analytics/analysis_repository.py", "local_inspection_service/analytics/analysis_publication.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
       "required_docs": ["docs/production-runbook.md", "docs/postgresql-runtime.md"]
     },
     {

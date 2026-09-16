@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_analysis_projections.py` exercises actual processing/scope/
+view/publication services with synthetic dependencies: manifest reuse, status
+normalization, stable item merging, scope precedence, normal/admin debug fields,
+list/detail limits, unavailable images, save-before-capture, persistence failure,
+capture failure without retry, owner preservation and concurrent item upserts.
+The real-server `smoke_data_analysis.py` additionally exercises nested cache scopes,
+exception restoration and concurrent asyncio ContextVar isolation through the
+migrated projection's explicit dependency port. No provider or device is contacted.
+
 `python scripts/smoke_analysis_records.py --postgres` covers normalization,
 legacy JSON shapes and atomic-file replacement, deterministic ordering, bounded
 records, owner guards, row upserts/deletes and concurrent independent PostgreSQL

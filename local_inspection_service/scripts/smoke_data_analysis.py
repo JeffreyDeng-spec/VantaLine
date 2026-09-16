@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import asyncio
+from dataclasses import replace
 import os
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -246,7 +249,45 @@ def main() -> None:
         raise AssertionError("owner delete response changed")
     assert_status(client_a.delete(f"/api/data-analysis/records/{record_a}"), 404, "repeated HTTP delete remains missing")
     assert_status(client_b.get(f"/api/data-analysis/records/{record_b}"), 200, "other owner record survives deletion")
+    analysis_cache_contract()
     print("data analysis smoke ok")
+
+
+def analysis_cache_contract() -> None:
+    """Exercise the actual runtime ContextVar and migrated projection dependency."""
+    before = server._read_path_cache.get()
+    try:
+        with server.read_path_cache_scope():
+            active = server._read_path_cache.get()
+            with server.read_path_cache_scope():
+                assert server._read_path_cache.get() is active
+            raise RuntimeError("synthetic cache scope failure")
+    except RuntimeError:
+        pass
+    assert server._read_path_cache.get() is before
+    reads = []
+    def manifest(path):
+        reads.append(server._read_path_cache.get()["request"])
+        return {"samples": []}
+    projection = server._analysis_processing
+    dependencies = replace(projection.dependencies, load_json=manifest)
+    async def request(name):
+        with server.read_path_cache_scope():
+            cache = server._read_path_cache.get()
+            cache["request"] = name
+            await asyncio.sleep(0)
+            state = {"datasets": [{"id": "dataset", "manifest_path": "synthetic-manifest.json"}]}
+            for _ in range(2):
+                projection.auto_optimize_dataset_processing_items_for_sample(state, {"sample_id": "sample"}, record_id="record", task_id="task")
+            assert cache["request"] == name
+            return cache
+    async def concurrent():
+        first, second = await asyncio.gather(request("alice"), request("bob"))
+        assert first is not second
+    with patch.object(projection, "dependencies", dependencies):
+        asyncio.run(concurrent())
+    assert sorted(reads) == ["alice", "bob"]
+    assert server._read_path_cache.get() is before
 
 
 if __name__ == "__main__":
