@@ -1,5 +1,9 @@
 # Configuration reference
 
+Record audit extraction adds no settings. Timestamp priority, integer truncation,
+nonzero fallback and file-time behavior are unchanged. Audit projection does not
+rewrite stored timestamps, owners or historical records.
+
 Shared record policy extraction introduces no configuration. `legacy_admin` and
 `system` retain their fixed owner meanings. The `legacy` alias applies to filtering;
 owner assignment continues to use its existing rules. Shared read access never

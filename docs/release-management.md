@@ -1,5 +1,9 @@
 # VantaLine release management
 
+The audit projection gate adds synthetic timestamp and file-fallback checks.
+Existing cost, analysis and application contracts remain required. This batch
+changes no release topology, database schema or runtime configuration.
+
 The shared-ownership extraction adds a pure policy gate while keeping full RBAC,
 analysis HTTP, model, PLC and frontend checks. It changes no deployment topology,
 migration, runtime configuration or persisted record representation.

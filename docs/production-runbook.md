@@ -1,5 +1,9 @@
 # Production runbook
 
+Audit projection extraction uses the ordinary whole-release restart and rollback.
+Check displayed creation/update times and ownership in analysis and cost views.
+Restoring the previous release requires no data or timestamp conversion.
+
 Shared ownership policy extraction uses the ordinary complete-release restart.
 Check owner/shared/admin record visibility. Roll back the entire prior release on
 regression; do not relabel records, rewrite owners or clean historical data.

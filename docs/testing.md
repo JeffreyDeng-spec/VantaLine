@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_record_audit.py` covers timestamp field priority, numeric
+coercion, zero/negative/invalid values, unchanged infinite-value exceptions,
+file errors, separate creation/update stat calls and shallow-copy behavior.
+Six original function bodies were compared before wiring. Cost, analysis HTTP
+and assembled application contracts exercise the existing consumers after wiring.
+
 `python scripts/smoke_record_ownership.py` checks legacy field precedence, blank
 owner fallback, shared users/wildcards versus malformed sharing values, read/write
 distinctions, administrator filters and isolated owner configurations. Migration
