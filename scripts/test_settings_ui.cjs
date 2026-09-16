@@ -56,7 +56,7 @@ let browser,page;
  fs.mkdirSync(output,{recursive:true});await page.screenshot({path:path.join(output,'desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'mobile.png'),fullPage:true});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile page overflows');
- await page.getByRole('tab',{name:'用量与成本',exact:true}).click();await page.getByText('未计价',{exact:true}).waitFor();
+ await page.getByRole('tab',{name:'用量与成本',exact:true}).click();await page.getByText('未计价',{exact:true}).first().waitFor();
  role='user';await page.reload();await page.getByRole('heading',{name:'个人与设备',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'添加 key',exact:true}).count(),0);
  assert.deepEqual(errors,[]);console.log('PASS settings dropdown/add/save/member/mobile; artifacts '+output);
 })().catch(async e=>{console.error(e);if(page)console.error(await page.locator("body").innerText());process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();vite.kill();});
