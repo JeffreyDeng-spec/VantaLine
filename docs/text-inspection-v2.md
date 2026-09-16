@@ -1,5 +1,14 @@
 # Text inspection v2
 
+Label call diagnostics are internal: the result page shows only a detection ID for
+support. `GET /api/label-inspection/runs/{id}/diagnostics` requires administrator role
+in addition to inspection permission and current-account ownership; it returns the
+preserved run snapshot, quality measurements and call evidence. Ordinary run responses
+omit model, prompt hash, layout and transformations, and reduce quality evidence to a
+presence marker. Capabilities expose only availability. To trace another account,
+authorized operators use the existing restricted runtime repository with owner and run
+ID; this change grants no cross-account API access.
+
 The original preparation/OCR APIs documented below remain for compatibility and
 historical readers. New primary label submissions use only the following A +
 Evolving module; those older pipelines are not part of its execution path.

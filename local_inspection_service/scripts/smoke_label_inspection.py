@@ -64,6 +64,7 @@ def main():
     root = Path(tempfile.mkdtemp(prefix="label-evolving-test-"))
     owner = ContextVar("owner", default="alice")
     connections = []
+    admin = ContextVar("admin", default=False)
 
     def raw():
         conn = psycopg.connect(dsn)
@@ -76,20 +77,28 @@ def main():
         if owner.get() == "denied":
             raise HTTPException(403, "没有权限")
 
+    def require_admin():
+        permission("inspection")
+        if not admin.get():
+            raise HTTPException(403, "Admin role required")
+
     app = FastAPI()
 
     @app.middleware("http")
     async def identity(request, call_next):
+        admin_token = admin.set(request.headers.get("x-test-admin") == "true")
         token = owner.set(request.headers.get("x-test-owner", "alice"))
         try:
             return await call_next(request)
         finally:
             owner.reset(token)
+            admin.reset(admin_token)
 
     ns = {
         "app": app,
         "DATA_DIR": root,
         "require_permission": permission,
+        "require_admin_role": require_admin,
         "_text_v2_owner": lambda: (owner.get(), "test"),
         "runtime_postgres_repository_or_none": raw,
         "clear_thread_runtime_repository_selection": lambda: None,
@@ -221,21 +230,37 @@ def main():
             process(repo, media, claimed, "test-only-placeholder", provider)
             final = check(client.get(PREFIX + "/runs/" + run["id"]))
             assert final["decision"] == "MATCH" and len(calls) == 2
-            assert final["quality"]["preflight"]["passed"]
-            assert final["quality"]["selected"]["passed"]
+            assert final["quality"] == {"checked": True}
+            assert (
+                not {"model", "prompt_hash", "layout", "transformations"} & final.keys()
+            )
+            check(client.get(PREFIX + "/runs/" + run["id"] + "/diagnostics"), 403)
+            check(
+                client.get(
+                    PREFIX + "/runs/" + run["id"] + "/diagnostics",
+                    headers={"x-test-owner": "anonymous"},
+                ),
+                401,
+            )
             diagnostics = check(
-                client.get(PREFIX + "/runs/" + run["id"] + "/diagnostics")
+                client.get(
+                    PREFIX + "/runs/" + run["id"] + "/diagnostics",
+                    headers={"x-test-admin": "true"},
+                )
             )
             assert (
                 len(diagnostics["calls"]) == 2
                 and "base64" not in json.dumps(diagnostics)
                 and "test-only-placeholder" not in json.dumps(diagnostics)
             )
+            assert diagnostics["quality"]["preflight"]["passed"]
+            assert diagnostics["quality"]["selected"]["passed"]
+            assert diagnostics["run"]["model"] == model.MODEL
             for suffix in ("", "/diagnostics"):
                 check(
                     client.get(
                         PREFIX + "/runs/" + run["id"] + suffix,
-                        headers={"x-test-owner": "bob"},
+                        headers={"x-test-owner": "bob", "x-test-admin": "true"},
                     ),
                     404,
                 )
@@ -252,7 +277,7 @@ def main():
             )
             # Quality rejection persists without paid calls; retry is a new linked attempt.
             blocked = check(submit("quality-rejected", 3, picture(7)))
-            assert blocked["quality"]["policy"]["version"] == "black-label-quality-v1"
+            assert blocked["quality"] == {"checked": True}
             claim = repo.claim()
             seen = []
             process(
@@ -269,7 +294,10 @@ def main():
                 check(submit("quality-rejected", 3, picture(7)))["id"] == blocked["id"]
             )
             diagnostic = check(
-                client.get(PREFIX + "/runs/" + blocked["id"] + "/diagnostics")
+                client.get(
+                    PREFIX + "/runs/" + blocked["id"] + "/diagnostics",
+                    headers={"x-test-admin": "true"},
+                )
             )
             assert (
                 diagnostic["calls"] == []

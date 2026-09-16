@@ -1,5 +1,11 @@
 # Testing
 
+Private label diagnostics acceptance: ordinary and unauthenticated direct requests must
+fail before evidence access; administrators retain only owner-scoped access. Verify full
+call/quality evidence is retained for internal reads while normal run, history and
+submission responses omit internal metadata. The browser fixture asserts no diagnostic
+control, raw JSON or diagnostic request, and a visible detection ID.
+
 **Status: Authoritative**
 
 ## A + Evolving label acceptance

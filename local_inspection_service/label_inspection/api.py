@@ -25,12 +25,22 @@ class Edit(BaseModel):
     value: str = Field(min_length=1, max_length=200)
 
 
-def public(value):
-    return {
+def public(value, *, diagnostic=False):
+    result = {
         k: v
         for k, v in value.items()
         if k not in {"owner_user_id", "idempotency_key", "parameters", "kind"}
     }
+    if not diagnostic and value.get("kind") == "run":
+        for key in ("model", "prompt_hash", "layout", "transformations"):
+            result.pop(key, None)
+        if result.get("error") and not result.get("error_code"):
+            result["error"] = (
+                "检测未完成，请稍后手动重新检测；如需协助，请提供检测编号。"
+            )
+        if result.get("quality"):
+            result["quality"] = {"checked": True}
+    return result
 
 
 def image(media, owner, data):
@@ -218,9 +228,6 @@ def register(ns):
         context()
         return {
             "enabled": model.settings()["enabled"],
-            "model": model.MODEL,
-            "concurrency": 2,
-            "prompt_hash": model.PROMPT_HASH,
         }
 
     @app.get(PREFIX + "/tasks")
@@ -537,17 +544,19 @@ def register(ns):
 
     @app.get(PREFIX + "/runs/{identity}/diagnostics")
     def diagnostics(identity: str):
+        ns["require_admin_role"]()
         owner, repo, _ = context()
 
         def work():
             run = require(repo, owner, identity, "run")
             return {
+                "run": public(run, diagnostic=True),
                 "quality": run.get("quality"),
                 "calls": [
                     public(c)
                     for c in repo.list(owner, "call", run["task_id"])
                     if c["run_id"] == identity
-                ]
+                ],
             }
 
         return call(work)

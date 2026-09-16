@@ -71,7 +71,7 @@ type Run = {
   scope?: string;
   error?: string;
   error_code?: string;
-  quality?: { policy?: { version: string; config_hash: string } };
+  quality?: { checked: boolean };
   legacy_record_id?: string;
   result?: { decision: string; similarity: number; issues: Issue[] };
 };
@@ -377,25 +377,6 @@ function Camera({
         ) : null}
       </div>
     </div>
-  );
-}
-function Diagnostics({ id }: { id: string }) {
-  const [open, setOpen] = useState(false);
-  const data = useQuery({
-    queryKey: ["label-diagnostics", id],
-    queryFn: () => apiClient.get(`${API}/runs/${id}/diagnostics`),
-    enabled: open,
-    retry: false,
-  });
-  return (
-    <details onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>质量与调用诊断（默认折叠）</summary>
-      {open ? (
-        <pre>
-          {data.isError ? "诊断读取失败" : JSON.stringify(data.data, null, 2)}
-        </pre>
-      ) : null}
-    </details>
   );
 }
 function LegacyResult({
@@ -1562,9 +1543,7 @@ export function LabelWorkspace() {
                           </>
                         ) : null}
                         {!run.quality && !["queued", "running"].includes(run.status) ? <p className="li-quality-history">当时未执行质量筛选</p> : null}
-                        {!run.legacy_record_id ? (
-                          <Diagnostics id={run.id} />
-                        ) : null}
+                        <p className="li-record-id">检测编号：{run.id}</p>
                       </section>
                     ) : runId ? (
                       <p role="alert">当前任务内不存在该检测记录。</p>
