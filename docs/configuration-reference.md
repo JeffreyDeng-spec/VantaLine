@@ -1,5 +1,11 @@
 # Configuration reference
 
+Authentication HTTP extraction changes no routes, response schemas, throttle
+parameters or cookie attributes. Each application composition owns its limiter;
+settings remain resolved at use time. Bootstrap/login only set a cookie after
+persistence succeeds, and logout only clears it after the existing delete/save
+path succeeds. Internal flow return values are not serialized to the client.
+
 Session settings remain resolved at use time: cookie name, TTL and persist interval
 keep their current values. Bootstrap environment reads remain dynamic. Extracted
 middleware preserves early-denial responses, CORS order, security/cache headers,

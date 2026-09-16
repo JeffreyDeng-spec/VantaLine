@@ -1700,70 +1700,25 @@ def output_path_visible_to_user(request_path: str, user: dict[str, Any]) -> bool
     return True
 
 
-_login_rate_limit_lock = threading.RLock()
-_login_failures: dict[str, list[float]] = {}
-_login_blocked_until: dict[str, float] = {}
+from .auth.login_limits import LoginLimitSettings, LoginRateLimiter, request_client_ip, login_rate_limit_keys
+_login_limiter = LoginRateLimiter(lambda: LoginLimitSettings(
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS, LOGIN_RATE_LIMIT_LOCKOUT_SECONDS,
+))
+_login_rate_limit_lock = _login_limiter.lock
+_login_failures = _login_limiter.failures
+_login_blocked_until = _login_limiter.blocked_until
 
 
-def request_client_ip(request: Request) -> str:
-    forwarded = str(request.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip()
-    if forwarded:
-        return forwarded
-    return str((request.client.host if request.client else "") or "unknown")
+prune_login_rate_limit_state = _login_limiter.prune_login_rate_limit_state
 
 
-def login_rate_limit_keys(request: Request, username: str) -> list[str]:
-    normalized_username = str(username or "").strip().casefold() or "<empty>"
-    return [f"user:{normalized_username}", f"ip:{request_client_ip(request)}"]
+enforce_login_rate_limit = _login_limiter.enforce_login_rate_limit
 
 
-def prune_login_rate_limit_state(now: float) -> None:
-    window_start = now - LOGIN_RATE_LIMIT_WINDOW_SECONDS
-    for key, attempts in list(_login_failures.items()):
-        kept = [stamp for stamp in attempts if stamp >= window_start]
-        if kept:
-            _login_failures[key] = kept
-        else:
-            _login_failures.pop(key, None)
-    for key, blocked_until in list(_login_blocked_until.items()):
-        if blocked_until <= now:
-            _login_blocked_until.pop(key, None)
+record_failed_login_attempt = _login_limiter.record_failed_login_attempt
 
 
-def enforce_login_rate_limit(request: Request, username: str) -> None:
-    now = time.time()
-    with _login_rate_limit_lock:
-        prune_login_rate_limit_state(now)
-        retry_after = 0
-        for key in login_rate_limit_keys(request, username):
-            blocked_until = float(_login_blocked_until.get(key) or 0.0)
-            if blocked_until > now:
-                retry_after = max(retry_after, int(math.ceil(blocked_until - now)))
-        if retry_after > 0:
-            raise HTTPException(
-                status_code=429,
-                detail="Too many login attempts. Please try again later.",
-                headers={"Retry-After": str(retry_after)},
-            )
-
-
-def record_failed_login_attempt(request: Request, username: str) -> None:
-    now = time.time()
-    with _login_rate_limit_lock:
-        prune_login_rate_limit_state(now)
-        for key in login_rate_limit_keys(request, username):
-            attempts = _login_failures.setdefault(key, [])
-            attempts.append(now)
-            attempts[:] = [stamp for stamp in attempts if stamp >= now - LOGIN_RATE_LIMIT_WINDOW_SECONDS]
-            if len(attempts) >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
-                _login_blocked_until[key] = max(float(_login_blocked_until.get(key) or 0.0), now + LOGIN_RATE_LIMIT_LOCKOUT_SECONDS)
-
-
-def clear_failed_login_attempts(request: Request, username: str) -> None:
-    with _login_rate_limit_lock:
-        for key in login_rate_limit_keys(request, username):
-            _login_failures.pop(key, None)
-            _login_blocked_until.pop(key, None)
+clear_failed_login_attempts = _login_limiter.clear_failed_login_attempts
 
 
 def require_docs_admin(request: Request) -> dict[str, Any]:
@@ -25663,114 +25618,27 @@ def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = N
     }
 
 
-@app.get("/api/auth/status")
-def auth_status(request: Request) -> dict[str, Any]:
-    user, store, _ = authenticate_request(request)
-    setup_required = not users_exist(store)
-    if not user:
-        return {
-            "authenticated": False,
-            "setup_required": setup_required,
-            "user": None,
-            "features": {},
-            "default_user_permissions": [],
-            "legacy_owner_id": "",
-        }
-    return {
-        "authenticated": True,
-        "setup_required": setup_required,
-        "user": user,
-        "features": FEATURE_PERMISSIONS,
-        "default_user_permissions": DEFAULT_USER_PERMISSIONS,
-        "legacy_owner_id": LEGACY_OWNER_ID,
-    }
+from .auth.users import UserService
+from .auth.flows import AuthFlows
+from .auth.api import register_auth_api, register_user_api
 
-
-@app.post("/api/auth/bootstrap")
-def auth_bootstrap(request: Request, response: Response, payload: AuthBootstrapRequest) -> dict[str, Any]:
-    store = load_auth_store()
-    if users_exist(store):
-        raise HTTPException(status_code=409, detail="First admin already exists")
-    user = create_auth_user(
-        store,
-        username=payload.username,
-        password=payload.password,
-        display_name=payload.display_name,
-        role="admin",
-        permissions=sorted(FEATURE_PERMISSIONS),
-    )
-    session_id, _ = create_login_session(store, user)
-    save_auth_store(store)
-    set_session_cookie(response, request, session_id)
-    return {"status": "created", "user": public_user(user), "features": FEATURE_PERMISSIONS}
-
-
-@app.post("/api/auth/login")
-def auth_login(request: Request, response: Response, payload: AuthLoginRequest) -> dict[str, Any]:
-    store = load_auth_store()
-    if bootstrap_admin_from_env(store):
-        store = load_auth_store()
-    if not users_exist(store):
-        raise HTTPException(status_code=409, detail="First admin setup required")
-    enforce_login_rate_limit(request, payload.username)
-    user = find_user_by_username(store, payload.username)
-    if not user or not bool(user.get("active", True)) or not verify_password(payload.password, str(user.get("password_hash") or "")):
-        record_failed_login_attempt(request, payload.username)
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    clear_failed_login_attempts(request, payload.username)
-    session_id, revoked_sessions = create_login_session(store, user)
-    revoked_sessions = save_login_session(store, session_id, user, revoked_sessions)
-    set_session_cookie(response, request, session_id)
-    return {
-        "status": "authenticated",
-        "user": public_user(user),
-        "features": FEATURE_PERMISSIONS,
-        "revoked_sessions": revoked_sessions,
-    }
-
-
-@app.post("/api/auth/logout")
-def auth_logout(request: Request, response: Response) -> dict[str, Any]:
-    store = load_auth_store()
-    session_id = request.cookies.get(AUTH_SESSION_COOKIE, "")
-    if session_id and isinstance(store.get("sessions"), dict):
-        if runtime_postgres_repository_or_none() is not None:
-            delete_auth_session(session_id)
-        else:
-            for candidate in auth_session_key_candidates(session_id):
-                store["sessions"].pop(candidate, None)
-            save_auth_store(store)
-    clear_session_cookie(response, request)
-    return {"status": "logged_out"}
-
-
-@app.get("/api/user/preferences/tasks")
-def get_task_navigation_preferences() -> dict[str, Any]:
-    current_user = current_auth_user()
-    store = load_auth_store()
-    user = find_user(store, str(current_user.get("id") or ""))
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return task_navigation_preferences_payload(user)
-
-
-@app.post("/api/user/preferences/tasks")
-def update_task_navigation_preferences(payload: TaskNavigationPreferencesRequest) -> dict[str, Any]:
-    current_user = current_auth_user()
-    store = load_auth_store()
-    user = find_user(store, str(current_user.get("id") or ""))
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    now = int(time.time())
-    user[TASK_NAVIGATION_PREFERENCES_KEY] = {
-        "pinned_task_ids": normalize_task_navigation_ids(payload.pinned_task_ids),
-        "archived_task_ids": normalize_task_navigation_ids(payload.archived_task_ids),
-        "updated_at": now,
-    }
-    user["updated_at"] = now
-    if not save_auth_user(user):
-        save_auth_store(store)
-    return task_navigation_preferences_payload(user)
+_user_service = UserService(
+    _auth_repository, _account_service, _access_control,
+    postgres=lambda: runtime_postgres_repository_or_none() is not None,
+    write_lock=lambda: _auth_store_write_lock,
+)
+_auth_flows = AuthFlows(
+    _auth_repository, _account_service, _session_service, _login_limiter,
+    postgres=lambda: runtime_postgres_repository_or_none() is not None,
+    legacy_owner=lambda: LEGACY_OWNER_ID,
+)
+_auth_routes = register_auth_api(app, _auth_flows, _session_service, _user_service)
+auth_status = _auth_routes.auth_status
+auth_bootstrap = _auth_routes.auth_bootstrap
+auth_login = _auth_routes.auth_login
+auth_logout = _auth_routes.auth_logout
+get_task_navigation_preferences = _auth_routes.get_task_navigation_preferences
+update_task_navigation_preferences = _auth_routes.update_task_navigation_preferences
 
 
 @app.get("/openapi.json", include_in_schema=False)
@@ -25799,132 +25667,12 @@ def redoc_ui(request: Request) -> Response:
     return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} ReDoc")
 
 
-@app.get("/api/auth/users")
-def list_users() -> dict[str, Any]:
-    require_admin_role()
-    store = load_auth_store()
-    return {
-        "users": [public_user(user) for user in store.get("users", []) if isinstance(user, dict)],
-        "features": FEATURE_PERMISSIONS,
-        "default_user_permissions": DEFAULT_USER_PERMISSIONS,
-    }
-
-
-@app.post("/api/auth/users")
-def create_user(payload: UserCreateRequest) -> dict[str, Any]:
-    require_admin_role()
-    store = load_auth_store()
-    user = create_auth_user(
-        store,
-        username=payload.username,
-        password=payload.password,
-        display_name=payload.display_name,
-        role=payload.role,
-        permissions=payload.permissions,
-        active=payload.active,
-    )
-    if not save_auth_user(user):
-        save_auth_store(store)
-    return {"status": "created", "user": public_user(user), "users": [public_user(item) for item in store.get("users", [])]}
-
-
-@app.patch("/api/auth/users/{user_id}")
-def update_user(user_id: str, payload: UserUpdateRequest, request: Request) -> dict[str, Any]:
-    actor = require_admin_role()
-    store = load_auth_store()
-    user = find_user(store, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user["id"] == actor["id"] and payload.active is False:
-        raise HTTPException(status_code=400, detail="Cannot deactivate the current session user")
-    if payload.display_name is not None:
-        user["display_name"] = clean_display_name(payload.display_name, str(user.get("username") or "user"))
-    if payload.password is not None and payload.password.strip():
-        set_user_password(user, payload.password)
-        keep_session_id = request.cookies.get(AUTH_SESSION_COOKIE, "") if user["id"] == actor["id"] else ""
-        if runtime_postgres_repository_or_none() is not None:
-            delete_auth_sessions_for_user(user["id"], keep_session_id=keep_session_id)
-        else:
-            revoke_user_sessions(store, user["id"], keep_session_id=keep_session_id)
-    if payload.role is not None:
-        user["role"] = normalize_role(payload.role)
-    if payload.permissions is not None:
-        user["permissions"] = sorted(FEATURE_PERMISSIONS) if normalize_role(user.get("role")) == "admin" else normalize_permissions(payload.permissions)
-    if payload.active is not None:
-        user["active"] = bool(payload.active)
-    user["updated_at"] = int(time.time())
-    if not any(normalize_role(item.get("role")) == "admin" and bool(item.get("active", True)) for item in store.get("users", []) if isinstance(item, dict)):
-        raise HTTPException(status_code=400, detail="At least one active admin is required")
-    if not save_auth_user(user):
-        save_auth_store(store)
-    return {"status": "updated", "user": public_user(user), "users": [public_user(item) for item in store.get("users", [])]}
-
-
-@app.post("/api/auth/users/{user_id}/password")
-def reset_user_password(user_id: str, payload: UserPasswordResetRequest, request: Request) -> dict[str, Any]:
-    actor = require_admin_role()
-    store = load_auth_store()
-    user = find_user(store, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if payload.generate and user["id"] == actor["id"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot generate a temporary password for the current signed-in user. Enter a new password explicitly instead.",
-        )
-    generated_password = generate_temporary_password() if payload.generate else ""
-    new_password = generated_password or str(payload.password or "")
-    if not new_password:
-        raise HTTPException(status_code=400, detail="Password is required unless generate is true")
-    set_user_password(user, new_password)
-    revoked_sessions = 0
-    if payload.revoke_sessions:
-        keep_session_id = request.cookies.get(AUTH_SESSION_COOKIE, "") if user["id"] == actor["id"] else ""
-        if runtime_postgres_repository_or_none() is not None:
-            revoked_sessions = delete_auth_sessions_for_user(user["id"], keep_session_id=keep_session_id)
-        else:
-            revoked_sessions = revoke_user_sessions(store, user["id"], keep_session_id=keep_session_id)
-    if not save_auth_user(user):
-        save_auth_store(store)
-    response = {
-        "status": "password_reset",
-        "user": public_user(user),
-        "users": [public_user(item) for item in store.get("users", []) if isinstance(item, dict)],
-        "revoked_sessions": revoked_sessions,
-    }
-    if generated_password:
-        response["temporary_password"] = generated_password
-    return response
-
-
-@app.delete("/api/auth/users/{user_id}")
-def delete_user(user_id: str) -> dict[str, Any]:
-    actor = require_admin_role()
-    if user_id == actor["id"]:
-        raise HTTPException(status_code=400, detail="Cannot delete the current session user")
-    store = load_auth_store()
-    users = [user for user in store.get("users", []) if isinstance(user, dict)]
-    target = next((user for user in users if user.get("id") == user_id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found")
-    remaining = [user for user in users if user.get("id") != user_id]
-    if not any(normalize_role(user.get("role")) == "admin" and bool(user.get("active", True)) for user in remaining):
-        raise HTTPException(status_code=400, detail="At least one active admin is required")
-    store["users"] = remaining
-    if runtime_postgres_repository_or_none() is not None:
-        with _auth_store_write_lock:
-            delete_auth_sessions_for_user(user_id)
-            delete_auth_user(user_id)
-    elif isinstance(store.get("sessions"), dict):
-        store["sessions"] = {
-            session_id: session
-            for session_id, session in store["sessions"].items()
-            if not isinstance(session, dict) or session.get("user_id") != user_id
-        }
-        save_auth_store(store)
-    else:
-        save_auth_store(store)
-    return {"status": "deleted", "deleted_user_id": user_id, "users": [public_user(item) for item in remaining]}
+_user_routes = register_user_api(app, _session_service, _user_service)
+list_users = _user_routes.list_users
+create_user = _user_routes.create_user
+update_user = _user_routes.update_user
+reset_user_password = _user_routes.reset_user_password
+delete_user = _user_routes.delete_user
 
 
 @app.get("/")

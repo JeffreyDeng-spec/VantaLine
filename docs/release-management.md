@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Authentication HTTP extraction adds service/transport failure checks and restores
+the complete original auth/RBAC smoke as a CI gate, with explicit real-HTTP tests
+for label-local permissions. It does not add deployment flags or change topology.
+
 The request-authentication gate includes actual ASGI security/identity contracts
 and real PostgreSQL indexed authentication through the extracted service. Required
 HTTP snapshots remain unchanged; this adds no worker startup or deployment switch.

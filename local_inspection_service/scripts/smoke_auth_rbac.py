@@ -13,10 +13,33 @@ sys.path.insert(0, str(REPO_ROOT))
 ROOT = Path(tempfile.mkdtemp(prefix="vantaline_auth_smoke_"))
 (ROOT / "local_inspection_service" / "static").mkdir(parents=True, exist_ok=True)
 os.environ["LOCAL_INSPECTION_ROOT"] = str(ROOT)
+os.environ["VANTALINE_DATA_STORE"] = "json"
+os.environ["VANTALINE_LABEL_INSPECTION_ENABLED"] = "false"
+os.environ["LOCAL_INSPECTION_AUTO_RESUME_WORKER"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from local_inspection_service import server  # noqa: E402
+from local_inspection_service.scripts.model_profiles_fixture import install
+install(server)
+
+# These guards live inside the label endpoints. Every entry is exercised below
+# with real HTTP and a valid request shape, rather than silently exempted.
+LOCAL_LABEL_GUARDS = {
+    ("GET", "/api/label-inspection/capabilities"),
+    ("GET", "/api/label-inspection/tasks"),
+    ("POST", "/api/label-inspection/tasks"),
+    ("GET", "/api/label-inspection/tasks/{identity}"),
+    ("POST", "/api/label-inspection/tasks/{identity}/continue"),
+    ("PATCH", "/api/label-inspection/tasks/{identity}"),
+    ("POST", "/api/label-inspection/tasks/{identity}/assets"),
+    ("POST", "/api/label-inspection/tasks/{identity}/runs"),
+    ("GET", "/api/label-inspection/requests/{request_id}"),
+    ("GET", "/api/label-inspection/runs/{identity}"),
+    ("GET", "/api/label-inspection/runs/{identity}/diagnostics"),
+    ("GET", "/api/label-inspection/tasks/{identity}/history-media/{page_id}"),
+    ("GET", "/api/label-inspection/tasks/{identity}/media/{sha}"),
+}
 
 TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
@@ -57,7 +80,7 @@ def assert_api_route_permissions() -> None:
                 continue
             key = (method, path)
             permission = server.route_required_permission(path, method)
-            if key in public_routes or key in authenticated_allowlist:
+            if key in public_routes or key in authenticated_allowlist or key in LOCAL_LABEL_GUARDS:
                 continue
             if permission is None:
                 missing.append(f"{method} {path}")
@@ -89,6 +112,26 @@ def assert_no_password_secrets(payload, label: str, *, allow_temporary: bool = F
                 walk(child, f"{path}[{index}]")
 
     walk(payload, "")
+
+
+def assert_local_label_guards() -> None:
+    registered = {(method, route.path) for route in server.app.routes
+                  if str(getattr(route, "path", "")).startswith("/api/label-inspection/")
+                  for method in getattr(route, "methods", ()) if method not in {"HEAD", "OPTIONS"}}
+    assert registered == LOCAL_LABEL_GUARDS, "update explicit permission probes when label routes change"
+    with TestClient(server.app, base_url="https://testserver") as reader:
+        login(reader, "zero_user", "zero_user-password-1")
+        for method, template in sorted(LOCAL_LABEL_GUARDS):
+            path = template
+            for key in ("identity", "request_id", "page_id", "sha"):
+                path = path.replace("{" + key + "}", "synthetic-fixture")
+            kwargs = {}
+            if method == "PATCH":
+                kwargs["json"] = {"request_id": "synthetic-fixture", "revision": 1, "operation": "name", "value": "fixture"}
+            elif method == "POST" and not path.endswith("/continue"):
+                kwargs.update(files={"file": ("fixture.png", TINY_PNG, "image/png")},
+                              data={"request_id": "synthetic-fixture", "revision": "1", "asset_id": "fixture"})
+            assert_status(reader.request(method, path, **kwargs), 403, "endpoint-local label guard " + method + " " + path)
 
 
 def assert_timestamp_ui_hooks() -> None:
@@ -563,6 +606,7 @@ def main() -> None:
         if username == "manager" and "user_management" in created_users[username].get("permissions", []):
             raise AssertionError("user_management must not be grantable to normal users")
 
+    assert_local_label_guards()
     users_payload = client.get("/api/auth/users").json()
     assert_no_password_secrets(users_payload, "admin user list response")
 

@@ -10,15 +10,19 @@ success. This is a terminal-state correctness fix, not the label-worker split.
 owns cookies, sliding expiry and indexed/full-store authentication. Settings and
 repository ports resolve on each call. `auth.access` and `auth.middleware` share
 the same request identity instance; `auth.route_permissions` retains the exact
-central policy, including existing endpoint-local label guards. Account HTTP
-routes, login throttling and domain-specific resource guards remain at the root.
+central policy, including existing endpoint-local label guards. `auth.api` owns
+thin account/user/preference HTTP registrars around `auth.flows` and `auth.users`.
+`auth.login_limits` owns each composition's throttle state and reentrant lock.
+`auth.ports` declares the narrow persistence capabilities for these services.
+Domain-specific resource guards remain with their current business domains.
 
 Authentication foundations live in `auth.policy`, `auth.credentials`,
 `auth.preferences` and `auth.repository`. Pure permission/credential/preference
 rules do not depend on the application. Persistence receives lazy path, repository
 and reentrant-lock factories, retaining thread ownership and raw/hashed session
-compatibility. The root retains account HTTP routes for their next extraction;
-compatibility exports serve old callers.
+compatibility. The root assembles these services and retains compatibility
+exports for old callers. API documentation routes remain at their original
+position between preference and user-administration routes.
 
 Analysis records use `analytics.analysis_records` for normalization,
 `analysis_repository` for JSON/PostgreSQL persistence, `analysis_service` for

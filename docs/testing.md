@@ -7,6 +7,19 @@ deadline precedence. It verifies final metadata is persisted before completion a
 scratch files are cleaned. It launches no process, model or database. The original
 real PostgreSQL/CLI regression remains and includes allowlisted failure evidence.
 
+The PLC frontend source contract locates the actual `analyze_bgr` AST body for
+its no-dispatch assertion, rather than using an unrelated auth route as the end
+marker. Ordinary-image, video and zero-server-serial checks remain in place.
+
+`python scripts/smoke_auth_api.py` tests two independent HTTP compositions,
+private-token exclusion, cookie persistence ordering under injected failures,
+login-throttle key/threshold/window/expiry rules, revoked-session arguments and
+reentrant-lock release after deletion failure. The original `smoke_auth_rbac.py`
+now uses the existing synthetic model fixture and exercises all 13 label-local
+permission guards through valid real HTTP requests. Its original cross-owner,
+media, training, password and permission assertions are retained, and the full
+suite passed before and after the auth API extraction. CI runs both suites.
+
 `python scripts/smoke_auth_access.py` exercises actual account/session services and
 ASGI middleware: dynamic settings/bootstrap, JSON expiry persistence throttling,
 empty-store fallback versus indexed no-scan behavior, cookie attributes, parallel

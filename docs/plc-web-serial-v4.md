@@ -1,5 +1,9 @@
 # PLC Web Serial v4
 
+The frontend/source guard inspects the actual `analyze_bgr` function after auth
+route relocation. Its prohibition on PLC dispatch inside ordinary analysis or
+video frames is unchanged; no PLC runtime behavior changes in the auth extraction.
+
 Authentication route policy now lives in `auth.route_permissions`; its PLC
 administrator/runtime permission alternatives are unchanged. Middleware extraction
 does not change browser ownership, leases, dispatch ACK rules or physical I/O.

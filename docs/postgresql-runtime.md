@@ -1,5 +1,10 @@
 # PostgreSQL runtime operations
 
+`auth.users` uses narrow persistence ports and the original repository RLock for
+session-revocation/user-deletion ordering. Password revocation, last-admin checks
+and user saving retain their prior separate operations. This extraction does not
+make bootstrap or password changes a new atomic database transaction.
+
 Indexed request authentication now enters `auth.sessions.SessionService` and still
 uses `authenticate_session` on the thread-owned repository. An invalid cookie with
 existing users returns an authentication sentinel without full-table fallback;
