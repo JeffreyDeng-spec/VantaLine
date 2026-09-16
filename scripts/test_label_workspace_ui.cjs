@@ -32,8 +32,8 @@ let browser;
   if(p==='/api/label-inspection/capabilities')return reply({enabled:true});
   if(p.includes('/media/'))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#ddd"/><text x="40" y="100" font-size="32">MODEL: TEST</text></svg>'});
   if(p==='/api/label-inspection/tasks'){
-   if(req.method()==='POST'){docs++;if(holdImport)await new Promise(resolve=>{releaseImport=resolve;});return reply(task);}
-   return reply({items:docs?[{id:task.id,name:task.name,source:'word',standard_count:1,run_count:task.runs.length,updated_at:1,status:'ready',decision:'REVIEW_REQUIRED'}]:[],next_cursor:null});
+   if(req.method()==='POST'){docs++;if(req.postData().includes('filename="标准图片.png"')){task.assets=[{id:'a1',name:'标准 1',ordinal:1,enabled:true,media}];task.runs=[];task.source={type:'image'};}if(holdImport)await new Promise(resolve=>{releaseImport=resolve;});return reply(task);}
+   return reply({items:docs?[{id:task.id,name:task.name,source:task.source?.type||'word',standard_count:1,run_count:task.runs.length,updated_at:1,status:'ready',decision:'REVIEW_REQUIRED'}]:[],next_cursor:null});
   }
   if(p==='/api/label-inspection/tasks/test-task'){
    if(req.method()==='PATCH'){const b=req.postDataJSON();if(b.operation==='name')task.name=b.value;else{task.revision++;task.assets[0].enabled=b.operation==='restore';}}
@@ -49,7 +49,7 @@ let browser;
  await page.goto(base+'/workspace/label-inspection');await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();assert.equal(await page.locator('.sidebar').count(),0);
  await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();await page.waitForFunction(()=>document.fullscreenElement?.classList.contains('label-workspace'));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),1);
  // Emulate the native picker leaving fullscreen; file selection is still a user gesture.
- const pickerEvent=page.waitForEvent('filechooser');await page.getByLabel('导入 Word 创建任务').click();await pickerEvent;
+ const pickerEvent=page.waitForEvent('filechooser');await page.getByLabel('导入 Word 或标准图片创建任务').click();await pickerEvent;
  await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.fullscreenElement);
  await page.locator('input[type=file]').setInputFiles({name:'test.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('fixture')});
  await page.getByRole('button',{name:/测试订单.*标准版本/}).waitFor();assert.ok(await page.evaluate(()=>document.fullscreenElement?.classList.contains('label-workspace')));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),2);await page.getByText('图片内容无法解码',{exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'选择标准 2',exact:true}).isDisabled());
@@ -140,8 +140,35 @@ let browser;
  assert.equal(submits,1);
  holdImport=true;await page.getByRole('button',{name:'更多操作',exact:true}).click();await page.getByRole('link',{name:'新建任务',exact:true}).click();
  await page.locator('input[type=file]').setInputFiles({name:'delayed.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('fixture')});
- await page.getByText('正在提取图片…',{exact:true}).waitFor();await page.getByRole('link',{name:'← 返回任务列表',exact:true}).click();await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();
+ await page.getByText('正在创建任务…',{exact:true}).waitFor();await page.getByRole('link',{name:'← 返回任务列表',exact:true}).click();await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();
  assert.ok(releaseImport);releaseImport();await page.waitForTimeout(600);assert.equal(new URL(page.url()).search,'');assert.equal(await page.getByRole('heading',{name:'检测任务',exact:true}).count(),1);
+ // Direct image chooser/drop shares the single-file import surface and fullscreen shell.
+ holdImport=false;
+ await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();
+ const importer=page.getByLabel('导入 Word 或标准图片创建任务');
+ assert.equal(await importer.locator('input').getAttribute('accept'),'.doc,.docx,.jpg,.jpeg,.png,.webp,.bmp');
+ assert.equal(await importer.locator('input').getAttribute('multiple'),null);
+ assert.equal(await importer.locator('strong').evaluate(e=>getComputedStyle(e).color),'rgb(231, 238, 249)');
+ await page.screenshot({path:path.join(output,'image-import.png'),fullPage:true});
+ await importer.locator('input').setInputFiles({name:'标准图片.png',mimeType:'image/png',buffer:png});
+ await page.getByRole('button',{name:'选择标准 1',exact:true}).waitFor();
+ await page.waitForFunction(()=>document.querySelectorAll('.li-gallery button[aria-label^="选择标准"]').length===1);
+ assert.equal(await page.locator('.li-gallery button[aria-label^="选择标准"]').count(),1);
+ assert.equal(submits,1);
+ await page.reload();await page.getByRole('button',{name:'选择标准 1',exact:true}).click();
+ await page.getByRole('button',{name:'放大标准图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'返回任务列表',exact:true}).click();
+ await page.getByRole('combobox').first().selectOption('image');
+ await page.getByText('图片上传',{exact:true}).last().waitFor();
+ await page.getByRole('link',{name:'＋ 新建任务',exact:true}).click();
+ await page.getByLabel('导入 Word 或标准图片创建任务').evaluate((element,bytes)=>{
+  const transfer=new DataTransfer();transfer.items.add(new File([new Uint8Array(bytes)],'标准图片.png',{type:'image/png'}));
+  element.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}));
+ },Array.from(png));
+ await page.getByRole('button',{name:'选择标准 1',exact:true}).waitFor();
+ await page.waitForFunction(()=>document.querySelectorAll('.li-gallery button[aria-label^="选择标准"]').length===1);
+ assert.equal(await page.locator('.li-gallery button[aria-label^="选择标准"]').count(),1);
+ await page.screenshot({path:path.join(output,'image-single-grid.png'),fullPage:true});
  assert.deepEqual(errors,[]);console.log('label workspace UI PASS; screenshots: '+output);
  await require('./test_label_image_reuse.cjs')();
 })().catch(async e=>{console.error(e);if(browser){const p=browser.contexts()[0]?.pages()[0];if(p){console.error(await p.locator('body').innerText());await p.screenshot({path:path.join(output,'failure.png'),fullPage:true});}}process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();vite.kill();});

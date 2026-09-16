@@ -408,3 +408,5 @@ New submissions freeze the quality policy version/hash. Old queued submissions
 without that policy, or incompatible policies, stop without external I/O and
 require a new linked run. Terminal history is never re-evaluated. A quality failure
 uses failed/REVIEW_REQUIRED with a QUALITY_* code, no result or model score.
+
+Label task creation accepts either Word or one static JPG/JPEG, PNG, WebP or BMP. Direct images are strictly validated before persistence and become one complete version-1 standard; they do not enter the actual-photo quality gate or any model call. Source `image` uses existing task JSON and private media fields; no schema migration or new endpoint is required.

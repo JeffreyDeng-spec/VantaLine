@@ -4,6 +4,7 @@ import asyncio
 import io
 import time
 from pathlib import Path
+from PIL import Image
 from fastapi import File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -15,6 +16,13 @@ from ..codex_compare.contracts import digest
 from ..comparison_history import project, state
 
 PREFIX = "/api/label-inspection"
+IMAGE_FORMATS = {
+    ".jpg": "JPEG",
+    ".jpeg": "JPEG",
+    ".png": "PNG",
+    ".webp": "WEBP",
+    ".bmp": "BMP",
+}
 REQUEST = r"^[A-Za-z0-9_.-]{8,128}$"
 
 
@@ -233,7 +241,7 @@ def register(ns):
     @app.get(PREFIX + "/tasks")
     def tasks(
         q: str = Query("", max_length=200),
-        source: str = Query("all", pattern="^(all|word|legacy|beta)$"),
+        source: str = Query("all", pattern="^(all|word|image|legacy|beta)$"),
         result: str = Query("all", pattern="^(all|MATCH|DIFFERENCES|REVIEW_REQUIRED)$"),
         cursor: str = Query("", max_length=512),
         limit: int = Query(20, ge=1, le=100),
@@ -261,7 +269,11 @@ def register(ns):
                     {
                         "id": task["id"],
                         "name": task["name"],
-                        "source": "legacy" if task.get("legacy_id") else "word",
+                        "source": (
+                            "legacy"
+                            if task.get("legacy_id")
+                            else (task.get("source") or {}).get("type", "word")
+                        ),
                         "updated_at": max(
                             task.get("updated_at", 0), latest.get("created_at", 0)
                         ),
@@ -312,15 +324,54 @@ def register(ns):
     ):
         context()
         filename = Path(file.filename or "").name
+        extension = Path(filename).suffix.lower()
+        if extension not in {*IMAGE_FORMATS, ".doc", ".docx"}:
+            raise HTTPException(422, "仅支持 DOC、DOCX、JPG/JPEG、PNG、WebP、BMP")
         maximum = (
-            30 * 1024 * 1024 if filename.lower().endswith(".doc") else 100 * 1024 * 1024
+            model.MAX_BYTES
+            if extension in IMAGE_FORMATS
+            else (30 if extension == ".doc" else 100) * 1024 * 1024
         )
         data = await file.read(maximum + 1)
 
         def work():
             owner, repo, media = context()
             if not data or len(data) > maximum:
-                raise ValueError("文档超出上传限制")
+                raise ValueError(
+                    "图片不能为空或超过 10 MiB"
+                    if extension in IMAGE_FORMATS
+                    else "文档超出上传限制"
+                )
+            if extension in IMAGE_FORMATS:
+                try:
+                    with Image.open(io.BytesIO(data)) as source:
+                        if source.format != IMAGE_FORMATS[extension]:
+                            raise ValueError("图片实际格式与文件扩展名不一致")
+                        if getattr(source, "n_frames", 1) != 1:
+                            raise ValueError("不支持动画或多帧图片，请上传单张静态图片")
+                except Image.DecompressionBombError as exc:
+                    raise ValueError("图片超过 1600 万像素") from exc
+                # Strict decoding must finish before creating any task. Unlike Word
+                # extraction, a failed direct upload must not become an invalid asset.
+                standard = {
+                    "id": "a_" + digest({"request": request_id, "index": 0})[:24],
+                    "ordinal": 1,
+                    "enabled": True,
+                    "name": "标准 1",
+                    "media": image(media, owner, data),
+                }
+                task = repo.create(
+                    owner,
+                    request_id,
+                    Path(filename).stem[:200] or "新任务",
+                    [standard],
+                    {
+                        "type": "image",
+                        "filename": filename,
+                        "image_sha256": standard["media"]["original"],
+                    },
+                )
+                return detail(repo, owner, task)
             if filename.lower().endswith(".docx"):
                 entries, blobs = ns["extract_docx_candidates"](data, raw_only=True)
             elif filename.lower().endswith(".doc"):

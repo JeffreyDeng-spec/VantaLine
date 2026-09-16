@@ -476,3 +476,5 @@ scores, retry/camera access, historical unassessed message, full-screen navigati
 and existing viewport/scroll regression. Inspect its quality-rejected screenshot.
 Release acceptance also checks real clear/blurred photos, selected-label checks,
 private history readback, production version and server-side latency.
+
+The label PostgreSQL route smoke covers direct JPEG/PNG/WebP/BMP creation, Chinese filenames, original-byte preservation, EXIF orientation, transparent PNG, one-item grids/data, source filtering, idempotency, owner isolation and hide/restore revisions. Corrupt, mismatched, animated, unsupported and oversized images must return 422 without creating tasks. Workspace UI regression covers image selection/drop, image source filtering and the existing fullscreen, refresh, zoom and continuation flows. Live release acceptance imports one private standard image then checks actual-photo detection and persisted history.

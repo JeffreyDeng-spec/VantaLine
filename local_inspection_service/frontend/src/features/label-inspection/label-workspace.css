@@ -251,6 +251,12 @@
   align-items: center;
   text-align: center;
 }
+.label-workspace .li-import .dropzone strong {
+  color: #e7eef9;
+}
+.label-workspace .li-import .dropzone span {
+  color: #b6c6dc;
+}
 .li-camera video {
   width: 100%;
   max-height: 320px;
@@ -643,7 +649,13 @@
   flex-direction: column;
   min-height: 0;
 }
-.li-fixed .li-camera video {
+.li-fixed .label-workspace .li-import .dropzone strong {
+  color: #e7eef9;
+}
+.label-workspace .li-import .dropzone span {
+  color: #b6c6dc;
+}
+.li-camera video {
   width: 100%;
   height: 100%;
   max-height: none;
