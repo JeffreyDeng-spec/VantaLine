@@ -1,5 +1,11 @@
 # Architecture
 
+`accessories.gallery.AccessoryGallery` owns public detail projection, preview
+image writes and gallery assembly. Asset lookup, output storage and display
+capabilities are explicit and share the existing accessory projection. Detail
+retrieval still authorizes before invoking it. GET retains preview-file writes
+and asset callback mutations; this service is not a pure serializer.
+
 Accessory management has separate creation, confirmation and removal services.
 `management_api` preserves the original three creation/confirmation route positions
 and registers deletion separately after file routes. Confirmation retains the same
@@ -24,7 +30,7 @@ Accessory listing/detail routes now use `accessories.api` and `accessories.catal
 `policy` owns existing ID/material/profile-readiness rules; `projection` owns full
 and summary serialization; `repository` owns the existing row writes/JSON fallbacks.
 Each service receives only its required capabilities. Detail still calls the
-existing gallery renderer, which may write previews, only after authorization.
+gallery service, which may write previews, only after authorization.
 Candidate/image generation and the remaining write HTTP workflows stay in the root.
 Four constant aliases and fourteen compatibility helpers preserve existing callers.
 Prompt source manifest v2 includes `accessories/policy.py`; old task fingerprints

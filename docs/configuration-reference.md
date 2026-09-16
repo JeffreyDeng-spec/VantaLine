@@ -1,5 +1,10 @@
 # Configuration reference
 
+Gallery extraction adds no settings. Existing preview dimensions, alpha/gray
+conversion, source/pose/sprite ordering, duplicate suppression, reference selection,
+audit fields, metadata limits and per-request redaction are unchanged. Asset
+normalization and prompt-producing callbacks remain in their original locations.
+
 Management extraction changes no setting, form default or owner rule. Creation,
 preview and confirmation deliberately keep their different worker-start conditions.
 Confirmation retains its two profile-preparation calls and existing force flags.

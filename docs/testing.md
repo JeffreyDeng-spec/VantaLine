@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_accessory_gallery.py` covers real image pixels (transparent,
+partial-alpha, opaque and grayscale), preview sizing, unreadable input and the
+existing unchecked image-write return. Synthetic HTTP cases fix gallery order,
+deduplication, audit/asset metadata, explicit/default references, eighteen-sprite
+limit before duplicate suppression, per-account redaction and path normalization,
+shared-read authorization before preview writes and partial files on error.
+The same five groups passed against the original implementation. Existing file,
+management, model and complete-application contracts remain required.
+
 `python scripts/smoke_accessory_management.py` exercises ten original HTTP
 contract groups before and after management wiring: owner-scoped names, global
 class allocation, upload residues, preview persistence, lock scope, active/failed
