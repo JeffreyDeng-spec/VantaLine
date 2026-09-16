@@ -17774,54 +17774,27 @@ def create_accessory_candidate(
     return item
 
 
+from .accessories.candidate_repository import CandidateRepository, CandidateStoreDependencies
+_candidate_repository = CandidateRepository(CandidateStoreDependencies(
+    runtime_repository=lambda: runtime_postgres_repository_or_none(),
+    directory=lambda: ACCESSORY_CANDIDATES_DIR, lock=lambda: _candidate_store_lock,
+    ensure_task_ids=lambda candidate: ensure_candidate_image_job_task_ids(candidate),
+    safe_id=lambda value: safe_record_id(value),
+    created_at=lambda record, path: record_created_at(record, path),
+    updated_at=lambda record, path: record_updated_at(record, path),
+))
+
+
 def load_accessory_candidate(candidate_id: str) -> dict[str, Any]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_by_primary_key("accessory_candidates", {"id": candidate_id})
-        if row is None:
-            raise HTTPException(status_code=404, detail="Accessory candidate not found")
-        candidate = row_raw_json_list([row])[0]
-        if ensure_candidate_image_job_task_ids(candidate):
-            save_accessory_candidate(ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json", candidate)
-        return candidate
-    path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Accessory candidate not found")
-    with _candidate_store_lock:
-        candidate = json.loads(path.read_text(encoding="utf-8"))
-        if ensure_candidate_image_job_task_ids(candidate):
-            save_accessory_candidate(path, candidate)
-        return candidate
+    return _candidate_repository.load_accessory_candidate(candidate_id)
 
 
 def save_accessory_candidate(path: Path, candidate: dict[str, Any]) -> None:
-    with _candidate_store_lock:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            fallback_id = file_stem_identifier(path)
-            row = accessory_candidate_row(candidate, fallback_id=fallback_id)
-            if row:
-                repository.upsert_row("accessory_candidates", row)
-            return
-        write_accessory_candidate_file(path, candidate)
+    return _candidate_repository.save_accessory_candidate(path, candidate)
 
 
 def delete_accessory_candidate(candidate_id: str, path: Path | None = None) -> bool:
-    clean_id = str(candidate_id or "").strip()
-    if not clean_id:
-        return False
-    with _candidate_store_lock:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            if repository.fetch_by_primary_key("accessory_candidates", {"id": clean_id}) is None:
-                return False
-            repository.delete_by_primary_key("accessory_candidates", {"id": clean_id})
-            return True
-        candidate_path = path or ACCESSORY_CANDIDATES_DIR / f"{clean_id}.json"
-        if not candidate_path.exists():
-            return False
-        candidate_path.unlink()
-        return True
+    return _candidate_repository.delete_accessory_candidate(candidate_id, path)
 
 
 def cleanup_accessory_candidate_artifacts(candidate: dict[str, Any]) -> list[str]:
@@ -17930,48 +17903,15 @@ def cleanup_accessory_candidate_artifacts(candidate: dict[str, Any]) -> list[str
 
 
 def accessory_candidate_record_path(candidate: dict[str, Any], fallback_id: str = "candidate") -> Path:
-    candidate_id = safe_record_id(candidate.get("id") or candidate.get("candidate_id") or fallback_id or "candidate")
-    return ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
+    return _candidate_repository.accessory_candidate_record_path(candidate, fallback_id)
 
 
 def list_accessory_candidate_records(*, reverse: bool = True) -> list[tuple[Path, dict[str, Any]]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        records: list[tuple[Path, dict[str, Any]]] = []
-        for row in repository.fetch_all("accessory_candidates"):
-            raw_candidates = row_raw_json_list([row])
-            if not raw_candidates:
-                continue
-            candidate = raw_candidates[0]
-            candidate_id = str(candidate.get("id") or row.get("id") or "").strip()
-            if candidate_id and not candidate.get("id"):
-                candidate["id"] = candidate_id
-            records.append((accessory_candidate_record_path(candidate, candidate_id), candidate))
-        records.sort(
-            key=lambda item: (
-                record_updated_at(item[1], item[0]),
-                record_created_at(item[1], item[0]),
-                str(item[1].get("id") or ""),
-            ),
-            reverse=reverse,
-        )
-        return records
-    records = []
-    for path in sorted(ACCESSORY_CANDIDATES_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=reverse):
-        with _candidate_store_lock:
-            try:
-                candidate = json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                continue
-        records.append((path, candidate))
-    return records
+    return _candidate_repository.list_accessory_candidate_records(reverse=reverse)
 
 
 def write_accessory_candidate_file(path: Path, candidate: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(f".{path.name}.tmp")
-    temp_path.write_text(json.dumps(candidate, indent=2), encoding="utf-8")
-    os.replace(temp_path, path)
+    return _candidate_repository.write_accessory_candidate_file(path, candidate)
 
 
 def mutate_candidate_image_job(
@@ -26624,24 +26564,18 @@ get_accessories = _accessory_catalog_routes.get_accessories
 get_accessory_detail = _accessory_catalog_routes.get_accessory_detail
 
 
-@app.get("/api/accessories/candidates/{candidate_id}")
-def get_accessory_candidate(candidate_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
-    with _candidate_store_lock:
-        candidate = load_accessory_candidate(candidate_id)
-        candidate = enrich_record_audit_fields(candidate, path)
-        require_record_access(candidate, user)
-        changed = False
-        changed = ensure_candidate_image_job_task_ids(candidate) or changed
-        for job in candidate_image_jobs(candidate):
-            changed = ensure_image_job_task_id(candidate, job) or changed
-            refreshed = refresh_codex_image_job(job)
-            store_candidate_image_job(candidate, refreshed)
-            changed = True
-        if changed:
-            save_accessory_candidate(path, candidate)
-    return {"status": "candidate_ready", "candidate": candidate}
+from .accessories.candidate_queries import CandidateQueries, CandidateQueryDependencies
+from .accessories.candidate_api import register_candidate_api
+_candidate_queries = CandidateQueries(_candidate_repository, CandidateQueryDependencies(
+    current_user=lambda: current_auth_user(),
+    audit=lambda record, path: enrich_record_audit_fields(record, path),
+    require_access=lambda record, user=None, *, write=False: require_record_access(record, user, write=write),
+    image_jobs=lambda candidate: candidate_image_jobs(candidate),
+    ensure_image_task_id=lambda candidate, job: ensure_image_job_task_id(candidate, job),
+    refresh_image_job=lambda job: refresh_codex_image_job(job),
+    store_image_job=lambda candidate, job: store_candidate_image_job(candidate, job),
+))
+get_accessory_candidate = register_candidate_api(app, _candidate_queries)
 
 
 @app.get("/api/image-jobs")

@@ -1,5 +1,12 @@
 # Architecture
 
+`accessories.candidate_repository` owns candidate load/save/delete/list/path and
+atomic-file helpers; `candidate_queries` and `candidate_api` own retrieval.
+The root injects its existing candidate RLock and job callbacks. Retrieval retains
+load-time ID/provenance repair before authorization, then authorized job refresh and
+model-freezing storage within the same outer lock. It is not a pure read. Candidate
+creation, rendering and image execution remain in their existing implementation.
+
 Accessory listing/detail routes now use `accessories.api` and `accessories.catalog`.
 `policy` owns existing ID/material/profile-readiness rules; `projection` owns full
 and summary serialization; `repository` owns the existing row writes/JSON fallbacks.

@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Candidate CI adds isolated PostgreSQL and actual-root job callback regression.
+Read-time repair, prior snapshot references and runtime topology are unchanged;
+the ordinary immutable package includes the new candidate service files.
+
 Accessory catalog CI adds isolated PostgreSQL and synthetic HTTP/projection checks.
 The prompt source manifest advances to v2 for the moved policy file; the complete
 immutable package includes that source. Runtime topology and schema are unchanged.
