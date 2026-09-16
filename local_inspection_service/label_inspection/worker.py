@@ -5,18 +5,22 @@ import json
 import os
 import threading
 import time
-from . import model, quality
+from . import model, quality, manual
 from ..storage.label_inspection import LabelRepository
 from ..codex_compare.media import MediaStore
 
 
-def process(repo, media, run, key, invoke=model.invoke, resolved=None, record_call=None):
+def process(
+    repo, media, run, key, invoke=model.invoke, resolved=None, record_call=None
+):
     owner, identity = run["owner_user_id"], run["id"]
+    is_pdf = run.get("strategy") == manual.VERSION
+    engine = manual if is_pdf else model
     started = time.monotonic()
 
     def stage(name, images, cropped=False):
-        body = model.payload(name, images, cropped)
-        if resolved:
+        body = engine.payload(name, images, cropped)
+        if resolved and not is_pdf:
             body["model"] = resolved["model"]
         audit = copy.deepcopy(body)
         hashes = [media.put(owner, data) for data in images]
@@ -27,17 +31,35 @@ def process(repo, media, run, key, invoke=model.invoke, resolved=None, record_ca
         call = repo.begin_call(owner, identity, name, audit, hashes)
         start = time.monotonic()
         response = None
+
         def account(ok):
             if record_call and resolved:
                 try:
-                    record_call(resolved, round((time.monotonic()-start)*1000), ok, response.get("usage", {}) if isinstance(response,dict) else {})
+                    record_call(
+                        resolved,
+                        round((time.monotonic() - start) * 1000),
+                        ok,
+                        response.get("usage", {}) if isinstance(response, dict) else {},
+                    )
                 except Exception:
                     import logging
-                    logging.getLogger(__name__).warning("Model usage accounting unavailable")
+
+                    logging.getLogger(__name__).warning(
+                        "Model usage accounting unavailable"
+                    )
+
         try:
             if resolved:
                 from ..model_profiles.transport import invoke as profile_invoke
-                status, raw = profile_invoke(body, resolved)
+
+                status, raw = profile_invoke(
+                    body,
+                    (
+                        {**resolved, "timeout_seconds": 180, "model": model.MODEL}
+                        if is_pdf
+                        else resolved
+                    ),
+                )
             else:
                 status, raw = invoke(body, key)
             # Persist evidence before parsing; failures remain inspectable without replay.
@@ -83,80 +105,107 @@ def process(repo, media, run, key, invoke=model.invoke, resolved=None, record_ca
         repo.update_run(owner, identity, quality=quality_record)
 
     try:
-        if quality_record.get("policy") != quality.POLICY:
+        if quality_record.get("policy") != (
+            manual.POLICY if is_pdf else quality.POLICY
+        ):
             raise quality.Rejected("QUALITY_POLICY_CHANGED")
-        if (not resolved and run["model"] != model.MODEL) or run["prompt_hash"] != model.PROMPT_HASH:
+        if ((is_pdf or not resolved) and run["model"] != model.MODEL) or run[
+            "prompt_hash"
+        ] != engine.PROMPT_HASH:
             raise ValueError("提交后的模型或提示词版本发生变化，请手动重新检测")
-        reference, ref_transform = model.decode(
+        reference, ref_transform = (manual.decode_standard if is_pdf else model.decode)(
             media.read(owner, run["reference"]["media"]["original"])
         )
         actual, transform = model.decode(media.read(owner, run["actual"]["original"]))
-        reference_input, actual_input = model.jpeg(reference), model.jpeg(actual)
+        reference_input, actual_input = engine.jpeg(reference), engine.jpeg(actual)
         repo.update_run(
             owner,
             identity,
             transformations={"reference": ref_transform, "actual": transform},
         )
-        repo.update_run(owner, identity, phase="quality")
-        try:
-            quality_record["preflight"] = quality.inspect(actual_input, actual.size)
-        except Exception:
-            raise quality.Rejected("QUALITY_UNAVAILABLE") from None
-        quality_save()
-        if not quality_record["preflight"]["passed"]:
-            raise quality.Rejected(quality_record["preflight"]["code"])
-        repo.update_run(owner, identity, phase="layout")
-        layout = stage("layout", [actual_input])
-        crop = model.crop_rect(layout, actual.size)
-        if crop:
+        if is_pdf:
+            quality_record["preflight"] = {"passed": True, "method": "basic-decode"}
+            quality_save()
+            repo.update_run(owner, identity, phase="layout")
+            layout = stage("layout", [actual_input])
+            repo.update_run(owner, identity, layout=layout)
+            crop = manual.crop_rect(layout, actual.size)
             x, y, w, h = crop
-            actual_input = model.jpeg(actual.crop((x, y, x + w, y + h)))
-        repo.update_run(
-            owner,
-            identity,
-            phase="compare",
-            layout=layout,
-            crop=crop,
-            coordinate_space=model.COORDINATE_SPACE,
-            scope="仅检测选中标签" if crop else "检测实物图中的单张标签",
-        )
-        repo.update_run(owner, identity, phase="quality_selected")
-        selected_started = time.monotonic()
-        target = quality.selected(quality_record["preflight"], crop, actual.size)
-        quality_record["selected"] = {
-            "passed": bool(target and target["passed"]),
-            "code": (
-                None
-                if target and target["passed"]
-                else (
-                    "QUALITY_SELECTED_REJECTED"
-                    if target
-                    else "QUALITY_TARGET_UNCERTAIN"
-                )
-            ),
-            "candidate": target,
-            "crop": crop,
-        }
-        if target and target["passed"] and crop:
+            actual_input = manual.jpeg(actual.crop((x, y, x + w, y + h)))
+            quality_record["selected"] = {
+                "passed": True,
+                "method": "model-readability",
+                "crop": crop,
+            }
+            quality_save()
+            repo.update_run(
+                owner,
+                identity,
+                crop=crop,
+                coordinate_space=model.COORDINATE_SPACE,
+                scope="仅检测框选的单张页面",
+            )
+        else:
+            repo.update_run(owner, identity, phase="quality")
             try:
-                quality_record["selected"]["recheck"] = quality.recheck(
-                    actual_input, target, crop, actual.size
-                )
+                quality_record["preflight"] = quality.inspect(actual_input, actual.size)
             except Exception:
                 raise quality.Rejected("QUALITY_UNAVAILABLE") from None
-            if not quality_record["selected"]["recheck"]["passed"]:
-                quality_record["selected"].update(
-                    passed=False, code="QUALITY_SELECTED_REJECTED"
-                )
-        quality_record["selected"]["elapsed_ms"] = round(
-            (time.monotonic() - selected_started) * 1000, 2
-        )
-        quality_save()
-        if not quality_record["selected"]["passed"]:
-            raise quality.Rejected(quality_record["selected"]["code"])
+            quality_save()
+            if not quality_record["preflight"]["passed"]:
+                raise quality.Rejected(quality_record["preflight"]["code"])
+            repo.update_run(owner, identity, phase="layout")
+            layout = stage("layout", [actual_input])
+            crop = model.crop_rect(layout, actual.size)
+            if crop:
+                x, y, w, h = crop
+                actual_input = model.jpeg(actual.crop((x, y, x + w, y + h)))
+            repo.update_run(
+                owner,
+                identity,
+                phase="compare",
+                layout=layout,
+                crop=crop,
+                coordinate_space=model.COORDINATE_SPACE,
+                scope="仅检测选中标签" if crop else "检测实物图中的单张标签",
+            )
+            repo.update_run(owner, identity, phase="quality_selected")
+            selected_started = time.monotonic()
+            target = quality.selected(quality_record["preflight"], crop, actual.size)
+            quality_record["selected"] = {
+                "passed": bool(target and target["passed"]),
+                "code": (
+                    None
+                    if target and target["passed"]
+                    else (
+                        "QUALITY_SELECTED_REJECTED"
+                        if target
+                        else "QUALITY_TARGET_UNCERTAIN"
+                    )
+                ),
+                "candidate": target,
+                "crop": crop,
+            }
+            if target and target["passed"] and crop:
+                try:
+                    quality_record["selected"]["recheck"] = quality.recheck(
+                        actual_input, target, crop, actual.size
+                    )
+                except Exception:
+                    raise quality.Rejected("QUALITY_UNAVAILABLE") from None
+                if not quality_record["selected"]["recheck"]["passed"]:
+                    quality_record["selected"].update(
+                        passed=False, code="QUALITY_SELECTED_REJECTED"
+                    )
+            quality_record["selected"]["elapsed_ms"] = round(
+                (time.monotonic() - selected_started) * 1000, 2
+            )
+            quality_save()
+            if not quality_record["selected"]["passed"]:
+                raise quality.Rejected(quality_record["selected"]["code"])
         repo.update_run(owner, identity, phase="compare")
         value = stage("compare", [reference_input, actual_input], bool(crop))
-        result = model.result(value, crop, actual.size)
+        result = engine.result(value, crop, actual.size)
         repo.update_run(
             owner,
             identity,
@@ -184,7 +233,11 @@ def process(repo, media, run, key, invoke=model.invoke, resolved=None, record_ca
                 finished_at=time.time(),
                 elapsed=time.monotonic() - started,
                 error=error.replace(key, "[REDACTED]"),
-                error_code=exc.code if isinstance(exc, quality.Rejected) else None,
+                error_code=(
+                    exc.code
+                    if isinstance(exc, (quality.Rejected, manual.Rejected))
+                    else None
+                ),
                 quality=quality_record,
             )
         except Exception:
@@ -198,14 +251,23 @@ def register(ns):
         while not stop.is_set():
             run = None
             try:
-                if os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower() == "true":
+                if (
+                    os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower()
+                    == "true"
+                ):
                     raw_repo = ns["runtime_postgres_repository_or_none"]()
                     if raw_repo:
                         repo = LabelRepository(raw_repo)
                         run = repo.claim()
                         if run:
-                            reference = run.get("profile_snapshot") or ns["model_profile_service"].snapshot_for_record(run).get("label")
-                            resolved = ns["model_profile_service"].resolve("label", reference) if reference else None
+                            reference = run.get("profile_snapshot") or ns[
+                                "model_profile_service"
+                            ].snapshot_for_record(run).get("label")
+                            resolved = (
+                                ns["model_profile_service"].resolve("label", reference)
+                                if reference
+                                else None
+                            )
                             process(
                                 repo,
                                 MediaStore(

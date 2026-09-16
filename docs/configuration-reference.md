@@ -227,3 +227,8 @@ call/account feature gates remain authoritative and are not enabled by adding a 
 Dedicated OCR accepts only the pinned Qwen OCR model; document preparation keeps
 its existing Qwen-compatible requirement. Existing migrated bindings are retained.
 Connection tests use metadata endpoints; success does not certify model accuracy.
+
+
+## Unified PDF inspection
+
+PDF import accepts at most 200 MiB and 500 split entries. Configure the site multipart request body allowance above 200 MiB (installer uses 201m); other application file limits remain enforced. PDF comparison fixes Evolving/disabled thinking/0.1/180s, 3200 JPEG90 and 1024/8192 output limits. It resolves the existing label profile credentials but requires Doubao and freezes its profile revision. The former manual profile no longer starts new comparisons.

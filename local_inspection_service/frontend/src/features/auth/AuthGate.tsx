@@ -1,3 +1,4 @@
+import { LegacyManualRedirect } from "../label-inspection/LegacyManualRedirect";
 import { LabelWorkspace } from '../label-inspection/LabelWorkspace';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
@@ -115,7 +116,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
       }}
     >
       <AgentToolsProvider key={`agent:${identity}`} />
-      {location.pathname.replace(/\/$/, '') === '/workspace/label-inspection' ? <LabelWorkspace key={`label:${identity}`} /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-beta' && new URLSearchParams(location.search).get('mode') !== 'manual' ? <Navigate to='/workspace/label-inspection' replace /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-codex' ? <BatchWorkspace key={`batch:${identity}`} /> : <AppShell key={`workspace:${identity}`} />}
+      {location.pathname.replace(/\/$/, '') === '/workspace/label-inspection' ? <LabelWorkspace key={`label:${identity}`} /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-beta' ? <LegacyManualRedirect /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-codex' ? <BatchWorkspace key={`batch:${identity}`} /> : <AppShell key={`workspace:${identity}`} />}
     </AuthContext.Provider>
   );
 }

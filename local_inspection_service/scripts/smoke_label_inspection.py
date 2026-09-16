@@ -767,6 +767,29 @@ def main():
                 upload_image(name, payload, expected=422)
             assert len(LabelRepository(raw()).list("alice", "task")) == before
 
+            for conn in connections:
+                conn.close()
+            repo = LabelRepository(raw())
+            def close_pdf_connections():
+                for conn in connections:
+                    if conn is not repo.repository.connection:
+                        conn.close()
+            for kind, record in [
+                ("text_inspection_standards", {"id": "old-manual", "standard_type": "manual", "name": "旧说明书"}),
+                ("text_inspection_manual_sessions", {"id": "old-session", "standard_id": "old-manual", "status": "completed", "decision": "REVIEW_REQUIRED"}),
+                ("text_inspection_manual_pages", {"id": "old-page", "session_id": "old-session", "standard_asset_id": "missing-asset", "status": "completed", "decision": "DIFFERENCES", "capture_id": "capture-old"}),
+            ]:
+                seed(kind, {"owner_user_id": "alice", "created_at": 1, "updated_at": 1, **record})
+            manual_task = check(client.get(PREFIX + "/tasks/legacy-manual:old-session"))
+            assert manual_task["read_only"] and manual_task["manual_history"]["pages"][0]["decision"] == "DIFFERENCES"
+            assert not manual_task["manual_history"]["pages"][0]["has_photo"]
+            check(client.get(PREFIX + "/tasks/legacy-manual:old-page", headers={"x-test-owner": "bob"}), 404)
+            check(client.post(PREFIX + "/tasks/legacy-manual:old-manual/continue"), 422)
+            assert len(check(client.get(PREFIX + "/tasks?source=legacy_manual"))["items"]) == 1
+            close_pdf_connections()
+            from smoke_pdf_manual import check_all
+            check_all(client, check, repo, media, close_pdf_connections)
+
             print(
                 "PASS: PostgreSQL/routes/import/duplicates/versioning/idempotency/owner isolation/two calls/failures/restart/global concurrency/pagination"
             )

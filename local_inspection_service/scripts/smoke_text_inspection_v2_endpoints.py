@@ -411,8 +411,7 @@ def main() -> None:
         server._text_v2_save("sessions", session, insert_only=True)
         server._text_v2_save("pages", page, insert_only=True)
         completed = admin.post(f"/api/text-inspection/manual/sessions/{session['id']}/complete")
-        assert_status(completed, 200, "manual pass gate")
-        assert completed.json()["decision"] == "REVIEW_REQUIRED"
+        assert_status(completed, 410, "legacy manual is read-only")
 
     print(f"text inspection v2 endpoint smoke passed: {SMOKE_MODE}")
 

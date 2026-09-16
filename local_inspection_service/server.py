@@ -37763,6 +37763,8 @@ async def import_text_inspection_standard(
     if not contents or len(contents) > 100 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="标准文档不能为空且不能超过 100MB")
     filename = (file.filename or "").lower()
+    if filename.endswith(".pdf") or contents.startswith(b"%PDF-"):
+        raise HTTPException(410, "旧说明书流程已只读，请在文字检验新建任务中导入 PDF")
     digest = sha256_bytes(contents)
     duplicate = next((
         item for item in _text_v2_load("standards")
@@ -37867,6 +37869,8 @@ async def add_text_inspection_standard_asset(
     require_permission("inspection", detail="没有文字检验权限")
     owner_user_id, _ = _text_v2_owner()
     standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if standard and standard.get("standard_type") == "manual":
+        raise HTTPException(410, "旧说明书标准仅供查阅，请新建任务导入 PDF")
     if not standard:
         raise HTTPException(status_code=404, detail="标准不存在")
     if standard.get("standard_type") != "label":
@@ -37934,6 +37938,8 @@ async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: 
     require_permission("inspection", detail="没有文字检验权限")
     owner_user_id, _ = _text_v2_owner()
     standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if standard and standard.get("standard_type") == "manual":
+        raise HTTPException(410, "旧说明书标准仅供查阅，请新建任务导入 PDF")
     asset = _text_v2_owned("assets", asset_id, owner_user_id)
     if not standard or not asset or asset.get("standard_id") != standard_id:
         raise HTTPException(status_code=404, detail="标准资源不存在")
@@ -37996,6 +38002,8 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     require_permission("inspection", detail="没有文字检验权限")
     owner_user_id, _ = _text_v2_owner()
     standard = _text_v2_owned("standards", standard_id, owner_user_id)
+    if standard and standard.get("standard_type") == "manual":
+        raise HTTPException(410, "旧说明书标准仅供查阅，请新建任务导入 PDF")
     if not standard:
         raise HTTPException(status_code=404, detail="标准不存在")
     from local_inspection_service.standard_preparation_jobs import enabled as preparation_enabled
@@ -38485,17 +38493,7 @@ def get_text_inspection_v2_evidence(inspection_id: str, kind: str) -> Response:
 @app.post("/api/text-inspection/manual/sessions")
 async def create_text_manual_session(request: Request) -> dict[str, Any]:
     require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    body = await request.json()
-    standard_id = str(body.get("standard_id") or "") if isinstance(body, dict) else ""
-    standard = _text_v2_owned("standards", standard_id, owner_user_id)
-    if not standard or standard.get("standard_type") != "manual" or standard.get("status") != "confirmed":
-        raise HTTPException(status_code=404, detail="已确认说明书标准不存在")
-    now = int(time.time())
-    session = {"id": "man_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "standard_sha256": standard["source_sha256"], "status": "active", "created_at": now, "updated_at": now, "expected_page_count": standard.get("asset_count", 0)}
-    freeze_model_record(globals(), session)
-    _text_v2_save("sessions", session, insert_only=True)
-    return _text_v2_public(session)
+    raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
 
 
 def _text_v2_similarity(left: bytes, right: bytes) -> float:
@@ -38520,83 +38518,13 @@ async def inspect_text_manual_page(
     standard_asset_id: str = Form(""),
 ) -> dict[str, Any]:
     require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", capture_id):
-        raise HTTPException(status_code=400, detail="capture_id 格式错误")
-    session = _text_v2_owned("sessions", session_id, owner_user_id)
-    if not session or session.get("status") != "active":
-        raise HTTPException(status_code=404, detail="可用的说明书检验会话不存在")
-    contents = await captured_file.read()
-    contents, captured_mime, _, source_format = _text_v2_prepare_image(contents)
-    source_hash = sha256_bytes(contents)
-    existing = next((item for item in _text_v2_load("pages") if item.get("owner_user_id") == owner_user_id and item.get("session_id") == session_id and item.get("capture_id") == capture_id), None)
-    if existing:
-        if existing.get("source_sha256") != source_hash:
-            raise HTTPException(status_code=409, detail="capture_id 已用于其他页面照片")
-        return _text_v2_public(existing)
-    completed_ids = {str(item.get("standard_asset_id")) for item in _text_v2_load("pages") if item.get("session_id") == session_id and item.get("status") == "completed"}
-    candidates = [item for item in _text_v2_load("assets") if item.get("owner_user_id") == owner_user_id and item.get("standard_id") == session.get("standard_id") and item.get("id") not in completed_ids]
-    selected = next((item for item in candidates if item.get("id") == standard_asset_id), None)
-    recommendations: list[dict[str, Any]] = []
-    if selected is None:
-        for candidate in candidates[:24]:
-            score = _text_v2_similarity(_text_v2_asset_bytes(candidate, owner_user_id), contents)
-            recommendations.append({"asset_id": candidate["id"], "ordinal": candidate.get("ordinal"), "score": round(score, 4), "content_url": f"/api/text-inspection/assets/{candidate['id']}/content"})
-        recommendations.sort(key=lambda item: item["score"], reverse=True)
-        if recommendations and recommendations[0]["score"] >= 0.72:
-            selected = next(item for item in candidates if item["id"] == recommendations[0]["asset_id"])
-        else:
-            return {"capture_id": capture_id, "decision": "REVIEW_REQUIRED", "status": "page_selection_required", "message": "自动匹配置信度不足，请从缩略图确认标准页。", "recommendations": recommendations[:6]}
-    now = int(time.time())
-    page = {"id": "pg_" + uuid.uuid4().hex, "session_id": session_id, "owner_user_id": owner_user_id, "capture_id": capture_id, "standard_asset_id": selected["id"], "source_sha256": source_hash, "source_format": source_format, "captured_mime": captured_mime, "status": "attempting", "decision": "REVIEW_REQUIRED", "created_at": now, "updated_at": now, "recommendations": recommendations[:6]}
-    page["model_profiles"] = session.get("model_profiles") or model_profile_service.snapshot_for_record(session)
-    page["prompt_version"] = hashlib.sha256(strict_compare_prompt().encode()).hexdigest()
-    if not _text_v2_save("pages", page, insert_only=True):
-        raise HTTPException(status_code=409, detail="本页正在处理")
-    if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
-        page.update({"status": "review_required", "decision": "REVIEW_REQUIRED", "message": "外部说明书图片比对尚未完成客户授权和生产启用，请人工复核。", "external_media_sent": False, "external_media_send_status": "not_sent", "updated_at": int(time.time())})
-        _text_v2_save("pages", page)
-        return _text_v2_public(page)
-    reference = _text_v2_asset_bytes(selected, owner_user_id)
-    try:
-        page["external_media_send_status"] = "attempting"
-        page["external_media_sent"] = None
-        _text_v2_save("pages", page)
-        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": model_profile_service.resolve("manual", page["model_profiles"].get("manual")), "system_prompt": strict_compare_prompt(), "user_content": [{"type": "text", "text": "STANDARD_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(reference, "image/png"), "detail": "high"}}, {"type": "text", "text": "CAPTURED_MANUAL_PAGE"}, {"type": "image_url", "image_url": {"url": _text_v2_data_url(contents), "detail": "high"}}], "max_tokens": 1800, "max_attempts": 1})
-        page["external_media_sent"] = True
-        page["external_media_send_status"] = "sent"
-        if not provider.get("ok"):
-            raise ValueError("provider failure")
-        checked = validate_vlm_result(provider.get("parsed"))
-        page.update(checked)
-        page["status"] = "completed" if checked["decision"] == "MATCH" else "review_required"
-    except Exception as exc:
-        page.update({"status": "uncertain", "decision": "REVIEW_REQUIRED", "message": "页面模型请求结果不确定，请人工确认；系统不会自动重试。", "error_code": type(exc).__name__, "differences": [], "external_media_send_status": "uncertain", "external_media_sent": None, "charge_status": "uncertain"})
-    page["updated_at"] = int(time.time())
-    _text_v2_save("pages", page)
-    return _text_v2_public(page)
+    raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
 
 
 @app.post("/api/text-inspection/manual/sessions/{session_id}/complete")
 def complete_text_manual_session(session_id: str) -> dict[str, Any]:
     require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    session = _text_v2_owned("sessions", session_id, owner_user_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="说明书检验会话不存在")
-    pages = [item for item in _text_v2_load("pages") if item.get("session_id") == session_id and item.get("owner_user_id") == owner_user_id]
-    matched = {str(item.get("standard_asset_id")) for item in pages if item.get("status") == "completed"}
-    standard = _text_v2_owned("standards", str(session.get("standard_id")), owner_user_id) or {}
-    expected = set(str(item) for item in standard.get("confirmed_asset_ids", []))
-    missing = sorted(expected - matched)
-    expected_order = [str(item.get("id")) for item in standard.get("confirmed_assets", [])]
-    observed_order = [str(item.get("standard_asset_id")) for item in sorted(pages, key=lambda item: int(item.get("created_at") or 0)) if item.get("status") == "completed"]
-    duplicate_sources = len({str(item.get("source_sha256") or "") for item in pages}) != len(pages)
-    ordered = observed_order == expected_order
-    can_pass = TEXT_INSPECTION_MANUAL_PASS_VERIFIED and expected and not missing and ordered and not duplicate_sources and all(item.get("decision") == "MATCH" for item in pages)
-    session.update({"status": "completed", "updated_at": int(time.time()), "missing_asset_ids": missing, "observed_asset_order": observed_order, "expected_asset_order": expected_order, "duplicate_capture_detected": duplicate_sources, "order_matches": ordered, "decision": "PASS" if can_pass else "REVIEW_REQUIRED"})
-    _text_v2_save("sessions", session)
-    return _text_v2_public(session)
+    raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
 
 
 @app.post("/api/text-inspection/inspections/{inspection_id}/review")
@@ -38606,6 +38534,9 @@ async def review_text_inspection_v2(inspection_id: str, request: Request) -> dic
     record = _text_v2_owned("records", inspection_id, owner_user_id)
     if not record:
         raise HTTPException(status_code=404, detail="检验记录不存在")
+    standard = _text_v2_owned("standards", record.get("standard_id", ""), owner_user_id)
+    if record.get("standard_type") == "manual" or (standard and standard.get("standard_type") == "manual"):
+        raise HTTPException(status_code=410, detail="旧说明书历史仅供查阅，请在文字检验重新导入 PDF")
     body = await request.json()
     decision = str(body.get("decision") or "") if isinstance(body, dict) else ""
     reason = bounded_text(body.get("reason") if isinstance(body, dict) else "", 500).strip()
