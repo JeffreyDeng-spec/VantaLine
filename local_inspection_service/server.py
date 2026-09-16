@@ -34650,7 +34650,31 @@ from local_inspection_service.codex_compare.api import register as register_code
 register_codex_compare(globals())
 
 from .label_inspection.api import register as register_label_inspection
-register_label_inspection(globals())
+from .label_inspection.dependencies import LabelAccess, RepositoryLifecycle, LabelImports
+from .label_inspection import model as label_inspection_model
+_label_repository_lifecycle = RepositoryLifecycle(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    clear=lambda: clear_thread_runtime_repository_selection(),
+)
+_label_imports = LabelImports(
+    data_directory=lambda: DATA_DIR,
+    extract_docx=lambda data, **kwargs: extract_docx_candidates(data, **kwargs),
+    extract_doc=lambda data: extract_doc_images(data),
+    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
+    read_verified=lambda path, owner, standard, **kwargs: _text_v2_read_verified(path, owner, standard, **kwargs),
+)
+register_label_inspection(
+    app,
+    LabelAccess(
+        require_permission=lambda permission: require_permission(permission),
+        require_admin=lambda: require_admin_role(),
+        owner=lambda: _text_v2_owner(),
+    ),
+    _label_repository_lifecycle,
+    _label_imports,
+    models=lambda: resolve_model_profiles(),
+    configuration=lambda: label_inspection_model.settings(lambda: resolve_model_profiles()),
+)
 
 
 @app.post("/api/text-inspection/label/compare")

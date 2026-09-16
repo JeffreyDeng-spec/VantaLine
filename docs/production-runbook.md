@@ -1,5 +1,10 @@
 # Production runbook
 
+Label dependency extraction keeps the existing embedded topology: one PDF import
+thread and two detection threads in the Web process. Startup, stop-event signaling,
+claim and cleanup behavior are unchanged. Use the normal whole-release restart and
+rollback; no independent-worker switch or queue drain is introduced by this batch.
+
 Route-selection extraction uses ordinary immutable-release restart and rollback.
 A failed profile attempt still permits route saving and AI-task creation. A later
 AI-task or projection failure can follow a successful save; preserve that record

@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Label dependency CI adds explicit-port isolation and registrar lifecycle contracts,
+while preserving the real PostgreSQL and complete-application gates. Include the new
+label dependency module in the immutable package. Worker process separation remains
+a later release after the publisher bridge; this batch changes no runtime topology.
+
 Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.

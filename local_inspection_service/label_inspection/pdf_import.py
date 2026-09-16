@@ -3,6 +3,10 @@
 import io
 import math
 import threading
+from collections.abc import Callable
+from pathlib import Path
+from fastapi import FastAPI
+from .dependencies import RepositoryLifecycle
 import time
 import uuid
 
@@ -123,14 +127,14 @@ def process(repo, media, task, token):
         )
 
 
-def register(ns):
+def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Callable[[], Path]):
     stop = threading.Event()
 
     def loop():
         while not stop.is_set():
             task = None
             try:
-                raw = ns["runtime_postgres_repository_or_none"]()
+                raw = repositories.repository()
                 if raw:
                     repo = LabelRepository(raw)
                     token = uuid.uuid4().hex
@@ -138,12 +142,12 @@ def register(ns):
                     if task:
                         process(
                             repo,
-                            MediaStore(ns["DATA_DIR"] / "label_inspection" / "media"),
+                            MediaStore(data_directory() / "label_inspection" / "media"),
                             task,
                             token,
                         )
             finally:
-                ns["clear_thread_runtime_repository_selection"]()
+                repositories.clear()
             if not task:
                 stop.wait(2)
 
@@ -154,9 +158,9 @@ def register(ns):
             except Exception:
                 stop.wait(2)
 
-    ns["app"].on_event("startup")(
+    app.on_event("startup")(
         lambda: threading.Thread(
             target=safe_loop, name="pdf-import", daemon=True
         ).start()
     )
-    ns["app"].on_event("shutdown")(stop.set)
+    app.on_event("shutdown")(stop.set)

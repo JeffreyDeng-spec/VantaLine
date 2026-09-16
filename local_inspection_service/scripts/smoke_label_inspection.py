@@ -94,20 +94,26 @@ def main():
             owner.reset(token)
             admin.reset(admin_token)
 
-    ns = {
-        "app": app,
-        "DATA_DIR": root,
-        "require_permission": permission,
-        "require_admin_role": require_admin,
-        "_text_v2_owner": lambda: (owner.get(), "test"),
-        "runtime_postgres_repository_or_none": raw,
-        "clear_thread_runtime_repository_selection": lambda: None,
-        "extract_docx_candidates": extract_docx_candidates,
-    }
     from types import SimpleNamespace
-    ns["model_profile_service"] = SimpleNamespace(snapshot=lambda: {"label": None}, resolve=lambda purpose, reference=None: {"model": model.MODEL})
-    model.settings = model.legacy_settings
-    register(ns)
+    from local_inspection_service.label_inspection.dependencies import LabelAccess, RepositoryLifecycle, LabelImports
+    def missing_fixture(*args, **kwargs):
+        raise KeyError("fixture media is unavailable")
+    legacy_asset_reader = missing_fixture
+    model_service = SimpleNamespace(snapshot=lambda: {"label": None}, resolve=lambda purpose, reference=None: {"model": model.MODEL})
+    register(
+        app,
+        LabelAccess(permission, require_admin, lambda: (owner.get(), "test")),
+        RepositoryLifecycle(raw, lambda: None),
+        LabelImports(
+            data_directory=lambda: root,
+            extract_docx=extract_docx_candidates,
+            extract_doc=missing_fixture,
+            asset_bytes=lambda old, uid: legacy_asset_reader(old, uid),
+            read_verified=missing_fixture,
+        ),
+        models=lambda: model_service,
+        configuration=model.legacy_settings,
+    )
     # TestClient without lifespan: tests invoke worker explicitly; never call a live provider.
     client = TestClient(app)
     config = root / "key"
@@ -572,7 +578,7 @@ def main():
                     "created_at": 10,
                 },
             )
-            ns["_text_v2_asset_bytes"] = lambda old, uid: (
+            legacy_asset_reader = lambda old, uid: (
                 picture() if uid == "alice" else (_ for _ in ()).throw(KeyError())
             )
             listing = check(client.get(PREFIX + "/tasks", params={"limit": 100}))[

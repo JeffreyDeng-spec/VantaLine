@@ -1,5 +1,11 @@
 # Configuration reference
 
+Label dependency extraction changes no environment setting. Configuration still
+resolves `label` with an omitted reference before reading the enabled flag; submitting
+a repeated request resolves its explicit stored reference, including None. Worker
+claim handling retains its existing empty-reference legacy fallback. A missing model
+service raises before processing; it never selects another model or replays a call.
+
 Route-selection extraction preserves the existing `yolo`, `ai`, and `archive_only`
 values and `apply=True` request default. Applying AI still calls profile preparation
 with the item alone, then saves before AI-task upsert; non-applied AI still saves

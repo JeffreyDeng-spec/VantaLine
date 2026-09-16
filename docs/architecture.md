@@ -1,5 +1,12 @@
 # Architecture
 
+Label inspection registration now takes the app separately from typed access,
+repository-lifecycle, import/media and model-provider capabilities. API and worker
+code no longer read the application's global namespace. `model.settings(provider)`
+also resolves its explicit model service, so importing the label package cannot load
+`server`. All providers remain lazy: owner and repositories are obtained in the
+request/worker thread. The whole label package is now covered by dependency checks.
+
 `accessories.routing.AccessoryRouting` owns detection-route selection; `routing_api`
 registers its synchronous endpoint in the original position. Access, config storage,
 profile preparation, AI-task upsert and response projection are explicit capabilities.
