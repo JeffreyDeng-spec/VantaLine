@@ -377,3 +377,5 @@ workspace remembers fullscreen only for that picker gesture and attempts restora
 on file selection while transient user activation is available. Cancellation, explicit
 exit and navigation clear that intent; upload completion never forces fullscreen.
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
+
+Label result issues use a single 32px desktop row with 16px text, number, type and description. Secondary evidence and uncertainty fields remain available in a modal inside the fullscreen root. All reliable existing issue boxes are displayed with matching numbers; selecting a row highlights that number on both images. Missing geometry is never invented.

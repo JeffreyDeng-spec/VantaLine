@@ -432,3 +432,5 @@ workspace remembers fullscreen only for that picker gesture and attempts restora
 on file selection while transient user activation is available. Cancellation, explicit
 exit and navigation clear that intent; upload completion never forces fullscreen.
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
+
+Compact issue regression verifies six visible rows at 1920x1080 and five at 1440x900, 16px single-line descriptions, full details including unlocated evidence, numbered existing boxes and selected-row highlight. Existing small-screen, local overflow, fullscreen, history, camera and navigation regressions remain required.

@@ -169,3 +169,5 @@ workspace remembers fullscreen only for that picker gesture and attempts restora
 on file selection while transient user activation is available. Cancellation, explicit
 exit and navigation clear that intent; upload completion never forces fullscreen.
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
+
+Compact label issue rows and numbered overlays are frontend presentation only and require no new settings. They preserve saved model results, confidence, evidence coordinates and prompts; details are available from each row.

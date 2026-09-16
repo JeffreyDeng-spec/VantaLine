@@ -58,7 +58,7 @@ let browser;
  await page.getByRole('button',{name:'开始检测',exact:true}).dblclick();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);
  await page.reload();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);assert.equal(diagnostics,0);assert.equal(await page.evaluate(()=>window.__fullscreenRequests),0);
  task.runs[0]={...task.runs[0],status:'completed',phase:'completed',decision:'DIFFERENCES',elapsed:18,crop:[60,40,300,200],scope:'仅检测选中标签',result:{decision:'DIFFERENCES',similarity:85,issues:[{id:1,type:'missing_line',description:'缺少 MODEL 行',standardText:'MODEL: TEST',actualText:'',severity:'high',confidence:'',position_note:'无法可靠定位'}]}};
- await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();await page.getByText('模型置信度：未提供',{exact:false}).waitFor();assert.equal(await page.locator('.li-crop').count(),1);
+ await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(await page.locator('.li-box-number').count(),0);await page.getByRole('button',{name:'查看异常 1 详情',exact:true}).click();await page.getByRole('dialog').getByText('模型置信度',{exact:true}).waitFor();await page.getByRole('dialog').getByText('无法可靠定位',{exact:true}).waitFor();await page.getByRole('button',{name:'关闭详情'}).click();assert.equal(await page.locator('.li-crop').count(),1);
  await page.getByText('调用诊断（默认折叠）',{exact:true}).click();await page.waitForFunction(()=>document.querySelector('.li-results pre')?.textContent.includes('calls'));assert.equal(diagnostics,1);
  await page.screenshot({path:path.join(output,'desktop-difference.png'),fullPage:true});
  await page.getByRole('button',{name:'放大实物图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),0);
@@ -67,6 +67,13 @@ let browser;
  await page.getByRole('button',{name:'返回缩略图'}).click();await page.getByRole('button',{name:'隐藏标准',exact:true}).click();await page.getByLabel('显示已隐藏 / 无效标准').check();await page.getByRole('button',{name:'恢复标准',exact:true}).click();assert.equal(task.revision,3);assert.equal(task.runs[0].revision,1);assert.ok(await page.locator('.li-gallery').isVisible());
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'mobile-workbench.png'),fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await page.getByRole('tab',{name:/历史记录/}).click();await page.getByRole('button',{name:/旧文字检验|Evolving.*版本/}).click();await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(submits,1);
+ // Compact rows: six abnormalities with trustworthy coordinates, one unlocated item.
+ task.runs[0].result.issues=Array.from({length:6},(_,i)=>({...task.runs[0].result.issues[0],id:i+1,
+  description:`异常 ${i+1}：型号文字与标准不一致，请核对实际印刷内容。`,
+  actual_box:i===0?undefined:[.2,.1+i*.1,.25,.08]}));
+ await page.reload();await page.locator('.li-issue').nth(5).waitFor();
+ assert.equal(await page.locator('.li-box-number').count(),5);
+ await page.locator('.li-issue-line').nth(2).click();assert.equal(await page.locator('.li-box-number.selected').textContent(),'3');
  // Fixed geometry, actual image/overlay fit and local overflow across target sizes.
  const cases=[[1920,1080],[1440,900],[1366,768],[1024,768],[390,844],[683,384]];
  for(const [width,height] of cases){
@@ -79,12 +86,17 @@ let browser;
   });
   assert.ok(geometry.bodyHeight<=height+1,JSON.stringify(geometry));assert.equal(geometry.scrollY,0);assert.ok(geometry.buttonBottom<=height);assert.ok(geometry.contentHeight>=25,JSON.stringify(geometry));
   assert.ok(geometry.ratio.every(r=>Math.abs(r-1)<.01),JSON.stringify(geometry));
+  if(width===1920||width===1440){
+   const rows=await page.locator('.li-issue').evaluateAll(es=>{const pane=document.querySelector('.li-result-content').getBoundingClientRect();return es.map(e=>({visible:e.getBoundingClientRect().bottom<=pane.bottom,height:e.getBoundingClientRect().height,font:parseFloat(getComputedStyle(e.querySelector('.li-issue-line')).fontSize)}));});
+   assert.ok(rows.every(r=>r.height===32 && r.font>=16),JSON.stringify(rows));
+   assert.ok(rows.filter(r=>r.visible).length >= (width===1920?6:5),JSON.stringify(rows));
+  }
   await page.screenshot({path:path.join(output,`fixed-${width}x${height}.png`),fullPage:true});
  }
  await page.setViewportSize({width:1366,height:768});
  await page.getByRole('button',{name:/测试订单.*标准版本/}).click();await page.getByRole('dialog').waitFor();
  await page.getByLabel('任务名称',{exact:true}).fill('测试订单-改名');await page.getByRole('button',{name:'保存名称',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});assert.equal(task.name,'测试订单-改名');
- await page.getByRole('separator',{name:'调整结果面板高度'}).focus();await page.keyboard.press('ArrowUp');assert.equal(await page.getByRole('separator').getAttribute('aria-valuenow'),'30');
+ await page.getByRole('separator',{name:'调整结果面板高度'}).focus();await page.keyboard.press('ArrowUp');assert.equal(await page.getByRole('separator').getAttribute('aria-valuenow'),'34');
  const split=await page.getByRole('separator').boundingBox();await page.mouse.move(split.x+split.width/2,split.y+split.height/2);await page.mouse.down();await page.mouse.move(split.x+split.width/2,split.y-500);await page.mouse.up();assert.equal(await page.getByRole('separator').getAttribute('aria-valuenow'),'45');
  await page.getByRole('button',{name:'进入全屏',exact:true}).click();await page.waitForFunction(()=>!!document.fullscreenElement);
  await page.getByRole('button',{name:'退出全屏',exact:true}).click();await page.waitForFunction(()=>!document.fullscreenElement);
