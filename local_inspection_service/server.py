@@ -54,6 +54,51 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StrictBool, StrictFloat, StrictInt, StrictStr
+from .schemas.accessories import (
+    AccessoryFileDeleteRequest,
+    AccessoryAiReferenceRequest,
+    AccessoryTextCropRequest,
+    AccessoryRouteRequest,
+)
+from .schemas.auth import (
+    AuthBootstrapRequest,
+    AuthLoginRequest,
+    UserCreateRequest,
+    UserUpdateRequest,
+    UserPasswordResetRequest,
+    TaskNavigationPreferencesRequest,
+)
+from .schemas.configuration import (
+    StreamConfig,
+    AiConfigRequest,
+    AgentConfigRequest,
+)
+from .schemas.detection import (
+    RuleConfig,
+    TaskRuleConfig,
+    AiDetectionTaskAccessory,
+    AiDetectionTaskRequest,
+    ModelWarmupRequest,
+)
+from .schemas.pipeline import (
+    AgentRecommendRequest,
+    PipelineTaskCreateRequest,
+    PipelineTaskUpdateRequest,
+    PipelineAgentFeedbackRequest,
+    PipelineAgentChatRequest,
+)
+from .schemas.text_inspection import (
+    IncomingTextRulesRequest,
+    IncomingTextReviewRequest,
+)
+from .schemas.training import (
+    AutoOptimizeSettingsRequest,
+    AutoOptimizeSampleApproveRequest,
+    TrainingPreviewRequest,
+    TrainingStartRequest,
+    TrainingTaskUpdateRequest,
+    TrainingResourceUpdateRequest,
+)
 from starlette.middleware.gzip import GZipMiddleware
 from ultralytics import YOLO
 
@@ -3048,23 +3093,6 @@ MANUAL_TYPE_KEYWORDS: dict[str, list[tuple[str, int]]] = {
 }
 
 
-class RuleConfig(BaseModel):
-    confidence_threshold: float
-    required_classes: list[int]
-    min_counts: dict[str, int]
-
-
-class TaskRuleConfig(BaseModel):
-    confidence_threshold: float
-    required_accessory_counts: dict[str, int]
-
-
-class StreamConfig(BaseModel):
-    enabled: bool = False
-    source: str = "camera"
-    url: str = ""
-
-
 class PlcConfigRequest(BaseModel):
     class Config:
         extra = "forbid"
@@ -3230,151 +3258,6 @@ class PlcWebSerialReceiptRequest(BaseModel):
     attempt_token: StrictStr
     outcome: StrictStr
     operations: list[PlcWebSerialReceiptOperation]
-
-
-class AiConfigRequest(BaseModel):
-    enabled: bool | None = None
-    provider: str | None = None
-    model: str | None = None
-    base_url: str | None = None
-    proxy_url: str | None = None
-    auto_local_proxy: bool | None = None
-    api_key: str | None = None
-    active_key_id: str | None = None
-    api_key_env: str | None = None
-    timeout: float | None = None
-    timeout_seconds: float | None = None
-    image_provider: str | None = None
-    image_model: str | None = None
-    image_base_url: str | None = None
-    image_timeout_seconds: float | None = None
-    image_api_key: str | None = None
-    image_active_key_id: str | None = None
-    image_api_key_env: str | None = None
-
-
-
-
-
-
-class AiDetectionTaskAccessory(BaseModel):
-    accessory_id: str
-    required_count: int = 1
-
-
-class AiDetectionTaskRequest(BaseModel):
-    name: str | None = None
-    accessories: list[AiDetectionTaskAccessory] | None = None
-    required_accessory_counts: dict[str, int] | None = None
-
-
-class AutoOptimizeSettingsRequest(BaseModel):
-    enabled: bool | None = None
-    samples_per_real_image: int | None = None
-    min_trainable_samples: int | None = None
-    min_positive_samples: int | None = None
-    min_negative_samples: int | None = None
-    negative_samples_per_real_image: int | None = None
-    training_epochs: int | None = None
-    training_image_size: int | None = None
-    max_label_jobs_per_cycle: int | None = None
-    mask_compare_min_score: float | None = None
-    shadow_min_samples: int | None = None
-    shadow_min_agreement: float | None = None
-    auto_promote: bool | None = None
-
-
-class AutoOptimizeSampleApproveRequest(BaseModel):
-    mode: str | None = "sprite"
-
-
-class ModelWarmupRequest(BaseModel):
-    model_id: str
-
-
-class TrainingPreviewRequest(BaseModel):
-    selected_accessory_ids: list[str]
-    sample_count: int = 4000
-    train_mode: str = "yolo_ocr"
-    preview_count: int = 5
-    preview_pose_family_policy: str = "auto"
-    background_set_id: str | None = None
-    force_refresh: bool = True
-
-
-class TrainingStartRequest(BaseModel):
-    selected_accessory_ids: list[str]
-    sample_count: int = 4000
-    train_mode: str = "yolo_ocr"
-    approved_preview_id: str | None = None
-    dataset_id: str | None = None
-    epochs: int = 80
-    image_size: int = 640
-    background_set_id: str | None = None
-    pipeline_task_id: str | None = None
-    pipeline_task_name: str | None = None
-
-
-class TrainingTaskUpdateRequest(BaseModel):
-    label: str | None = None
-    note: str | None = None
-
-
-class TrainingResourceUpdateRequest(BaseModel):
-    display_name: str | None = None
-    note: str | None = None
-
-
-class AccessoryFileDeleteRequest(BaseModel):
-    source_path: str
-
-
-class AccessoryAiReferenceRequest(BaseModel):
-    source_path: str
-
-
-class AccessoryTextCropRequest(BaseModel):
-    source_path: str
-    corners: list[dict[str, float]]
-
-
-class AuthBootstrapRequest(BaseModel):
-    username: str
-    password: str
-    display_name: str | None = None
-
-
-class AuthLoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class UserCreateRequest(BaseModel):
-    username: str
-    password: str
-    display_name: str | None = None
-    role: str = "user"
-    permissions: list[str] = []
-    active: bool = True
-
-
-class UserUpdateRequest(BaseModel):
-    display_name: str | None = None
-    password: str | None = None
-    role: str | None = None
-    permissions: list[str] | None = None
-    active: bool | None = None
-
-
-class UserPasswordResetRequest(BaseModel):
-    password: str | None = None
-    generate: bool = False
-    revoke_sessions: bool = True
-
-
-class TaskNavigationPreferencesRequest(BaseModel):
-    pinned_task_ids: list[str] = []
-    archived_task_ids: list[str] = []
 
 
 STANDARD_PAPER_SIZES_MM = {
@@ -31299,76 +31182,6 @@ PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S = 600
 
 class PipelineAdvanceCancelled(Exception):
     """Raised inside advance_pipeline_task when the task's cancel event fires."""
-
-
-class AgentConfigRequest(BaseModel):
-    enabled: bool | None = None
-    provider: str | None = None
-    base_url: str | None = None
-    api_key_env: str | None = None
-    api_key: str | None = None
-    active_key_id: str | None = None
-    model: str | None = None
-    timeout_seconds: float | None = None
-    auto_advance_default: bool | None = None
-
-
-class AgentRecommendRequest(BaseModel):
-    stage: str
-    accessory_ids: list[str] = []
-    sample_count: int | None = None
-
-
-class PipelineTaskCreateRequest(BaseModel):
-    name: str | None = None
-    accessory_ids: list[str] = []
-    accessory_counts: dict[str, int] | None = None
-    detection_method: str | None = None
-    auto_advance: bool | None = None
-    expected_production_count: int | None = None
-    task_kind: str | None = None
-    material_code: str | None = None
-    material_name: str | None = None
-    inspection_user_ids: list[str] = []
-
-
-class PipelineTaskUpdateRequest(BaseModel):
-    name: str | None = None
-    accessory_ids: list[str] | None = None
-    accessory_counts: dict[str, int] | None = None
-    detection_method: str | None = None
-    params: dict[str, Any] | None = None
-    auto_advance: bool | None = None
-    expected_production_count: int | None = None
-    material_code: str | None = None
-    material_name: str | None = None
-    inspection_user_ids: list[str] | None = None
-
-
-class IncomingTextRulesRequest(BaseModel):
-    rules: list[dict[str, Any]]
-    activate: bool = False
-
-
-class IncomingTextReviewRequest(BaseModel):
-    decision: str
-    reason: str
-
-
-class PipelineAgentFeedbackRequest(BaseModel):
-    action: str
-    decision: str | None = None
-    message: str | None = None
-    updated_plan: dict[str, Any] | None = None
-
-
-class PipelineAgentChatRequest(BaseModel):
-    message: str
-
-
-class AccessoryRouteRequest(BaseModel):
-    route: str
-    apply: bool = True
 
 
 def agent_base_url_host(base_url: str) -> str:

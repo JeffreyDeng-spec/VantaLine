@@ -12,6 +12,10 @@ retained unchanged.
 
 **Status: Authoritative**
 
+HTTP configuration/authentication request shapes now live in `schemas/` by domain.
+This location change adds no configuration keys, validation rule or default value;
+the assembled OpenAPI and real HTTP error baseline remain the compatibility gate.
+
 Model dependency extraction adds no environment flag or model default. A missing
 injected model resolver is a configuration error and cannot silently execute an
 unbound task. Profile-version and secret references in historical records remain
