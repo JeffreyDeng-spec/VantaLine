@@ -39,6 +39,10 @@ def capture():
         assert server._record_audit.ownership is server._record_ownership
         assert server._candidate_queries.repository is server._candidate_repository
         assert server._accessory_files.projection is server._accessory_projection
+        assert server._accessory_creation.projection is server._accessory_projection
+        assert server._accessory_confirmation.projection is server._accessory_projection
+        assert server._accessory_confirmation.store.lock() is server._candidate_store_lock
+        assert server._accessory_removal.projection is server._accessory_projection
         assert server.add_accessory_files is server._accessory_file_routes.add_accessory_files
         assert server._candidate_repository.dependencies.lock() is server._candidate_store_lock
 

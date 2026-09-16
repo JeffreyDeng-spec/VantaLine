@@ -1,5 +1,12 @@
 # Architecture
 
+Accessory management has separate creation, confirmation and removal services.
+`management_api` preserves the original three creation/confirmation route positions
+and registers deletion separately after file routes. Confirmation retains the same
+candidate RLock through authorization, model preparation, persistence and response
+projection. Candidate creation, profile generation and pipeline callbacks retain
+their existing implementations; services receive narrow capabilities, not globals.
+
 `accessories.file_api` preserves the four file-edit routes and their sync/async
 boundaries; `files.AccessoryFiles` owns upload, text crop, reference selection and
 file deletion orchestration. Narrow access/store/media/profile ports are composed

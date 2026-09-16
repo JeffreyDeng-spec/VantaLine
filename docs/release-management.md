@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Management CI adds the synthetic creation/confirmation/removal contract gate.
+No schema, worker topology, model producer or task snapshot format changes. Keep
+ordinary complete-release validation and rollback; the phase adds no cutover step.
+
 Accessory file-edit CI adds synthetic real-HTTP regression without paid calls.
 The immutable package includes the new services; deployment topology, schema and
 prompt-source manifest remain unchanged. Existing frontend and PLC gates remain.

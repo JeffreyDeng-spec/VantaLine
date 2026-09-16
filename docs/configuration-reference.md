@@ -1,5 +1,11 @@
 # Configuration reference
 
+Management extraction changes no setting, form default or owner rule. Creation,
+preview and confirmation deliberately keep their different worker-start conditions.
+Confirmation retains its two profile-preparation calls and existing force flags.
+Legacy JSON whole-accessory deletion currently returns 404 after pre-filtering its
+configuration; this known pre-existing behavior is covered, not repaired here.
+
 Accessory file-edit extraction adds no settings. Upload limits, crop coordinates,
 shared-read-only permissions, reference-provider selection and media deletion
 boundaries retain their existing behavior. No task binding or prompt producer moves.
