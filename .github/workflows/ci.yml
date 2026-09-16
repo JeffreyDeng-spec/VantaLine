@@ -172,6 +172,7 @@ jobs:
           python scripts/smoke_auth_foundation.py --postgres
           python scripts/smoke_auth_access.py
           python scripts/smoke_auth_api.py
+          python scripts/smoke_record_ownership.py
           python local_inspection_service/scripts/smoke_auth_rbac.py
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py

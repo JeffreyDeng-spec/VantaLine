@@ -1,5 +1,9 @@
 # VantaLine release management
 
+The shared-ownership extraction adds a pure policy gate while keeping full RBAC,
+analysis HTTP, model, PLC and frontend checks. It changes no deployment topology,
+migration, runtime configuration or persisted record representation.
+
 Authentication HTTP extraction adds service/transport failure checks and restores
 the complete original auth/RBAC smoke as a CI gate, with explicit real-HTTP tests
 for label-local permissions. It does not add deployment flags or change topology.

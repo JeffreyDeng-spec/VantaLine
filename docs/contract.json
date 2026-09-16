@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Shared record policies",
+      "paths": ["local_inspection_service/records/**", "scripts/smoke_record_ownership.py"],
+      "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
+    },
+    {
       "name": "Analytics domains",
       "paths": ["local_inspection_service/analytics/**", "scripts/smoke_cost_ledger.py", "scripts/smoke_analysis_records.py", "scripts/smoke_analysis_projections.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]

@@ -1,5 +1,12 @@
 # Architecture
 
+`records.ownership.RecordOwnership` contains five pure ownership policies shared
+by existing record callers. The root supplies the existing legacy/system identifiers and
+retains the five original function signatures as explicit forwarding adapters.
+Shared users can read; administrators or owners can write. Administrator owner
+filters remain binding. Identity, owner assignment, audit timestamps and storage
+are outside this extraction and retain their current lifecycle.
+
 The existing Codex comparison worker observes process exit once per loop, waits
 for its event reader and persists final session/usage metadata before settling.
 An exit during a heartbeat is handled in the next loop. Cancellation and deadline

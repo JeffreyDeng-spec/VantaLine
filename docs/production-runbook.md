@@ -1,5 +1,9 @@
 # Production runbook
 
+Shared ownership policy extraction uses the ordinary complete-release restart.
+Check owner/shared/admin record visibility. Roll back the entire prior release on
+regression; do not relabel records, rewrite owners or clean historical data.
+
 The auth HTTP/service split uses ordinary complete-release restart and rollback.
 Check administrator/member login, navigation and protected media. Existing cookies,
 password hashes and account rows require no conversion or session reset. Preserve
