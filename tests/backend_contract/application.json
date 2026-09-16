@@ -64,11 +64,9 @@
       "status": 401
     },
     "cross_origin": {
-      "body": {
-        "status": "logged_out"
-      },
-      "content_type": "application/json",
-      "status": 200
+      "body": "Untrusted cross-origin write request",
+      "content_type": "text/plain; charset=utf-8",
+      "status": 403
     },
     "hidden_openapi": {
       "body": {
@@ -189,7 +187,7 @@
           "DELETE",
           "OPTIONS"
         ],
-        "allow_origin_regex": "",
+        "allow_origin_regex": "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(?::\\d+)?$",
         "allow_origins": []
       }
     },

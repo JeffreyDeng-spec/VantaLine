@@ -27,7 +27,7 @@ def capture():
         os.environ["VANTALINE_LABEL_INSPECTION_ENABLED"] = "false"
         os.environ["LOCAL_INSPECTION_AUTO_RESUME_WORKER"] = "0"
         os.environ["INSPECTION_ENABLE_LAN_CORS"] = "0"
-        os.environ["INSPECTION_CORS_ORIGIN_REGEX"] = ""
+        os.environ.pop("INSPECTION_CORS_ORIGIN_REGEX", None)
         os.environ["INSPECTION_CORS_ORIGINS"] = ""
         sys.path.insert(0, str(ROOT))
         from local_inspection_service import server
@@ -79,7 +79,8 @@ def capture_http_errors(app):
     errors = {}
     anonymous = TestClient(app, base_url="https://testserver")
 
-    def record(name, response):
+    def record(name, response, expected_status):
+        assert response.status_code == expected_status, (name, response.status_code, response.text)
         content_type = response.headers.get("content-type", "")
         errors[name] = {
             "status": response.status_code,
@@ -87,7 +88,7 @@ def capture_http_errors(app):
             "body": response.json() if "application/json" in content_type else response.text,
         }
 
-    record("setup_required", anonymous.get("/api/status"))
+    record("setup_required", anonymous.get("/api/status"), 503)
     admin = TestClient(app, base_url="https://testserver")
     password = "contract-fixture-password-only"
     response = admin.post("/api/auth/bootstrap", json={"username": "contract-admin", "password": password})
@@ -107,12 +108,12 @@ def capture_http_errors(app):
              "/api/plc/config", "/api/analyze/image"]
     for path in paths:
         method = "POST" if path == "/api/analyze/image" else "GET"
-        record("anonymous " + path, anonymous.request(method, path))
-        record("reader " + path, reader.request(method, path))
-    record("private_media", anonymous.get("/outputs/missing.png"))
-    record("hidden_openapi", anonymous.get("/openapi.json"))
-    record("cross_origin", admin.post("/api/auth/logout", headers={"origin": "https://untrusted.invalid"}))
-    record("invalid_login", anonymous.post("/api/auth/login", json={"username": "x", "password": "x"}))
+        record("anonymous " + path, anonymous.request(method, path), 401)
+        record("reader " + path, reader.request(method, path), 403)
+    record("private_media", anonymous.get("/outputs/missing.png"), 401)
+    record("hidden_openapi", anonymous.get("/openapi.json"), 404)
+    record("cross_origin", admin.post("/api/auth/logout", headers={"origin": "https://untrusted.invalid"}), 403)
+    record("invalid_login", anonymous.post("/api/auth/login", json={"username": "x", "password": "x"}), 401)
     anonymous.close()
     admin.close()
     reader.close()
