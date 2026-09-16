@@ -9082,8 +9082,17 @@ def ensure_candidate_image_job_task_ids(candidate: dict[str, Any]) -> bool:
 from .model_profiles.snapshots import freeze_record as freeze_model_record, pinned as pinned_model_profiles
 
 
+def resolve_model_profiles():
+    """Composition-only late binding; domain decorators receive this callable."""
+    return model_profile_service
+
+
+def record_model_call(settings, elapsed_ms, ok, usage):
+    return resolve_model_profiles().record_call(settings, elapsed_ms, ok, usage)
+
+
 def store_candidate_image_job(candidate: dict[str, Any], updated_job: dict[str, Any]) -> None:
-    freeze_model_record(globals(), updated_job)
+    freeze_model_record(resolve_model_profiles, updated_job)
     ensure_image_job_task_id(candidate, updated_job)
     ensure_anchor_image_provenance(updated_job)
     ensure_image_job_target_guides(updated_job)
@@ -11056,7 +11065,7 @@ def load_auto_optimize_state(task_id: str) -> dict[str, Any]:
 
 
 def save_auto_optimize_state(state: dict[str, Any]) -> dict[str, Any]:
-    freeze_model_record(globals(), state)
+    freeze_model_record(resolve_model_profiles, state)
     AUTO_OPTIMIZE_DIR.mkdir(parents=True, exist_ok=True)
     state["updated_at"] = int(time.time())
     clean_task_id = sanitize_ai_detection_task_id(state.get("task_id")) or AI_DETECTION_MODEL_ID
@@ -12684,7 +12693,7 @@ def auto_optimize_process_label_sample(
     }
 
 
-@pinned_model_profiles("load_auto_optimize_state")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))
 def auto_optimize_label_worker(task_id: str) -> None:
     try:
         settings = image_generation_settings()
@@ -12862,7 +12871,7 @@ def maybe_start_auto_optimize_training_locked(state: dict[str, Any]) -> None:
     save_auto_optimize_state(state)
 
 
-@pinned_model_profiles("load_auto_optimize_state")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))
 def auto_optimize_training_check_worker(task_id: str, delay_seconds: float = 0.0) -> None:
     clean_task_id = sanitize_ai_detection_task_id(task_id)
     if not clean_task_id:
@@ -13667,7 +13676,7 @@ def start_auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
         thread.start()
 
 
-@pinned_model_profiles("load_auto_optimize_state")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))
 def auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
     try:
         time.sleep(0.1)
@@ -15132,7 +15141,7 @@ class OpenAICompatibleAiProvider:
         self.settings = settings
         self.last_usage_metadata: dict[str, Any] = {}
 
-    @metered_model_call
+    @metered_model_call(resolve_model_profiles)
     def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], *, max_tokens: int = 1400) -> tuple[dict[str, Any], int]:
         if not self.settings.get("configured"):
             raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
@@ -15278,7 +15287,7 @@ class GeminiAiProvider:
             "expire_time": str(response_json.get("expireTime") or ""),
         }
 
-    @metered_model_call
+    @metered_model_call(resolve_model_profiles)
     def generate_json(
         self,
         system_prompt: str,
@@ -15349,7 +15358,7 @@ class GeminiAiProvider:
         self.last_raw_text = str(content or "")
         return parse_ai_json_object(str(content or "")), latency_ms
 
-    @metered_model_call
+    @metered_model_call(resolve_model_profiles)
     def generate_image(
         self,
         prompt: str,
@@ -15519,7 +15528,7 @@ class AgnesImageProvider:
                     raise AiProviderError(f"Agnes image provider URL download failed: {bounded_text(exc, 180)}") from exc
         raise AiProviderError("Agnes image provider did not return image bytes")
 
-    @metered_model_call
+    @metered_model_call(resolve_model_profiles)
     def generate_image(
         self,
         prompt: str,
@@ -15660,7 +15669,7 @@ class QwenImageProvider:
             stack.extend(reversed(list(item.values())))
         raise AiProviderError("Qwen image provider did not return image bytes")
 
-    @metered_model_call
+    @metered_model_call(resolve_model_profiles)
     def generate_image(
         self,
         prompt: str,
@@ -21492,7 +21501,7 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
         )
 
 
-@pinned_model_profiles(argument=2)
+@pinned_model_profiles(resolve_model_profiles, argument=2)
 def run_image_generation_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
     provider = str(job.get("provider") or "").strip()
     status = str(job.get("status") or "").strip()
@@ -21760,7 +21769,7 @@ def load_training_task_records() -> list[dict[str, Any]]:
 
 
 def save_training_task(task: dict[str, Any]) -> None:
-    freeze_model_record(globals(), task)
+    freeze_model_record(resolve_model_profiles, task)
     store_read_cache_invalidate("training_task_pairs")
     with _training_task_lock:
         repository = runtime_postgres_repository_or_none()
@@ -23075,7 +23084,7 @@ def validate_task_environment_background_image(task_id: str, task: dict[str, Any
     }
 
 
-@pinned_model_profiles("find_training_task")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: find_training_task(identity))
 def run_background_set_task(job_id: str) -> None:
     task = load_training_task(training_task_path(job_id))
     if not task:
@@ -25420,7 +25429,7 @@ def start_worker_training_watcher() -> None:
     return None
 
 
-@pinned_model_profiles("find_training_task")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: find_training_task(identity))
 def run_training_task(job_id: str) -> None:
     task = load_training_task(training_task_path(job_id))
     if not task:
@@ -27749,7 +27758,7 @@ def normalize_ai_detection_result(
     }
 
 
-@pinned_model_profiles()
+@pinned_model_profiles(resolve_model_profiles)
 def analyze_bgr_ai_detection(
     image_bgr: np.ndarray,
     request_id: str,
@@ -30211,7 +30220,7 @@ def video_ai_summary(frames: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 @app.post("/api/analyze/video")
-@pinned_model_profiles()
+@pinned_model_profiles(resolve_model_profiles)
 async def analyze_video(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
     ensure_dirs()
     require_analyze_model_permission(model_id)
@@ -32108,7 +32117,7 @@ def load_pipeline_task(task_id: str) -> dict[str, Any] | None:
 def save_pipeline_task(task: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(task, dict):
         return None
-    freeze_model_record(globals(), task)
+    freeze_model_record(resolve_model_profiles, task)
     row = pipeline_task_row(task)
     if not row:
         return None
@@ -36308,7 +36317,7 @@ AGENT_PIPELINE_SYSTEM_PROMPT = (
 )
 
 
-@pinned_model_profiles()
+@pinned_model_profiles(resolve_model_profiles)
 def agent_pipeline_decide(
     task: dict[str, Any],
     config: dict[str, Any],
@@ -36570,7 +36579,7 @@ def pipeline_task_needs_auto_agent(task: dict[str, Any]) -> bool:
     return False
 
 
-@pinned_model_profiles("load_pipeline_task")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
 def _run_pipeline_auto_agent_step(task_id: str, user: dict[str, Any] | None) -> None:
     token = _request_user.set(user) if user else None
     try:
@@ -36665,7 +36674,7 @@ def advance_pipeline_task_guarded(
         )
 
 
-@pinned_model_profiles("load_pipeline_task")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
 def _run_pipeline_advance(task_id: str, user: dict[str, Any] | None) -> None:
     token = _request_user.set(user) if user else None
     try:
@@ -36804,7 +36813,7 @@ def consume_pipeline_recommendation(task: dict[str, Any], stage: str) -> dict[st
     return None
 
 
-@pinned_model_profiles("load_pipeline_task")
+@pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
 def _run_pipeline_recommendation_pregen(task_id: str, stage: str, user: dict[str, Any] | None) -> None:
     token = _request_user.set(user) if user else None
     try:
@@ -39571,7 +39580,34 @@ def react_production_spa_enabled() -> bool:
 
 
 from .model_profiles.api import register as register_model_profiles
-model_profile_service = register_model_profiles(globals())
+from .model_profiles.service import Service as ModelProfileService
+from .model_profiles.dependencies import ProfileDependencies, ProfileApiDependencies
+from .model_profiles.legacy import LegacyConfiguration, sources as legacy_model_sources
+
+model_profile_service = ModelProfileService(ProfileDependencies(
+    runtime_repository=lambda: runtime_postgres_repository_or_none(),
+    write_secret=lambda key, value: set_local_secret_env(key, value),
+    read_secret=lambda key: local_secret_env_value(key),
+    legacy_sources=lambda: legacy_model_sources(LegacyConfiguration(
+        ai=lambda: _legacy_ai_detection_settings(),
+        image=lambda: _legacy_image_generation_settings(),
+        agent=lambda: _legacy_load_agent_config(),
+        local=lambda: load_ai_local_config(),
+        ai_keys=lambda config: normalize_ai_key_items(config),
+        image_keys=lambda config, provider: normalize_image_key_items(config, provider),
+        agent_keys=lambda config: normalize_agent_key_items(config),
+    )),
+    validate_model=lambda value: validate_ai_model(value),
+    validate_base_url=lambda value: validate_ai_base_url(value),
+    mask_secret=lambda value: mask_secret(value),
+))
+register_model_profiles(app, model_profile_service, ProfileApiDependencies(
+    require_admin=lambda: require_admin_role(),
+    cost_from_usage=lambda model, usage: api_cost_from_usage(model, usage),
+    cursor_api_url=lambda base, path: cursor_api_url(base, path),
+    cursor_auth_headers=lambda key: cursor_auth_headers(key),
+    model_options_from_items=lambda items, **kwargs: agent_model_options_from_items(items, **kwargs),
+))
 
 
 @app.get("/{react_path:path}")

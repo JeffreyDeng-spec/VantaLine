@@ -6,6 +6,12 @@ releases use the existing complete-release deployment and rollback procedure.
 
 **Status: Authoritative**
 
+For model dependency extraction, use normal whole-release deployment and verify
+health/version before observing existing tasks. Missing resolver/recorder errors
+must be corrected in composition, never bypassed by replaying a paid task. Rollback
+restores the previous complete release while keeping all saved model references,
+secret versions and call evidence. This step adds no migration or worker topology.
+
 For the local OCR reread trial, verify the immutable release and health first,
 then add only the authorized owner to `VANTALINE_QWEN_REREAD_ACCOUNTS` in restricted
 runtime configuration and restart via the normal service procedure. Keep automatic

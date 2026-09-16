@@ -132,8 +132,9 @@ def main():
                 files={"captured_file": ("actual.png", data)}), 409, "no legacy fallback without template")
         finally:
             server._text_v2_save("standards", original_standard)
-        def remote_ocr(settings, blob, size, timeout, *, presence_evidence=False, audit=None):
+        def remote_ocr(settings, blob, size, timeout, *, presence_evidence=False, audit=None, record_usage=None):
             assert presence_evidence is True
+            assert callable(record_usage)
             claims = server._text_v2_load("ocr_evidence")
             assert len(claims) == 1 and claims[0]["status"] == "attempting"
             qwen_calls.append("ocr")
@@ -146,6 +147,7 @@ def main():
                 result.append(dict(id=f"o{index}", type="text", text=e["text"], box=[x,y,x+w,y+h], confidence=None, provenance="qwen_ocr"))
             return result, dict(model=qj.ocr.MODEL, usage={})
         def mapping(settings, request, timeout, **kwargs):
+            assert callable(kwargs.get('record_usage'))
             assert any(r.get("diagnostics",{}).get("llm_call",{}).get("state") == "attempting" for r in server._text_v2_load("records"))
             qwen_calls.append("llm")
             return {"mappings":[]}, dict(model="fixture", usage={})

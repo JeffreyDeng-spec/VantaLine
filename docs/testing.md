@@ -23,6 +23,22 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 ## Backend extraction contract
 
+`python -X utf8 scripts/smoke_model_dependency_contract.py` verifies callable loader
+binding after relocation, frozen/default/empty snapshots, missing dependencies,
+concurrent async-to-thread scope propagation, independent recorders and ledger
+failure without inference replay. The dependency smoke also checks nested real-service scope isolation and
+that every manifest source changes the new fingerprint without rewriting a stored
+historical fingerprint. Document-classifier and job tests include profile metadata
+and assert an actual fake transport plus its usage recorder both run exactly once.
+`smoke_model_profiles.py` supplies typed test
+ports and retains real PostgreSQL immutable-version, restart and concurrent binding
+checks. `smoke_model_profile_routing.py` retains real provider-adapter and role tests.
+
+`python scripts/verify_backend_boundaries.py` rejects entry-point imports, circular
+dependencies, wildcard imports and namespace injection inside extracted packages.
+Its explicit package list currently covers `model_profiles`; each domain extraction
+must extend it. Existing unconverted modules are not claimed compliant by this gate.
+
 `python -X utf8 scripts/verify_backend_contract.py` imports the real application in a
 temporary JSON runtime without starting lifespan hooks or provider workers. The
 checked-in `tests/backend_contract/application.json` fixes assembled route order

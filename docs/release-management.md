@@ -6,6 +6,10 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+Model dependency extraction is a separate release after the contract baseline. It
+preserves the embedded label worker and existing database/HTTP contracts. CI also
+requires the explicit dependency smoke; no worker cutover or model change is bundled.
+
 `main` is the only production source of truth. Production is never built from a developer worktree, server checkout, backup directory, untracked bundle, or manually selected files.
 
 ## Change and release flow

@@ -16,7 +16,10 @@ def main():
     owner = user['id']
     os.environ['VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS'] = owner
     server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = True
-    server.ai_detection_settings = lambda *args: dict(provider='qwen', model='fixture-vl', api_key='never-log-this', base_url='https://fixture.invalid')
+    server.ai_detection_settings = lambda *args: dict(provider='qwen', model='fixture-vl', api_key='never-log-this', base_url='https://fixture.invalid',
+        profile_id='synthetic-profile', profile_version=1, profile_purpose='document')
+    recorded = []
+    server.model_profile_service.record_call = lambda *args: recorded.append(args)
     blobs = [picture('LABEL'), picture('LABEL'), picture('PRODUCT')]
     server.extract_doc_images = lambda data: ([dict(ordinal=i+1, sha256=server.sha256_bytes(b), mime_type='image/png') for i,b in enumerate(blobs)], blobs)
     calls = []
@@ -43,6 +46,7 @@ def main():
     assert result['classification']['state'] == 'completed'
     assert [a['status'] for a in result['assets']] == ['candidate', 'candidate', 'excluded']
     assert len(calls) == 2, 'duplicate images require one model call'
+    assert len(recorded) == 2 and all(row[0]['profile_purpose'] == 'document' for row in recorded)
     assert 'never-log-this' not in json.dumps(result)
     assert upload('1') == identity
     assert_status(admin.post(f'/api/text-inspection/standards/{identity}/classify'), 200, 'duplicate classify')

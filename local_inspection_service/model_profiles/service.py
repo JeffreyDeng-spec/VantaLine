@@ -12,6 +12,7 @@ from contextvars import ContextVar
 from urllib.parse import urlsplit
 from fastapi import HTTPException
 from .repository import Repository, Conflict
+from .dependencies import ProfileDependencies
 
 PURPOSES = {
     'label': ('标签对比', 'vision', False),
@@ -33,7 +34,6 @@ DEFAULTS = {
     'openai_compatible': ('', ''),
     'cursor': ('', 'https://api.cursor.com'),
 }
-_scope = ContextVar('model_profile_snapshot', default=None)
 _UNSET = object()
 
 
@@ -69,12 +69,18 @@ def validate_binding(purpose, profile):
 def prompt_source_version():
     """Fingerprint shipped prompt-producing code; task inputs remain in their records."""
     root = Path(__file__).resolve().parents[1]
+    manifest = json.loads((Path(__file__).with_name('prompt_sources.json')).read_text(encoding='utf-8'))
+    return fingerprint_sources(root, manifest)
+
+
+def fingerprint_sources(root: Path, manifest: dict):
+    """Hash the actual shipped files, including their versioned provenance list."""
     digest = hashlib.sha256()
-    for name in ('server.py','label_inspection/prompts.json','document_label_classifier.py',
-                 'standard_preparation.py','qwen_evidence_jobs.py','qwen_ocr_evidence.py'):
+    digest.update(json.dumps(manifest, sort_keys=True).encode())
+    for name in manifest['sources']:
         digest.update(name.encode())
         digest.update((root/name).read_bytes())
-    return 'source-sha256:' + digest.hexdigest()
+    return f"source-sha256:v{manifest['version']}:" + digest.hexdigest()
 
 
 def profile_reference(profile):
@@ -82,11 +88,15 @@ def profile_reference(profile):
 
 
 class Service:
-    def __init__(self, ns):
-        self.ns = ns
+    def __init__(self, dependencies: ProfileDependencies):
+        self.dependencies = dependencies
+        self._scope = ContextVar('model_profile_snapshot', default=None)
+
+    def current_snapshot(self):
+        return self._scope.get()
 
     def repository(self):
-        runtime = self.ns['runtime_postgres_repository_or_none']()
+        runtime = self.dependencies.runtime_repository()
         if runtime is None:
             raise HTTPException(503, '模型配置需要 PostgreSQL 存储')
         return Repository(runtime)
@@ -94,27 +104,11 @@ class Service:
     def secret(self, value):
         # All profile writers hold the same DB advisory lock, across processes.
         ref = 'VANTALINE_PROFILE_' + uuid.uuid4().hex.upper()
-        self.ns['set_local_secret_env'](ref, value)
+        self.dependencies.write_secret(ref, value)
         return ref
 
     def legacy_sources(self):
-        ai = self.ns['_legacy_ai_detection_settings']()
-        image = self.ns['_legacy_image_generation_settings']()
-        agent = self.ns['_legacy_load_agent_config']()
-        local = self.ns['load_ai_local_config']()
-        ai['api_key_candidates'] = self.ns['normalize_ai_key_items'](local)
-        image['api_key_candidates'] = self.ns['normalize_image_key_items'](local, image['provider'])
-        agent['api_key_candidates'] = self.ns['normalize_agent_key_items'](agent)
-        key = agent.get('api_key', '')
-        sources = [('原 AI 配置', ai, ['pipeline','manual','accessory','training_vision','document']),
-                   ('原图片生成配置', image, ['image']),
-                   ('原训练助手', {**agent, 'api_key': key}, ['training_assistant'])]
-        from ..label_inspection.model import legacy_settings, MODEL, URL
-        label = legacy_settings()
-        sources.append(('原标签配置', dict(provider='doubao',model=MODEL,base_url=URL,api_key=label['key'],timeout_seconds=180), ['label']))
-        if ai.get('provider') == 'qwen' and ai.get('api_key'):
-            sources.append(('原专用 OCR', {**ai, 'model':'qwen-vl-ocr-2025-11-20'}, ['ocr']))
-        return sources
+        return self.dependencies.legacy_sources()
 
     def initialize(self):
         repo = self.repository()
@@ -159,13 +153,13 @@ class Service:
         if not migrated and not model:
             raise ValueError('请输入模型 ID')
         if model:
-            self.ns['validate_ai_model'](model)
+            self.dependencies.validate_model(model)
         endpoint = str(data.get('base_url') or DEFAULTS[provider][1]).strip().rstrip('/')
         if not migrated:
             url = urlsplit(endpoint)
             if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
                 raise ValueError('接口地址须为不含凭据或查询参数的 HTTPS 地址')
-            self.ns['validate_ai_base_url'](endpoint)
+            self.dependencies.validate_base_url(endpoint)
         timeout = float(data.get('timeout_seconds', 30))
         if not 1 <= timeout <= 600:
             raise ValueError('超时必须为 1–600 秒')
@@ -177,7 +171,7 @@ class Service:
                     base_url=endpoint, timeout_seconds=timeout, enabled=bool(data.get('enabled',True)),
                     capabilities=capabilities(provider,model), pending=not bool(model),
                     secret_ref=self.secret(key) if key else previous['secret_ref'],
-                    masked_key=self.ns['mask_secret'](key) if key else previous['masked_key'],
+                    masked_key=self.dependencies.mask_secret(key) if key else previous['masked_key'],
                     proxy_ref=previous.get('proxy_ref','') if previous else '',
                     created_at=time.time(), operational=copy.deepcopy(previous.get('operational',{})) if previous else {})
 
@@ -200,15 +194,15 @@ class Service:
 
     @contextmanager
     def scope(self, snapshot=None):
-        token = _scope.set(snapshot if snapshot is not None else self.snapshot())
+        token = self._scope.set(snapshot if snapshot is not None else self.snapshot())
         try:
             yield
         finally:
-            _scope.reset(token)
+            self._scope.reset(token)
 
     def resolve(self, purpose, reference=_UNSET):
         if reference is _UNSET:
-            bindings = _scope.get()
+            bindings = self._scope.get()
             if bindings is None:
                 bindings = self.snapshot()
             reference = bindings.get(purpose)
@@ -220,8 +214,8 @@ class Service:
             tested = repo.get(c, f"test:{reference['id']}:{reference['version']}")
         if not p:
             raise HTTPException(503, '任务引用的模型配置版本不存在')
-        key = self.ns['local_secret_env_value'](p['secret_ref'])
-        return {**p.get('operational',{}), **({'connection_status':'connected' if tested['ok'] else 'failed', 'last_tested_at':tested['at'], **({'model_options':tested['model_options']} if tested.get('model_options') else {})} if tested else {}), 'proxy_url_raw': self.ns['local_secret_env_value'](p['proxy_ref']) if p.get('proxy_ref') else '', **{k:p[k] for k in ('provider','model','base_url','timeout_seconds')},
+        key = self.dependencies.read_secret(p['secret_ref'])
+        return {**p.get('operational',{}), **({'connection_status':'connected' if tested['ok'] else 'failed', 'last_tested_at':tested['at'], **({'model_options':tested['model_options']} if tested.get('model_options') else {})} if tested else {}), 'proxy_url_raw': self.dependencies.read_secret(p['proxy_ref']) if p.get('proxy_ref') else '', **{k:p[k] for k in ('provider','model','base_url','timeout_seconds')},
                 'enabled':bool(key) and p.get('enabled',True), 'configured':bool(key) and p.get('enabled',True), 'api_key':key,
                 'profile_id':p['id'], 'profile_version':p['version'], 'profile_purpose':purpose,
                 'profile_name':p['name'], 'active_key_id':p['id'], 'api_key_candidates':[],

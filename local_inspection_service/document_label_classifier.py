@@ -129,7 +129,7 @@ def validate(value):
 from .model_profiles.audit import metered_function
 
 @metered_function(2)
-def classify_once(preview: bytes, context, settings: dict, transport):
+def classify_once(preview: bytes, context, settings: dict, transport, *, record_usage=None):
     started = time.monotonic()
     diagnostic = {"prompt_version": VERSION, "model": settings["model"],
                   "input_sha256": hashlib.sha256(preview).hexdigest(), "max_attempts": 1}

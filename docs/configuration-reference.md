@@ -12,6 +12,12 @@ retained unchanged.
 
 **Status: Authoritative**
 
+Model dependency extraction adds no environment flag or model default. A missing
+injected model resolver is a configuration error and cannot silently execute an
+unbound task. Profile-version and secret references in historical records remain
+immutable. New snapshots use a `source-sha256:v1:` fingerprint of the checked-in
+source manifest and files; migration never rewrites old prompt fingerprints.
+
 This document lists ownership and names, never secret values or production endpoints.
 
 ## Independent A + Evolving label detection

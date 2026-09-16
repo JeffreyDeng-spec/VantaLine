@@ -47,7 +47,7 @@ def main():
             with (attempt/(event+'.json')).open('x') as output: output.write(text)
         started=time.monotonic()
         try:
-            proposal,metadata=candidate.llm(settings,request,45,audit=audit,structured=structured)
+            proposal,metadata=candidate.llm(settings,request,45,audit=audit,structured=structured,record_usage=server.record_model_call)
             summary=dict(state='parsed',metadata=metadata,proposal=proposal)
         except Exception as error:
             summary=dict(state='failed',error_type=type(error).__name__,error=str(error) if isinstance(error,ValueError) else 'unknown',

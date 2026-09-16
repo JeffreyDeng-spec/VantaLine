@@ -18,6 +18,7 @@ from local_inspection_service.model_profiles.api import register
 from local_inspection_service.model_profiles.service import Service, DEFAULTS
 from local_inspection_service.model_profiles.snapshots import pinned, public_record
 from local_inspection_service.model_profiles.audit import metered
+from local_inspection_service.model_profiles.dependencies import ProfileDependencies, ProfileApiDependencies
 from local_inspection_service.storage.postgres_schema import postgres_ddl
 from local_inspection_service.storage.postgres_runtime_repository import PostgresRuntimeRepository
 
@@ -41,11 +42,13 @@ def main():
         token=admin.set(request.headers.get('x-admin')=='true')
         try: return await call_next(request)
         finally: admin.reset(token)
-    ns=dict(app=app, runtime_postgres_repository_or_none=runtime,
-            require_admin_role=require_admin, set_local_secret_env=lambda k,v:secrets.update({k:v}),
-            local_secret_env_value=lambda k:secrets.get(k,''), mask_secret=lambda k:'****'+k[-4:],
-            validate_ai_model=lambda v:None,validate_ai_base_url=lambda v:None,
-            api_cost_from_usage=lambda m,u:(0,0,False))
+    dependencies=ProfileDependencies(runtime_repository=runtime,
+        write_secret=lambda k,v:secrets.update({k:v}), read_secret=lambda k:secrets.get(k,''),
+        mask_secret=lambda k:'****'+k[-4:], validate_model=lambda v:None,
+        validate_base_url=lambda v:None, legacy_sources=lambda:[])
+    api_dependencies=ProfileApiDependencies(require_admin=require_admin,
+        cost_from_usage=lambda m,u:(0,0,False), cursor_api_url=lambda b,p:b+p,
+        cursor_auth_headers=lambda key:{}, model_options_from_items=lambda items,**kw:items)
     ai=dict(provider='gemini',model='gemini-2.5-flash',api_key='legacy-key-A',base_url=DEFAULTS['gemini'][1],enabled=True,
             api_key_candidates=[dict(provider='qwen',label='unused qwen',key='unused-key-B')])
     agent=dict(provider='openai_compatible',model='agent-model',api_key='disabled-agent-key',base_url='https://example.com/v1',enabled=False)
@@ -53,7 +56,8 @@ def main():
     with psycopg.connect(dsn,autocommit=True) as control, patch.object(Service,'legacy_sources',source):
         control.execute(postgres_ddl(schema))
         try:
-            service=register(ns)
+            service=Service(dependencies)
+            register(app, service, api_dependencies)
             client=TestClient(app)
             base='/api/admin/model-profiles'
             def req(method,path='',body=None,status=200,member=False):
@@ -107,12 +111,10 @@ def main():
             assert all(key not in serialized for key in ['legacy-key-A','rotated-key-A','unused-key-B','doubao-key-one','disabled-agent-key'])
             assert 'secret_ref' not in json.dumps(req('GET'))
             # Process restart resolves persisted bindings; old tasks retain migration snapshot.
-            restarted=Service(ns)
+            restarted=Service(dependencies)
             assert restarted.resolve('pipeline')['api_key']=='doubao-key-two'
             assert restarted.snapshot_for_record({'created_at':1})==old
-            global model_profile_service
-            model_profile_service=service
-            @pinned()
+            @pinned(lambda: service)
             async def video():
                 first=service.resolve('pipeline')['api_key']
                 state=service.public()
@@ -124,7 +126,7 @@ def main():
             assert public_record({'nested':{'profile_snapshot':old,'value':1},'model_profiles':old})=={'nested':{'value':1}}
             class Provider:
                 settings=service.resolve('label')
-                @metered
+                @metered(lambda: service)
                 def generate_json(self): return {'valid':True}
             with patch.object(service,'record_call',side_effect=RuntimeError('db unavailable')):
                 assert Provider().generate_json()=={'valid':True}
