@@ -1,5 +1,11 @@
 # Codex label inspection beta
 
+Worker completion requires an observed successful process exit, reader EOF and
+valid completion/session events after draining the queue. Final session/usage
+metadata is pulsed before settlement. A process exiting during a database heartbeat
+is handled on the next iteration; cancellation/deadline rules and finalized-report
+requirements remain authoritative. No unknown call is retried or requeued.
+
 **Status: Authoritative — implemented, default disabled; production/model accuracy not commissioned**
 
 ## User contract

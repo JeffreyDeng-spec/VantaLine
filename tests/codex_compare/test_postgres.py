@@ -271,6 +271,8 @@ print(json.dumps({'type':'turn.completed','usage':{}}),flush=True)
     monkeypatch.setattr(worker,'with_repo',lambda fn:fn(storage()))
     worker.execute(task,token,{'work_root':str(tmp_path/'work'),'auth_home':str(auth),'model':'fixture','binary':'unused'},media)
     result=repo.get('a',task['id'])
-    assert result['status']=='completed' and result['skill_sha256']==digest((worker.SKILL/'SKILL.md').read_bytes())
+    diagnostics = {key: result.get(key) for key in ('status', 'error', 'finalized', 'session_id', 'sequence')}
+    diagnostics['check_count'] = len(result.get('checks') or {})
+    assert result['status']=='completed' and result['skill_sha256']==digest((worker.SKILL/'SKILL.md').read_bytes()), diagnostics
     assert len(result['checks'])==13
     assert result['summary']['decision']=='REVIEW_REQUIRED'
