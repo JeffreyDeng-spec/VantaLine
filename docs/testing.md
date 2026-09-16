@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_accessory_routing.py` fixes five original real-HTTP groups:
+401/403 and hidden ownership denial, retired/invalid-route ordering, trimmed but
+case-sensitive values, default apply and non-applied AI routes, first matching ID,
+shared config/item identity, provider failure with retained mutation and bounded error,
+and separate save/task/projection failures. The same tests pass before and after
+extraction using a real disposable auth store and provider/task substitutes.
+
 `python scripts/smoke_accessory_preparation.py` fixes eight original-runtime groups
 before and after migration: crop ordering/limits, empty-source results, exact object
 plans, deferred-field cleanup, reference normalization, video expansion ordering,

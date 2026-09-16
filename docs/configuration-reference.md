@@ -1,5 +1,10 @@
 # Configuration reference
 
+Route-selection extraction preserves the existing `yolo`, `ai`, and `archive_only`
+values and `apply=True` request default. Applying AI still calls profile preparation
+with the item alone, then saves before AI-task upsert; non-applied AI still saves
+the selected route. The retired `locate` route retains its existing 410 response.
+
 Source preparation adds no configuration or prompt-content change. New task source
 fingerprints use manifest v4, which includes the actual `accessories/preparation.py`
 producer. Historical source fingerprints and model/secret references remain unchanged.

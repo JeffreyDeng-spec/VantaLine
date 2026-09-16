@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
+service and route module together. No schema, source-manifest, process-topology or
+PLC change is part of this extraction; preserve existing complete-release gates.
+
 Preparation CI adds synthetic workflow contracts and source manifest v4 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
