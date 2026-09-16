@@ -7,6 +7,15 @@ deadline precedence. It verifies final metadata is persisted before completion a
 scratch files are cleaned. It launches no process, model or database. The original
 real PostgreSQL/CLI regression remains and includes allowlisted failure evidence.
 
+`python scripts/smoke_auth_access.py` exercises actual account/session services and
+ASGI middleware: dynamic settings/bootstrap, JSON expiry persistence throttling,
+empty-store fallback versus indexed no-scan behavior, cookie attributes, parallel
+identities across async/native threads and independent applications, exception
+recovery, security/cache headers, media denial and exact RunPod public path/method
+exceptions. The real PostgreSQL agent smoke now calls the actual `SessionService`
+with full-store access configured to fail, retaining inactive/mismatched identity
+assertions. No server-source function copy is executed by that test.
+
 `python scripts/smoke_auth_foundation.py --postgres` covers permission/password
 rules, JSON replacement and temporary-file cleanup, isolated PostgreSQL account
 updates, concurrent sessions, raw/hashed legacy keys, expiry equality, login

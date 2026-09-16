@@ -136,22 +136,26 @@ def main():
         repository.upsert_row("auth_sessions",legacy_session)
         u,s,_=repository.authenticate_session(session_key_hash("fixture-cookie"),now=100,ttl=500,persist_interval=30)
         assert auth_store_from_rows([u],[s])["users"][0]["id"]==owner and s["expires_at"]==600
-        source=Path(__file__).resolve().parents[1]/"server.py"
-        tree=ast.parse(source.read_text(encoding="utf-8"))
-        from local_inspection_service.auth.policy import find_user
-        functions=[node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name == "authenticate_request"]
-        namespace={"Any":Any,"Request":object,"time":SimpleNamespace(time=lambda:100),"runtime_postgres_repository_or_none":lambda:repository,"session_key_hash":session_key_hash,"auth_store_from_rows":auth_store_from_rows,"AUTH_SESSION_COOKIE":"fixture","AUTH_SESSION_TTL_SECONDS":500,"AUTH_SESSION_PERSIST_INTERVAL_SECONDS":30,"public_user":lambda value:{"id":value["id"]}}
-        namespace["find_user"] = find_user
-        exec(compile(ast.Module(body=functions,type_ignores=[]),str(source),"exec"),namespace)
+        from local_inspection_service.auth.sessions import SessionDependencies, SessionService, SessionSettings
+        from unittest.mock import patch
+        def unexpected_full_store(*args, **kwargs):
+            raise AssertionError("indexed auth unexpectedly scanned or bootstrapped the full store")
+        auth = SessionService(lambda: SessionSettings("fixture", 500, 30), SessionDependencies(
+            runtime_repository=lambda: repository, load_store=unexpected_full_store,
+            bootstrap_admin=unexpected_full_store, save_touch_or_prune=unexpected_full_store,
+        ))
         request=SimpleNamespace(cookies={"fixture":"fixture-cookie"})
-        assert namespace["authenticate_request"](request,indexed=True)[0]["id"]==owner
-        repository.upsert_row("users",{**legacy_user,"raw_json":json.dumps({**user,"active":False})})
-        assert namespace["authenticate_request"](request,indexed=True)[0] is None
-        repository.upsert_row("users",legacy_user)
-        repository.upsert_row("auth_sessions",{**session_row,"raw_json":{**session_row["raw_json"],"user_id":"mismatched-account"}})
-        assert namespace["authenticate_request"](request,indexed=True)[0] is None
-        repository.upsert_row("auth_sessions",legacy_session)
-        namespace["authenticate_request"](request,indexed=True)
+        with patch("local_inspection_service.auth.sessions.time.time", return_value=100):
+            assert auth.authenticate_request(request,indexed=True)[0]["id"]==owner
+            repository.upsert_row("users",{**legacy_user,"raw_json":json.dumps({**user,"active":False})})
+            assert auth.authenticate_request(request,indexed=True)[0] is None
+            repository.upsert_row("users",legacy_user)
+            repository.upsert_row("auth_sessions",{**session_row,"raw_json":{**session_row["raw_json"],"user_id":"mismatched-account"}})
+            assert auth.authenticate_request(request,indexed=True)[0] is None
+            repository.upsert_row("auth_sessions",legacy_session)
+            auth.authenticate_request(request,indexed=True)
+            unknown, sentinel, changed = auth.authenticate_request(SimpleNamespace(cookies={"fixture":"unknown"}), indexed=True)
+            assert unknown is None and sentinel["users"] == [{"id": "existing-account"}] and not changed
         repository.upsert_row("users",{**legacy_user,"active":False})
         assert repository.authenticate_session(session_key_hash("fixture-cookie"),now=101,ttl=500,persist_interval=30)[0] is None
         repository.upsert_row("users",legacy_user)

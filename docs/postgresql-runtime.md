@@ -1,5 +1,11 @@
 # PostgreSQL runtime operations
 
+Indexed request authentication now enters `auth.sessions.SessionService` and still
+uses `authenticate_session` on the thread-owned repository. An invalid cookie with
+existing users returns an authentication sentinel without full-table fallback;
+only an empty user store falls back to bootstrap. JSONB inactive users and mismatched
+session/user identities remain denied. No query or transaction optimization occurs.
+
 `auth.repository` owns user/session persistence with injected thread-owned
 repositories and the existing reentrant write lock. Raw and hashed session-key
 candidates, expiry cutoff and account-scoped revocation remain compatible. Login

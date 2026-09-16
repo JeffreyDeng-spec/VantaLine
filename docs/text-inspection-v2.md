@@ -1,5 +1,10 @@
 # Text inspection v2
 
+Request authentication and central route policy now live in `auth.sessions`,
+`auth.middleware` and `auth.route_permissions`. Text-inspection/Beta permissions
+and label endpoint-local guards retain their previous behavior; no provider,
+prompt, task state or upload limit changes in this extraction.
+
 The current label workspace retains one owner/task/request/run-bound local photo URL
 through submission and completion; result polling updates independent SVG overlays
 without replacing the photo node or source. Photo replacement, navigation away and

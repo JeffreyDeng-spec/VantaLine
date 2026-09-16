@@ -6,12 +6,19 @@ An exit during a heartbeat is handled in the next loop. Cancellation and deadlin
 checks still precede completion; a reader that has not reached EOF cannot claim
 success. This is a terminal-state correctness fix, not the label-worker split.
 
+`auth.accounts` owns account creation and environment bootstrap; `auth.sessions`
+owns cookies, sliding expiry and indexed/full-store authentication. Settings and
+repository ports resolve on each call. `auth.access` and `auth.middleware` share
+the same request identity instance; `auth.route_permissions` retains the exact
+central policy, including existing endpoint-local label guards. Account HTTP
+routes, login throttling and domain-specific resource guards remain at the root.
+
 Authentication foundations live in `auth.policy`, `auth.credentials`,
 `auth.preferences` and `auth.repository`. Pure permission/credential/preference
 rules do not depend on the application. Persistence receives lazy path, repository
 and reentrant-lock factories, retaining thread ownership and raw/hashed session
-compatibility. The root retains request authentication, session orchestration and
-HTTP routes for their next extraction; compatibility exports serve old callers.
+compatibility. The root retains account HTTP routes for their next extraction;
+compatibility exports serve old callers.
 
 Analysis records use `analytics.analysis_records` for normalization,
 `analysis_repository` for JSON/PostgreSQL persistence, `analysis_service` for

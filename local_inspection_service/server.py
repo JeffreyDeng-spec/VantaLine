@@ -915,192 +915,62 @@ def cors_origin_allowed(origin: str) -> bool:
     return re.match(CORS_ORIGIN_REGEX, normalized) is not None
 
 
-def users_exist(store: dict[str, Any] | None = None) -> bool:
-    store = store or load_auth_store()
-    return any(isinstance(user, dict) for user in store.get("users", []))
+from .auth.accounts import AccountDependencies, AccountService
+from .auth.sessions import (
+    SessionDependencies, SessionService, SessionSettings,
+    prune_expired_sessions, request_is_https, revoke_user_sessions,
+)
+from .auth.access import AccessControl
+from .auth.route_permissions import route_required_permission, route_allowed_permissions
+from .auth.middleware import SecurityDependencies, register_security_middleware
+
+_account_service = AccountService(AccountDependencies(
+    load_store=lambda: load_auth_store(), save_store=lambda store: save_auth_store(store),
+    hash_password=lambda value: password_hash(value),
+))
+_session_service = SessionService(
+    settings=lambda: SessionSettings(AUTH_SESSION_COOKIE, AUTH_SESSION_TTL_SECONDS, AUTH_SESSION_PERSIST_INTERVAL_SECONDS),
+    dependencies=SessionDependencies(
+        runtime_repository=lambda: runtime_postgres_repository_or_none(),
+        load_store=lambda: load_auth_store(),
+        bootstrap_admin=lambda store: bootstrap_admin_from_env(store),
+        save_touch_or_prune=lambda store, session_id, session, *, prune_expired:
+            save_auth_session_touch_or_prune(store, session_id, session, prune_expired=prune_expired),
+    ),
+)
+_access_control = AccessControl(_request_user)
+
+users_exist = _account_service.users_exist
 
 
-def create_auth_user(
-    store: dict[str, Any],
-    *,
-    username: str,
-    password: str,
-    display_name: str | None = None,
-    role: str = "user",
-    permissions: list[str] | None = None,
-    active: bool = True,
-) -> dict[str, Any]:
-    clean = clean_username(username)
-    if not clean:
-        raise HTTPException(status_code=400, detail="Username is required")
-    if any(clean_username(user.get("username")) == clean for user in store.get("users", []) if isinstance(user, dict)):
-        raise HTTPException(status_code=409, detail="Username already exists")
-    now = int(time.time())
-    normalized_role = normalize_role(role)
-    user = {
-        "id": f"user_{uuid.uuid4().hex[:12]}",
-        "username": clean,
-        "display_name": clean_display_name(display_name, clean),
-        "role": normalized_role,
-        "permissions": sorted(FEATURE_PERMISSIONS) if normalized_role == "admin" else normalize_permissions(permissions or []),
-        "password_hash": password_hash(password),
-        "active": bool(active),
-        "created_at": now,
-        "updated_at": now,
-    }
-    store.setdefault("users", []).append(user)
-    return user
+create_auth_user = _account_service.create_auth_user
 
 
-def bootstrap_admin_from_env(store: dict[str, Any]) -> bool:
-    if users_exist(store):
-        return False
-    username = os.environ.get("VANTALINE_BOOTSTRAP_ADMIN_USERNAME", "").strip()
-    password = os.environ.get("VANTALINE_BOOTSTRAP_ADMIN_PASSWORD", "")
-    if not username or not password:
-        return False
-    create_auth_user(store, username=username, password=password, display_name=username, role="admin", permissions=sorted(FEATURE_PERMISSIONS))
-    save_auth_store(store)
-    return True
+bootstrap_admin_from_env = _account_service.bootstrap_admin_from_env
 
 
-def prune_expired_sessions(store: dict[str, Any]) -> bool:
-    now = int(time.time())
-    sessions = store.get("sessions") if isinstance(store.get("sessions"), dict) else {}
-    active = {
-        session_id: session
-        for session_id, session in sessions.items()
-        if isinstance(session, dict) and int(session.get("expires_at") or 0) > now
-    }
-    changed = len(active) != len(sessions)
-    store["sessions"] = active
-    return changed
+set_session_cookie = _session_service.set_session_cookie
 
 
-def request_is_https(request: Request) -> bool:
-    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
-    return request.url.scheme == "https" or forwarded_proto == "https"
+clear_session_cookie = _session_service.clear_session_cookie
 
 
-def set_session_cookie(response: Response, request: Request, session_id: str) -> None:
-    response.set_cookie(
-        AUTH_SESSION_COOKIE,
-        session_id,
-        max_age=AUTH_SESSION_TTL_SECONDS,
-        httponly=True,
-        secure=request_is_https(request),
-        samesite="lax",
-        path="/",
-    )
+create_session = _session_service.create_session
 
 
-def clear_session_cookie(response: Response, request: Request) -> None:
-    response.delete_cookie(AUTH_SESSION_COOKIE, path="/", secure=request_is_https(request), samesite="lax")
+create_login_session = _session_service.create_login_session
 
 
-def create_session(store: dict[str, Any], user: dict[str, Any]) -> str:
-    session_id = secrets.token_urlsafe(32)
-    now = int(time.time())
-    store.setdefault("sessions", {})[session_id] = {
-        "user_id": user["id"],
-        "created_at": now,
-        "last_seen_at": now,
-        "expires_at": now + AUTH_SESSION_TTL_SECONDS,
-    }
-    return session_id
+set_user_password = _account_service.set_user_password
 
 
-def create_login_session(store: dict[str, Any], user: dict[str, Any]) -> tuple[str, int]:
-    session_id = create_session(store, user)
-    revoked_sessions = revoke_user_sessions(store, str(user.get("id") or ""), keep_session_id=session_id)
-    return session_id, revoked_sessions
+authenticate_request = _session_service.authenticate_request
 
 
-def revoke_user_sessions(store: dict[str, Any], user_id: str, *, keep_session_id: str = "") -> int:
-    sessions = store.get("sessions") if isinstance(store.get("sessions"), dict) else {}
-    keep_session_ids = {keep_session_id, session_key_hash(keep_session_id)} if keep_session_id else set()
-    revoked = 0
-    kept: dict[str, Any] = {}
-    for session_id, session in sessions.items():
-        if (
-            isinstance(session, dict)
-            and str(session.get("user_id") or "") == str(user_id or "")
-            and session_id not in keep_session_ids
-        ):
-            revoked += 1
-            continue
-        kept[session_id] = session
-    store["sessions"] = kept
-    return revoked
+current_auth_user = _access_control.current_auth_user
 
 
-def set_user_password(user: dict[str, Any], password: str) -> None:
-    user["password_hash"] = password_hash(password)
-    user["updated_at"] = int(time.time())
-
-
-def authenticate_request(request: Request, *, indexed: bool = False) -> tuple[dict[str, Any] | None, dict[str, Any], bool]:
-    # Protected hot paths never load every account/session. Auth management keeps
-    # the existing full-store path, including first-admin bootstrap semantics.
-    repository = runtime_postgres_repository_or_none() if indexed else None
-    if repository is not None:
-        session_id = request.cookies.get(AUTH_SESSION_COOKIE, "")
-        user_row, session_row, has_users = repository.authenticate_session(
-            session_key_hash(session_id) if session_id else "",
-            now=int(time.time()), ttl=AUTH_SESSION_TTL_SECONDS,
-            persist_interval=AUTH_SESSION_PERSIST_INTERVAL_SECONDS,
-        )
-        store = auth_store_from_rows([user_row] if user_row else [], [session_row] if session_row else [])
-        session = store["sessions"].get(str((session_row or {}).get("id_hash") or ""))
-        identity = str((session or {}).get("user_id") or "")
-        selected_user = find_user(store, identity) if identity else None
-        if selected_user and identity == str((session_row or {}).get("user_id") or "") and bool(selected_user.get("active", True)):
-            return public_user(selected_user), store, False
-        if not has_users:
-            return authenticate_request(request)
-        if has_users:
-            # Used only by middleware's setup-required check; never persisted.
-            store["users"] = [{"id": "existing-account"}]
-        return None, store, False
-    store = load_auth_store()
-    changed = prune_expired_sessions(store)
-    expired_sessions_pruned = changed
-    if bootstrap_admin_from_env(store):
-        store = load_auth_store()
-    session_id = request.cookies.get(AUTH_SESSION_COOKIE, "")
-    sessions = store.get("sessions", {}) if isinstance(store.get("sessions"), dict) else {}
-    session = sessions.get(session_id) if session_id else None
-    if session is None and session_id:
-        session = sessions.get(session_key_hash(session_id))
-    user = find_user(store, str((session or {}).get("user_id") or "")) if isinstance(session, dict) else None
-    if not user or not bool(user.get("active", True)):
-        if expired_sessions_pruned:
-            save_auth_session_touch_or_prune(store, "", None, prune_expired=True)
-        return None, store, changed
-    now = int(time.time())
-    prev_seen = int(session.get("last_seen_at") or 0)
-    session["last_seen_at"] = now
-    session["expires_at"] = now + AUTH_SESSION_TTL_SECONDS
-    # Throttle disk writes: only persist the slid expiry when something else
-    # changed (pruned sessions) or enough time has elapsed since the last write.
-    if expired_sessions_pruned or (now - prev_seen) >= AUTH_SESSION_PERSIST_INTERVAL_SECONDS:
-        changed = True
-        save_auth_session_touch_or_prune(store, session_id, session, prune_expired=expired_sessions_pruned)
-    return public_user(user), store, changed
-
-
-def current_auth_user() -> dict[str, Any]:
-    user = _request_user.get()
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
-
-
-def require_admin_role(detail: str = "Admin role required") -> dict[str, Any]:
-    user = current_auth_user()
-    if not user_is_admin(user):
-        raise HTTPException(status_code=403, detail=detail)
-    return user
+require_admin_role = _access_control.require_admin_role
 
 
 RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS: Callable[[str], Any] | None = None
@@ -1797,126 +1667,7 @@ def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = 
         raise HTTPException(status_code=404, detail="Resource not found")
 
 
-def route_required_permission(path: str, method: str) -> str | None:
-    clean_path = path.rstrip("/") or "/"
-    # Discovery and account-owned operation recovery require authentication,
-    # not the administrator's provider-configuration permission.
-    if clean_path == "/api/agent/capabilities" or clean_path.startswith("/api/operations/"):
-        return None
-    plc_admin_routes = {
-        ("/api/plc/config", "GET"),
-        ("/api/plc/config", "POST"),
-        ("/api/plc/workstations/pair", "POST"),
-        ("/api/plc/workstations", "GET"),
-        ("/api/plc/workstation/config", "POST"),
-        ("/api/plc/workstation/profile-verification", "POST"),
-    }
-    plc_runtime_routes = {
-        ("/api/plc/workstation/connect", "POST"),
-        ("/api/plc/workstation/connect/activate", "POST"),
-        ("/api/plc/workstation/lease/heartbeat", "POST"),
-        ("/api/plc/workstation/lease/rebind-model", "POST"),
-        ("/api/plc/workstation/lease/disconnect", "POST"),
-    }
-    if (clean_path, method) in plc_admin_routes:
-        return "system_settings"
-    if clean_path == "/api/plc/workstation" and method == "GET":
-        return "inspection"
-    if (clean_path, method) in plc_runtime_routes:
-        return "inspection"
-    if clean_path.startswith("/api/plc/workstation/dispatches/") and method == "POST":
-        suffix = clean_path.rsplit("/", 1)[-1]
-        if suffix in {"attempt", "receipt"}:
-            return "inspection"
-    if clean_path == "/api/docs" or clean_path.startswith("/api/auth/users"):
-        return "user_management"
-    if clean_path.startswith("/api/windows-worker"):
-        return "worker_settings"
-    if clean_path.startswith("/api/text-compare-codex"):
-        return "inspection"
-    if clean_path.startswith("/api/agent"):
-        return "agent_config"
-    if clean_path.startswith("/api/admin"):
-        return "ai_config"
-    if clean_path.startswith("/api/ai/config"):
-        return "ai_config"
-    if clean_path.startswith("/api/stream/config"):
-        return "system_settings"
-    if clean_path.startswith("/api/plc/capture-"):
-        return "inspection"
-    if clean_path.startswith("/api/plc"):
-        return "system_settings"
-    if clean_path.startswith("/api/data-analysis"):
-        return "ai_detection"
-    if clean_path.startswith("/api/incoming-text/tasks") and (clean_path.endswith("/references") or method in {"PUT", "PATCH", "DELETE"}):
-        return "incoming_material_config"
-    if clean_path.startswith("/api/incoming-text/references"):
-        return "incoming_material_config"
-    if clean_path.startswith("/api/incoming-text"):
-        return "inspection"
-    if clean_path.startswith("/api/text-inspection"):
-        return "inspection"
-    if clean_path.startswith("/api/text-compare-beta"):
-        return "inspection"
-    if clean_path.startswith("/api/locateanything") or clean_path.startswith("/api/label-sheets") or clean_path.startswith("/api/experimental/label-inspector"):
-        return "system_settings"
-    if clean_path.startswith("/api/ai/tasks"):
-        return "ai_detection"
-    if clean_path == "/api/config" or clean_path.startswith("/api/config/"):
-        return "system_settings" if method != "GET" or clean_path == "/api/config" else None
-    if clean_path.startswith("/api/accessories"):
-        return "accessory_library"
-    if clean_path.startswith("/api/training/resources"):
-        return "model_library"
-    if clean_path.startswith("/api/training") or clean_path.startswith("/api/pipeline") or clean_path.startswith("/api/image-jobs") or clean_path.startswith("/api/image-job-candidates"):
-        return "training_pipeline"
-    if clean_path.startswith("/api/backgrounds"):
-        return "training_pipeline"
-    if clean_path.startswith("/api/models"):
-        return "inspection"
-    if clean_path.startswith("/api/analyze"):
-        return "inspection"
-    return None
-
-
-def route_allowed_permissions(path: str, method: str) -> tuple[str, ...]:
-    clean_path = path.rstrip("/") or "/"
-    permission = route_required_permission(path, method)
-    if clean_path.startswith("/api/training/resources"):
-        return ("model_library", "training_pipeline")
-    if clean_path.startswith("/api/analyze"):
-        return ("inspection", "ai_detection")
-    if clean_path.startswith("/api/plc/capture-"):
-        return ("inspection", "ai_detection")
-    if clean_path == "/api/pipeline/tasks" and method == "GET":
-        return ("training_pipeline", "incoming_material_config", "inspection")
-    if clean_path == "/api/pipeline/tasks" and method == "POST":
-        return ("training_pipeline", "incoming_material_config")
-    if clean_path.startswith("/api/pipeline/tasks/") and method == "PATCH":
-        return ("training_pipeline", "incoming_material_config")
-    if clean_path.startswith("/api/pipeline/tasks/") and method == "DELETE":
-        return ("training_pipeline", "incoming_material_config")
-    if clean_path.startswith("/api/incoming-text/tasks") and method == "GET":
-        return ("inspection", "incoming_material_config")
-    if clean_path == "/api/plc/workstation" and method == "GET":
-        return ("inspection", "ai_detection", "system_settings")
-    plc_runtime_routes = {
-        ("/api/plc/workstation/connect", "POST"),
-        ("/api/plc/workstation/connect/activate", "POST"),
-        ("/api/plc/workstation/lease/heartbeat", "POST"),
-        ("/api/plc/workstation/lease/rebind-model", "POST"),
-        ("/api/plc/workstation/lease/disconnect", "POST"),
-    }
-    if (clean_path, method) in plc_runtime_routes:
-        return ("inspection", "ai_detection")
-    if clean_path.startswith("/api/plc/workstation/dispatches/") and method == "POST" and clean_path.rsplit("/", 1)[-1] in {"attempt", "receipt"}:
-        return ("inspection", "ai_detection")
-    return (permission,) if permission else ()
-
-
-def require_permission(permission: str, *, detail: str = "Permission denied") -> None:
-    if not user_has_permission(current_auth_user(), permission):
-        raise HTTPException(status_code=403, detail=detail)
+require_permission = _access_control.require_permission
 
 
 def require_analyze_model_permission(model_id: str | None) -> None:
@@ -1928,8 +1679,6 @@ def require_analyze_model_permission(model_id: str | None) -> None:
         if spec.get("is_ai_detection"):
             return
     raise HTTPException(status_code=403, detail="Inspection permission required for non-AI detection models")
-
-
 
 
 def output_path_visible_to_user(request_path: str, user: dict[str, Any]) -> bool:
@@ -2073,83 +1822,13 @@ def include_internal_runtime_details(user: dict[str, Any] | None) -> bool:
     return user_is_admin(viewer) or user_has_permission(viewer, "system_settings")
 
 
-@app.middleware("http")
-async def reject_untrusted_cross_origin_writes(request: Request, call_next):
-    if request.method not in {"GET", "HEAD", "OPTIONS"}:
-        origin = request.headers.get("origin")
-        host = request.headers.get("host", "")
-        if origin and not same_origin(origin, host) and not cors_origin_allowed(origin):
-            return PlainTextResponse("Untrusted cross-origin write request", status_code=403)
-    path = request.url.path
-    auth_user: dict[str, Any] | None = None
-    token = None
-    public_auth_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout", "/api/version"}
-    public_runpod_training_transfer = (
-        request.method in {"GET", "HEAD"}
-        and re.match(r"^/api/training/runpod/datasets/[^/]+/[^/]+/dataset\.zip$", path) is not None
-    ) or (
-        request.method == "PUT"
-        and re.match(r"^/api/training/runpod/artifacts/[^/]+/[^/]+/run\.zip$", path) is not None
-    )
-    if path.startswith("/api/") and path not in public_auth_paths and not public_runpod_training_transfer:
-        auth_user, auth_store, _ = authenticate_request(request, indexed=True)
-        if not users_exist(auth_store):
-            return JSONResponse({"detail": "First admin setup required", "setup_required": True}, status_code=503)
-        if not auth_user:
-            return JSONResponse({"detail": "Authentication required"}, status_code=401)
-        if (path.startswith(("/api/ai/config", "/api/agent/config", "/api/admin/model-profiles"))) and not user_is_admin(auth_user):
-            return JSONResponse({"detail": "Admin role required"}, status_code=403)
-        required_permissions = route_allowed_permissions(path, request.method.upper())
-        if required_permissions and not any(user_has_permission(auth_user, permission) for permission in required_permissions):
-            return JSONResponse(
-                {"detail": "Permission denied", "permission": " / ".join(required_permissions)},
-                status_code=403,
-            )
-        request.state.user = auth_user
-        token = _request_user.set(auth_user)
-    elif path.startswith("/outputs/"):
-        auth_user, auth_store, _ = authenticate_request(request, indexed=True)
-        if not users_exist(auth_store):
-            return PlainTextResponse("First admin setup required", status_code=503)
-        if not auth_user:
-            return PlainTextResponse("Authentication required", status_code=401)
-        if not output_path_visible_to_user(path, auth_user):
-            return PlainTextResponse("Not found", status_code=404)
-        request.state.user = auth_user
-        token = _request_user.set(auth_user)
-    try:
-        response = await call_next(request)
-    finally:
-        if token is not None:
-            _request_user.reset(token)
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("Referrer-Policy", "no-referrer")
-    response.headers.setdefault("Permissions-Policy", "camera=(self), serial=(self), microphone=(), geolocation=()")
-    response.headers.setdefault(
-        "Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:; "
-        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
-    )
-    if str(request.headers.get("x-forwarded-proto") or request.url.scheme).lower() == "https":
-        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-    if request.method in {"GET", "HEAD"}:
-        cacheable_ok = getattr(response, "status_code", 200) < 400
-        if path.startswith("/static/") and cacheable_ok:
-            response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
-        elif path.startswith("/react-preview/assets/") and cacheable_ok:
-            response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
-        elif path == "/react-preview" or path.startswith("/react-preview/"):
-            response.headers.setdefault("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-        elif path.startswith("/outputs/"):
-            # Output artifacts are effectively write-once; let the browser show the
-            # cached copy instantly on reopen and revalidate in the background
-            # (StaticFiles still answers conditional requests with a cheap 304).
-            response.headers.setdefault("Cache-Control", "private, max-age=600, stale-while-revalidate=86400")
-        elif path.startswith("/api/"):
-            response.headers.setdefault("Cache-Control", "no-store")
-    return response
+reject_untrusted_cross_origin_writes = register_security_middleware(app, SecurityDependencies(
+    authenticate=lambda request, *, indexed=False: authenticate_request(request, indexed=indexed),
+    users_exist=lambda store: users_exist(store), identity=_request_user,
+    output_visible=lambda path, user: output_path_visible_to_user(path, user),
+    same_origin=lambda origin, host: same_origin(origin, host),
+    cors_origin_allowed=lambda origin: cors_origin_allowed(origin),
+))
 
 app.mount(
     "/static/assets",

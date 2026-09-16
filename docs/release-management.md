@@ -1,5 +1,9 @@
 # VantaLine release management
 
+The request-authentication gate includes actual ASGI security/identity contracts
+and real PostgreSQL indexed authentication through the extracted service. Required
+HTTP snapshots remain unchanged; this adds no worker startup or deployment switch.
+
 The authentication foundation gate adds synthetic JSON and isolated PostgreSQL
 compatibility/failure tests. Existing HTTP, agent, navigation and frontend checks
 remain required. This release changes no worker topology or deployment flags.

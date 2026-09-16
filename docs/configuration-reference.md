@@ -1,5 +1,10 @@
 # Configuration reference
 
+Session settings remain resolved at use time: cookie name, TTL and persist interval
+keep their current values. Bootstrap environment reads remain dynamic. Extracted
+middleware preserves early-denial responses, CORS order, security/cache headers,
+media authentication and the exact public RunPod transfer path/method exceptions.
+
 Authentication foundation extraction preserves password hashing format and
 iteration configuration, session expiry/cookies, permission defaults, navigation
 limits and JSON/PostgreSQL selection. No new setting or credential is introduced.
