@@ -1,5 +1,10 @@
 # Configuration reference
 
+Analysis projection/publication extraction changes no model, prompt, threshold,
+source-image path rule or display default. Ordinary detail responses still omit
+raw model/debug fields; only the existing administrator detail path enables them.
+The list retains its 40-item preview cap and detail retains the full item list.
+
 Analysis record extraction adds no configuration. Its list/detail/delete and
 retired LocateAnything endpoints preserve their schemas, query defaults and
 permission behavior. Cross-owner read/delete remains hidden as 404; admin user

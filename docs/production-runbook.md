@@ -1,5 +1,10 @@
 # Production runbook
 
+Analysis projection/publication changes use the ordinary complete-release restart.
+Verify normal/admin analysis visibility and preserved history; no recomputation,
+backfill, worker mode change or database cleanup is needed. Whole-release rollback
+retains saved records, including records whose later capture step failed.
+
 Analysis record extraction requires no data migration, maintenance window or
 service topology change beyond the ordinary Web restart. Roll back the entire
 previous release if history access regresses. Retain records, model references

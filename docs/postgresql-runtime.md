@@ -1,5 +1,11 @@
 # PostgreSQL runtime operations
 
+`analytics.analysis_publication` uses the same injected repository and lock as
+analysis CRUD. Image-processing read/merge/save retains the existing local lock;
+detection publication still saves first and only then requests auto-optimize
+capture. A capture failure leaves the saved record and is not automatically
+retried by this service. No transaction or advisory-lock optimization is included.
+
 `analytics.analysis_repository` owns analysis-record SQL/JSON selection through
 an injected thread-owned runtime repository factory. Replace-all, row upsert,
 lookup and deletion retain their existing transactions and local lock placement.

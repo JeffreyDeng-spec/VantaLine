@@ -6,8 +6,13 @@ owner-aware access, `analysis_queries` for list/detail assembly and `analysis_ap
 for the five original routes. The composition root injects narrow factories and
 permission/presentation ports. Existing source IDs, normalization, lock placement,
 sort order, offset pagination, hidden 404s and retired 410 routes remain intact.
-Image/scope projections and detection-side record publication still use explicit
-adapters until their subsequent extraction; they are not declared migrated yet.
+`analysis_processing` owns image-processing metadata and request-local manifest
+projection; `analysis_scope` owns required-accessory scope/count projection;
+`analysis_projection` owns public/debug record views and source-image lookup;
+`analysis_publication` owns detection/image-processing record publication. These
+services receive explicit media/configuration/identity/persistence ports and do
+not import the application. Current identity/cache is fetched at each call, never
+stored at construction. Compatibility exports remain for unconverted callers.
 
 `schemas/` contains dependency-free HTTP request models grouped into authentication,
 configuration, detection, accessories, training, pipeline and text inspection.
@@ -459,8 +464,8 @@ injects lazy path, runtime repository and existing task loader callbacks; no
 connection or request identity is stored in the ledger. PostgreSQL raw JSON
 remains authoritative, legacy source paths still define stable call IDs, and
 file metadata is read only after store-backed payloads. Existing loader locking
-and pricing are unchanged by this extraction. Other analytics endpoints remain
-in the application entry point until their own migration.
+and pricing are unchanged by this extraction. Analysis-record endpoints use the
+separate analytics query/access/repository services described above.
 
 Settings groups administrative controls into 模型与 API, 设备与运行 and 用量与成本.
 `model_profiles` resolves label, manual, pipeline, image, training_assistant,

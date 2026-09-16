@@ -1,5 +1,9 @@
 # VantaLine release management
 
+The analysis projection/publication gate adds synthetic service failure/cache
+tests and keeps the assembled API, original analysis HTTP flow, PostgreSQL and
+frontend checks. It introduces no deployment flags or service topology changes.
+
 Analysis-domain CI includes real isolated PostgreSQL storage tests, the original
 synthetic detection-to-analysis HTTP flow and an updated source-owner contract.
 These are additional gates; existing PLC, frontend and model checks remain.
