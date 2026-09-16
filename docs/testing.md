@@ -1,5 +1,20 @@
 # Testing
 
+`python scripts/smoke_analysis_records.py --postgres` covers normalization,
+legacy JSON shapes and atomic-file replacement, deterministic ordering, bounded
+records, owner guards, row upserts/deletes and concurrent independent PostgreSQL
+writes in a disposable schema. It checks no JSON fallback and connection release.
+`smoke_data_analysis.py` now installs the existing model fixture and retains the
+real HTTP detection-to-history assertions, plus cross-owner hidden 404s, denied
+deletion preservation, internal missing_ok and repeated HTTP deletion.
+The PostgreSQL source contract follows the actual extracted repository and checks
+that public/HTTP deletion reaches authorization before persistence.
+
+The unrelated `smoke_postgres_cutover_full.py --mode local-fake-postgres` currently
+fails on its fake SQL parser's unsupported PLC advisory-lock SELECT. This failure
+was reproduced on the pre-analysis baseline; the script is retained. It is not
+evidence against actual PostgreSQL behavior, which the new isolated test exercises.
+
 `python scripts/smoke_cost_ledger.py` uses synthetic records and temporary files
 with real cost services/adapters: token aliases, cached/image/reasoning pricing,
 unknown models, raw PostgreSQL-source precedence over stale JSON, stable call

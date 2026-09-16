@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Analysis-domain CI includes real isolated PostgreSQL storage tests, the original
+synthetic detection-to-analysis HTTP flow and an updated source-owner contract.
+These are additional gates; existing PLC, frontend and model checks remain.
+
 Cost-domain extraction adds `smoke_cost_ledger.py` to backend CI. It changes no
 runtime topology, dependency pin, migration or pricing; the whole-release gate
 and sequential deployment observation remain required.

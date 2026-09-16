@@ -1,5 +1,12 @@
 # PostgreSQL runtime operations
 
+`analytics.analysis_repository` owns analysis-record SQL/JSON selection through
+an injected thread-owned runtime repository factory. Replace-all, row upsert,
+lookup and deletion retain their existing transactions and local lock placement.
+This migration introduces no schema/index, unlocked reads or changed pagination.
+Authorization and deletion keep their prior separate read/write sequence; this
+phase does not claim to close that pre-existing race window.
+
 Repository connection selection now lives in `runtime/connections.py`. Web and
 worker callers continue using the same factory/clear interfaces: each execution
 thread owns its connection, reset advances a generation, and other threads evict

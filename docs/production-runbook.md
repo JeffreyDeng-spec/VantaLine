@@ -1,5 +1,10 @@
 # Production runbook
 
+Analysis record extraction requires no data migration, maintenance window or
+service topology change beyond the ordinary Web restart. Roll back the entire
+previous release if history access regresses. Retain records, model references
+and call evidence; do not rebuild historical JSON or replay provider calls.
+
 Cost-domain extraction ships in the ordinary immutable release, with no data
 migration or worker change. Revert the complete release on regression; preserve
 stored call evidence and existing metadata. There is no cost-ledger repair or

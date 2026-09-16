@@ -15,11 +15,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TMP_ROOT = Path(tempfile.mkdtemp(prefix="vantaline_data_analysis_smoke_"))
 (TMP_ROOT / "local_inspection_service" / "static").mkdir(parents=True, exist_ok=True)
 os.environ["LOCAL_INSPECTION_ROOT"] = str(TMP_ROOT)
+os.environ["VANTALINE_DATA_STORE"] = "json"
+os.environ["VANTALINE_LABEL_INSPECTION_ENABLED"] = "false"
+os.environ["LOCAL_INSPECTION_AUTO_RESUME_WORKER"] = "0"
 
 sys.path.insert(0, str(REPO_ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from local_inspection_service import server  # noqa: E402
+from local_inspection_service.scripts.model_profiles_fixture import install  # noqa: E402
+
+install(server)
 
 
 def assert_status(response: Any, expected: int, label: str) -> None:
@@ -229,6 +235,17 @@ def main() -> None:
 
     if client_b.get(f"/api/data-analysis/records/{record_b}").json()["record"]["record_id"] != record_b:
         raise AssertionError("operator B could not read own data analysis record")
+    assert_status(client_b.get(f"/api/data-analysis/records/{record_a}"), 404, "cross-owner read is hidden")
+    assert_status(client_b.delete(f"/api/data-analysis/records/{record_a}"), 404, "cross-owner delete is hidden")
+    if server.delete_data_analysis_record(record_a, user_b, missing_ok=True) is not None:
+        raise AssertionError("hidden missing_ok delete must remain idempotent")
+    assert_status(client_a.get(f"/api/data-analysis/records/{record_a}"), 200, "denied deletion preserved owner record")
+    deleted = client_a.delete(f"/api/data-analysis/records/{record_a}")
+    assert_status(deleted, 200, "owner delete")
+    if deleted.json() != {"status": "deleted", "record_id": record_a}:
+        raise AssertionError("owner delete response changed")
+    assert_status(client_a.delete(f"/api/data-analysis/records/{record_a}"), 404, "repeated HTTP delete remains missing")
+    assert_status(client_b.get(f"/api/data-analysis/records/{record_b}"), 200, "other owner record survives deletion")
     print("data analysis smoke ok")
 
 
