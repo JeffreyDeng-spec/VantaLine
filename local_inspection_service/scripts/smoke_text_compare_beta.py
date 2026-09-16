@@ -37,84 +37,22 @@ def main():
     assert '@app.post("/api/text-compare-beta/analyze")' in source
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in source
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in source
-    frontend = (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "TextCompareBetaPage.tsx").read_text(encoding="utf-8")
-    frontend += (APP_DIR / "frontend" / "src" / "features" / "text-compare" / "ComparisonResult.tsx").read_text(encoding="utf-8")
-    styles = (APP_DIR / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
-    assert "getUserMedia" in frontend and "track.stop()" in frontend
-    lifecycle = (APP_DIR / "frontend/src/features/text-compare/useComparisonTask.ts").read_text()
-    dialog = (APP_DIR / "frontend/src/features/text-compare/ComparisonDialog.tsx").read_text()
-    assert "comparison.start" in frontend and "inputEpoch.current !== epoch" in frontend
-    assert "current.current?.requestId !== requestId" in lifecycle
-    assert 'useState<"camera" | "image">(comparison.task ? "image" : "camera")' in frontend
-    assert "sessionStorage.setItem" in lifecycle and "by-request/" in lifecycle
-    assert "showModal()" in dialog and "onCancel" in dialog and "进度为估算" in dialog
-    assert "查看结果" in frontend and "对比中 · 查看进度" in frontend
-    assert 'const IMAGE_ACCEPT = "image/*' in frontend
-    assert "ACCEPTED_TYPES" not in frontend and "仅支持 PNG、JPG 或 WEBP 图片。" not in frontend
-    assert "支持常见图片格式" in frontend
-    assert "上传实物图片" in frontend and "请先上传实物图片" in frontend
-    assert "text-compare-lightbox" in frontend and "zoomScale" in frontend and "查看大图" in frontend
-    # Standard-library navigation and inspection stays in the order detail: users
-    # should not have to enter a second manager dialog to edit the same standard.
-    assert 'className="text-standard-thumbnail"' in frontend and "openZoom(asset.content_url" in frontend
-    assert 'aria-expanded={expanded}' in frontend and 'data-testid="standard-order-detail"' in frontend
-    assert 'aria-labelledby="text-standard-import-title"' in frontend and 'aria-label="返回标准库"' in frontend
-    assert 'role="dialog"' in frontend and 'aria-modal="true"' in frontend
-    assert 'role="tab"' in frontend and 'role="tabpanel"' in frontend and 'event.key !== "Escape"' in frontend
-    assert 'data-testid="standard-library-assets"' in frontend
-    assert "查看第 ${asset.ordinal} 张标准大图" in frontend and "第 ${asset.ordinal} 张标准缩略图" in frontend
-    assert 'className={`text-standard-asset-card ' in frontend
-    assert 'classification-${asset.status}' in frontend and '${selected ? "selected" : ""}' in frontend
-    assert 'aria-pressed={selectable ? selected : undefined}' in frontend
-    assert 'selectable ? chooseAsset(asset)' in frontend and "已选标准" in frontend and "点击选中" in frontend
-    assert 'className={mode === "label" ? "text-compare-workbench" : ""}' in frontend
-    assert 'className="text-compare-compact-topbar"' in frontend
-    assert "100dvh" in styles and "max-height: 800px" in styles
-    assert ".text-compare-workbench .text-compare-actual-panel .text-compare-stage" in styles
-    assert "setShowImport(true)" in frontend
-    assert "showManager" not in frontend and "管理标准" not in frontend
-    # Label comparison accepts only an enabled gallery asset as its standard.
-    # Changing that selection clears stale output but preserves the actual image.
-    assert "const resetComparison" in frontend and "comparison.reset()" in frontend
-    assert 'resetComparison();\n    setSelectedAssetId(asset.id);' in frontend
-    assert 'setSelectedStandardId(nextId); setSelectedAssetId(""); setAssetUploadFile(null);\n    resetComparison();' in frontend
-    assert "assetId: selectedAsset.id" in frontend
-    assert 'form.set("standard_asset_id", selectedAsset.id)' in frontend
-    assert "analyzeTextCompareBeta" not in frontend and "replaceReference" not in frontend
-    assert 'ariaLabel="拖拽或选择标准图片"' not in frontend
-    assert "请先选择已启用并完成元素准备的标准" in frontend
-    assert "function isActiveAsset" in frontend
-    # Colored current state is distinct from the one-click destination action.
-    # Pending/excluded become retained; retained becomes excluded.
-    assert '<option value="needs_confirmation">' not in frontend
-    control = frontend.split('className={`text-standard-retention-control', 1)[1].split('</div>', 1)[0]
-    assert 'retention-${asset.status}' in control
-    assert 'className="text-standard-retention-state"' in control
-    assert all(label in control for label in ('"已保留"', '"未保留"', '"待确认"'))
-    toggle = control.split('className="text-standard-retention-toggle"', 1)[1].split('</button>', 1)[0]
-    assert 'aria-label={`第 ${asset.ordinal} 张图片：' in toggle
-    assert '"改为不保留"' in toggle and '"改为保留"' in toggle
-    assert 'disabled={reviewBusy}' in toggle
-    assert 'action: asset.status === "candidate" ? "remove" : "confirm"' in toggle
-    for status, color in [('candidate', '#187344'), ('excluded', '#b42332'), ('needs_confirmation', '#ffcf85')]:
-        assert f'.retention-{status} {{ background: {color};' in styles
-    assert '.text-standard-retention-toggle:focus-visible' in styles
-    assert 'setSelectedStandardId(""); setSelectedAssetId(""); setShowImport(false); resetComparison({ clearCaptured: true });' in frontend
-    assert 'standardQuery.data?.status !== "confirmed"' in frontend
-    assert "这个订单还没有启用" in frontend
-    # Logical standards remain manageable after confirmation, while the backend
-    # records immutable revisions and only soft-removes their assets.
-    assert "addTextInspectionStandardAsset" in frontend
-    assert 'revision: standardQuery.data?.revision_number' in toggle
-    assert "添加到标准" in frontend and "停用" in frontend and "启用" in frontend
+    retired = (APP_DIR / "frontend/src/features/text-compare/TextCompareBetaPage.tsx").read_text()
+    redirect = (APP_DIR / "frontend/src/features/label-inspection/LegacyManualRedirect.tsx").read_text()
+    history = (APP_DIR / "frontend/src/features/label-inspection/ManualHistory.tsx").read_text()
+    result = (APP_DIR / "frontend/src/features/text-compare/ComparisonResult.tsx").read_text()
+    assert "LegacyManualRedirect" in retired and "getUserMedia" not in retired
+    assert "legacy-manual:" in redirect and "/workspace/label-inspection" in redirect
+    assert 'params.get("session_id")' in redirect and 'params.get("inspection_id")' in redirect
+    assert "历史记录（只读）" in history and "原记录未保留实物照片" in history
+    assert "has_photo" in history and "final_decision" in history
     assert "standard_revision_id" in source and "standard_revision_number" in source
     assert '"revisions": "text_inspection_standard_revisions"' in source
-    assert "仅辅助检查文字" not in frontend and "颜色、材质与印刷质量仍需肉眼确认" not in frontend
-    assert '<details className="text-compare-raw-output"' in frontend
-    assert "Raw Output（调试信息）" in frontend and "默认折叠" in frontend
-    assert "parsed_response" in frontend and "response_preview" in frontend and "normalized_response" in frontend
-    assert "MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000" in frontend and "formatDiagnosticOutput" in frontend
-    assert '.text-compare-raw-output[open] > summary svg' in styles
+    # The historical result reader still renders bounded original diagnostics.
+    assert "parsed_response" in result and "response_preview" in result and "normalized_response" in result
+    assert "MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000" in result and "formatDiagnosticOutput" in result
+    # Current upload/camera/grid coverage lives in smoke_frontend_media_inputs and
+    # test_label_workspace_ui; no test should require resurrecting the retired UI.
     shell = (APP_DIR / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
     assert "包材文字检验（旧版）" not in shell
     assert 'task_kind: "incoming_material_text"' not in shell

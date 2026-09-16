@@ -428,3 +428,8 @@ jobs use the initial migration snapshot. Video scopes cover all frames; manual
 sessions preserve their original model binding. Public task projections remove
 private configuration references. Usage failures must not turn a successful paid
 response into a failed/retried call. No new cross-model fallback is introduced.
+
+
+## Unified PDF inspection
+
+The unified label-inspection service now owns PDF manual tasks. A globally leased deterministic PDF importer publishes complete immutable revisions; a separate versioned two-call page strategy uses the same durable run/call storage. Historical manual routes are read-only, and old frontend entries redirect into the unified task list/history. No PLC path changes.

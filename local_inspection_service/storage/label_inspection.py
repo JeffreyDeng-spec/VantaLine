@@ -188,6 +188,87 @@ class LabelRepository:
             self.revision(c, task)
             return task
 
+    def create_pdf(self, owner, key, name, source, entries, version):
+        parameters = {
+            "name": name,
+            "source": source,
+            "entries": entries,
+            "version": version,
+        }
+        with self.tx() as c:
+            old = self.prior(c, owner, "task", key, parameters)
+            if old:
+                return old
+            task = self.new(
+                owner,
+                "",
+                "task",
+                key,
+                name=name,
+                source=source,
+                revision=0,
+                assets=[],
+                parameters=digest(parameters),
+                status="import_queued",
+                **{
+                    "import": {
+                        "version": version,
+                        "entries": entries,
+                        "assets": [],
+                        "completed": 0,
+                        "total": len(entries),
+                    }
+                },
+            )
+            task["task_id"] = task["id"]
+            self.put(c, task, True)
+            return task
+
+    def claim_pdf(self, token):
+        with self.tx() as c:
+            c.execute(
+                f"SELECT raw_json FROM {self.table} WHERE kind='task' AND status IN ('import_queued','import_running') ORDER BY created_at,id"
+            )
+            tasks = self.rows(c)
+            if any(
+                t["status"] == "import_running"
+                and t["import"].get("lease_until", 0) > time.time()
+                for t in tasks
+            ):
+                return None
+            if not tasks:
+                return None
+            task = tasks[0]
+            task["status"] = "import_running"
+            task["import"].update(token=token, lease_until=time.time() + 300)
+            self.put(c, task)
+            return task
+
+    def pdf_progress(self, owner, identity, token, assets, complete=False, error=None):
+        with self.tx() as c:
+            task = self.read(c, owner, identity, "task")
+            if (
+                not task
+                or task["status"] != "import_running"
+                or task["import"].get("token") != token
+            ):
+                return False
+            if error:
+                task.update(status="import_failed")
+                task["import"]["error"] = error
+            else:
+                task["import"].update(
+                    assets=assets, completed=len(assets), lease_until=time.time() + 300
+                )
+                if complete:
+                    if len(assets) != task["import"]["total"]:
+                        raise ValueError("PDF 页面尚未全部完成")
+                    task.update(status="ready", assets=assets, revision=1)
+                    self.revision(c, task)
+                    task["import"].pop("assets", None)
+            self.put(c, task)
+            return True
+
     def revision(self, c, task):
         value = self.new(
             task["owner_user_id"],
@@ -213,6 +294,8 @@ class LabelRepository:
                 raise KeyError(identity)
             if old:
                 return task
+            if task.get("status", "ready") != "ready":
+                raise OperationConflict("PDF 尚未完成导入，不能修改标准")
             if task["revision"] != expected:
                 raise OperationConflict("标准版本已更新，请刷新后操作")
             change(task)
@@ -252,6 +335,8 @@ class LabelRepository:
             "records": "text_inspection_records",
             "beta": "codex_comparison_tasks",
             "assets": "text_inspection_assets",
+            "sessions": "text_inspection_manual_sessions",
+            "pages": "text_inspection_manual_pages",
         }
         table = self.repository._qualified_table(tables[kind])
         with self.tx() as c:
@@ -319,6 +404,8 @@ class LabelRepository:
             task = self.read(c, owner, identity, "task")
             if not task:
                 raise KeyError(identity)
+            if task.get("status", "ready") != "ready":
+                raise OperationConflict("PDF 尚未完成导入，不能检测")
             if task["revision"] != revision:
                 raise OperationConflict("标准版本已更新，请重新选择")
             ref = next(
@@ -342,6 +429,9 @@ class LabelRepository:
                 previous = self.read(c, owner, parent, "run")
                 if not previous or previous["task_id"] != identity:
                     raise KeyError(parent)
+            from ..label_inspection import manual
+
+            is_pdf = (task.get("source") or {}).get("type") == "pdf"
             run = self.new(
                 owner,
                 identity,
@@ -358,7 +448,8 @@ class LabelRepository:
                 parent_id=parent,
                 decision="REVIEW_REQUIRED",
                 phase="queued",
-                quality={"policy": copy.deepcopy(POLICY)},
+                strategy=manual.VERSION if is_pdf else "label",
+                quality={"policy": copy.deepcopy(manual.POLICY if is_pdf else POLICY)},
             )
             self.put(c, run, True)
             self.put(c, task)

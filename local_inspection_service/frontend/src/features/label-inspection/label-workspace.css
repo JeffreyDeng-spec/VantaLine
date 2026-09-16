@@ -986,3 +986,7 @@
 .li-image img {
   image-orientation: from-image;
 }
+
+.li-manual-history { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px; }
+.li-manual-history article { border-top: 1px solid #394658; padding: 12px 0; }
+.li-manual-history .li-modal img { max-width: 90vw; max-height: 85dvh; object-fit: contain; }

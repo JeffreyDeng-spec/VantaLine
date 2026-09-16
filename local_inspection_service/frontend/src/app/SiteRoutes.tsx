@@ -31,7 +31,7 @@ function PageTitle() {
   useEffect(() => {
     const item = navItems.find((item) => item.path.split("?")[0] === pathname);
     const title = pathname === "/" ? "AI 视觉质检" : pathname === "/docs" ? "使用文档"
-      : pathname === "/login" ? "登录工作台" : pathname === "/workspace/text-compare-beta" ? "说明书检验" : item?.label
+      : pathname === "/login" ? "登录工作台" : pathname === "/workspace/text-compare-beta" ? "文字检验" : item?.label
         || (pathname.includes("/tasks/") ? "任务" : "页面不存在");
     document.title = `${title} · VantaLine`;
   }, [pathname]);

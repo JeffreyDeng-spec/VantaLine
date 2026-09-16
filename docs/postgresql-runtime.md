@@ -160,3 +160,8 @@ are stored only in restricted server secret storage; metadata stores references.
 The registry requires PostgreSQL and has no JSON runtime fallback. Initial
 migration is idempotent; original settings and immutable secret versions remain
 for complete-release rollback. Never remove a secret used by unfinished work.
+
+
+## Unified PDF inspection
+
+PDF task JSON extends label_inspection_objects with source pdf, import manifest/checkpoints/lease, and import_queued/import_running/import_failed states. No DDL migration. One advisory-lock-protected importer owns a token with a 300s renewed lease; stale tokens cannot checkpoint or publish. Revision 1 is inserted atomically only after all pages render. Existing runs freeze pdf-page-v1 or label strategy. Old manual standards/sessions/pages/records are owner-scoped read-only projections.
