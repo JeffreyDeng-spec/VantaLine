@@ -1,5 +1,14 @@
 # Architecture
 
+`runtime/identity.py` owns the request identity port backed by a `ContextVar` per
+composition. `runtime/connections.py` owns thread-local repository selection,
+generation invalidation, closed-connection rebuilding and explicit same-thread
+release scopes. The Web composition supplies factories and keeps its existing
+HTTP-safe store errors. Existing workers retain their explicit finally cleanup;
+HTTP connection caching and worker startup behavior remain unchanged in this step.
+The new `thread_scope` belongs inside synchronous work sent to an executor, never
+across an await; it is available for subsequent worker lifecycle migration.
+
 Model-profile composition uses `model_profiles/dependencies.py`: the service gets
 a repository factory, secret access, legacy configuration and validation ports;
 the HTTP registrar gets explicit admin and formatting callbacks. Snapshot decorators

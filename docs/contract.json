@@ -57,7 +57,7 @@
     },
     {
       "name": "PostgreSQL and migrations",
-      "paths": ["local_inspection_service/storage/**", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
+      "paths": ["local_inspection_service/storage/**", "local_inspection_service/runtime/connections.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
       "required_docs": ["docs/production-runbook.md", "docs/postgresql-runtime.md"]
     },
     {

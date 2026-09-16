@@ -6,6 +6,12 @@ releases use the existing complete-release deployment and rollback procedure.
 
 **Status: Authoritative**
 
+Runtime connection/identity extraction uses ordinary complete-release restart and
+rollback. It adds no service, flag, migration or maintenance gate. Existing worker
+cleanup remains on its own thread; do not close an active worker's connection from
+an HTTP shutdown callback. Connection factory tests cover redacted failures before
+this independently deployable step is merged.
+
 For model dependency extraction, use normal whole-release deployment and verify
 health/version before observing existing tasks. Missing resolver/recorder errors
 must be corrected in composition, never bypassed by replaying a paid task. Rollback
