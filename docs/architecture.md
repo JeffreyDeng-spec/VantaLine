@@ -6,6 +6,13 @@ An exit during a heartbeat is handled in the next loop. Cancellation and deadlin
 checks still precede completion; a reader that has not reached EOF cannot claim
 success. This is a terminal-state correctness fix, not the label-worker split.
 
+Authentication foundations live in `auth.policy`, `auth.credentials`,
+`auth.preferences` and `auth.repository`. Pure permission/credential/preference
+rules do not depend on the application. Persistence receives lazy path, repository
+and reentrant-lock factories, retaining thread ownership and raw/hashed session
+compatibility. The root retains request authentication, session orchestration and
+HTTP routes for their next extraction; compatibility exports serve old callers.
+
 Analysis records use `analytics.analysis_records` for normalization,
 `analysis_repository` for JSON/PostgreSQL persistence, `analysis_service` for
 owner-aware access, `analysis_queries` for list/detail assembly and `analysis_api`

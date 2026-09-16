@@ -1,5 +1,9 @@
 # VantaLine release management
 
+The authentication foundation gate adds synthetic JSON and isolated PostgreSQL
+compatibility/failure tests. Existing HTTP, agent, navigation and frontend checks
+remain required. This release changes no worker topology or deployment flags.
+
 The analysis projection/publication gate adds synthetic service failure/cache
 tests and keeps the assembled API, original analysis HTTP flow, PostgreSQL and
 frontend checks. It introduces no deployment flags or service topology changes.

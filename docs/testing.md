@@ -7,6 +7,15 @@ deadline precedence. It verifies final metadata is persisted before completion a
 scratch files are cleaned. It launches no process, model or database. The original
 real PostgreSQL/CLI regression remains and includes allowlisted failure evidence.
 
+`python scripts/smoke_auth_foundation.py --postgres` covers permission/password
+rules, JSON replacement and temporary-file cleanup, isolated PostgreSQL account
+updates, concurrent sessions, raw/hashed legacy keys, expiry equality, login
+revocation isolation and reentrant-lock release on failure. It uses synthetic
+credentials and drops its own schema. The existing agent PostgreSQL smoke imports
+the real extracted user lookup while retaining indexed request-auth assertions;
+the source contract follows the actual auth repository. HTTP and navigation
+contracts remain required.
+
 `python scripts/smoke_analysis_projections.py` exercises actual processing/scope/
 view/publication services with synthetic dependencies: manifest reuse, status
 normalization, stable item merging, scope precedence, normal/admin debug fields,

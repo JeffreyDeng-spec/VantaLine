@@ -814,29 +814,39 @@ SYSTEM_OWNER_ID = "system"
 from .runtime.identity import RequestIdentity
 _request_user = RequestIdentity()
 
-FEATURE_PERMISSIONS: dict[str, str] = {
-    "inspection": "检测工作台",
-    "ai_detection": "AI 检测",
-    "accessory_library": "配件库",
-    "training_pipeline": "任务流水线",
-    "incoming_material_config": "包材文字标准配置",
-    "model_library": "训练库 / 模型库",
-    "system_settings": "通过规则 / API 服务设置",
-    "ai_config": "AI 服务配置",
-    "agent_config": "Agent 接入配置",
-    "worker_settings": "RunPod / 远程执行设置",
-    "user_management": "用户与权限管理",
-}
+from .auth.policy import (
+    FEATURE_PERMISSIONS, ADMIN_ONLY_PERMISSIONS, DEFAULT_USER_PERMISSIONS,
+    clean_username, clean_display_name, normalize_role, normalize_permissions,
+    public_user, find_user, find_user_by_username, user_is_admin, user_has_permission,
+)
+from .auth.credentials import PasswordHasher, verify_password, generate_temporary_password, TEMP_PASSWORD_ALPHABET
+from .auth.preferences import (
+    TASK_NAVIGATION_PREFERENCES_KEY, MAX_TASK_NAVIGATION_IDS, MAX_TASK_NAVIGATION_ID_LENGTH,
+    normalize_task_navigation_ids, task_navigation_preferences_payload,
+)
+from .auth.repository import (
+    AuthStoreDependencies, AuthRepository, empty_auth_store, auth_user_row_for_user,
+    auth_session_key_candidates, auth_session_from_store, auth_session_row_for_session,
+)
 
-ADMIN_ONLY_PERMISSIONS = {"user_management", "ai_config", "agent_config", "system_settings"}
-
-DEFAULT_USER_PERMISSIONS = [
-    "inspection",
-    "ai_detection",
-    "accessory_library",
-    "training_pipeline",
-    "model_library",
-]
+_password_hasher = PasswordHasher(lambda: PASSWORD_HASH_ITERATIONS)
+password_hash = _password_hasher.password_hash
+_auth_store_write_lock = threading.RLock()
+_auth_repository = AuthRepository(AuthStoreDependencies(
+    data_directory=lambda: DATA_DIR, auth_path=lambda: AUTH_PATH,
+    runtime_repository=lambda: runtime_postgres_repository_or_none(),
+    write_lock=lambda: _auth_store_write_lock,
+))
+load_auth_store = _auth_repository.load_auth_store
+save_auth_store = _auth_repository.save_auth_store
+save_auth_user = _auth_repository.save_auth_user
+delete_auth_user = _auth_repository.delete_auth_user
+save_auth_session = _auth_repository.save_auth_session
+delete_auth_session = _auth_repository.delete_auth_session
+delete_expired_auth_sessions = _auth_repository.delete_expired_auth_sessions
+delete_auth_sessions_for_user = _auth_repository.delete_auth_sessions_for_user
+save_login_session = _auth_repository.save_login_session
+save_auth_session_touch_or_prune = _auth_repository.save_auth_session_touch_or_prune
 
 
 for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, IMAGE_WORKER_LOG_DIR):
@@ -905,302 +915,6 @@ def cors_origin_allowed(origin: str) -> bool:
     return re.match(CORS_ORIGIN_REGEX, normalized) is not None
 
 
-def clean_username(value: Any) -> str:
-    username = re.sub(r"[^a-zA-Z0-9_.@-]+", "_", str(value or "").strip().lower())
-    return username[:64]
-
-
-def clean_display_name(value: Any, fallback: str) -> str:
-    name = str(value or "").strip()
-    return name[:80] if name else fallback
-
-
-def normalize_role(value: Any) -> str:
-    role = str(value or "").strip().lower()
-    return "admin" if role == "admin" else "user"
-
-
-def normalize_permissions(values: Any) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    seen: set[str] = set()
-    permissions: list[str] = []
-    for raw in values:
-        permission = str(raw or "").strip()
-        if permission in FEATURE_PERMISSIONS and permission not in ADMIN_ONLY_PERMISSIONS and permission not in seen:
-            seen.add(permission)
-            permissions.append(permission)
-    return permissions
-
-
-def password_hash(password: str) -> str:
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), PASSWORD_HASH_ITERATIONS)
-    return f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}${salt}${digest.hex()}"
-
-
-def verify_password(password: str, stored_hash: str) -> bool:
-    try:
-        algorithm, iterations_raw, salt_hex, digest_hex = str(stored_hash or "").split("$", 3)
-        if algorithm != "pbkdf2_sha256":
-            return False
-        iterations = int(iterations_raw)
-        expected = bytes.fromhex(digest_hex)
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), iterations)
-        return hmac.compare_digest(actual, expected)
-    except (TypeError, ValueError, binascii.Error):
-        return False
-
-
-def empty_auth_store() -> dict[str, Any]:
-    return {"users": [], "sessions": {}}
-
-
-def load_auth_store() -> dict[str, Any]:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return auth_store_from_rows(repository.fetch_all("users"), repository.fetch_all("auth_sessions"))
-    if not AUTH_PATH.exists():
-        return empty_auth_store()
-    try:
-        raw = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return empty_auth_store()
-    users = raw.get("users") if isinstance(raw.get("users"), list) else []
-    sessions = raw.get("sessions") if isinstance(raw.get("sessions"), dict) else {}
-    return {"users": users, "sessions": sessions}
-
-
-_auth_store_write_lock = threading.RLock()
-
-
-def save_auth_store(store: dict[str, Any]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        with _auth_store_write_lock:
-            repository.replace_tables({"users": auth_user_rows(store), "auth_sessions": auth_session_rows(store)})
-        return
-    payload = json.dumps(store, indent=2, ensure_ascii=False)
-    # Serialize writes and use a unique temp file so concurrent request threads
-    # cannot clobber a shared temp path mid-write (which corrupted the store and
-    # surfaced as random FileNotFound/decode failures under load).
-    with _auth_store_write_lock:
-        tmp_path = AUTH_PATH.with_suffix(f".json.tmp.{uuid.uuid4().hex}")
-        try:
-            tmp_path.write_text(payload, encoding="utf-8")
-            tmp_path.replace(AUTH_PATH)
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-
-def auth_user_row_for_user(user: dict[str, Any]) -> dict[str, Any] | None:
-    rows = auth_user_rows({"users": [user]})
-    return rows[0] if rows else None
-
-
-def save_auth_user(user: dict[str, Any]) -> bool:
-    row = auth_user_row_for_user(user)
-    if not row:
-        return False
-    repository = runtime_postgres_repository_or_none()
-    if repository is None:
-        return False
-    with _auth_store_write_lock:
-        repository.upsert_row("users", row)
-    return True
-
-
-TASK_NAVIGATION_PREFERENCES_KEY = "task_navigation_preferences"
-MAX_TASK_NAVIGATION_IDS = 200
-MAX_TASK_NAVIGATION_ID_LENGTH = 200
-
-
-def normalize_task_navigation_ids(raw_ids: Any) -> list[str]:
-    if not isinstance(raw_ids, list):
-        return []
-    clean_ids: list[str] = []
-    seen: set[str] = set()
-    for raw_id in raw_ids:
-        task_id = str(raw_id or "").strip()
-        if not task_id or len(task_id) > MAX_TASK_NAVIGATION_ID_LENGTH or task_id in seen:
-            continue
-        seen.add(task_id)
-        clean_ids.append(task_id)
-        if len(clean_ids) >= MAX_TASK_NAVIGATION_IDS:
-            break
-    return clean_ids
-
-
-def task_navigation_preferences_payload(user: dict[str, Any]) -> dict[str, Any]:
-    raw_preferences = user.get(TASK_NAVIGATION_PREFERENCES_KEY)
-    preferences = raw_preferences if isinstance(raw_preferences, dict) else {}
-    return {
-        "pinned_task_ids": normalize_task_navigation_ids(preferences.get("pinned_task_ids")),
-        "archived_task_ids": normalize_task_navigation_ids(preferences.get("archived_task_ids")),
-        "updated_at": int(preferences.get("updated_at") or 0),
-        "exists": isinstance(raw_preferences, dict),
-    }
-
-
-def delete_auth_user(user_id: str) -> bool:
-    clean_user_id = str(user_id or "").strip()
-    if not clean_user_id:
-        return False
-    repository = runtime_postgres_repository_or_none()
-    if repository is None:
-        return False
-    with _auth_store_write_lock:
-        if repository.fetch_by_primary_key("users", {"id": clean_user_id}) is None:
-            return False
-        repository.delete_by_primary_key("users", {"id": clean_user_id})
-    return True
-
-
-def auth_session_key_candidates(session_id: str) -> tuple[str, ...]:
-    clean_id = str(session_id or "").strip()
-    if not clean_id:
-        return ()
-    return tuple(dict.fromkeys([clean_id, session_key_hash(clean_id)]))
-
-
-def auth_session_from_store(store: dict[str, Any], session_id: str) -> dict[str, Any] | None:
-    sessions = store.get("sessions") if isinstance(store.get("sessions"), dict) else {}
-    for candidate in auth_session_key_candidates(session_id):
-        session = sessions.get(candidate)
-        if isinstance(session, dict):
-            return session
-    return None
-
-
-def auth_session_row_for_session(session_id: str, session: dict[str, Any]) -> dict[str, Any] | None:
-    rows = auth_session_rows({"sessions": {session_id: session}})
-    return rows[0] if rows else None
-
-
-def save_auth_session(session_id: str, session: dict[str, Any]) -> None:
-    row = auth_session_row_for_session(session_id, session)
-    if not row:
-        return
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        with _auth_store_write_lock:
-            repository.upsert_row("auth_sessions", row)
-        return
-    store = load_auth_store()
-    store.setdefault("sessions", {})[session_id] = dict(session)
-    save_auth_store(store)
-
-
-def delete_auth_session(session_id: str) -> bool:
-    candidates = auth_session_key_candidates(session_id)
-    if not candidates:
-        return False
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        deleted = False
-        with _auth_store_write_lock:
-            for candidate in candidates:
-                if repository.fetch_by_primary_key("auth_sessions", {"id_hash": candidate}) is not None:
-                    repository.delete_by_primary_key("auth_sessions", {"id_hash": candidate})
-                    deleted = True
-        return deleted
-    store = load_auth_store()
-    sessions = store.get("sessions") if isinstance(store.get("sessions"), dict) else {}
-    deleted = False
-    for candidate in candidates:
-        deleted = sessions.pop(candidate, None) is not None or deleted
-    if deleted:
-        save_auth_store(store)
-    return deleted
-
-
-def delete_expired_auth_sessions(now: int | None = None) -> int:
-    repository = runtime_postgres_repository_or_none()
-    if repository is None:
-        return 0
-    cutoff = int(now or time.time())
-    deleted = 0
-    with _auth_store_write_lock:
-        for row in repository.fetch_all("auth_sessions"):
-            try:
-                expires_at = int(row.get("expires_at") or 0)
-            except (TypeError, ValueError):
-                expires_at = 0
-            id_hash = str(row.get("id_hash") or "")
-            if id_hash and expires_at <= cutoff:
-                repository.delete_by_primary_key("auth_sessions", {"id_hash": id_hash})
-                deleted += 1
-    return deleted
-
-
-def delete_auth_sessions_for_user(user_id: str, *, keep_session_id: str = "") -> int:
-    repository = runtime_postgres_repository_or_none()
-    if repository is None:
-        return 0
-    clean_user_id = str(user_id or "").strip()
-    if not clean_user_id:
-        return 0
-    keep_hashes = set(auth_session_key_candidates(keep_session_id))
-    deleted = 0
-    with _auth_store_write_lock:
-        for row in repository.fetch_all("auth_sessions"):
-            raw_sessions = row_raw_json_list([row])
-            session = raw_sessions[0] if raw_sessions else {}
-            id_hash = str(row.get("id_hash") or session.get("id_hash") or "")
-            if (
-                id_hash
-                and id_hash not in keep_hashes
-                and str(session.get("user_id") or row.get("user_id") or "") == clean_user_id
-            ):
-                repository.delete_by_primary_key("auth_sessions", {"id_hash": id_hash})
-                deleted += 1
-    return deleted
-
-
-def save_login_session(store: dict[str, Any], session_id: str, user: dict[str, Any], revoked_sessions: int = 0) -> int:
-    repository = runtime_postgres_repository_or_none()
-    if repository is None:
-        save_auth_store(store)
-        return revoked_sessions
-    session = auth_session_from_store(store, session_id)
-    if not session:
-        return revoked_sessions
-    with _auth_store_write_lock:
-        actual_revoked = delete_auth_sessions_for_user(str(user.get("id") or ""), keep_session_id=session_id)
-        save_auth_session(session_id, session)
-    return actual_revoked
-
-
-def save_auth_session_touch_or_prune(store: dict[str, Any], session_id: str, session: dict[str, Any] | None, *, prune_expired: bool) -> None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is None:
-        save_auth_store(store)
-        return
-    if prune_expired:
-        delete_expired_auth_sessions()
-    if session:
-        save_auth_session(session_id, session)
-
-
-def public_user(user: dict[str, Any]) -> dict[str, Any]:
-    role = normalize_role(user.get("role"))
-    permissions = sorted(FEATURE_PERMISSIONS) if role == "admin" else normalize_permissions(user.get("permissions"))
-    return {
-        "id": str(user.get("id") or ""),
-        "username": str(user.get("username") or ""),
-        "display_name": str(user.get("display_name") or user.get("username") or ""),
-        "role": role,
-        "permissions": permissions,
-        "active": bool(user.get("active", True)),
-        "created_at": int(user.get("created_at") or 0),
-        "updated_at": int(user.get("updated_at") or 0),
-    }
-
-
 def users_exist(store: dict[str, Any] | None = None) -> bool:
     store = store or load_auth_store()
     return any(isinstance(user, dict) for user in store.get("users", []))
@@ -1248,33 +962,6 @@ def bootstrap_admin_from_env(store: dict[str, Any]) -> bool:
     create_auth_user(store, username=username, password=password, display_name=username, role="admin", permissions=sorted(FEATURE_PERMISSIONS))
     save_auth_store(store)
     return True
-
-
-def find_user(store: dict[str, Any], user_id: str) -> dict[str, Any] | None:
-    for user in store.get("users", []):
-        if isinstance(user, dict) and str(user.get("id") or "") == str(user_id or ""):
-            return user
-    return None
-
-
-def find_user_by_username(store: dict[str, Any], username: str) -> dict[str, Any] | None:
-    clean = clean_username(username)
-    for user in store.get("users", []):
-        if isinstance(user, dict) and clean_username(user.get("username")) == clean:
-            return user
-    return None
-
-
-def user_is_admin(user: dict[str, Any] | None) -> bool:
-    return normalize_role((user or {}).get("role")) == "admin"
-
-
-def user_has_permission(user: dict[str, Any] | None, permission: str | None) -> bool:
-    if not permission:
-        return True
-    if user_is_admin(user):
-        return True
-    return permission in normalize_permissions((user or {}).get("permissions"))
 
 
 def prune_expired_sessions(store: dict[str, Any]) -> bool:
@@ -1327,14 +1014,6 @@ def create_login_session(store: dict[str, Any], user: dict[str, Any]) -> tuple[s
     session_id = create_session(store, user)
     revoked_sessions = revoke_user_sessions(store, str(user.get("id") or ""), keep_session_id=session_id)
     return session_id, revoked_sessions
-
-
-TEMP_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^*-_"
-
-
-def generate_temporary_password(length: int = 18) -> str:
-    length = max(12, min(48, int(length or 18)))
-    return "".join(secrets.choice(TEMP_PASSWORD_ALPHABET) for _ in range(length))
 
 
 def revoke_user_sessions(store: dict[str, Any], user_id: str, *, keep_session_id: str = "") -> int:

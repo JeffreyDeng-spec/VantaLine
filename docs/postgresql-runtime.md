@@ -1,5 +1,11 @@
 # PostgreSQL runtime operations
 
+`auth.repository` owns user/session persistence with injected thread-owned
+repositories and the existing reentrant write lock. Raw and hashed session-key
+candidates, expiry cutoff and account-scoped revocation remain compatible. Login
+revocation and insertion retain their prior separate database operations; this
+extraction does not claim a new atomic transaction or alter advisory locks.
+
 `analytics.analysis_publication` uses the same injected repository and lock as
 analysis CRUD. Image-processing read/merge/save retains the existing local lock;
 detection publication still saves first and only then requests auto-optimize
