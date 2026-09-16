@@ -116,6 +116,17 @@ def result(value, crop, size):
         raise Rejected(
             "PAGE_REVIEW_REQUIRED", "尚未完成整页比对，部分内容无法可靠读取，请重新拍摄"
         )
+    consistent = value.get("consistentItems", [])
+    if isinstance(consistent, list):
+        # Evolving may enrich optional agreement summaries with boxes. They are
+        # not differences: normalize only their prose, preserving raw call evidence.
+        value = {
+            **value,
+            "consistentItems": [
+                item.get("description") if isinstance(item, dict) else item
+                for item in consistent
+            ],
+        }
     return model.result(value, crop, size)
 
 
