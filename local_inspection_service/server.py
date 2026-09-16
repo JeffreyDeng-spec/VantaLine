@@ -26935,224 +26935,41 @@ def confirm_accessory(candidate_id: str) -> dict[str, Any]:
         }
 
 
-@app.post("/api/accessories/{accessory_id}/files")
-async def add_accessory_files(accessory_id: str, files: list[UploadFile] = File(default=[])) -> dict[str, Any]:
-    user = current_auth_user()
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded")
-    config = load_config()
-    for item in config.get("accessories", []):
-        if accessory_uid(item) != accessory_id:
-            continue
-        require_record_access(item, user, write=True)
-        if accessory_material_type(item) == "text":
-            validate_text_accessory_uploads(files, existing_count=text_accessory_source_count(item))
-        target_dir = UPLOAD_DIR / "accessories" / accessory_id
-        target_dir.mkdir(parents=True, exist_ok=True)
-        saved_files: list[str] = []
-        for upload in files:
-            path = target_dir / safe_name(upload.filename)
-            if path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-                raise HTTPException(status_code=400, detail="Only image files can be added to accessory profiles")
-            with path.open("wb") as f:
-                shutil.copyfileobj(upload.file, f)
-            saved_files.append(str(path))
-        item.setdefault("source_files", [])
-        item["source_files"].extend(saved_files)
-        if accessory_material_type(item) == "text":
-            item.setdefault("original_source_files", [])
-            item["original_source_files"].extend(saved_files)
-        refresh_accessory_assets_after_source_change(item, force_profile=True)
-        save_ai_profile_cache({"entries": {}})
-        save_accessory_item(item, config)
-        return {
-            "status": "saved",
-            "item": serialize_accessory_summary(item),
-            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
-            "detail": accessory_detail_payload(item),
-        }
-    raise HTTPException(status_code=404, detail="Accessory not found")
-
-
-@app.post("/api/accessories/{accessory_id}/text-crop")
-def crop_accessory_text_image(accessory_id: str, request: AccessoryTextCropRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    target_raw = str(request.source_path or "").strip()
-    if not target_raw:
-        raise HTTPException(status_code=400, detail="source_path is required")
-    if len(request.corners or []) != 4:
-        raise HTTPException(status_code=400, detail="corners must contain tl,tr,br,bl")
-    config = load_config()
-    for item in config.get("accessories", []):
-        if accessory_uid(item) != accessory_id:
-            continue
-        require_record_access(item, user, write=True)
-        if accessory_material_type(item) != "text":
-            raise HTTPException(status_code=400, detail="Only text accessories can be cropped")
-        source_paths = {str(path): path for path in existing_source_image_paths(item)}
-        if target_raw not in source_paths:
-            raise HTTPException(status_code=404, detail="Photo is not registered on this accessory")
-        source_path = source_paths[target_raw]
-        if is_text_rectified_path(source_path):
-            raise HTTPException(status_code=400, detail="This text image is already manually cropped")
-        image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
-        if image is None:
-            raise HTTPException(status_code=400, detail="Source image is unreadable")
-        height, width = image.shape[:2]
-        points: list[list[float]] = []
-        for corner in request.corners:
-            x = max(0.0, min(100.0, float(corner.get("x", 0.0)))) * width / 100.0
-            y = max(0.0, min(100.0, float(corner.get("y", 0.0)))) * height / 100.0
-            points.append([x, y])
-        src = np.array(points, dtype="float32")
-        tl, tr, br, bl = src
-        target_w = int(round(max(np.linalg.norm(br - bl), np.linalg.norm(tr - tl))))
-        target_h = int(round(max(np.linalg.norm(tr - br), np.linalg.norm(tl - bl))))
-        if target_w < 8 or target_h < 8:
-            raise HTTPException(status_code=400, detail="Crop area is too small")
-        dst = np.array(
-            [[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]],
-            dtype="float32",
-        )
-        warped = cv2.warpPerspective(image, cv2.getPerspectiveTransform(src, dst), (target_w, target_h))
-        target_dir = UPLOAD_DIR / "accessories" / accessory_id
-        target_dir.mkdir(parents=True, exist_ok=True)
-        base = stable_text_crop_stem(source_path)
-        out_path = target_dir / f"{base}_manual_rectified.png"
-        suffix = 1
-        while out_path.exists():
-            out_path = target_dir / f"{base}_manual_rectified_{suffix}.png"
-            suffix += 1
-        if not cv2.imwrite(str(out_path), warped):
-            raise HTTPException(status_code=500, detail="Failed to save cropped image")
-        item.setdefault("source_files", [])
-        item["source_files"].append(str(out_path))
-        refresh_accessory_assets_after_source_change(item, force_profile=True)
-        save_ai_profile_cache({"entries": {}})
-        save_accessory_item(item, config)
-        return {
-            "status": "saved",
-            "accessory_id": accessory_id,
-            "source_path": str(out_path),
-            "item": serialize_accessory_summary(item),
-            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
-            "detail": accessory_detail_payload(item),
-        }
-    raise HTTPException(status_code=404, detail="Accessory not found")
-
-
-@app.post("/api/accessories/{accessory_id}/ai-reference")
-def set_accessory_ai_reference(accessory_id: str, request: AccessoryAiReferenceRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    target_raw = str(request.source_path or "").strip()
-    if not target_raw:
-        raise HTTPException(status_code=400, detail="source_path is required")
-    config = load_config()
-    for item in config.get("accessories", []):
-        if accessory_uid(item) != accessory_id:
-            continue
-        require_record_access(item, user, write=True)
-        allowed = {
-            str(asset.get("source_path") or "")
-            for asset in accessory_detail_payload(item).get("gallery", [])
-            if isinstance(asset, dict) and asset.get("source_path")
-        }
-        if target_raw not in allowed or not Path(target_raw).exists():
-            raise HTTPException(status_code=404, detail="Photo is not available on this accessory")
-        item["ai_profile_reference_files"] = [target_raw]
-        item["ai_profile"] = fallback_accessory_ai_profile(item)
-        item["ai_profile_status"] = "ready"
-        try:
-            generate_accessory_ai_profile(item, allow_provider=True)
-        except Exception as exc:
-            item["ai_profile_status"] = {
-                "ok": False,
-                "status": "fallback",
-                "message": f"AI profile provider failed; using selected local reference. {bounded_text(str(exc), 120)}",
-            }
-        save_ai_profile_cache({"entries": {}})
-        save_accessory_item(item, config)
-        return {
-            "status": "saved",
-            "accessory_id": accessory_id,
-            "source_path": target_raw,
-            "item": serialize_accessory_summary(item),
-            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
-            "detail": accessory_detail_payload(item),
-        }
-    raise HTTPException(status_code=404, detail="Accessory not found")
-
-
-@app.delete("/api/accessories/{accessory_id}/files")
-def delete_accessory_file(accessory_id: str, request: AccessoryFileDeleteRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    target_raw = str(request.source_path or "").strip()
-    if not target_raw:
-        raise HTTPException(status_code=400, detail="source_path is required")
-    config = load_config()
-    for item in config.get("accessories", []):
-        if accessory_uid(item) != accessory_id:
-            continue
-        require_record_access(item, user, write=True)
-        source_paths = {str(path) for path in existing_source_image_paths(item)}
-        normalized_paths = {
-            str(asset.get("path") or "")
-            for asset in item.get("normalized_assets", [])
-            if isinstance(asset, dict) and asset.get("path")
-        }
-        pose_paths = {
-            str(job.get("output_path") or "")
-            for job in candidate_image_jobs(item)
-            if isinstance(job, dict) and job.get("output_path")
-        }
-        allowed = source_paths | normalized_paths | pose_paths
-        if target_raw not in allowed:
-            raise HTTPException(status_code=404, detail="Photo is not registered on this accessory")
-        removed_source = target_raw in source_paths
-        removed_pose = target_raw in pose_paths
-        for key in ("source_files", "original_source_files", "ai_profile_reference_files"):
-            if isinstance(item.get(key), list):
-                item[key] = [path for path in item[key] if str(path) != target_raw]
-        if isinstance(item.get("normalized_assets"), list):
-            item["normalized_assets"] = [
-                asset
-                for asset in item["normalized_assets"]
-                if not isinstance(asset, dict)
-                or (
-                    str(asset.get("path") or "") != target_raw
-                    and (not removed_pose or str(asset.get("source_pose_collection") or "") != target_raw)
-                )
-            ]
-        if isinstance(item.get("codex_image_jobs"), list):
-            item["codex_image_jobs"] = [
-                job
-                for job in item["codex_image_jobs"]
-                if not isinstance(job, dict) or str(job.get("output_path") or "") != target_raw
-            ]
-            item["codex_image_job"] = item["codex_image_jobs"][0] if item["codex_image_jobs"] else None
-        target_path = Path(target_raw)
-        try:
-            resolved = target_path.resolve()
-            if resolved.exists() and resolved.is_relative_to(DATA_DIR.resolve()):
-                resolved.unlink()
-        except OSError:
-            pass
-        if removed_source:
-            refresh_accessory_assets_after_source_change(item, force_profile=True)
-            save_ai_profile_cache({"entries": {}})
-        else:
-            item["clean_sprite_count"] = len(clean_sprite_assets(item))
-            item["clean_sprite_status"] = "ready" if item["clean_sprite_count"] else item.get("clean_sprite_status", "")
-        save_accessory_item(item, config)
-        return {
-            "status": "deleted",
-            "accessory_id": accessory_id,
-            "source_path": target_raw,
-            "item": serialize_accessory_summary(item),
-            "items": serialize_accessory_items(scope_config_for_user(config, user)["accessories"]),
-            "detail": accessory_detail_payload(item),
-        }
-    raise HTTPException(status_code=404, detail="Accessory not found")
+from .accessories.files import AccessoryFiles
+from .accessories.file_ports import FileAccess, FileStore, FileMedia, FileProfiles
+from .accessories.file_api import register_file_api
+_accessory_files = AccessoryFiles(
+    FileAccess(lambda: current_auth_user(), lambda record, user=None, *, write=False: require_record_access(record, user, write=write)),
+    FileStore(lambda: load_config(), lambda item, config: save_accessory_item(item, config),
+              lambda config, user: scope_config_for_user(config, user)),
+    FileMedia(
+        upload_directory=lambda: UPLOAD_DIR,
+        data_directory=lambda: DATA_DIR,
+        image_suffixes=lambda: IMAGE_REFERENCE_SUFFIXES,
+        safe_name=lambda name: safe_name(name),
+        validate_text_uploads=lambda files, *, existing_count=0: validate_text_accessory_uploads(files, existing_count=existing_count),
+        text_source_count=lambda item: text_accessory_source_count(item),
+        existing_source_paths=lambda item: existing_source_image_paths(item),
+        is_rectified=lambda path: is_text_rectified_path(path),
+        crop_stem=lambda path: stable_text_crop_stem(path),
+        detail=lambda item: accessory_detail_payload(item),
+        clean_sprites=lambda item: clean_sprite_assets(item),
+        image_jobs=lambda item: candidate_image_jobs(item),
+    ),
+    FileProfiles(
+        refresh=lambda item, *, force_profile=True: refresh_accessory_assets_after_source_change(item, force_profile=force_profile),
+        fallback=lambda item: fallback_accessory_ai_profile(item),
+        generate=lambda item, *, allow_provider=True: generate_accessory_ai_profile(item, allow_provider=allow_provider),
+        save_cache=lambda payload: save_ai_profile_cache(payload),
+        bounded_text=lambda value, limit: bounded_text(value, limit),
+    ),
+    _accessory_projection,
+)
+_accessory_file_routes = register_file_api(app, _accessory_files)
+add_accessory_files = _accessory_file_routes.add_accessory_files
+crop_accessory_text_image = _accessory_file_routes.crop_accessory_text_image
+set_accessory_ai_reference = _accessory_file_routes.set_accessory_ai_reference
+delete_accessory_file = _accessory_file_routes.delete_accessory_file
 
 
 @app.delete("/api/accessories/{accessory_id}")

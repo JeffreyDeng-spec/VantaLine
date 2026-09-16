@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_accessory_files.py` runs six real-HTTP contract groups with
+disposable images and provider substitutes. The same tests passed before wiring.
+They cover shared-write denial, partial upload effects, crop limits and asymmetric
+corner pixels, legacy job fields, data-directory deletion, provider fallback and
+failure ordering. Four service bodies and HTTP signatures were compared against
+the prior root implementation; the complete application and RBAC gates remain.
+
 `python scripts/smoke_accessory_candidates.py --postgres --root` covers JSON repair,
 atomic-file replacement failure, format/file-time ordering, exact PG lock/factory
 order, no fallback, real HTTP denial/refresh and error cleanup. Isolated PostgreSQL

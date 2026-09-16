@@ -1,5 +1,10 @@
 # Production runbook
 
+Accessory file editing uses ordinary complete-release restart and rollback.
+Check authorized upload/crop/delete and reference selection with synthetic media.
+On regression restore the previous complete release, preserving file and task
+records; do not replay model calls or remove already-written files during rollback.
+
 Candidate extraction uses ordinary complete-release restart and rollback. Check
 candidate retrieval and existing job status display. Preserve task identifiers,
 anchor provenance and model snapshots, including repairs already persisted during

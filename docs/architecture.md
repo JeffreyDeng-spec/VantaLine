@@ -1,5 +1,11 @@
 # Architecture
 
+`accessories.file_api` preserves the four file-edit routes and their sync/async
+boundaries; `files.AccessoryFiles` owns upload, text crop, reference selection and
+file deletion orchestration. Narrow access/store/media/profile ports are composed
+in the root. Gallery rendering and profile generation remain existing callbacks.
+Authorization order, partial file effects and provider fallback remain unchanged.
+
 `accessories.candidate_repository` owns candidate load/save/delete/list/path and
 atomic-file helpers; `candidate_queries` and `candidate_api` own retrieval.
 The root injects its existing candidate RLock and job callbacks. Retrieval retains
@@ -12,7 +18,7 @@ Accessory listing/detail routes now use `accessories.api` and `accessories.catal
 and summary serialization; `repository` owns the existing row writes/JSON fallbacks.
 Each service receives only its required capabilities. Detail still calls the
 existing gallery renderer, which may write previews, only after authorization.
-Candidate/image generation, uploads and write HTTP workflows remain in the root.
+Candidate/image generation and the remaining write HTTP workflows stay in the root.
 Four constant aliases and fourteen compatibility helpers preserve existing callers.
 Prompt source manifest v2 includes `accessories/policy.py`; old task fingerprints
 are unchanged. This is a structure change without policy or model changes.

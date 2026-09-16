@@ -1,5 +1,9 @@
 # Configuration reference
 
+Accessory file-edit extraction adds no settings. Upload limits, crop coordinates,
+shared-read-only permissions, reference-provider selection and media deletion
+boundaries retain their existing behavior. No task binding or prompt producer moves.
+
 Candidate persistence/retrieval extraction changes no setting. Load identifiers
 retain their existing exact form; deletion trims them and generated record paths
 use the existing sanitizer. GET may repair legacy job metadata before authorization;

@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Accessory file-edit CI adds synthetic real-HTTP regression without paid calls.
+The immutable package includes the new services; deployment topology, schema and
+prompt-source manifest remain unchanged. Existing frontend and PLC gates remain.
+
 Candidate CI adds isolated PostgreSQL and actual-root job callback regression.
 Read-time repair, prior snapshot references and runtime topology are unchanged;
 the ordinary immutable package includes the new candidate service files.
