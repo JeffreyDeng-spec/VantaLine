@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Accessory catalog CI adds isolated PostgreSQL and synthetic HTTP/projection checks.
+The prompt source manifest advances to v2 for the moved policy file; the complete
+immutable package includes that source. Runtime topology and schema are unchanged.
+
 Record-context CI checks exercise real HTTP/thread identity plus owner assignment
 and failure behavior. The full RBAC and assembled application gates remain required;
 release topology and persistent data formats are unchanged.

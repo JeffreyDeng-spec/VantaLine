@@ -1,5 +1,10 @@
 # PostgreSQL runtime operations
 
+Accessory row persistence now lives in `accessories.repository` behind a lazy
+runtime-repository factory and the existing configuration lock. JSON fallbacks,
+row-ID normalization, raw payloads and fetch/delete transaction behavior are
+unchanged. No new indexes, tables or unlocked reads are introduced by this batch.
+
 `auth.users` uses narrow persistence ports and the original repository RLock for
 session-revocation/user-deletion ordering. Password revocation, last-admin checks
 and user saving retain their prior separate operations. This extraction does not

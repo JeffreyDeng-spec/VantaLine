@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_accessory_catalog.py --postgres` covers accessory policy,
+projection, JSON mutation/failure, lazy PG capability/lock ordering and real HTTP
+visibility, view modes, duplicate IDs and authorization before gallery side effects.
+The isolated PostgreSQL fixture tests concurrent row updates, legacy raw payloads,
+deletes and thread-owned connection cleanup. Migration validation compared sixteen
+AST bodies, 448 policy outcomes and 24 full/summary results against actual root
+dependencies before wiring. Existing full RBAC, model, HTTP and source contracts
+remain required. The source gate now inspects the actual accessory repository and
+root delegates; the dependency gate includes `accessories`.
+
 `python scripts/smoke_record_access.py` verifies lazy administrator target lookup,
 special owner IDs, literal legacy alias lookup, renamed/deleted/inactive accounts,
 unchanged storage errors, explicit-user override, anonymous 401 and hidden 404.

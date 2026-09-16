@@ -1,7 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "sources": [
     "server.py",
+    "accessories/policy.py",
     "label_inspection/prompts.json",
     "label_inspection/manual.py",
     "document_label_classifier.py",

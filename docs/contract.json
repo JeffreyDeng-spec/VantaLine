@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Accessory catalog",
+      "paths": ["local_inspection_service/accessories/**", "scripts/smoke_accessory_catalog.py"],
+      "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
+    },
+    {
       "name": "Shared record policies",
       "paths": ["local_inspection_service/records/**", "scripts/smoke_record_ownership.py", "scripts/smoke_record_audit.py", "scripts/smoke_record_access.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]

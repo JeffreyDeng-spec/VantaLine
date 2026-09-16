@@ -1,5 +1,15 @@
 # Architecture
 
+Accessory listing/detail routes now use `accessories.api` and `accessories.catalog`.
+`policy` owns existing ID/material/profile-readiness rules; `projection` owns full
+and summary serialization; `repository` owns the existing row writes/JSON fallbacks.
+Each service receives only its required capabilities. Detail still calls the
+existing gallery renderer, which may write previews, only after authorization.
+Candidate/image generation, uploads and write HTTP workflows remain in the root.
+Four constant aliases and fourteen compatibility helpers preserve existing callers.
+Prompt source manifest v2 includes `accessories/policy.py`; old task fingerprints
+are unchanged. This is a structure change without policy or model changes.
+
 `records.access.RecordAccess` owns request owner fields, administrator owner
 assignment and hidden-resource guards. It shares the authentication identity and
 ownership policy and receives lazy current-user/target-user capabilities. It holds
