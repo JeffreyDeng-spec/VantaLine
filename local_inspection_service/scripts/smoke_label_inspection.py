@@ -620,6 +620,150 @@ def main():
                 )["run"]
                 is None
             )
+
+            for conn in connections:
+                conn.close()
+            connections.clear()
+
+            # Direct image import: real decoders/storage, no extraction or quality gate.
+            def upload_image(name, data, request=None, expected=200):
+                return check(
+                    client.post(
+                        PREFIX + "/tasks",
+                        data={"request_id": request or key()},
+                        files={"file": (name, data)},
+                    ),
+                    expected,
+                )
+
+            def encoded(fmt, size=(80, 60), **options):
+                output = io.BytesIO()
+                Image.new(
+                    "RGBA" if fmt == "PNG" else "RGB",
+                    size,
+                    (0, 0, 0, 0) if fmt == "PNG" else "white",
+                ).save(output, fmt, **options)
+                return output.getvalue()
+
+            image_ids = []
+            for ext, fmt in [
+                ("jpg", "JPEG"),
+                ("JPEG", "JPEG"),
+                ("png", "PNG"),
+                ("webp", "WEBP"),
+                ("bmp", "BMP"),
+            ]:
+                for conn in connections:
+                    conn.close()
+                connections.clear()
+                payload = encoded(fmt)
+                request = key()
+                imported = upload_image("中文标准." + ext, payload, request)
+                assert (
+                    imported["name"] == "中文标准"
+                    and imported["source"]["type"] == "image"
+                )
+                assert imported["revision"] == 1 and len(imported["assets"]) == 1
+                standard = imported["assets"][0]
+                assert (
+                    standard["ordinal"] == 1
+                    and standard["enabled"]
+                    and "error" not in standard
+                )
+                assert not imported["runs"]
+                image_ids.append(imported["id"])
+                assert (
+                    upload_image("中文标准." + ext, payload, request)["id"]
+                    == imported["id"]
+                )
+                path = PREFIX + "/tasks/" + imported["id"]
+                for suffix in ("", "/media/" + standard["media"]["original"]):
+                    check(
+                        client.get(path + suffix, headers={"x-test-owner": "bob"}), 404
+                    )
+                original = client.get(path + "/media/" + standard["media"]["original"])
+                assert original.content == payload
+                assert (
+                    client.get(
+                        path + "/media/" + standard["media"]["preview"]
+                    ).status_code
+                    == 200
+                )
+                hidden = check(
+                    client.patch(
+                        path,
+                        json={
+                            "request_id": key(),
+                            "revision": 1,
+                            "operation": "hide",
+                            "value": standard["id"],
+                        },
+                    )
+                )
+                assert hidden["revision"] == 2 and not hidden["assets"][0]["enabled"]
+                restored = check(
+                    client.patch(
+                        path,
+                        json={
+                            "request_id": key(),
+                            "revision": 2,
+                            "operation": "restore",
+                            "value": standard["id"],
+                        },
+                    )
+                )
+                assert restored["revision"] == 3 and restored["assets"][0]["enabled"]
+            exif = Image.Exif()
+            exif[274] = 6
+            rotated = upload_image("旋转.jpg", encoded("JPEG", exif=exif))
+            image_ids.append(rotated["id"])
+            assert rotated["assets"][0]["media"]["size"] == [60, 80]
+            assert rotated["assets"][0]["media"]["original_size"] == [80, 60]
+            filtered = check(
+                client.get(PREFIX + "/tasks", params={"source": "image", "limit": 100})
+            )["items"]
+            assert {x["id"] for x in filtered} == set(image_ids)
+            assert all(
+                x["source"] == "image" and x["standard_count"] == 1 for x in filtered
+            )
+            assert not set(image_ids) & {
+                x["id"]
+                for x in check(
+                    client.get(
+                        PREFIX + "/tasks", params={"source": "word", "limit": 100}
+                    )
+                )["items"]
+            }
+            before = len(LabelRepository(raw()).list("alice", "task"))
+            animation = io.BytesIO()
+            Image.new("RGB", (20, 20), "red").save(
+                animation,
+                "PNG",
+                save_all=True,
+                append_images=[Image.new("RGB", (20, 20), "blue")],
+                duration=100,
+            )
+            webp_animation = io.BytesIO()
+            Image.new("RGB", (20, 20), "red").save(
+                webp_animation,
+                "WEBP",
+                save_all=True,
+                append_images=[Image.new("RGB", (20, 20), "blue")],
+                duration=100,
+            )
+            for name, payload in [
+                ("bad.png", b"broken"),
+                ("empty.jpg", b""),
+                ("spoof.jpg", encoded("PNG")),
+                ("unsupported.heic", encoded("JPEG")),
+                ("animated.png", animation.getvalue()),
+                ("animated.webp", webp_animation.getvalue()),
+                ("huge.png", encoded("PNG", (4001, 4000))),
+                ("bytes.jpg", b"x" * (model.MAX_BYTES + 1)),
+            ]:
+                upload_image(name, payload, expected=422)
+            assert len(LabelRepository(raw()).list("alice", "task")) == before
+
             print(
                 "PASS: PostgreSQL/routes/import/duplicates/versioning/idempotency/owner isolation/two calls/failures/restart/global concurrency/pagination"
             )

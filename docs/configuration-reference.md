@@ -198,3 +198,5 @@ blur only when both overall and active-block median Laplacian variance are below
 threshold. Fewer than four active blocks are unassessable. Values are tied to this
 implementation/scaling, not generic sharpness scores. Unsupported localization
 fails closed; expected first-release coverage is dark labels on lighter backgrounds.
+
+Label standard-image imports use fixed existing image limits: 10 MiB and 16 million pixels. Accepted static formats are JPG/JPEG, PNG, WebP and BMP with extension/decoded-format agreement; animations and HEIC/HEIF are rejected. No new runtime setting or model configuration is introduced. Word limits remain DOC 30 MiB, DOCX 100 MiB and 500 standard entries.

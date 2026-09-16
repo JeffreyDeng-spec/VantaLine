@@ -467,3 +467,5 @@ bounds were visually checked. A fixed grid of minimum short side 200..300 by 25
 and focus 200..1600 by 200 selected the lowest lexicographic feasible pair (200,
 1000). This is calibration, not held-out validation or a production accuracy claim.
 Other colors, clipped labels and uncertain localization may require retaking.
+
+Direct standard-image import uses the same task POST and request id: JPG/JPEG, PNG, WebP or BMP, at most 10 MiB and 16 million pixels. Extension must match the decoded format; animated/multi-frame, unsupported, corrupt or oversized files fail before task creation. One complete image creates exactly one enabled standard (ordinal 1, revision 1), without label splitting, extraction calls or actual-photo quality screening. Original bytes, EXIF-normalized image and preview use existing private media storage. The task name defaults to the filename stem; source `image` is displayed/filterable as “图片上传”. Word, legacy and Beta sources remain compatible. Standard append/hide/restore and later actual-photo quality checks are unchanged.

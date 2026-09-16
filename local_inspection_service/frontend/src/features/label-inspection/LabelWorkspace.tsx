@@ -96,6 +96,7 @@ type Row = {
 };
 const labels: Record<string, string> = {
   word: "Word 导入",
+  image: "图片上传",
   legacy: "旧文字检验",
   beta: "标签检查 Beta",
   MATCH: "未发现差异",
@@ -1097,7 +1098,7 @@ export function LabelWorkspace() {
               <div className="li-title">
                 <div>
                   <h1>检测任务</h1>
-                  <p>导入一份 Word，保存标准，持续检查每一件产品。</p>
+                  <p>导入 Word 或标准图片，保存标准，持续检查每一件产品。</p>
                 </div>
                 <Link className="li-primary" to={`${PAGE}?view=new`}>
                   ＋ 新建任务
@@ -1115,7 +1116,7 @@ export function LabelWorkspace() {
                   value={source}
                   onChange={(e) => setSource(e.target.value)}
                 >
-                  {["all", "word", "legacy", "beta"].map((x) => (
+                  {["all", "word", "image", "legacy", "beta"].map((x) => (
                     <option key={x} value={x}>
                       {x === "all" ? "全部来源" : text(x)}
                     </option>
@@ -1193,12 +1194,12 @@ export function LabelWorkspace() {
               <Link to={PAGE}>← 返回任务列表</Link>
               <h1>新建检测任务</h1>
               <p>
-                直接提取文档中的全部图片，保留重复图片；导入后手动选择标准检测。
+                Word 提取全部内嵌图片；标准图片完整保留为一张，不拆分标签。导入后手动选择标准检测。
               </p>
               <FileDropZone
-                accept=".doc,.docx"
+                accept=".doc,.docx,.jpg,.jpeg,.png,.webp,.bmp"
                 disabled={busy}
-                ariaLabel="导入 Word 创建任务"
+                ariaLabel="导入 Word 或标准图片创建任务"
                 onFiles={(files) => {
                   resumeAfterPicker();
                   if (files[0])
@@ -1212,9 +1213,10 @@ export function LabelWorkspace() {
                 }}
               >
                 <strong>
-                  {busy ? "正在提取图片…" : "拖入 Word 文档，或点击选择"}
+                  {busy ? "正在创建任务…" : "拖入 Word 文档或标准图片，或点击选择"}
                 </strong>
-                <span>DOC ≤ 30 MiB · DOCX ≤ 100 MiB · 最多 500 个标准条目</span>
+                <span>一次一个文件 · DOC ≤ 30 MiB · DOCX ≤ 100 MiB · 最多 500 个标准条目</span>
+                <span>JPG/JPEG、PNG、WebP、BMP ≤ 10 MiB / 1600 万像素 · 不支持 HEIC/HEIF 或动画图片</span>
               </FileDropZone>
             </section>
           ) : null}
