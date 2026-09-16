@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Model profile binding and source provenance",
+      "paths": ["local_inspection_service/model_profiles/**", "local_inspection_service/qwen_evidence_jobs.py", "local_inspection_service/qwen_ocr_evidence.py"],
+      "required_docs": ["docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md"]
+    },
+    {
       "name": "PLC and camera dispatch",
       "paths": ["release/plc-protocol.json", "local_inspection_service/plc_web_serial.py", "local_inspection_service/frontend/src/features/plc/**", "local_inspection_service/frontend/src/features/detection/**"],
       "server_diff_regex": "(?i)plc|web_serial|workstation|camera_dispatch|camera.*lease",

@@ -117,7 +117,8 @@ class DocumentJobs:
                     try:
                         data = self.s._text_v2_asset_bytes(target, owner)
                         preview = classifier.prepare_image(data)
-                        value, diagnostic = classifier.classify_once(preview, target.get('context', ''), settings, self.s.ai_urlopen)
+                        value, diagnostic = classifier.classify_once(preview, target.get('context', ''), settings, self.s.ai_urlopen,
+                            record_usage=self.s.record_model_call)
                     except Exception as exc:
                         value = dict(category='uncertain', status='needs_confirmation', reason='图片无法安全预览，需人工确认')
                         diagnostic = dict(error_type=type(exc).__name__, external_call=False)

@@ -163,6 +163,8 @@ jobs:
       - name: Verify text inspection comparison and document contracts
         run: |
           python scripts/verify_backend_contract.py
+          python scripts/smoke_model_dependency_contract.py
+          python scripts/verify_backend_boundaries.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py
           python local_inspection_service/scripts/smoke_model_profile_routing.py

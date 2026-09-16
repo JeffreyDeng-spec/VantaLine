@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "sources": [
+    "server.py",
+    "label_inspection/prompts.json",
+    "label_inspection/manual.py",
+    "document_label_classifier.py",
+    "standard_preparation.py",
+    "qwen_evidence_jobs.py",
+    "qwen_ocr_evidence.py",
+    "evidence_matching.py"
+  ]
+}

@@ -31,7 +31,7 @@ def main():
         claim = dict(state='attempting', source_sha256=hashlib.sha256(blob).hexdigest(), model=settings['model'], prompt_version=classifier.VERSION)
         # An interrupted probe is evidence, never a reason to replay this directory.
         (folder / 'claim.json').write_text(json.dumps(claim))
-        value, diagnostic = classifier.classify_once(preview, '', settings, server.ai_urlopen)
+        value, diagnostic = classifier.classify_once(preview, '', settings, server.ai_urlopen, record_usage=server.record_model_call)
         (folder / 'result.json').write_text(json.dumps(dict(result=value, diagnostics=diagnostic), ensure_ascii=False, indent=2))
         summary = dict(image=index, **value, elapsed_ms=diagnostic['elapsed_ms'], usage=diagnostic.get('usage', {}))
         summaries.append(summary)

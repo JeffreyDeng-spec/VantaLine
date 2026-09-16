@@ -41,6 +41,24 @@ class Contract(unittest.TestCase):
         self.assertEqual(len(calls),1);self.assertEqual(result['status'],'needs_confirmation')
         self.assertNotIn('private-key',json.dumps(diagnostic))
 
+    def test_bound_profile_accounting(self):
+        calls, ledger = [], []
+        settings = dict(model='fixture', base_url='https://invalid.test', api_key='private-key',
+                        profile_id='synthetic', profile_version=1, profile_purpose='document')
+        def transport(*args, **kwargs):
+            calls.append(1)
+            return io.BytesIO(json.dumps({'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'category':'label_design','reason':'sticker'})}}]}).encode())
+        result, _ = c.classify_once(b'image', [], settings, transport, record_usage=lambda *args:ledger.append(args))
+        self.assertEqual(result['status'], 'candidate')
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(ledger), 1)
+        self.assertTrue(ledger[0][2])
+        def unavailable(*args):
+            raise RuntimeError('synthetic ledger unavailable')
+        result, _ = c.classify_once(b'image', [], settings, transport, record_usage=unavailable)
+        self.assertEqual(result['status'], 'candidate')
+        self.assertEqual(len(calls), 2)
+
     def test_redaction(self):
         value=c.evidence(json.dumps({'secret':'s','note':'Bearer abc https://private.test/?key=secret','nested':json.dumps({'api_key':'abc'})}),'abc')
         encoded=json.dumps(value)

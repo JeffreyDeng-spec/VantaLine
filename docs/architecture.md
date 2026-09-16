@@ -1,5 +1,19 @@
 # Architecture
 
+Model-profile composition uses `model_profiles/dependencies.py`: the service gets
+a repository factory, secret access, legacy configuration and validation ports;
+the HTTP registrar gets explicit admin and formatting callbacks. Snapshot decorators
+receive a resolver provider and callable task loader. They do not discover services
+through a function's module, string loader names or a global namespace. The provider
+is resolved at execution time and must exist before provider work. No connection or
+request user is captured in these dependencies; the existing thread-local repository
+factory and request `ContextVar` remain responsible for their lifetimes.
+Each profile service owns its own snapshot `ContextVar`, so nested independent
+application compositions cannot borrow one another's active model versions.
+Usage accounting receives an explicit recorder. Ledger failure after inference is
+logged without replaying the call. New task source fingerprints use the versioned
+`model_profiles/prompt_sources.json` manifest; saved task references remain unchanged.
+
 The label actual-image component remains mounted from local selection through run
 completion. A single in-memory photo lease binds owner, task, request ID and then run
 ID; only that run may reuse the blob URL. Navigation, replacement, next-item, logout

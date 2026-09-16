@@ -38,7 +38,7 @@ def settings(s, owner):
 from .model_profiles.audit import metered_function
 
 @metered_function(0)
-def llm(resolved, request, timeout, *, audit=None, structured=True):
+def llm(resolved, request, timeout, *, audit=None, structured=True, record_usage=None):
     import requests
     payload = dict(model=resolved["model"], input={"messages": [
         {"role": "system", "content": [{"text": matching.PROMPT}]},
@@ -160,7 +160,7 @@ def run(s, jobs, record, upload, resolved):
             save("extracting_text")
             try:
                 audit = model_call_audit.recorder(s, record, 'ocr', save, resolved.get('ocr_settings', resolved)['api_key'])
-                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved.get("ocr_settings", resolved), blob, image.size, remaining(),presence_evidence=True, audit=audit))
+                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved.get("ocr_settings", resolved), blob, image.size, remaining(),presence_evidence=True, audit=audit, record_usage=getattr(s, "record_model_call", None)))
                 cache.update(status="completed", observations=observations, diagnostics=diagnostic)
                 s._text_v2_update_attempt("ocr_evidence", cache)
             except Exception as error:
@@ -199,7 +199,7 @@ def run(s, jobs, record, upload, resolved):
             save("mapping_unmatched")  # Durable claim BEFORE the one text-only call.
             try:
                 audit = model_call_audit.recorder(s, record, 'mapping', save, resolved['api_key'])
-                proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining(), audit=audit))
+                proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining(), audit=audit, record_usage=getattr(s, "record_model_call", None)))
                 remaining()
                 record["diagnostics"]["llm_call"].update(**metadata)
                 rows, validation = matching.validate_independently(proposal, request, rows)
@@ -244,7 +244,7 @@ def run(s, jobs, record, upload, resolved):
                             save(phase)  # Persist each paid claim before sending image-only input.
                             audit = model_call_audit.recorder(s, record, identity, save, resolved.get('ocr_settings', resolved)['api_key'])
                             raw, metadata = ocr.recognize(resolved.get("ocr_settings", resolved), region['blob'], region['input_size'], remaining(),
-                                presence_evidence=True, region_text=mode == 'text_recognition', audit=audit)
+                                presence_evidence=True, region_text=mode == 'text_recognition', audit=audit, record_usage=getattr(s, 'record_model_call', None))
                             claim.update(status='completed', observations=raw, diagnostics=metadata)
                             s._text_v2_update_attempt('ocr_evidence', claim)
                         else:

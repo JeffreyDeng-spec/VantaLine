@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from .repository import Conflict
 from .service import Service
+from .dependencies import ProfileApiDependencies
 
 
 class ProfileInput(BaseModel):
@@ -25,16 +26,11 @@ class BindingInput(BaseModel):
     bindings: dict[str,str]
 
 
-def register(ns):
-    service = Service(ns)
-    ns['model_profile_service'] = service
-    from . import audit
-    audit._service = service
-    app = ns['app']
+def register(app, service: Service, dependencies: ProfileApiDependencies):
     prefix = '/api/admin/model-profiles'
 
     def admin():
-        return ns['require_admin_role']()
+        return dependencies.require_admin()
 
     def run(fn):
         try:
@@ -67,7 +63,7 @@ def register(ns):
         admin()
         rows = service.calls()
         for row in rows:
-            cost, tokens, priced = ns['api_cost_from_usage'](row['model'], row['usage'])
+            cost, tokens, priced = dependencies.cost_from_usage(row['model'], row['usage'])
             priced = priced and bool(row['usage'])
             row['priced'] = priced
             row['cost'] = cost if priced else None
@@ -112,8 +108,8 @@ def register(ns):
         elif provider == 'qwen_image':
             url = host.scheme+'://'+host.netloc+'/compatible-mode/v1/models'
         elif provider == 'cursor':
-            url = ns['cursor_api_url'](base, '/v1/models')
-            headers = ns['cursor_auth_headers'](settings['api_key'])
+            url = dependencies.cursor_api_url(base, '/v1/models')
+            headers = dependencies.cursor_auth_headers(settings['api_key'])
         elif '/chat/completions' in base:
             url = base.rsplit('/chat/completions',1)[0]+'/models'
         elif '/images/generations' in base:
@@ -133,7 +129,7 @@ def register(ns):
                             raise ValueError('Model list too large')
                     import json
                     payload = json.loads(raw)
-                    model_options = ns['agent_model_options_from_items'](payload.get('items', payload.get('models', payload.get('data', []))), prepend=[{'id':'auto','label':'auto · Cursor 默认模型'}])
+                    model_options = dependencies.model_options_from_items(payload.get('items', payload.get('models', payload.get('data', []))), prepend=[{'id':'auto','label':'auto · Cursor 默认模型'}])
                 message = '凭据与服务可连接；未验证实际生成或检测效果' if ok else f'连接验证未通过（HTTP {response.status_code}）；服务可能不支持模型列表接口'
         except Exception:
             ok = False
