@@ -1,5 +1,10 @@
 # Configuration reference
 
+Shared record policy extraction introduces no configuration. `legacy_admin` and
+`system` retain their fixed owner meanings. The `legacy` alias applies to filtering;
+owner assignment continues to use its existing rules. Shared read access never
+confers write access, and administrative filtering remains enforced.
+
 Authentication HTTP extraction changes no routes, response schemas, throttle
 parameters or cookie attributes. Each application composition owns its limiter;
 settings remain resolved at use time. Bootstrap/login only set a cookie after

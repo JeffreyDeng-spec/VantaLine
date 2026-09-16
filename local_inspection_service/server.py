@@ -1115,11 +1115,12 @@ api_cost_collect_records = _cost_ledger.collect_records
 api_cost_summary = _cost_ledger.summary
 
 
+from .records.ownership import RecordOwnership
+_record_ownership = RecordOwnership(LEGACY_OWNER_ID, SYSTEM_OWNER_ID)
+
+
 def record_owner_id(record: dict[str, Any] | None) -> str:
-    if not isinstance(record, dict):
-        return LEGACY_OWNER_ID
-    owner = str(record.get("owner_user_id") or record.get("created_by_user_id") or "").strip()
-    return owner or LEGACY_OWNER_ID
+    return _record_ownership.record_owner_id(record)
 
 
 def current_owner_fields() -> dict[str, Any]:
@@ -1178,17 +1179,7 @@ def record_updated_at(record: dict[str, Any] | None, fallback_path: Path | None 
 
 
 def record_owner_username(record: dict[str, Any] | None) -> str:
-    if not isinstance(record, dict):
-        return LEGACY_OWNER_ID
-    username = str(record.get("owner_username") or record.get("created_by_username") or "").strip()
-    if username:
-        return username
-    owner = record_owner_id(record)
-    if owner == LEGACY_OWNER_ID:
-        return LEGACY_OWNER_ID
-    if owner == SYSTEM_OWNER_ID:
-        return "system"
-    return owner
+    return _record_ownership.record_owner_username(record)
 
 
 def record_audit_fields(record: dict[str, Any] | None, fallback_path: Path | None = None) -> dict[str, Any]:
@@ -1207,27 +1198,15 @@ def enrich_record_audit_fields(record: dict[str, Any], fallback_path: Path | Non
 
 
 def record_matches_owner_filter(record: dict[str, Any], target_user_id: str | None) -> bool:
-    if not target_user_id:
-        return True
-    target = str(target_user_id).strip()
-    owner = record_owner_id(record)
-    if target in {LEGACY_OWNER_ID, "legacy"}:
-        return owner == LEGACY_OWNER_ID
-    if target in {SYSTEM_OWNER_ID, "system"}:
-        return owner == SYSTEM_OWNER_ID
-    return owner == target
+    return _record_ownership.record_matches_owner_filter(record, target_user_id)
 
 
 def record_visible_to_user(record: dict[str, Any], user: dict[str, Any], target_user_id: str | None = None) -> bool:
-    if user_is_admin(user):
-        return record_matches_owner_filter(record, target_user_id)
-    owner = record_owner_id(record)
-    shared = record.get("shared_with_user_ids") if isinstance(record.get("shared_with_user_ids"), list) else []
-    return owner == user["id"] or user["id"] in {str(item) for item in shared} or "*" in shared
+    return _record_ownership.record_visible_to_user(record, user, target_user_id)
 
 
 def record_mutable_by_user(record: dict[str, Any], user: dict[str, Any]) -> bool:
-    return user_is_admin(user) or record_owner_id(record) == user["id"]
+    return _record_ownership.record_mutable_by_user(record, user)
 
 
 def resource_name_key(value: Any) -> str:

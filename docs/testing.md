@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_record_ownership.py` checks legacy field precedence, blank
+owner fallback, shared users/wildcards versus malformed sharing values, read/write
+distinctions, administrator filters and isolated owner configurations. Migration
+validation compared the five function ASTs and 2,688 old/new outcomes before wiring.
+Full auth/RBAC, actual analysis HTTP and assembled application contracts also pass.
+The dependency boundary gate includes `records`.
+
 `tests/codex_compare/test_worker_exit.py` runs the actual worker and event reader
 under deterministic process/thread scheduling: exit before or during a heartbeat,
 delayed EOF, nonzero exit, failed/missing completion events, cancellation and
