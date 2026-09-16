@@ -1,5 +1,11 @@
 # VantaLine release management
 
+Preparation dependency CI adds isolated timeout, transaction, admission and
+late-result contracts while preserving the original endpoint and PostgreSQL gates.
+Ship API, job, policy and port modules with their compatibility module in one
+immutable release. Model source manifest remains unchanged because the prompt and
+classification producers have not moved. Use the existing complete-release rollback.
+
 Extraction dependency CI adds isolated identity, worker and evidence-retention
 contracts alongside existing extraction/bbox and PostgreSQL race checks. Ship the
 new API/port modules and compatibility export together in the immutable package;

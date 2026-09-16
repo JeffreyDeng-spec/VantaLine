@@ -1,5 +1,12 @@
 # Production runbook
 
+Preparation module extraction retains the current daemon job, single preparation
+slot and whole-release restart/rollback. Keep attempts, snapshots and revision
+media. Existing cleanup failure can prevent slot release; a duplicate-claim view
+failure can trigger a second release and mask the original exception. These are
+recorded boundaries, not changes bundled into the structural migration. Unknown
+paid calls remain non-replayable. No schema or worker-topology change is introduced.
+
 Extraction dependency changes use ordinary complete-release restart/rollback.
 Preserve immutable edits, tombstones, source media and uncertain attempts. A failed
 final save still clears the worker connection but does not justify automatic replay.

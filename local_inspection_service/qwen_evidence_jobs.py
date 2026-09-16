@@ -109,12 +109,12 @@ def expired(record):
     return time.time() >= record.get("deadline_at", record["created_at"] + 120)
 
 
-def timeout(s, record):
+def timeout(update_attempt, record):
     record = copy.deepcopy(record)
     record.update(status="review_required", decision="REVIEW_REQUIRED", auto_decision="REVIEW_REQUIRED",
         message="比较超过120秒或服务重启，请复核；不会自动重发付费请求。", updated_at=int(time.time()))
     record["diagnostics"].update(phase="timeout", error="comparison_deadline", elapsed_ms=120000)
-    return s._text_v2_update_attempt("records", record)
+    return update_attempt("records", record)
 
 
 def run(s, jobs, record, upload, resolved):
@@ -296,7 +296,7 @@ def run(s, jobs, record, upload, resolved):
     finally:
         try:
             if expired(record):
-                timeout(s, record)
+                timeout(s._text_v2_update_attempt, record)
             else:
                 record["diagnostics"]["elapsed_ms"] = round((time.monotonic()-started)*1000)
                 record["updated_at"] = int(time.time())
@@ -310,6 +310,6 @@ def run(s, jobs, record, upload, resolved):
 
 def settle_timeout(s, record):
     try:
-        timeout(s, record)
+        timeout(s._text_v2_update_attempt, record)
     finally:
         s.clear_thread_runtime_repository_selection()

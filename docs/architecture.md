@@ -1,5 +1,13 @@
 # Architecture
 
+Standard preparation is split into `text_inspection.preparation_api`,
+`preparation_jobs` and `preparation_policy`. Narrow record, media, model, account
+and history capabilities replace namespace injection; the composition root shares
+one record/media capability pair with the job service. Compatibility exports remain.
+Qwen timeout settlement takes its compare-and-set callback explicitly; the
+comparison GET rereads the authoritative record after settlement. OCR, classification,
+recovery, prompt sources, transaction order and embedded thread topology are unchanged.
+
 Label extraction registration now lives in `text_inspection.extraction_api` and
 takes explicit account, record, media, model and cleanup capabilities. The old
 registrar export remains identical. This dependency batch retains the existing
