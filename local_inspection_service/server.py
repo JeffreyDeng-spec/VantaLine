@@ -31593,6 +31593,12 @@ def public_agent_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_agent_config()
     configured = agent_credentials_present(config)
     recommendation_supported = agent_recommendation_supported(config)
+    if not user_is_admin(current_auth_user()):
+        return {"enabled":bool(config.get("enabled")), "configured":configured,
+                "connection_status":config.get("connection_status","untested") if configured else "untested",
+                "recommendation_supported":recommendation_supported,
+                "auto_advance_default":bool(config.get("auto_advance_default")),
+                "mode":"agent" if recommendation_supported else "rules"}
     key_items = normalize_agent_key_items(config)
     current_key_items = agent_keys_for_provider(key_items, config["provider"])
     active_key_id = str(config.get("active_key_id") or "").strip()

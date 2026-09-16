@@ -29,6 +29,9 @@ def main():
     assert client.request('DELETE','/api/ai/config/key').status_code==409
     for permission in ('ai_config','agent_config','system_settings'):
         assert not s.user_has_permission({'id':'member','role':'user','permissions':[permission]},permission)
+    with patch.object(s,'current_auth_user',return_value={'id':'member','role':'user'}):
+        public=s.public_agent_config({**s.DEFAULT_AGENT_CONFIG,'api_key':'private-key','model':'fixture','base_url':'https://fixture.invalid'})
+        assert not {'api_keys','api_key_masked','api_key_env','active_key_id','base_url'} & public.keys()
     for provider,model in [('qwen','qwen3-vl-flash'),('doubao','doubao-seed-evolving'),('gemini','gemini-2.5-flash')]:
         settings=dict(configured=True,enabled=True,provider=provider,model=model,base_url='https://fixture.invalid/v1',api_key='fixture-secret-never-log',timeout_seconds=5,profile_id='object',profile_version=1,profile_purpose='pipeline')
         calls=[]
