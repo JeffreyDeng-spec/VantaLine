@@ -34691,7 +34691,37 @@ register_comparison_history(
     _history_media,
 )
 
-resolve_label_extraction = register_label_extraction(globals())
+from .text_inspection.extraction_ports import ExtractionAccess, ExtractionRecords, ExtractionMedia, ExtractionModels
+_extraction_records = ExtractionRecords(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    load=lambda kind: _text_v2_load(kind),
+    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
+)
+_extraction_media = ExtractionMedia(
+    path=lambda owner, identifier, name: _text_v2_media_path(owner, identifier, name),
+    write=lambda path, data: _text_v2_write(path, data),
+    read_verified=lambda path, owner, identifier, **kwargs: _text_v2_read_verified(path, owner, identifier, **kwargs),
+    digest=lambda data: sha256_bytes(data),
+    data_url=lambda data, mime: _text_v2_data_url(data, mime),
+)
+_extraction_models = ExtractionModels(
+    image_settings=lambda: image_generation_settings(),
+    detection_settings=lambda purpose: ai_detection_settings(purpose),
+    image_provider=lambda settings: image_generation_provider_from_settings(settings),
+    transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
+    diagnostic_value=lambda value: _text_v2_diagnostic_value(value),
+    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+)
+resolve_label_extraction = register_label_extraction(
+    app,
+    ExtractionAccess(
+        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+        owner=lambda: _text_v2_owner(),
+    ),
+    _extraction_records, _extraction_media, _extraction_models,
+    clear_repository=lambda: clear_thread_runtime_repository_selection(),
+)
 from .agent.dependencies import AgentAccess, AgentAccounts
 register_agent_api(
     app,

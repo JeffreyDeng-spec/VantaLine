@@ -1,5 +1,10 @@
 # Production runbook
 
+Extraction dependency changes use ordinary complete-release restart/rollback.
+Preserve immutable edits, tombstones, source media and uncertain attempts. A failed
+final save still clears the worker connection but does not justify automatic replay.
+No data migration or worker-process switch is included in this extraction.
+
 Agent HTTP extraction uses the existing immutable-release restart and rollback.
 Include the API, dependency, schema and projection modules together. Preserve durable
 operations, reservations and unknown-outcome evidence; no new tables, workers or

@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Extraction dependency CI adds isolated identity, worker and evidence-retention
+contracts alongside existing extraction/bbox and PostgreSQL race checks. Ship the
+new API/port modules and compatibility export together in the immutable package;
+existing restart and whole-release rollback remain the deployment procedure.
+
 Agent dependency CI adds native-ASGI account/policy/cancellation contracts while
 retaining the isolated PostgreSQL state-machine smoke. Complete application HTTP
 and dependency-direction gates include the new modules; release topology and
