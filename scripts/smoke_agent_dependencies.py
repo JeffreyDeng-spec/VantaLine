@@ -27,7 +27,9 @@ class AgentContracts(unittest.TestCase):
         first=schemas.PolicyUpdate(expected_version=0,enabled=True,budget=1)
         second=schemas.PolicyUpdate(expected_version=0,enabled=True,budget=1)
         first.cloud_targets.append('fixture');self.assertEqual(second.cloud_targets,[])
-        self.enterContext(patch.object(api,'AgentOperationsRepository',lambda underlying:underlying))
+        repository_patch=patch.object(api,'AgentOperationsRepository',lambda underlying:underlying)
+        repository_patch.start()
+        self.addCleanup(repository_patch.stop)
     def fixture(self,name):
         app=FastAPI();who=ContextVar(name,default=None)
         f=SimpleNamespace(events=[],enabled=True,pg=True,policy=None,transition_error=None,policy_error=None)
