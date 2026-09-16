@@ -1,5 +1,10 @@
 # Configuration reference
 
+Record access extraction adds no settings. Only administrators may assign another
+owner; existing special IDs bypass user lookup. Other targets are freshly resolved
+through the existing auth-store path, including inactive accounts. The `legacy`
+filter alias is not an owner-assignment alias. Storage failures are not hidden.
+
 Record audit extraction adds no settings. Timestamp priority, integer truncation,
 nonzero fallback and file-time behavior are unchanged. Audit projection does not
 rewrite stored timestamps, owners or historical records.

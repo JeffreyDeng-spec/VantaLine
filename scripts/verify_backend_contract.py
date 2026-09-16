@@ -33,6 +33,11 @@ def capture():
         from local_inspection_service import server
         from starlette.routing import Mount
 
+        assert server._record_access.identity is server._request_user
+        assert server._access_control.identity is server._request_user
+        assert server._record_access.ownership is server._record_ownership
+        assert server._record_audit.ownership is server._record_ownership
+
         routes = []
         for route in server.app.routes:
             item = {

@@ -1116,6 +1116,7 @@ api_cost_summary = _cost_ledger.summary
 
 
 from .records.ownership import RecordOwnership
+from .records.access import RecordAccess
 from .records.audit import (
     RecordAudit,
     coerce_record_timestamp as _coerce_record_timestamp,
@@ -1125,6 +1126,10 @@ from .records.audit import (
 )
 _record_ownership = RecordOwnership(LEGACY_OWNER_ID, SYSTEM_OWNER_ID)
 _record_audit = RecordAudit(_record_ownership)
+_record_access = RecordAccess(
+    _request_user, _record_ownership, current_user=lambda: current_auth_user(),
+    find_user=lambda target: find_user(load_auth_store(), target),
+)
 
 
 def record_owner_id(record: dict[str, Any] | None) -> str:
@@ -1132,24 +1137,11 @@ def record_owner_id(record: dict[str, Any] | None) -> str:
 
 
 def current_owner_fields() -> dict[str, Any]:
-    user = _request_user.get()
-    if not user:
-        return {}
-    return {"owner_user_id": user["id"], "owner_username": user.get("username") or ""}
+    return _record_access.current_owner_fields()
 
 
 def owner_fields_for_new_record(user: dict[str, Any], target_user_id: str | None = None) -> dict[str, Any]:
-    target = str(target_user_id or "").strip()
-    if user_is_admin(user) and target:
-        if target == LEGACY_OWNER_ID:
-            return {"owner_user_id": LEGACY_OWNER_ID, "owner_username": LEGACY_OWNER_ID}
-        if target == SYSTEM_OWNER_ID:
-            return {"owner_user_id": SYSTEM_OWNER_ID, "owner_username": "system"}
-        target_user = find_user(load_auth_store(), target)
-        if not target_user:
-            raise HTTPException(status_code=404, detail="目标用户不存在")
-        return {"owner_user_id": target_user["id"], "owner_username": target_user.get("username") or ""}
-    return {"owner_user_id": user["id"], "owner_username": user.get("username") or ""}
+    return _record_access.owner_fields_for_new_record(user, target_user_id)
 
 
 def coerce_record_timestamp(value: Any) -> int:
@@ -1623,10 +1615,7 @@ def scope_config_for_user(config: dict[str, Any], user: dict[str, Any] | None = 
 
 
 def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = None, *, write: bool = False) -> None:
-    user = user or current_auth_user()
-    allowed = record_mutable_by_user(record, user) if write else record_visible_to_user(record, user)
-    if not allowed:
-        raise HTTPException(status_code=404, detail="Resource not found")
+    return _record_access.require_record_access(record, user, write=write)
 
 
 require_permission = _access_control.require_permission
