@@ -379,3 +379,18 @@ exit and navigation clear that intent; upload completion never forces fullscreen
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
 
 Label result issues use a single 32px desktop row with 16px text, number, type and description. Secondary evidence and uncertainty fields remain available in a modal inside the fullscreen root. All reliable existing issue boxes are displayed with matching numbers; selecting a row highlights that number on both images. Missing geometry is never invented.
+
+## Label photo quality admission
+
+The label worker performs deterministic OpenCV checks on read-only copies of the
+unchanged prepared JPEGs before the first paid call. At least one localized black
+label must pass. After layout, the selected extent must identify one complete
+candidate; a rejected/ambiguous target stops before comparison. A crop is measured
+again on the exact second-stage JPEG. Paid calls are therefore 0, 1 or 2; successful
+comparisons retain the original two request bodies. No OCR, extra provider, PLC
+operation, input enhancement or camera setting change is introduced.
+
+New submissions freeze the quality policy version/hash. Old queued submissions
+without that policy, or incompatible policies, stop without external I/O and
+require a new linked run. Terminal history is never re-evaluated. A quality failure
+uses failed/REVIEW_REQUIRED with a QUALITY_* code, no result or model score.

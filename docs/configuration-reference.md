@@ -173,3 +173,18 @@ When restoration is unavailable the fixed viewport and manual toggle remain usab
 Compact label issue rows and numbered overlays are frontend presentation only and require no new settings. They preserve saved model results, confidence, evidence coordinates and prompts; details are available from each row.
 
 Label comparison now declares image_input_normalized_v2 in its prompt and result. No new environment setting is needed. Prompt hashes freeze this contract at submission; new runs use the corrected coordinates, while legacy results retain their original evidence. Model, two-call count and limits are unchanged.
+
+## Label quality policy
+
+The release-owned `label_inspection/quality.py` policy `black-label-quality-v1`
+is mandatory for new A + Evolving runs; it has no browser/account bypass or runtime
+threshold override. Submit freezes its version and CONFIG hash. Changing rules or
+thresholds requires a tested immutable release; incompatible queued policy fails
+before provider I/O. The model/key/encoding settings above remain unchanged.
+
+Initial parameters use a 1000px detection view, 300px score view, 4x4 internal grid,
+200px minimum short side and focus threshold 1000. A candidate is rejected for
+blur only when both overall and active-block median Laplacian variance are below
+threshold. Fewer than four active blocks are unassessable. Values are tied to this
+implementation/scaling, not generic sharpness scores. Unsupported localization
+fails closed; expected first-release coverage is dark labels on lighter backgrounds.

@@ -415,3 +415,35 @@ exit and navigation clear that intent; upload completion never forces fullscreen
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
 
 The default abnormality list shows one line per issue (number, type, description) at 16px. Long descriptions use ellipsis with full evidence in the Details dialog; standard/actual text, severity, model confidence and positioning notes are preserved there. The default dock uses 32% of the operation area and remains adjustable. Desktop rows are 32px (44px for touch). Six rows fit at 1920x1080 and five at 1440x900 with the default dock. Existing valid boxes have matching issue numbers, with selected boxes highlighted. Unlocated issues remain textual.
+
+## Conservative label photo quality gate
+
+Before any Evolving call, local grayscale/Otsu segmentation, closing and external
+contours locate candidate dark labels. Area, aspect, solidity, fill, border and
+surrounding-contrast checks reject unreliable candidates; no largest-dark-blob
+fallback is used. External contours consolidate nested regions. Analysis excludes
+label borders and flat blocks, measures native/input size and normalized internal
+Laplacian variance. Only obvious size/focus failures are commissioned; weak-block,
+brightness and darkness fractions are diagnostic, not standalone rejection rules.
+Missing text/icons are not quality criteria. Local glare/blur can still be missed.
+
+At least one candidate must pass. Layout's crop must contain at least 90% of one
+candidate's bounding rectangle and must not overlap another by more than 10%; an
+uncropped result requires exactly one candidate. An ambiguous selection or a bad
+selected candidate stops after one call without automatic reselection. A good
+cropped selection is remeasured on its unchanged comparison JPEG. All input images,
+prompts, temperatures and model parameters remain byte-equivalent for admitted runs.
+
+Quality failures save reason/metrics/policy/stage/timing in optional `quality`
+run data and `error_code`, use failed/REVIEW_REQUIRED, and create no comparison
+result. Diagnostics return `quality` alongside calls. The workspace shows an
+unfinished-comparison message and a retry action retaining the selected standard;
+retry creates a linked run. Old history explicitly says quality was not checked.
+
+Initial private calibration used six distinct files (four clearer, two visibly
+low-quality) covering two dark label designs. Several files depict closely related
+scenes, so these are not six independent capture conditions. Automatic candidate
+bounds were visually checked. A fixed grid of minimum short side 200..300 by 25
+and focus 200..1600 by 200 selected the lowest lexicographic feasible pair (200,
+1000). This is calibration, not held-out validation or a production accuracy claim.
+Other colors, clipped labels and uncertain localization may require retaking.

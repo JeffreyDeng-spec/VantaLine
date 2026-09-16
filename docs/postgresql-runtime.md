@@ -138,3 +138,14 @@ revisions. Child cards do not have queue rows or their own sessions. The worker
 credential is still task/attempt-scoped, and validates label scope on every write.
 No DDL or database role expansion is required. Drain all v3 queue rows before
 rolling back to workers without the batch contract.
+
+## Label quality snapshots
+
+New run raw_json adds `quality.policy` at submission; the worker appends preflight
+and selected diagnostics with normalized bounds, scalar/block metrics and timings.
+Quality refusal adds `error_code=QUALITY_*` and retains failed/REVIEW_REQUIRED.
+No migration, new connection, old-row backfill or historical reinterpretation is
+needed. Request identity remains based on user intent, so an identical request ID
+returns the original policy snapshot even across releases. New retries get fresh
+policy snapshots and retain parent_id. Quality evidence shares existing owner
+isolation and backups; no raw quality media enters application logs or Git.

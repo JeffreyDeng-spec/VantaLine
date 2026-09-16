@@ -31,10 +31,7 @@ from local_inspection_service.codex_compare.media import MediaStore
 from local_inspection_service.text_inspection_v2 import extract_docx_candidates
 
 
-def picture():
-    b = io.BytesIO()
-    Image.new("RGB", (300, 200), "white").save(b, "PNG")
-    return b.getvalue()
+from smoke_label_quality import picture
 
 
 def docx(broken=False, count=2):
@@ -57,7 +54,11 @@ def docx(broken=False, count=2):
 
 def main():
     from smoke_label_coordinates import main as coordinate_checks
+
     coordinate_checks()
+    from smoke_label_quality import main as quality_checks
+
+    quality_checks()
     dsn = os.environ["VANTALINE_POSTGRES_DSN"]
     schema = "label_evolving_" + uuid.uuid4().hex
     root = Path(tempfile.mkdtemp(prefix="label-evolving-test-"))
@@ -161,11 +162,11 @@ def main():
             )
             assert broken["assets"][0]["error"] and not broken["assets"][0]["enabled"]
 
-            def submit(req="detection-0001", revision=1):
+            def submit(req="detection-0001", revision=1, actual=None):
                 return client.post(
                     base + "/runs",
                     data={"request_id": req, "revision": revision, "asset_id": aid},
-                    files={"file": ("actual.png", picture())},
+                    files={"file": ("actual.png", actual or picture())},
                 )
 
             run = check(submit())
@@ -220,6 +221,8 @@ def main():
             process(repo, media, claimed, "test-only-placeholder", provider)
             final = check(client.get(PREFIX + "/runs/" + run["id"]))
             assert final["decision"] == "MATCH" and len(calls) == 2
+            assert final["quality"]["preflight"]["passed"]
+            assert final["quality"]["selected"]["passed"]
             diagnostics = check(
                 client.get(PREFIX + "/runs/" + run["id"] + "/diagnostics")
             )
@@ -246,6 +249,57 @@ def main():
                         "value": aid,
                     },
                 )
+            )
+            # Quality rejection persists without paid calls; retry is a new linked attempt.
+            blocked = check(submit("quality-rejected", 3, picture(7)))
+            assert blocked["quality"]["policy"]["version"] == "black-label-quality-v1"
+            claim = repo.claim()
+            seen = []
+            process(
+                repo, media, claim, "test-only-placeholder", lambda *a: seen.append(1)
+            )
+            rejected = check(client.get(PREFIX + "/runs/" + blocked["id"]))
+            assert not seen and rejected["error_code"] == "QUALITY_BLURRED"
+            assert (
+                rejected["status"] == "failed"
+                and rejected["decision"] == "REVIEW_REQUIRED"
+            )
+            assert not rejected.get("result")
+            assert (
+                check(submit("quality-rejected", 3, picture(7)))["id"] == blocked["id"]
+            )
+            diagnostic = check(
+                client.get(PREFIX + "/runs/" + blocked["id"] + "/diagnostics")
+            )
+            assert (
+                diagnostic["calls"] == []
+                and not diagnostic["quality"]["preflight"]["passed"]
+            )
+            check(
+                client.get(
+                    PREFIX + "/runs/" + blocked["id"], headers={"x-test-owner": "bob"}
+                ),
+                404,
+            )
+            retry = check(
+                client.post(
+                    base + "/runs",
+                    data={
+                        "request_id": "quality-retry",
+                        "revision": 3,
+                        "asset_id": aid,
+                        "parent_id": blocked["id"],
+                    },
+                    files={"file": ("actual.png", picture())},
+                )
+            )
+            assert retry["parent_id"] == blocked["id"] and retry["id"] != blocked["id"]
+            claim = repo.claim()
+            calls.clear()
+            process(repo, media, claim, "test-only-placeholder", provider)
+            assert (
+                repo.get("alice", retry["id"])["status"] == "completed"
+                and len(calls) == 2
             )
             # Paid stage errors never pass or auto retry. Missing target boxes stay missing.
             for index, response in enumerate(

@@ -173,3 +173,18 @@ real batch with multiple actuals and record a single session ID, early matching,
 per-label CLI findings, safe uncertain matching and partial-report behavior. Preserve
 all draft/terminal v3 records and media on rollback; cancel/drain queued v3 tasks
 before starting an older worker. The 600-second limit applies to the entire batch.
+
+## Label quality rollout
+
+Before enabling this release, run private real-photo calibration and inspect the
+automatic candidate overlays. Require two low-quality captures rejected and four
+clearer files retained, plus 0/1/2-call and unchanged-input contracts. Sample counts
+are calibration evidence only. Benchmark on the service host without provider
+calls; each local check must have P95 <500ms. No new credential/config is required.
+
+Drain active label work before switching releases. New submissions freeze the
+release policy; older queued runs without a compatible snapshot stop and require
+manual retry. After immutable release/version acceptance, verify clear/blurred
+submissions, mixed-label selection and owned history in the browser. Restore the
+previous complete release to roll back; preserve all task, quality and call data.
+The previous release does not enforce this quality gate.

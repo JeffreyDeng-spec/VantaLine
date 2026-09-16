@@ -436,3 +436,24 @@ When restoration is unavailable the fixed viewport and manual toggle remain usab
 Compact issue regression verifies six visible rows at 1920x1080 and five at 1440x900, 16px single-line descriptions, full details including unlocated evidence, numbered existing boxes and selected-row highlight. Existing small-screen, local overflow, fullscreen, history, camera and navigation regressions remain required.
 
 Run `python local_inspection_service/scripts/smoke_label_coordinates.py` for full-image/crop mapping, EXIF orientation, invisible sides, missing contract markers, nonfinite/out-of-bounds geometry and independent valid siblings. The PostgreSQL label smoke invokes these checks too. Before release, inspect real same-photo, rotated and multi-label outputs in the actual React workspace, preserving raw responses and overlays outside Git. Successful API responses alone do not establish localization quality.
+
+## Label quality verification
+
+`smoke_label_inspection.py` invokes `smoke_label_quality.py` in required backend CI.
+Generated fixtures verify local rejection, unsupported/blank images, rotation,
+small labels, mixed-quality multi-label selection, policy mismatch, exact prepared
+JPEG/request-body equivalence, and zero/one/two provider calls. PostgreSQL tests
+exercise saved policy/results, idempotency, account isolation, immutable standards,
+restart non-replay and concurrent claims. No test calls a paid provider.
+
+`scripts/replay_label_quality.py --manifest <private-json> --output <private-json>`
+replays annotated real images, checks the fixed threshold grid against frozen
+CONFIG and measures ten checks per image with P95 <500ms. Manifest entries contain
+path, name and expected_pass; originals, annotations and output stay outside Git.
+Do not use model verdicts as quality truth or count derivatives as independent data.
+
+`scripts/test_label_workspace_ui.cjs` includes saved quality failure, absent model
+scores, retry/camera access, historical unassessed message, full-screen navigation
+and existing viewport/scroll regression. Inspect its quality-rejected screenshot.
+Release acceptance also checks real clear/blurred photos, selected-label checks,
+private history readback, production version and server-side latency.

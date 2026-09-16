@@ -300,6 +300,8 @@ class LabelRepository:
         prompt_hash,
         parent="",
     ):
+        from ..label_inspection.quality import POLICY
+
         parameters = {
             "task": identity,
             "revision": revision,
@@ -354,6 +356,7 @@ class LabelRepository:
                 parent_id=parent,
                 decision="REVIEW_REQUIRED",
                 phase="queued",
+                quality={"policy": copy.deepcopy(POLICY)},
             )
             self.put(c, run, True)
             self.put(c, task)
@@ -376,7 +379,7 @@ class LabelRepository:
             run = rows[0]
             run.update(
                 status="running",
-                phase="layout",
+                phase="quality",
                 started_at=time.time(),
                 deadline=time.time() + 420,
             )

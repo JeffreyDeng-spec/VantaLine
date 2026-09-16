@@ -59,7 +59,7 @@ let browser;
  await page.reload();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);assert.equal(diagnostics,0);assert.equal(await page.evaluate(()=>window.__fullscreenRequests),0);
  task.runs[0]={...task.runs[0],status:'completed',phase:'completed',decision:'DIFFERENCES',elapsed:18,crop:[60,40,300,200],scope:'仅检测选中标签',result:{decision:'DIFFERENCES',similarity:85,issues:[{id:1,type:'missing_line',description:'缺少 MODEL 行',standardText:'MODEL: TEST',actualText:'',severity:'high',confidence:'',position_note:'无法可靠定位'}]}};
  await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(await page.locator('.li-box-number').count(),0);await page.getByRole('button',{name:'查看异常 1 详情',exact:true}).click();await page.getByRole('dialog').getByText('模型置信度',{exact:true}).waitFor();await page.getByRole('dialog').getByText('无法可靠定位',{exact:true}).waitFor();await page.getByRole('button',{name:'关闭详情'}).click();assert.equal(await page.locator('.li-crop').count(),1);
- await page.getByText('调用诊断（默认折叠）',{exact:true}).click();await page.waitForFunction(()=>document.querySelector('.li-results pre')?.textContent.includes('calls'));assert.equal(diagnostics,1);
+ await page.getByText('质量与调用诊断（默认折叠）',{exact:true}).click();await page.waitForFunction(()=>document.querySelector('.li-results pre')?.textContent.includes('calls'));assert.equal(diagnostics,1);
  await page.screenshot({path:path.join(output,'desktop-difference.png'),fullPage:true});
  await page.getByRole('button',{name:'放大实物图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),0);
  await page.getByRole('button',{name:'检测下一件',exact:true}).click();await page.getByRole('button',{name:'开始检测',exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'开始检测',exact:true}).isDisabled());
@@ -116,6 +116,22 @@ let browser;
  await page.locator('.li-history button').first().click();await page.getByText('长问题说明'.repeat(100),{exact:true}).first().waitFor();
  assert.ok(await page.locator('.li-result-content').evaluate(e=>e.scrollHeight>e.clientHeight));
  await page.locator('.li-result-content').hover();await page.mouse.wheel(0,30000);assert.equal(await page.evaluate(()=>scrollY),0);
+ // Quality rejection is a saved non-pass, with retry retaining the selected standard.
+ const qualitySaved=JSON.parse(JSON.stringify(task.runs[0]));
+ task.runs[0]={...qualitySaved,status:'failed',decision:'REVIEW_REQUIRED',result:null,
+  error_code:'QUALITY_BLURRED',error:'标签文字整体不够清晰，请重新对焦并保持相机稳定后拍摄',
+  quality:{policy:{version:'black-label-quality-v1',config_hash:'fixture'}}};
+ await page.setViewportSize({width:1440,height:900});await page.reload();
+ await page.getByRole('heading',{name:'照片质量未通过',exact:true}).waitFor();
+ await page.getByRole('alert').filter({hasText:'尚未完成比对'}).waitFor();
+ assert.equal(await page.locator('.li-pass,.li-model-score,.li-issue').count(),0);
+ await page.screenshot({path:path.join(output,'quality-rejected.png'),fullPage:true});
+ await page.getByRole('button',{name:'重新拍照 / 重新上传',exact:true}).click();
+ await page.getByRole('button',{name:'开启摄像头 / 重拍',exact:true}).waitFor();
+ assert.ok(await page.getByRole('button',{name:'返回缩略图',exact:true}).isVisible());
+ assert.equal(submits,1);
+ task.runs[0]=qualitySaved;await page.goto(base+'/workspace/label-inspection?task=test-task&run='+qualitySaved.id);
+ await page.getByText('当时未执行质量筛选',{exact:true}).waitFor();
  task.runs[0].error='长错误说明'.repeat(300);task.runs[0].status='failed';task.runs[0].result=null;
  await page.reload();await page.getByRole('alert').filter({hasText:'长错误说明'}).waitFor();assert.ok(await page.locator('.li-result-content').evaluate(e=>e.scrollHeight>e.clientHeight));assert.equal(await page.evaluate(()=>scrollY),0);
  await page.getByRole('button',{name:'返回任务详情',exact:true}).click();await page.getByRole('button',{name:'返回任务列表',exact:true}).click();await page.getByRole('heading',{name:'检测任务'}).waitFor();
