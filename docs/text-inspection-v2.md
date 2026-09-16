@@ -1,5 +1,16 @@
 # Text inspection v2
 
+The current label workspace retains one owner/task/request/run-bound local photo URL
+through submission and completion; result polling updates independent SVG overlays
+without replacing the photo node or source. Photo replacement, navigation away and
+account changes release this lease. Refresh uses the saved preview without resubmitting.
+Historical actuals display their existing 1600px JPEG preview; zoom keeps the preview
+visible until the full normalized image loads, with explicit retry on failure. Failed
+local decoding falls back to the server preview, then the full normalized image once.
+EXIF-oriented browser pixels share the server's oriented coordinate frame; normalized
+issue boxes and original-size crop geometry do not depend on preview resolution.
+No original or detector input bytes are changed.
+
 Label call diagnostics are internal: the result page shows only a detection ID for
 support. `GET /api/label-inspection/runs/{id}/diagnostics` requires administrator role
 in addition to inspection permission and current-account ownership; it returns the

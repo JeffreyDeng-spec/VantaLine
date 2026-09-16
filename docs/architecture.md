@@ -1,5 +1,13 @@
 # Architecture
 
+The label actual-image component remains mounted from local selection through run
+completion. A single in-memory photo lease binds owner, task, request ID and then run
+ID; only that run may reuse the blob URL. Navigation, replacement, next-item, logout
+and unmount release it. Request recovery binds only the original pending request.
+Historical reads use the stored JPEG preview; full normalized images load only on
+zoom or a bounded preview failure fallback. Original uploads and inference inputs
+remain unchanged, and authenticated no-store media policy is preserved.
+
 The label result page exposes a detection ID for support, with no call-diagnostic
 control or diagnostic fetch. Normal run responses omit model/prompt/layout/transform
 internals and retain only a quality-check presence marker. Full evidence remains in

@@ -138,6 +138,7 @@ function form(file: File, values: Record<string, string | number> = {}) {
 function Evidence({
   url,
   title,
+  fallbackUrls = [],
   size,
   crop,
   boxes = [],
@@ -146,18 +147,26 @@ function Evidence({
 }: {
   url: string;
   title: string;
+  fallbackUrls?: string[];
   size?: number[];
   crop?: number[];
   boxes?: { id: number; box: number[] }[];
   selectedIssue?: number | null;
   onZoom: (url: string) => void;
 }) {
-  const [bad, setBad] = useState(false);
+  const [failures, setFailures] = useState<{ primary: string; urls: string[] }>(
+    { primary: url, urls: [] },
+  );
+  const failed = failures.primary === url ? failures.urls : [];
+  const source = [url, ...fallbackUrls].find(
+    (candidate) => candidate && !failed.includes(candidate),
+  );
+  const bad = !source;
   const frame = useRef<HTMLButtonElement>(null);
   const [natural, setNatural] = useState<[number, number]>([1, 1]);
   const [space, setSpace] = useState<[number, number]>([1, 1]);
   useEffect(() => {
-    setBad(false);
+    setFailures({ primary: url, urls: [] });
     setNatural([1, 1]);
   }, [url]);
   useEffect(() => {
@@ -187,12 +196,12 @@ function Evidence({
     <button
       ref={frame}
       className="li-image"
-      onClick={() => onZoom(url)}
+      onClick={() => onZoom(source!)}
       aria-label={`放大${title}`}
     >
       <span style={{ width: natural[0] * scale, height: natural[1] * scale }}>
         <img
-          src={url}
+          src={source}
           alt={title}
           onLoad={(e) =>
             setNatural([
@@ -200,7 +209,15 @@ function Evidence({
               e.currentTarget.naturalHeight,
             ])
           }
-          onError={() => setBad(true)}
+          onError={() =>
+            setFailures((previous) => ({
+              primary: url,
+              urls: [
+                ...(previous.primary === url ? previous.urls : []),
+                source!,
+              ],
+            }))
+          }
         />
         {(crop && size) || located.length ? (
           <svg
@@ -250,11 +267,15 @@ function Camera({
   onError,
   preview,
   tools,
+  readOnly = false,
+  disabled = false,
 }: {
   onPhoto: (file: File) => void;
   onError: (e: unknown) => void;
   preview: ReactNode;
   tools: ReactNode;
+  readOnly?: boolean;
+  disabled?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null),
     stream = useRef<MediaStream | null>(null),
@@ -280,7 +301,11 @@ function Camera({
       stop();
     };
   }, []);
+  useEffect(() => {
+    if (readOnly || disabled) stop();
+  }, [readOnly, disabled]);
   async function start() {
+    if (readOnly || disabled) return;
     stop();
     const token = generation.current;
     setStarting(true);
@@ -349,33 +374,36 @@ function Camera({
         <video ref={video} muted playsInline hidden={!active && !starting} />
         {!active && !starting ? preview : null}
       </div>
-      <div className="li-tools">
-        {tools}
-        <select
-          aria-label="选择摄像头"
-          value={device}
-          onChange={(e) => {
-            stop();
-            setDevice(e.target.value);
-          }}
-        >
-          <option value="">默认摄像头</option>
-          {devices.map((d, i) => (
-            <option value={d.deviceId} key={d.deviceId}>
-              {d.label || `摄像头 ${i + 1}`}
-            </option>
-          ))}
-        </select>
-        <button onClick={() => void start()} disabled={starting}>
-          {starting ? "正在开启…" : active ? "重新连接" : "开启摄像头 / 重拍"}
-        </button>
-        {active ? (
-          <>
-            <button onClick={capture}>拍照</button>
-            <button onClick={stop}>关闭摄像头</button>
-          </>
-        ) : null}
-      </div>
+      {!readOnly && (
+        <div className="li-tools">
+          {tools}
+          <select
+            disabled={disabled}
+            aria-label="选择摄像头"
+            value={device}
+            onChange={(e) => {
+              stop();
+              setDevice(e.target.value);
+            }}
+          >
+            <option value="">默认摄像头</option>
+            {devices.map((d, i) => (
+              <option value={d.deviceId} key={d.deviceId}>
+                {d.label || `摄像头 ${i + 1}`}
+              </option>
+            ))}
+          </select>
+          <button onClick={() => void start()} disabled={starting || disabled}>
+            {starting ? "正在开启…" : active ? "重新连接" : "开启摄像头 / 重拍"}
+          </button>
+          {active ? (
+            <>
+              <button onClick={capture}>拍照</button>
+              <button onClick={stop}>关闭摄像头</button>
+            </>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -490,6 +518,84 @@ function IssueDetails({
     </dialog>
   );
 }
+type PhotoLease = {
+  owner: string;
+  task: string;
+  file: File;
+  url: string;
+  requestId?: string;
+  runId?: string;
+};
+type ZoomImage = { preview: string; full: string };
+function ImageZoom({
+  image,
+  onClose,
+}: {
+  image: ZoomImage;
+  onClose: () => void;
+}) {
+  const [loaded, setLoaded] = useState(image.preview === image.full);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  return (
+    <div
+      className="li-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="图片放大"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <button autoFocus onClick={onClose}>
+        关闭放大
+      </button>
+      <div className="li-zoom-images" onClick={(e) => e.stopPropagation()}>
+        <img
+          src={image.preview}
+          alt="图片预览"
+          style={{
+            visibility:
+              loaded && image.preview !== image.full ? "hidden" : "visible",
+          }}
+        />
+        {image.preview !== image.full && (
+          <img
+            key={attempt}
+            src={image.full}
+            alt="原尺寸图片"
+            style={{ visibility: loaded ? "visible" : "hidden" }}
+            onLoad={() => {
+              setLoaded(true);
+              setFailed(false);
+            }}
+            onError={() => setFailed(true)}
+          />
+        )}
+      </div>
+      {!loaded && (
+        <div className="li-zoom-status" onClick={(e) => e.stopPropagation()}>
+          {failed ? (
+            <>
+              <span>高清图加载失败，当前显示预览图。</span>
+              <button
+                onClick={() => {
+                  setFailed(false);
+                  setAttempt((v) => v + 1);
+                }}
+              >
+                重试高清图
+              </button>
+            </>
+          ) : (
+            <span role="status">正在加载高清图…</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 export function LabelWorkspace() {
   const { user, logout } = useAuth();
   const cache = useQueryClient();
@@ -503,8 +609,8 @@ export function LabelWorkspace() {
     [gallery, setGallery] = useState(true),
     [hidden, setHidden] = useState(false),
     [actual, setActual] = useState<File | null>(null),
-    [preview, setPreview] = useState(""),
-    [zoom, setZoom] = useState(""),
+    [localPhoto, setLocalPhoto] = useState<PhotoLease | null>(null),
+    [zoom, setZoom] = useState<ZoomImage | null>(null),
     [issue, setIssue] = useState<number | null>(null),
     [rename, setRename] = useState(""),
     [parent, setParent] = useState("");
@@ -631,33 +737,56 @@ export function LabelWorkspace() {
   });
   useEffect(() => {
     if (recovery.data?.run && pending && recovery.data.run.task_id === taskId) {
+      const recovered = recovery.data.run;
+      setLocalPhoto((photo) =>
+        photo?.owner === user.id &&
+        photo.task === taskId &&
+        photo.requestId === pending
+          ? { ...photo, runId: recovered.id }
+          : photo,
+      );
+      cache.setQueryData<Task>(["label-task", user.id, taskId], (task) =>
+        task && !task.runs.some((run) => run.id === recovered.id)
+          ? { ...task, runs: [recovered, ...task.runs] }
+          : task,
+      );
+      setError("");
       sessionStorage.removeItem(pendingKey);
       setPending("");
       setParams({ task: recovery.data.run.task_id, run: recovery.data.run.id });
     }
-  }, [recovery.data, pending, pendingKey, setParams, taskId]);
+  }, [recovery.data, pending, pendingKey, setParams, taskId, user.id, cache]);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
+  // The image lease survives draft -> run navigation, independently of the form.
   useEffect(() => {
-    if (!actual) {
-      setPreview("");
-      return;
-    }
-    const url = URL.createObjectURL(actual);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [actual]);
+    const url = localPhoto?.url;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [localPhoto?.url]);
+  useEffect(() => {
+    setLocalPhoto((photo) =>
+      photo &&
+      (photo.owner !== user.id ||
+        photo.task !== taskId ||
+        (runId ? photo.runId !== runId : !!photo.runId))
+        ? null
+        : photo,
+    );
+    setZoom(null);
+  }, [user.id, taskId, runId]);
   useEffect(() => {
     setActual(null);
     setSelected("");
     setGallery(true);
     setError("");
     setParent("");
-  }, [taskId]);
+  }, [taskId, user.id]);
   useEffect(() => {
     setIssue(null);
     setIssueDetails(null);
@@ -711,6 +840,22 @@ export function LabelWorkspace() {
     run = value?.runs.find((r) => r.id === runId),
     running = value?.runs.find((r) => ["queued", "running"].includes(r.status)),
     reference = run?.reference || value?.assets.find((a) => a.id === selected);
+  const photoLease =
+    localPhoto?.owner === user.id &&
+    localPhoto.task === taskId &&
+    (runId ? localPhoto.runId === runId : !localPhoto.runId)
+      ? localPhoto
+      : null;
+  const actualPreview = run?.actual?.preview
+    ? mediaURL(taskId, run.actual.preview)
+    : "";
+  const actualFull = run?.actual?.image
+    ? mediaURL(taskId, run.actual.image)
+    : "";
+  const actualDisplay = photoLease?.url || actualPreview || actualFull;
+  function openZoom(url: string) {
+    setZoom({ preview: url, full: url });
+  }
   useEffect(() => {
     if (value) setRename(value.name);
   }, [value?.name]);
@@ -744,9 +889,19 @@ export function LabelWorkspace() {
       fail(new Error("实物图片不能超过 10 MiB"));
       return;
     }
+    if (submission.current || pending || runId) return;
+    setZoom(null);
+    setLocalPhoto({
+      owner: user.id,
+      task: taskId,
+      file,
+      url: URL.createObjectURL(file),
+    });
     setActual(file);
   }
   function fresh() {
+    setLocalPhoto(null);
+    setZoom(null);
     if (runId) setParent(runId.startsWith("legacy:") ? "" : runId);
     if (run?.reference) setSelected(run.reference.id);
     setParams({ task: taskId });
@@ -1144,7 +1299,7 @@ export function LabelWorkspace() {
                                 : reference.legacy_url || ""
                             }
                             title="标准图"
-                            onZoom={setZoom}
+                            onZoom={openZoom}
                             boxes={run?.result?.issues.flatMap((i) =>
                               i.reference_box
                                 ? [{ id: i.id, box: i.reference_box }]
@@ -1265,72 +1420,71 @@ export function LabelWorkspace() {
                   <section className="li-panel li-actual-panel">
                     <header>
                       <h2>实物标签</h2>
-                      <span>{run ? "历史原图" : "拍照或上传一张实物照片"}</span>
+                      <span>
+                        {run ? "检测照片 · 点击放大" : "拍照或上传一张实物照片"}
+                      </span>
                     </header>
-                    {run ? (
-                      <div className="li-visual">
-                        {run.actual ? (
-                          <Evidence
-                            url={mediaURL(value.id, run.actual.image)}
-                            title="实物图"
-                            onZoom={setZoom}
-                            size={run.actual.size}
-                            crop={run.crop}
-                            boxes={run?.result?.issues.flatMap((i) =>
-                              i.actual_box
-                                ? [{ id: i.id, box: i.actual_box }]
-                                : [],
-                            )}
-                            selectedIssue={issue}
-                          />
-                        ) : (
-                          <div className="li-placeholder">原图缺失</div>
-                        )}
-                        {run.scope && (
-                          <p className={run.crop ? "li-warning" : ""}>
-                            {run.error_code?.startsWith("QUALITY_")
-                              ? "尚未完成比对；框线仅表示布局选中范围。"
-                              : `${run.scope}${run.crop ? "；框外其他标签没有检测。" : ""}`}
-                          </p>
-                        )}
-                      </div>
-                    ) : value.revision ? (
-                      <Camera
-                        key={taskId + runId}
-                        onPhoto={photo}
-                        onError={fail}
-                        preview={
-                          preview ? (
+                    <Camera
+                      key={user.id + ":" + taskId}
+                      readOnly={!!runId || !value.revision}
+                      disabled={busy || !!pending || !!running}
+                      onPhoto={photo}
+                      onError={fail}
+                      preview={
+                        <>
+                          {actualDisplay ? (
                             <Evidence
-                              url={preview}
-                              title="待检实物图"
-                              onZoom={setZoom}
+                              url={actualDisplay}
+                              fallbackUrls={[actualPreview, actualFull]}
+                              title={runId ? "实物图" : "待检实物图"}
+                              onZoom={(display) =>
+                                setZoom({
+                                  preview: display,
+                                  full:
+                                    display === photoLease?.url
+                                      ? display
+                                      : actualFull || display,
+                                })
+                              }
+                              size={run?.actual?.size}
+                              crop={run?.crop}
+                              boxes={run?.result?.issues.flatMap((i) =>
+                                i.actual_box
+                                  ? [{ id: i.id, box: i.actual_box }]
+                                  : [],
+                              )}
+                              selectedIssue={issue}
                             />
                           ) : (
-                            <div className="li-placeholder">等待实物照片</div>
-                          )
-                        }
-                        tools={
-                          <FileDropZone
-                            accept="image/*"
-                            disabled={busy || !!running}
-                            ariaLabel="上传实物照片"
-                            onFiles={(files) => {
-                              resumeAfterPicker();
-                              if (files[0]) photo(files[0]);
-                            }}
-                          >
-                            {actual
-                              ? `重新上传 · ${actual.name}`
-                              : "拖入实物图片，或点击上传（≤ 10 MiB / 1600 万像素）"}
-                          </FileDropZone>
-                        }
-                      />
-                    ) : (
-                      <div className="li-placeholder">
-                        继续检测后可上传实物照片
-                      </div>
-                    )}
+                            <div className="li-placeholder">
+                              {runId ? "原图缺失" : "等待实物照片"}
+                            </div>
+                          )}
+                          {run?.scope && (
+                            <p className={run.crop ? "li-warning" : ""}>
+                              {run.error_code?.startsWith("QUALITY_")
+                                ? "尚未完成比对；框线仅表示布局选中范围。"
+                                : `${run.scope}${run.crop ? "；框外其他标签没有检测。" : ""}`}
+                            </p>
+                          )}
+                        </>
+                      }
+                      tools={
+                        <FileDropZone
+                          accept="image/*"
+                          disabled={busy || !!running || !!pending}
+                          ariaLabel="上传实物照片"
+                          onFiles={(files) => {
+                            resumeAfterPicker();
+                            if (files[0]) photo(files[0]);
+                          }}
+                        >
+                          {actual
+                            ? `重新上传 · ${actual.name}`
+                            : "拖入实物图片，或点击上传（≤ 10 MiB / 1600 万像素）"}
+                        </FileDropZone>
+                      }
+                    />
                   </section>
                 </div>
                 <div
@@ -1386,6 +1540,11 @@ export function LabelWorkspace() {
                               sessionStorage.getItem(pendingKey) || key();
                             sessionStorage.setItem(pendingKey, requestId);
                             setPending(requestId);
+                            setLocalPhoto((photo) =>
+                              photo?.file === actual
+                                ? { ...photo, requestId }
+                                : photo,
+                            );
                             const created = await apiClient.upload<Run>(
                               `${API}/tasks/${value.id}/runs`,
                               form(actual, {
@@ -1397,6 +1556,29 @@ export function LabelWorkspace() {
                             );
                             sessionStorage.removeItem(pendingKey);
                             if (!isCurrent()) return;
+                            setLocalPhoto((photo) =>
+                              photo?.owner === user.id &&
+                              photo.task === value.id &&
+                              photo.requestId === requestId
+                                ? { ...photo, runId: created.id }
+                                : photo,
+                            );
+                            // Seed the result before navigation, so the photo never disappears waiting for a poll.
+                            cache.setQueryData<Task>(
+                              ["label-task", user.id, value.id],
+                              (task) =>
+                                task
+                                  ? {
+                                      ...task,
+                                      runs: [
+                                        created,
+                                        ...task.runs.filter(
+                                          (r) => r.id !== created.id,
+                                        ),
+                                      ],
+                                    }
+                                  : task,
+                            );
                             setPending("");
                             setParams({ task: value.id, run: created.id });
                           })
@@ -1434,8 +1616,8 @@ export function LabelWorkspace() {
                         {run.error_code?.startsWith("QUALITY_")
                           ? "照片质量未通过"
                           : run.status === "completed"
-                          ? text(run.decision)
-                          : text(run.status)}
+                            ? text(run.decision)
+                            : text(run.status)}
                       </h2>
                       <span>
                         {when(run.created_at)} ·{" "}
@@ -1454,7 +1636,9 @@ export function LabelWorkspace() {
                         disabled={["queued", "running"].includes(run.status)}
                         onClick={fresh}
                       >
-                        {run.error_code?.startsWith("QUALITY_") ? "重新拍照 / 重新上传" : "检测下一件"}
+                        {run.error_code?.startsWith("QUALITY_")
+                          ? "重新拍照 / 重新上传"
+                          : "检测下一件"}
                       </button>
                     </header>
                   )}
@@ -1491,7 +1675,14 @@ export function LabelWorkspace() {
                   >
                     {run ? (
                       <section className="li-results">
-                        {run.error ? <p role="alert">{run.error_code?.startsWith("QUALITY_") ? "尚未完成比对。" : ""}{run.error}</p> : null}
+                        {run.error ? (
+                          <p role="alert">
+                            {run.error_code?.startsWith("QUALITY_")
+                              ? "尚未完成比对。"
+                              : ""}
+                            {run.error}
+                          </p>
+                        ) : null}
                         {["queued", "running"].includes(run.status) ? (
                           <p role="status">
                             {text(run.phase || run.status)}…
@@ -1501,7 +1692,7 @@ export function LabelWorkspace() {
                         {run.legacy_record_id ? (
                           <LegacyResult
                             id={run.legacy_record_id}
-                            onZoom={setZoom}
+                            onZoom={openZoom}
                           />
                         ) : null}
                         {run.result ? (
@@ -1542,7 +1733,12 @@ export function LabelWorkspace() {
                             ))}
                           </>
                         ) : null}
-                        {!run.quality && !["queued", "running"].includes(run.status) ? <p className="li-quality-history">当时未执行质量筛选</p> : null}
+                        {!run.quality &&
+                        !["queued", "running"].includes(run.status) ? (
+                          <p className="li-quality-history">
+                            当时未执行质量筛选
+                          </p>
+                        ) : null}
                         <p className="li-record-id">检测编号：{run.id}</p>
                       </section>
                     ) : runId ? (
@@ -1573,8 +1769,10 @@ export function LabelWorkspace() {
                       >
                         {when(r.created_at)} ·{" "}
                         {r.legacy_record_id ? "旧文字检验" : "Evolving"} ·{" "}
-                        {r.error_code?.startsWith("QUALITY_") ? "照片质量未通过" : text(r.decision)} · {text(r.status)} · 版本{" "}
-                        {r.revision ?? "未留存"}
+                        {r.error_code?.startsWith("QUALITY_")
+                          ? "照片质量未通过"
+                          : text(r.decision)}{" "}
+                        · {text(r.status)} · 版本 {r.revision ?? "未留存"}
                       </button>
                     ))}
                     {!value.runs.length ? <p>还没有检测记录。</p> : null}
@@ -1607,25 +1805,11 @@ export function LabelWorkspace() {
         />
       )}
       {zoom ? (
-        <div
-          className="li-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label="图片放大"
-          onClick={() => setZoom("")}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setZoom("");
-          }}
-        >
-          <button autoFocus onClick={() => setZoom("")}>
-            关闭放大
-          </button>
-          <img
-            src={zoom}
-            alt="原尺寸图片"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ImageZoom
+          key={zoom.preview + zoom.full}
+          image={zoom}
+          onClose={() => setZoom(null)}
+        />
       ) : null}
     </main>
   );

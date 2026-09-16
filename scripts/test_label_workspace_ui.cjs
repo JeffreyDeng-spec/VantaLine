@@ -143,4 +143,5 @@ let browser;
  await page.getByText('正在提取图片…',{exact:true}).waitFor();await page.getByRole('link',{name:'← 返回任务列表',exact:true}).click();await page.getByRole('heading',{name:'检测任务',exact:true}).waitFor();
  assert.ok(releaseImport);releaseImport();await page.waitForTimeout(600);assert.equal(new URL(page.url()).search,'');assert.equal(await page.getByRole('heading',{name:'检测任务',exact:true}).count(),1);
  assert.deepEqual(errors,[]);console.log('label workspace UI PASS; screenshots: '+output);
+ await require('./test_label_image_reuse.cjs')();
 })().catch(async e=>{console.error(e);if(browser){const p=browser.contexts()[0]?.pages()[0];if(p){console.error(await p.locator('body').innerText());await p.screenshot({path:path.join(output,'failure.png'),fullPage:true});}}process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();vite.kill();});
