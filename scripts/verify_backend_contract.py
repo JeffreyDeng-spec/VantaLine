@@ -44,6 +44,7 @@ def capture():
         assert server._accessory_confirmation.store.lock() is server._candidate_store_lock
         assert server._accessory_removal.projection is server._accessory_projection
         assert server._accessory_gallery.projection is server._accessory_projection
+        assert server._image_job_metadata.model_resolver() is server.resolve_model_profiles()
         assert server.add_accessory_files is server._accessory_file_routes.add_accessory_files
         assert server._candidate_repository.dependencies.lock() is server._candidate_store_lock
 

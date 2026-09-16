@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_image_job_metadata.py` fixes six original-runtime groups:
+deterministic IDs and legacy aliases, anchor timestamps/hashes and strict read
+errors, guide order/truncation/basename collisions, duplicate job identities,
+snapshot deep copies/context binding and failure evidence. The original seven
+bodies are compared before wiring. Existing actual-root candidate, model resolver,
+real-PG candidate and full application gates remain. Source-fingerprint tests require
+the migrated file and verify that changing each declared source changes the hash.
+
 `python scripts/smoke_accessory_gallery.py` covers real image pixels (transparent,
 partial-alpha, opaque and grayscale), preview sizing, unreadable input and the
 existing unchecked image-write return. Synthetic HTTP cases fix gallery order,

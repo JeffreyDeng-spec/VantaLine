@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Image-job metadata CI adds runtime contract checks and advances source provenance
+to manifest v3. Package the new metadata source with the complete immutable release.
+No schema, prompt algorithm, concurrency or process topology change is introduced.
+
 Gallery CI adds synthetic HTTP/image-byte contracts. Whole immutable releases
 include the new gallery service; schema, prompts and process topology are unchanged.
 
@@ -16,7 +20,7 @@ Read-time repair, prior snapshot references and runtime topology are unchanged;
 the ordinary immutable package includes the new candidate service files.
 
 Accessory catalog CI adds isolated PostgreSQL and synthetic HTTP/projection checks.
-The prompt source manifest advances to v2 for the moved policy file; the complete
+The prompt source manifest includes the moved policy file; the complete
 immutable package includes that source. Runtime topology and schema are unchanged.
 
 Record-context CI checks exercise real HTTP/thread identity plus owner assignment
