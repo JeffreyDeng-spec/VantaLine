@@ -136,14 +136,16 @@ function Evidence({
   title,
   size,
   crop,
-  box,
+  boxes = [],
+  selectedIssue,
   onZoom,
 }: {
   url: string;
   title: string;
   size?: number[];
   crop?: number[];
-  box?: number[];
+  boxes?: { id: number; box: number[] }[];
+  selectedIssue?: number | null;
   onZoom: (url: string) => void;
 }) {
   const [bad, setBad] = useState(false);
@@ -164,6 +166,17 @@ function Evidence({
     return () => observer.disconnect();
   }, [bad]);
   const scale = Math.min(space[0] / natural[0], space[1] / natural[1]);
+  const located = boxes.filter(
+    ({ box }) =>
+      box.length === 4 &&
+      box.every(Number.isFinite) &&
+      box[0] >= 0 &&
+      box[1] >= 0 &&
+      box[2] > 0 &&
+      box[3] > 0 &&
+      box[0] + box[2] <= 1.001 &&
+      box[1] + box[3] <= 1.001,
+  );
   return bad ? (
     <p role="status">图片缺失或无法读取</p>
   ) : (
@@ -185,7 +198,7 @@ function Evidence({
           }
           onError={() => setBad(true)}
         />
-        {(crop && size) || box ? (
+        {(crop && size) || located.length ? (
           <svg
             viewBox="0 0 1000 1000"
             preserveAspectRatio="none"
@@ -200,16 +213,30 @@ function Evidence({
                 height={(crop[3] / size[1]) * 1000}
               />
             ) : null}
-            {box ? (
+            {located.map(({ id, box }) => (
               <rect
+                key={id}
+                className={selectedIssue === id ? "li-box-selected" : ""}
                 x={box[0] * 1000}
                 y={box[1] * 1000}
                 width={box[2] * 1000}
                 height={box[3] * 1000}
               />
-            ) : null}
+            ))}
           </svg>
         ) : null}
+        {located.map(({ id, box }) => (
+          <b
+            key={id}
+            className={`li-box-number ${selectedIssue === id ? "selected" : ""}`}
+            style={{
+              left: `${Math.min(box[0], 0.94) * 100}%`,
+              top: `${Math.min(box[1], 0.94) * 100}%`,
+            }}
+          >
+            {id}
+          </b>
+        ))}
       </span>
     </button>
   );
@@ -437,6 +464,47 @@ function RenameDialog({
     </dialog>
   );
 }
+function IssueDetails({
+  issue,
+  onClose,
+}: {
+  issue: Issue;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="li-rename-dialog li-issue-dialog"
+      aria-labelledby="li-issue-title"
+      onCancel={onClose}
+      onClose={onClose}
+    >
+      <h2 id="li-issue-title">
+        异常 {issue.id} · {text(issue.type)}
+      </h2>
+      <p>{issue.description}</p>
+      <dl>
+        <dt>标准原文</dt>
+        <dd>{issue.standardText || "未提供"}</dd>
+        <dt>实物文字</dt>
+        <dd>{issue.actualText || "未提供"}</dd>
+        <dt>严重程度</dt>
+        <dd>{text(issue.severity) || "未提供"}</dd>
+        <dt>模型置信度</dt>
+        <dd>{text(issue.confidence) || "未提供"}</dd>
+        <dt>定位说明</dt>
+        <dd>{issue.position_note || "仅对具有可靠坐标的差异显示编号框。"}</dd>
+      </dl>
+      <button autoFocus onClick={onClose}>
+        关闭详情
+      </button>
+    </dialog>
+  );
+}
 export function LabelWorkspace() {
   const { user, logout } = useAuth();
   const cache = useQueryClient();
@@ -472,7 +540,8 @@ export function LabelWorkspace() {
     [more, setMore] = useState(false);
   const [panel, setPanel] = useState<"result" | "history">("result");
   const [imageTab, setImageTab] = useState<"standard" | "actual">("standard");
-  const [dock, setDock] = useState(28);
+  const [issueDetails, setIssueDetails] = useState<Issue | null>(null);
+  const [dock, setDock] = useState(32);
   const fullscreenRequest = useRef(0);
   const pickerFullscreen = useRef(false);
   function leaveFullscreen() {
@@ -550,7 +619,7 @@ export function LabelWorkspace() {
   }, [taskId]);
   useEffect(() => {
     setPanel("result");
-  }, [runId]);
+  }, [taskId, runId]);
   function resizeDock(clientY: number) {
     const rect = bench.current?.getBoundingClientRect();
     if (rect?.height)
@@ -606,8 +675,9 @@ export function LabelWorkspace() {
   }, [taskId]);
   useEffect(() => {
     setIssue(null);
+    setIssueDetails(null);
     setActual(null);
-  }, [runId]);
+  }, [taskId, runId]);
   useEffect(() => {
     setCursor("");
     setRows([]);
@@ -655,8 +725,7 @@ export function LabelWorkspace() {
   const value = task.data,
     run = value?.runs.find((r) => r.id === runId),
     running = value?.runs.find((r) => ["queued", "running"].includes(r.status)),
-    reference = run?.reference || value?.assets.find((a) => a.id === selected),
-    activeIssue = run?.result?.issues.find((i) => i.id === issue);
+    reference = run?.reference || value?.assets.find((a) => a.id === selected);
   useEffect(() => {
     if (value) setRename(value.name);
   }, [value?.name]);
@@ -1091,7 +1160,12 @@ export function LabelWorkspace() {
                             }
                             title="标准图"
                             onZoom={setZoom}
-                            box={activeIssue?.reference_box}
+                            boxes={run?.result?.issues.flatMap((i) =>
+                              i.reference_box
+                                ? [{ id: i.id, box: i.reference_box }]
+                                : [],
+                            )}
+                            selectedIssue={issue}
                           />
                           <p>{reference.name}</p>
                         </>
@@ -1217,7 +1291,12 @@ export function LabelWorkspace() {
                             onZoom={setZoom}
                             size={run.actual.size}
                             crop={run.crop}
-                            box={activeIssue?.actual_box}
+                            boxes={run?.result?.issues.flatMap((i) =>
+                              i.actual_box
+                                ? [{ id: i.id, box: i.actual_box }]
+                                : [],
+                            )}
+                            selectedIssue={issue}
                           />
                         ) : (
                           <div className="li-placeholder">原图缺失</div>
@@ -1377,6 +1456,12 @@ export function LabelWorkspace() {
                           ? ` · ${run.result.issues.length} 项差异`
                           : ""}
                       </span>
+                      {run.result && (
+                        <span className="li-model-score">
+                          模型评分 {run.result.similarity} /
+                          100（不是系统准确率）
+                        </span>
+                      )}
                       <button
                         disabled={["queued", "running"].includes(run.status)}
                         onClick={fresh}
@@ -1433,30 +1518,39 @@ export function LabelWorkspace() {
                         ) : null}
                         {run.result ? (
                           <>
-                            <p>
-                              {run.result.issues.length} 项差异 · 模型评分{" "}
-                              {run.result.similarity} / 100（不是系统准确率）
-                            </p>
                             {run.result.issues.map((i) => (
-                              <button
+                              <div
                                 className={`li-issue ${issue === i.id ? "selected" : ""}`}
                                 key={i.id}
-                                onClick={() => setIssue(i.id)}
                               >
-                                <strong>
-                                  {i.id}. {text(i.type)} · 严重程度：
-                                  {text(i.severity) || "未提供"} · 模型置信度：
-                                  {text(i.confidence) || "未提供"}
-                                </strong>
-                                <span>
-                                  标准：{i.standardText || "未提供"}　实物：
-                                  {i.actualText || "未提供"}
-                                </span>
-                                <p>{i.description}</p>
-                                {i.position_note ? (
-                                  <small>{i.position_note}</small>
-                                ) : null}
-                              </button>
+                                <button
+                                  className="li-issue-line"
+                                  onClick={() => setIssue(i.id)}
+                                  aria-pressed={issue === i.id}
+                                  title={i.description}
+                                >
+                                  <strong className="li-issue-number">
+                                    {i.id}
+                                  </strong>
+                                  <strong className="li-issue-type">
+                                    {text(i.type)}
+                                  </strong>
+                                  <span className="li-issue-description">
+                                    {i.description ||
+                                      `标准：${i.standardText || "未提供"}；实物：${i.actualText || "未提供"}`}
+                                  </span>
+                                </button>
+                                <button
+                                  className="li-issue-details"
+                                  aria-label={`查看异常 ${i.id} 详情`}
+                                  onClick={() => {
+                                    setIssue(i.id);
+                                    setIssueDetails(i);
+                                  }}
+                                >
+                                  详情
+                                </button>
+                              </div>
                             ))}
                           </>
                         ) : null}
@@ -1503,6 +1597,12 @@ export function LabelWorkspace() {
             </>
           ) : null}
         </>
+      )}
+      {issueDetails && (
+        <IssueDetails
+          issue={issueDetails}
+          onClose={() => setIssueDetails(null)}
+        />
       )}
       {renameOpen && value && (
         <RenameDialog

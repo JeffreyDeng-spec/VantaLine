@@ -389,7 +389,7 @@ root. Esc/manual exit never forces reentry. Reloads, deep links, denied/unsuppor
 fullscreen retain the fixed viewport and a usable manual toggle. All dialogs remain
 inside the fullscreen root. Only this module's fullscreen is exited on leave.
 
-The result/history dock defaults to 28% and has pointer/keyboard resizing from
+The result/history dock defaults to 32% and has pointer/keyboard resizing from
 20% to 45%, with a small-viewport minimum so its scrollable body remains reachable.
 Detection and summary controls remain outside scrolling bodies. Gallery, issues,
 history, diagnostics and lengthy notices scroll locally without chaining to the page.
@@ -404,3 +404,5 @@ workspace remembers fullscreen only for that picker gesture and attempts restora
 on file selection while transient user activation is available. Cancellation, explicit
 exit and navigation clear that intent; upload completion never forces fullscreen.
 When restoration is unavailable the fixed viewport and manual toggle remain usable.
+
+The default abnormality list shows one line per issue (number, type, description) at 16px. Long descriptions use ellipsis with full evidence in the Details dialog; standard/actual text, severity, model confidence and positioning notes are preserved there. The default dock uses 32% of the operation area and remains adjustable. Desktop rows are 32px (44px for touch). Six rows fit at 1920x1080 and five at 1440x900 with the default dock. Existing valid boxes have matching issue numbers, with selected boxes highlighted. Unlocated issues remain textual.
