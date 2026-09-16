@@ -32,6 +32,11 @@ Receipts are workstation evidence, not proof against browser/OS failure. At-most
 
 ## Production gates
 
+The initial request-schema extraction moves only non-PLC validation models into
+domain schema modules. PLC models and strict field validation remain in their
+current domain; browser ownership, lease/ACK rules and zero uncertain-write retries
+are unchanged. Keep the assembled HTTP and existing PLC contracts in this gate.
+
 Public/workspace route separation keeps the same browser origin. Updated camera
 task links use `/workspace/tasks/.../inspect`; legacy URLs remain aliases.
 Website/help shortcuts open new tabs instead of replacing a live workbench;

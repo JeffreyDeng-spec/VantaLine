@@ -1,5 +1,12 @@
 # Architecture
 
+`schemas/` contains dependency-free HTTP request models grouped into authentication,
+configuration, detection, accessories, training, pipeline and text inspection.
+The application explicitly imports these classes; business modules can depend on
+the same contracts without importing `server`. Defaults, coercion and field names
+are unchanged. PLC request models remain with the PLC domain until its dedicated
+extraction and protocol review.
+
 `runtime/identity.py` owns the request identity port backed by a `ContextVar` per
 composition. `runtime/connections.py` owns thread-local repository selection,
 generation invalidation, closed-connection rebuilding and explicit same-thread

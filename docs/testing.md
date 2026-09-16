@@ -36,8 +36,13 @@ checks. `smoke_model_profile_routing.py` retains real provider-adapter and role 
 
 `python scripts/verify_backend_boundaries.py` rejects entry-point imports, circular
 dependencies, wildcard imports and namespace injection inside extracted packages.
-Its explicit package list currently covers `model_profiles` and `runtime`; each domain extraction
+Its explicit package list currently covers `model_profiles`, `runtime` and `schemas`; each domain extraction
 must extend it. Existing unconverted modules are not claimed compliant by this gate.
+
+Request-schema extraction preserved each moved class's normalized AST. Continue
+running the assembled OpenAPI/HTTP baseline and real navigation/auth, model routing
+and PLC contract tests; source re-exports in the application preserve existing
+test imports while new business modules import their domain schema directly.
 
 `python scripts/smoke_runtime_lifecycle.py --postgres` runs native ASGI and thread-pool
 requests for two identities with separate PostgreSQL connections, plus exception
