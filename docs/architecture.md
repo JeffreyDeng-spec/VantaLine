@@ -1,12 +1,19 @@
 # Architecture
 
+Accessory source preparation now has three explicit services: `AccessoryPreparation`
+for normalization/reference expansion, `AccessoryRefresh` for post-edit preparation,
+and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
+ports retain existing call ordering and partial file effects. Crop/video/image
+algorithms remain existing providers. The actual object-plan prompt is now in
+`accessories/preparation.py`, included in source manifest v4 for new tasks.
+
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an
 explicit model-resolver provider and narrow provenance capabilities. Freeze still
 precedes ID/file mutation, and existing snapshot references remain untouched.
 The root intentionally injects its final `file_sha256` binding: the later strict
 implementation overrides an earlier definition, and I/O errors must still propagate.
-Source manifest v3 includes the actual migrated metadata file for new task evidence.
+The versioned source manifest includes the actual migrated metadata file for new task evidence.
 
 `accessories.gallery.AccessoryGallery` owns public detail projection, preview
 image writes and gallery assembly. Asset lookup, output storage and display

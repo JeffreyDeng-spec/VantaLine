@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_accessory_preparation.py` fixes eight original-runtime groups
+before and after migration: crop ordering/limits, empty-source results, exact object
+plans, deferred-field cleanup, reference normalization, video expansion ordering,
+refresh force flags, candidate ownership/aliasing, default-size arity, thumbnail
+limits and partial files on provider/pose/save failure. Providers use substitutes;
+no paid call, image worker or real PLC is started. Existing management/file/gallery,
+immutable model snapshots and complete application contracts remain required.
+
 `python scripts/smoke_image_job_metadata.py` fixes six original-runtime groups:
 deterministic IDs and legacy aliases, anchor timestamps/hashes and strict read
 errors, guide order/truncation/basename collisions, duplicate job identities,

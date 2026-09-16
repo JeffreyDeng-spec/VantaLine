@@ -1,9 +1,10 @@
 {
-  "version": 3,
+  "version": 4,
   "sources": [
     "server.py",
     "accessories/policy.py",
     "accessories/image_job_metadata.py",
+    "accessories/preparation.py",
     "label_inspection/prompts.json",
     "label_inspection/manual.py",
     "document_label_classifier.py",

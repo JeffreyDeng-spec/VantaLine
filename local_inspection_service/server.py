@@ -7222,15 +7222,71 @@ def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, A
     }
 
 
+from .accessories.preparation import (
+    AccessoryPreparation, AccessoryRefresh,
+    build_object_view_plan as _preparation_view_plan,
+    defer_accessory_normalization as _preparation_defer,
+)
+from .accessories.preparation_ports import (
+    PreparationPaths, TextPreparation, ReferenceMedia, RefreshPreparation, RefreshProfiles,
+    CandidateMedia, CandidatePreparation, CandidateStorage,
+)
+from .accessories.candidate_factory import CandidateFactory
+_accessory_preparation = AccessoryPreparation(
+    PreparationPaths(
+        normalized=lambda: NORMALIZED_DIR,
+        uploads=lambda: UPLOAD_DIR,
+        image_suffixes=lambda: IMAGE_REFERENCE_SUFFIXES,
+        video_suffixes=lambda: VIDEO_REFERENCE_SUFFIXES,
+    ),
+    TextPreparation(
+        is_rectified=lambda path: is_text_rectified_path(path),
+        has_rectified=lambda path, sources: text_raw_has_rectified(path, sources),
+        normalize=lambda source, directory, size: normalize_text_image(source, directory, size),
+        max_images=lambda: MAX_TEXT_ACCESSORY_IMAGES,
+    ),
+    ReferenceMedia(
+        extract_frames=lambda path, directory: extract_video_reference_frames(path, directory),
+        profile_paths=lambda item: ai_profile_reference_paths(item),
+        first_source=lambda item: first_source_ai_reference_path(item),
+    ),
+)
+_accessory_refresh = AccessoryRefresh(
+    RefreshPreparation(
+        normalize=lambda item: normalize_accessory_assets(item),
+        defer=lambda item: defer_accessory_normalization(item),
+        ensure_reference=lambda item: ensure_default_ai_profile_reference(item),
+    ),
+    RefreshProfiles(
+        fallback=lambda item: fallback_accessory_ai_profile(item),
+        generate=lambda item, **kwargs: generate_accessory_ai_profile(item, **kwargs),
+    ),
+)
+_candidate_factory = CandidateFactory(
+    CandidateMedia(
+        expand_sources=lambda identifier, sources: expand_accessory_reference_sources(identifier, sources),
+        default_size=lambda material_type: physical_size_payload(material_type),
+        size_reference=lambda value: normalize_size_reference(value),
+        image_suffixes=lambda: IMAGE_REFERENCE_SUFFIXES,
+        output_directory=lambda category: output_write_dir(category),
+        thumbnail=lambda image, path, angle: write_thumbnail(image, path, angle),
+    ),
+    CandidatePreparation(
+        defer=lambda item: defer_accessory_normalization(item),
+        ensure_reference=lambda item: ensure_default_ai_profile_reference(item),
+        ensure_profile=lambda item, **kwargs: ensure_accessory_ai_profile(item, **kwargs),
+        ensure_pose_jobs=lambda item: ensure_pose_collection_image_jobs(item),
+    ),
+    CandidateStorage(
+        owner_fields=lambda: current_owner_fields(),
+        directory=lambda: ACCESSORY_CANDIDATES_DIR,
+        save=lambda path, item: save_accessory_candidate(path, item),
+    ),
+)
+
+
 def build_object_view_plan(name: str) -> list[dict[str, Any]]:
-    return [
-        {"view": "front", "angle": 0, "scale": "1.00x"},
-        {"view": "left_oblique", "angle": -45, "scale": "0.90x"},
-        {"view": "right_oblique", "angle": 45, "scale": "1.10x"},
-        {"view": "top", "angle": 90, "scale": "0.85x"},
-        {"view": "lying_horizontal", "angle": 180, "scale": "1.00x"},
-        {"view": "standing", "angle": "cap diameter calibrated", "scale": "matched_to_proxy_length"},
-    ]
+    return _preparation_view_plan(name)
 
 
 def default_asset_for_accessory(item: dict[str, Any]) -> Path | None:
@@ -16946,79 +17002,11 @@ def paste_rotated_asset(canvas: np.ndarray, asset: np.ndarray, center: tuple[int
 
 
 def normalize_accessory_assets(item: dict[str, Any]) -> dict[str, Any]:
-    normalized_dir = NORMALIZED_DIR / accessory_uid(item)
-    normalized_dir.mkdir(parents=True, exist_ok=True)
-    source_files = [Path(path) for path in item.get("source_files", [])]
-    image_sources = [path for path in source_files if path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES]
-    material_type = accessory_material_type(item)
-    if material_type == "text":
-        assets = []
-        physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
-        skipped_for_manual_crop = False
-        rectified_sources = [path for path in image_sources if is_text_rectified_path(path)]
-        raw_sources = [path for path in image_sources if not is_text_rectified_path(path)]
-        text_sources = rectified_sources + raw_sources
-        original_sources = [
-            Path(str(path))
-            for path in (item.get("original_source_files") or [])
-            if Path(str(path)).suffix.lower() in IMAGE_REFERENCE_SUFFIXES and not is_text_rectified_path(path)
-        ]
-        crop_required_sources = original_sources or raw_sources
-        all_required_sources_cropped = all(text_raw_has_rectified(path, rectified_sources) for path in crop_required_sources)
-        for src in text_sources[:MAX_TEXT_ACCESSORY_IMAGES]:
-            if not is_text_rectified_path(src):
-                skipped_for_manual_crop = True
-                continue
-            normalized = normalize_text_image(src, normalized_dir, physical_size)
-            if normalized:
-                assets.append(normalized)
-            else:
-                skipped_for_manual_crop = True
-        manual_crop_required = bool(crop_required_sources) and not all_required_sources_cropped
-        manual_crop_reason = ""
-        if manual_crop_required:
-            manual_crop_reason = "manual_crop_required"
-        elif not assets and skipped_for_manual_crop:
-            manual_crop_reason = "manual_crop_required"
-        return {
-            "status": "normalized_text_ready" if assets and not manual_crop_required else "needs_crop",
-            "normalized_assets": assets,
-            "manual_crop_required": manual_crop_required or (not assets and skipped_for_manual_crop),
-            "manual_crop_reason": manual_crop_reason,
-            "preprocess": "用户裁剪包含完整文字的文档图像，系统进行透视校正并生成规整说明书图。",
-        }
-    prompt = (
-        f"Image-to-image asset expansion for '{item.get('name', 'accessory')}'. "
-        "Generate clean isolated product views with consistent material, multiple angles, "
-        "standing/lying poses when applicable, calibrated size variants, object-only framing, "
-        "no background/backing/surface/shadows, and transparent PNG alpha when supported."
-    )
-    return {
-        "status": "image_tool_plan_ready",
-        "normalized_assets": [
-            {
-                "kind": "object_view_plan",
-                "source_files": [str(path) for path in image_sources],
-                "image_tool_prompt": prompt,
-                "view_plan": build_object_view_plan(str(item.get("name", "accessory"))),
-            }
-        ],
-        "preprocess": "系统记录 Image tool 扩展计划，用于生成多视角、多尺寸辅助素材。",
-    }
+    return _accessory_preparation.normalize_accessory_assets(item)
 
 
 def defer_accessory_normalization(item: dict[str, Any]) -> None:
-    item["normalized_assets"] = []
-    for key in (
-        "clean_sprite_status",
-        "clean_sprite_count",
-        "clean_sprite_expected_count",
-        "clean_sprite_failed_cells",
-        "clean_sprite_preprocessed_at",
-    ):
-        item.pop(key, None)
-    item["normalization_deferred"] = True
-    item["preprocess"] = "已保存用户上传素材；任务进入生成样本阶段后再生成规范化文件。"
+    return _preparation_defer(item)
 
 
 def frame_detail_score(frame: np.ndarray) -> float:
@@ -17118,17 +17106,7 @@ def extract_video_reference_frames(video_path: Path, output_dir: Path, max_frame
 
 
 def expand_accessory_reference_sources(candidate_id: str, source_files: list[str]) -> tuple[list[str], list[dict[str, Any]]]:
-    expanded = list(source_files)
-    extracted_frames: list[dict[str, Any]] = []
-    frame_dir = UPLOAD_DIR / "accessory_candidates" / candidate_id / "video_reference_frames"
-    for path_str in source_files:
-        path = Path(path_str)
-        if path.suffix.lower() not in VIDEO_REFERENCE_SUFFIXES:
-            continue
-        frames = extract_video_reference_frames(path, frame_dir)
-        extracted_frames.extend(frames)
-        expanded.extend(frame["path"] for frame in frames)
-    return expanded, extracted_frames
+    return _accessory_preparation.expand_accessory_reference_sources(candidate_id, source_files)
 
 
 def write_thumbnail(image: np.ndarray, out_path: Path, angle: float = 0.0, size: int = 360) -> dict[str, Any]:
@@ -17636,52 +17614,7 @@ def create_accessory_candidate(
     material_alpha_policy: str | None = None,
     size_reference: str | None = None,
 ) -> dict[str, Any]:
-    candidate_id = f"cand_{uuid.uuid4().hex[:10]}"
-    expanded_source_files, extracted_video_frames = expand_accessory_reference_sources(candidate_id, source_files)
-    alpha_policy = normalize_object_alpha_material_policy(material_alpha_policy) if material_type == "object" else None
-    if material_type == "object" and not alpha_policy:
-        raise HTTPException(status_code=400, detail="material_alpha_policy must be transparent or opaque for object accessories")
-    item = {
-        "id": candidate_id,
-        "class_id": -1,
-        "name": name,
-        "material_type": material_type,
-        "training_role": training_role,
-        "physical_size": physical_size or physical_size_payload(material_type),
-        "status": "candidate_review",
-        "source_files": expanded_source_files,
-        "original_source_files": source_files,
-        "video_reference_frames": extracted_video_frames,
-        "created_at": int(time.time()),
-        **current_owner_fields(),
-    }
-    if alpha_policy:
-        item["material_alpha_policy"] = alpha_policy
-        item["object_alpha_policy_label"] = object_alpha_policy_label(alpha_policy)
-    size_reference_key = normalize_size_reference(size_reference) if material_type == "object" else ""
-    if size_reference_key:
-        item["size_reference"] = size_reference_key
-    defer_accessory_normalization(item)
-    ensure_default_ai_profile_reference(item)
-    ensure_accessory_ai_profile(item, allow_provider=True)
-    thumbnails = []
-    image_sources = [Path(path) for path in expanded_source_files if Path(path).suffix.lower() in IMAGE_REFERENCE_SUFFIXES]
-    if image_sources:
-        thumb_dir = output_write_dir("accessory_candidates") / candidate_id
-        thumb_dir.mkdir(parents=True, exist_ok=True)
-    for idx, src in enumerate(image_sources[:8]):
-        image = cv2.imread(str(src), cv2.IMREAD_COLOR)
-        if image is not None:
-            thumbnails.append(write_thumbnail(image, thumb_dir / f"source_{idx + 1:02d}.png", 0))
-    item["thumbnails"] = thumbnails[:8]
-    item["ai_generation_required"] = False
-    item["pose_collection_prompt"] = ""
-    item["pose_collection_prompts"] = {}
-    item["codex_image_jobs"] = []
-    item["codex_image_job"] = None
-    ensure_pose_collection_image_jobs(item)
-    save_accessory_candidate(ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json", item)
-    return item
+    return _candidate_factory.create_accessory_candidate(name, material_type, training_role, source_files, physical_size, material_alpha_policy, size_reference)
 
 
 from .accessories.candidate_repository import CandidateRepository, CandidateStoreDependencies
@@ -19617,30 +19550,11 @@ def first_source_ai_reference_path(item: dict[str, Any]) -> Path | None:
 
 
 def ensure_default_ai_profile_reference(item: dict[str, Any]) -> bool:
-    current_refs = [str(path) for path in ai_profile_reference_paths(item)]
-    if current_refs:
-        if item.get("ai_profile_reference_files") != current_refs:
-            item["ai_profile_reference_files"] = current_refs
-            return True
-        return False
-    first_source = first_source_ai_reference_path(item)
-    if not first_source:
-        return False
-    item["ai_profile_reference_files"] = [str(first_source)]
-    return True
+    return _accessory_preparation.ensure_default_ai_profile_reference(item)
 
 
 def refresh_accessory_assets_after_source_change(item: dict[str, Any], *, force_profile: bool = True) -> None:
-    if accessory_material_type(item) == "text":
-        item.update(normalize_accessory_assets(item))
-        item["normalization_deferred"] = False
-    else:
-        defer_accessory_normalization(item)
-    ensure_default_ai_profile_reference(item)
-    if force_profile:
-        item["ai_profile"] = fallback_accessory_ai_profile(item)
-        item["ai_profile_status"] = "ready"
-        generate_accessory_ai_profile(item, allow_provider=True)
+    return _accessory_refresh.refresh_accessory_assets_after_source_change(item, force_profile=force_profile)
 
 
 def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
