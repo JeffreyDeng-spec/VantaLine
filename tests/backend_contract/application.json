@@ -6746,7 +6746,7 @@
               "required": false,
               "schema": {
                 "default": "all",
-                "pattern": "^(all|word|image|legacy|beta)$",
+                "pattern": "^(all|word|image|pdf|legacy|legacy_manual|beta)$",
                 "title": "Source",
                 "type": "string"
               }
@@ -7007,6 +7007,52 @@
             }
           },
           "summary": "Continue Legacy"
+        }
+      },
+      "/api/label-inspection/tasks/{identity}/history-media/{page_id}": {
+        "get": {
+          "operationId": "manual_photo_api_label_inspection_tasks__identity__history_media__page_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "identity",
+              "required": true,
+              "schema": {
+                "title": "Identity",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "page_id",
+              "required": true,
+              "schema": {
+                "title": "Page Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Manual Photo"
         }
       },
       "/api/label-inspection/tasks/{identity}/media/{sha}": {
@@ -15562,6 +15608,20 @@
       "methods": [
         "GET"
       ],
+      "name": "manual_photo",
+      "path": "/api/label-inspection/tasks/{identity}/history-media/{page_id}",
+      "permission": {
+        "GET": []
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
       "name": "media_read",
       "path": "/api/label-inspection/tasks/{identity}/media/{sha}",
       "permission": {
@@ -15971,6 +16031,7 @@
     }
   ],
   "shutdown": [
+    "set",
     "set"
   ],
   "startup": [
@@ -15978,6 +16039,7 @@
     "start_ai_mcp_warmup",
     "start_worker_training_watcher",
     "start_yolo_model_warmup",
+    "<lambda>",
     "start",
     "resume_image_worker_queue",
     "enforce_incoming_text_image_retention"
