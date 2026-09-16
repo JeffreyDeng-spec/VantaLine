@@ -1,5 +1,10 @@
 # Production runbook
 
+Accessory catalog extraction uses the ordinary complete-release restart. Check
+owner/shared/admin listing and details. New tasks record the v2 prompt-source
+manifest; retain old snapshots and paid-call evidence on complete-release rollback.
+No record-ID conversion, image regeneration or data migration is required.
+
 Record access uses the ordinary complete-release restart. Verify member-owned and
 shared record access and administrator assignment. On regression restore the
 previous complete release, retaining accounts, sessions and ownership records.

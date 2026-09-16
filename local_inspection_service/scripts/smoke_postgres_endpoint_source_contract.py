@@ -227,6 +227,28 @@ def main() -> None:
         getattr(contract, attribute).update(getattr(auth, attribute))
     contract.runtime_repository_entry_call_count += auth.runtime_repository_entry_call_count
 
+    accessory_path = ROOT / "local_inspection_service" / "accessories" / "repository.py"
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "accessories.repository"
+                and any(alias.name == "AccessoryRepository" for alias in node.names)
+                for node in ast.walk(tree)), "server.py missing AccessoryRepository composition import")
+    accessory = SourceContract(injected_repository=True)
+    accessory.visit(ast.parse(accessory_path.read_text(encoding="utf-8"), filename=str(accessory_path)))
+    accessory_helpers = {"save_accessory_item", "delete_accessory_item"}
+    require(accessory_helpers <= accessory.functions_with_runtime_repository_entry,
+            "accessory persistence helpers must use the injected runtime repository")
+    for name in accessory_helpers:
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        expected = ast.parse("_accessory_repository." + name +
+                             ("(item, config)" if name == "save_accessory_item" else "(accessory_id, config)"), mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected),
+                "accessory compatibility function is not bound to repository: " + name)
+    require("accessories" in accessory.string_literals, "accessory repository missing actual table access")
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(accessory, attribute))
+    contract.runtime_repository_entry_call_count += accessory.runtime_repository_entry_call_count
+
     missing_adapters = sorted(REQUIRED_RUNTIME_ADAPTERS - contract.imported_names)
     require(not missing_adapters, "server.py missing runtime record adapters: " + ",".join(missing_adapters))
 

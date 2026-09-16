@@ -1805,18 +1805,7 @@ MAX_IMAGE_WORKER_INPUTS = 10
 MAX_VIDEO_REFERENCE_FRAMES = 6
 PREVIEW_CACHE_SCHEMA_VERSION = "preview-cache-v4-object-overlap-material-alpha-scale"
 ANCHOR_POLICY_VERSION = "anchor-replacement-2026-05-27"
-TRANSPARENT_OBJECT_KEYWORDS = (
-    "glass",
-    "transparent",
-    "translucent",
-    "bottle",
-    "jar",
-    "vial",
-    "玻璃",
-    "透明",
-    "透光",
-    "瓶",
-)
+from .accessories.policy import TRANSPARENT_OBJECT_KEYWORDS
 POSE_ANCHOR_DIR = DATA_DIR / "anchor_pose_guides"
 POSE_ANCHOR_IMAGES = {
     "upright": POSE_ANCHOR_DIR / "endface_9bar_anchor.png",
@@ -6659,49 +6648,33 @@ async def dispatch_plc_for_detection_async(
     return result
 
 
+from .accessories import policy as _accessory_policy
+from .accessories.projection import AccessoryProjection, ProjectionDependencies as AccessoryProjectionDependencies
+from .accessories.repository import AccessoryRepository, AccessoryStoreDependencies
+
+_accessory_repository = AccessoryRepository(AccessoryStoreDependencies(
+    runtime_repository=lambda: runtime_postgres_repository_or_none(),
+    lock=lambda: _config_io_lock, load_config=lambda: load_config(),
+    save_config=lambda config: save_config(config),
+))
+_accessory_projection = AccessoryProjection(AccessoryProjectionDependencies(
+    audit=lambda item: enrich_record_audit_fields(item),
+    sanitize=lambda item: public_path_sanitized(item),
+    physical_size=lambda kind: physical_size_payload(kind),
+    size_reference=lambda key: size_reference_payload(key),
+    text_source_count=lambda item: text_accessory_source_count(item),
+    text_preview_limit=lambda: MAX_TEXT_ACCESSORY_IMAGES,
+    current_user=lambda: current_auth_user(),
+    redact=lambda payload, user: redact_accessory_payload_for_user(payload, user),
+))
+
+
 def save_accessory_item(item: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    if not isinstance(item, dict):
-        return None
-    row = accessory_row(item)
-    if not row:
-        return None
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        with _config_io_lock:
-            repository.upsert_row("accessories", row)
-        return dict(item)
-    next_config = config if isinstance(config, dict) else load_config()
-    accessories = next_config.setdefault("accessories", [])
-    row_id = str(row["id"])
-    for index, existing in enumerate(accessories):
-        if accessory_uid(existing) == row_id:
-            accessories[index] = dict(item)
-            save_config(next_config)
-            return dict(item)
-    accessories.append(dict(item))
-    save_config(next_config)
-    return dict(item)
+    return _accessory_repository.save_accessory_item(item, config)
 
 
 def delete_accessory_item(accessory_id: str, config: dict[str, Any] | None = None) -> bool:
-    clean_id = str(accessory_id or "").strip()
-    if not clean_id:
-        return False
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        with _config_io_lock:
-            if repository.fetch_by_primary_key("accessories", {"id": clean_id}) is None:
-                return False
-            repository.delete_by_primary_key("accessories", {"id": clean_id})
-        return True
-    next_config = config if isinstance(config, dict) else load_config()
-    accessories = next_config.get("accessories") if isinstance(next_config.get("accessories"), list) else []
-    remaining = [item for item in accessories if accessory_uid(item) != clean_id]
-    if len(remaining) == len(accessories):
-        return False
-    next_config["accessories"] = remaining
-    save_config(next_config)
-    return True
+    return _accessory_repository.delete_accessory_item(accessory_id, config)
 
 
 def task_rule_id(value: Any) -> str:
@@ -6744,152 +6717,46 @@ def apply_task_rule_override_to_spec(spec: dict[str, Any], config: dict[str, Any
 
 
 def accessory_uid(item: dict[str, Any]) -> str:
-    if item.get("id"):
-        return str(item["id"])
-    return accessory_legacy_uid(item)
+    return _accessory_policy.accessory_uid(item)
 
 
 def accessory_legacy_uid(item: dict[str, Any]) -> str:
-    raw = f"{item.get('class_id', 'x')}_{item.get('name', 'accessory')}"
-    return re.sub(r"[^a-zA-Z0-9_-]+", "_", raw).strip("_").lower()
+    return _accessory_policy.accessory_legacy_uid(item)
 
 
 def serialize_accessory(item: dict[str, Any]) -> dict[str, Any]:
-    copy = public_path_sanitized(enrich_record_audit_fields(item))
-    copy["id"] = accessory_uid(item)
-    material_type = copy.setdefault("material_type", "object" if int(copy.get("class_id", 0)) == 0 else "text")
-    copy.setdefault("physical_size", physical_size_payload(str(material_type)))
-    if str(material_type) == "object":
-        copy.setdefault("material_alpha_policy", object_alpha_material_policy(item))
-    copy.setdefault("source_files", [])
-    copy.setdefault("normalized_assets", [])
-    copy.setdefault("training_role", "detect_and_classify")
-    copy.setdefault("detection_route", "yolo")
-    if copy.get("detection_route") == "locate":
-        copy["detection_route"] = "yolo"
-    copy.pop("locateanything_profile", None)
-    copy.pop("locateanything_profile_status", None)
-    return copy
+    return _accessory_projection.serialize_accessory(item)
 
 
 def serialize_accessory_summary(item: dict[str, Any]) -> dict[str, Any]:
-    full = serialize_accessory(item)
-    source_files = full.get("source_files") if isinstance(full.get("source_files"), list) else []
-    is_text = str(full.get("material_type")) == "text"
-    source_preview_limit = MAX_TEXT_ACCESSORY_IMAGES if is_text else 4
-    source_file_count = text_accessory_source_count(full) if is_text else len(source_files)
-    original_source_files = full.get("original_source_files") if isinstance(full.get("original_source_files"), list) else []
-    thumbnails = full.get("thumbnails") if isinstance(full.get("thumbnails"), list) else []
-    ai_status = full.get("ai_profile_status") if isinstance(full.get("ai_profile_status"), dict) else {}
-    payload = {
-        "id": full["id"],
-        "class_id": full.get("class_id"),
-        "name": full.get("name") or full["id"],
-        "label": full.get("label") or full.get("name") or full["id"],
-        "material_type": full.get("material_type"),
-        "material_alpha_policy": full.get("material_alpha_policy"),
-        "object_alpha_policy_label": full.get("object_alpha_policy_label"),
-        "training_role": full.get("training_role"),
-        "detection_route": full.get("detection_route"),
-        "physical_size": full.get("physical_size"),
-        "size_reference": full.get("size_reference"),
-        "size_reference_label": (size_reference_payload(full.get("size_reference")) or {}).get("label"),
-        "status": full.get("status"),
-        "manual_crop_required": full.get("manual_crop_required"),
-        "manual_crop_reason": full.get("manual_crop_reason"),
-        "preprocess": full.get("preprocess"),
-        "source_files": source_files[:source_preview_limit],
-        "original_source_files": original_source_files[:source_preview_limit],
-        "source_file_count": source_file_count,
-        "normalized_asset_count": len(full.get("normalized_assets") or []),
-        "clean_sprite_status": full.get("clean_sprite_status"),
-        "clean_sprite_count": full.get("clean_sprite_count"),
-        "clean_sprite_expected_count": full.get("clean_sprite_expected_count"),
-        "clean_sprite_failed_cells": full.get("clean_sprite_failed_cells") or [],
-        "ai_profile_status": {
-            "status": ai_status.get("status"),
-            "source": ai_status.get("source"),
-            "message": ai_status.get("message"),
-            "updated_at": ai_status.get("updated_at"),
-        }
-        if ai_status
-        else full.get("ai_profile_status"),
-        "ai_profile_ready": accessory_ai_profile_ready(full),
-        "thumbnails": thumbnails[:2],
-        "thumbnail_url": thumbnails[0].get("url") if thumbnails and isinstance(thumbnails[0], dict) else "",
-        "created_at": full.get("created_at"),
-        "updated_at": full.get("updated_at"),
-        "confirmed_at": full.get("confirmed_at"),
-        "owner_user_id": full.get("owner_user_id"),
-        "owner_username": full.get("owner_username"),
-    }
-    return redact_accessory_payload_for_user(payload, current_auth_user())
+    return _accessory_projection.serialize_accessory_summary(item)
 
 
 def serialize_accessory_items(items: list[dict[str, Any]], *, summary: bool = True) -> list[dict[str, Any]]:
-    serializer = serialize_accessory_summary if summary else serialize_accessory
-    return [serializer(item) for item in items]
+    return _accessory_projection.serialize_accessory_items(items, summary=summary)
 
 
 def accessory_material_type(item: dict[str, Any]) -> str:
-    return str(item.get("material_type") or ("object" if int(item.get("class_id", 0)) == 0 else "text"))
+    return _accessory_policy.accessory_material_type(item)
 
 
-TEXT_ACCESSORY_NAME_HINTS = ("说明", "说明书", "标签", "贴纸", "标牌", "铭牌", "文字", "卡片", "资料", "文档", "手册", "manual", "label", "card", "text")
+from .accessories.policy import TEXT_ACCESSORY_NAME_HINTS
 
 
 def accessory_uses_ocr(item: dict[str, Any]) -> bool:
-    if accessory_material_type(item) == "text":
-        return True
-    role = str(item.get("training_role") or "").lower()
-    if role in {"detect_then_ocr", "text_ocr", "ocr"}:
-        return True
-    route = str(item.get("detection_route") or item.get("optimization_route") or "").lower()
-    if route == "yolo_ocr":
-        return True
-    name_blob = " ".join(
-        str(item.get(key) or "")
-        for key in ("name", "label", "description", "category", "material_type")
-    ).lower()
-    return any(hint in name_blob for hint in TEXT_ACCESSORY_NAME_HINTS)
+    return _accessory_policy.accessory_uses_ocr(item)
 
 
 def normalize_object_alpha_material_policy(value: Any) -> str | None:
-    normalized = str(value or "").strip().lower()
-    if normalized in {"transparent", "glass", "translucent", "preserve_transparency", "preserve_glass"}:
-        return "transparent"
-    if normalized in {"opaque", "solid", "foreground_opaque", "solid_foreground"}:
-        return "opaque"
-    return None
+    return _accessory_policy.normalize_object_alpha_material_policy(value)
 
 
 def object_alpha_material_policy(item: dict[str, Any] | None = None, metadata: dict[str, Any] | None = None) -> str:
-    source = metadata or {}
-    explicit = (
-        source.get("material_alpha_policy")
-        or source.get("alpha_policy")
-        or (item or {}).get("material_alpha_policy")
-        or (item or {}).get("alpha_policy")
-        or (item or {}).get("object_alpha_policy")
-    )
-    explicit_policy = normalize_object_alpha_material_policy(explicit)
-    if explicit_policy:
-        return explicit_policy
-    haystack = " ".join(
-        str(value or "")
-        for value in (
-            (item or {}).get("name"),
-            source.get("name"),
-            (item or {}).get("material"),
-            (item or {}).get("description"),
-            source.get("source_pose_collection"),
-        )
-    ).lower()
-    return "transparent" if any(keyword in haystack for keyword in TRANSPARENT_OBJECT_KEYWORDS) else "opaque"
+    return _accessory_policy.object_alpha_material_policy(item, metadata)
 
 
 def object_alpha_policy_label(policy: str) -> str:
-    return "透明" if policy == "transparent" else "不透明"
+    return _accessory_policy.object_alpha_policy_label(policy)
 
 
 def service_rebased_path(path: Path) -> Path | None:
@@ -14996,41 +14863,16 @@ def canonical_text_assets_complete(item: dict[str, Any], assets: list[dict[str, 
     return bool(text_assets) and all(asset.get("width") and asset.get("height") for asset in text_assets)
 
 
-AI_PROFILE_PROVIDER_READY_STATUSES = {"generated", "ready"}
-AI_PROFILE_REJECTED_STATUSES = {
-    "missing_api_key",
-    "provider_error",
-    "timeout",
-    "create_failed",
-    "fallback",
-    "unsupported_provider",
-    "invalid_base_url",
-}
+from .accessories.policy import AI_PROFILE_PROVIDER_READY_STATUSES
+from .accessories.policy import AI_PROFILE_REJECTED_STATUSES
 
 
 def accessory_ai_profile_ready(item: dict[str, Any]) -> bool:
-    profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
-    if not profile:
-        return False
-    if profile.get("accessory_id") != accessory_uid(item):
-        return False
-    if profile.get("material_type") != accessory_material_type(item):
-        return False
-    if not (profile.get("name") and (profile.get("visual_signature") or profile.get("description") or profile.get("reference_images"))):
-        return False
-    status = item.get("ai_profile_status") if isinstance(item.get("ai_profile_status"), dict) else {}
-    source = str(status.get("source") or "").strip().lower()
-    state = str(status.get("status") or "").strip().lower()
-    if source == "fallback" or state in AI_PROFILE_REJECTED_STATUSES:
-        return False
-    return source == "provider" and state in AI_PROFILE_PROVIDER_READY_STATUSES
+    return _accessory_policy.accessory_ai_profile_ready(item)
 
 
 def accessory_ai_profile_rejected(item: dict[str, Any]) -> bool:
-    status = item.get("ai_profile_status") if isinstance(item.get("ai_profile_status"), dict) else {}
-    source = str(status.get("source") or "").strip().lower()
-    state = str(status.get("status") or "").strip().lower()
-    return source == "fallback" or state in AI_PROFILE_REJECTED_STATUSES
+    return _accessory_policy.accessory_ai_profile_rejected(item)
 
 
 
@@ -26769,27 +26611,17 @@ def update_task_rules(task_id: str, rule: TaskRuleConfig) -> dict[str, Any]:
     return {"status": "saved", "task_id": clean_task_id, "rule": config["task_rules"][clean_task_id]}
 
 
-@app.get("/api/accessories")
-def get_accessories(view: str = "summary", summary: bool = True, user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    full_config = load_config()
-    config = scope_config_for_user(full_config, user, user_id if user_is_admin(user) else None)
-    use_summary = summary and str(view or "summary").strip().lower() not in {"full", "detail", "all"}
-    return {"items": serialize_accessory_items(config["accessories"], summary=use_summary)}
-
-
-@app.get("/api/accessories/{accessory_id}/detail")
-def get_accessory_detail(accessory_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = load_config()
-    for item in config.get("accessories", []):
-        if accessory_uid(item) == accessory_id:
-            require_record_access(item, user)
-            # Do NOT generate clean sprites just for viewing an accessory. Sprite
-            # creation is deferred until a pipeline task starts (it happens during
-            # task normalization / the agent-MCP pose pipeline).
-            return accessory_detail_payload(item)
-    raise HTTPException(status_code=404, detail="Accessory not found")
+from .accessories.catalog import AccessoryCatalog, CatalogDependencies
+from .accessories.api import register_catalog_api
+_accessory_catalog = AccessoryCatalog(CatalogDependencies(
+    current_user=lambda: current_auth_user(), load_config=lambda: load_config(),
+    scope_config=lambda config, user, target: scope_config_for_user(config, user, target),
+    require_access=lambda record, user=None, *, write=False: require_record_access(record, user, write=write),
+    detail=lambda item: accessory_detail_payload(item),
+), _accessory_projection)
+_accessory_catalog_routes = register_catalog_api(app, _accessory_catalog)
+get_accessories = _accessory_catalog_routes.get_accessories
+get_accessory_detail = _accessory_catalog_routes.get_accessory_detail
 
 
 @app.get("/api/accessories/candidates/{candidate_id}")

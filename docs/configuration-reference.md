@@ -1,5 +1,10 @@
 # Configuration reference
 
+Accessory catalog extraction introduces no settings. Existing member/admin
+visibility, full-versus-summary payloads, source redaction, defaults and physical
+dimensions are unchanged. New task prompt provenance uses source manifest v2,
+including the extracted policy source; existing snapshots keep their old reference.
+
 Record access extraction adds no settings. Only administrators may assign another
 owner; existing special IDs bypass user lookup. Other targets are freshly resolved
 through the existing auth-store path, including inactive accounts. The `legacy`
