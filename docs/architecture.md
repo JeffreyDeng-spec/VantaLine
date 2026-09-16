@@ -1,10 +1,15 @@
 # Architecture
 
+`records.audit` owns timestamp coercion, field precedence, file-time fallback and
+shallow audit projection. `RecordAudit` receives the existing ownership policy;
+six root forwarding functions preserve caller signatures. Owner assignment,
+request identity and persistence retain their existing implementations.
+
 `records.ownership.RecordOwnership` contains five pure ownership policies shared
 by existing record callers. The root supplies the existing legacy/system identifiers and
 retains the five original function signatures as explicit forwarding adapters.
 Shared users can read; administrators or owners can write. Administrator owner
-filters remain binding. Identity, owner assignment, audit timestamps and storage
+filters remain binding. Identity, owner assignment and storage
 are outside this extraction and retain their current lifecycle.
 
 The existing Codex comparison worker observes process exit once per loop, waits

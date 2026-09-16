@@ -1116,7 +1116,15 @@ api_cost_summary = _cost_ledger.summary
 
 
 from .records.ownership import RecordOwnership
+from .records.audit import (
+    RecordAudit,
+    coerce_record_timestamp as _coerce_record_timestamp,
+    path_mtime_timestamp as _path_mtime_timestamp,
+    record_created_at as _record_created_at,
+    record_updated_at as _record_updated_at,
+)
 _record_ownership = RecordOwnership(LEGACY_OWNER_ID, SYSTEM_OWNER_ID)
+_record_audit = RecordAudit(_record_ownership)
 
 
 def record_owner_id(record: dict[str, Any] | None) -> str:
@@ -1145,37 +1153,19 @@ def owner_fields_for_new_record(user: dict[str, Any], target_user_id: str | None
 
 
 def coerce_record_timestamp(value: Any) -> int:
-    try:
-        return int(float(value or 0))
-    except (TypeError, ValueError):
-        return 0
+    return _coerce_record_timestamp(value)
 
 
 def path_mtime_timestamp(path: Path | None) -> int:
-    if not path:
-        return 0
-    try:
-        return int(path.stat().st_mtime)
-    except OSError:
-        return 0
+    return _path_mtime_timestamp(path)
 
 
 def record_created_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
-    if isinstance(record, dict):
-        for key in ("created_at", "created", "started_at", "queued_at", "requested_at", "completed_at", "updated_at"):
-            timestamp = coerce_record_timestamp(record.get(key))
-            if timestamp:
-                return timestamp
-    return path_mtime_timestamp(fallback_path)
+    return _record_created_at(record, fallback_path)
 
 
 def record_updated_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
-    if isinstance(record, dict):
-        for key in ("updated_at", "completed_at", "failed_at", "confirmed_at", "started_at", "created_at"):
-            timestamp = coerce_record_timestamp(record.get(key))
-            if timestamp:
-                return timestamp
-    return path_mtime_timestamp(fallback_path)
+    return _record_updated_at(record, fallback_path)
 
 
 def record_owner_username(record: dict[str, Any] | None) -> str:
@@ -1183,18 +1173,11 @@ def record_owner_username(record: dict[str, Any] | None) -> str:
 
 
 def record_audit_fields(record: dict[str, Any] | None, fallback_path: Path | None = None) -> dict[str, Any]:
-    return {
-        "created_at": record_created_at(record, fallback_path),
-        "updated_at": record_updated_at(record, fallback_path),
-        "owner_user_id": record_owner_id(record),
-        "owner_username": record_owner_username(record),
-    }
+    return _record_audit.record_audit_fields(record, fallback_path)
 
 
 def enrich_record_audit_fields(record: dict[str, Any], fallback_path: Path | None = None) -> dict[str, Any]:
-    copy = dict(record)
-    copy.update(record_audit_fields(copy, fallback_path))
-    return copy
+    return _record_audit.enrich_record_audit_fields(record, fallback_path)
 
 
 def record_matches_owner_filter(record: dict[str, Any], target_user_id: str | None) -> bool:
