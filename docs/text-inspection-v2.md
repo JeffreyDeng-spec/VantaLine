@@ -26,7 +26,7 @@ inspection permission and scopes all reads/writes to the current account. Import
 and mutations are idempotent; active runs serialize per task. Refresh only reads.
 All media and run snapshots are private and preserved in runtime storage.
 
-`label_inspection/prompts.json` contains the original A prompts unchanged. Both
+`label_inspection/prompts.json` retains A layout and comparison rules, with a versioned coordinate correction for the comparison response. Both
 images are EXIF-transposed for orientation, with originals and transforms retained.
 Model inputs use longest edge 1600, bicubic resize and JPEG quality 90. Call one
 classifies the actual-image layout (512 output tokens). Multi-label images use A's
@@ -37,11 +37,20 @@ Both use `doubao-seed-evolving`, temperature 0.1, `thinking.type=disabled` and a
 layout stops before call two. Network errors, 429, invalid JSON, truncated output,
 invalid crop and inconsistent hasDiff/issues cannot produce a passing result.
 
-The original prompt defines issue boxes relative to the label body, without
-providing its extent within a full standard/photo. These suggested coordinates
-are retained in evidence but are not presented as reliable image annotations.
-The UI shows textual issues and the verified multi-label crop rectangle; its
-linked overlay renderer only accepts reliably mapped boxes. Missing confidence
+New comparison responses declare `coordinateSpace=image_input_normalized_v2`.
+Each issue rectangle is normalized against its entire input image, including white
+margins and document headings, and uses the input orientation even when reading
+rotated labels. Standard rectangles map directly to the oriented standard; actual
+rectangles are mapped from the selected crop back to the oriented full photograph.
+Visible, finite, in-bounds rectangles are retained independently per side/issue and
+rendered with matching numbers. Invalid, absent or invisible rectangles are skipped
+without hiding valid siblings or changing the difference conclusion. Model boxes
+remain approximate visual guidance, not verified pixel segmentation.
+Historical label-relative coordinates and responses without the explicit contract
+remain unrendered; historical conclusions and evidence are never rewritten. A new
+linked detection uses the new prompt hash and produces new annotations. Normal
+completion still makes two model calls with the same token/time limits.
+Missing confidence
 is displayed as not supplied. Similarity is explicitly a model score, never system
 accuracy. Valid empty issues show green “未发现差异”; failures remain review-required.
 

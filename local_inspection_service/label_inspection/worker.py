@@ -79,6 +79,7 @@ def process(repo, media, run, key, invoke=model.invoke):
             phase="compare",
             layout=layout,
             crop=crop,
+            coordinate_space=model.COORDINATE_SPACE,
             scope="仅检测选中标签" if crop else "检测实物图中的单张标签",
         )
         value = stage("compare", [reference_input, actual_input], bool(crop))

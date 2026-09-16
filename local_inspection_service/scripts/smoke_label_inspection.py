@@ -56,6 +56,8 @@ def docx(broken=False, count=2):
 
 
 def main():
+    from smoke_label_coordinates import main as coordinate_checks
+    coordinate_checks()
     dsn = os.environ["VANTALINE_POSTGRES_DSN"]
     schema = "label_evolving_" + uuid.uuid4().hex
     root = Path(tempfile.mkdtemp(prefix="label-evolving-test-"))
