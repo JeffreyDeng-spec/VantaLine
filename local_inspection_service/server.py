@@ -1749,8 +1749,21 @@ app.mount(
 )
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
-_models: dict[str, YOLO] = {}
-_model_paths: dict[str, Path] = {}
+from .detection.model_selection import ModelSelection
+from .detection.local_models import LocalModels
+
+_model_selection = ModelSelection(
+    specialized=lambda config: list_ai_detection_specialized_model_specs(config),
+    trained=lambda *args: list_trained_model_specs(*args), registry=lambda: MODEL_REGISTRY,
+    default_id=lambda: DEFAULT_MODEL_ID, removed=lambda feature: removed_phase1_feature(feature),
+)
+_local_models = LocalModels(
+    select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda path: YOLO(path),
+    legacy_specs=lambda: legacy_model_specs(), trained_specs=lambda *args: list_trained_model_specs(*args),
+)
+# Compatibility objects for existing maintenance scripts; state belongs to LocalModels.
+_models = _local_models.models
+_model_paths = _local_models.paths
 _yolo_warmup_lock = threading.RLock()
 _yolo_warmup_state: dict[str, Any] = {
     "enabled": True,
@@ -23066,47 +23079,11 @@ def list_ai_detection_specialized_model_specs(
 
 
 def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = None) -> dict[str, Any]:
-    explicit_model = bool(model_id)
-    requested = model_id or (config or {}).get("active_model_id") or DEFAULT_MODEL_ID
-    if requested == "label_sheet_local_match":
-        if explicit_model:
-            removed_phase1_feature("Label Sheet")
-        requested = DEFAULT_MODEL_ID
-    for spec in list_ai_detection_specialized_model_specs(config):
-        if spec["id"] == requested:
-            return spec
-    try:
-        trained_specs = list_trained_model_specs(config)
-    except TypeError:
-        trained_specs = list_trained_model_specs()
-    for spec in trained_specs:
-        if spec["id"] == requested:
-            return spec
-    if requested not in MODEL_REGISTRY:
-        raise HTTPException(status_code=400, detail=f"Unknown model_id: {requested}")
-    return MODEL_REGISTRY[requested]
+    return _model_selection.selected_model_spec(model_id, config)
 
 
 def model(model_id: str | None = None, config: dict[str, Any] | None = None) -> YOLO:
-    spec = selected_model_spec(model_id, config)
-    if spec.get("is_ai_detection"):
-        raise RuntimeError("AI Detection does not use a local YOLO model")
-    if spec.get("is_label_sheet_match"):
-        raise RuntimeError("Label sheet matching does not use a local YOLO model")
-    model_id = str(spec["id"])
-    model_path = Path(spec["path"])
-    if model_id not in _models:
-        if not model_path.exists():
-            raise RuntimeError(f"Model file not found: {model_path}")
-        resolved_model_path = model_path.resolve()
-        for cached_id, cached_path in list(_model_paths.items()):
-            if cached_path == resolved_model_path and cached_id in _models:
-                _models[model_id] = _models[cached_id]
-                _model_paths[model_id] = resolved_model_path
-                return _models[model_id]
-        _models[model_id] = YOLO(str(model_path))
-        _model_paths[model_id] = resolved_model_path
-    return _models[model_id]
+    return _local_models.model(model_id, config)
 
 
 def yolo_warmup_enabled() -> bool:
@@ -23203,28 +23180,11 @@ def yolo_warmup_status() -> dict[str, Any]:
 
 
 def yolo_loaded_model_ids(config: dict[str, Any]) -> list[str]:
-    loaded_paths = set(_model_paths.values())
-    ids = set(_models.keys())
-    if not loaded_paths:
-        return sorted(ids)
-    specs = [
-        *legacy_model_specs(),
-        *list_trained_model_specs(config),
-    ]
-    for spec in specs:
-        if spec.get("is_ai_detection") or spec.get("is_label_sheet_match"):
-            continue
-        try:
-            model_path = Path(spec.get("path") or "").resolve()
-        except (TypeError, OSError):
-            continue
-        if model_path in loaded_paths:
-            ids.add(str(spec.get("id") or ""))
-    return sorted(item for item in ids if item)
+    return _local_models.yolo_loaded_model_ids(config)
 
 
 def yolo_model_ready(model_id: str, config: dict[str, Any]) -> bool:
-    return str(model_id or "") in set(yolo_loaded_model_ids(config))
+    return _local_models.yolo_model_ready(model_id, config)
 
 
 def public_yolo_warmup_status(config: dict[str, Any]) -> dict[str, Any]:

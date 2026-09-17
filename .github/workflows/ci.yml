@@ -203,6 +203,7 @@ jobs:
           python scripts/smoke_detection_ocr.py
           python scripts/smoke_detection_task_store.py --postgres
           python scripts/smoke_detection_task_catalog.py
+          python scripts/smoke_local_model_runtime.py
           python local_inspection_service/scripts/smoke_phase3a_resources.py
           python local_inspection_service/scripts/smoke_phase3b_detection.py
           python local_inspection_service/scripts/smoke_auth_rbac.py
