@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_incoming_text_workflows.py` exercises owner-only task access,
+projection/media checks, reference creation and clone failures, activation order,
+repeat/insert-loser admission, OCR and quality failure boundaries, review partial
+writes, list filters, retention failures and interleaved HTTP identities. Synthetic
+images and OCR doubles avoid model downloads or paid calls. Retain the original
+incoming endpoint smoke, complete HTTP baseline and real PostgreSQL repository
+checks. Static gates follow five actual workflow repository entries and their shared
+lazy factory instead of counting composition forwarding twice.
+
 `python scripts/smoke_incoming_text_analysis.py --root` adds sixteen synthetic groups:
 OCR single initialization/failure retry/instance isolation; result mapping and color
 order; critical-region crops; absence thresholds; raster limits; real PDF behavior;

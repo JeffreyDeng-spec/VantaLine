@@ -39,8 +39,10 @@ def main():
     assert '@app.post("/api/text-compare-beta/analyze")' in api_source
     assert 'from .text_inspection.beta_api import register as register_beta_comparison, BetaAccess' in source
     assert 'analyze_text_compare_beta = register_beta_comparison(' in source
-    assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in source
-    assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in source
+    incoming_api = (APP_DIR / 'text_inspection/incoming_api.py').read_text(encoding='utf-8')
+    assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in incoming_api
+    assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in incoming_api
+    assert '_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)' in source
     retired = (APP_DIR / "frontend/src/features/text-compare/TextCompareBetaPage.tsx").read_text()
     redirect = (APP_DIR / "frontend/src/features/label-inspection/LegacyManualRedirect.tsx").read_text()
     history = (APP_DIR / "frontend/src/features/label-inspection/ManualHistory.tsx").read_text()

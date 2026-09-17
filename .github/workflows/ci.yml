@@ -198,6 +198,7 @@ jobs:
           python scripts/smoke_text_comparison_api.py --root
           python scripts/smoke_incoming_text_store.py --root --postgres
           python scripts/smoke_incoming_text_analysis.py --root
+          python scripts/smoke_incoming_text_workflows.py
           python local_inspection_service/scripts/smoke_auth_rbac.py
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py

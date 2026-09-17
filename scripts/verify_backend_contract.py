@@ -70,6 +70,16 @@ def capture():
         assert [route.endpoint for route in server.app.routes if route.name == "analyze_text_compare_beta"] == [server.analyze_text_compare_beta]
 
 
+        assert server._incoming_catalog.access is server._incoming_execution.access is server._incoming_reviews.access
+        assert server._incoming_catalog.writes is server._incoming_reviews.writes is server._incoming_retention.writes
+        assert server._incoming_writes.guard() is server._incoming_text_store_lock
+        assert server._incoming_json.paths is server._incoming_text_store.paths
+        for routes in (server._incoming_catalog_routes, server._incoming_inspection_routes):
+            for name in routes.__dataclass_fields__:
+                endpoint = getattr(server, name)
+                assert endpoint is getattr(routes, name)
+                assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
+
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         from local_inspection_service.text_inspection.projection import public_record
         from local_inspection_service.text_inspection import revisions, diagnostics

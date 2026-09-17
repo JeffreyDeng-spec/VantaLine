@@ -1,5 +1,12 @@
 # Production runbook
 
+Legacy incoming workflow modules preserve partial-failure boundaries. Activation
+can persist before task publication fails; JSON review writes the inspection before
+audit, and repeating an already identical decision does not repair missing audit.
+Retention only removes eligible evidence: partial unlink failures do not mark the
+record; a later audit failure does not restore removed files. This refactor does not
+run retention or change database transactions. Roll back the complete release.
+
 OCR and Beta services remain inside the existing Web process; restarting clears
 these process-local states as before. A failed initialization remains retryable on
 a later request; Beta failed comparisons retain their prior cached-review behavior.
@@ -17,7 +24,7 @@ incoming store together, preserving existing records and audit evidence.
 Comparison extraction preserves attempts, media, uncertain-call evidence and the
 existing review/audit ordering. A failed final save can leave a persisted attempt;
 retry is not a recovery action. Use the usual complete-release restart and rollback
-with matching manifest v7, retaining historical snapshots. This batch does not
+with matching manifest v8, retaining historical snapshots. This batch does not
 activate an independent label worker or modify deployment topology.
 
 Standard-route extraction keeps the current jobs, write locks and complete-release

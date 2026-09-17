@@ -34380,31 +34380,40 @@ def append_incoming_text_audit(event: dict[str, Any]) -> None:
 
 
 
+from .text_inspection.incoming_access import (
+    public_record as _incoming_public_record, task_access_allowed as _incoming_task_access_allowed,
+    IncomingTaskAccess,
+)
+from .text_inspection.incoming_ports import (
+    IncomingAccess, IncomingReferences, IncomingInspections, IncomingTasks, IncomingMedia,
+    IncomingWrites, IncomingJSON, IncomingOCR, IncomingImaging,
+)
+from .text_inspection.incoming_catalog import IncomingCatalog
+from .text_inspection.incoming_execution import IncomingExecution
+from .text_inspection.incoming_reviews import IncomingReviews
+from .text_inspection.incoming_retention import IncomingCapacity, IncomingRetention
+from .text_inspection.incoming_api import register_catalog as register_incoming_catalog, register_inspections as register_incoming_inspections
+
+_incoming_task_access = IncomingTaskAccess(
+    load=lambda task_id: load_pipeline_task(task_id), user=lambda: current_auth_user(),
+    allowed=lambda task, user: incoming_text_task_access_allowed(task, user),
+)
+
+
 def incoming_text_public(record: dict[str, Any]) -> dict[str, Any]:
-    value = copy.deepcopy(record)
-    record_id = str(value.get("id") or "")
-    for key in ("source_path", "canonical_path", "corrected_path", "annotated_path"):
-        raw_path = str(value.pop(key, "") or "")
-        if raw_path:
-            asset_kind = key.removesuffix("_path")
-            if record_id.startswith("itinsp_"):
-                value[f"{asset_kind}_url"] = f"/api/incoming-text/inspections/{quote(record_id)}/evidence/{asset_kind}"
-            elif record_id.startswith("itref_"):
-                value[f"{asset_kind}_url"] = f"/api/incoming-text/references/{quote(record_id)}/asset/{asset_kind}"
-    return public_path_sanitized(value)
+    return _incoming_public_record(record, sanitize=lambda value: public_path_sanitized(value))
 
 
 def incoming_text_task_access_allowed(task: dict[str, Any], user: dict[str, Any]) -> bool:
-    return user_is_admin(user) or record_owner_id(task) == str(user.get("id") or "")
+    return _incoming_task_access_allowed(task, user, is_admin=lambda value: user_is_admin(value), owner=lambda value: record_owner_id(value))
 
 
 def require_incoming_text_task(task_id: str, *, write: bool = False) -> dict[str, Any]:
-    task = load_pipeline_task(task_id)
-    if not task or str(task.get("task_kind") or "") != "incoming_material_text":
-        raise HTTPException(status_code=404, detail="包材文字检验任务不存在")
-    if not incoming_text_task_access_allowed(task, current_auth_user()):
-        raise HTTPException(status_code=404, detail="包材文字检验任务不存在")
-    return task
+    return _incoming_task_access.require(task_id, write=write)
+
+
+
+
 
 
 from .text_inspection.incoming_analysis import (
@@ -34434,209 +34443,81 @@ def incoming_text_corroboration_observations(
 
 
 def _duplicate_incoming_capture(owner_user_id: str, task_id: str, capture_id: str) -> dict[str, Any] | None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_one_by_columns(
-            "incoming_text_inspections",
-            {"owner_user_id": owner_user_id, "task_id": task_id, "capture_id": capture_id},
-        )
-        values = row_raw_json_list([row]) if row else []
-        return values[0] if values else None
-    return next(
-        (
-            item
-            for item in load_incoming_text_inspections()
-            if str(item.get("owner_user_id")) == owner_user_id
-            and str(item.get("task_id")) == task_id
-            and str(item.get("capture_id")) == capture_id
-        ),
-        None,
-    )
+    return _incoming_reviews.duplicate(owner_user_id, task_id, capture_id)
 
 
-@app.get("/api/incoming-text/tasks/{task_id}")
-def get_incoming_text_task(task_id: str) -> dict[str, Any]:
-    task = require_incoming_text_task(task_id)
-    references = [
-        incoming_text_public(item)
-        for item in load_incoming_text_references()
-        if str(item.get("task_id")) == task_id
-    ]
-    references.sort(key=lambda item: int(item.get("created_at") or 0), reverse=True)
-    active_items = [item for item in references if item.get("status") == "active"]
-    active = active_items[0] if len(active_items) == 1 else None
-    public_task = pipeline_task_public(task, scope_config_for_user(load_config()))
-    public_task["status"] = "ready" if active else "configuration_error" if active_items else "setup_required"
-    public_task["active_reference_id"] = str(active.get("id") or "") if active else ""
-    public_task["reference_version_label"] = str(active.get("version_label") or "") if active else ""
-    return {
-        "task": public_task,
-        "references": references,
-        "active_reference": active,
-        "configuration_valid": len(active_items) <= 1,
-        "automatic_decisions_verified": INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
-    }
+_incoming_access = IncomingAccess(
+    permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+    user=lambda: current_auth_user(), task=lambda task_id, **kwargs: require_incoming_text_task(task_id, **kwargs),
+    record=lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
+    owner=lambda record: record_owner_id(record), task_allowed=lambda task, user: incoming_text_task_access_allowed(task, user),
+)
+_incoming_references = IncomingReferences(
+    all=lambda: load_incoming_text_references(), load=lambda reference_id: load_incoming_text_reference(reference_id),
+    save=lambda record, **kwargs: save_incoming_text_reference(record, **kwargs),
+)
+_incoming_inspections = IncomingInspections(
+    all=lambda: load_incoming_text_inspections(), load=lambda inspection_id: load_incoming_text_inspection(inspection_id),
+    save=lambda record, **kwargs: save_incoming_text_inspection(record, **kwargs),
+    duplicate=lambda owner, task_id, capture_id: _duplicate_incoming_capture(owner, task_id, capture_id),
+)
+_incoming_tasks = IncomingTasks(
+    all=lambda: load_pipeline_tasks(), save=lambda task: save_pipeline_task(task),
+    public=lambda task, config: pipeline_task_public(task, config), config=lambda: scope_config_for_user(load_config()),
+)
+_incoming_media = IncomingMedia(
+    output=lambda name, owner: output_write_dir_for_owner(name, owner), root=lambda: OUTPUT_DIR,
+    under=lambda path, root: path_is_under(path, root), decode=lambda data, name: decode_incoming_reference(data, name),
+)
+_incoming_writes = IncomingWrites(
+    repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
+)
+_incoming_json = IncomingJSON(
+    paths=_incoming_text_store.paths,
+    read=lambda path: _incoming_text_json_list(path), write=lambda path, values: _save_incoming_text_json_list(path, values),
+)
+_incoming_catalog = IncomingCatalog(
+    _incoming_access, _incoming_references, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
+    public=lambda record: incoming_text_public(record), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+)
+_incoming_reviews = IncomingReviews(
+    _incoming_access, _incoming_inspections, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
+    decode_rows=lambda rows: row_raw_json_list(rows), public=lambda record: incoming_text_public(record),
+)
+_incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
+_incoming_execution = IncomingExecution(
+    _incoming_access, _incoming_references, _incoming_inspections, _incoming_media,
+    IncomingOCR(observe=lambda image: incoming_text_ocr_observations(image),
+                corroborate=lambda image, rules: incoming_text_corroboration_observations(image, rules),
+                field=lambda rule, first, second, corrected, reference: _field_observation(rule, first, second, corrected, reference)),
+    IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda image, size: rectify_label(image, size),
+                    similarity=lambda reference, corrected, region: local_visual_similarity(reference, corrected, region),
+                    annotate=lambda image, fields: annotate_inspection(image, fields)),
+    capacity=lambda size: require_incoming_text_storage_capacity(size), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+    public=lambda record: incoming_text_public(record),
+)
+_incoming_retention = IncomingRetention(
+    _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
+    audit=lambda event: append_incoming_text_audit(event), system_owner=lambda: SYSTEM_OWNER_ID,
+)
+_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog)
+get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
+get_incoming_text_reference_asset = _incoming_catalog_routes.get_incoming_text_reference_asset
+create_incoming_text_reference = _incoming_catalog_routes.create_incoming_text_reference
+update_incoming_text_reference_rules = _incoming_catalog_routes.update_incoming_text_reference_rules
+clone_incoming_text_reference = _incoming_catalog_routes.clone_incoming_text_reference
 
 
-@app.get("/api/incoming-text/references/{reference_id}/asset/{asset_kind}")
-def get_incoming_text_reference_asset(reference_id: str, asset_kind: str) -> FileResponse:
-    reference = load_incoming_text_reference(reference_id)
-    if not reference:
-        raise HTTPException(status_code=404, detail="标准版本不存在")
-    require_record_access(reference, current_auth_user())
-    require_incoming_text_task(str(reference.get("task_id")))
-    key = {"source": "source_path", "canonical": "canonical_path"}.get(asset_kind)
-    path = Path(str(reference.get(key or "") or ""))
-    if not key or not path.exists() or not path_is_under(path, OUTPUT_DIR):
-        raise HTTPException(status_code=404, detail="标准稿文件不存在")
-    return FileResponse(path)
 
 
-@app.post("/api/incoming-text/tasks/{task_id}/references")
-async def create_incoming_text_reference(
-    task_id: str,
-    file: UploadFile = File(...),
-    version_label: str = Form(...),
-) -> dict[str, Any]:
-    require_permission("incoming_material_config", detail="没有包材文字标准配置权限")
-    task = require_incoming_text_task(task_id, write=True)
-    clean_version = version_label.strip()
-    if not clean_version or len(clean_version) > 40:
-        raise HTTPException(status_code=400, detail="标准版本号必须为 1–40 个字符")
-    contents = await file.read()
-    image, suffix = decode_incoming_reference(contents, file.filename or "reference")
-    owner_user_id = str(task.get("owner_user_id") or record_owner_id(task))
-    reference_id = f"itref_{uuid.uuid4().hex[:12]}"
-    output_dir = output_write_dir_for_owner(f"incoming_text/references/{task_id}", owner_user_id)
-    source_path = output_dir / f"{reference_id}{suffix}"
-    canonical_path = output_dir / f"{reference_id}_canonical.png"
-    source_path.write_bytes(contents)
-    if not cv2.imwrite(str(canonical_path), image):
-        source_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="标准稿规范化图片保存失败")
-    now = int(time.time())
-    reference = {
-        "id": reference_id,
-        "task_id": task_id,
-        "version_label": clean_version,
-        "material_code": str(task.get("material_code") or ""),
-        "material_name": str(task.get("material_name") or ""),
-        "status": "draft",
-        "source_filename": Path(file.filename or "reference").name,
-        "source_path": str(source_path),
-        "canonical_path": str(canonical_path),
-        "source_sha256": hashlib.sha256(contents).hexdigest(),
-        "canonical_sha256": hashlib.sha256(canonical_path.read_bytes()).hexdigest(),
-        "width": int(image.shape[1]),
-        "height": int(image.shape[0]),
-        "rules": [],
-        "created_at": now,
-        "activated_at": 0,
-        "created_by_user_id": str(current_auth_user().get("id") or ""),
-        "owner_user_id": owner_user_id,
-        "owner_username": str(task.get("owner_username") or ""),
-        "shared_with_user_ids": list(task.get("shared_with_user_ids") or []),
-    }
-    if not save_incoming_text_reference(reference, insert_only=True):
-        source_path.unlink(missing_ok=True)
-        canonical_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="该标准版本号已存在")
-    return incoming_text_public(reference)
 
 
-@app.put("/api/incoming-text/references/{reference_id}/rules")
-def update_incoming_text_reference_rules(reference_id: str, request: IncomingTextRulesRequest) -> dict[str, Any]:
-    require_permission("incoming_material_config", detail="没有包材文字标准配置权限")
-    reference = load_incoming_text_reference(reference_id)
-    if not reference:
-        raise HTTPException(status_code=404, detail="标准版本不存在")
-    require_record_access(reference, current_auth_user(), write=True)
-    require_incoming_text_task(str(reference.get("task_id")), write=True)
-    if reference.get("status") != "draft":
-        raise HTTPException(status_code=409, detail="已启用的标准不可修改，请新建版本")
-    try:
-        rules = normalize_field_rules(request.rules)
-    except IncomingTextValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
-    reference["rules"] = rules
-    reference["updated_at"] = int(time.time())
-    if request.activate:
-        reference["status"] = "active"
-        reference["activated_at"] = int(time.time())
-        reference["activated_by_user_id"] = str(current_auth_user().get("id") or "")
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            draft = dict(reference)
-            draft["status"] = "draft"
-            save_incoming_text_reference(draft)
-            repository.activate_incoming_text_reference(
-                reference_id,
-                str(reference.get("owner_user_id")),
-                str(reference.get("task_id")),
-                reference,
-            )
-        else:
-            with _incoming_text_store_lock:
-                values = _incoming_text_json_list(INCOMING_TEXT_REFERENCES_PATH)
-                for item in values:
-                    if (
-                        str(item.get("owner_user_id")) == str(reference.get("owner_user_id"))
-                        and str(item.get("task_id")) == str(reference.get("task_id"))
-                        and item.get("status") == "active"
-                    ):
-                        item["status"] = "archived"
-                values = [reference if str(item.get("id")) == reference_id else item for item in values]
-                _save_incoming_text_json_list(INCOMING_TEXT_REFERENCES_PATH, values)
-        task = require_incoming_text_task(str(reference.get("task_id")), write=True)
-        task.update(
-            {
-                "status": "ready",
-                "active_reference_id": reference_id,
-                "reference_version_label": reference["version_label"],
-                "updated_at": int(time.time()),
-            }
-        )
-        save_pipeline_task(task)
-    else:
-        save_incoming_text_reference(reference)
-    return incoming_text_public(reference)
 
 
-@app.post("/api/incoming-text/references/{reference_id}/clone")
-def clone_incoming_text_reference(reference_id: str, version_label: str = Form(...)) -> dict[str, Any]:
-    require_permission("incoming_material_config", detail="没有包材文字标准配置权限")
-    source = load_incoming_text_reference(reference_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="标准版本不存在")
-    require_record_access(source, current_auth_user(), write=True)
-    require_incoming_text_task(str(source.get("task_id") or ""), write=True)
-    clean_version = version_label.strip()
-    if not clean_version or len(clean_version) > 40:
-        raise HTTPException(status_code=400, detail="标准版本号必须为 1–40 个字符")
-    clone = copy.deepcopy(source)
-    clone.update(
-        {
-            "id": f"itref_{uuid.uuid4().hex[:12]}",
-            "version_label": clean_version,
-            "status": "draft",
-            "created_at": int(time.time()),
-            "activated_at": 0,
-            "created_by_user_id": str(current_auth_user().get("id") or ""),
-        }
-    )
-    if not save_incoming_text_reference(clone, insert_only=True):
-        raise HTTPException(status_code=409, detail="该标准版本号已存在")
-    return incoming_text_public(clone)
 
 
 def require_incoming_text_storage_capacity(upload_bytes: int) -> None:
-    reserve = INCOMING_TEXT_MIN_FREE_BYTES + max(0, int(upload_bytes)) * 3
-    try:
-        free_bytes = shutil.disk_usage(DATA_DIR).free
-    except OSError as exc:
-        raise HTTPException(status_code=507, detail="无法确认服务器存储空间，已停止本次检验") from exc
-    if free_bytes < reserve:
-        raise HTTPException(status_code=507, detail="服务器存储空间不足，已停止本次检验，请联系管理员清理空间")
+    return _incoming_capacity.require(upload_bytes)
 
 
 TEXT_COMPARE_BETA_MAX_BYTES = 10 * 1024 * 1024
@@ -34671,319 +34552,21 @@ analyze_text_compare_beta = register_beta_comparison(
 )
 
 
-@app.post("/api/incoming-text/tasks/{task_id}/inspect")
-async def inspect_incoming_text(
-    task_id: str,
-    file: UploadFile = File(...),
-    capture_id: str = Form(...),
-) -> dict[str, Any]:
-    require_permission("inspection", detail="没有来料检验权限")
-    task = require_incoming_text_task(task_id)
-    capture_id = capture_id.strip()
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", capture_id):
-        raise HTTPException(status_code=400, detail="capture_id 格式错误")
-    owner_user_id = str(task.get("owner_user_id") or record_owner_id(task))
-    contents = await file.read()
-    if not contents or len(contents) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="拍照图片必须在 20MB 以内")
-    source_hash = hashlib.sha256(contents).hexdigest()
-    duplicate = _duplicate_incoming_capture(owner_user_id, task_id, capture_id)
-    if duplicate:
-        if duplicate.get("source_sha256") != source_hash:
-            raise HTTPException(status_code=409, detail="同一 capture_id 对应了不同图片")
-        return incoming_text_public(duplicate)
-    require_incoming_text_storage_capacity(len(contents))
-    active_references = [
-        item
-        for item in load_incoming_text_references()
-        if str(item.get("task_id")) == task_id and item.get("status") == "active" and str(item.get("owner_user_id")) == owner_user_id
-    ]
-    if not active_references:
-        raise HTTPException(status_code=409, detail="任务还没有已启用的标准版本")
-    if len(active_references) != 1:
-        raise HTTPException(status_code=409, detail="任务标准状态异常，请管理员处理后再检验")
-    reference = active_references[0]
-    image = cv2.imdecode(np.frombuffer(contents, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise HTTPException(status_code=400, detail="拍照图片解码失败")
-    image_height, image_width = image.shape[:2]
-    if image_width * image_height > 40_000_000 or min(image_width, image_height) < 300:
-        raise HTTPException(status_code=400, detail="拍照图片尺寸不符合要求")
-    inspection_id = f"itinsp_{uuid.uuid4().hex[:14]}"
-    output_dir = output_write_dir_for_owner(f"incoming_text/inspections/{task_id}", owner_user_id)
-    source_suffix = ".png" if contents[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
-    source_path = output_dir / f"{inspection_id}_source{source_suffix}"
-    source_path.write_bytes(contents)
-    now = int(time.time())
-    inspection = {
-        "id": inspection_id,
-        "capture_id": capture_id,
-        "task_id": task_id,
-        "reference_id": str(reference["id"]),
-        "reference_version_label": str(reference.get("version_label") or ""),
-        "reference_sha256": str(reference.get("source_sha256") or ""),
-        "material_code": str(task.get("material_code") or ""),
-        "material_name": str(task.get("material_name") or ""),
-        "status": "processing",
-        "auto_decision": "",
-        "final_decision": "",
-        "source_path": str(source_path),
-        "source_sha256": source_hash,
-        "created_at": now,
-        "updated_at": now,
-        "operator_user_id": str(current_auth_user().get("id") or ""),
-        "owner_user_id": owner_user_id,
-        "owner_username": str(task.get("owner_username") or ""),
-        "shared_with_user_ids": list(task.get("shared_with_user_ids") or []),
-    }
-    if not save_incoming_text_inspection(inspection, insert_only=True):
-        source_path.unlink(missing_ok=True)
-        duplicate = _duplicate_incoming_capture(owner_user_id, task_id, capture_id)
-        if duplicate and duplicate.get("source_sha256") == source_hash:
-            return incoming_text_public(duplicate)
-        raise HTTPException(status_code=409, detail="capture_id 已被其他请求占用")
-    quality = assess_image_quality(image)
-    try:
-        reference_image = cv2.imread(str(reference.get("canonical_path") or ""), cv2.IMREAD_COLOR)
-        if reference_image is None:
-            raise RuntimeError("reference_image_missing")
-        corrected, alignment = rectify_label(image, (reference_image.shape[1], reference_image.shape[0]))
-        can_run_ocr = bool(quality.get("accepted") and alignment.get("accepted"))
-        rules = normalize_field_rules(reference.get("rules"))
-        first = incoming_text_ocr_observations(corrected) if can_run_ocr else []
-        gray = cv2.cvtColor(corrected, cv2.COLOR_BGR2GRAY)
-        enhanced = cv2.cvtColor(cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8, 8)).apply(gray), cv2.COLOR_GRAY2BGR)
-        second_by_field = incoming_text_corroboration_observations(enhanced, rules) if can_run_ocr else {}
-        observations = {
-            rule["field_id"]: _field_observation(
-                rule, first, second_by_field.get(str(rule["field_id"]), []), corrected, reference_image
-            )
-            for rule in rules
-        }
-        similarities = {
-            rule["field_id"]: score
-            for rule in rules
-            for score in [local_visual_similarity(reference_image, corrected, rule["region_normalized"])]
-            if score is not None
-        }
-        result = decide_inspection(rules, observations, quality=quality, alignment=alignment, visual_similarities=similarities)
-        result = apply_commissioning_gate(
-            result, automatic_decisions_verified=INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED
-        )
-        annotated = annotate_inspection(corrected, result["fields"])
-        corrected_path = output_dir / f"{inspection_id}_corrected.jpg"
-        annotated_path = output_dir / f"{inspection_id}_annotated.jpg"
-        if not cv2.imwrite(str(corrected_path), corrected) or not cv2.imwrite(str(annotated_path), annotated):
-            raise RuntimeError("evidence_save_failed")
-        inspection.update(
-            {
-                "status": "completed",
-                "auto_decision": result["decision"],
-                "final_decision": result["decision"] if result["decision"] in {INCOMING_TEXT_PASS, INCOMING_TEXT_FAIL} else "",
-                "quality": quality,
-                "alignment": alignment,
-                "fields": result["fields"],
-                "reasons": result["reasons"],
-                "candidate_decision": result.get("candidate_decision", ""),
-                "corrected_path": str(corrected_path),
-                "annotated_path": str(annotated_path),
-                "ocr_engine": "PaddleOCR-3.7.0/PP-OCRv6-medium/two-pass",
-                "updated_at": int(time.time()),
-            }
-        )
-    except Exception as exc:  # fail closed: engine/files/rules can never yield PASS
-        inspection.update(
-            {
-                "status": "completed_with_error",
-                "auto_decision": INCOMING_TEXT_REVIEW_REQUIRED,
-                "final_decision": "",
-                "quality": quality,
-                "reasons": ["inspection_engine_error"],
-                "error_code": type(exc).__name__,
-                "updated_at": int(time.time()),
-            }
-        )
-    save_incoming_text_inspection(inspection)
-    return incoming_text_public(inspection)
+_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)
+inspect_incoming_text = _incoming_inspection_routes.inspect_incoming_text
+get_incoming_text_inspection_evidence = _incoming_inspection_routes.get_incoming_text_inspection_evidence
+review_incoming_text_inspection = _incoming_inspection_routes.review_incoming_text_inspection
+list_incoming_text_inspections = _incoming_inspection_routes.list_incoming_text_inspections
 
 
-@app.get("/api/incoming-text/inspections/{inspection_id}/evidence/{asset_kind}")
-def get_incoming_text_inspection_evidence(inspection_id: str, asset_kind: str) -> FileResponse:
-    inspection = load_incoming_text_inspection(inspection_id)
-    if not inspection:
-        raise HTTPException(status_code=404, detail="检验记录不存在")
-    # The task owner is authoritative. Legacy shared assignments do not grant
-    # access after the self-owned task model was introduced.
-    require_incoming_text_task(str(inspection.get("task_id")))
-    key = {"source": "source_path", "corrected": "corrected_path", "annotated": "annotated_path"}.get(asset_kind)
-    path = Path(str(inspection.get(key or "") or ""))
-    if not key or not path.exists() or not path_is_under(path, OUTPUT_DIR):
-        raise HTTPException(status_code=404, detail="检验证据文件不存在")
-    return FileResponse(path)
 
 
-@app.post("/api/incoming-text/inspections/{inspection_id}/review")
-def review_incoming_text_inspection(inspection_id: str, request: IncomingTextReviewRequest) -> dict[str, Any]:
-    require_permission("inspection", detail="没有来料检验权限")
-    inspection = load_incoming_text_inspection(inspection_id)
-    if not inspection:
-        raise HTTPException(status_code=404, detail="检验记录不存在")
-    # Only the task owner (or a platform administrator) may disposition records.
-    require_incoming_text_task(str(inspection.get("task_id") or ""))
-    if inspection.get("auto_decision") != INCOMING_TEXT_REVIEW_REQUIRED:
-        raise HTTPException(status_code=409, detail="只有需复核记录可以人工处理")
-    decision = request.decision.strip().upper()
-    if decision not in {"RELEASED", "REJECTED"}:
-        raise HTTPException(status_code=400, detail="人工结论只能是 RELEASED 或 REJECTED")
-    reason = request.reason.strip()
-    if not reason or len(reason) > 500:
-        raise HTTPException(status_code=400, detail="请填写 1–500 字复核原因")
-    existing = str(inspection.get("final_decision") or "")
-    if existing:
-        if existing == decision:
-            return incoming_text_public(inspection)
-        raise HTTPException(status_code=409, detail="该记录已经作出不同的人工结论")
-    reviewed_at = int(time.time())
-    actor_user_id = str(current_auth_user().get("id") or "")
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        try:
-            inspection = repository.review_incoming_text_inspection(
-                inspection_id,
-                decision=decision,
-                reason=reason,
-                actor_user_id=actor_user_id,
-                reviewed_at=reviewed_at,
-            )
-        except Exception as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from None
-    else:
-        with _incoming_text_store_lock:
-            inspections = _incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH)
-            stored = next((item for item in inspections if str(item.get("id")) == inspection_id), None)
-            if not stored:
-                raise HTTPException(status_code=404, detail="检验记录不存在")
-            stored_decision = str(stored.get("final_decision") or "")
-            if stored_decision and stored_decision != decision:
-                raise HTTPException(status_code=409, detail="该记录已经作出不同的人工结论")
-            stored.update(
-                {
-                    "final_decision": decision,
-                    "review_reason": reason,
-                    "reviewed_at": reviewed_at,
-                    "reviewed_by_user_id": actor_user_id,
-                    "updated_at": reviewed_at,
-                }
-            )
-            audit_event = {
-                "id": f"incoming_review_{inspection_id}",
-                "event_type": "incoming_text.reviewed",
-                "created_at": reviewed_at,
-                "actor_user_id": actor_user_id,
-                "payload": {"inspection_id": inspection_id, "task_id": stored.get("task_id"), "decision": decision, "reason": reason},
-            }
-            audits = _incoming_text_json_list(INCOMING_TEXT_AUDIT_PATH)
-            if not any(str(item.get("id")) == audit_event["id"] for item in audits):
-                audits.insert(0, audit_event)
-            _save_incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH, inspections)
-            _save_incoming_text_json_list(INCOMING_TEXT_AUDIT_PATH, audits)
-            inspection = stored
-    return incoming_text_public(inspection)
 
 
-@app.get("/api/incoming-text/inspections")
-def list_incoming_text_inspections(
-    task_id: str | None = None,
-    material_code: str | None = None,
-    decision: str | None = None,
-    limit: int = 100,
-) -> dict[str, Any]:
-    require_permission("inspection", detail="没有来料检验权限")
-    user = current_auth_user()
-    normalized_decision = str(decision or "").strip().upper()
-    visible_task_ids = {
-        str(task.get("id"))
-        for task in load_pipeline_tasks()
-        if str(task.get("task_kind") or "") == "incoming_material_text" and incoming_text_task_access_allowed(task, user)
-    }
-    repository = runtime_postgres_repository_or_none()
-    bounded = max(1, min(500, limit))
-    if repository is not None:
-        result = repository.list_incoming_text_inspections(
-            task_ids=sorted(visible_task_ids),
-            task_id=str(task_id or ""),
-            material_code=str(material_code or ""),
-            decision=normalized_decision,
-            limit=bounded,
-        )
-        return {
-            "items": [incoming_text_public(item) for item in row_raw_json_list(result.get("items") or [])],
-            "total": int(result.get("total") or 0),
-            "summary": result.get("summary") or {},
-        }
-    items = [item for item in load_incoming_text_inspections() if str(item.get("task_id")) in visible_task_ids]
-    if task_id:
-        items = [item for item in items if str(item.get("task_id")) == task_id]
-    if material_code:
-        items = [item for item in items if str(item.get("material_code")) == material_code]
-    if normalized_decision:
-        items = [item for item in items if normalized_decision in {str(item.get("auto_decision")), str(item.get("final_decision"))}]
-    items.sort(key=lambda item: int(item.get("created_at") or 0), reverse=True)
-    counts = Counter(str(item.get("final_decision") or item.get("auto_decision") or "UNKNOWN") for item in items)
-    return {"items": [incoming_text_public(item) for item in items[:bounded]], "total": len(items), "summary": dict(counts)}
 
 
 def purge_expired_incoming_text_evidence() -> dict[str, int]:
-    """Delete only image evidence after the configured retention period."""
-    retention_days = max(1, int(os.environ.get("VANTALINE_INCOMING_TEXT_IMAGE_RETENTION_DAYS", "90")))
-    cutoff = int(time.time()) - retention_days * 86400
-    repository = runtime_postgres_repository_or_none()
-    candidates = (
-        repository.incoming_text_retention_candidates(before_created_at=cutoff)
-        if repository is not None
-        else [item for item in load_incoming_text_inspections() if int(item.get("created_at") or 0) < cutoff and not item.get("evidence_purged_at")]
-    )
-    deleted_files = 0
-    updated_records = 0
-    for inspection in candidates:
-        all_removed = True
-        for key in ("source_path", "corrected_path", "annotated_path"):
-            path = Path(str(inspection.get(key) or ""))
-            if path.exists() and path_is_under(path, OUTPUT_DIR):
-                try:
-                    path.unlink()
-                    deleted_files += 1
-                except OSError:
-                    all_removed = False
-        if not all_removed:
-            continue
-        purged_at = int(time.time())
-        if repository is not None:
-            changed = repository.mark_incoming_text_evidence_purged(
-                str(inspection.get("id") or ""), purged_at=purged_at, retention_days=retention_days
-            )
-        else:
-            changed = False
-            with _incoming_text_store_lock:
-                values = _incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH)
-                stored = next((item for item in values if str(item.get("id")) == str(inspection.get("id"))), None)
-                if stored and not stored.get("evidence_purged_at"):
-                    stored["evidence_purged_at"] = purged_at
-                    stored["evidence_retention_days"] = retention_days
-                    _save_incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH, values)
-                    changed = True
-        updated_records += int(changed)
-    if updated_records:
-        append_incoming_text_audit(
-            {
-                "id": f"incoming_retention_{cutoff // 86400}",
-                "event_type": "incoming_text.evidence_retention_purge",
-                "created_at": int(time.time()),
-                "actor_user_id": SYSTEM_OWNER_ID,
-                "payload": {"records": updated_records, "files": deleted_files, "retention_days": retention_days},
-            }
-        )
-    return {"records": updated_records, "files": deleted_files}
+    return _incoming_retention.purge()
 
 
 DASHBOARD_AI_TASK_NAME = "Dashboard 快捷 AI 检测"
