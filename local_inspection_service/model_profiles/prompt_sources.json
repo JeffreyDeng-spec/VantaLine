@@ -1,7 +1,10 @@
 {
-  "version": 14,
+  "version": 15,
   "sources": [
     "server.py",
+    "training/task_lookup.py",
+    "training/model_catalog.py",
+    "pipeline/training_links.py",
     "detection/warmup_policy.py",
     "detection/warmup_prediction.py",
     "runtime/yolo_warmup.py",

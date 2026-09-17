@@ -377,6 +377,35 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(detection, attribute))
 
+    training_path = ROOT / "local_inspection_service" / "training" / "task_lookup.py"
+    training = SourceContract(injected_repository=True, repository_expression="self.repository")
+    training.visit(ast.parse(training_path.read_text(encoding="utf-8"), filename=str(training_path)))
+    require(training.runtime_repository_entry_call_count == 1
+            and training.functions_with_runtime_repository_entry == {"training_task_finder"},
+            "training finder must retain its single repository selection at finder creation")
+    require("training_tasks" in training.string_literals and "fetch_all" in training.called_attributes,
+            "training finder missing actual table access")
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "training.task_lookup"
+                and any(alias.name == "TrainingTaskLookup" for alias in node.names)
+                for node in tree.body), "server missing training lookup composition")
+    compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name) and node.func.id == "TrainingTaskLookup"]
+    require(len(compositions) == 1, "expected one training lookup composition")
+    repository = next(keyword.value for keyword in compositions[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "training lookup must obtain the current thread repository lazily")
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "training_task_finder")
+    require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+            and ast.dump(function.body[0].value) == ast.dump(ast.parse(
+                "_training_task_lookup.training_task_finder()", mode="eval").body),
+            "training finder forward must use the extracted lookup")
+    # Count the actual finder entry once, excluding its composition callback.
+    contract.runtime_repository_entry_call_count += training.runtime_repository_entry_call_count - 1
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(training, attribute))
+
     # Legacy workflows retain five real repository entries after extraction.
     for filename, expected in {
         "incoming_catalog.py": {"update_incoming_text_reference_rules"},

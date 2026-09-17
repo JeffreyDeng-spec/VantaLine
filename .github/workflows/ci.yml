@@ -205,6 +205,7 @@ jobs:
           python scripts/smoke_detection_task_catalog.py
           python scripts/smoke_local_model_runtime.py
           python scripts/smoke_yolo_warmup.py
+          python scripts/smoke_trained_model_catalog.py --postgres
           python local_inspection_service/scripts/smoke_phase3a_resources.py
           python local_inspection_service/scripts/smoke_phase3b_detection.py
           python local_inspection_service/scripts/smoke_auth_rbac.py

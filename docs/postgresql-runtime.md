@@ -1,5 +1,14 @@
 # PostgreSQL runtime operations
 
+The extracted training finder selects the current thread repository once when the
+finder is created and fetches `training_tasks` lazily on first lookup. Its closure
+is an operation snapshot for that same thread, not a shareable repository or global
+connection. Shared cache invalidation does not mutate an existing finder snapshot.
+A failed fetch leaves empty local pairs; partial decode or cache-write failure leaves
+the accumulated pairs. The same finder does not automatically repeat those operations.
+Factory/query errors never fall back to JSON; JSON returns the current loader object.
+SQL, transaction scope and advisory locks are unchanged in this structural batch.
+
 Detection task persistence now obtains the current thread repository inside each
 of its three original storage entry points. JSON single-task writes retain the
 nested load/save factory selections; SQL single writes still upsert and full saves
@@ -9,7 +18,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v14 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v15 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
