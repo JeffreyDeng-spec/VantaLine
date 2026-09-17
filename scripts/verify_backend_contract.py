@@ -152,6 +152,12 @@ def capture():
                 assert endpoint is getattr(routes, name)
                 assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
 
+        for name in server._training_resource_routes.__dataclass_fields__:
+            endpoint = getattr(server, name)
+            assert endpoint is getattr(server._training_resource_routes, name)
+            assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
+        assert server._dataset_catalog.paths.output() == server.OUTPUT_DIR
+
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         from local_inspection_service.text_inspection.projection import public_record
         from local_inspection_service.text_inspection import revisions, diagnostics

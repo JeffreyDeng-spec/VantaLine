@@ -39,7 +39,7 @@
     },
     {
       "name": "Training and pipeline services",
-      "paths": ["local_inspection_service/training/**", "local_inspection_service/runtime/training_tasks.py", "local_inspection_service/pipeline/**", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_training_task_lifecycle.py", "scripts/smoke_training_executor_client.py", "scripts/smoke_training_state_services.py", "scripts/smoke_training_runner.py", "scripts/smoke_training_dataset.py", "scripts/smoke_training_runpod_flow.py", "scripts/smoke_training_artifacts.py", "scripts/smoke_pipeline_stores.py"],
+      "paths": ["local_inspection_service/training/**", "local_inspection_service/runtime/training_tasks.py", "local_inspection_service/pipeline/**", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_training_task_lifecycle.py", "scripts/smoke_training_executor_client.py", "scripts/smoke_training_state_services.py", "scripts/smoke_training_runner.py", "scripts/smoke_training_dataset.py", "scripts/smoke_training_runpod_flow.py", "scripts/smoke_training_artifacts.py", "scripts/smoke_training_resource_catalog.py", "scripts/smoke_pipeline_stores.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {

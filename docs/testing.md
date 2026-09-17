@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_training_resource_catalog.py` covers 22 offline groups. Fifteen
+passed on the actual original implementation before extraction; 19 expanded business
+groups pass on saved originals. Independent service composition and new getter failure
+groups cover three additional boundaries. Two HTTP applications verify zero
+constructor reads and identity propagation into real synchronous handlers. Contracts include root
+order, summary/detail file access, permission timing, shared read versus write, duplicate/history
+rules, model timestamps and ambient identity, exact failure call counts and final sanitization.
+Real task-view/lifecycle integration settles only visible interrupted tasks; failed saves stop
+aggregation without retry. Legacy resource and missing-dataset deletion smokes exercise callers.
+
 `python scripts/smoke_training_artifacts.py` covers 27 offline groups. Nineteen passed
 on the actual original functions before extraction; 24 expanded business groups also
 pass on saved originals. Independent composition and new getter failure groups add three.
