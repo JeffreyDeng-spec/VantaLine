@@ -1291,40 +1291,47 @@ def assert_unique_model_name(name: Any, owner_user_id: str, *, exclude_run_id: s
             duplicate_name_error("模型")
 
 
+from .training.user_state import TrainingUserState, TrainingStateAccess, TrainingStateStorage, clear_training_private_state
+from .training.task_models import TrainingTaskModels, training_task_model_variant
+from .pipeline.training_sync import PipelineTrainingSync, PipelineTrainingRecords, PipelineTrainingModels
+from .detection.training_candidate_sync import TrainingCandidateSync, CandidateTrainingRecords
+
+_training_user_state = TrainingUserState(
+    defaults=lambda: DEFAULT_CONFIG["training"], legacy_owner=lambda: LEGACY_OWNER_ID,
+    access=TrainingStateAccess(owner=lambda record: record_owner_id(record),
+        visible=lambda record, user, target=None: record_visible_to_user(record, user, target),
+        admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
+    storage=TrainingStateStorage(find=lambda job_id: find_training_task(job_id), load=lambda: load_config(), save=lambda config: save_config(config)),
+    sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task),
+)
+_training_task_models = TrainingTaskModels(specs=lambda: list_trained_model_specs())
+_pipeline_training_sync = PipelineTrainingSync(
+    guard=lambda: _pipeline_tasks_lock,
+    records=PipelineTrainingRecords(load=lambda task_id: load_pipeline_task(task_id), save=lambda task: save_pipeline_task(task)),
+    models=PipelineTrainingModels(resolve=lambda task, job_id: training_task_model_id(task, job_id), link=lambda task: link_pipeline_trained_model(task)),
+    normalize_method=lambda: normalize_pipeline_detection_method, clean_id=lambda: sanitize_ai_detection_task_id,
+    sync_candidate=lambda task, **kwargs: sync_auto_optimize_training_candidate_from_task(task, **kwargs),
+)
+_training_candidate_sync = TrainingCandidateSync(
+    guard=lambda: _auto_optimize_lock,
+    records=CandidateTrainingRecords(load=lambda task_id: load_auto_optimize_state(task_id), save=lambda state: save_auto_optimize_state(state)),
+    clean_id=lambda value: sanitize_ai_detection_task_id(value),
+    stop_capture=lambda state, model_id, **kwargs: auto_optimize_stop_capture_for_model_locked(state, model_id, **kwargs),
+)
+
+
 def default_training_state() -> dict[str, Any]:
-    return json.loads(json.dumps(DEFAULT_CONFIG["training"]))
+    return _training_user_state.default_training_state()
 
 
-def clear_training_private_state(training: dict[str, Any], reason: str) -> dict[str, Any]:
-    training["preview_urls"] = []
-    training["previews"] = []
-    training["preview_cache_key"] = None
-    training["preview_sprite_versions"] = {}
-    training["last_preview_id"] = ""
-    training["approved_preview_id"] = ""
-    training["active_training_task_id"] = ""
-    training["preview_stale_reason"] = reason
-    return training
 
 
 def normalize_training_owner_key(owner_user_id: Any) -> str:
-    owner = str(owner_user_id or "").strip()
-    return owner or LEGACY_OWNER_ID
+    return _training_user_state.normalize_training_owner_key(owner_user_id)
 
 
 def training_state_store(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    raw_store = config.get("training_by_user_id") if isinstance(config.get("training_by_user_id"), dict) else {}
-    store: dict[str, dict[str, Any]] = {
-        normalize_training_owner_key(owner): state
-        for owner, state in raw_store.items()
-        if isinstance(state, dict)
-    }
-    legacy_training = config.get("training") if isinstance(config.get("training"), dict) else None
-    if legacy_training:
-        owner = normalize_training_owner_key(record_owner_id(legacy_training))
-        store.setdefault(owner, legacy_training)
-    config["training_by_user_id"] = store
-    return store
+    return _training_user_state.training_state_store(config)
 
 
 def sanitize_training_state_for_user(
@@ -1333,18 +1340,7 @@ def sanitize_training_state_for_user(
     selected_ids: set[str],
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    if not isinstance(training, dict):
-        return default_training_state()
-    if not record_visible_to_user(training, user, target_user_id):
-        return default_training_state()
-    scoped_training = training
-    raw_selected = [str(item) for item in scoped_training.get("selected_accessory_ids", []) if str(item)]
-    if raw_selected:
-        visible_selected = [item_id for item_id in raw_selected if item_id in selected_ids]
-        if len(visible_selected) != len(raw_selected):
-            scoped_training["selected_accessory_ids"] = visible_selected
-            clear_training_private_state(scoped_training, "training_selection_not_visible")
-    return scoped_training
+    return _training_user_state.sanitize_training_state_for_user(training, user, selected_ids, target_user_id)
 
 
 def training_state_for_user(
@@ -1353,113 +1349,25 @@ def training_state_for_user(
     selected_ids: set[str],
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    store = training_state_store(config)
-    if user_is_admin(user) and target_user_id:
-        owner_key = normalize_training_owner_key(target_user_id)
-    elif user_is_admin(user):
-        states = [
-            sanitize_training_state_for_user(dict(state), user, selected_ids, None)
-            for state in store.values()
-            if isinstance(state, dict) and record_visible_to_user(state, user)
-        ]
-        aggregate = default_training_state()
-        aggregate["training_states"] = states
-        return aggregate
-    else:
-        owner_key = normalize_training_owner_key(user["id"])
-    state = store.get(owner_key)
-    return sanitize_training_state_for_user(dict(state) if isinstance(state, dict) else None, user, selected_ids, target_user_id)
+    return _training_user_state.training_state_for_user(config, user, selected_ids, target_user_id)
 
 
 def set_training_state_for_user(config: dict[str, Any], user: dict[str, Any], training_state: dict[str, Any]) -> None:
-    state = {**default_training_state(), **training_state, **current_owner_fields()}
-    owner_key = normalize_training_owner_key(state.get("owner_user_id") or user["id"])
-    store = training_state_store(config)
-    store[owner_key] = state
-    config["training_by_user_id"] = store
-    if user_is_admin(user):
-        config["training"] = state
+    return _training_user_state.set_training_state_for_user(config, user, training_state)
 
 
 def sync_training_state_from_task(job_id: str) -> None:
-    task = find_training_task(job_id)
-    if not task:
-        return
-    owner_user_id = str(task.get("owner_user_id") or task.get("user_id") or task.get("created_by_user_id") or LEGACY_OWNER_ID)
-    owner_username = str(task.get("owner_username") or task.get("username") or task.get("created_by_username") or "")
-    full_config = load_config()
-    store = training_state_store(full_config)
-    owner_key = normalize_training_owner_key(owner_user_id)
-    existing = store.get(owner_key) if isinstance(store.get(owner_key), dict) else {}
-    state = {**default_training_state(), **dict(existing)}
-    for key in (
-        "status",
-        "progress",
-        "note",
-        "error",
-        "current_epoch",
-        "total_epochs",
-        "completed_at",
-        "stopped_at",
-        "cancelled_at",
-        "return_code",
-        "training_executor",
-        "remote_training_status",
-        "remote_training_poll_error",
-        "training_run_dir",
-        "imported_model_path",
-        "runpod_job_id",
-        "runpod_best_pt_sha256",
-    ):
-        if key in task:
-            state[key] = task.get(key)
-    state.update(
-        {
-            "active_training_task_id": str(task.get("job_id") or task.get("task_id") or job_id),
-            "active_training_action": task.get("action") or state.get("active_training_action") or "",
-            "selected_accessory_ids": task.get("selected_accessory_ids") or state.get("selected_accessory_ids") or [],
-            "sample_count": task.get("sample_count") or state.get("sample_count") or 0,
-            "mode": task.get("train_mode") or task.get("mode") or task.get("model_variant") or state.get("mode") or "yolo",
-            "epochs": task.get("epochs") or state.get("epochs") or 0,
-            "image_size": task.get("image_size") or state.get("image_size") or 0,
-            "dataset_id": task.get("dataset_id") or task.get("source_dataset_id") or state.get("dataset_id") or "",
-            "owner_user_id": owner_user_id,
-            "owner_username": owner_username,
-            "updated_at": int(time.time()),
-        }
-    )
-    store[owner_key] = state
-    full_config["training_by_user_id"] = store
-    current_training = full_config.get("training") if isinstance(full_config.get("training"), dict) else {}
-    current_owner_key = normalize_training_owner_key(record_owner_id(current_training)) if current_training else ""
-    if current_owner_key == owner_key or str(current_training.get("active_training_task_id") or "") == job_id:
-        full_config["training"] = state
-    save_config(full_config)
-    sync_pipeline_training_state_from_task(task)
+    return _training_user_state.sync_training_state_from_task(job_id)
 
 
-def training_task_model_variant(task: dict[str, Any]) -> str:
-    variant = str(task.get("model_variant") or task.get("mode") or task.get("train_mode") or "yolo").strip()
-    return variant if variant in {"yolo", "yolo_ocr"} else "yolo"
 
 
 def training_task_model_id(task: dict[str, Any], job_id: str) -> str:
-    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id") or "") == job_id), None)
-    if spec and str(spec.get("id") or "").strip():
-        return str(spec.get("id") or "").strip()
-    return f"trained_{job_id}__{training_task_model_variant(task)}"
+    return _training_task_models.training_task_model_id(task, job_id)
 
 
 def auto_optimize_task_id_from_pipeline_task(pipeline_task_id: str, pipeline_task: dict[str, Any] | None = None) -> str:
-    if pipeline_task:
-        direct = sanitize_ai_detection_task_id(pipeline_task.get("ai_task_id") or "")
-        if direct:
-            return direct
-    clean_pipeline_id = str(pipeline_task_id or "").strip()
-    prefix = "pipe_ai_"
-    if clean_pipeline_id.startswith(prefix):
-        return sanitize_ai_detection_task_id(clean_pipeline_id[len(prefix):])
-    return ""
+    return _pipeline_training_sync.auto_optimize_task_id_from_pipeline_task(pipeline_task_id, pipeline_task)
 
 
 def sync_auto_optimize_training_candidate_from_task(
@@ -1468,116 +1376,11 @@ def sync_auto_optimize_training_candidate_from_task(
     ai_task_id: str,
     model_id: str,
 ) -> None:
-    clean_task_id = sanitize_ai_detection_task_id(ai_task_id)
-    if not clean_task_id:
-        return
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    if not job_id:
-        return
-    status = str(task.get("status") or "").strip()
-    if status not in {"completed", "failed", "stopped", "cancelled", "canceled"}:
-        return
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(clean_task_id)
-        candidates = [item for item in state.get("candidate_models") or [] if isinstance(item, dict)]
-        existing = next((item for item in candidates if str(item.get("job_id") or "") == job_id), None)
-        candidate = existing or {}
-        candidate.update(
-            {
-                "job_id": job_id,
-                "status": "completed" if status == "completed" else status,
-                "progress": int(task.get("progress") or 100),
-                "dataset_id": str(task.get("source_dataset_id") or task.get("dataset_id") or ""),
-                "model_id": model_id,
-                "note": str(task.get("note") or task.get("error") or "")[:240],
-                "updated_at": int(time.time()),
-                "training_parameters": {
-                    "training_epochs": int(task.get("epochs") or task.get("total_epochs") or 0),
-                    "training_image_size": int(task.get("image_size") or 0),
-                },
-            }
-        )
-        if not existing:
-            candidate["created_at"] = int(task.get("created_at") or time.time())
-            candidates.insert(0, candidate)
-        else:
-            candidates = [candidate, *[item for item in candidates if item is not candidate]]
-        state["candidate_models"] = candidates
-        if task.get("pipeline_task_name") and not state.get("task_name"):
-            state["task_name"] = str(task.get("pipeline_task_name") or "")
-        if task.get("selected_accessory_ids") and not state.get("selected_accessory_ids"):
-            state["selected_accessory_ids"] = task.get("selected_accessory_ids") or []
-        if status == "completed":
-            auto_optimize_stop_capture_for_model_locked(state, model_id, reason="completed_model_ready")
-        save_auto_optimize_state(state)
+    return _training_candidate_sync.sync_auto_optimize_training_candidate_from_task(task, ai_task_id=ai_task_id, model_id=model_id)
 
 
 def sync_pipeline_training_state_from_task(task: dict[str, Any]) -> None:
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    pipeline_task_id = str(task.get("pipeline_task_id") or "").strip()
-    if not job_id or not pipeline_task_id:
-        return
-    status = str(task.get("status") or "").strip()
-    if status not in {"completed", "failed", "stopped", "cancelled", "canceled"}:
-        return
-    model_id = training_task_model_id(task, job_id)
-    with _pipeline_tasks_lock:
-        pipeline_task = load_pipeline_task(pipeline_task_id)
-        ai_task_id = auto_optimize_task_id_from_pipeline_task(pipeline_task_id, pipeline_task)
-        if pipeline_task:
-            method = normalize_pipeline_detection_method(
-                str(
-                    pipeline_task.get("detection_method")
-                    or (pipeline_task.get("params") or {}).get("train_mode")
-                    or (pipeline_task.get("params") or {}).get("route")
-                    or ""
-                )
-            )
-            if method in {"yolo", "yolo_ocr"}:
-                if status == "completed":
-                    pipeline_task.update(
-                        {
-                            "stage": "library",
-                            "status": "completed",
-                            "progress": 100,
-                            "training_task_id": job_id,
-                            "model_run_id": job_id,
-                            "ai_model_id": model_id,
-                            "model_status": "available",
-                            "model_exists": True,
-                            "linked_view": "inspect",
-                            "last_error": "",
-                            "job_note": str(task.get("note") or "模型训练已完成。")[:200],
-                        }
-                    )
-                    link_pipeline_trained_model(pipeline_task)
-                else:
-                    pipeline_task.update(
-                        {
-                            "stage": "training",
-                            "status": "failed" if status == "failed" else "stopped",
-                            "progress": 100,
-                            "training_task_id": job_id,
-                            "last_error": str(task.get("error") or task.get("note") or "")[:240],
-                            "job_note": str(task.get("note") or "")[:200],
-                        }
-                    )
-                pipeline_task["updated_at"] = int(time.time())
-                save_pipeline_task(pipeline_task)
-            elif method == "ai" and status == "completed":
-                pipeline_task.update(
-                    {
-                        "stage": "library",
-                        "status": "completed",
-                        "progress": 100,
-                        "last_error": "",
-                        "job_note": "YOLO 接管模型已训练完成，自动优化采集已停止。",
-                        "updated_at": int(time.time()),
-                    }
-                )
-                save_pipeline_task(pipeline_task)
-    if ai_task_id:
-        sync_auto_optimize_training_candidate_from_task(task, ai_task_id=ai_task_id, model_id=model_id)
+    return _pipeline_training_sync.sync_pipeline_training_state_from_task(task)
 
 
 def merge_scoped_accessory_updates(full_config: dict[str, Any], scoped_config: dict[str, Any], user: dict[str, Any]) -> None:

@@ -1,5 +1,20 @@
 # Testing
 
+`python scripts/smoke_training_state_services.py` covers twenty-one groups. Twelve first
+passed against the original thirteen functions; the added group composes independent domain
+services and identities. Nineteen expanded business groups also pass on the original
+bodies; new getter-only cases are checked separately. Nine callback-capture traces,
+first-error/later-valid matrices, five clock failure windows and cross-thread reads
+retain original ordering, exceptions, partial state and lock release. Checks cover JSON default cloning, legacy-key collisions, state-object
+aliasing, visibility and ContextVar ownership across two accounts entering thread pools,
+nonterminal config propagation, ignored false returns, model precedence, terminal branch
+fields, duplicate candidate identity and exception residue. Cross-thread probes require
+pipeline-lock ownership only during pipeline writes and auto-lock ownership only during
+candidate updates, including clocks, record.update and state-key assignments between I/O
+callbacks. Unlocking either shared-object mutation is rejected by a dedicated mutation check.
+The account concurrency check establishes identity isolation, not atomic
+whole-configuration writes. Source tests mutate each manifest file and preserve old bindings.
+
 `python scripts/smoke_training_executor_client.py` covers twenty-one offline groups. Eleven
 passed on the original twenty-seven functions; the added group checks independent settings,
 late environment replacement, injected clients and imports without Web/model runtimes.

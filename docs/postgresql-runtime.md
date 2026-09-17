@@ -1,5 +1,11 @@
 # PostgreSQL runtime operations
 
+Training state synchronization now uses explicit storage ports but keeps the existing
+configuration, pipeline and candidate persistence functions and write-lock behavior. No SQL,
+DDL, connection lifecycle or transaction scope changes here. Completion synchronization is
+still sequential across those stores; this extraction does not make their writes atomic
+as a unit. Read-lock removal remains a separate performance change.
+
 Training deletion obtains its repository inside the existing shared training guard,
 after authorization, stop processing and in-memory deletion markers. Valid SQL rows
 invalidate the training lookup cache before primary-key deletion. Active local tasks
@@ -42,7 +48,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v19 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v20 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

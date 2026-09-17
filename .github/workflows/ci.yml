@@ -209,6 +209,7 @@ jobs:
           python scripts/smoke_training_record_store.py --postgres
           python scripts/smoke_training_task_lifecycle.py --postgres
           python scripts/smoke_training_executor_client.py
+          python scripts/smoke_training_state_services.py
           python scripts/smoke_pipeline_stores.py --postgres
           python local_inspection_service/scripts/smoke_training_dataset_delete_missing.py
           python local_inspection_service/scripts/smoke_phase3a_resources.py
