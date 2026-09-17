@@ -1,7 +1,10 @@
 {
-  "version": 13,
+  "version": 14,
   "sources": [
     "server.py",
+    "detection/warmup_policy.py",
+    "detection/warmup_prediction.py",
+    "runtime/yolo_warmup.py",
     "detection/model_selection.py",
     "detection/local_models.py",
     "detection/task_projection.py",

@@ -1764,17 +1764,30 @@ _local_models = LocalModels(
 # Compatibility objects for existing maintenance scripts; state belongs to LocalModels.
 _models = _local_models.models
 _model_paths = _local_models.paths
-_yolo_warmup_lock = threading.RLock()
-_yolo_warmup_state: dict[str, Any] = {
-    "enabled": True,
-    "status": "idle",
-    "model_ids": [],
-    "completed_model_ids": [],
-    "failed_model_ids": [],
-    "started_at": 0,
-    "completed_at": 0,
-    "error": "",
-}
+from .detection.warmup_policy import (
+    yolo_warmup_enabled, yolo_warmup_limit, WarmupPipeline, WarmupModels, WarmupCandidates,
+)
+from .detection.warmup_prediction import WarmupPrediction
+from .runtime.yolo_warmup import YoloWarmup, WarmupOperations
+
+_warmup_candidates = WarmupCandidates(
+    pipeline=WarmupPipeline(tasks=lambda: load_pipeline_tasks(), method=lambda value: normalize_pipeline_detection_method(value),
+                            status=lambda task: pipeline_task_model_status(task), model_id=lambda task: pipeline_task_model_id(task)),
+    models=WarmupModels(default_id=lambda: DEFAULT_MODEL_ID, trained=lambda *args: list_trained_model_specs(*args),
+                        resolve=lambda value: resolve_service_path(value)), limit=lambda: yolo_warmup_limit(),
+)
+_warmup_prediction = WarmupPrediction(
+    select=lambda model_id, config: selected_model_spec(model_id, config),
+    load=lambda model_id, config: model(model_id, config), device=lambda: yolo_inference_device(),
+)
+_yolo_warmup_runtime = YoloWarmup(WarmupOperations(
+    enabled=lambda: yolo_warmup_enabled(), config=lambda: load_config(),
+    candidates=lambda config: yolo_warmup_configured_model_ids(config),
+    warm=lambda model_id, config: warm_yolo_model_once(model_id, config),
+    loaded_ids=lambda config: yolo_loaded_model_ids(config), error_text=lambda value, limit: bounded_text(value, limit),
+))
+_yolo_warmup_lock = _yolo_warmup_runtime.lock
+_yolo_warmup_state = _yolo_warmup_runtime.state
 _incoming_text_store_lock = threading.RLock()
 _rembg_session: Any | None = None
 _rembg_lock = threading.RLock()
@@ -23086,97 +23099,20 @@ def model(model_id: str | None = None, config: dict[str, Any] | None = None) -> 
     return _local_models.model(model_id, config)
 
 
-def yolo_warmup_enabled() -> bool:
-    return os.environ.get("VANTALINE_YOLO_PREWARM", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 
-def yolo_warmup_limit() -> int:
-    try:
-        return max(1, min(12, int(os.environ.get("VANTALINE_YOLO_PREWARM_LIMIT", "6"))))
-    except (TypeError, ValueError):
-        return 6
 
 
 def yolo_warmup_configured_model_ids(config: dict[str, Any]) -> list[str]:
-    explicit = [
-        item.strip()
-        for item in os.environ.get("VANTALINE_YOLO_PREWARM_MODELS", "").split(",")
-        if item.strip()
-    ]
-    if explicit:
-        return explicit[: yolo_warmup_limit()]
-    ids: list[str] = []
-    active_model_id = str(config.get("active_model_id") or DEFAULT_MODEL_ID).strip()
-    if active_model_id:
-        ids.append(active_model_id)
-    pipeline_tasks = sorted(
-        [
-            task for task in load_pipeline_tasks()
-            if isinstance(task, dict)
-            and str(task.get("stage") or "") == "library"
-            and normalize_pipeline_detection_method(str(task.get("detection_method") or "")) in {"yolo", "yolo_ocr"}
-            and pipeline_task_model_status(task) == "available"
-        ],
-        key=lambda task: int(task.get("updated_at") or task.get("created_at") or 0),
-        reverse=True,
-    )
-    for task in pipeline_tasks:
-        model_id = pipeline_task_model_id(task)
-        if model_id:
-            ids.append(model_id)
-        if len(ids) >= yolo_warmup_limit():
-            break
-    trained_specs = sorted(
-        [spec for spec in list_trained_model_specs(config) if not spec.get("is_ai_detection") and not spec.get("is_label_sheet_match")],
-        key=lambda spec: int(spec.get("updated_at") or spec.get("created_at") or 0),
-        reverse=True,
-    )
-    seen_paths: set[str] = set()
-    for spec in trained_specs:
-        path = str(resolve_service_path(spec.get("path") or spec.get("artifact_path") or ""))
-        if path in seen_paths:
-            continue
-        seen_paths.add(path)
-        model_id = str(spec.get("id") or "").strip()
-        if model_id:
-            ids.append(model_id)
-        if len(ids) >= yolo_warmup_limit():
-            break
-    result: list[str] = []
-    seen_ids: set[str] = set()
-    for model_id in ids:
-        if model_id and model_id not in seen_ids:
-            seen_ids.add(model_id)
-            result.append(model_id)
-    return result[: yolo_warmup_limit()]
+    return _warmup_candidates.yolo_warmup_configured_model_ids(config)
 
 
 def warm_yolo_model_once(model_id: str, config: dict[str, Any]) -> None:
-    spec = selected_model_spec(model_id, config)
-    if spec.get("is_ai_detection") or spec.get("is_label_sheet_match"):
-        return
-    yolo_model = model(str(spec["id"]), config)
-    dummy = np.zeros((96, 96, 3), dtype=np.uint8)
-    try:
-        imgsz = max(320, min(1280, int(config.get("image_size") or 640)))
-    except (TypeError, ValueError):
-        imgsz = 640
-    try:
-        confidence_threshold = max(0.001, min(0.99, float(spec.get("confidence_threshold", config.get("confidence_threshold", 0.25)))))
-    except (TypeError, ValueError):
-        confidence_threshold = 0.25
-    yolo_model.predict(
-        dummy,
-        imgsz=imgsz,
-        device=yolo_inference_device(),
-        conf=confidence_threshold,
-        verbose=False,
-    )
+    return _warmup_prediction.warm_yolo_model_once(model_id, config)
 
 
 def yolo_warmup_status() -> dict[str, Any]:
-    with _yolo_warmup_lock:
-        return dict(_yolo_warmup_state)
+    return _yolo_warmup_runtime.yolo_warmup_status()
 
 
 def yolo_loaded_model_ids(config: dict[str, Any]) -> list[str]:
@@ -23188,66 +23124,15 @@ def yolo_model_ready(model_id: str, config: dict[str, Any]) -> bool:
 
 
 def public_yolo_warmup_status(config: dict[str, Any]) -> dict[str, Any]:
-    status = yolo_warmup_status()
-    status["loaded_model_ids"] = yolo_loaded_model_ids(config)
-    return status
+    return _yolo_warmup_runtime.public_yolo_warmup_status(config)
 
 
 def yolo_warmup_worker(reason: str = "startup", model_ids: list[str] | None = None) -> None:
-    if not yolo_warmup_enabled():
-        with _yolo_warmup_lock:
-            _yolo_warmup_state.update({"enabled": False, "status": "disabled", "error": ""})
-        return
-    try:
-        delay_seconds = max(0.0, min(30.0, float(os.environ.get("VANTALINE_YOLO_PREWARM_DELAY_SECONDS", "1.5"))))
-    except (TypeError, ValueError):
-        delay_seconds = 1.5
-    time.sleep(delay_seconds)
-    config = load_config()
-    warmup_ids = model_ids or yolo_warmup_configured_model_ids(config)
-    started_at = int(time.time())
-    with _yolo_warmup_lock:
-        _yolo_warmup_state.update(
-            {
-                "enabled": True,
-                "status": "running",
-                "reason": reason,
-                "model_ids": warmup_ids,
-                "completed_model_ids": [],
-                "failed_model_ids": [],
-                "started_at": started_at,
-                "completed_at": 0,
-                "error": "",
-            }
-        )
-    completed: list[str] = []
-    failed: list[dict[str, str]] = []
-    for model_id in warmup_ids:
-        try:
-            warm_yolo_model_once(model_id, config)
-            completed.append(model_id)
-        except Exception as exc:  # noqa: BLE001 - warmup must not block serving
-            failed.append({"model_id": model_id, "error": bounded_text(str(exc), 180)})
-        with _yolo_warmup_lock:
-            _yolo_warmup_state["completed_model_ids"] = completed
-            _yolo_warmup_state["failed_model_ids"] = failed
-    with _yolo_warmup_lock:
-        _yolo_warmup_state.update(
-            {
-                "status": "completed" if not failed else "completed_with_errors",
-                "completed_at": int(time.time()),
-                "error": "; ".join(f"{item['model_id']}: {item['error']}" for item in failed[:3]),
-            }
-        )
+    return _yolo_warmup_runtime.yolo_warmup_worker(reason, model_ids)
 
 
 def start_yolo_warmup(reason: str = "startup", model_ids: list[str] | None = None) -> None:
-    if not yolo_warmup_enabled():
-        with _yolo_warmup_lock:
-            _yolo_warmup_state.update({"enabled": False, "status": "disabled", "error": ""})
-        return
-    thread = threading.Thread(target=yolo_warmup_worker, args=(reason, model_ids), name=f"yolo-warmup-{reason}", daemon=True)
-    thread.start()
+    return _yolo_warmup_runtime.start_yolo_warmup(reason, model_ids, worker=lambda: yolo_warmup_worker)
 
 
 @app.on_event("startup")

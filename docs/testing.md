@@ -1,5 +1,16 @@
 # Testing
 
+`python scripts/smoke_yolo_warmup.py` adds ten synthetic groups; the first eight ran
+against the original root before migration. They cover environment defaults, candidate
+ordering and limit-before-deduplication, exact zero-image prediction parameters,
+shallow snapshots, disabled-state retention, progress/failure summaries, uncaught
+setup errors, late thread targets, independent runtimes and cross-thread lock checks.
+Predictions/thread scheduling use test doubles; small lock probes use real threads.
+No real model is loaded, and the warmup delay is replaced during worker tests.
+Prediction cases assert exact call counts, including zero on skipped model types.
+Missing environment keys explicitly verify enabled/limit/delay defaults of true,
+6 and 1.5 seconds; in-memory duplicate/default mutations must fail these contracts.
+
 `python scripts/smoke_local_model_runtime.py` adds seventeen groups; eight first passed
 against the unchanged root. Fifteen business groups also pass against the original
 function bodies. Synthetic model factories and temporary placeholder
