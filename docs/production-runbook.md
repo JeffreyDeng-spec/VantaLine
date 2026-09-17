@@ -1,5 +1,12 @@
 # Production runbook
 
+Resource deletion retains the current file-delete, training-marker, pipeline-marker and response
+query order. Errors stop later stages and do not restore earlier files or records. Sample deletion
+can still report removed manifest records after a swallowed manifest-write OSError, even if those
+records remain on disk; this extraction preserves that behavior rather than changing recovery policy.
+Model deletion still requires the selected run directory to exist, unlike missing dataset retirement.
+Normal release restart and whole-package rollback remain in effect with source manifest v19.
+
 Training resource listing is not a pure read: its existing task-view dependency may mark an
 interrupted local training task stopped. Visibility is checked before this lifecycle refresh,
 and refresh failure aborts later resource aggregation. This extraction does not change that

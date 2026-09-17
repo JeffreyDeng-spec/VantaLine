@@ -93,6 +93,8 @@ def seed_model(run_id: str, display_name: str, owner: dict[str, str], accessory_
 
 
 def main() -> None:
+    from local_inspection_service.scripts.model_profiles_fixture import install
+    install(server)
     client = TestClient(server.app, base_url="https://testserver")
     admin = bootstrap_admin(client)
     common_name = "同名资源"
@@ -122,7 +124,7 @@ def main() -> None:
 
     response = client.patch(f"/api/pipeline/tasks/{pipeline_task_id}", json={"name": "流水线唯一任务"})
     assert_status(response, 200, "rename pipeline task to unique name")
-    pipeline_ai_payload = {"name": "AI 流水线唯一任务", "accessory_ids": [accessory_id], "detection_method": "ai"}
+    pipeline_ai_payload = {"name": "AI 流水线唯一任务", "accessory_ids": [accessory_id], "detection_method": "ai", "expected_production_count": 1}
     assert_status(client.post("/api/pipeline/tasks", json=pipeline_ai_payload), 200, "create unique AI pipeline task")
     assert_status(client.post("/api/pipeline/tasks", json=pipeline_ai_payload), 409, "reject duplicate AI pipeline task name")
 

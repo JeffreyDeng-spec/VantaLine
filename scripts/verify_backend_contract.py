@@ -157,6 +157,12 @@ def capture():
             assert endpoint is getattr(server._training_resource_routes, name)
             assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
         assert server._dataset_catalog.paths.output() == server.OUTPUT_DIR
+        for name in server._training_resource_write_routes.__dataclass_fields__:
+            endpoint = getattr(server, name)
+            assert endpoint is getattr(server._training_resource_write_routes, name)
+            assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
+        assert server._training_dataset_links.guard() is server._training_task_lock
+        assert server._pipeline_resource_links.guard() is server._pipeline_tasks_lock
 
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         from local_inspection_service.text_inspection.projection import public_record

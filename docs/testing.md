@@ -1,5 +1,19 @@
 # Testing
 
+`python scripts/smoke_training_resource_mutations.py --postgres` covers 25 synthetic groups.
+Nineteen passed on actual original functions before migration with an isolated PostgreSQL database;
+23 expanded business groups also pass on saved originals. Windows skips PostgreSQL unless requested.
+Independent services bind two HTTP applications and exercise all five write routes against separate
+fixture files and records. Cross-thread probes cover record reads, permissions, updates, loads and
+saves under the original locks, with timestamps outside. Contracts preserve
+permission order, missing-resource differences, exact file/manifest formats, exception boundaries,
+first-error call counts and partial completion. Recursive removals and unlink operations validate
+resolved targets inside each temporary fixture. PostgreSQL markers use only row upserts, retain
+other owners and historical model snapshots, and create no JSON files.
+The legacy unique-resource-name smoke installs the same explicit model-profile fixture as
+other JSON business smokes and supplies the required AI production-count field. Its original
+name-collision assertions run unchanged in CI.
+
 `python scripts/smoke_training_resource_catalog.py` covers 22 offline groups. Fifteen
 passed on the actual original implementation before extraction; 19 expanded business
 groups pass on saved originals. Independent service composition and new getter failure

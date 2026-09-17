@@ -1,5 +1,12 @@
 # Configuration reference
 
+Resource mutations add no configuration or request defaults. Dataset PATCH converts manifest
+read OSError/JSONDecodeError to HTTP 500; model PATCH treats only JSONDecodeError as empty metadata;
+sample DELETE retains its existing OSError/JSONDecodeError catch around manifest read/write.
+Invalid UTF-8 and unlink errors propagate. No-field PATCH still updates the timestamp. Dataset,
+training-link and model identifiers retain their different normalization rules. This write-path
+extraction adds no model-input producer: source manifest remains v19 and old bindings stay intact.
+
 Training resource catalogs add no settings or API defaults. Summary mode omits per-sample path
 hydration but still loads the manifest and record audit; detail preserves per-sample audit and
 ownership fallback. Model discovery retains its ambient request identity in addition to resource
