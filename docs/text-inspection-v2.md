@@ -1,5 +1,12 @@
 # Text inspection v2
 
+Text records use an explicit store service. OCR evidence and extraction rows retain
+JSONB objects; other record kinds retain their existing JSON-string representation.
+All rows still undergo serialization validation first. JSON normal saves do not
+acquire new business-key rejection behavior; insert-only checks remain unchanged.
+Owned lookup and terminal CAS retain the existing account/status conditions, with
+no query optimization or history/snapshot rewriting in this extraction.
+
 Prepared comparisons no longer copy the server namespace. Submission still writes
 original media and a display-only preview before insert-only claim, and duplicate
 requests return the existing owned record or reject an inconsistent fingerprint.

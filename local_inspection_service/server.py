@@ -33879,98 +33879,39 @@ def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
-TEXT_INSPECTION_TABLES = {
-    "ocr_evidence": "text_ocr_evidence",
-    "extractions": "text_label_extractions",
-    "standards": "text_inspection_standards",
-    "assets": "text_inspection_assets",
-    "revisions": "text_inspection_standard_revisions",
-    "records": "text_inspection_records",
-    "sessions": "text_inspection_manual_sessions",
-    "pages": "text_inspection_manual_pages",
-    "feedback": "text_inspection_classification_feedback",
-}
+from local_inspection_service.text_inspection.record_store import (
+    TEXT_INSPECTION_TABLES, TextRecordDependencies, TextRecordStore, record_row as _text_v2_row,
+)
+
+_text_records = TextRecordStore(TextRecordDependencies(
+    runtime_repository=lambda: runtime_postgres_repository_or_none(),
+    guard=lambda: _incoming_text_store_lock,
+    directory=lambda: TEXT_INSPECTION_JSON_DIR,
+    tables=lambda: TEXT_INSPECTION_TABLES,
+    read_json=lambda path: _incoming_text_json_list(path),
+    write_json=lambda path, values: _save_incoming_text_json_list(path, values),
+    raw_rows=lambda rows: row_raw_json_list(rows),
+))
 
 
 def _text_v2_json_path(kind: str) -> Path:
-    return TEXT_INSPECTION_JSON_DIR / f"{kind}.json"
+    return _text_records.json_path(kind)
 
 
 def _text_v2_load(kind: str) -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return row_raw_json_list(repository.fetch_all(TEXT_INSPECTION_TABLES[kind]))
-    return _incoming_text_json_list(_text_v2_json_path(kind))
-
-
-def _text_v2_row(kind: str, value: dict[str, Any]) -> dict[str, Any]:
-    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    fields = {
-        "ocr_evidence": ("id", "owner_user_id", "status", "created_at"),
-        "extractions": ("id", "owner_user_id", "created_at"),
-        "standards": ("id", "owner_user_id", "name", "material_code", "version_label", "standard_type", "status", "source_sha256", "created_at", "updated_at"),
-        "assets": ("id", "standard_id", "owner_user_id", "asset_kind", "ordinal", "status", "sha256", "created_at", "updated_at"),
-        "revisions": ("id", "standard_id", "owner_user_id", "revision_number", "action", "asset_id", "created_at"),
-        "records": ("id", "owner_user_id", "standard_id", "comparison_id", "status", "auto_decision", "final_decision", "source_sha256", "created_at", "updated_at"),
-        "sessions": ("id", "owner_user_id", "standard_id", "status", "created_at", "updated_at"),
-        "pages": ("id", "session_id", "owner_user_id", "capture_id", "standard_asset_id", "status", "created_at", "updated_at"),
-        "feedback": ("id", "owner_user_id", "standard_id", "asset_id", "action", "created_at"),
-    }[kind]
-    # Extraction queries index fields inside JSONB: write an object, not a
-    # JSON-encoded string (legacy tables retain their existing representation).
-    return {**{field: value.get(field, "") for field in fields}, "raw_json": value if kind in {"extractions", "ocr_evidence"} else raw}
+    return _text_records.load(kind)
 
 
 def _text_v2_save(kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = _text_v2_row(kind, value)
-        if insert_only:
-            return bool(repository.insert_row_once(TEXT_INSPECTION_TABLES[kind], row))
-        repository.upsert_row(TEXT_INSPECTION_TABLES[kind], row)
-        return True
-    with _incoming_text_store_lock:
-        values = _incoming_text_json_list(_text_v2_json_path(kind))
-        index = next((i for i, item in enumerate(values) if str(item.get("id")) == str(value.get("id"))), None)
-        unique_fields = {
-            "standards": ("owner_user_id", "material_code", "version_label", "standard_type"),
-            "assets": ("standard_id", "ordinal"),
-            "revisions": ("standard_id", "revision_number"),
-            "records": ("owner_user_id", "comparison_id"),
-            "pages": ("owner_user_id", "session_id", "capture_id"),
-        }.get(kind, ("id",))
-        business_duplicate = next((item for item in values if all(str(item.get(field)) == str(value.get(field)) for field in unique_fields)), None)
-        if insert_only and (index is not None or business_duplicate is not None):
-            return False
-        if index is None:
-            values.insert(0, copy.deepcopy(value))
-        else:
-            values[index] = copy.deepcopy(value)
-        _save_incoming_text_json_list(_text_v2_json_path(kind), values)
-        return True
+    return _text_records.save(kind, value, insert_only=insert_only)
 
 
 def _text_v2_update_attempt(kind: str, value: dict[str, Any], expected_status: str = "attempting") -> bool:
-    if kind not in {"records", "ocr_evidence"}:
-        raise ValueError("unsupported_attempt_kind")
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return repository.update_text_attempt(TEXT_INSPECTION_TABLES[kind], _text_v2_row(kind, value), expected_status)
-    with _incoming_text_store_lock:
-        previous = _text_v2_owned(kind, value["id"], value["owner_user_id"])
-        if previous is None or previous.get("status") != expected_status:
-            return False
-        return _text_v2_save(kind, value)
+    return _text_records.update_attempt(kind, value, expected_status)
 
 
 def _text_v2_owned(kind: str, record_id: str, owner_user_id: str) -> dict[str, Any] | None:
-    if kind in {"ocr_evidence", "records"}:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            row = repository.fetch_one_by_columns(TEXT_INSPECTION_TABLES[kind], {"id": record_id, "owner_user_id": owner_user_id})
-            values = row_raw_json_list([row]) if row else []
-            return values[0] if values else None
-    return next((item for item in _text_v2_load(kind) if str(item.get("id")) == record_id and str(item.get("owner_user_id")) == owner_user_id), None)
+    return _text_records.owned(kind, record_id, owner_user_id)
 
 
 def _text_v2_owner() -> tuple[str, str]:

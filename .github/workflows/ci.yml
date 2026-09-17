@@ -191,6 +191,7 @@ jobs:
           python scripts/smoke_extraction_dependencies.py
           python scripts/smoke_preparation_dependencies.py
           python scripts/smoke_comparison_dependencies.py
+          python scripts/smoke_text_record_store.py --root --postgres
           python local_inspection_service/scripts/smoke_auth_rbac.py
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py

@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_text_record_store.py --root --postgres` runs six groups:
+nine table encodings and payload aliases; JSON unique keys/order/copy behavior;
+account/status CAS and reentrant lock failures; exact SQL dispatch without JSON
+fallback; real application lock/factory/table composition; and two independent
+PostgreSQL connections racing insert-only and terminal updates. PostgreSQL uses an
+explicit test DSN and disposable schema. Source contracts now inspect the extracted
+implementation and all compatibility forwards; the minimum repository gate remains.
+
 `python scripts/smoke_comparison_dependencies.py` has ten synthetic groups:
 duplicate/conflicting requests and per-submission callback isolation; admission and
 thread-start failure; durable unknown OCR cache with account isolation; both orders

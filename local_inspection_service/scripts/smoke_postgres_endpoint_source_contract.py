@@ -270,6 +270,27 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(candidates, attribute))
     contract.runtime_repository_entry_call_count += candidates.runtime_repository_entry_call_count
+    text_path = ROOT / "local_inspection_service" / "text_inspection" / "record_store.py"
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "local_inspection_service.text_inspection.record_store"
+                and any(alias.name == "TextRecordStore" for alias in node.names)
+                and any(alias.name == "record_row" and alias.asname == "_text_v2_row" for alias in node.names)
+                for node in ast.walk(tree)), "server.py missing text record store and row composition imports")
+    text_records = SourceContract(injected_repository=True)
+    text_records.visit(ast.parse(text_path.read_text(encoding="utf-8"), filename=str(text_path)))
+    require({"load", "save", "owned", "update_attempt"} <= text_records.functions_with_runtime_repository_entry,
+            "text record methods must obtain their runtime repository lazily")
+    for name, arguments in {"json_path": "kind", "load": "kind", "save": "kind, value, insert_only=insert_only",
+                            "owned": "kind, record_id, owner_user_id", "update_attempt": "kind, value, expected_status"}.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_text_v2_" + name)
+        expected = ast.parse("_text_records." + name + "(" + arguments + ")", mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected), "text helper is not bound to record store: " + name)
+    require({"text_inspection_records", "text_ocr_evidence"} <= text_records.string_literals,
+            "text record store missing actual table mappings")
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(text_records, attribute))
+    contract.runtime_repository_entry_call_count += text_records.runtime_repository_entry_call_count
     missing_adapters = sorted(REQUIRED_RUNTIME_ADAPTERS - contract.imported_names)
     require(not missing_adapters, "server.py missing runtime record adapters: " + ",".join(missing_adapters))
 

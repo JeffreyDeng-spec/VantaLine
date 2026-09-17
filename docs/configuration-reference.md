@@ -1,5 +1,10 @@
 # Configuration reference
 
+Text-record extraction adds no configuration. The JSON directory and table mapping
+remain late-bound, as do the thread repository factory and shared reentrant lock.
+No repository connection or request identity is retained on the store. Existing
+string coercion, missing values and JSON-versus-PostgreSQL behavior are preserved.
+
 Prepared comparison extraction adds no settings. Qwen resolution still obtains
 document settings, attaches OCR settings to that same dictionary, then validates
 both providers. Per-submission capabilities retain the submitted callbacks, model
