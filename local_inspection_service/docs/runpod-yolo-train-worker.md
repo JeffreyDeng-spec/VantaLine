@@ -1,5 +1,12 @@
 # RunPod YOLO Training Worker
 
+Training dispatch now enters `training.runner.TrainingRunner`; task construction lives in
+`training.submission`. The existing RunPod request adapter, server-side RunPod payload builder
+and worker package stay unchanged. Samples-only tasks still complete before executor dispatch.
+The runner binds saved model references once before its separate task load and delegates to
+the original RunPod flow; ordinary training threads gain no new identity propagation. New
+source fingerprints use manifest v15, while historical task references remain untouched.
+
 The Web-side executor settings now live in `training/executor_settings.py`, and the active
 HTTP adapter/response summary in `training/runpod_client.py`. Dataset/archive input assembly,
 worker payloads, polling, model artifacts and this worker package are unchanged. The adapter

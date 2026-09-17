@@ -1,9 +1,17 @@
 # Configuration reference
 
+Training execution adds no setting. Executor selection, repeated dataset-existence checks,
+CPU/GPU command flags, CLI discovery precedence and snapshot fallback retain their original
+rules. Submission still reads request identity at its original points and does not add
+ContextVar propagation to ordinary training threads. Each Runner has one binding wrapper;
+missing model dependencies fail before task reads or failure-state writes. Source manifest
+v21 adds `training/runner.py`, `training/submission.py` and `training/local_process.py` for
+the actual relocated task and command input sources; old task snapshots are not rewritten.
+
 Training state services preserve current-owner ContextVar precedence over an explicit
 state/user when setting ownership. Store keys are normalized while raw owner fields keep
 existing payload spelling. Direct sanitization mutates the supplied record; user views first
-copy only the top level. The current source manifest is v20 and adds `training/user_state.py`,
+copy only the top level. The current source manifest is v21 and adds `training/user_state.py`,
 `training/task_models.py`, `pipeline/training_sync.py` and `detection/training_candidate_sync.py`
 for the moved selection, training parameter and model-ID assembly. Existing frozen references,
 secret versions and historical fingerprints are not rewritten. No new setting is introduced.
@@ -13,13 +21,13 @@ Whitespace primary RunPod keys still suppress fallback before trimming; public-U
 and parsed-URL validity retain their separate rules. RunPod URL/auth are resolved once per
 request, while the default timeout is read inside each attempt. Only explicit 401/403
 responses use the existing second authorization format. Timeouts and uncertain transport
-failures are not retried. Source manifest v20 includes both moved executor implementations; historical
+failures are not retried. Source manifest v21 includes both moved executor implementations; historical
 model bindings and snapshots remain unchanged.
 
 Training lifecycle extraction adds no setting. Retired Windows-worker records remain
 read-only regardless of allow_remote_refresh; RunPod classification keeps its existing
 precedence. Public projections retain existing None/empty values set by earlier steps
-and parse only the first epochs/imgsz command argument. Source manifest v20 covers the moved runtime, lifecycle and view implementations;
+and parse only the first epochs/imgsz command argument. Source manifest v21 covers the moved runtime, lifecycle and view implementations;
 existing model references and historical snapshots are not rewritten.
 
 Pipeline task single saves retain their frozen model references; bulk saves do not
@@ -27,14 +35,14 @@ add missing snapshots. JSON task payloads retain their raw IDs even when the SQL
 encoder normalizes the primary key. State normalization keeps the two ordered lists
 and the original iterable input handling. Root PIPELINE_STATE_PATH overrides are
 resolved when called. No setting change accompanies this storage
-extraction. Source manifest v20 includes the three migrated pipeline implementations;
+extraction. Source manifest v21 includes the three migrated pipeline implementations;
 historical model bindings and fingerprints remain intact.
 
 Training storage keeps the existing model-binding policy: only records without the
 `model_profiles` key acquire a new frozen snapshot. Existing None, empty or historical
 values stay untouched. A new record without an available resolver fails before cache
 invalidation or storage. No setting or schema changes are introduced; source manifest
-v20 includes the moved training identity/storage implementations. The shared
+v21 includes the moved training identity/storage implementations. The shared
 snapshot algorithm and historical fingerprints remain unchanged.
 
 Training catalog path, resolver, audit, OCR and pipeline callbacks use seven narrow
@@ -44,7 +52,7 @@ repository selection, lazy snapshots and partial-failure state remain unchanged.
 
 Training model discovery keeps existing config fallback, task/manifest/metadata
 precedence, accessory counts and OCR variant selection. It adds no environment or
-business API setting. Source manifest v20 includes `training/task_lookup.py`,
+business API setting. Source manifest v21 includes `training/task_lookup.py`,
 `training/model_catalog.py` and `pipeline/training_links.py`; new snapshots use that
 truthful source fingerprint and historical task/secret/model bindings remain intact.
 
@@ -56,36 +64,36 @@ before them. No retry, lock or thread admission policy is added.
 Warmup extraction preserves all `VANTALINE_YOLO_PREWARM*` defaults and read timing.
 Explicit model lists retain duplicates, implicit candidates apply the original limits
 before final deduplication, and no admission or concurrency setting is added. Manifest
-v20 includes the three migrated warmup sources; historical snapshots remain unchanged.
+v21 includes the three migrated warmup sources; historical snapshots remain unchanged.
 
 Local model factory lookup uses a narrow getter after path resolution and before
 string conversion, preserving callback replacement and missing-callable argument
 effects. Existing cache publication order and exception boundaries remain unchanged.
 
 Local model selection/cache extraction adds no settings or selection rules. Current
-source manifest v20 includes `detection/model_selection.py` and `detection/local_models.py`
+source manifest v21 includes `detection/model_selection.py` and `detection/local_models.py`
 so new fingerprints cover the moved specification and actual weight-instance choice.
 Historical task bindings, prompt fingerprints and secret versions remain unchanged.
 
 Task catalog extraction changes no API defaults, thresholds or model selection
-rules. Manifest v20 now includes the actual task projection and catalog files that
+rules. Manifest v21 now includes the actual task projection and catalog files that
 assemble model accessory names/counts. New tasks receive the new source fingerprint;
 existing task snapshots, secret references and historical fingerprints are untouched.
 
 Detection task storage adds no configuration or defaults. Existing ID/name/count
 normalization, background selection, path providers and shared read-cache TTL remain.
-Source manifest v20 adds the three task modules that normalize counts and select
+Source manifest v21 adds the three task modules that normalize counts and select
 background inputs, retaining all previously listed sources. Stored model versions
 and historical snapshots are unchanged.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v20 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v21 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
 Paddle settings and OCR thresholds are unchanged. `runtime.paddle` keeps setdefault
 semantics for environment flags and the exact English PP-OCRv6-small parameters;
-the incoming engine continues to use PP-OCRv6-medium. Source manifest v20 lists the
+the incoming engine continues to use PP-OCRv6-medium. Source manifest v21 lists the
 actual bootstrap and five detection OCR modules. New snapshots record this source
 fingerprint; stored model versions, secret references and historical fingerprints
 remain untouched. No new business switch or worker mode is introduced.
@@ -99,7 +107,7 @@ retry or model-initialization lock is introduced.
 Detection result extraction changes no settings or thresholds. Label maps remain
 lazy providers. Existing specialized thresholds, geometry ratios, exact-count rules
 and manual-type requirements retain their original defaults and evaluation timing.
-Source manifest v20 includes all five migrated detection files, preserving source
+Source manifest v21 includes all five migrated detection files, preserving source
 coverage previously supplied by the monolithic root. New records use the actual
 source fingerprint; historical snapshots and model bindings are not rewritten.
 
@@ -107,7 +115,7 @@ Legacy incoming workflow extraction adds no business configuration. Existing
 automatic-decision admission, minimum free space and image retention settings retain
 their defaults and read timing. Narrow providers read current request identity,
 repository and paths; nothing caches a user or a database connection. Source manifest
-v20 includes `text_inspection/incoming_execution.py`, the actual CLAHE/OCR input
+v21 includes `text_inspection/incoming_execution.py`, the actual CLAHE/OCR input
 orchestrator, without changing OCR parameters, business prompt versions or old snapshots.
 
 Workflow callback getters resolve only at their original call expressions, after
@@ -121,7 +129,7 @@ extra OCR, rendering, parsing or serialization retry is introduced.
 
 OCR/Beta extraction preserves the PP-OCRv6 medium model names and orientation
 options, image thresholds, one-hour cache TTL and existing byte budgets. Limits and
-request identity remain lazy providers. Manifest v20 includes the actual migrated input
+request identity remain lazy providers. Manifest v21 includes the actual migrated input
 and OCR orchestration files, `text_inspection/incoming_analysis.py` and
 `text_inspection/beta_comparison.py`; stored fingerprints and business prompt versions
 are unchanged. No new worker mode or setting is introduced.
@@ -130,12 +138,12 @@ Incoming-text store extraction adds no setting. Its three file paths, row adapte
 and runtime repository selection remain late-bound. JSON records preserve original
 input values rather than replacing them with normalized SQL rows; PostgreSQL keeps
 its existing table constraints. Shared JSON formatting and exception behavior stay
-unchanged. Prompt-source manifest remains v20; no model-input source moved here.
+unchanged. Prompt-source manifest remains v21; no model-input source moved here.
 Decoder and JSON fallback capabilities preserve live callback replacement and
 missing-callback ordering without eager validation, retries or backend fallback.
 
 Comparison extraction keeps provider timeouts, external-media/automatic-MATCH
-admission and the business prompt version unchanged. Prompt-source manifest v20
+admission and the business prompt version unchanged. Prompt-source manifest v21
 adds `text_inspection/comparison_submission.py`, which now assembles model input,
 and `text_inspection_v2.py`, the actual strict-prompt definition previously absent
 from the list. New fingerprints reflect both files; stored snapshots are unchanged.
@@ -148,14 +156,14 @@ Standard-route extraction introduces no configuration. Permission, account gates
 100 MiB import read limit, legacy PDF read-only responses, expected revisions and
 preparation enablement retain their existing behavior. Identity and job providers
 remain late-bound. Model-input producers stay in their existing modules and source
-manifest v20 continues; stored task bindings and historical fingerprints are retained.
+manifest v21 continues; stored task bindings and historical fingerprints are retained.
 Provider getters resolve at the original call expressions, without eager caching
 or callable validation. This includes exception-detail conversion and PostgreSQL
 confirmation before projection; no new retry or cleanup policy is introduced.
 
 Revision/projection/diagnostic extraction introduces no setting. Diagnostic limits,
 logger replacement, public fields and expected-revision errors retain their values.
-Source manifest is v20; these helpers do not move model-input producers.
+Source manifest is v21; these helpers do not move model-input producers.
 New fingerprints change normally with listed source edits; old snapshots remain.
 Diagnostic hash callback lookup and missing-callable errors retain their evaluation
 order. An absent failure message does not obtain a hash callback.
@@ -165,7 +173,7 @@ maximum side and JPEG quality retain their values and are obtained through expli
 getters at the original expressions. Passthrough never reads JPEG quality; resize
 reads the maximum once for comparison and twice for thumbnail dimensions. Input
 byte/pixel limits, 1.5x PDF rendering, image fast paths and error
-messages remain. New source fingerprints use manifest v20 with the migrated media
+messages remain. New source fingerprints use manifest v21 with the migrated media
 and image sources; existing model versions, secret references and snapshots remain.
 
 Text record callback factories add no configuration. Each operation obtains only
@@ -181,7 +189,7 @@ Prepared comparison extraction adds no settings. Qwen resolution still obtains
 document settings, attaches OCR settings to that same dictionary, then validates
 both providers. Per-submission capabilities retain the submitted callbacks, model
 admission flag and usage recorder; local MATCH commissioning reads account lists
-at execution time. The prompt source manifest uses v20, but edits to listed
+at execution time. The prompt source manifest uses v21, but edits to listed
 source files naturally change new fingerprints. Stored snapshots are not rewritten.
 
 Preparation dependency extraction adds no settings. The existing preparation
@@ -230,7 +238,7 @@ with the item alone, then saves before AI-task upsert; non-applied AI still save
 the selected route. The retired `locate` route retains its existing 410 response.
 
 Source preparation adds no configuration or prompt-content change. New task source
-fingerprints use manifest v20, which includes the actual `accessories/preparation.py`
+fingerprints use manifest v21, which includes the actual `accessories/preparation.py`
 producer. Historical source fingerprints and model/secret references remain unchanged.
 Existing crop limits, source ordering, default sizes and profile call flags remain.
 

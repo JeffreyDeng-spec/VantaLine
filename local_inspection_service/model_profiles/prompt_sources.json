@@ -1,7 +1,10 @@
 {
-  "version": 20,
+  "version": 21,
   "sources": [
     "server.py",
+    "training/runner.py",
+    "training/submission.py",
+    "training/local_process.py",
     "training/user_state.py",
     "training/task_models.py",
     "pipeline/training_sync.py",
