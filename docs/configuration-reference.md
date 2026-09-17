@@ -1,5 +1,11 @@
 # Configuration reference
 
+Standard-route extraction introduces no configuration. Permission, account gates,
+100 MiB import read limit, legacy PDF read-only responses, expected revisions and
+preparation enablement retain their existing behavior. Identity and job providers
+remain late-bound. Model-input producers stay in their existing modules and source
+manifest v5 continues; stored task bindings and historical fingerprints are retained.
+
 Revision/projection/diagnostic extraction introduces no setting. Diagnostic limits,
 logger replacement, public fields and expected-revision errors retain their values.
 Source manifest remains v5: these helpers do not move model-input producers.

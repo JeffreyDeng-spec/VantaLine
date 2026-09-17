@@ -1,5 +1,10 @@
 # PostgreSQL runtime operations
 
+Standard edit services obtain their thread repository lazily for add, patch and
+confirm. Existing repository transactions, advisory locks and JSON authoritative
+rereads remain unchanged; the source gate follows the actual three service entries.
+This extraction adds no database optimization, migration or connection cache.
+
 Text-record persistence now lives in `text_inspection.record_store`. The existing
 repository factory is called inside each operation, including nested JSON CAS
 operations; no connection is cached by this service. Only records/OCR evidence use

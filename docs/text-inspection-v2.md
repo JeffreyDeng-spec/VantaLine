@@ -1,5 +1,15 @@
 # Text inspection v2
 
+Standard import, library reads and human revision edits have separate business
+services and thin HTTP adapters. Import still checks PDF rejection before duplicate
+lookup; only legacy DOC extraction enters a thread pool. Its source file precedes
+the standard insert and per-asset false inserts retain their original treatment.
+Add obtains its repository after writing the file and before its cleanup try block.
+An error inside that block deletes the new file but may leave earlier JSON records.
+Patch still writes feedback outside the JSON lock even when the human state is
+unchanged. Confirmation can start preparation before the confirmed-state shortcut.
+These boundaries are preserved by extraction; no new transaction or retry is added.
+
 Revision publication retains the original baseline-then-new-revision sequence and
 shared snapshot lists. Baseline insert failure rejects publication; the later
 revision insert's false return is still ignored, and an exception may leave the

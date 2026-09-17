@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_text_standards.py` adds seven synthetic groups for import
+validation/duplicate/parser ordering, DOC thread identity and DOCX synchronous
+execution, partial writes and job failures, retrieval/media behavior, add cleanup,
+patch feedback/exception boundaries, confirmation priority, and interleaved native
+HTTP requests across two applications/accounts. The original five document-review
+checks now call real service/HTTP adapters through explicit test capabilities instead
+of compiling functions from the entry-point source. Their behavioral assertions are
+retained. Source checks follow all three migrated repository entries without counting
+the composition lambda twice; assembled HTTP checks verify all seven handler aliases.
+
 `python scripts/smoke_text_revisions.py --root` adds nine synthetic groups: exact revision
 write order and shared snapshot objects; baseline conflicts and partial failures;
 expected-revision validation and snapshot compatibility; copied public projections

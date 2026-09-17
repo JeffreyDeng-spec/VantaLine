@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Standard-workflow CI adds seven native HTTP and failure-boundary groups while
+retaining original document review and real PostgreSQL checks. Include the API,
+three business services and explicit ports with the matching root composition in
+the immutable artifact. Runtime topology and complete-release rollback stay unchanged.
+
 Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
 application identity checks. Ship these modules and their root adapters together.
 Manifest v5 and normal whole-release restart/rollback remain; no new topology or

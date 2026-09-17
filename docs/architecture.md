@@ -1,5 +1,13 @@
 # Architecture
 
+Seven standard HTTP routes now live in `text_inspection.standard_api`, in the same
+order with the same request types and synchronous/asynchronous boundaries. Import,
+retrieval and human edits use `standard_imports`, `standard_library` and
+`standard_edits`; narrow record, media, revision, parser and job capabilities are
+composed in the root. Providers resolve identities, repositories and jobs at use
+time. Compatibility names point to the actual registered handlers. Retrieval can
+refresh classification or generate cached media and is not uniformly a pure read.
+
 Text public projection, revision publication and diagnostics now live in
 `text_inspection.projection`, `revisions` and `diagnostics`. Revision storage and
 snapshot providers, diagnostic hashing and the logger are explicit capabilities;

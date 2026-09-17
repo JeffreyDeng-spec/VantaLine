@@ -6,7 +6,6 @@ This is not a live database or authentication middleware integration test.
 """
 from __future__ import annotations
 
-import ast
 import asyncio
 import copy
 import json
@@ -22,10 +21,13 @@ sys.path.insert(0, str(ROOT))
 from local_inspection_service.storage.postgres_runtime_repository import PostgresRuntimeRepository, PostgresRuntimeRepositoryError
 
 
-class HTTPException(Exception):
-    def __init__(self, status_code, detail):
-        self.status_code = status_code
-        super().__init__(detail)
+from fastapi import FastAPI, HTTPException
+from local_inspection_service.text_inspection.standard_api import register
+from local_inspection_service.text_inspection.standard_edits import StandardEdits
+from local_inspection_service.text_inspection.standard_ports import (
+    StandardAccess, StandardRecords, StandardWrites, StandardMedia,
+    StandardRevisions, StandardPreparation,
+)
 
 
 def fixtures():
@@ -48,13 +50,19 @@ def handlers():
           "_incoming_text_store_lock": threading.RLock(), "_text_v2_expected_revision": lambda v: v,
           "_text_v2_confirmed_snapshot": lambda assets: [x for x in assets if x["status"] in {"candidate", "page"}],
           "_text_v2_apply_revision": lambda *a, **kw: None}
-    tree = ast.parse((ROOT / "local_inspection_service/server.py").read_text())
-    names = {"patch_text_inspection_asset", "confirm_text_inspection_standard"}
-    nodes = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
-    for n in nodes:
-        n.decorator_list = []
-    module = ast.Module(body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), *nodes], type_ignores=[])
-    exec(compile(ast.fix_missing_locations(module), "review-handlers", "exec"), ns)
+    service = StandardEdits(
+        StandardAccess(lambda *args, **kwargs: None, lambda: ns["_text_v2_owner"]()),
+        StandardRecords(lambda kind: copy.deepcopy(store[kind]), save, owned, copy.deepcopy),
+        StandardWrites(lambda: None, lambda: ns["_incoming_text_store_lock"]),
+        StandardMedia(lambda *args: None, lambda *args: None, lambda data: "unused"),
+        StandardRevisions(lambda value: value, ns["_text_v2_confirmed_snapshot"], ns["_text_v2_apply_revision"]),
+        StandardPreparation(lambda *args: None, lambda owner: False),
+        prepare_image=lambda data: (data, "image/png", ".png", "PNG"),
+        bounded_text=lambda value, limit: value[:limit],
+    )
+    routes = register(FastAPI(), None, None, service)
+    ns["patch_text_inspection_asset"] = routes.patch_text_inspection_asset
+    ns["confirm_text_inspection_standard"] = routes.confirm_text_inspection_standard
     return store, ns
 
 
