@@ -33948,97 +33948,29 @@ def _text_v2_read_verified(path_value: str, owner_user_id: str, standard_id: str
     return _text_media.read_verified(path_value, owner_user_id, standard_id, expected_sha256=expected_sha256, max_bytes=max_bytes)
 
 
-def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
-    from .model_profiles.snapshots import public_record
-    result = public_record(copy.deepcopy(value))
-    result.pop("model_profiles", None)
-    result.pop("source_path", None)
-    result.pop("source_preview_path", None)
-    for audit in result.get('diagnostics', {}).get('model_audits', []):
-        for evidence in audit.get('files', {}).values():
-            evidence.pop('path', None)
-    result.pop("media_path", None)
-    result.pop("annotated_path", None)
-    result.pop("reference_overlay_path", None)
-    for trace in result.get('diagnostics', {}).get('rereads', []):
-        trace.pop('input_path', None)
-    if result.get("id") and result.get("asset_kind"):
-        result["content_url"] = f"/api/text-inspection/assets/{quote(str(result['id']))}/content"
-        result["original_url"] = result["content_url"]
-        active = result.get("active_preparation")
-        result["comparison_ready"] = not result.get("preparation_required") or bool(active or result.get("preparation_previous_snapshot"))
-        if active:
-            from .standard_preparation import supports_text_comparison
-            if not supports_text_comparison(active):
-                result["comparison_ready"] = False
-                result["comparison_unavailable_reason"] = "纯图形标准：已保存，当前不支持文字对比"
-            result["content_url"] = f"/api/text-inspection/standards/{result['standard_id']}/preparation/{result['id']}/{active['id']}/clean"
-    return result
+from local_inspection_service.text_inspection.projection import public_record as _text_v2_public
+from local_inspection_service.text_inspection.revisions import (
+    RevisionRecords, TextRevisions,
+    confirmed_snapshot as _text_v2_confirmed_snapshot, expected_revision as _text_v2_expected_revision,
+)
+
+_text_revisions = TextRevisions(
+    RevisionRecords(
+        load=lambda kind: _text_v2_load(kind),
+        save=lambda kind, value, insert_only=False: _text_v2_save(kind, value, insert_only=insert_only),
+    ),
+    snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
+)
 
 
 def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
     return _text_media.asset_bytes(asset, owner_user_id)
 
 
-def _text_v2_confirmed_snapshot(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    from local_inspection_service.standard_preparation_jobs import snapshot
-    return snapshot(assets)
-
-
-def _text_v2_expected_revision(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool) or (not isinstance(value, int) and not re.fullmatch(r"[0-9]+", str(value))):
-        raise HTTPException(status_code=400, detail="expected_revision 必须为非负整数")
-    try:
-        revision = int(value)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="expected_revision 必须为非负整数") from exc
-    if revision < 0:
-        raise HTTPException(status_code=400, detail="expected_revision 必须为非负整数")
-    return revision
-
-
 def _text_v2_apply_revision(
     standard: dict[str, Any], assets: list[dict[str, Any]], *, action: str, asset_id: str, now: int,
 ) -> dict[str, Any]:
-    snapshot = _text_v2_confirmed_snapshot(assets)
-    current_revision = int(standard.get("revision_number") or 0)
-    if standard.get("status") == "confirmed" and action != "confirm" and current_revision == 0:
-        legacy_snapshot = [
-            dict(item) for item in standard.get("confirmed_assets", [])
-            if isinstance(item, dict) and item.get("id")
-        ]
-        baseline = {
-            "id": f"rev_baseline_{standard['id']}", "standard_id": standard["id"],
-            "owner_user_id": standard["owner_user_id"], "revision_number": 1,
-            "action": "baseline", "asset_id": "", "confirmed_assets": legacy_snapshot,
-            "confirmed_asset_ids": [str(item["id"]) for item in legacy_snapshot], "created_at": now,
-        }
-        existing_baseline = next((
-            item for item in _text_v2_load("revisions")
-            if item.get("id") == baseline["id"] and item.get("standard_id") == standard["id"]
-        ), None)
-        if existing_baseline:
-            if existing_baseline.get("confirmed_assets") != legacy_snapshot:
-                raise HTTPException(status_code=409, detail="标准基线修订冲突，请刷新后重试")
-        elif not _text_v2_save("revisions", baseline, insert_only=True):
-            raise HTTPException(status_code=409, detail="标准基线修订已存在，请刷新后重试")
-        current_revision = 1
-    revision_number = current_revision + 1
-    revision = {
-        "id": "rev_" + uuid.uuid4().hex, "standard_id": standard["id"],
-        "owner_user_id": standard["owner_user_id"], "revision_number": revision_number,
-        "action": action, "asset_id": asset_id, "confirmed_assets": snapshot,
-        "confirmed_asset_ids": [item["id"] for item in snapshot], "created_at": now,
-    }
-    standard.update({
-        "revision_number": revision_number, "current_revision_id": revision["id"],
-        "confirmed_assets": snapshot, "confirmed_asset_ids": revision["confirmed_asset_ids"],
-        "asset_count": len(snapshot), "updated_at": now,
-    })
-    _text_v2_save("revisions", revision, insert_only=True)
-    return revision
+    return _text_revisions.apply(standard, assets, action=action, asset_id=asset_id, now=now)
 
 
 @app.post("/api/text-inspection/standards/import")
@@ -34336,116 +34268,27 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     return _text_v2_public(standard)
 
 
-def _text_v2_diagnostic_value(value: Any, *, depth: int = 0) -> Any:
-    """Bound diagnostic payloads and remove credentials or embedded media."""
-    if depth > 6:
-        return "<depth-limit>"
-    if isinstance(value, dict):
-        clean: dict[str, Any] = {}
-        for raw_key, raw_value in list(value.items())[:120]:
-            key = str(raw_key)[:120]
-            normalized = key.lower().replace("-", "_")
-            sensitive_key = (
-                normalized in {"api_key", "authorization", "cookie", "set_cookie", "secret", "token"}
-                or normalized.endswith(("_api_key", "_authorization", "_cookie", "_secret", "_token"))
-            )
-            if sensitive_key:
-                clean[key] = "<redacted>"
-            elif normalized in {"image_url", "data_url", "url"} and str(raw_value).startswith("data:"):
-                clean[key] = f"<embedded-media:{len(str(raw_value))}-chars>"
-            else:
-                clean[key] = _text_v2_diagnostic_value(raw_value, depth=depth + 1)
-        return clean
-    if isinstance(value, (list, tuple)):
-        return [_text_v2_diagnostic_value(item, depth=depth + 1) for item in list(value)[:120]]
-    if isinstance(value, str):
-        if value.startswith("data:") and ";base64," in value[:160]:
-            return f"<embedded-media:{len(value)}-chars>"
-        return value[:8192]
-    if value is None or isinstance(value, (bool, int, float)):
-        return value
-    return str(value)[:1000]
+from local_inspection_service.text_inspection.diagnostics import (
+    TextDiagnostics, diagnostic_value as _text_v2_diagnostic_value,
+    diagnostic_event as _text_v2_diagnostic_event, provider_diagnostics as _text_v2_provider_diagnostics,
+)
+
+_text_diagnostics = TextDiagnostics(
+    digest=lambda contents: sha256_bytes(contents),
+    logger=lambda: TEXT_INSPECTION_DIAGNOSTIC_LOGGER,
+)
 
 
 def _text_v2_image_diagnostics(contents: bytes, *, source_format: str, mime_type: str) -> dict[str, Any]:
-    width = height = 0
-    mode = ""
-    try:
-        with Image.open(io.BytesIO(contents)) as image:
-            width, height = image.size
-            mode = str(image.mode or "")
-    except Exception:
-        pass
-    return {
-        "bytes": len(contents),
-        "sha256": sha256_bytes(contents),
-        "source_format": str(source_format or ""),
-        "mime_type": str(mime_type or ""),
-        "width": int(width),
-        "height": int(height),
-        "mode": mode,
-    }
+    return _text_diagnostics.image_diagnostics(contents, source_format=source_format, mime_type=mime_type)
 
 
-def _text_v2_diagnostic_event(
-    diagnostics: dict[str, Any],
-    stage: str,
-    status: str,
-    *,
-    details: dict[str, Any] | None = None,
-) -> None:
-    started_ms = int(diagnostics.get("request_received_at_ms") or int(time.time() * 1000))
-    now_ms = int(time.time() * 1000)
-    event: dict[str, Any] = {
-        "stage": str(stage),
-        "status": str(status),
-        "at_ms": now_ms,
-        "elapsed_ms": max(0, now_ms - started_ms),
-    }
-    if details:
-        event["details"] = _text_v2_diagnostic_value(details)
-    diagnostics.setdefault("events", []).append(event)
 
 
-def _text_v2_provider_diagnostics(provider: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
-    keys = (
-        "ok", "tool", "provider", "provider_model", "latency_ms", "timed_out", "overloaded",
-        "provider_failure", "error", "error_type", "http_status", "attempts", "retry_count",
-        "previous_errors", "fallback_model", "fallback_reason", "usage_metadata",
-        "failed_usage_metadata", "response_sha256", "response_preview",
-    )
-    result = {key: provider.get(key) for key in keys if provider.get(key) not in (None, "", [], {})}
-    result["provider"] = provider.get("provider") or settings.get("provider") or ""
-    result["model"] = provider.get("model") or provider.get("provider_model") or settings.get("model") or ""
-    result["parsed_response"] = provider.get("parsed") if isinstance(provider.get("parsed"), dict) else {}
-    return _text_v2_diagnostic_value(result)
 
 
 def _text_v2_write_server_diagnostic(record: dict[str, Any]) -> None:
-    diagnostics = record.get("diagnostics") if isinstance(record.get("diagnostics"), dict) else {}
-    failure = diagnostics.get("failure") if isinstance(diagnostics.get("failure"), dict) else {}
-    payload = {
-        "event": "text_inspection_label_compare",
-        "inspection_id": record.get("id"),
-        "comparison_id": record.get("comparison_id"),
-        "standard_id": record.get("standard_id"),
-        "standard_asset_id": record.get("standard_asset_id"),
-        "status": record.get("status"),
-        "decision": record.get("decision"),
-        "provider": record.get("provider") or record.get("planned_provider"),
-        "model": record.get("model") or record.get("planned_model"),
-        "failure_stage": failure.get("stage"),
-        "error_type": failure.get("error_type"),
-        "error_message_sha256": (
-            sha256_bytes(str(failure.get("message") or "").encode("utf-8", errors="replace"))
-            if failure.get("message") else ""
-        ),
-        "elapsed_ms": max(0, int(time.time() * 1000) - int(diagnostics.get("request_received_at_ms") or 0)),
-    }
-    TEXT_INSPECTION_DIAGNOSTIC_LOGGER.info(
-        "text_inspection_diagnostic %s",
-        json.dumps(_text_v2_diagnostic_value(payload), ensure_ascii=False, separators=(",", ":")),
-    )
+    return _text_diagnostics.write_server_diagnostic(record)
 
 
 def _text_v2_prepare_provider_image(contents: bytes, mime_type: str) -> tuple[bytes, str, str]:

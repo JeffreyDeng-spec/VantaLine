@@ -1,5 +1,12 @@
 # Architecture
 
+Text public projection, revision publication and diagnostics now live in
+`text_inspection.projection`, `revisions` and `diagnostics`. Revision storage and
+snapshot providers, diagnostic hashing and the logger are explicit capabilities;
+the root retains compatible exports and thin forwards. The revision service keeps
+caller-owned transaction boundaries and the original partial-failure behavior.
+These modules do not own request identities, database connections or worker state.
+
 `text_inspection.media.TextMedia` owns account-scoped evidence paths, verified
 reads, atomic file replacement and lazy PDF page caches, with explicit record ports.
 `text_inspection.images` owns the original image decoding, provider-copy and

@@ -52,6 +52,15 @@ def capture():
         assert server._codex_media.data_directory() == server.DATA_DIR
         assert server._text_records.dependencies.guard() is server._incoming_text_store_lock
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
+        from local_inspection_service.text_inspection.projection import public_record
+        from local_inspection_service.text_inspection import revisions, diagnostics
+        assert server._text_v2_public is public_record
+        assert server._text_v2_expected_revision is revisions.expected_revision
+        assert server._text_v2_confirmed_snapshot is revisions.confirmed_snapshot
+        assert server._text_v2_diagnostic_value is diagnostics.diagnostic_value
+        assert server._text_v2_diagnostic_event is diagnostics.diagnostic_event
+        assert server._text_v2_provider_diagnostics is diagnostics.provider_diagnostics
+        assert server._text_diagnostics.logger() is server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER
         assert server._text_records.dependencies.guard() is server._preparation_records.guard()
         assert server.standard_preparation_jobs.records is server._preparation_records
         assert server.standard_preparation_jobs.media_dependencies is server._preparation_media

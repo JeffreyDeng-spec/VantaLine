@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_text_revisions.py` adds six synthetic groups: exact revision
+write order and shared snapshot objects; baseline conflicts and partial failures;
+expected-revision validation and snapshot compatibility; copied public projections
+and legacy URL/error rules; diagnostic bounds/redaction/clock rollback; and real
+image metadata with late logger replacement and hashed failure messages. The full
+application contract asserts identical exports and logger composition. Existing
+text endpoint modes, history, document jobs and model-binding checks remain required.
+
 `python scripts/smoke_text_media.py --root` adds eight groups using synthetic media:
 path/account/hash/size checks and failed atomic replacement; resolved symlink
 behavior; real PDF caching and cache-failure rules; PDF close/write/save failures;
