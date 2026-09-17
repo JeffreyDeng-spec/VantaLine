@@ -1,7 +1,9 @@
 {
-  "version": 4,
+  "version": 5,
   "sources": [
     "server.py",
+    "text_inspection/media.py",
+    "text_inspection/images.py",
     "accessories/policy.py",
     "accessories/image_job_metadata.py",
     "accessories/preparation.py",

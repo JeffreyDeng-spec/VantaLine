@@ -1,5 +1,12 @@
 # Production runbook
 
+Media extraction preserves existing evidence and cache failure behavior. Cached
+asset read/hash failures do not rerender from the parent PDF; a save failure may
+leave the new file and mutated asset, and an atomic replace failure may leave its
+temporary file. Resolved links targeting the owned directory retain prior behavior.
+No cleanup, data migration or provider policy change is bundled here. Roll back
+the full release together with its matching provenance manifest; retain old records.
+
 Text-record store extraction requires only the usual complete-release restart.
 No schema, index, JSON format, cursor or worker-topology migration is included.
 Keep attempts and revision history on rollback. Restore the full previous package,

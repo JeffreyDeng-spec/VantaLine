@@ -51,6 +51,7 @@ def capture():
         assert server._label_imports.data_directory() == server.DATA_DIR
         assert server._codex_media.data_directory() == server.DATA_DIR
         assert server._text_records.dependencies.guard() is server._incoming_text_store_lock
+        assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         assert server._text_records.dependencies.guard() is server._preparation_records.guard()
         assert server.standard_preparation_jobs.records is server._preparation_records
         assert server.standard_preparation_jobs.media_dependencies is server._preparation_media

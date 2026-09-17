@@ -1,5 +1,12 @@
 # Architecture
 
+`text_inspection.media.TextMedia` owns account-scoped evidence paths, verified
+reads, atomic file replacement and lazy PDF page caches, with explicit record ports.
+`text_inspection.images` owns the original image decoding, provider-copy and
+annotation, data-URL and similarity functions. The entry point keeps compatible exports/forwards and reads
+resize constants for each provider-copy call. Source manifest v5 includes both
+migrated media producers so new task provenance covers their actual shipped code.
+
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
 selection, insert-only writes, owned lookup and attempt compare-and-set. Its ports
 obtain the thread repository, shared write lock, directory, table mapping and JSON
@@ -79,7 +86,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v4 for new tasks.
+`accessories/preparation.py`, included in source manifest v5 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

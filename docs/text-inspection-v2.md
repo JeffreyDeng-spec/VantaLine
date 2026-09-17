@@ -1,5 +1,12 @@
 # Text inspection v2
 
+Verified media and lazy PDF page caching now use an explicit media service; image
+normalization/provider copies/annotations live in a separate image module. Cached
+media retains priority and failures do not trigger a silent rerender. PNG/JPEG/WEBP
+fast paths keep the original bytes, including existing EXIF/transparency behavior;
+conversion and white compositing retain their previous fallback/resize branches.
+No recognition algorithm, prompt or image tuning changes are included.
+
 Text persistence retains the original reader/writer/decoder lookup timing. Missing
 or failing capabilities do not cause retries or fallback. JSON duplicate checks and
 attempt status checks remain inside their original complete write-lock boundaries.
