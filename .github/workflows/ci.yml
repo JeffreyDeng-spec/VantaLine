@@ -200,6 +200,7 @@ jobs:
           python scripts/smoke_incoming_text_analysis.py --root
           python scripts/smoke_incoming_text_workflows.py
           python scripts/smoke_detection_results.py
+          python scripts/smoke_detection_ocr.py
           python local_inspection_service/scripts/smoke_auth_rbac.py
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py

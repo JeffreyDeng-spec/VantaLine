@@ -1,19 +1,24 @@
 # VantaLine release management
 
+The detection OCR batch adds its synthetic smoke and ships `runtime.paddle` plus
+five OCR modules with source manifest v10. Local factories never load real models in
+these contracts. Keep the complete application and incoming/OCR regression checks;
+release startup, worker topology and whole-package rollback remain unchanged.
+
 The detection-result extraction adds synthetic backend smoke and admits the new
 `detection` package to dependency-direction checks. It preserves the HTTP contract,
-model parameters, worker topology and release commands. Ship source manifest v9
+model parameters, worker topology and release commands. Ship source manifest v10
 with all five detection modules to retain their source coverage for new tasks.
 Historical snapshots remain untouched; whole-release rollback is the recovery unit.
 
 The legacy incoming workflow batch adds its focused smoke to backend CI, retains
 both original incoming endpoint and repository checks, and compares the complete
 assembled HTTP baseline. It does not change worker topology or launch commands.
-Source manifest v8 records the relocated OCR input orchestrator for new snapshots.
+Source manifest v10 records the relocated OCR input orchestrator for new snapshots.
 Rollback remains the previous immutable release with existing persistent state.
 
 OCR/Beta CI adds ten offline initialization, image, cache and composition groups.
-Ship the analysis, comparison-cache and HTTP modules with manifest v8 and the root
+Ship the analysis, comparison-cache and HTTP modules with manifest v10 and the root
 state aliases. Model names, flags, business prompt versions and deployment topology
 are unchanged. Full-runtime CI must retain the existing incoming/Beta endpoint and
 model-snapshot checks before any sequential production rollout.
@@ -24,7 +29,7 @@ remain required. Ship both the runtime file adapter and legacy store with the ro
 aliases in the immutable artifact; database schema and worker topology are unchanged.
 
 Comparison/review CI adds eight offline boundary groups and six route-identity
-checks. Ship the submission, review, API and port modules plus manifest v8 together;
+checks. Ship the submission, review, API and port modules plus manifest v10 together;
 the source list now includes the actual comparison input and strict-prompt files.
 Business prompt text/version stays unchanged. Retain old task evidence on a normal
 whole-release rollback; no new worker mode is enabled by this package.
@@ -36,11 +41,11 @@ the immutable artifact. Runtime topology and complete-release rollback stay unch
 
 Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
 application identity checks. Ship these modules and their root adapters together.
-Manifest v8 and normal whole-release restart/rollback apply; no new topology or
+Manifest v10 and normal whole-release restart/rollback apply; no new topology or
 model configuration is enabled by this structural batch.
 
 Text-media CI adds real image/PDF and application-composition contracts. Package
-both media/image modules with source manifest v8, which covers their migrated
+both media/image modules with source manifest v10, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
 dependency upgrade is needed; ordinary complete-release restart/rollback applies.
 Media fault injection preserves first-error evidence without retries. Callback and
@@ -100,7 +105,7 @@ Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.
 
-Preparation CI adds synthetic workflow contracts and source manifest v8 includes
+Preparation CI adds synthetic workflow contracts and source manifest v10 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
 

@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "sources": [
     "server.py",
     "detection/geometry.py",
@@ -7,6 +7,12 @@
     "detection/results.py",
     "detection/rules.py",
     "detection/drawing.py",
+    "runtime/paddle.py",
+    "detection/ocr_images.py",
+    "detection/ocr_matching.py",
+    "detection/manual_text.py",
+    "detection/ocr_scoring.py",
+    "detection/ocr_attachment.py",
     "text_inspection/incoming_analysis.py",
     "text_inspection/incoming_execution.py",
     "text_inspection/beta_comparison.py",

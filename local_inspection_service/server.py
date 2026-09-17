@@ -1762,7 +1762,6 @@ _yolo_warmup_state: dict[str, Any] = {
     "completed_at": 0,
     "error": "",
 }
-_ocr: Any | None = None
 _incoming_text_store_lock = threading.RLock()
 _rembg_session: Any | None = None
 _rembg_lock = threading.RLock()
@@ -23618,33 +23617,15 @@ def yolo_cli_command() -> str:
     return "yolo"
 
 
-def prepare_paddle_runtime() -> None:
-    os.environ.setdefault("FLAGS_use_mkldnn", "false")
-    os.environ.setdefault("FLAGS_use_onednn", "false")
-    os.environ.setdefault("FLAGS_enable_pir_api", "0")
-    libgomp = Path("/home/dministrator/.local/lib/python3.12/site-packages/torch/lib/libgomp.so.1")
-    if libgomp.exists():
-        try:
-            ctypes.CDLL(str(libgomp), mode=ctypes.RTLD_GLOBAL)
-        except OSError:
-            pass
+from .runtime.paddle import prepare_runtime as prepare_paddle_runtime, DetectionOCREngine
+
+_detection_ocr_engine = DetectionOCREngine(prepare=lambda: prepare_paddle_runtime())
 
 
 def ocr_engine() -> Any:
-    global _ocr
-    if _ocr is None:
-        prepare_paddle_runtime()
-        from paddleocr import PaddleOCR
+    return _detection_ocr_engine.get()
 
-        _ocr = PaddleOCR(
-            lang="en",
-            text_detection_model_name="PP-OCRv6_small_det",
-            text_recognition_model_name="PP-OCRv6_small_rec",
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=True,
-        )
-    return _ocr
+
 
 
 def safe_name(filename: str) -> str:
@@ -23666,27 +23647,7 @@ from .detection.geometry import (
 
 
 
-def normalize_ocr_text(text: str) -> str:
-    text = text.lower()
-    replacements = {
-        "ä": "a",
-        "ö": "o",
-        "ü": "u",
-        "ß": "ss",
-        "é": "e",
-        "è": "e",
-        "ê": "e",
-        "á": "a",
-        "à": "a",
-        "í": "i",
-        "ó": "o",
-        "ç": "c",
-        "ğ": "g",
-    }
-    for src, dst in replacements.items():
-        text = text.replace(src, dst)
-    text = re.sub(r"[^a-z0-9@./+ -]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+from .detection.ocr_matching import normalize_ocr_text, OCRMatching, MatchThresholds
 
 
 OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE = 0.65
@@ -23719,412 +23680,70 @@ OCR_ACCESSORY_PROFILE_STOPWORDS = {
 }
 
 
-def ocr_keyword_terms(value: Any, *, weight: float = 1.0) -> list[dict[str, Any]]:
-    terms: list[dict[str, Any]] = []
-    if value is None:
-        return terms
-    if isinstance(value, dict):
-        for nested in value.values():
-            terms.extend(ocr_keyword_terms(nested, weight=weight))
-        return terms
-    if isinstance(value, list):
-        for nested in value:
-            terms.extend(ocr_keyword_terms(nested, weight=weight))
-        return terms
-    normalized = normalize_ocr_text(str(value))
-    if not normalized:
-        return terms
-    if len(normalized) >= 3 and normalized not in OCR_ACCESSORY_PROFILE_STOPWORDS:
-        terms.append({"text": normalized, "weight": weight})
-    for token in normalized.split():
-        if len(token) >= 3 and token not in OCR_ACCESSORY_PROFILE_STOPWORDS:
-            terms.append({"text": token, "weight": weight})
-    return terms
+_ocr_matching = OCRMatching(
+    stopwords=lambda: OCR_ACCESSORY_PROFILE_STOPWORDS, uid=lambda item: accessory_uid(item),
+    thresholds=MatchThresholds(text_score=lambda: OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE,
+                               confidence=lambda: OCR_ACCESSORY_MATCH_MIN_CONFIDENCE, margin=lambda: OCR_ACCESSORY_MATCH_MIN_MARGIN),
+)
+ocr_keyword_terms = _ocr_matching.keywords
+build_ocr_accessory_profiles = _ocr_matching.profiles
+match_ocr_text_accessory = _ocr_matching.match
 
 
-def build_ocr_accessory_profiles(items: list[dict[str, Any]], accessory_labels: dict[str, str]) -> dict[str, dict[str, Any]]:
-    profiles: dict[str, dict[str, Any]] = {}
-    for item in items:
-        if not item:
-            continue
-        accessory_id = str(item.get("id") or accessory_uid(item) or "").strip()
-        if not accessory_id:
-            continue
-        profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
-        label = str(accessory_labels.get(accessory_id) or item.get("name") or item.get("label") or accessory_id)
-        raw_terms: list[dict[str, Any]] = []
-        raw_terms.extend(ocr_keyword_terms(label, weight=2.0))
-        raw_terms.extend(ocr_keyword_terms(item.get("name"), weight=2.0))
-        raw_terms.extend(ocr_keyword_terms(item.get("label"), weight=2.0))
-        raw_terms.extend(ocr_keyword_terms(profile.get("english_name"), weight=2.0))
-        raw_terms.extend(ocr_keyword_terms(profile.get("distinguishing_text"), weight=3.0))
-        raw_terms.extend(ocr_keyword_terms(profile.get("tags"), weight=1.0))
-        keywords: dict[str, float] = {}
-        for term in raw_terms:
-            text = str(term.get("text") or "").strip()
-            if not text:
-                continue
-            keywords[text] = max(float(term.get("weight") or 1.0), keywords.get(text, 0.0))
-        profiles[accessory_id] = {
-            "accessory_id": accessory_id,
-            "label": label,
-            "keywords": [{"text": text, "weight": weight} for text, weight in sorted(keywords.items())],
-        }
-    return profiles
 
 
-def match_ocr_text_accessory(texts: list[str], mean_text_score: float, spec: dict[str, Any]) -> dict[str, Any]:
-    joined = normalize_ocr_text(" ".join(texts))
-    profiles = spec.get("ocr_accessory_profiles") if isinstance(spec.get("ocr_accessory_profiles"), dict) else {}
-    if not joined or not profiles:
-        return {"accepted": False, "reason": "no_ocr_text_or_profiles", "confidence": 0.0, "margin": 0.0}
-    scores: list[dict[str, Any]] = []
-    for accessory_id, profile in profiles.items():
-        hits = []
-        score = 0.0
-        for keyword in profile.get("keywords") or []:
-            text = str(keyword.get("text") or "").strip()
-            if text and text in joined:
-                weight = float(keyword.get("weight") or 1.0)
-                score += weight
-                hits.append(text)
-        confidence = min(1.0, score / 6.0) if score > 0 else 0.0
-        scores.append(
-            {
-                "accessory_id": str(accessory_id),
-                "label": str(profile.get("label") or accessory_id),
-                "score": round(score, 4),
-                "confidence": round(confidence, 4),
-                "matched_keywords": hits[:12],
-            }
-        )
-    ranked = sorted(scores, key=lambda item: (float(item["confidence"]), float(item["score"])), reverse=True)
-    best = ranked[0] if ranked else {"confidence": 0.0, "score": 0.0}
-    second_confidence = float(ranked[1]["confidence"]) if len(ranked) > 1 else 0.0
-    margin = round(float(best.get("confidence") or 0.0) - second_confidence, 4)
-    accepted = (
-        float(mean_text_score) >= OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE
-        and float(best.get("confidence") or 0.0) >= OCR_ACCESSORY_MATCH_MIN_CONFIDENCE
-        and margin >= OCR_ACCESSORY_MATCH_MIN_MARGIN
-    )
-    reason = "accepted" if accepted else "low_ocr_confidence"
-    if float(mean_text_score) < OCR_ACCESSORY_MATCH_MIN_TEXT_SCORE:
-        reason = "low_text_score"
-    elif float(best.get("confidence") or 0.0) < OCR_ACCESSORY_MATCH_MIN_CONFIDENCE:
-        reason = "low_match_confidence"
-    elif margin < OCR_ACCESSORY_MATCH_MIN_MARGIN:
-        reason = "low_match_margin"
-    return {
-        "accepted": accepted,
-        "reason": reason,
-        "accessory_id": best.get("accessory_id"),
-        "label": best.get("label"),
-        "confidence": best.get("confidence", 0.0),
-        "margin": margin,
-        "mean_text_score": round(float(mean_text_score), 4),
-        "matched_keywords": best.get("matched_keywords", []),
-        "candidates": ranked[:5],
-    }
 
 
-def classify_manual_text(texts: list[str]) -> dict[str, Any]:
-    joined = normalize_ocr_text(" ".join(texts))
-    scores: dict[str, int] = {}
-    matches: dict[str, list[str]] = {}
-    for manual_type, keywords in MANUAL_TYPE_KEYWORDS.items():
-        score = 0
-        hit_list = []
-        for keyword, weight in keywords:
-            key = normalize_ocr_text(keyword)
-            if key and key in joined:
-                score += weight
-                hit_list.append(keyword)
-        scores[manual_type] = score
-        matches[manual_type] = hit_list
+from .detection.manual_text import ManualClassifier, ManualProjection
+from .detection.results import DetectionLabels
 
-    best_type, best_score = max(scores.items(), key=lambda item: item[1])
-    second_score = max((score for key, score in scores.items() if key != best_type), default=0)
-    if best_score < 6 or best_score - second_score < 2:
-        best_type = "unknown"
-    confidence = 0.0 if best_type == "unknown" else min(1.0, best_score / max(best_score + second_score, 1))
-    return {
-        "manual_type": best_type,
-        "manual_label": MANUAL_TYPE_LABELS.get(best_type, "Unknown Manual"),
-        "confidence": round(confidence, 4),
-        "scores": scores,
-        "matches": matches.get(best_type, []),
-    }
+_manual_classifier = ManualClassifier(keywords=lambda: MANUAL_TYPE_KEYWORDS, labels=lambda: MANUAL_TYPE_LABELS)
+classify_manual_text = _manual_classifier.classify
 
 
-def rotate_quarter_turn(image_bgr: np.ndarray, angle: int) -> np.ndarray:
-    normalized = int(angle) % 360
-    if normalized == 0:
-        return image_bgr
-    if normalized == 90:
-        return cv2.rotate(image_bgr, cv2.ROTATE_90_CLOCKWISE)
-    if normalized == 180:
-        return cv2.rotate(image_bgr, cv2.ROTATE_180)
-    if normalized == 270:
-        return cv2.rotate(image_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    raise ValueError(f"angle must be a quarter turn, got {angle}")
+from .detection.ocr_images import rotate_quarter_turn, resize_for_ocr, crop_detection_region
 
 
-def resize_for_ocr(crop_bgr: np.ndarray, max_long_side: int) -> np.ndarray:
-    if max_long_side <= 0:
-        return crop_bgr
-    height, width = crop_bgr.shape[:2]
-    long_side = max(height, width)
-    if long_side <= max_long_side:
-        return crop_bgr
-    scale = max_long_side / long_side
-    return cv2.resize(
-        crop_bgr,
-        (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
-        interpolation=cv2.INTER_AREA,
-    )
 
 
-def crop_detection_region(
-    image_bgr: np.ndarray,
-    polygon: list[list[float]],
-    padding: int = 20,
-    max_long_side: int = 750,
-) -> tuple[np.ndarray, dict[str, Any]] | None:
-    height, width = image_bgr.shape[:2]
-    pts = np.array(polygon, dtype=np.float32)
-    if len(pts) < 3:
-        return None
-    x1 = max(0, int(np.floor(pts[:, 0].min())) - padding)
-    y1 = max(0, int(np.floor(pts[:, 1].min())) - padding)
-    x2 = min(width, int(np.ceil(pts[:, 0].max())) + padding)
-    y2 = min(height, int(np.ceil(pts[:, 1].max())) + padding)
-    if x2 <= x1 or y2 <= y1:
-        return None
-    crop = image_bgr[y1:y2, x1:x2]
-    shifted = pts.copy()
-    shifted[:, 0] -= x1
-    shifted[:, 1] -= y1
-    mask = np.zeros(crop.shape[:2], dtype=np.uint8)
-    cv2.fillPoly(mask, [np.round(shifted).astype(np.int32)], 255)
-    white = np.full_like(crop, 255)
-    masked = np.where(mask[:, :, None] > 0, crop, white)
-
-    rect = cv2.minAreaRect(shifted)
-    rect_width, rect_height = rect[1]
-    long_edge_angle = 0.0
-    if rect_width > 0 and rect_height > 0:
-        box = cv2.boxPoints(rect)
-        edges = []
-        for idx in range(4):
-            p1 = box[idx]
-            p2 = box[(idx + 1) % 4]
-            vector = p2 - p1
-            length = float(np.linalg.norm(vector))
-            angle = float(np.degrees(np.arctan2(vector[1], vector[0])))
-            edges.append((length, angle))
-        long_edge_angle = max(edges, key=lambda item: item[0])[1]
-
-    # Manuals are portrait documents. Rotate to make the long edge vertical,
-    # using only a single quarter-turn before the default OCR pass.
-    correction = int(round((90.0 - long_edge_angle) / 90.0) * 90) % 360
-    if correction == 0 and 35.0 <= abs(long_edge_angle) <= 75.0:
-        correction = 180
-    oriented = rotate_quarter_turn(masked, correction)
-    oriented = resize_for_ocr(oriented, max_long_side)
-    return oriented, {
-        "long_edge_angle": round(long_edge_angle, 2),
-        "predicted_rotation": correction,
-        "fallback_rotations": [(correction + 180) % 360],
-    }
 
 
-def build_ocr_result(result: dict[str, Any], rotation: int) -> dict[str, Any]:
-    texts = [str(x) for x in result.get("rec_texts", []) if str(x).strip()]
-    rec_scores = [float(x) for x in result.get("rec_scores", [])]
-    mean_score = sum(rec_scores) / len(rec_scores) if rec_scores else 0.0
-    return {
-        "texts": texts,
-        "mean_text_score": round(mean_score, 4),
-        "rotation": int(rotation) % 360,
-        "classification": classify_manual_text(texts),
-    }
+from .detection.ocr_scoring import OCRScoring, is_confident_manual_classification, better_ocr_result
+
+_ocr_scoring = OCRScoring(engine=lambda: ocr_engine(), classify=lambda texts: classify_manual_text(texts))
+build_ocr_result = _ocr_scoring.build
+score_ocr_variant = _ocr_scoring.variant
+score_ocr_variants = _ocr_scoring.variants
+run_ocr_on_crop = _ocr_scoring.run_crop
 
 
-def score_ocr_variant(crop_bgr: np.ndarray, rotation: int) -> dict[str, Any]:
-    try:
-        result = ocr_engine().predict(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB))[0]
-    except Exception:
-        result = {}
-    return build_ocr_result(result, rotation)
 
 
-def score_ocr_variants(crops_bgr: list[np.ndarray], rotations: list[int]) -> list[dict[str, Any]]:
-    if not crops_bgr:
-        return []
-    try:
-        batch = [cv2.cvtColor(crop, cv2.COLOR_BGR2RGB) for crop in crops_bgr]
-        results = ocr_engine().predict(batch)
-        return [build_ocr_result(result or {}, rotation) for result, rotation in zip(results, rotations)]
-    except Exception:
-        return [score_ocr_variant(crop, rotation) for crop, rotation in zip(crops_bgr, rotations)]
 
 
-def is_confident_manual_classification(ocr_result: dict[str, Any], min_confidence: float) -> bool:
-    classification = ocr_result["classification"]
-    return classification["manual_type"] != "unknown" and float(classification["confidence"]) >= min_confidence
 
 
-def better_ocr_result(current: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
-    current_class_score = max(current["classification"]["scores"].values(), default=0)
-    candidate_class_score = max(candidate["classification"]["scores"].values(), default=0)
-    if (
-        candidate_class_score,
-        len(candidate["texts"]),
-        candidate["mean_text_score"],
-    ) > (
-        current_class_score,
-        len(current["texts"]),
-        current["mean_text_score"],
-    ):
-        return candidate
-    return current
 
 
-def run_ocr_on_crop(
-    crop_bgr: np.ndarray,
-    orientation: dict[str, Any],
-    fallback_min_confidence: float,
-) -> dict[str, Any]:
-    best = score_ocr_variant(crop_bgr, int(orientation["predicted_rotation"]))
-    fallback_used = False
-    if not is_confident_manual_classification(best, fallback_min_confidence):
-        for fallback_rotation in orientation.get("fallback_rotations", []):
-            fallback_crop = rotate_quarter_turn(crop_bgr, 180)
-            candidate = score_ocr_variant(fallback_crop, int(fallback_rotation))
-            fallback_used = True
-            best = better_ocr_result(best, candidate)
-            if is_confident_manual_classification(best, fallback_min_confidence):
-                break
-    best["fallback_used"] = fallback_used
-    best["orientation"] = orientation
-    return best
 
 
-def finalize_ocr_detection(
-    det: dict[str, Any],
-    ocr_result: dict[str, Any],
-    orientation: dict[str, Any],
-    max_texts: int,
-) -> None:
-    classification = ocr_result["classification"]
-    det["ocr"] = {
-        **classification,
-        "best_rotation": ocr_result["rotation"],
-        "predicted_rotation": orientation["predicted_rotation"],
-        "long_edge_angle": orientation["long_edge_angle"],
-        "fallback_used": ocr_result.get("fallback_used", False),
-        "mean_text_score": ocr_result["mean_text_score"],
-        "texts": ocr_result["texts"][:max_texts],
-    }
-    if classification["manual_type"] != "unknown":
-        manual_type = classification["manual_type"]
-        class_id = MANUAL_TYPE_CLASS_IDS[manual_type]
-        det["class_id"] = class_id
-        det["class_name"] = CLASS_NAMES[class_id]
-        det["label"] = CLASS_LABELS[class_id]
-        det["manual_type"] = manual_type
-        det["manual_label"] = classification["manual_label"]
-    else:
-        det["class_id"] = 99
-        det["class_name"] = GENERIC_DETECTION_CLASS_NAMES[99]
-        det["label"] = GENERIC_DETECTION_LABELS[99]
+_manual_projection = ManualProjection(
+    class_ids=lambda: MANUAL_TYPE_CLASS_IDS,
+    labels=DetectionLabels(class_names=lambda: CLASS_NAMES, class_labels=lambda: CLASS_LABELS,
+                           generic_names=lambda: GENERIC_DETECTION_CLASS_NAMES, generic_labels=lambda: GENERIC_DETECTION_LABELS),
+)
+finalize_ocr_detection = _manual_projection.finalize
 
 
-def attach_ocr_results(
-    image_bgr: np.ndarray,
-    detections: list[dict[str, Any]],
-    config: dict[str, Any],
-    spec: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    if not config.get("ocr", {}).get("enabled", True):
-        return detections
-    spec = spec or {}
-    ocr_config = config.get("ocr", {})
-    max_texts = int(ocr_config.get("max_texts_per_manual", 16))
-    max_crop_long_side = int(ocr_config.get("max_crop_long_side", 750))
-    fallback_min_confidence = float(ocr_config.get("fallback_min_confidence", 0.55))
-    if spec.get("is_specialized"):
-        ocr_model_class_ids = {int(x) for x in spec.get("ocr_model_class_ids") or []}
-    else:
-        ocr_model_class_ids = {1}
-    jobs = []
-    for det in detections:
-        if int(det.get("model_class_id", det["class_id"])) not in ocr_model_class_ids:
-            continue
-        crop_result = crop_detection_region(
-            image_bgr,
-            det["polygon"],
-            max_long_side=max_crop_long_side,
-        )
-        if crop_result is None:
-            det["ocr"] = {"manual_type": "unknown", "manual_label": "Unknown Manual", "texts": []}
-            continue
-        crop, orientation = crop_result
-        jobs.append({"det": det, "crop": crop, "orientation": orientation})
+from .detection.ocr_attachment import OCRAttachment, AttachmentDependencies
 
-    if not jobs:
-        return detections
-
-    default_results = score_ocr_variants(
-        [job["crop"] for job in jobs],
-        [int(job["orientation"]["predicted_rotation"]) for job in jobs],
-    )
-    fallback_indexes = [
-        idx
-        for idx, result in enumerate(default_results)
-        if not is_confident_manual_classification(result, fallback_min_confidence)
-    ]
-    if fallback_indexes:
-        fallback_results = score_ocr_variants(
-            [rotate_quarter_turn(jobs[idx]["crop"], 180) for idx in fallback_indexes],
-            [int(jobs[idx]["orientation"]["fallback_rotations"][0]) for idx in fallback_indexes],
-        )
-        for idx, fallback_result in zip(fallback_indexes, fallback_results):
-            fallback_result["fallback_used"] = True
-            default_results[idx] = better_ocr_result(default_results[idx], fallback_result)
-
-    for job, ocr_result in zip(jobs, default_results):
-        ocr_result.setdefault("fallback_used", False)
-        if spec.get("is_specialized"):
-            classification = ocr_result["classification"]
-            accessory_match = match_ocr_text_accessory(ocr_result["texts"], float(ocr_result["mean_text_score"]), spec)
-            job["det"]["ocr"] = {
-                **classification,
-                "best_rotation": ocr_result["rotation"],
-                "orientation": job["orientation"],
-                "fallback_used": ocr_result.get("fallback_used", False),
-                "mean_text_score": ocr_result["mean_text_score"],
-                "texts": ocr_result["texts"][:max_texts],
-                "accessory_match": accessory_match,
-            }
-            job["det"]["manual_type"] = classification["manual_type"]
-            job["det"]["manual_label"] = classification["manual_label"]
-            job["det"].setdefault("yolo_accessory_id", job["det"].get("accessory_id"))
-            if accessory_match.get("accepted") and accessory_match.get("accessory_id"):
-                resolved_id = str(accessory_match["accessory_id"])
-                label = str(accessory_match.get("label") or spec.get("accessory_labels", {}).get(resolved_id) or resolved_id)
-                job["det"]["resolved_accessory_id"] = resolved_id
-                job["det"]["accessory_id"] = resolved_id
-                job["det"]["label"] = label
-                job["det"]["class_name"] = label
-                job["det"]["resolution_source"] = "ocr"
-            else:
-                fallback_id = str(job["det"].get("yolo_accessory_id") or job["det"].get("accessory_id") or "")
-                job["det"]["resolved_accessory_id"] = fallback_id
-                job["det"]["resolution_source"] = f"yolo_fallback_{accessory_match.get('reason') or 'ocr_rejected'}"
-        else:
-            finalize_ocr_detection(job["det"], ocr_result, job["orientation"], max_texts)
-    return detections
+_ocr_attachment = OCRAttachment(AttachmentDependencies(
+    crop=lambda image, polygon, **kwargs: crop_detection_region(image, polygon, **kwargs),
+    score=lambda crops, rotations: score_ocr_variants(crops, rotations),
+    match=lambda texts, score, spec: match_ocr_text_accessory(texts, score, spec),
+    finalize=lambda det, result, orientation, max_texts: finalize_ocr_detection(det, result, orientation, max_texts),
+))
+attach_ocr_results = _ocr_attachment.attach
 
 
 from .detection.postprocessing import filter_detections, dedupe_detections, postprocess_detections

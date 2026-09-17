@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_detection_ocr.py` adds twelve synthetic groups. Nine passed
+against the original root before extraction: keywords/profiles, matching thresholds,
+manual classification, image geometry, scoring failures, crop fallbacks, attachment
+fallback/short-result rules, specialized resolution, and partial projection. Three
+additional groups verify factory/bootstrap failures and instance isolation, real root
+composition with late shared bootstrap replacement, and batch-build failure replay
+order. Fake Paddle factories and prediction substitutes prevent model downloads or
+inference. Existing task/OCR/YOLO-shape assertions remain required; complete HTTP,
+boundary and historical-fingerprint contracts accompany the extraction.
+
 `python scripts/smoke_detection_results.py` covers fourteen synthetic groups.
 Eight original business groups passed against the entry-point implementation before
 extraction. Four additional business groups cover exact overlap/area/absorption

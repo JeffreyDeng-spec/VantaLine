@@ -1,11 +1,16 @@
 # Text inspection v2
 
+The incoming-text medium OCR engine now calls the shared `runtime.paddle` bootstrap
+through its existing late provider. Its model parameters, initialization lock and
+prediction behavior are unchanged. Source manifest v10 includes the separated small
+model runtime and detection OCR producers; existing task snapshots remain immutable.
+
 Legacy incoming-text routes are assembled from `incoming_catalog`,
 `incoming_execution`, `incoming_reviews` and `incoming_retention`, through
 `incoming_api`. Same-capture returns still precede capacity and image processing;
 a losing insert removes only its own source. Quality evaluation remains outside the
 engine catch, while OCR/evidence failures settle as review-required. Clone metadata
-continues to share source files. Source provenance v8 includes the relocated OCR
+continues to share source files. Source provenance v10 includes the relocated OCR
 input orchestration; historical records and model snapshots are not rewritten.
 
 Incoming-text OCR initialization and Beta comparison cache now have explicit service
