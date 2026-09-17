@@ -20445,116 +20445,56 @@ def draw_training_preview(
     }
 
 
-def training_estimate(
-    sample_count: int,
-    include_training: bool = False,
-    include_generation: bool = True,
-    epochs: int = 80,
-    image_size: int = 640,
-    selected_count: int = 1,
-    train_mode: str = "yolo",
-) -> dict[str, Any]:
-    sample_count = max(1, min(20000, int(sample_count)))
-    selected_count = max(1, min(100, int(selected_count or 1)))
-    epochs = max(1, min(500, int(epochs or 1)))
-    image_size = max(320, min(1280, int(image_size or 640)))
-    generate_seconds = 8 + sample_count * (0.12 + selected_count * 0.025 + 0.018) if include_generation else 0
-    train_seconds = 0.0
-    if include_training:
-        size_factor = (image_size / 640.0) ** 2
-        mode_factor = 1.03 if train_mode == "yolo_ocr" else 1.0
-        train_seconds = 75 + epochs * 7 + sample_count * epochs * 0.085 * size_factor * mode_factor
-    generate_minutes = max(0, int(math.ceil(generate_seconds / 60.0)))
-    train_minutes = max(0, int(math.ceil(train_seconds / 60.0)))
-    return {
-        "sample_count": sample_count,
-        "estimated_minutes": max(1, generate_minutes + train_minutes),
-        "estimated_generate_minutes": generate_minutes,
-        "estimated_train_minutes": train_minutes,
-        "estimated_gb": round(sample_count * 1.8 / 1024, 2),
-        "estimate_formula_version": "gpu-cache-autobatch-v3",
-    }
+from .training.estimates import training_estimate
+from .training.annotations import (
+    AnnotationMedia, AnnotationPreview, TrainingOutputLinks, yolo_label_line, yolo_detection_label_line, write_dataset_yaml,
+)
+from .training.sample_plan import SamplePlanner, split_counts, missing_count_for_false_sample
+from .training.dataset_generation import DatasetGenerator, DatasetRecords, DatasetPlanning, DatasetRendering
+
+_training_output_links = TrainingOutputLinks(AnnotationMedia(
+    output_root=lambda: OUTPUT_DIR, public_url=lambda path: public_output_url(path),
+))
+_training_annotation_preview = AnnotationPreview(public_url=lambda path: public_training_output_url(path))
+_training_sample_planner = SamplePlanner(
+    split=lambda count: split_counts(count),
+    missing=lambda count, rng: missing_count_for_false_sample(count, rng),
+    poses=lambda selected, count, policy: preview_pose_family_sequence(selected, count, policy),
+)
+_training_dataset_generator = DatasetGenerator(
+    DatasetRecords(
+        load=lambda: load_config(), save=lambda config: save_config(config),
+        normalize_assets=lambda config, ids: ensure_training_normalized_assets_for_selection(config, ids),
+        select=lambda config, ids: selected_accessories(config, ids), uses_ocr=lambda item: accessory_uses_ocr(item),
+    ),
+    DatasetPlanning(
+        normalize_pose=lambda: normalize_preview_pose_family_policy,
+        background=lambda: selected_background_set_id,
+        build=lambda selected, count, seed, policy: build_training_sample_plan(selected, count, seed, policy),
+    ),
+    DatasetRendering(
+        draw=lambda: draw_training_preview,
+        label=lambda: yolo_detection_label_line,
+        annotation=lambda: write_training_annotation_preview,
+        yaml=lambda path, directory, names: write_dataset_yaml(path, directory, names),
+        max_occlusion=lambda: DETECTION_MAX_OCCLUSION_FRACTION,
+        min_visible_area=lambda: DETECTION_MIN_VISIBLE_AREA_PX,
+    ),
+    output=lambda: output_write_dir_for_owner,
+    update_provider=lambda: update_training_task,
+)
 
 
-def yolo_label_line(class_index: int, polygon: list[list[int]], width: int = 1280, height: int = 900) -> str | None:
-    if not polygon or len(polygon) < 3:
-        return None
-    values = [str(class_index)]
-    for x, y in polygon:
-        nx = min(1.0, max(0.0, float(x) / float(width)))
-        ny = min(1.0, max(0.0, float(y) / float(height)))
-        values.extend([f"{nx:.6f}", f"{ny:.6f}"])
-    return " ".join(values)
 
 
-def yolo_detection_label_line(
-    class_index: int,
-    bbox_xyxy: list[float] | None,
-    width: int = 1280,
-    height: int = 900,
-) -> str | None:
-    """YOLO detection label line: `class cx cy w h` (all normalized 0-1)."""
-    if not bbox_xyxy or len(bbox_xyxy) < 4:
-        return None
-    x1, y1, x2, y2 = (float(v) for v in bbox_xyxy[:4])
-    x1, x2 = sorted((x1, x2))
-    y1, y2 = sorted((y1, y2))
-    bw = (x2 - x1) / float(width)
-    bh = (y2 - y1) / float(height)
-    if bw <= 0 or bh <= 0:
-        return None
-    cx = ((x1 + x2) / 2.0) / float(width)
-    cy = ((y1 + y2) / 2.0) / float(height)
-    cx = min(1.0, max(0.0, cx))
-    cy = min(1.0, max(0.0, cy))
-    bw = min(1.0, max(0.0, bw))
-    bh = min(1.0, max(0.0, bh))
-    return f"{class_index} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}"
 
 
-def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
-    safe_names = [
-        re.sub(r"[^a-zA-Z0-9_]+", "_", str(name or f"class_{idx}")).strip("_") or f"class_{idx}"
-        for idx, name in enumerate(names)
-    ]
-    body = [
-        f"path: {dataset_dir.as_posix()}",
-        "train: images/train",
-        "val: images/val",
-        "test: images/test",
-        "names:",
-    ]
-    body.extend([f"  {idx}: {name}" for idx, name in enumerate(safe_names)])
-    path.write_text("\n".join(body) + "\n", encoding="utf-8")
 
 
-def split_counts(total: int) -> dict[str, int]:
-    total = max(1, int(total))
-    if total < 3:
-        return {"train": total, "val": 0, "test": 0}
-    val = max(1, int(round(total * 0.1)))
-    test = max(1, int(round(total * 0.1)))
-    train = max(1, total - val - test)
-    while train + val + test > total:
-        if train >= val and train >= test and train > 1:
-            train -= 1
-        elif val >= test and val > 1:
-            val -= 1
-        else:
-            test -= 1
-    while train + val + test < total:
-        train += 1
-    return {"train": train, "val": val, "test": test}
 
 
-def missing_count_for_false_sample(accessory_count: int, rng: np.random.Generator) -> int:
-    accessory_count = max(1, int(accessory_count))
-    if accessory_count == 1 or rng.random() < 0.95:
-        return 1
-    candidates = list(range(2, accessory_count + 1))
-    weights = np.array([0.5 ** (value - 2) for value in candidates], dtype=np.float64)
-    weights = weights / weights.sum()
-    return int(rng.choice(candidates, p=weights))
+
+
 
 
 def build_training_sample_plan(
@@ -20563,269 +20503,19 @@ def build_training_sample_plan(
     seed: int,
     pose_policy: str,
 ) -> list[dict[str, Any]]:
-    rng = np.random.default_rng(seed)
-    selected_ids = [str(item["id"]) for item in selected]
-    counts = split_counts(sample_count)
-    plan: list[dict[str, Any]] = []
-    pose_sequence = preview_pose_family_sequence(selected, sample_count, pose_policy)
-    true_target = sample_count // 2
-    true_counts = {split: count // 2 for split, count in counts.items()}
-    remaining_true = true_target - sum(true_counts.values())
-    for split in sorted(counts, key=lambda key: counts[key], reverse=True):
-        if remaining_true <= 0:
-            break
-        capacity = counts[split] - true_counts[split]
-        add = min(capacity, remaining_true)
-        true_counts[split] += add
-        remaining_true -= add
-    sample_index = 0
-    for split, count in counts.items():
-        true_count = true_counts[split]
-        false_count = count - true_count
-        split_items: list[dict[str, Any]] = []
-        for _ in range(true_count):
-            split_items.append({"is_true": True, "missing_ids": [], "extra_ids": []})
-        false_items: list[dict[str, Any]] = []
-        for _ in range(false_count):
-            missing_count = missing_count_for_false_sample(len(selected_ids), rng)
-            missing_ids = [str(item) for item in rng.choice(selected_ids, size=missing_count, replace=False).tolist()]
-            false_items.append({"is_true": False, "missing_ids": missing_ids, "extra_ids": []})
-        split_items.extend(false_items)
-        rng.shuffle(split_items)
-        for item in split_items:
-            present_ids = [item_id for item_id in selected_ids if item_id not in set(item["missing_ids"])]
-            present_ids.extend(item.get("extra_ids") or [])
-            plan.append(
-                {
-                    "index": sample_index,
-                    "split": split,
-                    "is_true": bool(item["is_true"]),
-                    "required_accessory_ids": selected_ids,
-                    "present_accessory_ids": present_ids,
-                    "missing_accessory_ids": item["missing_ids"],
-                    "extra_accessory_ids": item.get("extra_ids") or [],
-                    "missing_count": len(item["missing_ids"]),
-                    "extra_count": len(item.get("extra_ids") or []),
-                    "false_reason": (
-                        "extra_one_accessory"
-                        if item.get("extra_ids")
-                        else ("missing_accessory" if item.get("missing_ids") else None)
-                    ),
-                    "pose_family_policy": pose_sequence[sample_index] if sample_index < len(pose_sequence) else None,
-                }
-            )
-            sample_index += 1
-    missing_one_indexes = [
-        idx
-        for idx, item in enumerate(plan)
-        if not item.get("is_true") and len(item.get("missing_accessory_ids") or []) == 1 and not item.get("extra_accessory_ids")
-    ]
-    extra_target = int(math.floor(len(missing_one_indexes) * 0.10 + 0.5))
-    if extra_target > 0:
-        for idx in rng.choice(missing_one_indexes, size=extra_target, replace=False).tolist():
-            missing_id = str(plan[idx]["missing_accessory_ids"][0])
-            present_ids = list(plan[idx]["required_accessory_ids"])
-            present_ids.append(missing_id)
-            plan[idx]["present_accessory_ids"] = present_ids
-            plan[idx]["missing_accessory_ids"] = []
-            plan[idx]["extra_accessory_ids"] = [missing_id]
-            plan[idx]["missing_count"] = 0
-            plan[idx]["extra_count"] = 1
-            plan[idx]["false_reason"] = "extra_one_accessory"
-    return plan
+    return _training_sample_planner.build_training_sample_plan(selected, sample_count, seed, pose_policy)
 
 
 def public_training_output_url(path: Path) -> str:
-    if str(path).startswith(str(OUTPUT_DIR)):
-        return public_output_url(path)
-    return ""
+    return _training_output_links.public_training_output_url(path)
 
 
 def write_training_annotation_preview(image_path: Path, labels: list[dict[str, Any]], out_path: Path) -> str:
-    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    if image is None:
-        return ""
-    palette = [(0, 210, 60), (45, 125, 255), (250, 170, 35), (210, 65, 210), (60, 220, 220)]
-    for idx, label in enumerate(labels):
-        if label.get("detection_dropped"):
-            continue
-        bbox = label.get("amodal_bbox_xyxy")
-        if not bbox or len(bbox) < 4:
-            continue
-        x1, y1, x2, y2 = (int(round(float(v))) for v in bbox[:4])
-        color = palette[idx % len(palette)]
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 3)
-        x = x1
-        y = max(24, y1 - 8)
-        cv2.putText(image, str(label.get("name") or label.get("id") or "part"), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(out_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-    return public_training_output_url(out_path)
+    return _training_annotation_preview.write_training_annotation_preview(image_path, labels, out_path)
 
 
 def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
-    config = load_config()
-    selected_ids = list(task.get("selected_accessory_ids") or [])
-    try:
-        assets_changed = ensure_training_normalized_assets_for_selection(config, selected_ids)
-    except HTTPException:
-        save_config(config)
-        raise
-    if assets_changed:
-        save_config(config)
-    selected = selected_accessories(config, selected_ids)
-    sample_count = max(1, min(20000, int(task.get("sample_count") or 100)))
-    pose_policy = normalize_preview_pose_family_policy(task.get("preview_pose_family_policy") or "auto")
-    background_set_id = selected_background_set_id(task.get("background_set_id"))
-    seed_base = int(task.get("seed") or time.time() * 1000)
-    sample_plan = build_training_sample_plan(selected, sample_count, seed_base, pose_policy)
-    dataset_dir = output_write_dir_for_owner("training_datasets", str(task.get("owner_user_id") or "")) / str(task["job_id"])
-    class_names = [str(item.get("name") or item.get("id") or f"class_{idx}") for idx, item in enumerate(selected)]
-    class_index = {str(item.get("id")): idx for idx, item in enumerate(selected)}
-    for split in ("train", "val", "test"):
-        (dataset_dir / "images" / split).mkdir(parents=True, exist_ok=True)
-        (dataset_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
-    preview_dir = dataset_dir / "previews"
-    samples = []
-    for plan_item in sample_plan:
-        idx = int(plan_item["index"])
-        split = str(plan_item["split"])
-        selected_by_id = {str(item.get("id")): item for item in selected}
-        render_selected = [selected_by_id[item_id] for item_id in plan_item["present_accessory_ids"] if item_id in selected_by_id]
-        image_path = dataset_dir / "images" / split / f"sample_{idx + 1:06d}.png"
-        rendered = draw_training_preview(
-            render_selected,
-            image_path,
-            seed=seed_base + idx,
-            pose_family_policy=plan_item.get("pose_family_policy"),
-            split=split,
-            background_set_id=background_set_id,
-        )
-        label_path = dataset_dir / "labels" / split / f"sample_{idx + 1:06d}.txt"
-        lines = []
-        for label in rendered.get("labels", []):
-            # Detection dataset: one amodal (full, occlusion-complete) bbox per
-            # part. Parts that are essentially fully hidden are skipped.
-            if label.get("detection_dropped"):
-                continue
-            line = yolo_detection_label_line(
-                class_index.get(str(label.get("id") or ""), 0),
-                label.get("amodal_bbox_xyxy"),
-            )
-            if line:
-                lines.append(line)
-        label_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-        annotated_path = preview_dir / split / f"sample_{idx + 1:06d}_boxed.jpg"
-        annotated_url = write_training_annotation_preview(image_path, rendered.get("labels", []), annotated_path)
-        rendered_labels = rendered.get("labels", [])
-        document_assets = [
-            {
-                "id": label.get("id"),
-                "name": label.get("name"),
-                "document_asset_path": label.get("document_asset_path"),
-                "document_asset_index": label.get("document_asset_index"),
-                "document_asset_count": label.get("document_asset_count"),
-                "document_asset_selection_policy": label.get("document_asset_selection_policy"),
-                "document_asset_source": label.get("document_asset_source"),
-                "document_asset_method": label.get("document_asset_method"),
-            }
-            for label in rendered_labels
-            if label.get("material_type") == "text"
-        ]
-        samples.append(
-            {
-                "image": str(image_path),
-                "labels": str(label_path),
-                "url": rendered.get("url"),
-                "annotated_url": annotated_url,
-                "split": split,
-                "is_true": plan_item["is_true"],
-                "pass_fail_rule": "exact_count_match_required",
-                "required_accessory_ids": plan_item["required_accessory_ids"],
-                "present_accessory_ids": plan_item["present_accessory_ids"],
-                "missing_accessory_ids": plan_item["missing_accessory_ids"],
-                "extra_accessory_ids": plan_item.get("extra_accessory_ids") or [],
-                "missing_count": plan_item["missing_count"],
-                "extra_count": plan_item.get("extra_count") or 0,
-                "false_reason": plan_item.get("false_reason"),
-                "background_id": (rendered.get("background") or {}).get("background_id"),
-                "background_set_id": (rendered.get("background") or {}).get("background_set_id") or background_set_id,
-                "background_source": (rendered.get("background") or {}).get("background_source"),
-                "background": rendered.get("background") or {},
-                "document_assets": document_assets,
-            }
-        )
-        if idx == 0 or (idx + 1) % max(1, sample_count // 40) == 0 or idx + 1 == sample_count:
-            update_training_task(
-                str(task["job_id"]),
-                status="running",
-                progress=min(72, 8 + int(((idx + 1) / sample_count) * 64)),
-                completed_samples=idx + 1,
-                note=f"正在生成训练样本：{idx + 1}/{sample_count}",
-            )
-    yaml_path = dataset_dir / "dataset.yaml"
-    write_dataset_yaml(yaml_path, dataset_dir, class_names)
-    manifest = {
-        "id": task["job_id"],
-        "task_id": task["job_id"],
-        "pipeline_task_id": str(task.get("pipeline_task_id") or ""),
-        "pipeline_task_name": str(task.get("pipeline_task_name") or ""),
-        "created_at": int(time.time()),
-        "mode": task.get("mode"),
-        "model_variant": task.get("mode") or "yolo",
-        "background_set_id": background_set_id,
-        "sample_count": sample_count,
-        "selected_accessory_ids": [item.get("id") for item in selected],
-        "required_accessory_counts": {str(item.get("id")): 1 for item in selected},
-        "accessory_class_map": {str(idx): str(item.get("id")) for idx, item in enumerate(selected)},
-        "class_accessory_map": {str(item.get("id")): idx for idx, item in enumerate(selected)},
-        "ocr_accessory_ids": [str(item.get("id")) for item in selected if accessory_uses_ocr(item)],
-        "class_names": class_names,
-        "dataset_yaml": str(yaml_path),
-        "pass_fail_rule": "exact_count_match_required",
-        "split_counts": Counter(sample["split"] for sample in samples),
-        "true_count": sum(1 for sample in samples if sample.get("is_true")),
-        "false_count": sum(1 for sample in samples if not sample.get("is_true")),
-        "false_missing_count_distribution": Counter(str(sample.get("missing_count") or 0) for sample in samples if not sample.get("is_true")),
-        "false_extra_count_distribution": Counter(str(sample.get("extra_count") or 0) for sample in samples if not sample.get("is_true")),
-        "false_reason_distribution": Counter(str(sample.get("false_reason") or "none") for sample in samples if not sample.get("is_true")),
-        "background_set_id_distribution": Counter(str(sample.get("background_set_id") or "unknown") for sample in samples),
-        "background_id_distribution": Counter(str(sample.get("background_id") or "unknown") for sample in samples),
-        "background_source_distribution": Counter(str(sample.get("background_source") or "unknown") for sample in samples),
-        "document_asset_path_distribution": Counter(
-            str(asset.get("document_asset_path") or "none")
-            for sample in samples
-            for asset in sample.get("document_assets", [])
-        ),
-        "document_asset_index_distribution": Counter(
-            str(asset.get("document_asset_index"))
-            for sample in samples
-            for asset in sample.get("document_assets", [])
-            if asset.get("document_asset_index") is not None
-        ),
-        "sample_generation_policy": {
-            "true_false_ratio": "1:1 per split when possible",
-            "split_ratio": "train/val/test ~= 80/10/10",
-            "false_class_missing_distribution": "missing_one remains the dominant false class; 10% of missing-one cases are replaced by extra_one_accessory",
-            "false_class_extra_distribution": "extra_one_accessory ~= 10% of the missing-one false bucket",
-            "pass_fail_rule": "exact_count_match_required; extra objects are false; true samples contain exact required counts for every task class",
-            "background_policy": "random same-environment background library item per sample with crop/shift, brightness, contrast, mild blur/noise, and texture variation; glare ellipse disabled",
-            "background_split_policy": "train/val/test use separate background pools when at least two same-environment assets are available; otherwise per-sample augmentations prevent exact duplicates",
-            "training_images_are_clean": True,
-            "annotated_previews": True,
-            "model_task": "detection",
-            "label_shape": "object_bounding_box",
-            "occlusion_policy": f"detection bbox is amodal: each part keeps its full bounding box even when another part is pasted on top; a part is dropped only when >{int(DETECTION_MAX_OCCLUSION_FRACTION * 100)}% hidden or its visible area < {DETECTION_MIN_VISIBLE_AREA_PX}px",
-            "rotation_policy": "objects use continuous random planar rotation sampled uniformly from -180 to 180 degrees; not limited to cardinal angles",
-            "format_reference": "Ultralytics YOLO detection dataset.yaml with train/val/test and per-image `class cx cy w h` txt labels",
-        },
-        "samples": samples,
-        "owner_user_id": str(task.get("owner_user_id") or ""),
-        "owner_username": str(task.get("owner_username") or ""),
-    }
-    manifest_path = dataset_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return {"dataset_dir": str(dataset_dir), "dataset_yaml": str(yaml_path), "manifest_path": str(manifest_path)}
+    return _training_dataset_generator.generate_training_dataset(task)
 
 
 _training_executor_settings = ExecutorSettings(
