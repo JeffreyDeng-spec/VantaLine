@@ -1,5 +1,11 @@
 # Production runbook
 
+Comparison extraction preserves attempts, media, uncertain-call evidence and the
+existing review/audit ordering. A failed final save can leave a persisted attempt;
+retry is not a recovery action. Use the usual complete-release restart and rollback
+with matching manifest v6, retaining historical snapshots. This batch does not
+activate an independent label worker or modify deployment topology.
+
 Standard-route extraction keeps the current jobs, write locks and complete-release
 restart procedure. Partial imports and edit evidence retain existing behavior; a
 repository-factory failure after media creation can leave that file. No cleanup or

@@ -1,5 +1,13 @@
 # Architecture
 
+Text comparison submission and human inspection review now live in
+`text_inspection.comparison_submission` and `inspection_reviews`; `inspection_api`
+registers their six routes, including the retained manual read-only responses.
+Submission receives record, media, image, model, policy and diagnostic capabilities.
+Prepared comparisons still capture the current callbacks and admission flag on each
+submission through a small root composition function. Ordinary comparison gates
+remain dynamic at their original points. No worker or transaction topology changes.
+
 Seven standard HTTP routes now live in `text_inspection.standard_api`, in the same
 order with the same request types and synchronous/asynchronous boundaries. Import,
 retrieval and human edits use `standard_imports`, `standard_library` and
@@ -29,7 +37,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v5 includes both
+policy or callback caching is introduced. Source manifest v6 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -111,7 +119,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v5 for new tasks.
+`accessories/preparation.py`, included in source manifest v6 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

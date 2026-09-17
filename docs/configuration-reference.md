@@ -1,17 +1,24 @@
 # Configuration reference
 
+Comparison extraction keeps provider timeouts, external-media/automatic-MATCH
+admission and the business prompt version unchanged. Prompt-source manifest v6
+adds `text_inspection/comparison_submission.py`, which now assembles model input,
+and `text_inspection_v2.py`, the actual strict-prompt definition previously absent
+from the list. New fingerprints reflect both files; stored snapshots are unchanged.
+Prepared jobs retain per-submission captured callbacks rather than later replacements.
+
 Standard-route extraction introduces no configuration. Permission, account gates,
 100 MiB import read limit, legacy PDF read-only responses, expected revisions and
 preparation enablement retain their existing behavior. Identity and job providers
 remain late-bound. Model-input producers stay in their existing modules and source
-manifest v5 continues; stored task bindings and historical fingerprints are retained.
+manifest v6 continues; stored task bindings and historical fingerprints are retained.
 Provider getters resolve at the original call expressions, without eager caching
 or callable validation. This includes exception-detail conversion and PostgreSQL
 confirmation before projection; no new retry or cleanup policy is introduced.
 
 Revision/projection/diagnostic extraction introduces no setting. Diagnostic limits,
 logger replacement, public fields and expected-revision errors retain their values.
-Source manifest remains v5: these helpers do not move model-input producers.
+Source manifest remains v6: these helpers do not move model-input producers.
 New fingerprints change normally with listed source edits; old snapshots remain.
 Diagnostic hash callback lookup and missing-callable errors retain their evaluation
 order. An absent failure message does not obtain a hash callback.
@@ -21,7 +28,7 @@ maximum side and JPEG quality retain their values and are obtained through expli
 getters at the original expressions. Passthrough never reads JPEG quality; resize
 reads the maximum once for comparison and twice for thumbnail dimensions. Input
 byte/pixel limits, 1.5x PDF rendering, image fast paths and error
-messages remain. New source fingerprints use manifest v5 with the migrated media
+messages remain. New source fingerprints use manifest v6 with the migrated media
 and image sources; existing model versions, secret references and snapshots remain.
 
 Text record callback factories add no configuration. Each operation obtains only
@@ -37,7 +44,7 @@ Prepared comparison extraction adds no settings. Qwen resolution still obtains
 document settings, attaches OCR settings to that same dictionary, then validates
 both providers. Per-submission capabilities retain the submitted callbacks, model
 admission flag and usage recorder; local MATCH commissioning reads account lists
-at execution time. The prompt source manifest uses v5, but edits to listed
+at execution time. The prompt source manifest uses v6, but edits to listed
 source files naturally change new fingerprints. Stored snapshots are not rewritten.
 
 Preparation dependency extraction adds no settings. The existing preparation
@@ -86,7 +93,7 @@ with the item alone, then saves before AI-task upsert; non-applied AI still save
 the selected route. The retired `locate` route retains its existing 410 response.
 
 Source preparation adds no configuration or prompt-content change. New task source
-fingerprints use manifest v5, which includes the actual `accessories/preparation.py`
+fingerprints use manifest v6, which includes the actual `accessories/preparation.py`
 producer. Historical source fingerprints and model/secret references remain unchanged.
 Existing crop limits, source ordering, default sizes and profile call flags remain.
 

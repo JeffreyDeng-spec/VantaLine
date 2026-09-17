@@ -84,6 +84,15 @@ def capture():
                     assert getter() is replacement
             for getter in getters:
                 assert getter() == original
+        assert server._comparison_submission.records is server._inspection_reviews.records
+        assert server._comparison_submission.access is server._inspection_reviews.access is server._inspection_access
+        for name in ("compare_text_inspection_label", "get_text_inspection_v2_evidence",
+                     "create_text_manual_session", "inspect_text_manual_page",
+                     "complete_text_manual_session", "review_text_inspection_v2"):
+            endpoint = getattr(server, name)
+            assert endpoint is getattr(server._inspection_routes, name)
+            assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
+
         for name in ("import_text_inspection_standard", "list_text_inspection_standards",
                      "get_text_inspection_standard", "get_text_inspection_asset_content",
                      "add_text_inspection_standard_asset", "patch_text_inspection_asset",

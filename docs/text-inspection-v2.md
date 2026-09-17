@@ -1,5 +1,14 @@
 # Text inspection v2
 
+The comparison/review HTTP layer is separate from submission and review services.
+Submission still prepares inputs before duplicate lookup, writes the source before
+the insert-only attempt, and records the provider attempt before calling the model.
+Unknown outcomes do not replay. Input construction remains outside the provider try
+block; final save and logging also remain outside it. Annotation failure retains
+uncertain settlement even if a provider already replied. Human review still saves
+before appending its audit; audit failure does not undo the saved review. Evidence
+retains account/hash/20 MiB checks, and the three old manual routes remain read-only.
+
 Standard import, library reads and human revision edits have separate business
 services and thin HTTP adapters. Import still checks PDF rejection before duplicate
 lookup; only legacy DOC extraction enters a thread pool. Its source file precedes
