@@ -34,7 +34,7 @@
   "impact_rules": [
     {
       "name": "Training and pipeline services",
-      "paths": ["local_inspection_service/training/**", "local_inspection_service/pipeline/**", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_pipeline_stores.py"],
+      "paths": ["local_inspection_service/training/**", "local_inspection_service/runtime/training_tasks.py", "local_inspection_service/pipeline/**", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_training_task_lifecycle.py", "scripts/smoke_pipeline_stores.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
@@ -82,7 +82,7 @@
     },
     {
       "name": "PostgreSQL and migrations",
-      "paths": ["local_inspection_service/storage/**", "local_inspection_service/training/task_lookup.py", "local_inspection_service/training/record_store.py", "local_inspection_service/pipeline/task_store.py", "local_inspection_service/pipeline/state_store.py", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_pipeline_stores.py", "local_inspection_service/detection/task_store.py", "scripts/smoke_detection_task_store.py", "local_inspection_service/text_inspection/record_store.py", "local_inspection_service/text_inspection/incoming_store.py", "local_inspection_service/runtime/json_records.py", "scripts/smoke_incoming_text_store.py", "scripts/smoke_text_record_store.py", "local_inspection_service/runtime/connections.py", "local_inspection_service/analytics/analysis_repository.py", "local_inspection_service/analytics/analysis_publication.py", "local_inspection_service/auth/repository.py", "local_inspection_service/accessories/repository.py", "local_inspection_service/accessories/candidate_repository.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
+      "paths": ["local_inspection_service/storage/**", "local_inspection_service/training/task_lookup.py", "local_inspection_service/training/record_store.py", "local_inspection_service/training/task_lifecycle.py", "local_inspection_service/pipeline/task_store.py", "local_inspection_service/pipeline/state_store.py", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_training_task_lifecycle.py", "scripts/smoke_pipeline_stores.py", "local_inspection_service/detection/task_store.py", "scripts/smoke_detection_task_store.py", "local_inspection_service/text_inspection/record_store.py", "local_inspection_service/text_inspection/incoming_store.py", "local_inspection_service/runtime/json_records.py", "scripts/smoke_incoming_text_store.py", "scripts/smoke_text_record_store.py", "local_inspection_service/runtime/connections.py", "local_inspection_service/analytics/analysis_repository.py", "local_inspection_service/analytics/analysis_publication.py", "local_inspection_service/auth/repository.py", "local_inspection_service/accessories/repository.py", "local_inspection_service/accessories/candidate_repository.py", "local_inspection_service/migrations/**", "scripts/verify_migration_safety.py", "local_inspection_service/scripts/smoke_postgres*"],
       "required_docs": ["docs/production-runbook.md", "docs/postgresql-runtime.md"]
     },
     {

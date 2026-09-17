@@ -1793,13 +1793,15 @@ _rembg_session: Any | None = None
 _rembg_lock = threading.RLock()
 _image_worker_lock = threading.Lock()
 _candidate_store_lock = threading.RLock()
-_training_task_lock = threading.RLock()
+from .runtime.training_tasks import TrainingTaskRuntime
+_training_task_runtime = TrainingTaskRuntime()
+_training_task_lock = _training_task_runtime.lock
 _path_migration_lock = threading.RLock()
 _path_migration_done = False
 _image_worker_thread: threading.Thread | None = None
 _image_worker_processes: dict[str, subprocess.Popen] = {}
-_training_task_threads: dict[str, threading.Thread] = {}
-_training_task_delete_tombstones: dict[str, dict[str, Any]] = {}
+_training_task_threads = _training_task_runtime.threads
+_training_task_delete_tombstones = _training_task_runtime.tombstones
 _auto_optimize_lock = threading.RLock()
 _auto_optimize_label_threads: dict[str, threading.Thread] = {}
 _auto_optimize_shadow_threads: dict[str, threading.Thread] = {}
@@ -19058,62 +19060,38 @@ def find_training_task(job_id: str) -> dict[str, Any] | None:
     return _training_records.find_training_task(job_id)
 
 
-def training_task_uses_worker(task: dict[str, Any]) -> bool:
-    executor = str(task.get("training_executor") or "").strip().lower()
-    if executor == "runpod":
-        return False
-    if executor == "worker":
-        return True
-    remote_job_id = str(task.get("remote_training_job_id") or "").strip()
-    return remote_job_id.startswith("worker_") or bool(task.get("worker_transfer_required"))
+from .training.task_lifecycle import (
+    training_task_uses_worker, TrainingTaskLifecycle, TrainingTaskRecords, TrainingTaskWrites,
+)
+from .runtime.training_tasks import TrainingTaskState
+from .training.task_views import TrainingTaskViews, TrainingViewAccess
+
+_training_lifecycle = TrainingTaskLifecycle(
+    state=TrainingTaskState(guard=lambda: _training_task_lock, threads=lambda: _training_task_threads,
+                            tombstones=lambda: _training_task_delete_tombstones),
+    records=TrainingTaskRecords(path=lambda job_id: training_task_path(job_id), load=lambda path: load_training_task(path),
+        save=lambda task: save_training_task(task), find=lambda job_id: find_training_task(job_id)),
+    writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(),
+        row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
+    require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
+)
+_training_views = TrainingTaskViews(
+    records=lambda: load_training_task_records(), refresh=lambda task: refresh_interrupted_local_training_task(task),
+    access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized,
+        visible=lambda record, user, target: record_visible_to_user(record, user, target)),
+)
 
 
 def local_training_task_is_active(task: dict[str, Any]) -> bool:
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    if not job_id:
-        return False
-    thread = _training_task_threads.get(job_id)
-    if thread and thread.is_alive():
-        return True
-    pid = task.get("training_pid")
-    if not pid:
-        return False
-    try:
-        return Path(f"/proc/{int(pid)}").exists()
-    except (TypeError, ValueError):
-        return False
+    return _training_lifecycle.local_training_task_is_active(task)
 
 
 def refresh_interrupted_local_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    if training_task_uses_worker(task):
-        return task
-    if task.get("status") not in {"queued", "running"}:
-        return task
-    if local_training_task_is_active(task):
-        return task
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    if not job_id:
-        return task
-    return update_training_task(
-        job_id,
-        status="stopped",
-        progress=100,
-        stopped_at=int(time.time()),
-        completed_at=int(time.time()),
-        error="Local training worker is no longer active. Delete and retry the task.",
-        note="本地训练任务已中断；请删除后重试。",
-    )
+    return _training_lifecycle.refresh_interrupted_local_training_task(task)
 
 
 def public_refreshed_training_task(task: dict[str, Any], *, allow_remote_refresh: bool = False) -> dict[str, Any]:
-    if training_task_uses_worker(task):
-        public = public_training_task(task)
-        public["executor_retired"] = True
-        public["remote_refresh_retired"] = True
-        public.setdefault("note", "历史 Windows-worker 训练记录仅保留只读展示；生产训练执行已切换为 RunPod。")
-        return public
-    task = refresh_interrupted_local_training_task(task)
-    return public_training_task(task)
+    return _training_views.public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh)
 
 
 def list_training_tasks(
@@ -19122,40 +19100,11 @@ def list_training_tasks(
     *,
     allow_remote_refresh: bool = False,
 ) -> list[dict[str, Any]]:
-    tasks: list[dict[str, Any]] = []
-    for task in load_training_task_records():
-        if user and not record_visible_to_user(task, user, target_user_id):
-            continue
-        tasks.append(public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh))
-    return tasks
+    return _training_views.list_training_tasks(user, target_user_id, allow_remote_refresh=allow_remote_refresh)
 
 
 def public_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    copy = public_path_sanitized(enrich_record_audit_fields(task))
-    command = copy.get("training_command") if isinstance(copy.get("training_command"), list) else []
-    if not copy.get("epochs"):
-        epoch_arg = next((str(item).split("=", 1)[1] for item in command if str(item).startswith("epochs=")), None)
-        if epoch_arg:
-            try:
-                copy["epochs"] = int(epoch_arg)
-            except ValueError:
-                pass
-    if not copy.get("image_size"):
-        image_size_arg = next((str(item).split("=", 1)[1] for item in command if str(item).startswith("imgsz=")), None)
-        if image_size_arg:
-            try:
-                copy["image_size"] = int(image_size_arg)
-            except ValueError:
-                pass
-    copy.setdefault("candidate_id", copy.get("job_id"))
-    copy.setdefault("candidate_name", copy.get("label") or "训练任务")
-    copy.setdefault("task_id", copy.get("job_id"))
-    copy.setdefault("progress", 0)
-    copy.setdefault("total_epochs", copy.get("epochs") or 0)
-    copy.setdefault("current_epoch", copy.get("epochs") if copy.get("status") == "completed" and copy.get("action") == "train_model" else 0)
-    copy.setdefault("label", copy.get("label") or "训练任务")
-    copy["queue_kind"] = "training"
-    return copy
+    return _training_views.public_training_task(task)
 
 
 def parse_yolo_epoch_progress(log_path: Path, total_epochs: int) -> tuple[int, int] | None:
@@ -19182,93 +19131,15 @@ def parse_yolo_epoch_progress(log_path: Path, total_epochs: int) -> tuple[int, i
 
 
 def update_training_task(job_id: str, **updates: Any) -> dict[str, Any]:
-    path = training_task_path(job_id)
-    with _training_task_lock:
-        tombstone = _training_task_delete_tombstones.get(str(job_id or "").strip())
-        if tombstone:
-            existing = load_training_task(path)
-            return dict(existing or tombstone)
-        task = load_training_task(path) or {"job_id": job_id, "created_at": int(time.time())}
-        task.update(updates)
-        save_training_task(task)
-        return task
+    return _training_lifecycle.update_training_task(job_id, **updates)
 
 
 def stop_training_task_process(task: dict[str, Any], *, note: str) -> dict[str, Any]:
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    if not job_id:
-        return task
-    pid = task.get("training_pid")
-    if task.get("status") == "running" and pid:
-        try:
-            os.kill(int(pid), signal.SIGTERM)
-        except (OSError, ValueError):
-            pass
-    if task.get("status") in {"queued", "running"}:
-        return update_training_task(
-            job_id,
-            status="stopped",
-            progress=100,
-            stopped_at=int(time.time()),
-            completed_at=int(time.time()),
-            note=note,
-        )
-    return task
+    return _training_lifecycle.stop_training_task_process(task, note=note)
 
 
 def delete_training_task_record(job_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
-    clean_job_id = str(job_id or "").strip()
-    if not clean_job_id:
-        return None
-    task = find_training_task(clean_job_id)
-    if not task:
-        if missing_ok:
-            return None
-        raise HTTPException(status_code=404, detail="Training task not found")
-    canonical_job_id = str(task.get("job_id") or task.get("task_id") or clean_job_id).strip() or clean_job_id
-    path = training_task_path(canonical_job_id)
-    require_record_access(task, user, write=True)
-    preserve_stopped_record = (
-        not training_task_uses_worker(task)
-        and local_training_task_is_active(task)
-        and task.get("status") in {"queued", "running"}
-    )
-    stopped = stop_training_task_process(task, note="关联流水线任务已删除，训练任务已停止。")
-    with _training_task_lock:
-        tombstone = dict(stopped or task)
-        tombstone.update(
-            {
-                "job_id": canonical_job_id,
-                "task_id": tombstone.get("task_id") or canonical_job_id,
-                "status": "stopped",
-                "progress": 100,
-                "stopped_at": int(time.time()),
-                "completed_at": int(time.time()),
-                "cancelled_at": int(time.time()),
-                "deleted_at": int(time.time()),
-                "delete_tombstone": True,
-                "note": "关联流水线任务已删除，训练任务已停止。",
-            }
-        )
-        _training_task_delete_tombstones[clean_job_id] = tombstone
-        _training_task_delete_tombstones[canonical_job_id] = tombstone
-        if preserve_stopped_record:
-            save_training_task(tombstone)
-        else:
-            repository = runtime_postgres_repository_or_none()
-            if repository is not None:
-                row = training_task_row(tombstone, fallback_id=canonical_job_id)
-                if row:
-                    store_read_cache_invalidate("training_task_pairs")
-                    repository.delete_by_primary_key("training_tasks", {"id": row["id"]})
-            else:
-                try:
-                    path.unlink()
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    raise HTTPException(status_code=500, detail=f"Failed to delete task: {exc}") from exc
-    return stopped
+    return _training_lifecycle.delete_training_task_record(job_id, user, missing_ok=missing_ok)
 
 
 def apply_codex_image_job_action(record: dict[str, Any], job: dict[str, Any], lookup_id: str, action: str) -> dict[str, Any]:

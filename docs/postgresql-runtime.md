@@ -1,5 +1,13 @@
 # PostgreSQL runtime operations
 
+Training deletion obtains its repository inside the existing shared training guard,
+after authorization, stop processing and in-memory deletion markers. Valid SQL rows
+invalidate the training lookup cache before primary-key deletion. Active local tasks
+keep a persisted stopped marker instead. Late updates with a marker ignore new values
+and return a copy of the current stored record when truthy, otherwise the marker.
+The extracted delete source gate verifies its actual entry and authorized root forward;
+SQL, transaction boundaries and advisory-lock behavior remain unchanged.
+
 Pipeline task/state stores retain five and three actual repository selections,
 respectively. Single task load uses the primary key; bulk save replaces valid rows;
 single save upserts only after freezing and encoding. State partial-key saves encode
@@ -34,7 +42,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v17 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v18 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

@@ -1,5 +1,18 @@
 # Testing
 
+`python scripts/smoke_training_task_lifecycle.py --postgres` covers twenty-one groups:
+eleven behavior groups were established on the original nine functions, including
+real PostgreSQL deletion and late-completion rejection. Nineteen expanded business
+groups also pass against original functions; two new-interface groups verify
+independent services/runtime aliases and getter failures. First-error matrices
+retain call counts, original exceptions, intermediate records and marker residues.
+Three traces preserve sanitizer capture before enrichment. Process signals and /proc checks use
+substitutes. Contracts cover authorization before activity/stop, single SIGTERM,
+exception boundaries, stop and deletion timestamps, same-object marker aliases,
+cross-thread lock probes during all four marker timestamps and both alias writes,
+failed-delete residue, existing-record precedence during late updates, worker-only
+read-only views, projection defaults and visibility before refresh side effects.
+
 `python scripts/smoke_pipeline_stores.py --postgres` covers twenty-one groups. Twelve
 behavior groups first passed against the original fourteen functions, including
 real partial-key updates and rollback after the second PostgreSQL write fails.
