@@ -1,5 +1,20 @@
 # Testing
 
+`python scripts/smoke_training_artifacts.py` covers 27 offline groups. Nineteen passed
+on the actual original functions before extraction; 24 expanded business groups also
+pass on saved originals. Independent composition and new getter failure groups add three.
+Twelve callback capture traces cover path/owner resolution and both export writes.
+Windows skips the symlink case only when creation permission is unavailable.
+Synthetic ZIPs and plain bytes verify
+strict hashing, sorting and repeated stat calls, top-level exclusions, real RGB JPEG conversion,
+same-stem overwrites, late policy replacement, original-image and partial-JPEG fallback,
+cleanup boundaries, token hashes/URL encoding, ZIP member selection and duplicate names,
+optional SHA, path/owner rules and ordered partial-import failures. Acquired bundles are cleaned
+exactly once even when output/name/copy/hash preparation fails; metadata and result writes
+must not retry after an error. All recursive removals
+are constrained to resolved temporary test paths. Tests explicitly select the native Pillow
+decoder to avoid Ultralytics' optional HEIF auto-install hook; no checkpoint is loaded.
+
 `python scripts/smoke_training_runpod_flow.py` covers twenty-four offline groups. Sixteen
 passed against the actual original five functions before migration; twenty-two expanded
 business groups also pass on saved original functions. Independent construction and new
