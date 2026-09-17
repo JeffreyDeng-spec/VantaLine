@@ -51,6 +51,14 @@ def capture():
         assert server._label_imports.data_directory() == server.DATA_DIR
         assert server._codex_media.data_directory() == server.DATA_DIR
         assert server._text_records.dependencies.guard() is server._incoming_text_store_lock
+        from local_inspection_service.runtime.json_records import read_json_list, write_json_list
+        assert server._incoming_text_json_list is read_json_list
+        assert server._save_incoming_text_json_list is write_json_list
+        assert server._incoming_text_store.guard() is server._text_records.dependencies.guard()
+        assert server._incoming_text_store.paths.references() == server.INCOMING_TEXT_REFERENCES_PATH
+        assert server._incoming_text_store.paths.inspections() == server.INCOMING_TEXT_INSPECTIONS_PATH
+        assert server._incoming_text_store.paths.audit() == server.INCOMING_TEXT_AUDIT_PATH
+
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         from local_inspection_service.text_inspection.projection import public_record
         from local_inspection_service.text_inspection import revisions, diagnostics

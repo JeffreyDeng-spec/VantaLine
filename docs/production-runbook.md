@@ -1,5 +1,12 @@
 # Production runbook
 
+Incoming-store extraction retains the shared JSON lock and file replacement rules.
+Invalid JSON or read OSError still yields an empty list, while invalid UTF-8 propagates.
+Replacement failure keeps the old target and completed temporary file; this batch
+does not add cleanup or claim to resolve the earlier Windows replacement error.
+Deploy or roll back the complete package containing the runtime file adapter and
+incoming store together, preserving existing records and audit evidence.
+
 Comparison extraction preserves attempts, media, uncertain-call evidence and the
 existing review/audit ordering. A failed final save can leave a persisted attempt;
 retry is not a recovery action. Use the usual complete-release restart and rollback

@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_incoming_text_store.py --root --postgres` covers seven groups:
+JSON reference/inspection key differences and original input; lazy factory and SQL
+dispatch without fallback; serializer/audit ordering; real file error boundaries;
+lock release checked from another thread plus dynamic paths; root shared-lock and
+helper identity; and real PostgreSQL unique keys/readback/audit inserts in a disposable
+schema. Root and PostgreSQL groups can run separately in their respective local
+runtimes. Keep the old incoming endpoint baseline, text-record contracts and complete
+HTTP/source gates; the static repository-call threshold is unchanged.
+
 `python scripts/smoke_text_comparison_api.py --root` adds fourteen synthetic groups:
 prepared short-circuit/extraction bounds; exact fingerprint/provider payload and
 persist-before-call order; duplicate/insert-loser/input-build boundaries; provider,

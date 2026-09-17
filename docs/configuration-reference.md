@@ -1,5 +1,11 @@
 # Configuration reference
 
+Incoming-text store extraction adds no setting. Its three file paths, row adapters
+and runtime repository selection remain late-bound. JSON records preserve original
+input values rather than replacing them with normalized SQL rows; PostgreSQL keeps
+its existing table constraints. Shared JSON formatting and exception behavior stay
+unchanged. Prompt-source manifest remains v6; no model-input source moved here.
+
 Comparison extraction keeps provider timeouts, external-media/automatic-MATCH
 admission and the business prompt version unchanged. Prompt-source manifest v6
 adds `text_inspection/comparison_submission.py`, which now assembles model input,

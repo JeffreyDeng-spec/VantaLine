@@ -1,5 +1,13 @@
 # PostgreSQL runtime operations
 
+Incoming-text persistence uses seven lazy repository entries in the extracted store.
+Reference and inspection writes validate their row before selecting a repository;
+audit selects it first and serializes only on PostgreSQL. SQL single reads remain
+primary-key reads, and a repository error never falls back to JSON. Existing unique
+constraints, transaction locks and raw-record formats remain; no schema change is
+introduced. JSON single reads still make the original second selection in their list
+method, so the service does not cache the repository choice.
+
 Standard edit services obtain their thread repository lazily for add, patch and
 confirm. Existing repository transactions, advisory locks and JSON authoritative
 rereads remain unchanged; the source gate follows the actual three service entries.
