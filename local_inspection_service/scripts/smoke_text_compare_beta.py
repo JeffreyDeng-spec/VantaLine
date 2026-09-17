@@ -47,7 +47,9 @@ def main():
     assert "历史记录（只读）" in history and "原记录未保留实物照片" in history
     assert "has_photo" in history and "final_decision" in history
     assert "standard_revision_id" in source and "standard_revision_number" in source
-    assert '"revisions": "text_inspection_standard_revisions"' in source
+    record_source = (APP_DIR / "text_inspection/record_store.py").read_text(encoding="utf-8")
+    assert '"revisions": "text_inspection_standard_revisions"' in record_source
+    assert "tables=lambda: TEXT_INSPECTION_TABLES," in source
     # The historical result reader still renders bounded original diagnostics.
     assert "parsed_response" in result and "response_preview" in result and "normalized_response" in result
     assert "MAX_DIAGNOSTIC_OUTPUT_CHARS = 20_000" in result and "formatDiagnosticOutput" in result

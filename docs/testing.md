@@ -7,6 +7,8 @@ fallback; real application lock/factory/table composition; and two independent
 PostgreSQL connections racing insert-only and terminal updates. PostgreSQL uses an
 explicit test DSN and disposable schema. Source contracts now inspect the extracted
 implementation and all compatibility forwards; the minimum repository gate remains.
+The original Beta smoke checks the revisions-table mapping in `record_store.py`
+and verifies its composition binding in the entry point.
 
 `python scripts/smoke_comparison_dependencies.py` has ten synthetic groups:
 duplicate/conflicting requests and per-submission callback isolation; admission and
