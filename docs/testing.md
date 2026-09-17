@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_comparison_dependencies.py` has eight synthetic groups:
+duplicate/conflicting requests and per-submission callback isolation; admission and
+thread-start failure; durable unknown OCR cache with account isolation; both orders
+of timer-versus-result settlement; dynamic local commissioning; settings alias/order
+and missing usage recorder; distinct cleanup-failure sequences; and captured usage
+across OCR, mapping and both region rereads. Seven groups passed against the old
+implementation before migration; the full suite passes with explicit ports. Existing
+Qwen protocol, local-reread, audit/preview and six preparation endpoint modes remain
+required, alongside the real PostgreSQL preparation smoke. No paid probe is run.
+
 `python scripts/smoke_preparation_dependencies.py` adds nine offline groups for
 native HTTP timeout/CAS races, JSON write/lock ordering, PostgreSQL forwarding,
 slot admission and thread-start failures, captured settings, late-result/source

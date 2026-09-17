@@ -1,5 +1,12 @@
 # Configuration reference
 
+Prepared comparison extraction adds no settings. Qwen resolution still obtains
+document settings, attaches OCR settings to that same dictionary, then validates
+both providers. Per-submission capabilities retain the submitted callbacks, model
+admission flag and usage recorder; local MATCH commissioning reads account lists
+at execution time. The prompt source manifest stays at v4, but edits to listed
+source files naturally change new fingerprints. Stored snapshots are not rewritten.
+
 Preparation dependency extraction adds no settings. The existing preparation
 account allowlist and external-model admission remain; the resolved settings object
 is captured at submission, with no new deep-copy or immutability guarantee. Verified

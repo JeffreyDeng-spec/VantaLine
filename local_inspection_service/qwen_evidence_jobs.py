@@ -5,6 +5,8 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable
+from .text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels, UsageRecorder
 
 from . import evidence_matching as matching
 from . import local_evidence_search
@@ -21,11 +23,11 @@ def enabled(owner):
     return owner in {v.strip() for v in os.getenv("VANTALINE_QWEN_OCR_ACCOUNTS", "").split(",") if v.strip()}
 
 
-def settings(s, owner):
-    if not enabled(owner) or not s.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
+def settings(models: ComparisonModels, owner):
+    if not enabled(owner) or not models.external_enabled:
         raise ValueError("ocr_external_authorization_unavailable")
-    resolved = s.ai_detection_settings("document")
-    resolved["ocr_settings"] = s.ai_detection_settings("ocr")
+    resolved = models.settings("document")
+    resolved["ocr_settings"] = models.settings("ocr")
     if resolved.get("provider") != "qwen" or not resolved.get("api_key"):
         raise ValueError("qwen_credentials_unavailable")
     dedicated = resolved["ocr_settings"]
@@ -117,9 +119,11 @@ def timeout(update_attempt, record):
     return update_attempt("records", record)
 
 
-def run(s, jobs, record, upload, resolved):
+def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Callable[[], None],
+        jobs, record, upload, resolved, record_usage: UsageRecorder | None):
     started, acquired = time.monotonic(), False
-    timer = threading.Timer(max(0, record["deadline_at"]-time.time()), lambda: settle_timeout(s, record))
+    timer = threading.Timer(max(0, record["deadline_at"]-time.time()), lambda: settle_timeout(
+        lambda kind, value: records.update_attempt(kind, value), clear_repository, record))
     timer.daemon = True; timer.start()
     def remaining():
         seconds = record["deadline_at"] - time.time()
@@ -130,7 +134,7 @@ def run(s, jobs, record, upload, resolved):
         remaining()
         record["diagnostics"]["phase"] = phase
         record["updated_at"] = int(time.time())
-        if not s._text_v2_update_attempt("records", record):
+        if not records.update_attempt("records", record):
             raise TimeoutError("comparison_already_settled")
     def measured(name, function):
         before = time.monotonic()
@@ -152,26 +156,26 @@ def run(s, jobs, record, upload, resolved):
             source_sha256=record["source_sha256"],validation_policy=ocr.PRESENCE_VERSION)
         save("extracting_text")
         # Insert-once is shared across workers, tabs, comparisons and restarts.
-        winner = s._text_v2_save("ocr_evidence", cache, insert_only=True)
+        winner = records.save("ocr_evidence", cache, insert_only=True)
         record["diagnostics"].update(ocr_cache_id=cache_id, cache_hit=not winner)
         if winner:
             record["diagnostics"]["external_calls"] += 1
             record["diagnostics"]["ocr_call"] = {"state": "attempting", "model": ocr.MODEL}
             save("extracting_text")
             try:
-                audit = model_call_audit.recorder(s, record, 'ocr', save, resolved.get('ocr_settings', resolved)['api_key'])
-                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved.get("ocr_settings", resolved), blob, image.size, remaining(),presence_evidence=True, audit=audit, record_usage=getattr(s, "record_model_call", None)))
+                audit = model_call_audit.recorder(media, record, 'ocr', save, resolved.get('ocr_settings', resolved)['api_key'])
+                observations, diagnostic = measured("ocr", lambda: ocr.recognize(resolved.get("ocr_settings", resolved), blob, image.size, remaining(),presence_evidence=True, audit=audit, record_usage=record_usage))
                 cache.update(status="completed", observations=observations, diagnostics=diagnostic)
-                s._text_v2_update_attempt("ocr_evidence", cache)
+                records.update_attempt("ocr_evidence", cache)
             except Exception as error:
                 cache.update(status="unknown", error_type=type(error).__name__, error=str(error) if isinstance(error, ocr.EvidenceError) else "provider_outcome_unknown")
                 if isinstance(error, ocr.EvidenceError):
                     cache['diagnostics'] = error.diagnostics
                     record['diagnostics']['ocr_call'].update(state='failed', **error.diagnostics)
-                s._text_v2_update_attempt("ocr_evidence", cache)
+                records.update_attempt("ocr_evidence", cache)
                 raise
         else:
-            cache = s._text_v2_owned("ocr_evidence", cache_id, record["owner_user_id"])
+            cache = records.owned("ocr_evidence", cache_id, record["owner_user_id"])
             if not cache or cache.get("status") != "completed":
                 raise ocr.EvidenceError("prior_ocr_pending_or_unknown_not_replayed")
             observations, diagnostic = copy.deepcopy(cache["observations"]), copy.deepcopy(cache["diagnostics"])
@@ -198,8 +202,8 @@ def run(s, jobs, record, upload, resolved):
             record["diagnostics"]["external_calls"] += 1
             save("mapping_unmatched")  # Durable claim BEFORE the one text-only call.
             try:
-                audit = model_call_audit.recorder(s, record, 'mapping', save, resolved['api_key'])
-                proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining(), audit=audit, record_usage=getattr(s, "record_model_call", None)))
+                audit = model_call_audit.recorder(media, record, 'mapping', save, resolved['api_key'])
+                proposal, metadata = measured("llm", lambda: llm(resolved, request, remaining(), audit=audit, record_usage=record_usage))
                 remaining()
                 record["diagnostics"]["llm_call"].update(**metadata)
                 rows, validation = matching.validate_independently(proposal, request, rows)
@@ -227,28 +231,28 @@ def run(s, jobs, record, upload, resolved):
                         region['input_sha256'], ocr.MODEL, ocr.VERSION, reread.VERSION, mode]).encode()).hexdigest()
                     trace = {k: v for k, v in region.items() if k != 'blob'}
                     trace.update(id=identity, mode=mode, model=ocr.MODEL, state='attempting')
-                    path = s._text_v2_media_path(record['owner_user_id'], record['standard_id'], record['id']+'-'+identity+'.png')
-                    s._text_v2_write(path, region['blob'])
+                    path = media.path(record['owner_user_id'], record['standard_id'], record['id']+'-'+identity+'.png')
+                    media.write(path, region['blob'])
                     trace.update(input_path=str(path), input_url=f"/api/text-inspection/prepared-comparisons/{record['id']}/media/{identity}")
                     traces.append(trace)
                     save(phase)
                     claim = dict(id=identity, owner_user_id=record['owner_user_id'], status='attempting',
                         created_at=int(time.time()), comparison_id=record['id'], source_sha256=record['source_sha256'],
                         model=ocr.MODEL, preprocess_version=reread.VERSION, mode=mode)
-                    winner = s._text_v2_save('ocr_evidence', claim, insert_only=True)
+                    winner = records.save('ocr_evidence', claim, insert_only=True)
                     trace['cache_hit'] = not winner
                     before = time.monotonic()
                     try:
                         if winner:
                             record['diagnostics']['external_calls'] += 1
                             save(phase)  # Persist each paid claim before sending image-only input.
-                            audit = model_call_audit.recorder(s, record, identity, save, resolved.get('ocr_settings', resolved)['api_key'])
+                            audit = model_call_audit.recorder(media, record, identity, save, resolved.get('ocr_settings', resolved)['api_key'])
                             raw, metadata = ocr.recognize(resolved.get("ocr_settings", resolved), region['blob'], region['input_size'], remaining(),
-                                presence_evidence=True, region_text=mode == 'text_recognition', audit=audit, record_usage=getattr(s, 'record_model_call', None))
+                                presence_evidence=True, region_text=mode == 'text_recognition', audit=audit, record_usage=record_usage)
                             claim.update(status='completed', observations=raw, diagnostics=metadata)
-                            s._text_v2_update_attempt('ocr_evidence', claim)
+                            records.update_attempt('ocr_evidence', claim)
                         else:
-                            claim = s._text_v2_owned('ocr_evidence', identity, record['owner_user_id'])
+                            claim = records.owned('ocr_evidence', identity, record['owner_user_id'])
                             if not claim or claim.get('status') != 'completed':
                                 raise ocr.EvidenceError('prior_reread_pending_or_unknown_not_replayed')
                             raw, metadata = copy.deepcopy(claim['observations']), copy.deepcopy(claim['diagnostics'])
@@ -265,7 +269,7 @@ def run(s, jobs, record, upload, resolved):
                             trace['diagnostics'] = error.diagnostics
                         if winner:
                             claim.update(status='unknown', diagnostics=trace.get('diagnostics', {}), error=trace['error'])
-                            s._text_v2_update_attempt('ocr_evidence', claim)
+                            records.update_attempt('ocr_evidence', claim)
                     finally:
                         trace['elapsed_ms'] = round((time.monotonic()-before)*1000)
                         record['diagnostics'].setdefault('stage_ms', {})[phase] = sum(
@@ -275,9 +279,9 @@ def run(s, jobs, record, upload, resolved):
         reference = engine.decode(jobs.media(record["standard_id"], record["owner_user_id"], record["standard_asset_id"], template["id"], "clean"))
         def annotate():
             annotation = engine.overlay(reference, [dict(id=r["element_id"], box=r["standard_box"], state="keep" if r["state"] == "matched" else "exclude" if r["state"] == "difference" else "uncertain") for r in rows])
-            path = s._text_v2_media_path(record["owner_user_id"], record["standard_id"], record["id"]+"-reference.png")
-            s._text_v2_write(path, annotation)
-            record.update(reference_overlay_path=str(path), reference_overlay_sha256=s.sha256_bytes(annotation),
+            path = media.path(record["owner_user_id"], record["standard_id"], record["id"]+"-reference.png")
+            media.write(path, annotation)
+            record.update(reference_overlay_path=str(path), reference_overlay_sha256=media.digest(annotation),
                 reference_overlay_url=f"/api/text-inspection/prepared-comparisons/{record['id']}/media/reference")
         measured("annotation", annotate)
         # This release deliberately has no MATCH commissioning path. Independent
@@ -296,20 +300,20 @@ def run(s, jobs, record, upload, resolved):
     finally:
         try:
             if expired(record):
-                timeout(lambda kind, value: s._text_v2_update_attempt(kind, value), record)
+                timeout(lambda kind, value: records.update_attempt(kind, value), record)
             else:
                 record["diagnostics"]["elapsed_ms"] = round((time.monotonic()-started)*1000)
                 record["updated_at"] = int(time.time())
-                s._text_v2_update_attempt("records", record)
+                records.update_attempt("records", record)
         finally:
             timer.cancel()
-            s.clear_thread_runtime_repository_selection()
+            clear_repository()
             if acquired:
                 _slots.release()
 
 
-def settle_timeout(s, record):
+def settle_timeout(update_attempt, clear_repository: Callable[[], None], record):
     try:
-        timeout(lambda kind, value: s._text_v2_update_attempt(kind, value), record)
+        timeout(update_attempt, record)
     finally:
-        s.clear_thread_runtime_repository_selection()
+        clear_repository()

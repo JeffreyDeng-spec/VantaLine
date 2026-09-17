@@ -1,5 +1,11 @@
 # VantaLine release management
 
+Prepared comparison CI adds submission/callback, late-CAS and paid-call dependency
+contracts. The compatibility export and new comparison/media ports ship together;
+Qwen, audit and preview consumers are updated in the same package. Source fingerprints
+change normally without rewriting old snapshots. The paid diagnostic probe is only
+adapted to the explicit settings signature, never executed by these checks.
+
 Preparation dependency CI adds isolated timeout, transaction, admission and
 late-result contracts while preserving the original endpoint and PostgreSQL gates.
 Ship API, job, policy and port modules with their compatibility module in one

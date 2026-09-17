@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 import time
+from .runtime.media import MediaWriter
 
 
 def redact(text, secret):
@@ -11,7 +12,7 @@ def redact(text, secret):
     return re.sub(r'data:image/[^;\s]+;base64,[A-Za-z0-9+/=]+', '[IMAGE_REDACTED]', text)
 
 
-def recorder(s, record, name, save, secret):
+def recorder(media: MediaWriter, record, name, save, secret):
     """Register links before network I/O; write each event once with source hash."""
     entry = dict(name=name, started_at=time.time(), state='attempting', files={})
     record['diagnostics'].setdefault('model_audits', []).append(entry)
@@ -23,8 +24,8 @@ def recorder(s, record, name, save, secret):
         text = value if isinstance(value, str) else ('' if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False))
         data = value if isinstance(value, bytes) else redact(text, secret).encode('utf-8')
         kind = 'audit-' + name + '-' + event
-        path = s._text_v2_media_path(record['owner_user_id'], record['standard_id'], record['id']+'-'+kind+('.bin' if isinstance(value, bytes) else '.json'))
-        s._text_v2_write(path, data)
+        path = media.path(record['owner_user_id'], record['standard_id'], record['id']+'-'+kind+('.bin' if isinstance(value, bytes) else '.json'))
+        media.write(path, data)
         entry['files'][event] = dict(path=str(path), sha256=hashlib.sha256(data).hexdigest(), bytes=len(data),
             kind=kind, url=f"/api/text-inspection/prepared-comparisons/{record['id']}/media/{kind}")
         entry['state'] = event

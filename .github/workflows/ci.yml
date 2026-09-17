@@ -190,6 +190,7 @@ jobs:
           python scripts/smoke_agent_dependencies.py
           python scripts/smoke_extraction_dependencies.py
           python scripts/smoke_preparation_dependencies.py
+          python scripts/smoke_comparison_dependencies.py
           python local_inspection_service/scripts/smoke_auth_rbac.py
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py
@@ -206,6 +207,7 @@ jobs:
           python -m local_inspection_service.scripts.smoke_qwen_ocr_evidence
           python -m local_inspection_service.scripts.smoke_local_evidence_search
           python -m local_inspection_service.scripts.smoke_local_ocr_reread
+          python -m local_inspection_service.scripts.smoke_model_audit_preview
           PREPARATION_TEST_QWEN=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
           PREPARATION_TEST_INCOMPLETE=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
           for mode in success timeout interrupted; do

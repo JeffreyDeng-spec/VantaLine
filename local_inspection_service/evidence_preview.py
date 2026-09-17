@@ -2,6 +2,7 @@
 import io
 import hashlib
 from PIL import Image
+from .runtime.media import MediaWriter
 
 VERSION = 'evidence-preview-v1'
 
@@ -21,10 +22,10 @@ def create(image):
         bytes=len(blob), sha256=hashlib.sha256(blob).hexdigest(), lossy=True, display_only=True)
 
 
-def save(s, record, image):
+def save(media: MediaWriter, record, image):
     blob, metadata = create(image)
-    path = s._text_v2_media_path(record['owner_user_id'], record['standard_id'], record['id']+'-'+VERSION+'.jpg')
-    s._text_v2_write(path, blob)
+    path = media.path(record['owner_user_id'], record['standard_id'], record['id']+'-'+VERSION+'.jpg')
+    media.write(path, blob)
     record['source_preview_path'] = str(path)
     record['source_preview_sha256'] = metadata['sha256']
     record['diagnostics']['source_preview'] = metadata

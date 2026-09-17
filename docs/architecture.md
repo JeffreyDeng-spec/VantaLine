@@ -1,5 +1,14 @@
 # Architecture
 
+Prepared comparison orchestration now lives in `text_inspection.comparison_jobs`.
+The application constructs narrow record/media/model capabilities for each submit,
+capturing function references and the external-model flag just as the prior namespace
+copy did. Runtime account allowlists stay dynamic. Qwen orchestration keeps its
+source location and receives the same capabilities explicitly; audit and preview
+writers require only media path/write methods. No namespace injection remains in
+the application. Dependency checks now also include these three evidence modules;
+a constant local-name membership test is permitted, namespace passing is rejected.
+
 Standard preparation is split into `text_inspection.preparation_api`,
 `preparation_jobs` and `preparation_policy`. Narrow record, media, model, account
 and history capabilities replace namespace injection; the composition root shares

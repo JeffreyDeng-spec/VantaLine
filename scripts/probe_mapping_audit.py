@@ -22,7 +22,9 @@ def main():
     folder=Path(args.output); folder.mkdir(mode=0o700,exist_ok=False)
     sys.path.insert(0,os.getcwd())
     from local_inspection_service import server, qwen_evidence_jobs, standard_preparation
-    settings=qwen_evidence_jobs.settings(server,args.owner)
+    from local_inspection_service.text_inspection.comparison_ports import ComparisonModels
+    settings=qwen_evidence_jobs.settings(ComparisonModels(server.ai_detection_settings,
+        server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,server.record_model_call),args.owner)
     record=server._text_v2_owned('records',args.record,args.owner)
     if not record: raise ValueError('owned_record_missing')
     # Import experimental modules in this process only, outside installed release.
