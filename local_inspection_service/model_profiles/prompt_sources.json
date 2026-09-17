@@ -1,7 +1,10 @@
 {
-  "version": 16,
+  "version": 17,
   "sources": [
     "server.py",
+    "pipeline/task_store.py",
+    "pipeline/state_store.py",
+    "pipeline/state_policy.py",
     "training/task_identity.py",
     "training/record_store.py",
     "training/task_lookup.py",

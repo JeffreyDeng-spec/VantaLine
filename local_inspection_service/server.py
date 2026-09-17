@@ -27126,82 +27126,43 @@ def agent_recommend(request: AgentRecommendRequest) -> dict[str, Any]:
     return agent_recommendation(stage, request.accessory_ids, request.sample_count)
 
 
+from .pipeline.state_policy import normalize_pipeline_state
+from .pipeline.task_store import PipelineTaskStore, PipelineTaskPaths, PipelineTaskRows
+from .pipeline.state_store import PipelineStateStore, PipelineStatePaths, PipelineStateRows
+
+_pipeline_task_store = PipelineTaskStore(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
+    rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
+    resolver=lambda: resolve_model_profiles,
+)
+_pipeline_state_store = PipelineStateStore(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),
+    rows=PipelineStateRows(encode=lambda: pipeline_state_rows,
+                           decode=lambda: pipeline_state_from_rows),
+    guard=lambda: _pipeline_state_lock,
+)
+
+
 def load_pipeline_tasks() -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return row_raw_json_list(repository.fetch_all("pipeline_tasks"))
-    if not PIPELINE_TASKS_PATH.exists():
-        return []
-    try:
-        raw = json.loads(PIPELINE_TASKS_PATH.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, list) else []
-    except (OSError, json.JSONDecodeError):
-        return []
+    return _pipeline_task_store.load_pipeline_tasks()
 
 
 def save_pipeline_tasks(tasks: list[dict[str, Any]]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        rows = [row for task in tasks if isinstance(task, dict) for row in [pipeline_task_row(task)] if row]
-        repository.replace_all("pipeline_tasks", rows)
-        return
-    tmp_path = PIPELINE_TASKS_PATH.with_name(f"{PIPELINE_TASKS_PATH.name}.tmp")
-    tmp_path.write_text(json.dumps(tasks, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp_path, PIPELINE_TASKS_PATH)
+    return _pipeline_task_store.save_pipeline_tasks(tasks)
 
 
 def load_pipeline_task(task_id: str) -> dict[str, Any] | None:
-    clean_id = str(task_id or "").strip()
-    if not clean_id:
-        return None
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_by_primary_key("pipeline_tasks", {"id": clean_id})
-        raw_tasks = row_raw_json_list([row]) if row else []
-        return raw_tasks[0] if raw_tasks else None
-    return next((task for task in load_pipeline_tasks() if str(task.get("id") or "") == clean_id), None)
+    return _pipeline_task_store.load_pipeline_task(task_id)
 
 
 def save_pipeline_task(task: dict[str, Any]) -> dict[str, Any] | None:
-    if not isinstance(task, dict):
-        return None
-    freeze_model_record(resolve_model_profiles, task)
-    row = pipeline_task_row(task)
-    if not row:
-        return None
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        repository.upsert_row("pipeline_tasks", row)
-        return dict(task)
-    tasks = load_pipeline_tasks()
-    clean_id = str(row["id"])
-    for index, existing in enumerate(tasks):
-        if str(existing.get("id") or "") == clean_id:
-            tasks[index] = dict(task)
-            save_pipeline_tasks(tasks)
-            return dict(task)
-    tasks.insert(0, dict(task))
-    save_pipeline_tasks(tasks)
-    return dict(task)
+    return _pipeline_task_store.save_pipeline_task(task)
 
 
 def delete_pipeline_task_row(task_id: str) -> bool:
-    clean_id = str(task_id or "").strip()
-    if not clean_id:
-        return False
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        if repository.fetch_by_primary_key("pipeline_tasks", {"id": clean_id}) is None:
-            return False
-        repository.delete_by_primary_key("pipeline_tasks", {"id": clean_id})
-        return True
-    tasks = load_pipeline_tasks()
-    remaining = [item for item in tasks if str(item.get("id") or "") != clean_id]
-    if len(remaining) == len(tasks):
-        return False
-    save_pipeline_tasks(remaining)
-    return True
+    return _pipeline_task_store.delete_pipeline_task_row(task_id)
 
 
 def mark_pipeline_task_advancing(task: dict[str, Any]) -> None:
@@ -27266,113 +27227,38 @@ def canonical_pipeline_accessory_ids(config: dict[str, Any], raw_ids: list[str])
     return result
 
 
-def normalize_pipeline_state(raw: Any) -> dict[str, list[str]]:
-    data = raw if isinstance(raw, dict) else {}
-    result: dict[str, list[str]] = {"accessory_ids": [], "pending_candidate_ids": []}
-    for key in result:
-        seen: set[str] = set()
-        for value in data.get(key) or []:
-            item_id = str(value or "").strip()
-            if not item_id or item_id in seen:
-                continue
-            seen.add(item_id)
-            result[key].append(item_id)
-    return result
 
 
 def load_pipeline_state() -> dict[str, list[str]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return normalize_pipeline_state(pipeline_state_from_rows(repository.fetch_all("pipeline_state")))
-    if not PIPELINE_STATE_PATH.exists():
-        return {"accessory_ids": [], "pending_candidate_ids": []}
-    try:
-        raw = json.loads(PIPELINE_STATE_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        raw = {}
-    return normalize_pipeline_state(raw)
+    return _pipeline_state_store.load_pipeline_state()
 
 
 def save_pipeline_state(state: dict[str, list[str]]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    payload = normalize_pipeline_state(state)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        repository.replace_all("pipeline_state", pipeline_state_rows(payload, updated_at=int(time.time())))
-        return
-    tmp_path = PIPELINE_STATE_PATH.with_name(f"{PIPELINE_STATE_PATH.name}.tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp_path, PIPELINE_STATE_PATH)
+    return _pipeline_state_store.save_pipeline_state(state)
 
 
 def save_pipeline_state_keys(state: dict[str, list[str]], changed_keys: set[str]) -> None:
-    payload = normalize_pipeline_state(state)
-    key_set = {key for key in changed_keys if key in payload}
-    if not key_set:
-        return
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        rows = [row for row in pipeline_state_rows(payload, updated_at=int(time.time())) if row.get("state_key") in key_set]
-        try:
-            for row in rows:
-                repository.upsert_row("pipeline_state", row, commit=False)
-            repository.connection.commit()
-        except Exception:
-            rollback = getattr(repository.connection, "rollback", None)
-            if callable(rollback):
-                rollback()
-            raise
-        return
-    save_pipeline_state(payload)
+    return _pipeline_state_store.save_pipeline_state_keys(state, changed_keys)
 
 
 def update_pipeline_state(mutator: Callable[[dict[str, list[str]]], None]) -> dict[str, list[str]]:
-    with _pipeline_state_lock:
-        before = load_pipeline_state()
-        state = json.loads(json.dumps(before))
-        mutator(state)
-        state = normalize_pipeline_state(state)
-        changed_keys = {key for key, value in state.items() if before.get(key) != value}
-        save_pipeline_state_keys(state, changed_keys)
-        return state
+    return _pipeline_state_store.update_pipeline_state(mutator)
 
 
 def add_pipeline_accessory_id(accessory_id: str) -> dict[str, list[str]]:
-    clean_id = str(accessory_id or "").strip()
-
-    def mutate(state: dict[str, list[str]]) -> None:
-        if clean_id and clean_id not in state["accessory_ids"]:
-            state["accessory_ids"].insert(0, clean_id)
-
-    return update_pipeline_state(mutate)
+    return _pipeline_state_store.add_pipeline_accessory_id(accessory_id)
 
 
 def remove_pipeline_accessory_id(accessory_id: str) -> dict[str, list[str]]:
-    clean_id = str(accessory_id or "").strip()
-
-    def mutate(state: dict[str, list[str]]) -> None:
-        state["accessory_ids"] = [item_id for item_id in state["accessory_ids"] if item_id != clean_id]
-
-    return update_pipeline_state(mutate)
+    return _pipeline_state_store.remove_pipeline_accessory_id(accessory_id)
 
 
 def add_pipeline_pending_candidate_id(candidate_id: str) -> dict[str, list[str]]:
-    clean_id = str(candidate_id or "").strip()
-
-    def mutate(state: dict[str, list[str]]) -> None:
-        if clean_id and clean_id not in state["pending_candidate_ids"]:
-            state["pending_candidate_ids"].insert(0, clean_id)
-
-    return update_pipeline_state(mutate)
+    return _pipeline_state_store.add_pipeline_pending_candidate_id(candidate_id)
 
 
 def remove_pipeline_pending_candidate_id(candidate_id: str) -> dict[str, list[str]]:
-    clean_id = str(candidate_id or "").strip()
-
-    def mutate(state: dict[str, list[str]]) -> None:
-        state["pending_candidate_ids"] = [item_id for item_id in state["pending_candidate_ids"] if item_id != clean_id]
-
-    return update_pipeline_state(mutate)
+    return _pipeline_state_store.remove_pipeline_pending_candidate_id(candidate_id)
 
 
 def candidate_confirmed_accessory_id(candidate: dict[str, Any]) -> str:

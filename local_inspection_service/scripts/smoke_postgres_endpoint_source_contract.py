@@ -436,6 +436,44 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(training_store, attribute))
 
+    for module, class_name, instance, expected_helpers, forwards in (
+        ("task_store", "PipelineTaskStore", "_pipeline_task_store",
+         {"load_pipeline_tasks", "save_pipeline_tasks", "load_pipeline_task", "save_pipeline_task", "delete_pipeline_task_row"},
+         {"load_pipeline_tasks": "", "save_pipeline_tasks": "tasks", "load_pipeline_task": "task_id",
+          "save_pipeline_task": "task", "delete_pipeline_task_row": "task_id"}),
+        ("state_store", "PipelineStateStore", "_pipeline_state_store",
+         {"load_pipeline_state", "save_pipeline_state", "save_pipeline_state_keys"},
+         {"load_pipeline_state": "", "save_pipeline_state": "state", "save_pipeline_state_keys": "state, changed_keys",
+          "update_pipeline_state": "mutator", "add_pipeline_accessory_id": "accessory_id",
+          "remove_pipeline_accessory_id": "accessory_id", "add_pipeline_pending_candidate_id": "candidate_id",
+          "remove_pipeline_pending_candidate_id": "candidate_id"}),
+    ):
+        path = ROOT / "local_inspection_service" / "pipeline" / (module + ".py")
+        pipeline_store = SourceContract(injected_repository=True, repository_expression="self.repository")
+        pipeline_store.visit(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
+        require(pipeline_store.runtime_repository_entry_call_count == len(expected_helpers)
+                and pipeline_store.functions_with_runtime_repository_entry == expected_helpers,
+                "pipeline store must retain actual per-operation repository selections: " + module)
+        require(any(isinstance(node, ast.ImportFrom) and node.module == "pipeline." + module
+                    and any(alias.name == class_name for alias in node.names)
+                    for node in tree.body), "server missing pipeline composition: " + module)
+        compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name) and node.func.id == class_name]
+        require(len(compositions) == 1, "expected one pipeline store composition: " + module)
+        repository = next(keyword.value for keyword in compositions[0].keywords if keyword.arg == "repository")
+        require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                    ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+                "pipeline store must obtain the current thread repository lazily: " + module)
+        for name, arguments in forwards.items():
+            function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+            expected = ast.parse(instance + "." + name + "(" + arguments + ")", mode="eval").body
+            require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                    and ast.dump(function.body[0].value) == ast.dump(expected), "pipeline store forward changed: " + name)
+        contract.runtime_repository_entry_call_count += pipeline_store.runtime_repository_entry_call_count - 1
+        for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                          "functions_with_runtime_repository_entry"):
+            getattr(contract, attribute).update(getattr(pipeline_store, attribute))
+
     # Legacy workflows retain five real repository entries after extraction.
     for filename, expected in {
         "incoming_catalog.py": {"update_incoming_text_reference_rules"},
