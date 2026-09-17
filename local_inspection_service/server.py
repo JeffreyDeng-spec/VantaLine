@@ -478,30 +478,33 @@ IMAGE_GENERATION_TIMEOUT_ENV = "VANTALINE_IMAGE_TIMEOUT_SECONDS"
 AI_PROXY_ENV_NAMES = ("INSPECTION_AI_PROXY_URL", "AI_PROVIDER_PROXY_URL", "HTTPS_PROXY", "ALL_PROXY")
 AI_LOCAL_PROXY_URL = "http://127.0.0.1:17890"
 AI_AUTO_LOCAL_PROXY_ENV = "INSPECTION_AI_AUTO_LOCAL_PROXY"
-REMOTE_TRAINING_EXECUTOR_ENV = "INSPECTION_TRAINING_EXECUTOR"
-REMOTE_TRAINING_ENDPOINT_ENV = "INSPECTION_REMOTE_TRAINING_ENDPOINT"
-REMOTE_TRAINING_API_KEY_ENV = "INSPECTION_REMOTE_TRAINING_API_KEY"
-REMOTE_TRAINING_TIMEOUT_ENV = "INSPECTION_REMOTE_TRAINING_TIMEOUT_SECONDS"
-REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS = 600.0
-RUNPOD_YOLO_ENDPOINT_ID_ENV = "VANTALINE_RUNPOD_YOLO_ENDPOINT_ID"
-RUNPOD_YOLO_API_KEY_ENV = "VANTALINE_RUNPOD_API_KEY"
-RUNPOD_YOLO_API_BASE_ENV = "VANTALINE_RUNPOD_API_BASE"
-RUNPOD_YOLO_PUBLIC_BASE_URL_ENV = "VANTALINE_PUBLIC_BASE_URL"
-RUNPOD_YOLO_DATASET_TOKEN_TTL_ENV = "VANTALINE_RUNPOD_YOLO_DATASET_TOKEN_TTL_SECONDS"
-RUNPOD_YOLO_POLL_INTERVAL_ENV = "VANTALINE_RUNPOD_YOLO_POLL_INTERVAL_SECONDS"
+from .training.executor_settings import (
+    REMOTE_TRAINING_API_KEY_ENV,
+    REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS,
+    REMOTE_TRAINING_ENDPOINT_ENV,
+    REMOTE_TRAINING_EXECUTOR_ENV,
+    REMOTE_TRAINING_TIMEOUT_ENV,
+    RUNPOD_YOLO_API_BASE_ENV,
+    RUNPOD_YOLO_API_KEY_ENV,
+    RUNPOD_YOLO_ARTIFACT_MAX_BYTES_ENV,
+    RUNPOD_YOLO_AUTH_SCHEME_ENV,
+    RUNPOD_YOLO_CLIENT_TIMEOUT_ENV,
+    RUNPOD_YOLO_DATASET_TOKEN_TTL_ENV,
+    RUNPOD_YOLO_ENDPOINT_ID_ENV,
+    RUNPOD_YOLO_INLINE_DATASET_MAX_BYTES_ENV,
+    RUNPOD_YOLO_JOB_TIMEOUT_ENV,
+    RUNPOD_YOLO_POLL_INTERVAL_ENV,
+    RUNPOD_YOLO_PUBLIC_BASE_URL_ENV,
+    WINDOWS_WORKER_BASE_URL_ENV,
+    WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS,
+    WINDOWS_WORKER_TIMEOUT_ENV,
+    WINDOWS_WORKER_TOKEN_ENV,
+    ExecutorSettings, host_is_private_or_tailnet,
+)
 RUNPOD_YOLO_BASE_MODEL_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL"
 RUNPOD_YOLO_BASE_MODEL_SHA256_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_SHA256"
 RUNPOD_YOLO_BASE_MODEL_URL_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_URL"
 RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_URL_SHA256"
-RUNPOD_YOLO_JOB_TIMEOUT_ENV = "VANTALINE_RUNPOD_YOLO_JOB_TIMEOUT_SECONDS"
-RUNPOD_YOLO_CLIENT_TIMEOUT_ENV = "VANTALINE_RUNPOD_YOLO_CLIENT_TIMEOUT_SECONDS"
-RUNPOD_YOLO_AUTH_SCHEME_ENV = "VANTALINE_RUNPOD_AUTH_SCHEME"
-RUNPOD_YOLO_INLINE_DATASET_MAX_BYTES_ENV = "VANTALINE_RUNPOD_YOLO_INLINE_DATASET_MAX_BYTES"
-RUNPOD_YOLO_ARTIFACT_MAX_BYTES_ENV = "VANTALINE_RUNPOD_YOLO_ARTIFACT_MAX_BYTES"
-WINDOWS_WORKER_BASE_URL_ENV = "VANTALINE_WORKER_BASE_URL"
-WINDOWS_WORKER_TOKEN_ENV = "VANTALINE_WORKER_TOKEN"
-WINDOWS_WORKER_TIMEOUT_ENV = "VANTALINE_WORKER_TIMEOUT_SECONDS"
-WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS = 30.0
 CURSOR_IMAGE2_PROVIDER = "cursor_image2"
 WINDOWS_WORKER_IMAGE_PROVIDER = "windows_worker_image_fallback"
 LOCAL_CODEX_IMAGE_PROVIDER = "local_codex_image_worker"
@@ -21042,94 +21045,51 @@ def generate_training_dataset(task: dict[str, Any]) -> dict[str, Any]:
     return {"dataset_dir": str(dataset_dir), "dataset_yaml": str(yaml_path), "manifest_path": str(manifest_path)}
 
 
+_training_executor_settings = ExecutorSettings(
+    environment=lambda: os.environ, mask_url=lambda value: masked_url_for_status(value),
+)
+
+
 def training_executor_mode() -> str:
-    mode = os.environ.get(REMOTE_TRAINING_EXECUTOR_ENV, "local").strip().lower()
-    if mode == "worker":
-        return "runpod"
-    return mode if mode in {"local", "remote", "runpod"} else "local"
+    return _training_executor_settings.training_executor_mode()
 
 
 def worker_local_training_fallback_enabled() -> bool:
-    return os.environ.get("INSPECTION_WORKER_LOCAL_TRAINING_FALLBACK", "").strip().lower() in {"1", "true", "yes", "on"}
+    return _training_executor_settings.worker_local_training_fallback_enabled()
 
 
-def host_is_private_or_tailnet(host: str) -> bool:
-    value = str(host or "").strip().strip("[]").lower()
-    if value in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    if value.endswith((".local", ".lan", ".internal")):
-        return True
-    try:
-        address = ipaddress.ip_address(value)
-    except ValueError:
-        return False
-    return address.is_private or address.is_loopback or address in ipaddress.ip_network("100.64.0.0/10")
 
 
 def validate_remote_training_endpoint(value: Any) -> str:
-    endpoint = str(value or "").strip()
-    if not endpoint:
-        return ""
-    parsed = urlsplit(endpoint)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} must be an http(s) URL")
-    if parsed.username or parsed.password:
-        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} must not include credentials")
-    if parsed.query or parsed.fragment:
-        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} must not include query strings or fragments")
-    if parsed.scheme == "http" and not host_is_private_or_tailnet(parsed.hostname or ""):
-        raise RuntimeError(f"{REMOTE_TRAINING_ENDPOINT_ENV} uses http; use a private/Tailscale/reverse-tunnel host or HTTPS")
-    return endpoint.rstrip("/")
+    return _training_executor_settings.validate_remote_training_endpoint(value)
 
 
 def validate_windows_worker_base_url(value: Any) -> str:
-    endpoint = str(value or "").strip()
-    if not endpoint:
-        return ""
-    parsed = urlsplit(endpoint)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} must be an http(s) URL")
-    if parsed.username or parsed.password:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} must not include credentials")
-    if parsed.query or parsed.fragment:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} must not include query strings or fragments")
-    if parsed.scheme == "http" and not host_is_private_or_tailnet(parsed.hostname or ""):
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} uses http; use a private/Tailscale/reverse-tunnel host or HTTPS")
-    return endpoint.rstrip("/")
+    return _training_executor_settings.validate_windows_worker_base_url(value)
 
 
 def remote_training_endpoint() -> str:
-    return validate_remote_training_endpoint(os.environ.get(REMOTE_TRAINING_ENDPOINT_ENV, ""))
+    return _training_executor_settings.remote_training_endpoint()
 
 
 def windows_worker_base_url() -> str:
-    return validate_windows_worker_base_url(os.environ.get(WINDOWS_WORKER_BASE_URL_ENV, ""))
+    return _training_executor_settings.windows_worker_base_url()
 
 
 def remote_training_timeout_seconds() -> float:
-    try:
-        return max(5.0, min(3600.0, float(os.environ.get(REMOTE_TRAINING_TIMEOUT_ENV, "") or REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS)))
-    except (TypeError, ValueError):
-        return REMOTE_TRAINING_DEFAULT_TIMEOUT_SECONDS
+    return _training_executor_settings.remote_training_timeout_seconds()
 
 
 def windows_worker_timeout_seconds() -> float:
-    try:
-        return max(2.0, min(3600.0, float(os.environ.get(WINDOWS_WORKER_TIMEOUT_ENV, "") or WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS)))
-    except (TypeError, ValueError):
-        return WINDOWS_WORKER_DEFAULT_TIMEOUT_SECONDS
+    return _training_executor_settings.windows_worker_timeout_seconds()
 
 
 def windows_worker_image_timeout_seconds() -> float:
-    try:
-        return max(60.0, min(1800.0, float(os.environ.get("VANTALINE_WORKER_IMAGE_TIMEOUT_SECONDS", "") or 960.0)))
-    except (TypeError, ValueError):
-        return 960.0
+    return _training_executor_settings.windows_worker_image_timeout_seconds()
 
 
 def windows_worker_headers() -> dict[str, str]:
-    token = os.environ.get(WINDOWS_WORKER_TOKEN_ENV, "").strip()
-    return {"Authorization": f"Bearer {token}"} if token else {}
+    return _training_executor_settings.windows_worker_headers()
 
 
 def windows_worker_request(method: str, path: str, *, json_body: dict[str, Any] | None = None, timeout_seconds: float | None = None) -> dict[str, Any]:
@@ -21206,31 +21166,7 @@ def windows_worker_status(*, force: bool = False, probe: bool = True, include_se
 
 
 def training_execution_status(*, include_worker_probe: bool = False, include_worker_services: bool = False) -> dict[str, Any]:
-    endpoint = ""
-    endpoint_error = ""
-    try:
-        endpoint = remote_training_endpoint()
-    except RuntimeError as exc:
-        endpoint_error = str(exc)
-    mode = training_executor_mode()
-    return {
-        "executor": mode,
-        "remote_enabled": mode == "remote",
-        "remote_endpoint_configured": bool(endpoint),
-        "remote_endpoint": masked_url_for_status(endpoint),
-        "remote_endpoint_error": endpoint_error,
-        "remote_api_key_present": bool(os.environ.get(REMOTE_TRAINING_API_KEY_ENV, "").strip()),
-        "required_endpoint_env": REMOTE_TRAINING_ENDPOINT_ENV,
-        "required_api_key_env": REMOTE_TRAINING_API_KEY_ENV,
-        "runpod_enabled": mode == "runpod",
-        "runpod_endpoint_configured": bool(os.environ.get(RUNPOD_YOLO_ENDPOINT_ID_ENV, "").strip()),
-        "runpod_api_key_present": bool((os.environ.get(RUNPOD_YOLO_API_KEY_ENV, "") or os.environ.get("RUNPOD_API_KEY", "")).strip()),
-        "runpod_public_base_url_configured": bool(os.environ.get(RUNPOD_YOLO_PUBLIC_BASE_URL_ENV, "").strip() or os.environ.get("INSPECTION_PUBLIC_BASE_URL", "").strip()),
-        "required_runpod_endpoint_env": RUNPOD_YOLO_ENDPOINT_ID_ENV,
-        "required_runpod_api_key_env": RUNPOD_YOLO_API_KEY_ENV,
-        "required_runpod_public_base_url_env": RUNPOD_YOLO_PUBLIC_BASE_URL_ENV,
-        "retired_executors": ["windows_worker"],
-    }
+    return _training_executor_settings.training_execution_status(include_worker_probe=include_worker_probe, include_worker_services=include_worker_services)
 
 
 def package_training_dataset(dataset_dir: Path, job_id: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
@@ -21539,155 +21475,71 @@ def run_remote_training_task(job_id: str, task: dict[str, Any], dataset: dict[st
 
 
 def runpod_yolo_endpoint_id() -> str:
-    endpoint_id = str(os.environ.get(RUNPOD_YOLO_ENDPOINT_ID_ENV, "") or "").strip()
-    if not endpoint_id:
-        raise RuntimeError(f"{RUNPOD_YOLO_ENDPOINT_ID_ENV} is not configured")
-    return endpoint_id
+    return _training_executor_settings.runpod_yolo_endpoint_id()
 
 
 def runpod_yolo_api_key() -> str:
-    api_key = str(os.environ.get(RUNPOD_YOLO_API_KEY_ENV, "") or os.environ.get("RUNPOD_API_KEY", "") or "").strip()
-    if not api_key:
-        raise RuntimeError(f"{RUNPOD_YOLO_API_KEY_ENV} is not configured")
-    return api_key
+    return _training_executor_settings.runpod_yolo_api_key()
 
 
 def runpod_yolo_api_base() -> str:
-    raw = str(os.environ.get(RUNPOD_YOLO_API_BASE_ENV, "") or "https://api.runpod.ai/v2").strip().rstrip("/")
-    parsed = urlsplit(raw)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
-        raise RuntimeError(f"{RUNPOD_YOLO_API_BASE_ENV} must be an http(s) base URL without query or fragment")
-    if parsed.username or parsed.password:
-        raise RuntimeError(f"{RUNPOD_YOLO_API_BASE_ENV} must not include credentials")
-    return raw
+    return _training_executor_settings.runpod_yolo_api_base()
 
 
 def runpod_yolo_public_base_url() -> str:
-    raw = str(os.environ.get(RUNPOD_YOLO_PUBLIC_BASE_URL_ENV, "") or os.environ.get("INSPECTION_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
-    parsed = urlsplit(raw)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
-        raise RuntimeError(f"{RUNPOD_YOLO_PUBLIC_BASE_URL_ENV} must be the public http(s) base URL for this service")
-    if parsed.username or parsed.password:
-        raise RuntimeError(f"{RUNPOD_YOLO_PUBLIC_BASE_URL_ENV} must not include credentials")
-    return raw
+    return _training_executor_settings.runpod_yolo_public_base_url()
 
 
 def runpod_yolo_job_timeout_seconds() -> int:
-    try:
-        return max(300, min(7 * 24 * 3600, int(float(os.environ.get(RUNPOD_YOLO_JOB_TIMEOUT_ENV, "") or 7200))))
-    except (TypeError, ValueError):
-        return 7200
+    return _training_executor_settings.runpod_yolo_job_timeout_seconds()
 
 
 def runpod_yolo_client_timeout_seconds() -> float:
-    try:
-        return max(5.0, min(300.0, float(os.environ.get(RUNPOD_YOLO_CLIENT_TIMEOUT_ENV, "") or 60.0)))
-    except (TypeError, ValueError):
-        return 60.0
+    return _training_executor_settings.runpod_yolo_client_timeout_seconds()
 
 
 def runpod_yolo_poll_interval_seconds() -> float:
-    try:
-        return max(5.0, min(120.0, float(os.environ.get(RUNPOD_YOLO_POLL_INTERVAL_ENV, "") or 20.0)))
-    except (TypeError, ValueError):
-        return 20.0
+    return _training_executor_settings.runpod_yolo_poll_interval_seconds()
 
 
 def runpod_yolo_dataset_token_ttl_seconds() -> int:
-    try:
-        return max(3600, min(7 * 24 * 3600, int(float(os.environ.get(RUNPOD_YOLO_DATASET_TOKEN_TTL_ENV, "") or 3 * 24 * 3600))))
-    except (TypeError, ValueError):
-        return 3 * 24 * 3600
+    return _training_executor_settings.runpod_yolo_dataset_token_ttl_seconds()
 
 
 def runpod_yolo_inline_dataset_max_bytes() -> int:
-    try:
-        return max(0, min(8 * 1024 * 1024, int(float(os.environ.get(RUNPOD_YOLO_INLINE_DATASET_MAX_BYTES_ENV, "") or 0))))
-    except (TypeError, ValueError):
-        return 0
+    return _training_executor_settings.runpod_yolo_inline_dataset_max_bytes()
 
 
 def runpod_yolo_artifact_max_bytes() -> int:
-    try:
-        return max(
-            10 * 1024 * 1024,
-            min(1024 * 1024 * 1024, int(float(os.environ.get(RUNPOD_YOLO_ARTIFACT_MAX_BYTES_ENV, "") or 256 * 1024 * 1024))),
-        )
-    except (TypeError, ValueError):
-        return 256 * 1024 * 1024
+    return _training_executor_settings.runpod_yolo_artifact_max_bytes()
 
 
 def runpod_yolo_url(path: str) -> str:
-    endpoint_id = quote(runpod_yolo_endpoint_id(), safe="")
-    clean_path = str(path or "").strip().lstrip("/")
-    return f"{runpod_yolo_api_base()}/{endpoint_id}/{clean_path}"
+    return _training_executor_settings.runpod_yolo_url(path)
 
 
 def runpod_yolo_authorization_values() -> list[str]:
-    api_key = runpod_yolo_api_key()
-    scheme = str(os.environ.get(RUNPOD_YOLO_AUTH_SCHEME_ENV, "") or "bearer").strip().lower()
-    if scheme in {"raw", "none", "token"}:
-        return [api_key, f"Bearer {api_key}"]
-    return [f"Bearer {api_key}", api_key]
+    return _training_executor_settings.runpod_yolo_authorization_values()
+
+
+from .training.runpod_client import RunPodClient, RunPodRequestSettings, runpod_dataset_token_hash
+
+_runpod_client = RunPodClient(
+    settings=RunPodRequestSettings(url=lambda path: runpod_yolo_url(path), authorization=lambda: runpod_yolo_authorization_values(),
+                                  timeout=lambda: runpod_yolo_client_timeout_seconds()),
+    request=lambda: requests.request,
+    bound_text=lambda: bounded_text,
+)
 
 
 def runpod_yolo_http_request(method: str, path: str, *, json_body: dict[str, Any] | None = None, timeout_seconds: float | None = None) -> dict[str, Any]:
-    url = runpod_yolo_url(path)
-    auth_values = runpod_yolo_authorization_values()
-    last_body: dict[str, Any] | None = None
-    last_status = 0
-    for index, auth_value in enumerate(auth_values):
-        headers = {"accept": "application/json", "authorization": auth_value}
-        if json_body is not None:
-            headers["content-type"] = "application/json"
-        try:
-            response = requests.request(
-                method,
-                url,
-                json=json_body,
-                headers=headers,
-                timeout=timeout_seconds or runpod_yolo_client_timeout_seconds(),
-            )
-        except requests.RequestException as exc:
-            raise RuntimeError(f"RunPod request failed: {type(exc).__name__}") from exc
-        last_status = int(response.status_code)
-        try:
-            body = response.json()
-        except ValueError:
-            body = {"message": response.text[:500]}
-        last_body = body if isinstance(body, dict) else {"result": body}
-        if response.status_code in {401, 403} and index + 1 < len(auth_values):
-            continue
-        if response.status_code >= 400:
-            detail = last_body.get("error") or last_body.get("detail") or last_body.get("message") or "request failed"
-            raise RuntimeError(f"RunPod returned HTTP {response.status_code}: {bounded_text(str(detail), 240)}")
-        return last_body
-    detail = (last_body or {}).get("error") or (last_body or {}).get("detail") or (last_body or {}).get("message") or "request failed"
-    raise RuntimeError(f"RunPod returned HTTP {last_status}: {bounded_text(str(detail), 240)}")
+    return _runpod_client.runpod_yolo_http_request(method, path, json_body=json_body, timeout_seconds=timeout_seconds)
 
 
 def runpod_public_response_summary(value: Any) -> Any:
-    if isinstance(value, dict):
-        result: dict[str, Any] = {}
-        for key, item in value.items():
-            key_l = str(key).lower()
-            if key_l in {"artifact_b64", "dataset_url", "base_model_url", "artifact_upload_url", "authorization", "api_key", "token", "secret"}:
-                if isinstance(item, str):
-                    result[key] = f"<redacted:{len(item)} chars>"
-                else:
-                    result[key] = "<redacted>"
-                continue
-            result[key] = runpod_public_response_summary(item)
-        return result
-    if isinstance(value, list):
-        return [runpod_public_response_summary(item) for item in value[:80]]
-    if isinstance(value, str):
-        return bounded_text(value, 1200)
-    return value
+    return _runpod_client.runpod_public_response_summary(value)
 
 
-def runpod_dataset_token_hash(token: str) -> str:
-    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
 
 
 def create_runpod_training_dataset_archive(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:

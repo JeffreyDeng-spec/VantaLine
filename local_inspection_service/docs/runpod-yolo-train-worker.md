@@ -1,5 +1,14 @@
 # RunPod YOLO Training Worker
 
+The Web-side executor settings now live in `training/executor_settings.py`, and the active
+HTTP adapter/response summary in `training/runpod_client.py`. Dataset/archive input assembly,
+worker payloads, polling, model artifacts and this worker package are unchanged. The adapter
+captures URL and authorization candidates once per call, reads default timeout per attempt,
+and only switches to the second existing auth format after HTTP 401/403. RequestException
+outcomes are raised once with their exception type and original cause. No additional retry,
+GPU worker or paid verification is introduced. The corresponding offline check is
+`python scripts/smoke_training_executor_client.py`.
+
 **Status: Authoritative**
 
 This document defines the active remote GPU training worker package:

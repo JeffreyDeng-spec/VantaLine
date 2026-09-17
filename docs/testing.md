@@ -1,5 +1,16 @@
 # Testing
 
+`python scripts/smoke_training_executor_client.py` covers twenty-one offline groups. Eleven
+passed on the original twenty-seven functions; the added group checks independent settings,
+late environment replacement, injected clients and imports without Web/model runtimes.
+Nineteen expanded business groups also pass against the original bodies. Nine
+argument-capture traces, first-error/later-valid matrices, second authorized-attempt
+failures, configuration seams, new provider failures and recursive failures retain original boundaries.
+Tests fix exact URL/configuration validation, status order, whitespace fallback, timeout
+clamps/NaN/Inf behavior, auth capture versus per-attempt timeout reads, request counts,
+headers, error truncation/causes and the precise recursive redaction boundary. The HTTP
+transport is always substituted. Retired endpoints remain zero-request controls.
+
 `python scripts/smoke_training_task_lifecycle.py --postgres` covers twenty-one groups:
 eleven behavior groups were established on the original nine functions, including
 real PostgreSQL deletion and late-completion rejection. Nineteen expanded business
