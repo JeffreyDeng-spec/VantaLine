@@ -35,7 +35,10 @@ def main():
     assert run([observation("MODEL: PPLBP-2020")], [observation("MODEL: PPLBP-2020", .72)])["decision"] == "REVIEW_REQUIRED"
     assert run([observation("MODEL")], [observation("MODEL")], aligned=False)["decision"] == "REVIEW_REQUIRED"
     source = (APP_DIR / "server.py").read_text(encoding="utf-8")
-    assert '@app.post("/api/text-compare-beta/analyze")' in source
+    api_source = (APP_DIR / "text_inspection/beta_api.py").read_text(encoding="utf-8")
+    assert '@app.post("/api/text-compare-beta/analyze")' in api_source
+    assert 'from .text_inspection.beta_api import register as register_beta_comparison, BetaAccess' in source
+    assert 'analyze_text_compare_beta = register_beta_comparison(' in source
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in source
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in source
     retired = (APP_DIR / "frontend/src/features/text-compare/TextCompareBetaPage.tsx").read_text()

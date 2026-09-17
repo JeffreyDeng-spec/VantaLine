@@ -1763,8 +1763,6 @@ _yolo_warmup_state: dict[str, Any] = {
     "error": "",
 }
 _ocr: Any | None = None
-_incoming_text_ocr: Any | None = None
-_incoming_text_ocr_lock = threading.RLock()
 _incoming_text_store_lock = threading.RLock()
 _rembg_session: Any | None = None
 _rembg_lock = threading.RLock()
@@ -34409,167 +34407,28 @@ def require_incoming_text_task(task_id: str, *, write: bool = False) -> dict[str
     return task
 
 
-def decode_incoming_reference(contents: bytes, filename: str) -> tuple[np.ndarray, str]:
-    if not contents or len(contents) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="标准稿必须为 20MB 以内的单页 PDF/PNG/JPG")
-    lower_name = filename.lower()
-    if contents.startswith(b"%PDF-"):
-        try:
-            import fitz
-        except ImportError:
-            raise HTTPException(status_code=503, detail="PDF 渲染组件尚未安装") from None
-        try:
-            document = fitz.open(stream=contents, filetype="pdf")
-            if document.page_count != 1:
-                raise HTTPException(status_code=400, detail="标准稿 PDF 必须只有一页")
-            pixmap = document[0].get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            image = cv2.imdecode(np.frombuffer(pixmap.tobytes("png"), dtype=np.uint8), cv2.IMREAD_COLOR)
-        except HTTPException:
-            raise
-        except Exception:
-            raise HTTPException(status_code=400, detail="无法解析标准稿 PDF") from None
-        return image, ".pdf"
-    if not (lower_name.endswith((".png", ".jpg", ".jpeg")) or contents[:8] == b"\x89PNG\r\n\x1a\n" or contents[:2] == b"\xff\xd8"):
-        raise HTTPException(status_code=400, detail="标准稿仅支持单页 PDF、PNG 或 JPG")
-    image = cv2.imdecode(np.frombuffer(contents, dtype=np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise HTTPException(status_code=400, detail="标准稿图片解码失败")
-    height, width = image.shape[:2]
-    if width * height > 40_000_000 or min(width, height) < 200:
-        raise HTTPException(status_code=400, detail="标准稿尺寸不符合要求")
-    return image, ".png" if contents[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
+from .text_inspection.incoming_analysis import (
+    decode_reference as decode_incoming_reference, result_mapping as _ocr_result_mapping,
+    field_observation as _field_observation, IncomingOCREngine,
+    observations as _incoming_observations, corroboration as _incoming_corroboration,
+)
+
+_incoming_ocr_engine = IncomingOCREngine(prepare_runtime=lambda: prepare_paddle_runtime())
+_incoming_text_ocr_lock = _incoming_ocr_engine.lock
 
 
 def incoming_text_ocr_engine() -> Any:
-    global _incoming_text_ocr
-    with _incoming_text_ocr_lock:
-        if _incoming_text_ocr is None:
-            prepare_paddle_runtime()
-            from paddleocr import PaddleOCR
-
-            _incoming_text_ocr = PaddleOCR(
-                # Production is pinned to PaddleOCR/PaddleX 3.7, where the
-                # PP-OCRv6 medium profile is registered and preloaded alongside
-                # the legacy v6-small path. Geometry is
-                # normalized exactly once by rectify_label above so OCR boxes
-                # stay in the same canonical coordinate space as field ROIs.
-                text_detection_model_name="PP-OCRv6_medium_det",
-                text_recognition_model_name="PP-OCRv6_medium_rec",
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                use_textline_orientation=True,
-            )
-        return _incoming_text_ocr
-
-
-def _ocr_result_mapping(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    raw = getattr(value, "json", None)
-    if callable(raw):
-        raw = raw()
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except json.JSONDecodeError:
-            raw = None
-    if isinstance(raw, dict):
-        return raw.get("res") if isinstance(raw.get("res"), dict) else raw
-    return {}
+    return _incoming_ocr_engine.get()
 
 
 def incoming_text_ocr_observations(image: np.ndarray) -> list[TextObservation]:
-    result_items = incoming_text_ocr_engine().predict(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    result = _ocr_result_mapping(result_items[0] if result_items else {})
-    texts = list(result.get("rec_texts") or [])
-    scores = list(result.get("rec_scores") or [])
-    polygons = list(result.get("rec_polys") or result.get("dt_polys") or [])
-    observations: list[TextObservation] = []
-    for index, text_value in enumerate(texts):
-        text_value = str(text_value)
-        if not text_value:
-            continue
-        polygon_value = polygons[index] if index < len(polygons) else []
-        try:
-            polygon = tuple((float(point[0]), float(point[1])) for point in polygon_value)
-        except (TypeError, ValueError, IndexError):
-            polygon = ()
-        confidence = float(scores[index]) if index < len(scores) else 0.0
-        observations.append(TextObservation(text=text_value, confidence=confidence, polygon=polygon))
-    return observations
+    return _incoming_observations(image, engine=lambda: incoming_text_ocr_engine())
 
 
 def incoming_text_corroboration_observations(
     image: np.ndarray, rules: list[dict[str, Any]]
 ) -> dict[str, list[TextObservation]]:
-    """Run the second OCR pass only on critical ROIs and restore global coords."""
-    height, width = image.shape[:2]
-    by_field: dict[str, list[TextObservation]] = {}
-    for rule in rules:
-        if rule.get("importance") != "critical":
-            continue
-        region = rule["region_normalized"]
-        padding_x = max(4, int(width * 0.008))
-        padding_y = max(4, int(height * 0.008))
-        x1 = max(0, int(region["x"] * width) - padding_x)
-        y1 = max(0, int(region["y"] * height) - padding_y)
-        x2 = min(width, int((region["x"] + region["width"]) * width) + padding_x)
-        y2 = min(height, int((region["y"] + region["height"]) * height) + padding_y)
-        crop = image[y1:y2, x1:x2]
-        if crop.size == 0:
-            by_field[str(rule["field_id"])] = []
-            continue
-        translated = []
-        for observation in incoming_text_ocr_observations(crop):
-            translated.append(
-                TextObservation(
-                    text=observation.text,
-                    confidence=observation.confidence,
-                    polygon=tuple((x + x1, y + y1) for x, y in observation.polygon),
-                )
-            )
-        by_field[str(rule["field_id"])] = translated
-    return by_field
-
-
-def _field_observation(
-    rule: dict[str, Any], first: list[TextObservation], second: list[TextObservation], image: np.ndarray, reference_image: np.ndarray
-) -> TextObservation | None:
-    image_size = (image.shape[1], image.shape[0])
-    first_items = observations_for_rule(rule, first, image_size)
-    second_items = observations_for_rule(rule, second, image_size)
-    first_text = " ".join(item.text for item in first_items)
-    second_text = " ".join(item.text for item in second_items)
-    if not first_items and not second_items:
-        region = rule["region_normalized"]
-        x1, y1 = int(region["x"] * image.shape[1]), int(region["y"] * image.shape[0])
-        x2 = int((region["x"] + region["width"]) * image.shape[1])
-        y2 = int((region["y"] + region["height"]) * image.shape[0])
-        roi = image[y1:y2, x1:x2]
-        reference_roi = reference_image[y1:y2, x1:x2]
-        similarity = local_visual_similarity(reference_image, image, region)
-        roi_sharpness = float(cv2.Laplacian(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()) if roi.size else 0.0
-        reference_sharpness = float(cv2.Laplacian(cv2.cvtColor(reference_roi, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()) if reference_roi.size else 0.0
-        # Absence is automatic only with two successful empty OCR passes plus
-        # clear, aligned ROI evidence on both the approved artwork and capture.
-        if roi.size and reference_roi.size and roi_sharpness >= 85 and reference_sharpness >= 85 and similarity is not None and similarity < 0.42:
-            return TextObservation(text="", confidence=1.0, corroborated=True)
-        return None
-    confidence = min(
-        sum(item.confidence for item in first_items) / max(len(first_items), 1),
-        sum(item.confidence for item in second_items) / max(len(second_items), 1),
-    )
-    polygon = tuple(point for item in first_items for point in item.polygon)
-    return TextObservation(
-        text=first_text,
-        confidence=confidence,
-        polygon=polygon,
-        corroborated=bool(
-            first_items
-            and second_items
-            and comparison_text(first_text, rule) == comparison_text(second_text, rule)
-        ),
-    )
+    return _incoming_corroboration(image, rules, observe=lambda crop: incoming_text_ocr_observations(crop))
 
 
 def _duplicate_incoming_capture(owner_user_id: str, task_id: str, capture_id: str) -> dict[str, Any] | None:
@@ -34778,92 +34637,36 @@ def require_incoming_text_storage_capacity(upload_bytes: int) -> None:
         raise HTTPException(status_code=507, detail="服务器存储空间不足，已停止本次检验，请联系管理员清理空间")
 
 
-_text_compare_beta_cache_lock = threading.RLock()
-_text_compare_beta_cache: dict[tuple[str, str], dict[str, Any]] = {}
 TEXT_COMPARE_BETA_MAX_BYTES = 10 * 1024 * 1024
 TEXT_COMPARE_BETA_MAX_PIXELS = 16_000_000
 TEXT_COMPARE_BETA_CACHE_TTL_SECONDS = 3600
 TEXT_COMPARE_BETA_CACHE_MAX_BYTES = 32 * 1024 * 1024
 
 
+from .text_inspection.beta_comparison import BetaComparison, BetaPolicy
+from .text_inspection.beta_api import register as register_beta_comparison, BetaAccess
+
+_beta_comparison = BetaComparison(
+    BetaPolicy(ttl_seconds=lambda: TEXT_COMPARE_BETA_CACHE_TTL_SECONDS,
+               max_pixels=lambda: TEXT_COMPARE_BETA_MAX_PIXELS,
+               max_cache_bytes=lambda: TEXT_COMPARE_BETA_CACHE_MAX_BYTES),
+    observer=lambda: incoming_text_ocr_observations,
+)
+_text_compare_beta_cache_lock = _beta_comparison.lock
+_text_compare_beta_cache = _beta_comparison.cache
+
+
 def _run_text_compare_beta(
-    user_id: str,
-    clean_id: str,
-    reference_bytes: bytes,
-    captured_bytes: bytes,
+    user_id: str, clean_id: str, reference_bytes: bytes, captured_bytes: bytes,
 ) -> dict[str, Any]:
-    reference_hash = hashlib.sha256(reference_bytes).hexdigest()
-    captured_hash = hashlib.sha256(captured_bytes).hexdigest()
-    fingerprint = hashlib.sha256(f"{len(reference_bytes)}:{reference_hash}:{len(captured_bytes)}:{captured_hash}".encode("ascii")).hexdigest()
-    key = (user_id, clean_id)
-    # The lock intentionally spans OCR. Beta is capped at one OCR comparison at
-    # a time, keeping the API event loop responsive and making same-ID retries
-    # true single-flight operations.
-    with _text_compare_beta_cache_lock:
-        now = time.monotonic()
-        for cached_key, cached in list(_text_compare_beta_cache.items()):
-            if now - float(cached.get("created_at") or 0) > TEXT_COMPARE_BETA_CACHE_TTL_SECONDS:
-                _text_compare_beta_cache.pop(cached_key, None)
-        cached = _text_compare_beta_cache.get(key)
-        if cached:
-            if cached["fingerprint"] != fingerprint:
-                raise HTTPException(status_code=409, detail="同一 comparison_id 对应了不同图片")
-            return cached["result"]
-        reference = cv2.imdecode(np.frombuffer(reference_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-        captured = cv2.imdecode(np.frombuffer(captured_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-        if reference is None or captured is None:
-            raise HTTPException(status_code=400, detail="图片解码失败，请使用 PNG 或 JPG 图片")
-        for image in (reference, captured):
-            if image.shape[0] * image.shape[1] > TEXT_COMPARE_BETA_MAX_PIXELS or min(image.shape[:2]) < 300:
-                raise HTTPException(status_code=400, detail="图片尺寸不符合要求，单张不能超过 1600 万像素")
-        try:
-            from local_inspection_service.text_compare_beta import compare_images
-
-            result = compare_images(reference, captured, clean_id, incoming_text_ocr_observations)
-        except Exception as exc:
-            result = {
-                "comparison_id": clean_id,
-                "decision": "REVIEW_REQUIRED",
-                "message": "文字识别服务暂时无法完成对比，请人工确认或稍后重试。",
-                "differences": [],
-                "error_code": type(exc).__name__,
-            }
-        result_size = len(json.dumps(result, ensure_ascii=False).encode("utf-8"))
-        _text_compare_beta_cache[key] = {
-            "fingerprint": fingerprint,
-            "result": result,
-            "created_at": now,
-            "size": result_size,
-        }
-        while sum(int(item.get("size") or 0) for item in _text_compare_beta_cache.values()) > TEXT_COMPARE_BETA_CACHE_MAX_BYTES:
-            oldest = min(_text_compare_beta_cache, key=lambda item: float(_text_compare_beta_cache[item].get("created_at") or 0))
-            _text_compare_beta_cache.pop(oldest, None)
-        return result
+    return _beta_comparison.run(user_id, clean_id, reference_bytes, captured_bytes)
 
 
-@app.post("/api/text-compare-beta/analyze")
-async def analyze_text_compare_beta(
-    reference_file: UploadFile = File(...),
-    captured_file: UploadFile = File(...),
-    comparison_id: str = Form(...),
-) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字对比权限")
-    clean_id = comparison_id.strip()
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", clean_id):
-        raise HTTPException(status_code=400, detail="comparison_id 格式错误")
-    allowed_types = {"image/png", "image/jpeg", "image/webp"}
-    if reference_file.content_type not in allowed_types or captured_file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="仅支持 PNG、JPG 或 WEBP 图片")
-    reference_bytes, captured_bytes = await reference_file.read(), await captured_file.read()
-    if (
-        not reference_bytes
-        or not captured_bytes
-        or len(reference_bytes) > TEXT_COMPARE_BETA_MAX_BYTES
-        or len(captured_bytes) > TEXT_COMPARE_BETA_MAX_BYTES
-    ):
-        raise HTTPException(status_code=400, detail="标准图和实物图必须存在，且单张不超过 10MB")
-    user_id = str(current_auth_user().get("id") or "")
-    return await asyncio.to_thread(_run_text_compare_beta, user_id, clean_id, reference_bytes, captured_bytes)
+analyze_text_compare_beta = register_beta_comparison(
+    app, BetaAccess(require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+                    current_user=lambda: current_auth_user()),
+    max_bytes=lambda: TEXT_COMPARE_BETA_MAX_BYTES, run_provider=lambda: _run_text_compare_beta,
+)
 
 
 @app.post("/api/incoming-text/tasks/{task_id}/inspect")

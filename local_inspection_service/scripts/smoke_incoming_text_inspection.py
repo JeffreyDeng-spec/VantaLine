@@ -132,8 +132,12 @@ def main() -> None:
     assert 'detection_method = "label_text_compare"' in server_text
     assert "def _duplicate_incoming_capture" in server_text
     assert "review_incoming_text_inspection" in server_text
-    assert 'text_detection_model_name="PP-OCRv6_medium_det"' in server_text
-    assert 'text_recognition_model_name="PP-OCRv6_medium_rec"' in server_text
+    analysis_text = (APP_DIR / "text_inspection" / "incoming_analysis.py").read_text(encoding="utf-8")
+    beta_text = (APP_DIR / "text_inspection" / "beta_comparison.py").read_text(encoding="utf-8")
+    assert 'text_detection_model_name="PP-OCRv6_medium_det"' in analysis_text
+    assert 'text_recognition_model_name="PP-OCRv6_medium_rec"' in analysis_text
+    assert '_incoming_ocr_engine = IncomingOCREngine(prepare_runtime=lambda: prepare_paddle_runtime())' in server_text
+    assert 'return _incoming_ocr_engine.get()' in server_text
     assert "def incoming_text_corroboration_observations" in server_text
     assert "def require_incoming_text_storage_capacity" in server_text
     assert "VANTALINE_INCOMING_TEXT_MIN_FREE_BYTES" in server_text
@@ -141,6 +145,8 @@ def main() -> None:
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in server_text
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in server_text
     assert "normalize_ocr_text" not in server_text[server_text.index("# Package-material incoming text inspection"):]
+    assert "normalize_ocr_text" not in analysis_text
+    assert "normalize_ocr_text" not in beta_text
 
     frontend_text = (APP_DIR / "frontend" / "src" / "components" / "AppShell.tsx").read_text(encoding="utf-8")
     assert "包材文字检验（旧版）" not in frontend_text

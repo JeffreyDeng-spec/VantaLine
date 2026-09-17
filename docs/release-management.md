@@ -1,12 +1,18 @@
 # VantaLine release management
 
+OCR/Beta CI adds ten offline initialization, image, cache and composition groups.
+Ship the analysis, comparison-cache and HTTP modules with manifest v7 and the root
+state aliases. Model names, flags, business prompt versions and deployment topology
+are unchanged. Full-runtime CI must retain the existing incoming/Beta endpoint and
+model-snapshot checks before any sequential production rollout.
+
 Incoming-store CI adds isolated file/JSON/SQL contracts, root composition checks and
 an explicit disposable-schema PostgreSQL group. Existing incoming/text endpoints
 remain required. Ship both the runtime file adapter and legacy store with the root
 aliases in the immutable artifact; database schema and worker topology are unchanged.
 
 Comparison/review CI adds eight offline boundary groups and six route-identity
-checks. Ship the submission, review, API and port modules plus manifest v6 together;
+checks. Ship the submission, review, API and port modules plus manifest v7 together;
 the source list now includes the actual comparison input and strict-prompt files.
 Business prompt text/version stays unchanged. Retain old task evidence on a normal
 whole-release rollback; no new worker mode is enabled by this package.
@@ -18,11 +24,11 @@ the immutable artifact. Runtime topology and complete-release rollback stay unch
 
 Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
 application identity checks. Ship these modules and their root adapters together.
-Manifest v6 and normal whole-release restart/rollback remain; no new topology or
+Manifest v7 and normal whole-release restart/rollback remain; no new topology or
 model configuration is enabled by this structural batch.
 
 Text-media CI adds real image/PDF and application-composition contracts. Package
-both media/image modules with source manifest v6, which covers their migrated
+both media/image modules with source manifest v7, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
 dependency upgrade is needed; ordinary complete-release restart/rollback applies.
 Media fault injection preserves first-error evidence without retries. Callback and
@@ -82,7 +88,7 @@ Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.
 
-Preparation CI adds synthetic workflow contracts and source manifest v6 includes
+Preparation CI adds synthetic workflow contracts and source manifest v7 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
 

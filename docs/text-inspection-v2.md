@@ -1,5 +1,14 @@
 # Text inspection v2
 
+Incoming-text OCR initialization and Beta comparison cache now have explicit service
+owners. Model initialization is locked, while predictions retain their original
+concurrency. Beta holds its lock throughout comparison, returns the same cached
+result object, expires only when age exceeds the TTL and keeps the pre-OCR timestamp.
+A cache hit does not recalculate size or immediately enforce a lowered budget. Model
+comparison failures cache REVIEW_REQUIRED, while decode/size/serialization errors
+retain their original uncached behavior. Standard PDF decoding retains its existing
+single-page, rendering and failure behavior; this extraction is not an OCR change.
+
 Shared JSON-list reads/writes now use the runtime adapter, and legacy incoming-text
 records use a dedicated store. Existing JSON uniqueness rules remain deliberately
 different: new reference IDs reject duplicate owner/task/version even for ordinary

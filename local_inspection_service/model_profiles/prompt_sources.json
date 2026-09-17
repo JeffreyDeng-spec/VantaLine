@@ -1,7 +1,9 @@
 {
-  "version": 6,
+  "version": 7,
   "sources": [
     "server.py",
+    "text_inspection/incoming_analysis.py",
+    "text_inspection/beta_comparison.py",
     "text_inspection/comparison_submission.py",
     "text_inspection_v2.py",
     "text_inspection/media.py",
