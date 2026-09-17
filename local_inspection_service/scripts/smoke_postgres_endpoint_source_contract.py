@@ -406,6 +406,36 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(training, attribute))
 
+    store_path = training_path.with_name("record_store.py")
+    training_store = SourceContract(injected_repository=True, repository_expression="self.repository")
+    training_store.visit(ast.parse(store_path.read_text(encoding="utf-8"), filename=str(store_path)))
+    require(training_store.runtime_repository_entry_call_count == 3
+            and training_store.functions_with_runtime_repository_entry == {
+                "load_training_task_records", "save_training_task", "load_training_task"},
+            "training store must retain its three per-operation repository selections")
+    require("training_tasks" in training_store.string_literals,
+            "training store missing actual table access")
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "training.record_store"
+                and any(alias.name == "TrainingRecordStore" for alias in node.names)
+                for node in tree.body), "server missing training store composition")
+    compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name) and node.func.id == "TrainingRecordStore"]
+    require(len(compositions) == 1, "expected one training store composition")
+    repository = next(keyword.value for keyword in compositions[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "training store must obtain the current thread repository lazily")
+    for name, arguments in {"training_task_path": "task_id", "load_training_task_records": "",
+                            "save_training_task": "task", "load_training_task": "path", "find_training_task": "job_id"}.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        expected = ast.parse("_training_records." + name + "(" + arguments + ")", mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected), "training store forward changed: " + name)
+    contract.runtime_repository_entry_call_count += training_store.runtime_repository_entry_call_count - 1
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(training_store, attribute))
+
     # Legacy workflows retain five real repository entries after extraction.
     for filename, expected in {
         "incoming_catalog.py": {"update_incoming_text_reference_rules"},

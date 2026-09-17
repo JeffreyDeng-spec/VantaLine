@@ -1,5 +1,12 @@
 # PostgreSQL runtime operations
 
+`TrainingRecordStore` retains three real repository entry points for list, save and
+single read. Nested JSON-list reads and find fallbacks reselect the current repository
+at the original call sites. Save freezes model references and invalidates the read
+cache before entering the existing shared reentrant training guard; repository
+selection, row encoding and upsert remain inside it. Invalid SQL rows still skip the
+write after those steps. No read/write SQL or advisory-lock behavior changes here.
+
 The extracted training finder selects the current thread repository once when the
 finder is created and fetches `training_tasks` lazily on first lookup. Its closure
 is an operation snapshot for that same thread, not a shareable repository or global
@@ -18,7 +25,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v15 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v16 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

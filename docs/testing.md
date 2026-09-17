@@ -1,5 +1,18 @@
 # Testing
 
+`python scripts/smoke_training_record_store.py --postgres` adds seventeen groups.
+Eleven behavior groups passed with the original eight functions, including an
+isolated PostgreSQL replay. Fifteen expanded business groups also pass against the original functions. Two
+interface groups check independent instances and getter failures. Added contracts
+cover callback/file first failures, nine callback capture traces and directory
+resolution after task-id conversion. Tests cover
+freeze/invalidation/lock/write order, missing resolver, existing None/empty snapshots,
+scoped deep copies, two async thread saves, cross-thread lock probes, nested RLock
+release after failure, partial file writes, JSON raw types, repeated repository
+selection, direct-versus-fallback matching and PostgreSQL upsert/update/readback.
+The original missing-dataset deletion smoke now installs the existing offline model
+profile fixture and runs in CI; all deletion/resource assertions remain intact.
+
 `python scripts/smoke_trained_model_catalog.py --postgres` covers nineteen groups:
 ten offline groups and the isolated PostgreSQL group first passed against the
 original three root functions; two groups check lazy independent service

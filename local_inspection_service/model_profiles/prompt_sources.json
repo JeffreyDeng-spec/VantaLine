@@ -1,7 +1,9 @@
 {
-  "version": 15,
+  "version": 16,
   "sources": [
     "server.py",
+    "training/task_identity.py",
+    "training/record_store.py",
     "training/task_lookup.py",
     "training/model_catalog.py",
     "pipeline/training_links.py",
