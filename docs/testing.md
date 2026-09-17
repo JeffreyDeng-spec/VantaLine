@@ -1,5 +1,20 @@
 # Testing
 
+`python scripts/smoke_training_runpod_flow.py` covers twenty-four offline groups. Sixteen
+passed against the actual original five functions before migration; twenty-two expanded
+business groups also pass on saved original functions. Independent construction and new
+getter failures add two groups. Thirty capture traces retain callback-before-argument
+ordering, while first-error-then-recovery cases cover file access, environment lookup,
+clocks, HTTP and JSON exception boundaries, and task writes. Repeated synthetic responses
+remain valid so accidental retries cannot hide behind exhausted fixtures.
+Checks include upload-before-validation, exact inline boundaries and file access order, POST
+payload identity and TTL, strict output booleans, status normalization differences, encoded job
+IDs, timeout equality and pre-sleep checks, terminal intermediate states from the original task,
+all failure stages without retries, import/summary/update/sync/warmup order and keyword-collision
+residue. Failure at each task-update position blocks later archive/submission/GET/import/sync
+side effects without retrying the write. An outer-runner integration retains one historical model scope through completion.
+HTTP, archive creation, artifact import, waits, model warming and process operations are substitutes.
+
 `python scripts/smoke_training_dataset.py` covers twenty-seven offline groups. Seventeen
 passed on the actual original ten functions before extraction. Twenty-three expanded business
 groups pass on the saved original functions. Independent composition, shared async/threadpool
