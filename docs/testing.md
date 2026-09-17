@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_detection_results.py` adds nine synthetic groups. Eight
+behavioral groups passed against the original entry-point functions before extraction:
+geometry/degeneracy, filtering mutation and thresholds, stable deduplication,
+box/mask/OBB precedence, parser rounding/callback identity, exact counts, manual counts
+and dynamic labels, and drawing. The ninth verifies actual root aliases, independent
+label capabilities, unselected-provider laziness and eager default evaluation.
+Keep the existing exact-count, manual-type and YOLO-shape smoke assertions. No model
+prediction or device I/O is required for the new suite.
+
 `python scripts/smoke_incoming_text_workflows.py` covers seventeen groups: owner-only task access,
 projection/media checks, reference creation and clone failures, activation order,
 repeat/insert-loser admission, OCR and quality failure boundaries, review partial

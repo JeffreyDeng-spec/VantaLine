@@ -33,6 +33,14 @@ def capture():
         from local_inspection_service import server
         from starlette.routing import Mount
 
+        from local_inspection_service.detection import geometry, postprocessing, drawing
+        assert server.polygon_area is geometry.polygon_area
+        assert server.postprocess_detections is postprocessing.postprocess_detections
+        assert server.draw_detections is drawing.draw_detections
+        assert server.parse_detections.__self__ is server._detection_results
+        assert server.apply_rule.__self__ is server._detection_rules
+        assert server._detection_rules.class_labels() is server.CLASS_LABELS
+        assert server._detection_rules.manual_labels() is server.MANUAL_TYPE_LABELS
         assert server._record_access.identity is server._request_user
         assert server._access_control.identity is server._request_user
         assert server._record_access.ownership is server._record_ownership

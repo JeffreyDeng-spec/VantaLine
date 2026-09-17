@@ -1,5 +1,11 @@
 # Configuration reference
 
+Detection result extraction changes no settings or thresholds. Label maps remain
+lazy providers. Existing specialized thresholds, geometry ratios, exact-count rules
+and manual-type requirements retain their original defaults and evaluation timing.
+Source manifest remains v8 because no model-input producer moves in this batch;
+new records still fingerprint the actual listed sources, including the changed root.
+
 Legacy incoming workflow extraction adds no business configuration. Existing
 automatic-decision admission, minimum free space and image retention settings retain
 their defaults and read timing. Narrow providers read current request identity,

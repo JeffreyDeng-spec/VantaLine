@@ -1,5 +1,11 @@
 # Production runbook
 
+Detection result modules preserve the existing in-process inference topology.
+Filtering still annotates candidate dictionaries, parsers still prefer nonempty
+boxes over oriented boxes, and rule errors retain their original propagation.
+Deploy and roll back the complete immutable release; no data migration or runtime
+maintenance action accompanies this structural batch.
+
 Legacy incoming workflow modules preserve partial-failure boundaries. Activation
 can persist before task publication fails; JSON review writes the inspection before
 audit, and repeating an already identical decision does not repair missing audit.
