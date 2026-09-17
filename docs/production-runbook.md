@@ -1,5 +1,10 @@
 # Production runbook
 
+Detection task storage extraction preserves cache invalidation and existing partial
+failure behavior. JSON saves retain the fixed `.json.tmp` path and atomic replacement;
+failed replacement leaves the old target and temporary file. This batch changes no
+locks, cache policy, schema or worker topology. Recovery remains whole-release rollback.
+
 Detection OCR extraction preserves synchronous local prediction, process-local
 caching and original exception boundaries. A malformed batch result still triggers
 the original per-image fallback; short valid batches are not padded or retried.

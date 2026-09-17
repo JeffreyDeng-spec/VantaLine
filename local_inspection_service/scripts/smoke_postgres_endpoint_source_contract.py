@@ -348,6 +348,35 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(edits, attribute))
 
+    detection_path = ROOT / "local_inspection_service" / "detection" / "task_store.py"
+    detection = SourceContract(injected_repository=True, repository_expression="self.repository")
+    detection.visit(ast.parse(detection_path.read_text(encoding="utf-8"), filename=str(detection_path)))
+    require(detection.runtime_repository_entry_call_count == 3
+            and detection.functions_with_runtime_repository_entry == {
+                "load_ai_detection_tasks", "save_ai_detection_tasks", "save_ai_detection_task"},
+            "detection task store must retain its three actual lazy repository entries")
+    for name, arguments in {"load_ai_detection_tasks": "", "save_ai_detection_tasks": "tasks",
+                            "find_ai_detection_task": "task_id", "save_ai_detection_task": "task, prepend=prepend"}.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        expected = ast.parse("_detection_task_store." + name + "(" + arguments + ")", mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected), "detection store forward changed: " + name)
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "detection.task_store"
+                and any(alias.name == "DetectionTaskStore" for alias in node.names)
+                for node in tree.body), "server missing detection task store composition")
+    compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name) and node.func.id == "DetectionTaskStore"]
+    require(len(compositions) == 1, "expected one detection task store composition")
+    repository = next(keyword.value for keyword in compositions[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "detection task store must obtain the thread repository lazily")
+    # Replace the composition lambda count with the actual three persistence entries.
+    contract.runtime_repository_entry_call_count += detection.runtime_repository_entry_call_count - 1
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(detection, attribute))
+
     # Legacy workflows retain five real repository entries after extraction.
     for filename, expected in {
         "incoming_catalog.py": {"update_incoming_text_reference_rules"},

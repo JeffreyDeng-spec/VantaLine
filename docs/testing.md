@@ -1,5 +1,18 @@
 # Testing
 
+`python scripts/smoke_detection_task_store.py --postgres` covers nine synthetic
+groups. The initial seven passed against the unchanged root implementation before
+extraction. Contracts cover normalization, shallow aliases, cache early returns,
+JSON I/O and replacement failures, raw single-task writes, repeated repository
+selection, background hydration, independent stores, late root providers and real
+PostgreSQL replace/upsert/readback in a disposable schema. No model/device is used.
+The PostgreSQL source gate follows all three actual store entries and the root's
+lazy factory binding without reducing its original total-entry threshold.
+The original phase3a resource and phase3b detection smokes also run in CI. Both use
+the existing explicit model-profile fixture; the frontend source contract follows
+the current workspace-relative routes and cancellable image/video calls. Original
+ownership, list/delete and image-admission HTTP assertions remain intact.
+
 `python scripts/smoke_detection_ocr.py` covers twenty synthetic groups. Nine passed
 against the original root before extraction: keywords/profiles, matching thresholds,
 manual classification, image geometry, scoring failures, crop fallbacks, attachment

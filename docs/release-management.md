@@ -1,5 +1,9 @@
 # VantaLine release management
 
+The detection task-store batch adds its synthetic and disposable-PostgreSQL smoke
+to backend CI and updates the repository source gate to inspect the extracted store.
+Deployment/rollback remains the complete immutable release with the current topology.
+
 The detection OCR batch adds its synthetic smoke and ships `runtime.paddle` plus
 five OCR modules with source manifest v10. Local factories never load real models in
 these contracts. Keep the complete application and incoming/OCR regression checks;

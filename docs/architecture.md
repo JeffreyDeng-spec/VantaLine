@@ -1,5 +1,14 @@
 # Architecture
 
+Detection task IDs/counts now live in `detection.task_identity`, persistence in
+`detection.task_store`, and background lookup/hydration in `detection.task_backgrounds`.
+The store receives lazy repository, path, cache and row-adapter capabilities. Shared
+read-cache ownership and its five-second TTL remain in the composition root; returned
+lists are shallow copies with shared record objects. No repository connection or
+request identity is stored by these services. Internal load/save calls now use the
+store instance; test replacements belong at its ports. Root background resolver and
+prefix remain late-bound for compatibility.
+
 Detection OCR now separates image variants (`detection.ocr_images`), keyword
 matching (`ocr_matching`), manual classification/projection (`manual_text`), scoring
 (`ocr_scoring`) and job selection/enrichment (`ocr_attachment`). Narrow callbacks

@@ -1,5 +1,13 @@
 # PostgreSQL runtime operations
 
+Detection task persistence now obtains the current thread repository inside each
+of its three original storage entry points. JSON single-task writes retain the
+nested load/save factory selections; SQL single writes still upsert and full saves
+still replace all valid rows. Invalid single rows are skipped after cache invalidation
+and directory creation; a fully invalid bulk save still replaces with an empty set.
+Factory/query errors propagate without JSON fallback. Existing locks, SQL and schema
+are unchanged; read-lock optimization belongs to a later batch.
+
 Legacy incoming catalog, review/list and retention workflows obtain the current
 thread repository through `IncomingWrites.repository` at each original entry point.
 Activation retains draft-save then repository activation then task publication;

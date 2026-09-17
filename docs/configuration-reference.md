@@ -1,5 +1,10 @@
 # Configuration reference
 
+Detection task storage adds no configuration or defaults. Existing ID/name/count
+normalization, background selection, path providers and shared read-cache TTL remain.
+This persistence-only extraction retains source manifest v9; new fingerprints still
+include the changed root source. Stored model versions and old snapshots are unchanged.
+
 Paddle settings and OCR thresholds are unchanged. `runtime.paddle` keeps setdefault
 semantics for environment flags and the exact English PP-OCRv6-small parameters;
 the incoming engine continues to use PP-OCRv6-medium. Source manifest v10 lists the
