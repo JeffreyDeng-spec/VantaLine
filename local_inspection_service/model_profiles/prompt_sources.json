@@ -1,7 +1,10 @@
 {
-  "version": 10,
+  "version": 11,
   "sources": [
     "server.py",
+    "detection/task_identity.py",
+    "detection/task_store.py",
+    "detection/task_backgrounds.py",
     "detection/geometry.py",
     "detection/postprocessing.py",
     "detection/results.py",

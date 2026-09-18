@@ -22950,8 +22950,8 @@ _detection_task_store = DetectionTaskStore(
     paths=TaskStorePaths(data=lambda: DATA_DIR, tasks=lambda: AI_DETECTION_TASKS_PATH, ensure=lambda: ensure_dirs()),
     cache=TaskReadCache(get=lambda key: store_read_cache_get(key), put=lambda key, value: store_read_cache_put(key, value),
                         invalidate=lambda key: store_read_cache_invalidate(key)),
-    rows=TaskRows(encode=lambda task: ai_detection_task_row(task), decode=lambda rows: row_raw_json_list(rows)),
-    normalize_background=lambda value: safe_background_set_id(value),
+    rows=TaskRows(encode=lambda task: ai_detection_task_row(task), decode=lambda: row_raw_json_list),
+    normalize_background=lambda: safe_background_set_id,
 )
 
 
@@ -23005,12 +23005,12 @@ def save_ai_detection_task(task: dict[str, Any], *, prepend: bool = False) -> No
 
 def ai_detection_task_background_record(task_id: str) -> tuple[str, dict[str, Any]]:
     return _detection_task_background_record(task_id, find_task=lambda value: find_ai_detection_task(value),
-                                             normalize_background=lambda value: safe_background_set_id(value))
+                                             normalize_background=lambda: safe_background_set_id)
 
 
 def hydrate_auto_optimize_background_from_ai_task(state: dict[str, Any]) -> bool:
-    return _hydrate_detection_task_background(state, background_record=lambda value: ai_detection_task_background_record(value),
-                                              normalize_background=lambda value: safe_background_set_id(value))
+    return _hydrate_detection_task_background(state, background_record=lambda: ai_detection_task_background_record,
+                                              normalize_background=lambda: safe_background_set_id)
 
 
 def serialize_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:

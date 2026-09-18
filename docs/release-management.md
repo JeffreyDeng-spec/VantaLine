@@ -3,9 +3,14 @@
 The detection task-store batch adds its synthetic and disposable-PostgreSQL smoke
 to backend CI and updates the repository source gate to inspect the extracted store.
 Deployment/rollback remains the complete immutable release with the current topology.
+Row decoding and background callback getters resolve at the original expressions:
+after preceding work and before fetch/string/mapping argument effects. Missing
+callbacks preserve argument evaluation and TypeError. Source manifest v11 covers
+the three task modules; no retry, cache policy or transaction change is introduced.
+
 
 The detection OCR batch adds its synthetic smoke and ships `runtime.paddle` plus
-five OCR modules with source manifest v10. Local factories never load real models in
+five OCR modules with source manifest v11. Local factories never load real models in
 these contracts. Keep the complete application and incoming/OCR regression checks;
 release startup, worker topology and whole-package rollback remain unchanged.
 Attachment crop, score and match getters capture the current callable at each
@@ -17,18 +22,18 @@ retry or model-initialization lock is introduced.
 
 The detection-result extraction adds synthetic backend smoke and admits the new
 `detection` package to dependency-direction checks. It preserves the HTTP contract,
-model parameters, worker topology and release commands. Ship source manifest v10
+model parameters, worker topology and release commands. Ship source manifest v11
 with all five detection modules to retain their source coverage for new tasks.
 Historical snapshots remain untouched; whole-release rollback is the recovery unit.
 
 The legacy incoming workflow batch adds its focused smoke to backend CI, retains
 both original incoming endpoint and repository checks, and compares the complete
 assembled HTTP baseline. It does not change worker topology or launch commands.
-Source manifest v10 records the relocated OCR input orchestrator for new snapshots.
+Source manifest v11 records the relocated OCR input orchestrator for new snapshots.
 Rollback remains the previous immutable release with existing persistent state.
 
 OCR/Beta CI adds ten offline initialization, image, cache and composition groups.
-Ship the analysis, comparison-cache and HTTP modules with manifest v10 and the root
+Ship the analysis, comparison-cache and HTTP modules with manifest v11 and the root
 state aliases. Model names, flags, business prompt versions and deployment topology
 are unchanged. Full-runtime CI must retain the existing incoming/Beta endpoint and
 model-snapshot checks before any sequential production rollout.
@@ -39,7 +44,7 @@ remain required. Ship both the runtime file adapter and legacy store with the ro
 aliases in the immutable artifact; database schema and worker topology are unchanged.
 
 Comparison/review CI adds eight offline boundary groups and six route-identity
-checks. Ship the submission, review, API and port modules plus manifest v10 together;
+checks. Ship the submission, review, API and port modules plus manifest v11 together;
 the source list now includes the actual comparison input and strict-prompt files.
 Business prompt text/version stays unchanged. Retain old task evidence on a normal
 whole-release rollback; no new worker mode is enabled by this package.
@@ -51,11 +56,11 @@ the immutable artifact. Runtime topology and complete-release rollback stay unch
 
 Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
 application identity checks. Ship these modules and their root adapters together.
-Manifest v10 and normal whole-release restart/rollback apply; no new topology or
+Manifest v11 and normal whole-release restart/rollback apply; no new topology or
 model configuration is enabled by this structural batch.
 
 Text-media CI adds real image/PDF and application-composition contracts. Package
-both media/image modules with source manifest v10, which covers their migrated
+both media/image modules with source manifest v11, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
 dependency upgrade is needed; ordinary complete-release restart/rollback applies.
 Media fault injection preserves first-error evidence without retries. Callback and
@@ -115,7 +120,7 @@ Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.
 
-Preparation CI adds synthetic workflow contracts and source manifest v10 includes
+Preparation CI adds synthetic workflow contracts and source manifest v11 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
 

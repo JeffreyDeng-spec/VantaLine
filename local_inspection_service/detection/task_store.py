@@ -28,13 +28,13 @@ class TaskReadCache:
 @dataclass(frozen=True)
 class TaskRows:
     encode: Callable[[Record], Record | None]
-    decode: Callable[[list[Record]], list[Record]]
+    decode: Callable[[], Callable[[list[Record]], list[Record]]]
 
 
 class DetectionTaskStore:
     def __init__(self, repository: Callable[[], PostgresRuntimeRepository | None],
                  paths: TaskStorePaths, cache: TaskReadCache, rows: TaskRows,
-                 normalize_background: Callable[[str], str]):
+                 normalize_background: Callable[[], Callable[[str], str]]):
         self.repository, self.paths, self.cache = repository, paths, cache
         self.rows, self.normalize_background = rows, normalize_background
 
@@ -45,7 +45,7 @@ class DetectionTaskStore:
         self.paths.ensure()
         repository = self.repository()
         if repository is not None:
-            raw_tasks = self.rows.decode(repository.fetch_all("ai_detection_tasks"))
+            raw_tasks = self.rows.decode()(repository.fetch_all("ai_detection_tasks"))
         else:
             if not self.paths.tasks().exists():
                 return []
@@ -84,7 +84,7 @@ class DetectionTaskStore:
                 "shared_with_user_ids": raw.get("shared_with_user_ids") if isinstance(raw.get("shared_with_user_ids"), list) else [],
             }
             environment_background = raw.get("environment_background") if isinstance(raw.get("environment_background"), dict) else {}
-            background_set_id = self.normalize_background(str(raw.get("background_set_id") or environment_background.get("background_set_id") or ""))
+            background_set_id = self.normalize_background()(str(raw.get("background_set_id") or environment_background.get("background_set_id") or ""))
             if background_set_id and background_set_id != "green_conveyor":
                 task["background_set_id"] = background_set_id
                 task["environment_background"] = {**environment_background, "background_set_id": background_set_id}

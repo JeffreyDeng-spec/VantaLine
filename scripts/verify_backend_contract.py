@@ -33,6 +33,19 @@ def capture():
         from local_inspection_service import server
         from starlette.routing import Mount
 
+        for provider, name in [(server._detection_task_store.rows.decode, 'row_raw_json_list'),
+                               (server._detection_task_store.normalize_background, 'safe_background_set_id')]:
+            original = getattr(server, name)
+            try:
+                assert provider() is original
+                replacement = lambda *args, **kwargs: None
+                setattr(server, name, replacement)
+                assert provider() is replacement
+                setattr(server, name, None)
+                assert provider() is None
+            finally:
+                setattr(server, name, original)
+            assert provider() is original
         from local_inspection_service.detection import geometry, postprocessing, drawing
         assert server.polygon_area is geometry.polygon_area
         assert server.postprocess_detections is postprocessing.postprocess_detections

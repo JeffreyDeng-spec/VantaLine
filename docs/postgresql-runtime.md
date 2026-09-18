@@ -7,6 +7,11 @@ still replace all valid rows. Invalid single rows are skipped after cache invali
 and directory creation; a fully invalid bulk save still replaces with an empty set.
 Factory/query errors propagate without JSON fallback. Existing locks, SQL and schema
 are unchanged; read-lock optimization belongs to a later batch.
+Row decoding and background callback getters resolve at the original expressions:
+after preceding work and before fetch/string/mapping argument effects. Missing
+callbacks preserve argument evaluation and TypeError. Source manifest v11 covers
+the three task modules; no retry, cache policy or transaction change is introduced.
+
 
 Legacy incoming catalog, review/list and retention workflows obtain the current
 thread repository through `IncomingWrites.repository` at each original entry point.

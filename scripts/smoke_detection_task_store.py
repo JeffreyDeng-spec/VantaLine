@@ -60,6 +60,147 @@ class TaskStoreContracts(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix='task-store-'); self.addCleanup(self.temporary.cleanup)
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         self.f = Fixture(self.temporary.name); self.f.bind(self.api, self.stack)
+    def test_read_first_failures_keep_cache_and_storage_without_retry(self):
+        api=self.api
+        for mode in ('cache_get','ensure','repository','fetch','decode','normalize','cache_put','exists','read'):
+            with self.subTest(mode=mode),ExitStack() as stack:
+                f=Fixture(Path(self.temporary.name)/mode);f.bind(api,stack)
+                raw=task('original',background_set_id='blue');f.seed({'tasks':[raw]})
+                original_bytes=f.path.read_bytes();repo=Mock();repo.fetch_all.return_value=[{'raw_json':raw}]
+                f.repo=None if mode in ('exists','read') else repo
+                error=RuntimeError(mode)
+                bindings={'cache_get':(api,'store_read_cache_get'),'ensure':(api,'ensure_dirs'),
+                          'repository':(api,'runtime_postgres_repository_or_none'),'fetch':(repo,'fetch_all'),
+                          'decode':(api,'row_raw_json_list'),'normalize':(api,'safe_background_set_id'),
+                          'cache_put':(api,'store_read_cache_put'),'exists':(Path,'exists'),'read':(Path,'read_text')}
+                owner,name=bindings[mode];operation=getattr(owner,name);attempts=[]
+                def first_error(*args,**kwargs):
+                    if mode=='exists' and args[0]!=f.path:return operation(*args,**kwargs)
+                    attempts.append(1)
+                    if len(attempts)==1:raise error
+                    return operation(*args,**kwargs)
+                target=stack.enter_context(patch.object(owner,name,autospec=owner is Path,side_effect=first_error))
+                with self.assertRaises(RuntimeError) as caught:api.load_ai_detection_tasks()
+                self.assertIs(caught.exception,error);self.assertEqual(attempts,[1])
+                if mode=='exists':self.assertEqual(sum(call.args[0]==f.path for call in target.call_args_list),1)
+                else:target.assert_called_once()
+                self.assertEqual(f.cache,{})
+                repo.replace_all.assert_not_called();repo.upsert_row.assert_not_called()
+                if mode in ('cache_get','ensure','repository'):repo.fetch_all.assert_not_called()
+                if mode!='read':self.assertEqual(f.path.read_bytes(),original_bytes)
+
+    def test_write_first_failures_retain_invalidation_and_file_evidence(self):
+        api=self.api
+        for kind in ('batch','single'):
+            for mode in ('invalidate','mkdir','repository','encode','database_write','write','replace'):
+                with self.subTest(kind=kind,mode=mode),ExitStack() as stack:
+                    f=Fixture(Path(self.temporary.name)/(kind+'_'+mode));f.bind(api,stack)
+                    f.seed({'tasks':[task('old')]});before=f.path.read_bytes()
+                    temporary=f.path.with_suffix('.json.tmp');temporary.write_bytes(b'temporary-before')
+                    f.cache['ai_detection_tasks']=[task('cached')]
+                    repo=Mock();f.repo=None if mode in ('write','replace') else repo
+                    error=RuntimeError(kind+'_'+mode)
+                    name='replace_all' if kind=='batch' else 'upsert_row'
+                    bindings={'invalidate':(api,'store_read_cache_invalidate'),'mkdir':(Path,'mkdir'),
+                              'repository':(api,'runtime_postgres_repository_or_none'),'encode':(api,'ai_detection_task_row'),
+                              'database_write':(repo,name),'write':(Path,'write_text'),'replace':(Path,'replace')}
+                    owner,attribute=bindings[mode];operation=getattr(owner,attribute)
+                    def first_error(*args,**kwargs):
+                        if target.call_count==1:raise error
+                        return operation(*args,**kwargs)
+                    target=stack.enter_context(patch.object(owner,attribute,autospec=owner is Path,side_effect=first_error))
+                    value=task('new')
+                    with self.assertRaises(RuntimeError) as caught:
+                        if kind=='batch':api.save_ai_detection_tasks([value])
+                        else:api.save_ai_detection_task(value,prepend=True)
+                    self.assertIs(caught.exception,error);target.assert_called_once()
+                    self.assertEqual(f.cache,{'ai_detection_tasks':[task('cached')]} if mode=='invalidate' else {})
+                    self.assertEqual(f.path.read_bytes(),before)
+                    if mode=='replace':
+                        payload=json.loads(temporary.read_text(encoding='utf-8'))['tasks']
+                        self.assertEqual(payload[0],value)
+                        self.assertEqual(len(payload),1 if kind=='batch' else 2)
+                    else:self.assertEqual(temporary.read_bytes(),b'temporary-before')
+                    if mode!='database_write':repo.replace_all.assert_not_called();repo.upsert_row.assert_not_called()
+
+    def test_background_first_failures_leave_workflow_state_unchanged(self):
+        api=self.api
+        for mode in ('find','record_normalize','current_normalize','resolver'):
+            with self.subTest(mode=mode):
+                raw=task('background',background_set_id='blue');error=RuntimeError(mode)
+                state={'task_id':'background','background_set_id':'','untouched':['evidence']};before=json.loads(json.dumps(state))
+                finder=Mock(return_value=raw);normalizer=Mock(return_value='');resolver=Mock(return_value=('blue',{'background_set_id':'blue'}))
+                target=finder if mode=='find' else resolver if mode=='resolver' else normalizer
+                success=raw if mode=='find' else ('blue',{'background_set_id':'blue'}) if mode=='resolver' else 'blue'
+                def first_error(*args,**kwargs):
+                    if target.call_count==1:raise error
+                    return success
+                target.side_effect=first_error
+                with patch.multiple(api,find_ai_detection_task=finder,safe_background_set_id=normalizer):
+                    if mode in ('find','record_normalize'):
+                        with self.assertRaises(RuntimeError) as caught:api.ai_detection_task_background_record('background')
+                    else:
+                        with patch.object(api,'ai_detection_task_background_record',resolver):
+                            with self.assertRaises(RuntimeError) as caught:api.hydrate_auto_optimize_background_from_ai_task(state)
+                self.assertIs(caught.exception,error);target.assert_called_once();self.assertEqual(state,before)
+                if mode=='find':normalizer.assert_not_called()
+                if mode=='current_normalize':resolver.assert_not_called()
+
+
+    def _capture_task_callback(self,mode,missing=False,prior=False):
+        api=self.api;f=self.f;events=[]
+        target_name='row_raw_json_list' if mode=='decode' else 'ai_detection_task_background_record' if mode=='hydrate_task' else 'safe_background_set_id'
+        def value():return [] if mode=='decode' else ('',{}) if mode=='hydrate_task' else 'blue'
+        def first(*args):events.append('B' if prior else 'A');return value()
+        def replacement(*args):events.append('C' if prior else 'B');return value()
+        def swap():events.append('arg');setattr(api,target_name,replacement)
+        def advance():events.append('prior');setattr(api,target_name,first)
+        class Text:
+            def __str__(self):swap();return 'blue'
+        raw=task('task',background_set_id=Text() if mode in ('load_background','background_record') else 'blue')
+        def fetch(*args):
+            if mode=='decode':swap()
+            return [{'raw_json':raw}]
+        repo=Mock();repo.fetch_all.side_effect=fetch;f.repo=repo;f.cache.clear()
+        def repository():
+            if prior and mode=='decode':advance()
+            return repo
+        def decode(rows):
+            if prior and mode=='load_background':advance()
+            return [raw]
+        def find(identity):
+            if prior and mode=='background_record':advance()
+            return raw
+        def normalizer(text):
+            if prior and mode=='hydrate_task':advance()
+            return ''
+        callbacks={'runtime_postgres_repository_or_none':repository,'row_raw_json_list':decode,
+                   'find_ai_detection_task':find,'safe_background_set_id':normalizer}
+        callbacks[target_name]=Mock(side_effect=AssertionError('captured before preceding work')) if prior else (None if missing else first)
+        with patch.multiple(api,**callbacks):
+            def invoke():
+                if mode in ('decode','load_background'):return api.load_ai_detection_tasks()
+                if mode=='background_record':return api.ai_detection_task_background_record('task')
+                if mode=='hydrate_current':return api.hydrate_auto_optimize_background_from_ai_task({'background_set_id':Text()})
+                return api.hydrate_auto_optimize_background_from_ai_task({'task_id':Text()})
+            if missing:
+                with self.assertRaises(TypeError):invoke()
+            else:invoke()
+        self.assertEqual(events,(['prior'] if prior else [])+['arg']+([] if missing else ['B' if prior else 'A']))
+
+    def test_callback_capture_before_argument_effects(self):
+        for mode in ('decode','load_background','background_record','hydrate_current','hydrate_task'):
+            with self.subTest(mode=mode):self._capture_task_callback(mode)
+
+    def test_callback_capture_after_preceding_work(self):
+        for mode in ('decode','load_background','background_record','hydrate_task'):
+            with self.subTest(mode=mode):self._capture_task_callback(mode,prior=True)
+
+    def test_missing_callback_preserves_argument_effects(self):
+        for mode in ('decode','load_background','background_record','hydrate_current','hydrate_task'):
+            with self.subTest(mode=mode):self._capture_task_callback(mode,missing=True)
+
+
     def test_identity_and_count_edge_cases(self):
         api=self.api
         self.assertEqual(api.sanitize_ai_detection_task_id(' __A 中文 B--___ '), 'a_b--')
@@ -178,7 +319,7 @@ class TaskStoreContracts(unittest.TestCase):
             return DetectionTaskStore(fixture.repository,
                 TaskStorePaths(lambda:fixture.directory, lambda:fixture.path, fixture.ensure),
                 TaskReadCache(fixture.get,fixture.put,fixture.invalidate),
-                TaskRows(ai_detection_task_row,row_raw_json_list),fixture.background)
+                TaskRows(ai_detection_task_row,lambda:row_raw_json_list),lambda:fixture.background)
         second=Fixture(Path(self.temporary.name)/'second'); first_store=service(f); second_store=service(second)
         first_store.save_ai_detection_task(task('first')); second_store.save_ai_detection_task(task('second'))
         self.assertEqual(first_store.load_ai_detection_tasks()[0]['id'],'first')
@@ -201,7 +342,7 @@ class TaskStoreContracts(unittest.TestCase):
             self.assertIs(state['environment_background'],environment); resolver.assert_called_once_with('first')
         finder=Mock(return_value=task('first',background_set_id='blue'))
         self.assertEqual(task_backgrounds.ai_detection_task_background_record(' FIRST ',find_task=finder,
-                         normalize_background=f.background)[0],'blue'); finder.assert_called_once_with('first')
+                         normalize_background=lambda:f.background)[0],'blue'); finder.assert_called_once_with('first')
 
     @unittest.skipUnless(PG_CHECK,'use --postgres with an isolated test DSN')
     def test_real_postgres_replace_upsert_invalid_rows_and_readback(self):
