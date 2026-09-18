@@ -1,12 +1,19 @@
 # Testing
 
-`python scripts/smoke_detection_task_catalog.py` adds nine synthetic groups, eight
-first run against the original root. They exercise duplicate IDs/labels, audit and
-background lookup, request validation order, native/trained precedence, eager
+`python scripts/smoke_detection_task_catalog.py` adds thirteen synthetic groups.
+The original eight first passed against the unchanged root; eleven business groups, including added
+failure and complete-output contracts, also pass against its immutable function
+bodies. They exercise duplicate IDs/labels, audit and background lookup, request validation order, native/trained precedence, eager
 setdefault evaluation, partial mutation before failure, distinct accessory indexes,
 None/empty configuration, explicit user versus request identity, two async thread
 handoffs and independent service instances. Original HTTP/RBAC/resource/detection
 checks remain. No model, physical device or paid provider is invoked.
+Twenty-one callback/port boundaries retain the same first exception without retries;
+the request lookup adds a second entry-path check. Full native, trained, projection
+and response literals protect flags, owner, time, source, missing IDs and nested aliases.
+Internal catalog calls are substituted on the catalog instance; root compatibility
+forwards remain available. New identity/registry ports are validated separately from
+old callback contracts.
 Empty requests assert zero lookup even with a throwing provider; valid and unknown
 accessories assert exactly one lookup. Both migrated files are mandatory fingerprint
 sources, with per-file hash sensitivity and historical snapshot freeze checks.

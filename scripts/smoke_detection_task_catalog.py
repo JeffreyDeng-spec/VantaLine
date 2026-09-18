@@ -228,4 +228,173 @@ class CatalogContracts(unittest.TestCase):
             project.assert_called_once_with(first.tasks[0],first.config)
 
 
+    def _assert_first_failure(self, bindings, operation, target):
+        events = []
+        error = RuntimeError('first catalog boundary failure: ' + target)
+        originals = [(obj, name, getattr(obj, name)) for obj, name in bindings]
+        def attempt(failing):
+            events.clear()
+            counts = {}
+            with ExitStack() as stack:
+                for obj, name, original in originals:
+                    def invoke(*args, _name=name, _original=original, **kwargs):
+                        events.append(_name)
+                        counts[_name] = counts.get(_name, 0) + 1
+                        if failing and _name == target and counts[_name] == 1:
+                            raise error
+                        return _original(*args, **kwargs)
+                    stack.enter_context(patch.object(obj, name, invoke))
+                if failing:
+                    with self.assertRaises(RuntimeError) as raised:
+                        operation()
+                    self.assertIs(raised.exception, error)
+                else:
+                    operation()
+            return list(events)
+        successful = attempt(False)
+        self.assertIn(target, successful)
+        expected = successful[:successful.index(target) + 1]
+        self.assertEqual(attempt(True), expected)
+
+    def test_existing_callback_first_failures_are_not_retried(self):
+        api = self.api; f = self.f
+        f.tasks = [task('native')]
+        f.background.return_value = ('blue', {'value': 'public'})
+        projection_names = ('record_audit_fields', 'accessory_lookup_by_id',
+            'ai_detection_task_model_id', 'ai_detection_task_background_record', 'public_path_sanitized')
+        projection_bindings = [(api, name) for name in projection_names]
+        for name in projection_names:
+            with self.subTest(boundary=name):
+                self._assert_first_failure(projection_bindings,
+                    lambda: api.serialize_ai_detection_task(f.tasks[0], f.config), name)
+        with self.subTest(boundary='request lookup'):
+            self._assert_first_failure(projection_bindings,
+                lambda: api.ai_detection_task_payload_from_request(
+                    api.AiDetectionTaskRequest(required_accessory_counts={'a': 2}), f.config),
+                'accessory_lookup_by_id')
+        catalog_names = ('load_config', 'load_ai_detection_tasks', 'list_trained_model_specs',
+            'record_visible_to_user', 'serialize_ai_detection_task', 'accessory_uid',
+            'serialize_accessory', 'record_owner_username')
+        bindings = [(api, name) for name in catalog_names] + projection_bindings
+        api._request_user.set({'id': 'alice'})
+        for name in ('load_config', 'load_ai_detection_tasks', 'record_visible_to_user',
+                     'serialize_ai_detection_task'):
+            with self.subTest(boundary=name):
+                self._assert_first_failure(bindings,
+                    lambda: api.list_ai_detection_task_model_specs(None), name)
+        api._request_user.set(None)
+        f.config['accessories'].append({'id': '', 'name': 'Generated'})
+        f.trained = [trained('other', owner='')]
+        for name in ('list_trained_model_specs', 'accessory_uid', 'serialize_accessory',
+                     'record_owner_username'):
+            with self.subTest(boundary=name):
+                self._assert_first_failure(bindings,
+                    lambda: api.list_ai_detection_specialized_model_specs(None, None), name)
+
+    def test_internal_catalog_first_failures_are_not_retried(self):
+        api = self.api; f = self.f
+        f.tasks = [task('native')]; f.trained = [trained('other')]
+        catalog = api._detection_task_catalog
+        bindings = [(catalog, 'list_ai_detection_task_model_specs'),
+                    (catalog, 'list_ai_detection_specialized_model_specs'),
+                    (api, 'load_ai_detection_tasks'), (api, 'list_trained_model_specs'),
+                    (api, 'serialize_ai_detection_task'), (api, 'record_owner_username')]
+        for name in ('list_ai_detection_task_model_specs', 'list_ai_detection_specialized_model_specs'):
+            with self.subTest(boundary=name):
+                self._assert_first_failure(bindings,
+                    lambda: api.ai_detection_tasks_response(f.config), name)
+
+    def test_new_identity_registry_ports_fail_once_before_later_work(self):
+        from dataclasses import replace
+        api = self.api; f = self.f; catalog = api._detection_task_catalog
+        f.tasks = [task('native')]; f.trained = [trained('other', owner='')]
+        for owner, field in (('access', 'user'), ('registry', 'base_spec'),
+                ('registry', 'label'), ('registry', 'tasks_path'),
+                ('registry', 'legacy_owner'), ('registry', 'model_id')):
+            with self.subTest(boundary=field), ExitStack() as stack:
+                events = []; error = RuntimeError('first new port: ' + field)
+                original = getattr(getattr(catalog, owner), field)
+                calls = []
+                def fail_once(*args, **kwargs):
+                    calls.append(args); events.append('fault')
+                    if len(calls) == 1:
+                        raise error
+                    return original(*args, **kwargs)
+                stack.enter_context(patch.object(catalog, owner,
+                    replace(getattr(catalog, owner), **{field: fail_once})))
+                # All later source/projection/owner activity must stop at the first failure.
+                for name in ('load_ai_detection_tasks', 'serialize_ai_detection_task',
+                             'record_owner_username', 'list_trained_model_specs'):
+                    original_callback = getattr(api, name)
+                    def observe(*args, _name=name, _original=original_callback, **kwargs):
+                        events.append(_name)
+                        return _original(*args, **kwargs)
+                    stack.enter_context(patch.object(api, name, observe))
+                with self.assertRaises(RuntimeError) as raised:
+                    api.list_ai_detection_specialized_model_specs(f.config, f.trained)
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(events[-1], 'fault')
+
+    def test_complete_projection_native_trained_response_shapes_and_aliases(self):
+        api = self.api; f = self.f
+        native = task('native', 'anna')
+        native.update(selected_accessory_ids=['a', 'missing'],
+            required_accessory_counts={'a': 2, 'missing': 4}, accessory_labels={'missing': 'Saved'},
+            created_at=11, updated_at=22, owner_username='Anna', source='custom_source')
+        f.tasks = [native]
+        background = {'safe': {'nested': 'public'}}
+        f.background.return_value = ('blue', {'value': 'public'})
+        f.sanitize.side_effect = None; f.sanitize.return_value = background
+        projected_expected = dict(id='native', name='Task', model_id='task:native',
+            selected_accessory_ids=['a', 'missing'], required_accessory_counts={'a': 2, 'missing': 4},
+            accessory_names=['Current A', 'Saved'], accessory_labels={'a': 'Current A', 'missing': 'Saved'},
+            accessory_count=2, missing_accessory_ids=['missing'], created_at=11, updated_at=22,
+            source='custom_source', owner_user_id='anna', owner_username='Anna',
+            background_set_id='blue', environment_background=background)
+        projected = api.serialize_ai_detection_task(native, f.config)
+        self.assertEqual(projected, projected_expected)
+        self.assertIs(projected['environment_background'], background)
+        native_expected = dict(id='task:native', engine={'version': 'fixture'}, run_id='native',
+            task_id='native', task_label='Task', task_source='ai_detection_task_config',
+            is_specialized=True, is_ai_detection=True, variant='ai_detection', label='AI label',
+            description='AI检测工具台创建的无训练任务，按配件画像调用无状态 AI 检测。',
+            selected_accessory_ids=['a', 'missing'], required_accessory_counts={'a': 2, 'missing': 4},
+            accessory_names=['Current A', 'Saved'], accessory_labels={'a': 'Current A', 'missing': 'Saved'},
+            artifact_path='', metadata_path='fixture-tasks.json', missing_accessory_ids=['missing'],
+            created_at=11, updated_at=22, owner_user_id='anna', owner_username='Anna')
+        with patch.object(api, 'serialize_ai_detection_task', return_value=projected):
+            value = api.list_ai_detection_task_model_specs(f.config)[0]
+        self.assertEqual(value, native_expected)
+        self.assertIs(value['engine'], f.base['engine'])
+        for key in ('selected_accessory_ids', 'required_accessory_counts', 'accessory_names',
+                    'accessory_labels', 'missing_accessory_ids'):
+            self.assertIs(value[key], projected[key])
+        fallback = trained('fallback', owner='')
+        fallback.update(selected_accessory_ids=['missing'], required_accessory_counts={'missing': 7},
+            accessory_labels={'missing': 'Fallback saved'}, created_at=33, updated_at=44)
+        f.trained = [fallback]
+        trained_expected = dict(id='task:fallback', engine={'version': 'fixture'}, run_id='run:fallback',
+            task_id='fallback', is_specialized=True, is_ai_detection=True, variant='ai_detection',
+            label='AI label', description='按当前任务配件画像调用无状态 AI 检测。',
+            selected_accessory_ids=['missing'], required_accessory_counts={'missing': 7},
+            accessory_names=['Fallback saved'], accessory_labels={'missing': 'Fallback saved'},
+            artifact_path='', metadata_path='', created_at=33, updated_at=44,
+            owner_user_id='legacy', owner_username='legacy-name')
+        specs = api.list_ai_detection_specialized_model_specs(f.config, f.trained)
+        self.assertEqual(specs, [native_expected, trained_expected])
+        self.assertIs(specs[1]['engine'], f.base['engine'])
+        response_expected = dict(id='fallback', name='Fallback saved', model_id='task:fallback',
+            source='trained_model_ai_sync', task_type='trained_model_ai', accessory_count=1,
+            selected_accessory_ids=['missing'], accessory_names=['Fallback saved'],
+            accessory_labels={'missing': 'Fallback saved'}, required_accessory_counts={'missing': 7},
+            missing_accessory_ids=[], created_at=33, updated_at=44,
+            owner_user_id='legacy', owner_username='legacy-name')
+        with patch.object(api._detection_task_catalog, 'list_ai_detection_specialized_model_specs', return_value=specs):
+            response = api.ai_detection_tasks_response(f.config)
+        self.assertEqual(response, {'tasks': [projected_expected, response_expected], 'selected_task_id': 'native'})
+        for key in ('selected_accessory_ids', 'accessory_labels', 'required_accessory_counts'):
+            self.assertIs(response['tasks'][1][key], specs[1][key])
+
+
 if __name__=='__main__': unittest.main()
