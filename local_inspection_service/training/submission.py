@@ -29,7 +29,7 @@ class TrainingSubmissionPolicy:
 class TrainingSubmissionIdentity:
     user: Callable[[], Record | None]
     owner: Callable[[], Record]
-    background: Callable[[], Callable[[str | None, Record | None], str]]
+    background: Callable[[], Callable[[str | None, Record | None], str | None]]
 
 
 @dataclass(frozen=True)

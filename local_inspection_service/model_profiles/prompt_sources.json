@@ -1,7 +1,9 @@
 {
-  "version": 30,
+  "version": 31,
   "sources": [
     "server.py",
+    "training/launch_submission.py",
+    "training/status_query.py",
     "training/preview_cache.py",
     "training/preview_approval.py",
     "training/dataset_input.py",
