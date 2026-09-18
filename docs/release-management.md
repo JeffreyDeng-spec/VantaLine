@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Incoming-store CI adds isolated file/JSON/SQL contracts, root composition checks and
+an explicit disposable-schema PostgreSQL group. Existing incoming/text endpoints
+remain required. Ship both the runtime file adapter and legacy store with the root
+aliases in the immutable artifact; database schema and worker topology are unchanged.
+
 Comparison/review CI adds eight offline boundary groups and six route-identity
 checks. Ship the submission, review, API and port modules plus manifest v6 together;
 the source list now includes the actual comparison input and strict-prompt files.

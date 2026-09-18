@@ -1,5 +1,15 @@
 # Architecture
 
+Legacy incoming-text persistence now lives in `text_inspection.incoming_store`.
+Seven methods receive a thread repository factory, shared guard, path providers,
+row adapters and JSON-list callbacks. Single JSON lookups use two explicit list
+callbacks, preserving the public loader lookup and its normal second repository
+selection. List decoding obtains its callback before fetching rows; single-row
+decoding obtains it after a successful lookup and skips it for an absent row.
+`runtime.json_records` owns
+the two unchanged file helpers; root aliases preserve their identity for current
+text-record consumers. No identity or connection is stored in the new service.
+
 Text comparison submission and human inspection review now live in
 `text_inspection.comparison_submission` and `inspection_reviews`; `inspection_api`
 registers their six routes, including the retained manual read-only responses.

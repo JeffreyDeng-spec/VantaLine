@@ -1,5 +1,13 @@
 # Text inspection v2
 
+Shared JSON-list reads/writes now use the runtime adapter, and legacy incoming-text
+records use a dedicated store. Existing JSON uniqueness rules remain deliberately
+different: new reference IDs reject duplicate owner/task/version even for ordinary
+saves, while inspections reject owner/task/capture duplicates only for insert-only
+saves. PostgreSQL keeps its stricter existing constraints. Audit serialization still
+occurs only on the PostgreSQL path; JSON retains its prior missing-ID deduplication.
+No historical record or old endpoint is removed by this extraction.
+
 The comparison/review HTTP layer is separate from submission and review services.
 Submission still prepares inputs before duplicate lookup, writes the source before
 the insert-only attempt, and records the provider attempt before calling the model.

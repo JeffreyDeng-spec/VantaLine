@@ -312,6 +312,38 @@ def main() -> None:
     # Count actual workflow entries, not the forwarding lambda a second time.
     contract.runtime_repository_entry_call_count -= 1
     contract.runtime_repository_entry_call_count += edits.runtime_repository_entry_call_count
+    incoming_path = text_path.with_name("incoming_store.py")
+    incoming = SourceContract(injected_repository=True, repository_expression="self.repository")
+    incoming.visit(ast.parse(incoming_path.read_text(encoding="utf-8"), filename=str(incoming_path)))
+    incoming_arguments = {
+        "load_incoming_text_references": "", "load_incoming_text_inspections": "",
+        "load_incoming_text_reference": "reference_id", "load_incoming_text_inspection": "inspection_id",
+        "save_incoming_text_reference": "reference, insert_only=insert_only",
+        "save_incoming_text_inspection": "inspection, insert_only=insert_only", "append_incoming_text_audit": "event",
+    }
+    require(incoming.runtime_repository_entry_call_count == 7
+            and incoming.functions_with_runtime_repository_entry == set(incoming_arguments),
+            "incoming text store must retain its seven real lazy repository entries")
+    for name, arguments in incoming_arguments.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        expected = ast.parse("_incoming_text_store." + name + "(" + arguments + ")", mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected), "incoming store forward changed: " + name)
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "text_inspection.incoming_store"
+                and any(alias.name == "IncomingTextStore" for alias in node.names)
+                for node in tree.body), "server missing incoming store composition")
+    compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name) and node.func.id == "IncomingTextStore"]
+    require(len(compositions) == 1, "expected one incoming text store composition")
+    repository = next(keyword.value for keyword in compositions[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "incoming store must obtain its thread repository lazily")
+    contract.runtime_repository_entry_call_count += incoming.runtime_repository_entry_call_count - 1
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(incoming, attribute))
+
     for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(edits, attribute))

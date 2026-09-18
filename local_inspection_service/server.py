@@ -34334,132 +34334,52 @@ review_text_inspection_v2 = _inspection_routes.review_text_inspection_v2
 # Package-material incoming text inspection (legacy, retained for rollback).
 
 
-def _incoming_text_json_list(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    return [dict(item) for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+from .runtime.json_records import (
+    read_json_list as _incoming_text_json_list, write_json_list as _save_incoming_text_json_list,
+)
+from .text_inspection.incoming_store import IncomingTextStore, IncomingPaths, IncomingRows
 
-
-def _save_incoming_text_json_list(path: Path, values: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(values, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temporary, path)
+_incoming_text_store = IncomingTextStore(
+    repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
+    paths=IncomingPaths(references=lambda: INCOMING_TEXT_REFERENCES_PATH,
+                        inspections=lambda: INCOMING_TEXT_INSPECTIONS_PATH, audit=lambda: INCOMING_TEXT_AUDIT_PATH),
+    rows=IncomingRows(reference=lambda record: incoming_text_reference_row(record),
+                      inspection=lambda record: incoming_text_inspection_row(record),
+                      audit=lambda event: audit_event_row(event), decode=lambda: row_raw_json_list),
+    read_json=lambda path: _incoming_text_json_list(path),
+    write_json=lambda path, values: _save_incoming_text_json_list(path, values),
+    load_references=lambda: load_incoming_text_references(),
+    load_inspections=lambda: load_incoming_text_inspections(),
+)
 
 
 def load_incoming_text_references() -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return row_raw_json_list(repository.fetch_all("incoming_text_reference_versions"))
-    with _incoming_text_store_lock:
-        return _incoming_text_json_list(INCOMING_TEXT_REFERENCES_PATH)
+    return _incoming_text_store.load_incoming_text_references()
 
 
 def load_incoming_text_inspections() -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return row_raw_json_list(repository.fetch_all("incoming_text_inspections"))
-    with _incoming_text_store_lock:
-        return _incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH)
+    return _incoming_text_store.load_incoming_text_inspections()
 
 
 def load_incoming_text_reference(reference_id: str) -> dict[str, Any] | None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_by_primary_key("incoming_text_reference_versions", {"id": reference_id})
-        values = row_raw_json_list([row]) if row else []
-        return values[0] if values else None
-    return next((item for item in load_incoming_text_references() if str(item.get("id")) == reference_id), None)
+    return _incoming_text_store.load_incoming_text_reference(reference_id)
 
 
 def load_incoming_text_inspection(inspection_id: str) -> dict[str, Any] | None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_by_primary_key("incoming_text_inspections", {"id": inspection_id})
-        values = row_raw_json_list([row]) if row else []
-        return values[0] if values else None
-    return next((item for item in load_incoming_text_inspections() if str(item.get("id")) == inspection_id), None)
+    return _incoming_text_store.load_incoming_text_inspection(inspection_id)
 
 
 def save_incoming_text_reference(reference: dict[str, Any], *, insert_only: bool = False) -> bool:
-    row = incoming_text_reference_row(reference)
-    if not row:
-        raise RuntimeError("invalid incoming text reference row")
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        if insert_only:
-            return bool(repository.insert_row_once("incoming_text_reference_versions", row))
-        repository.upsert_row("incoming_text_reference_versions", row)
-        return True
-    with _incoming_text_store_lock:
-        values = _incoming_text_json_list(INCOMING_TEXT_REFERENCES_PATH)
-        existing_index = next((index for index, item in enumerate(values) if str(item.get("id")) == str(reference["id"])), None)
-        if existing_index is not None:
-            if insert_only:
-                return False
-            values[existing_index] = dict(reference)
-        else:
-            if any(
-                str(item.get("owner_user_id")) == str(reference.get("owner_user_id"))
-                and str(item.get("task_id")) == str(reference.get("task_id"))
-                and str(item.get("version_label")) == str(reference.get("version_label"))
-                for item in values
-            ):
-                return False
-            values.insert(0, dict(reference))
-        _save_incoming_text_json_list(INCOMING_TEXT_REFERENCES_PATH, values)
-        return True
+    return _incoming_text_store.save_incoming_text_reference(reference, insert_only=insert_only)
 
 
 def save_incoming_text_inspection(inspection: dict[str, Any], *, insert_only: bool = False) -> bool:
-    row = incoming_text_inspection_row(inspection)
-    if not row:
-        raise RuntimeError("invalid incoming text inspection row")
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        if insert_only:
-            return bool(repository.insert_row_once("incoming_text_inspections", row))
-        repository.upsert_row("incoming_text_inspections", row)
-        return True
-    with _incoming_text_store_lock:
-        values = _incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH)
-        duplicate = next(
-            (
-                item
-                for item in values
-                if str(item.get("owner_user_id")) == str(inspection.get("owner_user_id"))
-                and str(item.get("task_id")) == str(inspection.get("task_id"))
-                and str(item.get("capture_id")) == str(inspection.get("capture_id"))
-            ),
-            None,
-        )
-        existing_index = next((index for index, item in enumerate(values) if str(item.get("id")) == str(inspection["id"])), None)
-        if insert_only and (duplicate is not None or existing_index is not None):
-            return False
-        if existing_index is None:
-            values.insert(0, dict(inspection))
-        else:
-            values[existing_index] = dict(inspection)
-        _save_incoming_text_json_list(INCOMING_TEXT_INSPECTIONS_PATH, values)
-        return True
+    return _incoming_text_store.save_incoming_text_inspection(inspection, insert_only=insert_only)
 
 
 def append_incoming_text_audit(event: dict[str, Any]) -> None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = audit_event_row(event)
-        if row:
-            repository.insert_row_once("audit_events", row)
-        return
-    with _incoming_text_store_lock:
-        values = _incoming_text_json_list(INCOMING_TEXT_AUDIT_PATH)
-        if not any(str(item.get("id")) == str(event.get("id")) for item in values):
-            values.insert(0, dict(event))
-            _save_incoming_text_json_list(INCOMING_TEXT_AUDIT_PATH, values)
+    return _incoming_text_store.append_incoming_text_audit(event)
+
 
 
 def incoming_text_public(record: dict[str, Any]) -> dict[str, Any]:
