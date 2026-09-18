@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_worker_retired_flows.py` runs 12 synthetic groups.
+Nine original business groups passed before migration on Windows and Linux;
+10 expanded groups also pass against saved original function bodies. Contracts retain
+retired task settlement fields, one update after the clock, current updater capture and
+read-only public projection identity. Partial projection mutations and errors retain
+original order. Historical unreachable network bodies remain unchanged after their
+early returns; synthetic dependencies prove no remote work or artifacts are requested.
+
 `python scripts/smoke_training_worker_retired_requests.py` runs 7 synthetic groups.
 Six original business groups passed before migration on Windows and Linux;
 6 expanded groups also pass against saved original function bodies. Contracts retain

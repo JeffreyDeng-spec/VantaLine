@@ -1,7 +1,9 @@
 {
-  "version": 43,
+  "version": 44,
   "sources": [
     "server.py",
+    "training/legacy_worker_tasks.py",
+    "training/legacy_worker_refresh.py",
     "training/legacy_worker_requests.py",
     "training/worker_watcher.py",
     "training/worker_artifacts.py",
