@@ -160,6 +160,47 @@ class DocumentContracts(unittest.TestCase):
         self.assertEqual(next(a for a in f.assets if a['id']=='unknown')['classification_attempt']['id'],'prior')
         self.assertEqual(f.standard['classification']['done'],5);self.assertEqual(f.standard['classification']['state'],'completed')
         self.assertEqual(f.clear_count,1);self.slots_free(f)
+    def test_worker_keeps_start_captured_model_settings(self):
+        f=Fixture();captured=f.config;f.start()
+        self.assertIs(f.tasks[0]['args'][-1],captured)
+        replacement={**captured,'model':'replacement-model','profile_version':8,'api_key':'replacement-fixture'}
+        resolver=Mock(return_value=replacement)
+        f.jobs.models=DocumentModels(lambda:True,resolver,f.models.transport,f.models.record_usage)
+        f.run()
+        resolver.assert_not_called()
+        self.assertEqual([event for event in f.events if event[0]=='settings'],[('settings','document')])
+        self.assertEqual(len(f.calls),1)
+        request,transport_settings=f.calls[0]
+        self.assertEqual(json.loads(request.data)['model'],captured['model'])
+        self.assertEqual(transport_settings,{**captured,'single_attempt':True})
+        self.assertEqual(len(f.usage),1);self.assertIs(f.usage[0][0],captured)
+        self.assertEqual(f.standard['classification']['model'],captured['model'])
+        self.assertEqual(f.clear_count,1);self.slots_free(f)
+
+    def test_finish_first_failure_is_not_retried_or_settled(self):
+        f=Fixture();f.start();attempts=[];order=[]
+        original_mutate=f.jobs.mutate;original_clear=f.jobs.clear_repository;original_release=f.jobs.slots.release
+        failure=RuntimeError('synthetic first settlement failure')
+        def mutate(identity,owner,change):
+            if change.__name__=='finish':
+                attempts.append(change)
+                if len(attempts)==1:raise failure
+            return original_mutate(identity,owner,change)
+        def clear():order.append('clear');return original_clear()
+        def release():order.append('release');return original_release()
+        with patch.object(f.jobs,'mutate',side_effect=mutate), \
+             patch.object(f.jobs,'clear_repository',side_effect=clear), \
+             patch.object(f.jobs.slots,'release',side_effect=release), \
+             patch('builtins.print') as logged:
+            f.run()
+        self.assertEqual(len(attempts),1)
+        self.assertEqual(len(f.calls),1);self.assertEqual(len(f.usage),1)
+        self.assertEqual(f.assets[0]['classification_attempt']['state'],'attempting')
+        self.assertEqual((f.standard['classification']['state'],f.standard['classification']['done']),('processing',0))
+        self.assertEqual(order,['clear','release']);self.assertEqual(f.clear_count,1)
+        logged.assert_called_once_with({'event':'document_classification_failure','standard_id':'order','error_type':'RuntimeError'},flush=True)
+        self.slots_free(f)
+
     def test_human_and_cancelled_jobs_fence_late_results_and_failures_do_not_retry(self):
         for mutation in ['human','delete','transport','media']:
             with self.subTest(mutation=mutation):
