@@ -23158,80 +23158,41 @@ _candidate_queries = CandidateQueries(_candidate_repository, CandidateQueryDepen
 get_accessory_candidate = register_candidate_api(app, _candidate_queries)
 
 
-@app.get("/api/image-jobs")
-def image_jobs(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    jobs = list_training_tasks(user=user, target_user_id=target_user_id) + list_codex_image_jobs(user=user, target_user_id=target_user_id)
-    return {
-        "items": jobs,
-        "active": [job for job in jobs if job.get("status") in IMAGE_JOB_ACTIVE_STATUSES],
-        "completed": [job for job in jobs if job.get("status") == "completed"],
-    }
+from .training.jobs_query import JobsReadAccess, JobsTraining, TrainingJobsQuery
+from .training.task_mutations import TaskMutationRecords, TrainingTaskMutations
+from .training.jobs_api import ImageJobActions
+from .training import jobs_api as _training_jobs_api
 
-
-@app.get("/api/image-jobs/{job_id}")
-def image_job(job_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    training_task = find_training_task(job_id)
-    if training_task:
-        require_record_access(training_task, user)
-        if training_task_uses_worker(training_task):
-            return public_refreshed_training_task(training_task, allow_remote_refresh=False)
-        return public_training_task(training_task)
-    for job in list_codex_image_jobs(user=user):
-        if job.get("job_id") == job_id or job.get("task_id") == job_id:
-            return job
-    raise HTTPException(status_code=404, detail="Image job not found")
-
-
-@app.patch("/api/training/tasks/{job_id}")
-def update_training_task_endpoint(job_id: str, request: TrainingTaskUpdateRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    task = find_training_task(job_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Training task not found")
-    require_record_access(task, user, write=True)
-    if request.label is not None:
-        task["label"] = request.label.strip() or task.get("label") or "训练任务"
-        task["candidate_name"] = task["label"]
-    if request.note is not None:
-        task["note"] = request.note.strip()
-    task["updated_at"] = int(time.time())
-    save_training_task(task)
-    return public_training_task(task)
-
-
-@app.delete("/api/training/tasks/{job_id}")
-def delete_training_task_endpoint(job_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    delete_training_task_record(job_id, user)
-    return {"status": "deleted", "job_id": job_id, "items": list_training_tasks(user=user)}
-
-
-@app.post("/api/image-jobs/{job_id}/stop")
-def stop_image_job(job_id: str) -> dict[str, Any]:
-    return update_codex_image_job(job_id, "stop")
-
-
-@app.post("/api/image-jobs/{job_id}/retry")
-def retry_image_job(job_id: str) -> dict[str, Any]:
-    return update_codex_image_job(job_id, "retry")
-
-
-@app.delete("/api/image-jobs/{job_id}")
-def delete_image_job(job_id: str) -> dict[str, Any]:
-    return update_codex_image_job(job_id, "delete")
-
-
-@app.post("/api/image-job-candidates/{candidate_id}/stop")
-def stop_image_job_candidate(candidate_id: str) -> dict[str, Any]:
-    return update_codex_image_candidate(candidate_id, "stop")
-
-
-@app.delete("/api/image-job-candidates/{candidate_id}")
-def delete_image_job_candidate(candidate_id: str) -> dict[str, Any]:
-    return update_codex_image_candidate(candidate_id, "delete")
+_training_jobs_query = TrainingJobsQuery(
+    JobsReadAccess(lambda: current_auth_user(), lambda user: user_is_admin(user),
+                   lambda task, user, **kwargs: require_record_access(task, user, **kwargs)),
+    JobsTraining(lambda job: find_training_task(job), lambda task: training_task_uses_worker(task),
+                 lambda task: public_training_task(task),
+                 lambda task, **kwargs: public_refreshed_training_task(task, **kwargs)),
+    lambda **kwargs: list_training_tasks(**kwargs), lambda **kwargs: list_codex_image_jobs(**kwargs),
+    lambda: IMAGE_JOB_ACTIVE_STATUSES,
+)
+_training_task_mutations = TrainingTaskMutations(
+    lambda: current_auth_user(), lambda task, user, **kwargs: require_record_access(task, user, **kwargs),
+    TaskMutationRecords(lambda job: find_training_task(job), lambda task: save_training_task(task),
+                        lambda task: public_training_task(task), lambda job, user: delete_training_task_record(job, user),
+                        lambda **kwargs: list_training_tasks(**kwargs)),
+    lambda: time.time(),
+)
+_training_jobs_routes = _training_jobs_api.register(
+    app, _training_jobs_query, _training_task_mutations,
+    ImageJobActions(lambda job, action: update_codex_image_job(job, action),
+                    lambda candidate, action: update_codex_image_candidate(candidate, action)),
+)
+image_jobs = _training_jobs_routes.image_jobs
+image_job = _training_jobs_routes.image_job
+update_training_task_endpoint = _training_jobs_routes.update_training_task_endpoint
+delete_training_task_endpoint = _training_jobs_routes.delete_training_task_endpoint
+stop_image_job = _training_jobs_routes.stop_image_job
+retry_image_job = _training_jobs_routes.retry_image_job
+delete_image_job = _training_jobs_routes.delete_image_job
+stop_image_job_candidate = _training_jobs_routes.stop_image_job_candidate
+delete_image_job_candidate = _training_jobs_routes.delete_image_job_candidate
 
 
 from .accessories.creation import AccessoryCreation
