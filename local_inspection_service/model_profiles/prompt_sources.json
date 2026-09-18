@@ -1,7 +1,10 @@
 {
-  "version": 34,
+  "version": 35,
   "sources": [
     "server.py",
+    "training/background_variants.py",
+    "training/background_writes.py",
+    "training/task_background_store.py",
     "training/background_manifest.py",
     "training/background_catalog.py",
     "training/background_seeding.py",

@@ -1,5 +1,8 @@
 # PostgreSQL runtime operations
 
+Background write services keep the existing filesystem assets and JSON manifest behavior.
+They introduce no database schema, connection, advisory-lock or transaction change.
+
 Background catalog helper extraction retains the existing filesystem manifest store and its
 initialization writes during directory reads. It adds no database schema, migration or lock change
 and does not classify all catalog calls as pure reads.
@@ -75,7 +78,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v34 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v35 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

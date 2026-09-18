@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_training_background_writes.py` runs 25 synthetic groups.
+Fifteen original business groups passed before migration on Windows and Linux;
+21 expanded groups also pass against saved original function bodies. The original
+pixel/RNG golden remains unchanged. Contracts retain overwrite and partial-file behavior,
+raw manifest aliases, two metadata clocks, eager values and callback exception boundaries.
+Three narrow getters preserve callback capture before argument effects. Independent
+compositions use owned temporary roots; all test deletions validate resolved containment.
+No real training, paid inference, PLC or production data is used.
+
 `python scripts/smoke_training_background_catalog.py` runs 25 synthetic groups.
 Seventeen original business groups passed before migration on Windows and Linux;
 22 expanded groups also pass against saved original function bodies. Contracts preserve

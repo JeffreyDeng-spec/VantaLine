@@ -19400,44 +19400,36 @@ def selected_background_set_id(
     return _background_selection.selected_background_set_id(background_set_id, user, target_user_id)
 def background_set_image_files(background_set_id: str | None) -> list[Path]:
     return _background_selection.background_set_image_files(background_set_id)
+from .training.background_variants import BackgroundVariants, BackgroundMinimumImages
+from .training.background_writes import BackgroundWrites
+from .training.task_background_store import (
+    TaskBackgroundIdentity, TaskBackgroundPaths, TaskBackgroundRecords, TaskBackgroundStore,
+)
+
+_background_variants = BackgroundVariants(lambda: time.time())
+_background_minimum_images = BackgroundMinimumImages(
+    lambda identifier: safe_background_set_id(identifier), lambda: BACKGROUND_SETS_DIR,
+    lambda path: image_file_list(path),
+    lambda: create_background_variants_from_source,
+)
+_background_writes = BackgroundWrites(
+    lambda identifier: safe_background_set_id(identifier), lambda: load_background_sets_manifest(),
+    lambda manifest: write_background_sets_manifest(manifest), lambda: BACKGROUND_SETS_DIR,
+    lambda: uuid.uuid4(), lambda: time.time(),
+)
+_task_background_store = TaskBackgroundStore(
+    TaskBackgroundIdentity(lambda identifier: sanitize_ai_detection_task_id(identifier),
+                           lambda identifier: safe_record_id(identifier), lambda: safe_background_set_id,
+                           lambda: LEGACY_OWNER_ID),
+    TaskBackgroundPaths(lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES),
+    TaskBackgroundRecords(lambda: update_background_set_manifest,
+                          lambda identifier, meta: background_set_payload(identifier, meta)),
+    lambda source_path, set_dir, count=5: create_background_variants_from_source(source_path, set_dir, count=count),
+    lambda path: image_file_list(path), lambda: time.time(),
+)
+
 def create_background_variants_from_source(source_path: Path, set_dir: Path, count: int = 5) -> list[Path]:
-    image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
-    if image is None:
-        return []
-    set_dir.mkdir(parents=True, exist_ok=True)
-    created: list[Path] = []
-    rng = np.random.default_rng(int(time.time() * 1000) % (2**32 - 1))
-    h, w = image.shape[:2]
-    for idx in range(1, count + 1):
-        variant = image.astype(np.float32)
-        contrast = float(rng.uniform(0.94, 1.08))
-        brightness = float(rng.uniform(-10, 10))
-        variant = variant * contrast + brightness
-        if float(rng.random()) < 0.8:
-            variant += rng.normal(0, float(rng.uniform(1.0, 3.2)), size=variant.shape).astype(np.float32)
-        variant = np.clip(variant, 0, 255).astype(np.uint8)
-        scale = float(rng.uniform(1.0, 1.045))
-        crop_w = max(1, int(w / scale))
-        crop_h = max(1, int(h / scale))
-        x = int(rng.integers(0, max(1, w - crop_w + 1)))
-        y = int(rng.integers(0, max(1, h - crop_h + 1)))
-        variant = cv2.resize(variant[y : y + crop_h, x : x + crop_w], (w, h), interpolation=cv2.INTER_AREA)
-        overlay = variant.copy()
-        for _ in range(int(rng.integers(5, 14))):
-            x1 = int(rng.integers(0, w))
-            y1 = int(rng.integers(0, h))
-            x2 = int(np.clip(x1 + rng.normal(0, w * 0.2), 0, w - 1))
-            y2 = int(np.clip(y1 + rng.normal(0, h * 0.025), 0, h - 1))
-            shade = int(rng.integers(45, 210))
-            cv2.line(overlay, (x1, y1), (x2, y2), (shade, shade, shade), 1, cv2.LINE_AA)
-        alpha = float(rng.uniform(0.025, 0.06))
-        variant = cv2.addWeighted(overlay, alpha, variant, 1.0 - alpha, 0)
-        output = set_dir / f"{source_path.stem}_variant_{idx:02d}.png"
-        cv2.imwrite(str(output), variant)
-        created.append(output)
-    return created
-
-
+    return _background_variants.create_background_variants_from_source(source_path, set_dir, count)
 def run_codex_background_generation(source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
     if not shutil.which("codex") or not source_path.exists():
         return []
@@ -19491,69 +19483,13 @@ def start_codex_background_generation(source_path: Path, set_dir: Path, set_id: 
 
 
 def ensure_background_set_minimum_images(set_id: str, min_count: int = 6) -> None:
-    clean_id = safe_background_set_id(set_id)
-    set_dir = BACKGROUND_SETS_DIR / clean_id
-    images = image_file_list(set_dir)
-    if len(images) >= min_count or not images:
-        return
-    create_background_variants_from_source(images[0], set_dir, max(0, min_count - len(images)))
-
-
+    return _background_minimum_images.ensure_background_set_minimum_images(set_id, min_count)
 def unique_background_set_id(base_id: str) -> str:
-    clean_id = safe_background_set_id(base_id)
-    manifest = load_background_sets_manifest()
-    sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-    if clean_id not in sets and not (BACKGROUND_SETS_DIR / clean_id).exists():
-        return clean_id
-    for _ in range(50):
-        candidate = f"{clean_id}_{uuid.uuid4().hex[:6]}"
-        if candidate not in sets and not (BACKGROUND_SETS_DIR / candidate).exists():
-            return candidate
-    return f"{clean_id}_{int(time.time())}"
-
-
+    return _background_writes.unique_background_set_id(base_id)
 def update_background_set_manifest(set_id: str, **updates: Any) -> dict[str, Any]:
-    manifest = load_background_sets_manifest()
-    sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-    current = sets.get(set_id, {"id": set_id, "name": set_id.replace("_", " ")})
-    current.update(updates)
-    sets[set_id] = current
-    manifest["sets"] = sets
-    manifest.setdefault("default_set_id", "green_conveyor")
-    write_background_sets_manifest(manifest)
-    return current
-
-
+    return _background_writes.update_background_set_manifest(set_id, **updates)
 def save_task_environment_background_set(task_id: str, source_path: Path, user: dict[str, Any], display_name: str = "") -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id) or safe_record_id(task_id)
-    set_id = safe_background_set_id(f"task_env_{clean_task_id}")
-    set_dir = BACKGROUND_SETS_DIR / set_id
-    if set_dir.exists():
-        shutil.rmtree(set_dir, ignore_errors=True)
-    set_dir.mkdir(parents=True, exist_ok=True)
-    suffix = source_path.suffix.lower() if source_path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES else ".jpg"
-    target_path = set_dir / f"source{suffix}"
-    shutil.copy2(source_path, target_path)
-    create_background_variants_from_source(target_path, set_dir, count=5)
-    image_count = len(image_file_list(set_dir))
-    meta = update_background_set_manifest(
-        set_id,
-        id=set_id,
-        name=display_name or f"任务空场景背景 · {clean_task_id}",
-        description="用户首次检测前通过摄像头采集的空白生产环境背景",
-        source=str(target_path),
-        created_at=int(time.time()),
-        updated_at=int(time.time()),
-        status="ready" if image_count else "empty",
-        image_count=image_count,
-        generation_method="camera_empty_environment_local_variants",
-        owner_user_id=str(user.get("id") or LEGACY_OWNER_ID),
-        owner_username=str(user.get("username") or user.get("name") or ""),
-        shared_with_user_ids=[],
-    )
-    return background_set_payload(set_id, meta)
-
-
+    return _task_background_store.save_task_environment_background_set(task_id, source_path, user, display_name)
 def validate_task_environment_background_image(task_id: str, task: dict[str, Any], source_path: Path) -> dict[str, Any]:
     """Reject task empty-background captures that still contain required parts."""
     clean_task_id = sanitize_ai_detection_task_id(task_id)
