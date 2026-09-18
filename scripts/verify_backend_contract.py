@@ -58,6 +58,7 @@ def capture():
         assert server._incoming_text_store.paths.references() == server.INCOMING_TEXT_REFERENCES_PATH
         assert server._incoming_text_store.paths.inspections() == server.INCOMING_TEXT_INSPECTIONS_PATH
         assert server._incoming_text_store.paths.audit() == server.INCOMING_TEXT_AUDIT_PATH
+        assert server._incoming_text_store.rows.decode() is server.row_raw_json_list
 
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         from local_inspection_service.text_inspection.projection import public_record

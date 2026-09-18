@@ -34345,9 +34345,11 @@ _incoming_text_store = IncomingTextStore(
                         inspections=lambda: INCOMING_TEXT_INSPECTIONS_PATH, audit=lambda: INCOMING_TEXT_AUDIT_PATH),
     rows=IncomingRows(reference=lambda record: incoming_text_reference_row(record),
                       inspection=lambda record: incoming_text_inspection_row(record),
-                      audit=lambda event: audit_event_row(event), decode=lambda rows: row_raw_json_list(rows)),
+                      audit=lambda event: audit_event_row(event), decode=lambda: row_raw_json_list),
     read_json=lambda path: _incoming_text_json_list(path),
     write_json=lambda path, values: _save_incoming_text_json_list(path, values),
+    load_references=lambda: load_incoming_text_references(),
+    load_inspections=lambda: load_incoming_text_inspections(),
 )
 
 

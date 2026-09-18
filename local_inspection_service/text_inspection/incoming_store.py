@@ -21,28 +21,30 @@ class IncomingRows:
     reference: Callable[[Record], Record | None]
     inspection: Callable[[Record], Record | None]
     audit: Callable[[Record], Record | None]
-    decode: Callable[[list[Record]], list[Record]]
+    decode: Callable[[], Callable[[list[Record]], list[Record]]]
 
 
 class IncomingTextStore:
     def __init__(self, repository: Callable[[], PostgresRuntimeRepository | None],
                  guard: Callable[[], AbstractContextManager[Any]], paths: IncomingPaths,
                  rows: IncomingRows, read_json: Callable[[Path], list[Record]],
-                 write_json: Callable[[Path, list[Record]], None]):
+                 write_json: Callable[[Path, list[Record]], None], *,
+                 load_references: Callable[[], list[Record]], load_inspections: Callable[[], list[Record]]):
         self.repository, self.guard, self.paths = repository, guard, paths
         self.rows, self.read_json, self.write_json = rows, read_json, write_json
+        self.load_references, self.load_inspections = load_references, load_inspections
 
     def load_incoming_text_references(self) -> list[dict[str, Any]]:
         repository = self.repository()
         if repository is not None:
-            return self.rows.decode(repository.fetch_all("incoming_text_reference_versions"))
+            return self.rows.decode()(repository.fetch_all("incoming_text_reference_versions"))
         with self.guard():
             return self.read_json(self.paths.references())
 
     def load_incoming_text_inspections(self) -> list[dict[str, Any]]:
         repository = self.repository()
         if repository is not None:
-            return self.rows.decode(repository.fetch_all("incoming_text_inspections"))
+            return self.rows.decode()(repository.fetch_all("incoming_text_inspections"))
         with self.guard():
             return self.read_json(self.paths.inspections())
 
@@ -50,17 +52,17 @@ class IncomingTextStore:
         repository = self.repository()
         if repository is not None:
             row = repository.fetch_by_primary_key("incoming_text_reference_versions", {"id": reference_id})
-            values = self.rows.decode([row]) if row else []
+            values = self.rows.decode()([row]) if row else []
             return values[0] if values else None
-        return next((item for item in self.load_incoming_text_references() if str(item.get("id")) == reference_id), None)
+        return next((item for item in self.load_references() if str(item.get("id")) == reference_id), None)
 
     def load_incoming_text_inspection(self, inspection_id: str) -> dict[str, Any] | None:
         repository = self.repository()
         if repository is not None:
             row = repository.fetch_by_primary_key("incoming_text_inspections", {"id": inspection_id})
-            values = self.rows.decode([row]) if row else []
+            values = self.rows.decode()([row]) if row else []
             return values[0] if values else None
-        return next((item for item in self.load_incoming_text_inspections() if str(item.get("id")) == inspection_id), None)
+        return next((item for item in self.load_inspections() if str(item.get("id")) == inspection_id), None)
 
     def save_incoming_text_reference(self, reference: dict[str, Any], *, insert_only: bool = False) -> bool:
         row = self.rows.reference(reference)

@@ -1,6 +1,7 @@
 """Legacy JSON/SQL persistence contracts with optional isolated PostgreSQL."""
 import copy
 from contextlib import contextmanager
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -28,7 +29,9 @@ class Fixture:
         self.directory=Path(directory);self.paths={kind:self.directory/(kind+'.json') for kind in ('references','inspections','audit')}
         self.data={path:[] for path in self.paths.values()};self.events=[];self.repo=None;self.choices=[];self.write_error=None;self.lock=threading.RLock()
         self.store=IncomingTextStore(self.repository,self.guard,IncomingPaths(*(lambda kind=kind:self.paths[kind] for kind in ('references','inspections','audit'))),
-            IncomingRows(self.serialize_reference,self.serialize_inspection,self.serialize_audit,row_raw_json_list),self.read,self.write)
+            IncomingRows(self.serialize_reference,self.serialize_inspection,self.serialize_audit,lambda:row_raw_json_list),self.read,self.write,
+            load_references=lambda:self.store.load_incoming_text_references(),
+            load_inspections=lambda:self.store.load_incoming_text_inspections())
     def repository(self):
         self.events.append(('repository',));value=self.choices.pop(0) if self.choices else self.repo
         if isinstance(value,Exception):raise value
@@ -52,6 +55,163 @@ class Fixture:
 class IncomingStoreContracts(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='incoming-store-');self.addCleanup(self.temp.cleanup);self.f=Fixture(self.temp.name)
+    @staticmethod
+    def fail_once(callback,error):
+        attempts=[]
+        def invoke(*args,**kwargs):
+            attempts.append((args,kwargs))
+            if len(attempts)==1:raise error
+            return callback(*args,**kwargs)
+        return Mock(side_effect=invoke)
+
+    def lock_available(self,lock):
+        acquired=[]
+        def probe():
+            got=lock.acquire(blocking=False);acquired.append(got)
+            if got:lock.release()
+        thread=threading.Thread(target=probe);thread.start();thread.join(timeout=3)
+        self.assertFalse(thread.is_alive());self.assertEqual(len(acquired),1)
+        return acquired[0]
+
+    def test_read_first_errors_are_not_retried_or_redirected(self):
+        for kind in ('references','inspections'):
+            for mode in ('factory','fetch-all','fetch-one','decode-list','decode-one','json'):
+                with self.subTest(kind=kind,mode=mode):
+                    f=Fixture(self.temp.name);repo=Mock();f.repo=repo
+                    repo.fetch_all.return_value=[{'raw_json':{'id':'wanted'}}]
+                    repo.fetch_by_primary_key.return_value={'raw_json':{'id':'wanted'}}
+                    error=RuntimeError(mode)
+                    if mode=='factory':
+                        failed=self.fail_once(f.store.repository,error);f.store.repository=failed
+                    elif mode.startswith('fetch'):
+                        name='fetch_all' if mode=='fetch-all' else 'fetch_by_primary_key'
+                        failed=self.fail_once(getattr(repo,name),error);setattr(repo,name,failed)
+                    elif mode.startswith('decode'):
+                        failed=self.fail_once(f.store.rows.decode(),error);f.store.rows=replace(f.store.rows,decode=lambda:failed)
+                    else:
+                        f.repo=None;failed=self.fail_once(f.store.read_json,error);f.store.read_json=failed
+                    single=mode in ('fetch-one','decode-one')
+                    fn=getattr(f.store,'load_incoming_text_'+(kind[:-1] if single else kind))
+                    with self.assertRaises(RuntimeError) as caught:fn('wanted') if single else fn()
+                    self.assertIs(caught.exception,error);self.assertEqual(failed.call_count,1)
+                    self.assertFalse(any(e[0] in {'write','row'} for e in f.events))
+                    self.assertTrue(all(not rows for rows in f.data.values()))
+                    if mode!='json':self.assertFalse(any(e[0]=='read' for e in f.events))
+                    if mode=='factory':repo.fetch_all.assert_not_called()
+                    if mode=='json':self.assertEqual([e[0] for e in f.events],['repository','enter','exit'])
+                    self.assertTrue(self.lock_available(f.lock))
+
+    def test_write_first_errors_preserve_data_and_stop_dispatch(self):
+        for kind in ('reference','inspection','audit'):
+            modes=('row','insert','json') if kind=='audit' else ('row','insert','upsert','json')
+            for mode in modes:
+                with self.subTest(kind=kind,mode=mode):
+                    f=Fixture(self.temp.name);repo=Mock();f.repo=repo
+                    value=reference() if kind=='reference' else inspection() if kind=='inspection' else {'id':'audit'}
+                    error=RuntimeError(kind+'-'+mode)
+                    if mode=='row':
+                        failed=self.fail_once(getattr(f.store.rows,kind),error)
+                        f.store.rows=replace(f.store.rows,**{kind:failed})
+                    elif mode in ('insert','upsert'):
+                        name='insert_row_once' if mode=='insert' else 'upsert_row'
+                        failed=self.fail_once(getattr(repo,name),error);setattr(repo,name,failed)
+                    else:
+                        f.repo=None;failed=self.fail_once(f.store.write_json,error);f.store.write_json=failed
+                    before=copy.deepcopy(f.data)
+                    with self.assertRaises(RuntimeError) as caught:
+                        if kind=='audit':f.store.append_incoming_text_audit(value)
+                        else:getattr(f.store,'save_incoming_text_'+kind)(value,insert_only=mode=='insert')
+                    self.assertIs(caught.exception,error);self.assertEqual(failed.call_count,1)
+                    self.assertEqual(f.data,before);self.assertTrue(self.lock_available(f.lock))
+                    if mode=='row':
+                        repo.insert_row_once.assert_not_called();repo.upsert_row.assert_not_called()
+                        if kind!='audit':self.assertFalse(any(e[0]=='repository' for e in f.events))
+                    if mode=='json':self.assertEqual(f.events[-1],('exit',))
+                    else:self.assertFalse(any(e[0] in {'read','write','enter'} for e in f.events))
+
+    def test_file_read_and_partial_temp_write_first_errors_are_not_retried(self):
+        path=Path(self.temp.name)/'first.json';path.write_text('[{"id":"old"}]',encoding='utf-8')
+        original_read=Path.read_text;error=PermissionError('first read')
+        failed=self.fail_once(original_read,error)
+        with patch.object(Path,'read_text',autospec=True,side_effect=failed):
+            self.assertEqual(json_records.read_json_list(path),[])
+        self.assertEqual(failed.call_count,1)
+        original_write=Path.write_text;error=OSError('partial write');attempts=[]
+        def write(target,text,*args,**kwargs):
+            attempts.append(target)
+            if len(attempts)==1:
+                original_write(target,'partial',encoding='utf-8');raise error
+            return original_write(target,text,*args,**kwargs)
+        with patch.object(Path,'write_text',autospec=True,side_effect=write),patch.object(json_records.os,'replace',wraps=json_records.os.replace) as move:
+            with self.assertRaises(OSError) as caught:json_records.write_json_list(path,[{'id':'new'}])
+            self.assertIs(caught.exception,error);move.assert_not_called()
+        self.assertEqual(len(attempts),1);self.assertEqual(path.read_text(encoding='utf-8'),'[{"id":"old"}]')
+        leftovers=list(path.parent.glob('first.json.*.tmp'));self.assertEqual(leftovers,attempts)
+        self.assertEqual(leftovers[0].read_text(encoding='utf-8'),'partial')
+
+    def test_uniqueness_and_input_copy_stay_inside_one_shared_guard(self):
+        for kind in ('reference','inspection'):
+            for existing in (False,True):
+                with self.subTest(kind=kind,existing=existing):
+                    f=Fixture(self.temp.name);armed=[False];stages=[]
+                    def locked(stage):
+                        if armed[0]:
+                            stages.append(stage);self.assertFalse(self.lock_available(f.lock),stage)
+                    class Prior(dict):
+                        def get(self,*args):locked('comparison');return super().get(*args)
+                    class Incoming(dict):
+                        def __iter__(self):return super().__iter__()
+                        def keys(self):locked('keys');return super().keys()
+                        def __getitem__(self,key):locked('item');return super().__getitem__(key)
+                    make=reference if kind=='reference' else inspection
+                    previous=make('ref' if kind=='reference' else 'inspection') if existing else make('other')
+                    if not existing:previous.update(version_label='other',capture_id='other')
+                    f.data[f.paths[kind+'s']]=[Prior(previous)]
+                    original=f.store.read_json
+                    def read(path):
+                        value=original(path);armed[0]=True;return value
+                    f.store.read_json=read
+                    self.assertTrue(getattr(f.store,'save_incoming_text_'+kind)(Incoming(make(nested=[]))))
+                    self.assertTrue({'comparison','keys','item'}<=set(stages))
+                    self.assertEqual(sum(e[0]=='enter' for e in f.events),1)
+                    self.assertEqual(sum(e[0]=='exit' for e in f.events),1)
+                    self.assertTrue(self.lock_available(f.lock))
+
+    def test_decoder_capture_window_and_single_lookup_short_circuit(self):
+        for kind in ('references','inspections'):
+            for mode in ('list','list-none','single','single-none','empty'):
+                with self.subTest(kind=kind,mode=mode):
+                    f=Fixture(self.temp.name);events=[];callbacks={}
+                    def decoder(label):
+                        def decode(rows):events.append(label);return [{'id':'wanted','source':label}]
+                        return decode
+                    callbacks['decode']=decoder('A');repo=Mock()
+                    def repository():
+                        events.append('repository');callbacks['decode']=None if mode.endswith('none') else decoder('B');return repo
+                    def fetch_all(table):
+                        events.append('fetch-all');callbacks['decode']=decoder('C');return [{'raw_json':{'id':'wanted'}}]
+                    def fetch_one(*args):
+                        events.append('fetch-one');callbacks['decode']=decoder('C');return None if mode=='empty' else {'raw_json':{'id':'wanted'}}
+                    getter=Mock(side_effect=lambda:callbacks['decode'])
+                    f.store.repository=repository;f.store.rows=replace(f.store.rows,decode=getter)
+                    repo.fetch_all=fetch_all;repo.fetch_by_primary_key=fetch_one
+                    if mode.startswith('list'):
+                        fn=getattr(f.store,'load_incoming_text_'+kind)
+                        if mode=='list-none':
+                            with self.assertRaises(TypeError):fn()
+                            self.assertEqual(events,['repository','fetch-all'])
+                        else:
+                            self.assertEqual(fn(),[{'id':'wanted','source':'B'}]);self.assertEqual(events,['repository','fetch-all','B'])
+                        self.assertEqual(getter.call_count,1)
+                    else:
+                        result=getattr(f.store,'load_incoming_text_'+kind[:-1])('wanted')
+                        if mode=='empty':
+                            self.assertIsNone(result);self.assertEqual(events,['repository','fetch-one']);getter.assert_not_called()
+                        else:
+                            self.assertEqual(result,{'id':'wanted','source':'C'});self.assertEqual(events,['repository','fetch-one','C'])
+                            self.assertEqual(getter.call_count,1)
+                    self.assertFalse(any(e[0] in {'read','write','enter'} for e in f.events))
+
     def test_json_reference_and_inspection_have_distinct_business_keys(self):
         f=self.f;s=f.store;original=reference(nested=[])
         self.assertTrue(s.save_incoming_text_reference(original,insert_only=True))
@@ -152,6 +312,30 @@ class IncomingStoreContracts(unittest.TestCase):
             serializer.assert_called_once();factory.assert_not_called()
         with patch.object(server,'runtime_postgres_repository_or_none',side_effect=RuntimeError('late')):
             with self.assertRaisesRegex(RuntimeError,'late'):server.load_incoming_text_inspection('inspection')
+    @unittest.skipUnless(ROOT_CHECK,'use --root for application composition')
+    def test_root_single_lookup_observes_replaced_public_list_loader(self):
+        runtime=Path(self.temp.name)/'runtime';(runtime/'local_inspection_service/static').mkdir(parents=True)
+        os.environ.update(LOCAL_INSPECTION_ROOT=str(runtime),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
+        from local_inspection_service import server
+        original=server.row_raw_json_list
+        self.assertIs(server._incoming_text_store.rows.decode(),original)
+        replacement=Mock()
+        with patch.object(server,'row_raw_json_list',replacement):self.assertIs(server._incoming_text_store.rows.decode(),replacement)
+        self.assertIs(server._incoming_text_store.rows.decode(),original)
+        for kind in ('references','inspections'):
+            for missing in (False,True):
+                with self.subTest(kind=kind,missing=missing):
+                    name='load_incoming_text_'+kind;initial=Mock(return_value=[])
+                    replacement=None if missing else Mock(return_value=[{'id':'wanted'}])
+                    def repository():setattr(server,name,replacement);return None
+                    with patch.object(server,name,initial),patch.object(server,'runtime_postgres_repository_or_none',side_effect=repository) as factory:
+                        fn=getattr(server,'load_incoming_text_'+kind[:-1])
+                        if missing:
+                            with self.assertRaises(TypeError):fn('wanted')
+                        else:
+                            self.assertEqual(fn('wanted'),{'id':'wanted'});replacement.assert_called_once_with()
+                        factory.assert_called_once_with();initial.assert_not_called()
+
     @unittest.skipUnless(PG_CHECK,'use --postgres with an isolated test DSN')
     def test_real_postgres_unique_keys_readback_and_audit_insert(self):
         import psycopg
