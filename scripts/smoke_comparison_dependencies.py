@@ -61,7 +61,7 @@ class Fixture:
     def settings(self, purpose):
         self.events.append(('settings', purpose))
         return {**self.config, 'model': qwen.ocr.MODEL} if purpose == 'ocr' else self.config
-    def clear(self): self.clears += 1
+    def clear(self): self.events.append(('clear',)); self.clears += 1
     def observations(self): return [dict(id='o1', type='text', text='A20', confidence=1.0, box=[.1,.1,.5,.2], polygon=[[20,10],[120,10],[120,30],[20,30]], provenance='qwen_ocr')]
     def recognize(self, *args, **kwargs):
         claims = [v for (k,_),v in self.store.items() if k == 'ocr_evidence']
@@ -95,7 +95,7 @@ class Fixture:
         class Timer:
             def __init__(self, interval, callback): self.interval=interval; self.callback=callback; self.cancelled=False; fixture.timers.append(self)
             def start(self): pass
-            def cancel(self): self.cancelled=True
+            def cancel(self): self.cancelled=True; fixture.events.append(('cancel',))
         task = self.workers.pop(0)
         with patch.object(qwen.threading, 'Timer', Timer), patch.object(qwen.ocr, 'recognize', self.recognize), patch.object(qwen, 'llm', self.mapping):
             task['target'](*task['args'])
@@ -181,26 +181,87 @@ class ComparisonContracts(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'recorder is not configured'): invoke()
 
     def test_existing_cleanup_sequences_remain_distinct(self):
-        f=Fixture(self); original=f.save
+        f=Fixture(self); original=f.save; failures=[]; error=RuntimeError('final save failed')
         def final_save_fails(kind,value,**kwargs):
-            if kind=='records' and value.get('status')=='completed': raise RuntimeError('final save failed')
+            if kind=='records' and value.get('status')=='completed':
+                failures.append(copy.deepcopy(value));f.events.append(('final-save',))
+                if len(failures)==1:raise error
             return original(kind,value,**kwargs)
-        f.namespace['_text_v2_save']=final_save_fails; f.submit()
+        f.namespace['_text_v2_save']=final_save_fails; record=f.submit()
         slot=Mock(); slot.acquire.return_value=True
-        with patch.object(comparison,'_slots',slot), self.assertRaisesRegex(RuntimeError,'final save failed'): f.run()
+        with patch.object(comparison,'_slots',slot), self.assertRaisesRegex(RuntimeError,'final save failed') as caught: f.run()
+        self.assertIs(caught.exception,error);self.assertEqual(len(failures),1)
+        self.assertEqual(f.store['records',record['id']]['status'],'attempting');self.assertEqual(f.events[-1],('final-save',))
         self.assertEqual(f.clears,0); slot.release.assert_not_called()
-        f=Fixture(self); original=f.update
+        f=Fixture(self); original=f.update; failures=[]; error=RuntimeError('final CAS failed')
         def final_cas_fails(kind,value):
-            if kind=='records' and value.get('status')=='completed': raise RuntimeError('final CAS failed')
+            if kind=='records' and value.get('status')=='completed':
+                failures.append(copy.deepcopy(value));f.events.append(('final-cas',))
+                if len(failures)==1:raise error
             return original(kind,value)
-        f.namespace['_text_v2_update_attempt']=final_cas_fails; f.submit(qwen_enabled=True)
+        f.namespace['_text_v2_update_attempt']=final_cas_fails; record=f.submit(qwen_enabled=True)
         slot=Mock(); slot.acquire.return_value=True
-        with patch.object(qwen,'_slots',slot), self.assertRaisesRegex(RuntimeError,'final CAS failed'): f.run()
+        slot.release.side_effect=lambda:f.events.append(('release',))
+        with patch.object(qwen,'_slots',slot), self.assertRaisesRegex(RuntimeError,'final CAS failed') as caught: f.run()
+        self.assertIs(caught.exception,error);self.assertEqual(len(failures),1)
+        self.assertEqual(f.store['records',record['id']]['status'],'attempting');self.assertEqual(len(f.calls),1)
+        self.assertEqual(f.events[-4:],[('final-cas',),('cancel',),('clear',),('release',)])
         self.assertEqual(f.clears,1); self.assertTrue(f.timers[0].cancelled); slot.release.assert_called_once()
         f=Fixture(self); f.namespace['clear_thread_runtime_repository_selection']=Mock(side_effect=RuntimeError('clear failed')); f.submit(qwen_enabled=True)
         slot=Mock(); slot.acquire.return_value=True
         with patch.object(qwen,'_slots',slot), self.assertRaisesRegex(RuntimeError,'clear failed'): f.run()
         self.assertTrue(f.timers[0].cancelled); slot.release.assert_not_called()
+
+    def test_unknown_mapping_outcome_is_not_retried(self):
+        f=Fixture(self);f.template['elements'][0]['text']='Battery Pack';observe=f.observations
+        f.observations=lambda:[{**observe()[0],'text':'Batterv Pack'}]
+        attempts=[];error=RuntimeError('unknown mapping outcome')
+        def mapping(*args,**kwargs):
+            stored=f.load('records')[0]
+            self.assertEqual(stored['diagnostics']['phase'],'mapping_unmatched')
+            self.assertEqual(stored['diagnostics']['llm_call']['state'],'attempting')
+            self.assertEqual(stored['diagnostics']['model_audits'][-1]['name'],'mapping')
+            self.assertIs(kwargs['record_usage'],f.usage);attempts.append(args)
+            if len(attempts)==1:raise error
+            return {'mappings':[]},{}
+        f.mapping=Mock(side_effect=mapping);record=f.submit(qwen_enabled=True);f.run()
+        f.mapping.assert_called_once();self.assertEqual(len(attempts),1);self.assertEqual(len(f.calls),1)
+        stored=f.store['records',record['id']]
+        self.assertEqual(stored['diagnostics']['llm_call']['state'],'unknown_or_invalid')
+        self.assertEqual(stored['diagnostics']['llm_call']['error_type'],'RuntimeError')
+        self.assertEqual(stored['diagnostics']['external_calls'],2)
+        self.assertEqual(stored['status'],'completed');self.assertEqual(stored['decision'],'REVIEW_REQUIRED')
+        self.assertEqual(f.clears,1);self.assertTrue(f.timers[0].cancelled)
+
+    def test_each_unknown_reread_claim_is_attempted_once(self):
+        for failed_mode in ['advanced_recognition','text_recognition']:
+            with self.subTest(mode=failed_mode):
+                f=Fixture(self);f.template['elements'][0]['text']='Battery Pack';observe=f.observations
+                f.observations=lambda:[{**observe()[0],'text':'Batterv Pack'}]
+                f.mapping=Mock(return_value=({'mappings':[]},{}));recognize=f.recognize;claims=[]
+                def provider(*args,**kwargs):
+                    rows,diagnostic=recognize(*args,**kwargs)
+                    if 'region_text' in kwargs:
+                        mode='text_recognition' if kwargs['region_text'] else 'advanced_recognition'
+                        stored=f.load('records')[0];trace=stored['diagnostics']['rereads'][-1]
+                        claim=f.store['ocr_evidence',trace['id']]
+                        self.assertEqual(claim['status'],'attempting');self.assertEqual(claim['mode'],mode)
+                        self.assertEqual(stored['diagnostics']['model_audits'][-1]['name'],trace['id'])
+                        claims.append((mode,trace['id']))
+                        if mode==failed_mode and sum(m==mode for m,_ in claims)==1:raise RuntimeError('unknown reread outcome')
+                        if kwargs['region_text']:rows[0]['text']='Battery Pack'
+                    return rows,diagnostic
+                f.recognize=provider;record=f.submit(qwen_enabled=True,reread_enabled=True);f.run()
+                self.assertEqual(len(f.calls),3);f.mapping.assert_called_once()
+                self.assertEqual([mode for mode,_ in claims],['advanced_recognition','text_recognition'])
+                self.assertEqual(len({identity for _,identity in claims}),2)
+                for mode,identity in claims:
+                    self.assertEqual(f.store['ocr_evidence',identity]['status'],'unknown' if mode==failed_mode else 'completed')
+                stored=f.store['records',record['id']]
+                failed=next(t for t in stored['diagnostics']['rereads'] if t['mode']==failed_mode)
+                self.assertEqual(failed['state'],'unknown_or_invalid');self.assertEqual(failed['error'],'provider_outcome_unknown')
+                self.assertEqual(stored['diagnostics']['external_calls'],4);self.assertEqual(stored['decision'],'REVIEW_REQUIRED')
+                self.assertEqual(f.clears,1);self.assertTrue(f.timers[0].cancelled)
 
     def test_ocr_mapping_and_both_rereads_share_captured_usage(self):
         f=Fixture(self); f.template['elements'][0]['text']='Battery Pack'

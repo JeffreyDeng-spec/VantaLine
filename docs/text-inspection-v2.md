@@ -8,6 +8,8 @@ attempts remain durable before calls; unknown cache entries cannot trigger repla
 A late timer cannot replace a completed result, and late work cannot reverse a
 successful timeout settlement. These guarantees concern the existing Qwen CAS path;
 local OCR retains its existing final-save behavior and independent commissioning.
+Unknown mapping and region-call outcomes are never retried for the same claim.
+The existing algorithm may still run the other separately claimed reread mode.
 
 Standard preparation HTTP routes, jobs and snapshot policy now have explicit
 ports. Existing attempt identity and processing-state checks are preserved: a late

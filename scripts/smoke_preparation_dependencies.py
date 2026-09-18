@@ -186,7 +186,7 @@ class PreparationContracts(unittest.TestCase):
         self.assertEqual(f.clears,1);self.slot_free(f)
 
     def test_worker_timeout_resolves_writer_after_timestamp(self):
-        for mode in ['timer','worker']:
+        for mode in ['timer','worker','callback']:
             with self.subTest(mode=mode):
                 events=[];record={'id':'record','created_at':0,'deadline_at':10,'status':'attempting','diagnostics':{}}
                 first=Mock(side_effect=lambda *args:events.append('first'))
@@ -207,6 +207,11 @@ class PreparationContracts(unittest.TestCase):
                     with patch.object(qwen.threading,'Timer') as timer,patch.object(qwen.time,'time',side_effect=worker_clock),patch.object(qwen,'expired',return_value=True):
                         qwen.run(records,None,clear,None,record,b'',{},None)
                     timer.return_value.start.assert_called_once();timer.return_value.cancel.assert_called_once()
+                    if mode=='callback':
+                        events.clear();first.reset_mock();second.reset_mock();clear.reset_mock();records.update_attempt=first
+                        original=copy.deepcopy(record)
+                        with patch.object(qwen.time,'time',side_effect=now):timer.call_args.args[1]()
+                        self.assertEqual(record,original)
                     self.assertEqual(events,['clock','second','clear'])
                 first.assert_not_called();second.assert_called_once();clear.assert_called_once()
                 self.assertEqual(second.call_args.args[0],'records');self.assertEqual(second.call_args.args[1]['updated_at'],100)

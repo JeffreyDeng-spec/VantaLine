@@ -8,6 +8,8 @@ source location and receives the same capabilities explicitly; audit and preview
 writers require only media path/write methods. No namespace injection remains in
 the application. Dependency checks now also include these three evidence modules;
 a constant local-name membership test is permitted, namespace passing is rejected.
+Timer and final-timeout forwarding defer the record writer lookup until settlement;
+the HTTP preparation history factory retains its separate early-capture boundary.
 
 Standard preparation is split into `text_inspection.preparation_api`,
 `preparation_jobs` and `preparation_policy`. Narrow record, media, model, account

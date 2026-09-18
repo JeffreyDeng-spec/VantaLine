@@ -5,6 +5,8 @@ contracts. The compatibility export and new comparison/media ports ship together
 Qwen, audit and preview consumers are updated in the same package. Source fingerprints
 change normally without rewriting old snapshots. The paid diagnostic probe is only
 adapted to the explicit settings signature, never executed by these checks.
+Final-write and paid-stage fault injection must reject duplicate attempts, and
+the previously deployed HTTP/worker timeout-capture contracts remain mandatory.
 
 Preparation dependency CI adds isolated timeout, transaction, admission and
 late-result contracts while preserving the original endpoint and PostgreSQL gates.
