@@ -172,7 +172,7 @@ class RevisionContracts(unittest.TestCase):
                     return failure() if mode.endswith('digest') else 'hash'
                 def get_logger():
                     events.append('logger');return failure() if mode=='logger' else logger
-                def info(*args):events.append('info');return failure()
+                def info(*args):events.append('info');return failure() if mode=='info' else None
                 logger.info.side_effect=info
                 original=diagnostics.diagnostic_value
                 def serialize(value,**kwargs):events.append('serialize');return original(value,**kwargs)
