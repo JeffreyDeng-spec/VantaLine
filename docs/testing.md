@@ -1,6 +1,6 @@
 # Testing
 
-`python scripts/smoke_detection_ocr.py` covers nineteen synthetic groups. Nine passed
+`python scripts/smoke_detection_ocr.py` covers twenty synthetic groups. Nine passed
 against the original root before extraction: keywords/profiles, matching thresholds,
 manual classification, image geometry, scoring failures, crop fallbacks, attachment
 fallback/short-result rules, specialized resolution, and partial projection. Three
@@ -9,13 +9,14 @@ composition with late shared bootstrap replacement, and batch-build failure repl
 order. Fake Paddle factories and prediction substitutes prevent model downloads or
 inference. Existing task/OCR/YOLO-shape assertions remain required; complete HTTP,
 boundary and historical-fingerprint contracts accompany the extraction.
-Seven additional groups cover four callback capture windows and four absent-callback
+Eight additional groups cover four callback capture windows and four absent-callback
 traces, five attachment first-error boundaries, original UID/mapping failures, six
 new policy-provider failure boundaries, single-image errors/BaseException propagation
-and batch classification fallback order. Valid subsequent returns prevent accidental
+and batch classification fallback order. Three preceding-work A-to-B-to-C traces
+reject caching crop, default score or match callbacks at attachment entry. Valid subsequent returns prevent accidental
 retries from passing the failure probes; attachment failures preserve partial state
 and prevent downstream work. The cache also retains a falsey non-None model.
-Fifteen business groups replay against actual original root bodies; the new provider
+Sixteen business groups replay against actual original root bodies; the new provider
 group, engine factory group, root composition group and class-based batch group are
 checked separately and are not claimed as old factory behavior.
 

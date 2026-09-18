@@ -29,12 +29,12 @@ class OCRContracts(unittest.TestCase):
     @classmethod
     def tearDownClass(cls): cls.temporary.cleanup()
 
-    def _attachment_capture_trace(self, mode, missing=False):
+    def _attachment_capture_trace(self, mode, missing=False, prior=False):
         api=self.api;events=[];image=np.zeros((5,7,3),np.uint8)
         key={'crop':'crop_detection_region','default':'score_ocr_variants','fallback':'score_ocr_variants','match':'match_ocr_text_accessory'}[mode]
         count=[0]
         def first(*args,**kwargs):
-            events.append('A');count[0]+=1
+            events.append('B' if prior else 'A');count[0]+=1
             if mode=='crop':return None
             if mode in ('default','fallback'):
                 if mode=='default' or count[0]>1:return []
@@ -42,7 +42,7 @@ class OCRContracts(unittest.TestCase):
                 return [result('unknown',6)]
             return {'accepted':False,'reason':'fixture'}
         def replacement(*args,**kwargs):
-            events.append('B')
+            events.append('C' if prior else 'B')
             return None if mode=='crop' else ([] if mode in ('default','fallback') else {'accepted':False,'reason':'fixture'})
         def swap():events.append('arg');setattr(api,key,replacement)
         class Integer:
@@ -62,18 +62,33 @@ class OCRContracts(unittest.TestCase):
                    'match_ocr_text_accessory':lambda *a:{'accepted':False,'reason':'fixture'},
                    'finalize_ocr_detection':lambda *a:None}
         callbacks[key]=None if missing and mode!='fallback' else first
-        det=Detection(class_id=4 if mode=='match' else 1,polygon=[[0,0],[1,0],[1,1]],accessory_id='old')
+        def advance():events.append('prior');setattr(api,key,first)
+        class ClassId:
+            def __int__(self):advance();return 1
+        if prior:
+            callbacks[key]=Mock(side_effect=AssertionError('callback captured before preceding work'))
+            if mode=='default':
+                def crop(*args,**kwargs):advance();return image,orientation
+                callbacks['crop_detection_region']=crop
+            elif mode=='match':
+                def score(*args):advance();return [value]
+                callbacks['score_ocr_variants']=score
+        det=Detection(class_id=ClassId() if prior and mode=='crop' else (4 if mode=='match' else 1),polygon=[[0,0],[1,0],[1,1]],accessory_id='old')
         with patch.dict(api.__dict__,callbacks):
             invoke=lambda:api.attach_ocr_results(image,[det],{}, {'is_specialized':True,'ocr_model_class_ids':[4]} if mode=='match' else {})
             if missing:
                 with self.assertRaises(TypeError):invoke()
             else:invoke()
-        expected=(['A'] if mode=='fallback' else [])+['arg']+([] if missing else ['A'])
+        expected=(['prior'] if prior else (['A'] if mode=='fallback' else []))+['arg']+([] if missing else ['B' if prior else 'A'])
         self.assertEqual(events,expected)
 
     def test_attachment_callback_capture_before_argument_effects(self):
         for mode in ('crop','default','fallback','match'):
             with self.subTest(mode=mode):self._attachment_capture_trace(mode)
+
+    def test_attachment_callback_capture_after_preceding_work(self):
+        for mode in ('crop','default','match'):
+            with self.subTest(mode=mode):self._attachment_capture_trace(mode,prior=True)
 
     def test_attachment_missing_callback_preserves_arguments_and_typeerror(self):
         for mode in ('crop','default','fallback','match'):
