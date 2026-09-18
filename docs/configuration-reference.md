@@ -6,6 +6,9 @@ adds `text_inspection/comparison_submission.py`, which now assembles model input
 and `text_inspection_v2.py`, the actual strict-prompt definition previously absent
 from the list. New fingerprints reflect both files; stored snapshots are unchanged.
 Prepared jobs retain per-submission captured callbacks rather than later replacements.
+Submission/review getter capabilities add no setting and preserve argument effects,
+missing-callback failures and existing uncertain-result settlement. They do not
+introduce provider, storage, postprocessing or audit retries.
 
 Standard-route extraction introduces no configuration. Permission, account gates,
 100 MiB import read limit, legacy PDF read-only responses, expected revisions and

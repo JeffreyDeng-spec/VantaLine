@@ -8,16 +8,15 @@ from urllib.parse import urlsplit
 from collections.abc import Callable
 from typing import Any
 from fastapi import HTTPException
-from .comparison_ports import ComparisonMedia
 from .inspection_ports import (
-    Record, CaptureUpload, InspectionAccess, InspectionRecords, SubmissionPolicy,
+    Record, CaptureUpload, SubmissionMedia, InspectionAccess, InspectionRecords, SubmissionPolicy,
     SubmissionImages, SubmissionModels, SubmissionDiagnostics, PreparedSubmit,
 )
 
 
 class ComparisonSubmission:
     def __init__(self, access: InspectionAccess, records: InspectionRecords,
-                 load: Callable[[str], list[Record]], media: ComparisonMedia,
+                 load: Callable[[str], list[Record]], media: SubmissionMedia,
                  images: SubmissionImages, models: SubmissionModels, policy: SubmissionPolicy,
                  diagnostics: SubmissionDiagnostics, prepared_submit: PreparedSubmit,
                  resolve_extraction: Callable[[str, str, str, Record], tuple[bytes, Record]],
@@ -34,8 +33,8 @@ class ComparisonSubmission:
         owner_user_id, owner_username = self.access.owner()
         if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", comparison_id):
             raise HTTPException(status_code=400, detail="comparison_id 格式错误")
-        asset = self.records.owned("assets", standard_asset_id, owner_user_id)
-        standard = self.records.owned("standards", str(asset.get("standard_id") if asset else ""), owner_user_id)
+        asset = self.records.owned()("assets", standard_asset_id, owner_user_id)
+        standard = self.records.owned()("standards", str(asset.get("standard_id") if asset else ""), owner_user_id)
         confirmed_snapshot = next((item for item in standard.get("confirmed_assets", []) if str(item.get("id")) == standard_asset_id), None) if standard else None
         if not asset or not standard or standard.get("status") != "confirmed" or not confirmed_snapshot:
             raise HTTPException(status_code=404, detail="已确认标准标签不存在")
@@ -50,11 +49,11 @@ class ComparisonSubmission:
             return self.prepared_submit(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
         if self.policy.qwen_enabled(owner_user_id):
             raise HTTPException(status_code=409, detail="该标准尚未生成元素模板，请先在标准库启用并完成标准准备；无需提取实拍标签。")
-        captured_upload_sha256 = self.media.digest(captured_upload)
-        captured, captured_mime, source_suffix, captured_source_format = self.images.prepare(captured_upload, max_bytes=100 * 1024 * 1024 if extraction else 10 * 1024 * 1024)
+        captured_upload_sha256 = self.media.digest()(captured_upload)
+        captured, captured_mime, source_suffix, captured_source_format = self.images.prepare()(captured_upload, max_bytes=100 * 1024 * 1024 if extraction else 10 * 1024 * 1024)
         asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
         reference_original = self.images.asset_bytes(asset, owner_user_id)
-        reference, reference_mime, _, reference_source_format = self.images.prepare(reference_original)
+        reference, reference_mime, _, reference_source_format = self.images.prepare()(reference_original)
         settings = self.models.settings("document")
         provider_settings = {
             **settings,
@@ -66,10 +65,10 @@ class ComparisonSubmission:
         provider_reference, provider_reference_mime, provider_reference_format = self.images.provider_copy(reference, reference_mime)
         provider_captured, provider_captured_mime, provider_captured_format = self.images.provider_copy(captured, captured_mime)
         fingerprint_payload = {
-            "reference_sha256": self.media.digest(reference_original), "reference_bytes": len(reference_original),
-            "prepared_reference_sha256": self.media.digest(reference), "prepared_reference_bytes": len(reference),
+            "reference_sha256": self.media.digest()(reference_original), "reference_bytes": len(reference_original),
+            "prepared_reference_sha256": self.media.digest()(reference), "prepared_reference_bytes": len(reference),
             "captured_upload_sha256": captured_upload_sha256, "captured_upload_bytes": len(captured_upload),
-            "captured_sha256": self.media.digest(captured), "captured_bytes": len(captured),
+            "captured_sha256": self.media.digest()(captured), "captured_bytes": len(captured),
             "standard_asset_id": standard_asset_id, "provider": settings.get("provider"),
             "standard_revision_id": standard.get("current_revision_id", ""),
             "standard_revision_number": int(standard.get("revision_number") or 0),
@@ -78,7 +77,7 @@ class ComparisonSubmission:
         }
         if extraction_id:
             fingerprint_payload["extraction_id"] = extraction_id
-        fingerprint = self.media.digest(json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode())
+        fingerprint = self.media.digest()(json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode())
         existing = next((item for item in self.load("records") if item.get("owner_user_id") == owner_user_id and item.get("comparison_id") == comparison_id), None)
         if existing:
             if existing.get("fingerprint") != fingerprint:
@@ -130,12 +129,12 @@ class ComparisonSubmission:
             },
             "events": [],
         }
-        self.diagnostics.event(diagnostics, "input_prepared", "ok")
+        self.diagnostics.event()(diagnostics, "input_prepared", "ok")
         if extraction:
             diagnostics["extraction"] = extraction
-        record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": self.media.digest(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": self.policy.prompt_version(), "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
+        record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": self.media.digest()(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": self.policy.prompt_version(), "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
         record["history_display"] = self.display_snapshot(standard, asset)
-        source_path = self.media.path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
+        source_path = self.media.path()(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
         self.media.write(source_path, captured)
         record["source_path"] = str(source_path)
         if not self.records.save("records", record, insert_only=True):
@@ -144,7 +143,7 @@ class ComparisonSubmission:
                 return self.records.public(winner)
             raise HTTPException(status_code=409, detail="comparison_id 已用于其他输入")
         if not self.policy.external_enabled():
-            self.diagnostics.event(diagnostics, "external_media_gate", "blocked")
+            self.diagnostics.event()(diagnostics, "external_media_gate", "blocked")
             record.update({"status": "review_required", "decision": "REVIEW_REQUIRED", "message": "外部图片比对尚未完成客户授权和生产启用，请人工复核。", "attempt_finished_at": int(time.time()), "external_media_sent": False, "external_media_send_status": "not_sent"})
             self.records.save("records", record)
             self.diagnostics.write(record)
@@ -159,11 +158,11 @@ class ComparisonSubmission:
         try:
             record["external_media_send_status"] = "attempting"
             record["external_media_sent"] = None
-            self.diagnostics.event(diagnostics, "provider_call", "started")
+            self.diagnostics.event()(diagnostics, "provider_call", "started")
             self.records.save("records", record)
-            provider = self.models.call("provider.gemini.generate_json", {"provider_config": provider_settings, "system_prompt": self.models.prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
+            provider = self.models.call()("provider.gemini.generate_json", {"provider_config": provider_settings, "system_prompt": self.models.prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
             diagnostics["provider_result"] = self.diagnostics.provider(provider, provider_settings)
-            self.diagnostics.event(
+            self.diagnostics.event()(
                 diagnostics,
                 "provider_call",
                 "ok" if provider.get("ok") else "failed",
@@ -180,16 +179,16 @@ class ComparisonSubmission:
                 failure_stage = "provider_result"
                 raise ValueError(str(provider.get("error") or "模型服务异常"))
             failure_stage = "response_validation"
-            normalized_response = self.models.normalize(
+            normalized_response = self.models.normalize()(
                 provider.get("parsed"),
                 str(provider.get("provider") or provider_settings.get("provider") or ""),
             )
             diagnostics["normalized_response"] = self.diagnostics.value(normalized_response)
             checked = self.models.validate(normalized_response)
-            self.diagnostics.event(diagnostics, "response_validation", "ok", details={"decision": checked.get("decision")})
+            self.diagnostics.event()(diagnostics, "response_validation", "ok", details={"decision": checked.get("decision")})
             if checked["decision"] == "MATCH" and not self.policy.automatic_match_verified():
                 checked = {"decision": "REVIEW_REQUIRED", "differences": [], "message": "模型未发现差异，但自动通过尚未完成现场验收，请人工确认。"}
-                self.diagnostics.event(diagnostics, "automatic_match_gate", "blocked")
+                self.diagnostics.event()(diagnostics, "automatic_match_gate", "blocked")
             record.update(checked)
             record["auto_decision"] = checked["decision"]
             record["status"] = "completed" if checked["decision"] != "REVIEW_REQUIRED" else "review_required"
@@ -197,14 +196,14 @@ class ComparisonSubmission:
             record["model"] = provider.get("model") or settings.get("model")
             record["latency_ms"] = provider.get("latency_ms")
             failure_stage = "annotation"
-            annotated = self.images.annotate(captured, checked["differences"])
-            annotated_path = self.media.path(owner_user_id, standard["id"], f"{record['id']}-annotated.jpg")
+            annotated = self.images.annotate()(captured, checked["differences"])
+            annotated_path = self.media.path()(owner_user_id, standard["id"], f"{record['id']}-annotated.jpg")
             self.media.write(annotated_path, annotated)
             record["annotated_path"] = str(annotated_path)
-            record["annotated_sha256"] = self.media.digest(annotated)
+            record["annotated_sha256"] = self.media.digest()(annotated)
             record["annotated_image_data_url"] = f"/api/text-inspection/inspections/{record['id']}/evidence/annotated"
-            self.diagnostics.event(diagnostics, "annotation", "ok", details={"bytes": len(annotated), "sha256": record["annotated_sha256"]})
-            self.diagnostics.event(diagnostics, "completed", "ok", details={"decision": record.get("decision")})
+            self.diagnostics.event()(diagnostics, "annotation", "ok", details={"bytes": len(annotated), "sha256": record["annotated_sha256"]})
+            self.diagnostics.event()(diagnostics, "completed", "ok", details={"decision": record.get("decision")})
         except Exception as exc:
             provider_error_type = (
                 str(provider.get("error_type") or "")
@@ -217,7 +216,7 @@ class ComparisonSubmission:
                 "error_type": error_type,
                 "message": str(exc)[:1000],
             }
-            self.diagnostics.event(
+            self.diagnostics.event()(
                 diagnostics,
                 failure_stage,
                 "failed",

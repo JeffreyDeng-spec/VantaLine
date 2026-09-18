@@ -34257,9 +34257,8 @@ from .text_inspection.comparison_submission import ComparisonSubmission
 from .text_inspection.inspection_reviews import InspectionReviews
 from .text_inspection.inspection_ports import (
     InspectionAccess, InspectionRecords, SubmissionPolicy, SubmissionImages,
-    SubmissionModels, SubmissionDiagnostics,
+    SubmissionModels, SubmissionDiagnostics, SubmissionMedia,
 )
-from .text_inspection.comparison_ports import ComparisonMedia as SubmissionMedia
 from . import qwen_evidence_jobs as _qwen_evidence_policy
 
 
@@ -34281,25 +34280,25 @@ _inspection_access = InspectionAccess(
     owner=lambda: _text_v2_owner(),
 )
 _inspection_records = InspectionRecords(
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    owned=lambda: _text_v2_owned,
     save=lambda kind, record, **kwargs: _text_v2_save(kind, record, **kwargs),
     public=lambda record: _text_v2_public(record),
 )
 _comparison_submission = ComparisonSubmission(
     _inspection_access, _inspection_records, load=lambda kind: _text_v2_load(kind),
-    media=SubmissionMedia(path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
-                          write=lambda path, data: _text_v2_write(path, data), digest=lambda data: sha256_bytes(data)),
+    media=SubmissionMedia(path=lambda: _text_v2_media_path,
+                          write=lambda path, data: _text_v2_write(path, data), digest=lambda: sha256_bytes),
     images=SubmissionImages(
-        prepare=lambda data, **kwargs: _text_v2_prepare_image(data, **kwargs),
+        prepare=lambda: _text_v2_prepare_image,
         provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime),
         asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-        annotate=lambda data, differences: _text_v2_annotate(data, differences),
+        annotate=lambda: _text_v2_annotate,
         data_url=lambda data, mime: _text_v2_data_url(data, mime),
     ),
     models=SubmissionModels(settings=lambda purpose: ai_detection_settings(purpose),
-                            call=lambda name, arguments: call_ai_mcp_tool(name, arguments),
+                            call=lambda: call_ai_mcp_tool,
                             prompt=lambda: strict_compare_prompt(),
-                            normalize=lambda value, provider: normalize_vlm_provider_result(value, provider),
+                            normalize=lambda: normalize_vlm_provider_result,
                             validate=lambda value: validate_vlm_result(value)),
     policy=SubmissionPolicy(timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
                             prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION,
@@ -34308,7 +34307,7 @@ _comparison_submission = ComparisonSubmission(
                             qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner)),
     diagnostics=SubmissionDiagnostics(
         image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs),
-        event=lambda record, stage, status, **kwargs: _text_v2_diagnostic_event(record, stage, status, **kwargs),
+        event=lambda: _text_v2_diagnostic_event,
         provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
         value=lambda value: _text_v2_diagnostic_value(value),
         write=lambda record: _text_v2_write_server_diagnostic(record),
@@ -34319,8 +34318,8 @@ _comparison_submission = ComparisonSubmission(
 )
 _inspection_reviews = InspectionReviews(
     _inspection_access, _inspection_records,
-    read_verified=lambda path, owner, standard, **kwargs: _text_v2_read_verified(path, owner, standard, **kwargs),
-    audit=lambda event: append_incoming_text_audit(event), bounded_text=lambda value, limit: bounded_text(value, limit),
+    read_verified=lambda: _text_v2_read_verified,
+    audit=lambda: append_incoming_text_audit, bounded_text=lambda: bounded_text,
 )
 _inspection_routes = register_text_inspections(app, _comparison_submission, _inspection_reviews, _inspection_access)
 compare_text_inspection_label = _inspection_routes.compare_text_inspection_label

@@ -52,7 +52,7 @@ def register(app: FastAPI, comparison: ComparisonSubmission, reviews: Inspection
 
     @app.post("/api/text-inspection/inspections/{inspection_id}/review")
     async def review_text_inspection_v2(inspection_id: str, request: Request) -> dict[str, Any]:
-        return await reviews.review_text_inspection_v2(inspection_id, request.json)
+        return await reviews.review_text_inspection_v2(inspection_id, lambda: request.json())
 
     return InspectionRoutes(compare_text_inspection_label, get_text_inspection_v2_evidence,
                             create_text_manual_session, inspect_text_manual_page,

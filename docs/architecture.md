@@ -7,6 +7,12 @@ Submission receives record, media, image, model, policy and diagnostic capabilit
 Prepared comparisons still capture the current callbacks and admission flag on each
 submission through a small root composition function. Ordinary comparison gates
 remain dynamic at their original points. No worker or transaction topology changes.
+Submission and review obtain the relevant callback before evaluating its arguments,
+using narrow getters for ownership, image preparation/annotation, media paths/hashes,
+model dispatch/normalization, diagnostic events, evidence reads, text and audit.
+SubmissionMedia is distinct from the per-job captured ComparisonMedia. Review JSON
+lookup remains after permission and record checks; no eager callback validation or
+method-entry caching is introduced.
 
 Seven standard HTTP routes now live in `text_inspection.standard_api`, in the same
 order with the same request types and synchronous/asynchronous boundaries. Import,

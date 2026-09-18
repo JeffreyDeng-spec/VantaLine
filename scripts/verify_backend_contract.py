@@ -73,6 +73,17 @@ def capture():
             (server, "_text_v2_expected_revision", (server._standard_edits.revisions.expected,)),
             (server, "_text_v2_public", (server._standard_records.public,)),
             (server, "_text_v2_apply_revision", (server._standard_edits.revisions.apply,)),
+            (server, '_text_v2_owned', (server._inspection_records.owned,)),
+            (server, '_text_v2_media_path', (server._comparison_submission.media.path,)),
+            (server, 'sha256_bytes', (server._comparison_submission.media.digest,)),
+            (server, '_text_v2_prepare_image', (server._comparison_submission.images.prepare,)),
+            (server, '_text_v2_annotate', (server._comparison_submission.images.annotate,)),
+            (server, 'call_ai_mcp_tool', (server._comparison_submission.models.call,)),
+            (server, 'normalize_vlm_provider_result', (server._comparison_submission.models.normalize,)),
+            (server, '_text_v2_diagnostic_event', (server._comparison_submission.diagnostics.event,)),
+            (server, '_text_v2_read_verified', (server._inspection_reviews.read_verified,)),
+            (server, 'append_incoming_text_audit', (server._inspection_reviews.audit,)),
+            (server, 'bounded_text', (server._inspection_reviews.bounded_text,)),
         )
         for owner, attribute, getters in bindings:
             original = getattr(owner, attribute)

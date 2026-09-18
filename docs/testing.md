@@ -1,6 +1,6 @@
 # Testing
 
-`python scripts/smoke_text_comparison_api.py --root` adds eight synthetic groups:
+`python scripts/smoke_text_comparison_api.py --root` adds fourteen synthetic groups:
 prepared short-circuit/extraction bounds; exact fingerprint/provider payload and
 persist-before-call order; duplicate/insert-loser/input-build boundaries; provider,
 validation and annotation failures; second/final save, logger and admission gates;
@@ -8,6 +8,14 @@ review save/audit partial effects and evidence hashes; retained 410/403/422 HTTP
 behavior; and per-submit root callback capture with dynamic environment reads.
 Each provider is a test double. Original endpoint modes and source-fingerprint
 checks remain required; the assembled contract verifies all six route aliases.
+Seven original business groups first pass against the original main function bodies
+through argument adapters; their candidate HTTP harness is not evidence for original
+request-body lookup timing. Three first-error matrices add fourteen input, evidence,
+postprocessing and review boundaries with valid second calls, exact attempt counts
+and unchanged partial evidence/uncertain settlement. Fourteen original event traces,
+thirteen A-to-B-to-C capture windows and thirteen missing-callback traces preserve
+argument effects and exception policy. The application contract also checks live
+replacement/restoration of all eleven new callback getters.
 
 `python scripts/smoke_text_standards.py` adds thirteen synthetic groups for import
 validation/duplicate/parser ordering, DOC thread identity and DOCX synchronous

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from .standard_ports import Upload, SaveRecord
 from .preparation_ports import Permission, ReadVerified
-from .comparison_ports import ComparisonMedia
+from pathlib import Path
 
 Record = dict[str, Any]
 
@@ -38,7 +38,7 @@ class InspectionAccess:
 
 @dataclass(frozen=True)
 class InspectionRecords:
-    owned: Callable[[str, str, str], Record | None]
+    owned: Callable[[], Callable[[str, str, str], Record | None]]
     save: SaveRecord
     public: Callable[[Record], Record]
 
@@ -54,26 +54,33 @@ class SubmissionPolicy:
 
 @dataclass(frozen=True)
 class SubmissionImages:
-    prepare: PrepareImage
+    prepare: Callable[[], PrepareImage]
     provider_copy: Callable[[bytes, str], tuple[bytes, str, str]]
     asset_bytes: Callable[[Record, str], bytes]
-    annotate: Callable[[bytes, list[Record]], bytes]
+    annotate: Callable[[], Callable[[bytes, list[Record]], bytes]]
     data_url: Callable[[bytes, str], str]
 
 
 @dataclass(frozen=True)
 class SubmissionModels:
     settings: Callable[[str], Record]
-    call: Callable[[str, Record], Record]
+    call: Callable[[], Callable[[str, Record], Record]]
     prompt: Callable[[], str]
-    normalize: Callable[[Any, str], Record]
+    normalize: Callable[[], Callable[[Any, str], Record]]
     validate: Callable[[Record], Record]
 
 
 @dataclass(frozen=True)
 class SubmissionDiagnostics:
     image: ImageDiagnostic
-    event: DiagnosticEvent
+    event: Callable[[], DiagnosticEvent]
     provider: Callable[[Record, Record], Record]
     value: Callable[[Any], Any]
     write: Callable[[Record], None]
+
+
+@dataclass(frozen=True)
+class SubmissionMedia:
+    path: Callable[[], Callable[[str, str, str], Path]]
+    write: Callable[[Path, bytes], None]
+    digest: Callable[[], Callable[[bytes], str]]
