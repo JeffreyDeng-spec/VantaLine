@@ -1,5 +1,14 @@
 # Configuration reference
 
+Text record callback factories add no configuration. Each operation obtains only
+its required reader/writer/decoder; missing callbacks preserve their original error
+ordering rather than silently choosing another persistence backend.
+
+Text-record extraction adds no configuration. The JSON directory and table mapping
+remain late-bound, as do the thread repository factory and shared reentrant lock.
+No repository connection or request identity is retained on the store. Existing
+string coercion, missing values and JSON-versus-PostgreSQL behavior are preserved.
+
 Prepared comparison extraction adds no settings. Qwen resolution still obtains
 document settings, attaches OCR settings to that same dictionary, then validates
 both providers. Per-submission capabilities retain the submitted callbacks, model

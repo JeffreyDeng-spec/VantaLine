@@ -1,5 +1,10 @@
 # Production runbook
 
+Text-record store extraction requires only the usual complete-release restart.
+No schema, index, JSON format, cursor or worker-topology migration is included.
+Keep attempts and revision history on rollback. Restore the full previous package,
+including its matching entry point and record-store module; do not copy files alone.
+
 Prepared comparison dependency extraction keeps both existing module-level slots,
 daemon threads and timer behavior. Timer cancellation does not join its callback;
 settlement still relies on the existing compare-and-set. Local final-save failure

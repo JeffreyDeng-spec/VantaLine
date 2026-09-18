@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Text-record CI adds isolated JSON/SQL contracts and real PostgreSQL competing
+submissions/updates. Existing HTTP and source contracts remain required; source
+checks follow the actual extracted repository instead of lowering coverage gates.
+Ship the store module and its entry-point composition in one immutable package.
+
 Prepared comparison CI adds submission/callback, late-CAS and paid-call dependency
 contracts. The compatibility export and new comparison/media ports ship together;
 Qwen, audit and preview consumers are updated in the same package. Source fingerprints

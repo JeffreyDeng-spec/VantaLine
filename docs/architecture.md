@@ -1,5 +1,15 @@
 # Architecture
 
+`text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
+selection, insert-only writes, owned lookup and attempt compare-and-set. Its ports
+obtain the thread repository, shared write lock, directory, table mapping and JSON
+adapters lazily. The entry point retains five thin forwards and the identical row
+serializer export. Internal store calls use the store itself; storage substitutions
+belong at its ports. Revision policy, query shape and lock placement are unchanged.
+Reader, writer and row-decoder factories preserve the original callable lookup
+before path or fetch-all arguments are evaluated. Owned lookup retains its separate
+post-query decoder lookup only when a row exists; no callable is cached or prevalidated.
+
 Prepared comparison orchestration now lives in `text_inspection.comparison_jobs`.
 The application constructs narrow record/media/model capabilities for each submit,
 capturing function references and the external-model flag just as the prior namespace
