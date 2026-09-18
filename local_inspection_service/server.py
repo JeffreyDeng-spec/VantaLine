@@ -13395,39 +13395,71 @@ def generate_ai_detection_json(
     return generate_provider_json_with_fallback(settings, AI_DETECTION_SYSTEM_PROMPT, user_content, max_tokens=max_tokens)
 
 
-def image_bgr_data_url(image_bgr: np.ndarray, max_side: int = 1280, quality: int = 82) -> str:
-    image = image_bgr
-    h, w = image.shape[:2]
-    scale = min(float(max_side) / max(h, w), 1.0)
-    if scale < 1.0:
-        image = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
-    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
-    if not ok:
-        raise AiProviderError("Failed to encode image for AI provider")
-    return f"data:image/jpeg;base64,{base64.b64encode(encoded.tobytes()).decode('ascii')}"
+from .detection.media_ports import InspectionImagePolicy, ReferenceCollectionPolicy, ReferenceSheetPolicy, ReferenceSheetCache, ReferenceSheetImages
+from .detection.image_encoding import ImageEncoding
+from .detection.inspection_image_store import InspectionImageStore
+from .detection.reference_images import ReferenceCollection, ReferenceTileRenderer
+from .detection.reference_sheet import ReferenceSheet
+_image_encoding = ImageEncoding(
+    lambda: cv2,
+    lambda message: AiProviderError(message),
+    lambda image, max_side=1280, quality=82: image_bgr_data_url(image, max_side=max_side, quality=quality),
+)
+_inspection_image_store = InspectionImageStore(
+    lambda: cv2,
+    InspectionImagePolicy(
+        lambda: AI_MCP_INSPECTION_IMAGE_DIR,
+        lambda: AI_INSPECTION_IMAGE_MAX_SIDE,
+        lambda: AI_INSPECTION_IMAGE_QUALITY,
+    ),
+    lambda: time.time_ns(),
+    lambda name: safe_name(name),
+)
+_reference_collection = ReferenceCollection(
+    lambda: bounded_text,
+    lambda item: accessory_uid(item),
+    lambda item: accessory_image_paths(item),
+    lambda path, max_side=1024, quality=78: image_path_data_url(path, max_side=max_side, quality=quality),
+    lambda value: data_url_payload(value),
+    ReferenceCollectionPolicy(
+        lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY,
+        lambda: AI_REFERENCE_IMAGE_MAX_SIDE,
+        lambda: AI_REFERENCE_IMAGE_QUALITY,
+    ),
+)
+_reference_tile_renderer = ReferenceTileRenderer(lambda: cv2, lambda: np)
+_reference_sheet = ReferenceSheet(
+    lambda: bounded_text,
+    lambda name: output_write_dir(name),
+    ReferenceSheetPolicy(
+        lambda: IMAGE_REFERENCE_SUFFIXES,
+        lambda: AI_PROFILE_REFERENCE_MODE,
+        lambda: AI_PROFILE_REFERENCE_SHEET_QUALITY,
+        lambda: AI_PROFILE_REFERENCE_SHEET_MAX_SIDE,
+    ),
+    ReferenceSheetCache(
+        lambda: _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK,
+        lambda: _REFERENCE_SHEET_DESCRIPTOR_CACHE,
+    ),
+    ReferenceSheetImages(
+        lambda: cv2,
+        lambda: np,
+        lambda image, width, height: fit_image_into_cell(image, width, height),
+        lambda: image_path_data_url,
+    ),
+)
+
+
+def image_bgr_data_url(image_bgr: np.ndarray, max_side: int=1280, quality: int=82) -> str:
+    return _image_encoding.image_bgr_data_url(image_bgr, max_side=max_side, quality=quality)
 
 
 def write_mcp_inspection_image(image_bgr: np.ndarray, request_id: str) -> Path | None:
-    try:
-        AI_MCP_INSPECTION_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-        image = image_bgr
-        h, w = image.shape[:2]
-        scale = min(float(AI_INSPECTION_IMAGE_MAX_SIDE) / max(h, w), 1.0)
-        if scale < 1.0:
-            image = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
-        digest = hashlib.sha1(f"{request_id}:{time.time_ns()}".encode("utf-8")).hexdigest()[:12]
-        path = AI_MCP_INSPECTION_IMAGE_DIR / f"{safe_name(request_id)[:80]}_{digest}.jpg"
-        ok = cv2.imwrite(str(path), image, [int(cv2.IMWRITE_JPEG_QUALITY), AI_INSPECTION_IMAGE_QUALITY])
-        return path if ok else None
-    except Exception:
-        return None
+    return _inspection_image_store.write_mcp_inspection_image(image_bgr, request_id)
 
 
-def image_path_data_url(path: Path, max_side: int = 1024, quality: int = 78) -> str | None:
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    if image is None:
-        return None
-    return image_bgr_data_url(image, max_side=max_side, quality=quality)
+def image_path_data_url(path: Path, max_side: int=1024, quality: int=78) -> str | None:
+    return _image_encoding.image_path_data_url(path, max_side=max_side, quality=quality)
 
 
 def accessory_profile_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
@@ -13646,52 +13678,7 @@ def tool_provider_gemini_generate_json(payload: dict[str, Any]) -> dict[str, Any
 
 
 def tool_accessory_reference_collect(payload: dict[str, Any]) -> dict[str, Any]:
-    item = payload.get("accessory") if isinstance(payload.get("accessory"), dict) else {}
-    accessory_id = bounded_text(payload.get("accessory_id") or accessory_uid(item), 120)
-    try:
-        max_images = max(0, min(16, int(payload.get("max_images", AI_REFERENCE_IMAGES_PER_ACCESSORY))))
-    except (TypeError, ValueError):
-        max_images = AI_REFERENCE_IMAGES_PER_ACCESSORY
-    try:
-        max_side = max(64, min(2048, int(payload.get("max_side", AI_REFERENCE_IMAGE_MAX_SIDE))))
-    except (TypeError, ValueError):
-        max_side = AI_REFERENCE_IMAGE_MAX_SIDE
-    try:
-        quality = max(40, min(95, int(payload.get("quality", AI_REFERENCE_IMAGE_QUALITY))))
-    except (TypeError, ValueError):
-        quality = AI_REFERENCE_IMAGE_QUALITY
-    raw_paths = payload.get("reference_image_paths")
-    paths = [Path(str(path)) for path in raw_paths] if isinstance(raw_paths, list) else accessory_image_paths(item)
-    descriptors: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for path in paths:
-        path_key = str(path)
-        if path_key in seen:
-            continue
-        seen.add(path_key)
-        data_url = image_path_data_url(path, max_side=max_side, quality=quality)
-        if not data_url:
-            continue
-        mime_type, _ = data_url_payload(data_url)
-        descriptors.append(
-            {
-                "accessory_id": accessory_id,
-                "source_path": path_key,
-                "mime_type": mime_type,
-                "data_url": data_url,
-                "detail": "low",
-                "ordinal": len(descriptors) + 1,
-            }
-        )
-        if len(descriptors) >= max_images:
-            break
-    return {
-        "tool": "accessory.reference.collect",
-        "accessory_id": accessory_id,
-        "references": descriptors,
-        "reference_count": len(descriptors),
-        "max_images": max_images,
-    }
+    return _reference_collection.tool_accessory_reference_collect(payload)
 
 
 from .detection.profile_cache_policy import ProfileCachePolicy
@@ -13728,103 +13715,11 @@ def required_accessory_cache_key(required_accessories: list[dict[str, Any]], set
 
 
 def fit_image_into_cell(image: np.ndarray, width: int, height: int) -> np.ndarray:
-    canvas = np.full((height, width, 3), 255, dtype=np.uint8)
-    if image is None:
-        return canvas
-    if image.ndim == 2:
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    if image.ndim == 3 and image.shape[2] >= 4:
-        alpha = (image[:, :, 3].astype(np.float32) / 255.0)[..., None]
-        bgr = image[:, :, :3].astype(np.float32)
-        background = np.full_like(bgr, 255.0)
-        image = (bgr * alpha + background * (1.0 - alpha)).astype(np.uint8)
-    src_h, src_w = image.shape[:2]
-    if src_h <= 0 or src_w <= 0:
-        return canvas
-    scale = min(width / src_w, height / src_h)
-    resized_w = max(1, int(round(src_w * scale)))
-    resized_h = max(1, int(round(src_h * scale)))
-    resized = cv2.resize(image[:, :, :3], (resized_w, resized_h), interpolation=cv2.INTER_AREA)
-    x = (width - resized_w) // 2
-    y = (height - resized_h) // 2
-    canvas[y : y + resized_h, x : x + resized_w] = resized
-    return canvas
+    return _reference_tile_renderer.fit_image_into_cell(image, width, height)
 
 
 def build_reference_sheet_descriptor(required_accessories: list[dict[str, Any]]) -> dict[str, Any] | None:
-    items: list[dict[str, Any]] = []
-    for required in required_accessories:
-        item_id = str(required.get("accessory_id") or "")
-        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
-        refs = [ref for ref in profile.get("reference_images", []) if isinstance(ref, dict) and ref.get("source_path")]
-        if not refs:
-            continue
-        ref = refs[0]
-        path = Path(str(ref.get("source_path") or ""))
-        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-            continue
-        items.append(
-            {
-                "accessory_id": item_id,
-                "name": bounded_text(required.get("name") or profile.get("name") or item_id, 80),
-                "expected_count": int(required.get("expected_count") or 1),
-                "source_path": str(path),
-                "sha256": str(ref.get("sha256") or hashlib.sha256(path.read_bytes()).hexdigest()),
-            }
-        )
-    if not items:
-        return None
-    items = sorted(items, key=lambda item: item["accessory_id"])
-    digest_payload = {
-        "mode": AI_PROFILE_REFERENCE_MODE,
-        "items": [{"accessory_id": item["accessory_id"], "sha256": item["sha256"]} for item in items],
-    }
-    digest = hashlib.sha256(json.dumps(digest_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
-    sheet_dir = output_write_dir("ai_reference_sheets")
-    sheet_dir.mkdir(parents=True, exist_ok=True)
-    sheet_path = sheet_dir / f"reference_sheet_{digest[:16]}.jpg"
-    with _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK:
-        cached = _REFERENCE_SHEET_DESCRIPTOR_CACHE.get(digest)
-        if cached and cached.get("data_url") and cached.get("source_path") == str(sheet_path):
-            return dict(cached)
-    if not sheet_path.exists():
-        cols = 3 if len(items) > 2 else len(items)
-        rows = int(math.ceil(len(items) / max(1, cols)))
-        cell_w, cell_h, label_h, margin = 560, 620, 86, 24
-        sheet_w = cols * cell_w + (cols + 1) * margin
-        sheet_h = rows * (cell_h + label_h) + (rows + 1) * margin
-        sheet = np.full((sheet_h, sheet_w, 3), 250, dtype=np.uint8)
-        for idx, item in enumerate(items):
-            row = idx // cols
-            col = idx % cols
-            x = margin + col * (cell_w + margin)
-            y = margin + row * (cell_h + label_h + margin)
-            image = cv2.imread(item["source_path"], cv2.IMREAD_UNCHANGED)
-            tile = fit_image_into_cell(image, cell_w, cell_h)
-            sheet[y : y + cell_h, x : x + cell_w] = tile
-            cv2.rectangle(sheet, (x, y), (x + cell_w, y + cell_h), (30, 30, 30), 2)
-            label_y = y + cell_h + 30
-            cv2.putText(sheet, item["accessory_id"], (x + 12, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.78, (0, 0, 0), 2, cv2.LINE_AA)
-            cv2.putText(sheet, item["name"][:42], (x + 12, label_y + 34), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (70, 70, 70), 1, cv2.LINE_AA)
-        cv2.imwrite(str(sheet_path), sheet, [int(cv2.IMWRITE_JPEG_QUALITY), AI_PROFILE_REFERENCE_SHEET_QUALITY])
-    data_url = image_path_data_url(
-        sheet_path,
-        max_side=AI_PROFILE_REFERENCE_SHEET_MAX_SIDE,
-        quality=AI_PROFILE_REFERENCE_SHEET_QUALITY,
-    )
-    if not data_url:
-        return None
-    descriptor = {
-        "accessory_id": "__reference_sheet__",
-        "data_url": data_url,
-        "detail": "low",
-        "source_path": str(sheet_path),
-        "mode": AI_PROFILE_REFERENCE_MODE,
-        "sheet_items": items,
-    }
-    with _REFERENCE_SHEET_DESCRIPTOR_CACHE_LOCK:
-        _REFERENCE_SHEET_DESCRIPTOR_CACHE[digest] = dict(descriptor)
-    return descriptor
+    return _reference_sheet.build_reference_sheet_descriptor(required_accessories)
 
 
 def profile_reference_descriptors(required_accessories: list[dict[str, Any]]) -> list[dict[str, Any]]:
