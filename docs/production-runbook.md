@@ -1,5 +1,11 @@
 # Production runbook
 
+Executor settings and the active RunPod client now have explicit dependencies. They do
+not start workers, retain environment credentials in a service instance, or change training
+submission/polling behavior. The existing 401/403 authorization-format fallback remains;
+unknown transport outcomes still fail without retry. Offline transport contracts require
+no production access. Deployment and rollback continue to use the whole release package.
+
 Training stop/delete remains non-atomic in its existing order. A failed stop creates
 no deletion marker; failures after marker assignment can leave both requested and
 canonical IDs pointing to the same marker even if deletion/persistence failed. JSON
@@ -22,32 +28,32 @@ file replacement: partial-write failures can leave partial content as before. JS
 reads suppress OSError/JSONDecodeError only; PostgreSQL errors never fall back to JSON.
 Model binding can remain added to the in-memory task after a later failure. Locks are
 released on exceptions, including nested saves. Recover with the whole release; keep
-runtime records and deploy both new modules with source manifest v18.
+runtime records and deploy both new modules with source manifest v19.
 
 Training discovery extraction introduces no schema, connection, cache-policy or
 process-topology change. Artifact discovery can still expose a task whose weight file
 is absent; existing selection/loading performs its later checks. Finder snapshots
 retain the existing partial-failure behavior and must be consumed on their creating
 thread. Deploy and roll back the entire package, including the three new modules and
-source manifest v18. Existing records and historical model snapshots are preserved.
+source manifest v19. Existing records and historical model snapshots are preserved.
 
 Warmup remains the existing best-effort daemon-thread operation. Disabled runs only
 update enabled/status/error; old detail fields remain. Setup errors can leave the
 prior status, and formatter or BaseException failures may leave running status.
 Prediction failures are recorded and remaining models continue. This extraction adds
-no thread coordination or lifecycle idempotence; deploy/restore manifest v18 and all
+no thread coordination or lifecycle idempotence; deploy/restore manifest v19 and all
 components as one complete release.
 
 Local model cache behavior remains process-local and unlocked during first load.
 Same-ID hits still select/validate their specification; new IDs check file existence
 before reusing a live instance at the resolved path. Removing an instance can leave
 a path alias that still influences readiness, as before. This batch does not alter
-warmup threads or restart behavior. Roll back the complete package with manifest v18.
+warmup threads or restart behavior. Roll back the complete package with manifest v19.
 
 Task projection/catalog extraction preserves current filtering and merge behavior,
 including partial in-memory changes before an exception. It introduces no database
 migration, cache policy or runtime topology change. Publish/restore both modules and
-source manifest v18 with the entire immutable release.
+source manifest v19 with the entire immutable release.
 
 Detection task storage extraction preserves cache invalidation and existing partial
 failure behavior. JSON saves retain the fixed `.json.tmp` path and atomic replacement;
@@ -59,7 +65,7 @@ caching and original exception boundaries. A malformed batch result still trigge
 the original per-image fallback; short valid batches are not padded or retried.
 Single-image build errors remain outside its prediction catch. This structural
 batch does not add initialization locking or change concurrency, topology or model
-parameters. Deploy/rollback all OCR modules and manifest v18 as one complete release.
+parameters. Deploy/rollback all OCR modules and manifest v19 as one complete release.
 
 Detection result modules preserve the existing in-process inference topology.
 Filtering still annotates candidate dictionaries, parsers still prefer nonempty
@@ -91,7 +97,7 @@ incoming store together, preserving existing records and audit evidence.
 Comparison extraction preserves attempts, media, uncertain-call evidence and the
 existing review/audit ordering. A failed final save can leave a persisted attempt;
 retry is not a recovery action. Use the usual complete-release restart and rollback
-with matching manifest v18, retaining historical snapshots. This batch does not
+with matching manifest v19, retaining historical snapshots. This batch does not
 activate an independent label worker or modify deployment topology.
 
 Standard-route extraction keeps the current jobs, write locks and complete-release

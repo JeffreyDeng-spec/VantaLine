@@ -1,7 +1,9 @@
 {
-  "version": 18,
+  "version": 19,
   "sources": [
     "server.py",
+    "training/executor_settings.py",
+    "training/runpod_client.py",
     "runtime/training_tasks.py",
     "training/task_lifecycle.py",
     "training/task_views.py",

@@ -33,8 +33,13 @@
   },
   "impact_rules": [
     {
+      "name": "Training executor transport",
+      "paths": ["local_inspection_service/training/executor_settings.py", "local_inspection_service/training/runpod_client.py", "scripts/smoke_training_executor_client.py"],
+      "required_docs": ["local_inspection_service/docs/runpod-yolo-train-worker.md"]
+    },
+    {
       "name": "Training and pipeline services",
-      "paths": ["local_inspection_service/training/**", "local_inspection_service/runtime/training_tasks.py", "local_inspection_service/pipeline/**", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_training_task_lifecycle.py", "scripts/smoke_pipeline_stores.py"],
+      "paths": ["local_inspection_service/training/**", "local_inspection_service/runtime/training_tasks.py", "local_inspection_service/pipeline/**", "scripts/smoke_trained_model_catalog.py", "scripts/smoke_training_record_store.py", "scripts/smoke_training_task_lifecycle.py", "scripts/smoke_training_executor_client.py", "scripts/smoke_pipeline_stores.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
