@@ -16,9 +16,9 @@ class Crop(Protocol):
 
 @dataclass(frozen=True)
 class AttachmentDependencies:
-    crop: Crop
-    score: Callable[[list[np.ndarray], list[int]], list[Record]]
-    match: Callable[[list[str], float, Record], Record]
+    crop: Callable[[], Crop]
+    score: Callable[[], Callable[[list[np.ndarray], list[int]], list[Record]]]
+    match: Callable[[], Callable[[list[str], float, Record], Record]]
     finalize: Callable[[Record, Record, Record, int], None]
 
 
@@ -42,7 +42,7 @@ class OCRAttachment:
         for det in detections:
             if int(det.get("model_class_id", det["class_id"])) not in ocr_model_class_ids:
                 continue
-            crop_result = self.dependencies.crop(
+            crop_result = self.dependencies.crop()(
                 image_bgr,
                 det["polygon"],
                 max_long_side=max_crop_long_side,
@@ -56,7 +56,7 @@ class OCRAttachment:
         if not jobs:
             return detections
 
-        default_results = self.dependencies.score(
+        default_results = self.dependencies.score()(
             [job["crop"] for job in jobs],
             [int(job["orientation"]["predicted_rotation"]) for job in jobs],
         )
@@ -66,7 +66,7 @@ class OCRAttachment:
             if not is_confident_manual_classification(result, fallback_min_confidence)
         ]
         if fallback_indexes:
-            fallback_results = self.dependencies.score(
+            fallback_results = self.dependencies.score()(
                 [rotate_quarter_turn(jobs[idx]["crop"], 180) for idx in fallback_indexes],
                 [int(jobs[idx]["orientation"]["fallback_rotations"][0]) for idx in fallback_indexes],
             )
@@ -78,7 +78,7 @@ class OCRAttachment:
             ocr_result.setdefault("fallback_used", False)
             if spec.get("is_specialized"):
                 classification = ocr_result["classification"]
-                accessory_match = self.dependencies.match(ocr_result["texts"], float(ocr_result["mean_text_score"]), spec)
+                accessory_match = self.dependencies.match()(ocr_result["texts"], float(ocr_result["mean_text_score"]), spec)
                 job["det"]["ocr"] = {
                     **classification,
                     "best_rotation": ocr_result["rotation"],

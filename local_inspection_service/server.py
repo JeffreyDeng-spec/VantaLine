@@ -23738,9 +23738,9 @@ finalize_ocr_detection = _manual_projection.finalize
 from .detection.ocr_attachment import OCRAttachment, AttachmentDependencies
 
 _ocr_attachment = OCRAttachment(AttachmentDependencies(
-    crop=lambda image, polygon, **kwargs: crop_detection_region(image, polygon, **kwargs),
-    score=lambda crops, rotations: score_ocr_variants(crops, rotations),
-    match=lambda texts, score, spec: match_ocr_text_accessory(texts, score, spec),
+    crop=lambda: crop_detection_region,
+    score=lambda: score_ocr_variants,
+    match=lambda: match_ocr_text_accessory,
     finalize=lambda det, result, orientation, max_texts: finalize_ocr_detection(det, result, orientation, max_texts),
 ))
 attach_ocr_results = _ocr_attachment.attach

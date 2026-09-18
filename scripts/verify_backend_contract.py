@@ -49,6 +49,20 @@ def capture():
         assert server.better_ocr_result is ocr_scoring.better_ocr_result
         assert server.score_ocr_variants.__self__ is server._ocr_scoring
         assert server.attach_ocr_results.__self__ is server._ocr_attachment
+        for field, name in [('crop', 'crop_detection_region'), ('score', 'score_ocr_variants'), ('match', 'match_ocr_text_accessory')]:
+            provider = getattr(server._ocr_attachment.dependencies, field)
+            original = getattr(server, name)
+            try:
+                assert provider() is original
+                replacement = lambda *args, **kwargs: None
+                setattr(server, name, replacement)
+                assert provider() is replacement
+                setattr(server, name, None)
+                assert provider() is None
+            finally:
+                setattr(server, name, original)
+            assert provider() is original
+
         assert server._ocr_matching.stopwords() is server.OCR_ACCESSORY_PROFILE_STOPWORDS
         assert server._manual_classifier.keywords() is server.MANUAL_TYPE_KEYWORDS
         assert server._record_access.identity is server._request_user

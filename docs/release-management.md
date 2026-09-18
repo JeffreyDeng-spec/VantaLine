@@ -4,6 +4,12 @@ The detection OCR batch adds its synthetic smoke and ships `runtime.paddle` plus
 five OCR modules with source manifest v10. Local factories never load real models in
 these contracts. Keep the complete application and incoming/OCR regression checks;
 release startup, worker topology and whole-package rollback remain unchanged.
+Attachment crop, score and match getters capture the current callable at each
+original expression, before argument effects. Missing callbacks still evaluate
+arguments and raise the original TypeError. Single-image OCR retains its existing
+Exception handling; batch failures retain the existing per-image fallback. No new
+retry or model-initialization lock is introduced.
+
 
 The detection-result extraction adds synthetic backend smoke and admits the new
 `detection` package to dependency-direction checks. It preserves the HTTP contract,

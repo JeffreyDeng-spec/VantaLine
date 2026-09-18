@@ -29,6 +29,162 @@ class OCRContracts(unittest.TestCase):
     @classmethod
     def tearDownClass(cls): cls.temporary.cleanup()
 
+    def _attachment_capture_trace(self, mode, missing=False):
+        api=self.api;events=[];image=np.zeros((5,7,3),np.uint8)
+        key={'crop':'crop_detection_region','default':'score_ocr_variants','fallback':'score_ocr_variants','match':'match_ocr_text_accessory'}[mode]
+        count=[0]
+        def first(*args,**kwargs):
+            events.append('A');count[0]+=1
+            if mode=='crop':return None
+            if mode in ('default','fallback'):
+                if mode=='default' or count[0]>1:return []
+                if missing:setattr(api,key,None)
+                return [result('unknown',6)]
+            return {'accepted':False,'reason':'fixture'}
+        def replacement(*args,**kwargs):
+            events.append('B')
+            return None if mode=='crop' else ([] if mode in ('default','fallback') else {'accepted':False,'reason':'fixture'})
+        def swap():events.append('arg');setattr(api,key,replacement)
+        class Integer:
+            def __int__(self):swap();return 0
+        class Floating:
+            def __float__(self):swap();return .9
+        class Detection(dict):
+            def __getitem__(self,name):
+                if mode=='crop' and name=='polygon':swap()
+                return super().__getitem__(name)
+        orientation={'predicted_rotation':Integer() if mode=='default' else 0,
+                     'fallback_rotations':[Integer() if mode=='fallback' else 180],'long_edge_angle':0}
+        value=result('known',6,confidence=1)
+        if mode=='match':value['mean_text_score']=Floating()
+        callbacks={'crop_detection_region':lambda *a,**k:(image,orientation),
+                   'score_ocr_variants':lambda *a:[value],
+                   'match_ocr_text_accessory':lambda *a:{'accepted':False,'reason':'fixture'},
+                   'finalize_ocr_detection':lambda *a:None}
+        callbacks[key]=None if missing and mode!='fallback' else first
+        det=Detection(class_id=4 if mode=='match' else 1,polygon=[[0,0],[1,0],[1,1]],accessory_id='old')
+        with patch.dict(api.__dict__,callbacks):
+            invoke=lambda:api.attach_ocr_results(image,[det],{}, {'is_specialized':True,'ocr_model_class_ids':[4]} if mode=='match' else {})
+            if missing:
+                with self.assertRaises(TypeError):invoke()
+            else:invoke()
+        expected=(['A'] if mode=='fallback' else [])+['arg']+([] if missing else ['A'])
+        self.assertEqual(events,expected)
+
+    def test_attachment_callback_capture_before_argument_effects(self):
+        for mode in ('crop','default','fallback','match'):
+            with self.subTest(mode=mode):self._attachment_capture_trace(mode)
+
+    def test_attachment_missing_callback_preserves_arguments_and_typeerror(self):
+        for mode in ('crop','default','fallback','match'):
+            with self.subTest(mode=mode):self._attachment_capture_trace(mode,missing=True)
+
+    def test_attachment_first_failures_preserve_partial_state_without_retry(self):
+        api=self.api;image=np.zeros((5,7,3),np.uint8)
+        for mode in ('crop','default','fallback','match','finalize'):
+            with self.subTest(mode=mode):
+                error=RuntimeError(mode);orientation={'predicted_rotation':0,'fallback_rotations':[180],'long_edge_angle':0}
+                value=result('unknown' if mode=='fallback' else 'known',6,confidence=1)
+                crop=Mock(return_value=(image,orientation));score=Mock(return_value=[value])
+                match=Mock(return_value={'accepted':False,'reason':'fixture'});finalize=Mock(return_value=None)
+                target={'crop':crop,'default':score,'fallback':score,'match':match,'finalize':finalize}[mode]
+                success={'crop':(image,orientation),'default':[],'fallback':[],'match':{'accepted':False,'reason':'fixture'},'finalize':None}[mode]
+                target.side_effect=([ [value] ] if mode=='fallback' else [])+[error,success]
+                det={'class_id':4 if mode=='match' else 1,'polygon':[[0,0],[1,0],[1,1]],'accessory_id':'original'}
+                before=copy.deepcopy(det)
+                with patch.multiple(api,crop_detection_region=crop,score_ocr_variants=score,match_ocr_text_accessory=match,finalize_ocr_detection=finalize):
+                    with self.assertRaises(RuntimeError) as caught:
+                        api.attach_ocr_results(image,[det],{}, {'is_specialized':True,'ocr_model_class_ids':[4]} if mode=='match' else {})
+                self.assertIs(caught.exception,error);self.assertEqual(target.call_count,2 if mode=='fallback' else 1)
+                self.assertEqual(det,before)
+                if mode=='crop':score.assert_not_called()
+                if mode in ('crop','default','fallback'):match.assert_not_called();finalize.assert_not_called()
+                if mode=='match':finalize.assert_not_called()
+
+    def test_original_uid_and_mapping_failures_are_not_retried(self):
+        api=self.api
+        for mode in ('uid','stopwords','keywords','labels'):
+            with self.subTest(mode=mode):
+                error=RuntimeError(mode);calls=[]
+                def fail_once():
+                    calls.append(1)
+                    if len(calls)==1:raise error
+                class Words(set):
+                    def __contains__(self,key):fail_once();return super().__contains__(key)
+                class Mapping(dict):
+                    def items(self):fail_once();return super().items()
+                    def get(self,*args):fail_once();return super().get(*args)
+                if mode=='uid':
+                    callback=Mock(side_effect=[error,'synthetic']);context=patch.object(api,'accessory_uid',callback)
+                    invoke=lambda:api.build_ocr_accessory_profiles([{'name':'alpha'}],{})
+                elif mode=='stopwords':
+                    context=patch.object(api,'OCR_ACCESSORY_PROFILE_STOPWORDS',Words());invoke=lambda:api.ocr_keyword_terms('alpha')
+                elif mode=='keywords':
+                    context=patch.object(api,'MANUAL_TYPE_KEYWORDS',Mapping({'alpha':[('alpha',6)]}));invoke=lambda:api.classify_manual_text(['alpha'])
+                else:
+                    context=patch.object(api,'MANUAL_TYPE_LABELS',Mapping());invoke=lambda:api.classify_manual_text(['unknown'])
+                with context:
+                    with self.assertRaises(RuntimeError) as caught:invoke()
+                self.assertIs(caught.exception,error)
+                if mode=='uid':callback.assert_called_once()
+                else:self.assertEqual(calls,[1])
+
+    def test_new_policy_provider_failures_are_not_retried(self):
+        from dataclasses import replace
+        from local_inspection_service.detection.ocr_matching import OCRMatching,MatchThresholds
+        from local_inspection_service.detection.manual_text import ManualClassifier
+        for mode in ('stopwords','text_score','confidence','margin','keywords','labels'):
+            with self.subTest(mode=mode):
+                error=RuntimeError(mode)
+                success={'stopwords':set(),'text_score':.65,'confidence':.6,'margin':.15,'keywords':{'alpha':[('alpha',6)]},'labels':{'alpha':'Alpha'}}[mode]
+                target=Mock(return_value=success)
+                def fail_once(*args,**kwargs):
+                    if target.call_count==1:raise error
+                    return success
+                target.side_effect=fail_once
+                if mode in ('keywords','labels'):
+                    policy=ManualClassifier(target if mode=='keywords' else lambda:{'alpha':[('alpha',6)]},target if mode=='labels' else lambda:{'alpha':'Alpha'})
+                    invoke=lambda:policy.classify(['alpha'])
+                else:
+                    thresholds=MatchThresholds(lambda:.65,lambda:.6,lambda:.15)
+                    if mode!='stopwords':thresholds=replace(thresholds,**{mode:target})
+                    policy=OCRMatching(target if mode=='stopwords' else lambda:set(),lambda item:'id',thresholds)
+                    invoke=(lambda:policy.keywords('alpha')) if mode=='stopwords' else lambda:policy.match(['alpha'],1,{'ocr_accessory_profiles':{'id':{'keywords':[{'text':'alpha','weight':6}]}}})
+                with self.assertRaises(RuntimeError) as caught:invoke()
+                self.assertIs(caught.exception,error);target.assert_called_once()
+
+    def test_single_scoring_first_failure_and_baseexception_boundaries(self):
+        api=self.api;image=np.zeros((3,4,3),np.uint8)
+        for mode in ('engine','predict','classify','engine_base','predict_base','classify_base'):
+            with self.subTest(mode=mode):
+                class Stop(BaseException):pass
+                error=Stop(mode) if mode.endswith('_base') else RuntimeError(mode)
+                model=Mock();model.predict.return_value=[{'rec_texts':['success'],'rec_scores':[.9]}]
+                engine=Mock(return_value=model);classify=Mock(return_value={'manual_type':'unknown'})
+                target=engine if mode.startswith('engine') else model.predict if mode.startswith('predict') else classify
+                success=model if mode.startswith('engine') else [{'rec_texts':['success'],'rec_scores':[.9]}] if mode.startswith('predict') else {'manual_type':'unknown'}
+                target.side_effect=[error,success]
+                with patch.object(api,'ocr_engine',engine),patch.object(api,'classify_manual_text',classify):
+                    if mode.endswith('_base') or mode=='classify':
+                        with self.assertRaises(type(error)) as caught:api.score_ocr_variant(image,0)
+                        self.assertIs(caught.exception,error)
+                    else:
+                        value=api.score_ocr_variant(image,0);self.assertEqual(value['texts'],[]);self.assertEqual(value['mean_text_score'],0)
+                target.assert_called_once()
+                if mode.startswith('engine'):model.predict.assert_not_called()
+                if mode.endswith('_base') and not mode.startswith('classify'):classify.assert_not_called()
+
+    def test_batch_classification_failure_retains_single_image_fallback(self):
+        api=self.api;image=np.zeros((3,4,3),np.uint8);model=Mock();error=RuntimeError('classification')
+        model.predict.side_effect=[[{'rec_texts':['discarded']}],[{'rec_texts':['one']}],[{'rec_texts':['two']}]]
+        classify=Mock(side_effect=[error,{'manual_type':'unknown'},{'manual_type':'unknown'}])
+        with patch.object(api,'ocr_engine',return_value=model),patch.object(api,'classify_manual_text',classify):
+            values=api.score_ocr_variants([image,image],[0,180])
+        self.assertEqual([value['texts'] for value in values],[['one'],['two']])
+        self.assertEqual(model.predict.call_count,3);self.assertEqual(classify.call_count,3)
+        self.assertEqual([call.args[0] for call in classify.call_args_list],[['discarded'],['one'],['two']])
+
+
     def test_engine_factory_failure_retry_instance_scope_and_bootstrap(self):
         from local_inspection_service.runtime import paddle
         model=object();prepare=Mock(side_effect=[RuntimeError('prepare'),None,None])
@@ -38,6 +194,13 @@ class OCRContracts(unittest.TestCase):
             self.assertIsNone(engine.instance)
         self.assertIs(engine.get(),model);self.assertIs(engine.get(),model)
         self.assertEqual(prepare.call_count,3);self.assertEqual(factory.call_count,2)
+        class FalsyModel:
+            def __bool__(self):return False
+        false_model=FalsyModel();false_factory=Mock(return_value=false_model);false_prepare=Mock()
+        cached=paddle.DetectionOCREngine(false_prepare,false_factory)
+        self.assertIs(cached.get(),false_model);self.assertIs(cached.get(),false_model)
+        false_factory.assert_called_once();false_prepare.assert_called_once()
+
         self.assertIsNot(paddle.DetectionOCREngine(lambda:None,lambda:object()).get(),model)
         module=types.ModuleType('paddleocr');module.PaddleOCR=Mock(return_value=model)
         with patch.dict(sys.modules,{'paddleocr':module}):self.assertIs(paddle.create_detection_ocr(),model)

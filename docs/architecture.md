@@ -8,6 +8,12 @@ Paddle bootstrap and small-model instance live in `runtime.paddle`; the medium
 incoming-text engine retains its own instance and initialization lock. Small-model
 initialization retains its existing unlocked behavior. Neither cache contains a user
 or database connection. Pure/internal test substitutions target the actual modules.
+Attachment crop, score and match getters capture the current callable at each
+original expression, before argument effects. Missing callbacks still evaluate
+arguments and raise the original TypeError. Single-image OCR retains its existing
+Exception handling; batch failures retain the existing per-image fallback. No new
+retry or model-initialization lock is introduced.
+
 
 Detection geometry, result filtering/deduplication, model-result parsing, exact-count
 rules and overlays now live in `detection.geometry`, `postprocessing`, `results`,

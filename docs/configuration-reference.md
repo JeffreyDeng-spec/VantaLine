@@ -6,6 +6,12 @@ the incoming engine continues to use PP-OCRv6-medium. Source manifest v10 lists 
 actual bootstrap and five detection OCR modules. New snapshots record this source
 fingerprint; stored model versions, secret references and historical fingerprints
 remain untouched. No new business switch or worker mode is introduced.
+Attachment crop, score and match getters capture the current callable at each
+original expression, before argument effects. Missing callbacks still evaluate
+arguments and raise the original TypeError. Single-image OCR retains its existing
+Exception handling; batch failures retain the existing per-image fallback. No new
+retry or model-initialization lock is introduced.
+
 
 Detection result extraction changes no settings or thresholds. Label maps remain
 lazy providers. Existing specialized thresholds, geometry ratios, exact-count rules
