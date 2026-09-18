@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_detection_analysis.py` and `python scripts/smoke_ai_detection_analysis.py`
+run 20 and 20 synthetic groups. Original Windows/Linux baselines passed 12 and 13 groups;
+expanded original-body replays retain 15 and 16 groups. Contracts cover routing, confidence bounds,
+provider/read failure, partial profile/output effects, callback selection and per-item refresh.
+Independent services retain snapshot scope and late policy reads. The PLC source guard follows
+both actual business methods, their constructors/imports and the pinned AI adapter; existing
+source assertions remain and reject dispatch or model-binding bypass. Synthetic models, callbacks
+and images avoid external inference, production data and physical devices.
+
 `python scripts/smoke_detection_annotation.py` runs 21 synthetic groups.
 Fifteen original business groups passed before migration on Windows and Linux;
 18 expanded groups also pass against saved original function bodies. Contracts retain

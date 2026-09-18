@@ -1,7 +1,10 @@
 {
-  "version": 49,
+  "version": 50,
   "sources": [
     "server.py",
+    "detection/analysis_ports.py",
+    "detection/analysis.py",
+    "detection/ai_analysis.py",
     "detection/annotation.py",
     "detection/presence_results.py",
     "detection/failure_projection.py",

@@ -6,9 +6,12 @@ The adjacent capture-dispatch implementation retains browser ownership, lease
 validation, actual ACK evidence and the existing no-retry rule for uncertain writes.
 Accessory IDs, visibility and catalog payloads retain their previous contracts.
 
-The frontend/source guard inspects the actual `analyze_bgr` function after auth
-route relocation. Its prohibition on PLC dispatch inside ordinary analysis or
-video frames is unchanged; no PLC runtime behavior changes in the auth extraction.
+The frontend/source guard follows the root adapters to the actual `DetectionAnalysis.analyze_bgr`
+and `AiDetectionAnalysis.analyze_bgr_ai_detection` methods. It rejects PLC dispatch in either body,
+changed class imports/constructor bindings or forwarding, a missing model-snapshot decorator or
+ordinary routing that bypasses the pinned
+AI entry. Existing image/video/camera provenance checks remain unchanged; these services receive no
+PLC dispatch capability and the physical protocol is unaffected.
 
 Authentication route policy now lives in `auth.route_permissions`; its PLC
 administrator/runtime permission alternatives are unchanged. Middleware extraction
