@@ -1,7 +1,9 @@
 {
-  "version": 31,
+  "version": 32,
   "sources": [
     "server.py",
+    "training/runpod_transfer.py",
+    "training/runpod_upload_store.py",
     "training/launch_submission.py",
     "training/status_query.py",
     "training/preview_cache.py",

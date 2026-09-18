@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+RunPod transfer task metadata still uses the existing training-task update path after final archive
+replacement. Extracting the upload store does not combine filesystem and database operations into
+a transaction, change locks, or retry failed metadata writes.
+
 Training launch HTTP extraction changes no database transactions or locking. Existing enqueue and
 user-state persistence remain sequential operations; status continues to use the projection whose
 visible interrupted-task settlement may write through the existing lifecycle service.
@@ -63,7 +67,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v31 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v32 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
