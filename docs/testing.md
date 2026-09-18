@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_jobs_api.py` runs 19 synthetic groups.
+Sixteen original HTTP/business groups passed before migration on Windows and Linux;
+17 expanded groups also pass against saved original function bodies. Contracts preserve
+ordered duplicate-bearing lists, first-match aliases, exact statuses, permissions and partial
+mutation/persistence ordering. Every callback first error propagates without retries. Active
+policy is read after each status lookup. Independent apps exercise threadpool identities;
+no training process, paid model, production database or physical PLC is used.
+
 `python scripts/smoke_training_runpod_transfer.py` runs 23 synthetic groups.
 Seventeen original HTTP/business groups passed before migration on Windows and Linux;
 21 expanded groups also pass against saved original function bodies. Contracts preserve

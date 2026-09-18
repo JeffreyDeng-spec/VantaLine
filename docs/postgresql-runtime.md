@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Task PATCH/DELETE adapters keep the existing training record save/delete services and locking.
+The combined jobs list may retain its existing lifecycle refresh writes. Moving these routes does
+not make the list a pure read or combine deletion and response projection into one transaction.
+
 RunPod transfer task metadata still uses the existing training-task update path after final archive
 replacement. Extracting the upload store does not combine filesystem and database operations into
 a transaction, change locks, or retry failed metadata writes.
@@ -67,7 +71,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v32 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v33 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

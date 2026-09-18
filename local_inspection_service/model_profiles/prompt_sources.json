@@ -1,7 +1,10 @@
 {
-  "version": 32,
+  "version": 33,
   "sources": [
     "server.py",
+    "training/jobs_query.py",
+    "training/task_mutations.py",
+    "training/jobs_api.py",
     "training/runpod_transfer.py",
     "training/runpod_upload_store.py",
     "training/launch_submission.py",
