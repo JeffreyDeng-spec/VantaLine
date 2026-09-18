@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_training_backgrounds.py` covers 22 offline groups. Thirteen passed
+against the original seven functions on Windows and Linux before extraction; 20 expanded business groups also pass on the originals. Pixel fingerprints,
+metadata and subsequent RNG state are fixed in `tests/backend_contract/training_background_pixels.json`
+with the original commit recorded; the selected cases match both runtimes. Tests cover non-symmetric
+image fitting, two INTER_AREA resizes, blur threshold/choice, texture blend, unchanged inputs, manifest
+error types, list aliases/order, repeated selection, fallback versus exceptions and exact render
+call counts. One extra group checks first errors from every new path getter; another constructs independent libraries/renderers without reads and uses real
+synthetic PNGs with different BGR colors while root callbacks are forbidden. No model is loaded.
+
 `python scripts/smoke_training_resource_mutations.py --postgres` covers 25 synthetic groups.
 Nineteen passed on actual original functions before migration with an isolated PostgreSQL database;
 23 expanded business groups also pass on saved originals. Windows skips PostgreSQL unless requested.

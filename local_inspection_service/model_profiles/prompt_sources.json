@@ -1,7 +1,9 @@
 {
-  "version": 25,
+  "version": 26,
   "sources": [
     "server.py",
+    "training/background_library.py",
+    "training/background_rendering.py",
     "training/dataset_catalog.py",
     "training/dataset_archives.py",
     "training/runpod_exports.py",
