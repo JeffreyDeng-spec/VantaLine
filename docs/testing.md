@@ -1,5 +1,16 @@
 # Testing
 
+`python scripts/smoke_document_job_dependencies.py` adds nine offline groups for
+native ASGI account isolation, JSON change-only writes and PG transaction forwarding,
+admission/duplicate/thread-start failure, independent slot limits, durable attempts,
+success/failure SHA reuse, human/deletion fencing and stale-job boundaries. It also
+checks claim/load/finish failures and clear-before-slot-release ordering. The PG
+adapter is a substitute; original document endpoint smoke remains intact and passes
+before and after migration. Seven business methods and two handlers are AST-equivalent.
+The worker retains the exact settings captured at admission after the resolver
+changes. A first settlement failure is never retried even if a second attempt
+would succeed; the attempt remains unresolved and cleanup runs once in order.
+
 `python scripts/smoke_history_dependencies.py` covers seven isolated groups: native
 ASGI concurrent account/app isolation and PostgreSQL adapter arguments; permission,
 filter and cursor ordering; immutable revision/hash evidence failures; real PNG/JPEG

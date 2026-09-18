@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Document-job dependency CI adds synthetic admission, persistence and failure contracts
+while retaining original document endpoint tests. Package the API, business and port
+modules with their compatibility export. No prompt, schema or process-topology change
+is introduced; ordinary immutable-release restart and rollback apply.
+
 History dependency CI adds native ASGI and evidence-media contracts alongside the
 original history and PostgreSQL label gates. Package `text_inspection.history`, its
 ports and the compatibility export together; use normal complete-release rollback.

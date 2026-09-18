@@ -1,5 +1,11 @@
 # Architecture
 
+Document classification now separates `text_inspection.document_api` from
+`document_jobs`, composed with explicit account, record, model/transport, media and
+connection-cleanup capabilities. Repository lookup and shared JSON lock stay lazy;
+the compatibility module exports the same class and registrar. Each job service
+retains two slots and the original persisted-attempt and human-edit rules.
+
 Historical comparison routes and projections now live in `text_inspection.history`.
 Typed account, record and verified-media capabilities replace namespace injection;
 `comparison_history` re-exports the same six public objects for existing consumers.

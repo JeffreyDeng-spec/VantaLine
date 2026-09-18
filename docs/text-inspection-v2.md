@@ -1,5 +1,11 @@
 # Text inspection v2
 
+Document classification routes and background jobs use explicit dependency ports.
+Attempts are still persisted before media reads/provider calls; repeated content
+reuses the same job-local result, including failures. Human selections and deleted
+orders retain their existing protection against late results. Prompt and classifier
+logic, stale thresholds and tombstone/history retention are unchanged.
+
 Comparison history now registers through explicit account, record and media ports
 in `text_inspection.history`. Existing consumers import the same projection/state
 objects through the compatibility module. Old revision selection, evidence hashes,
