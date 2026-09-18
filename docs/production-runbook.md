@@ -1,5 +1,10 @@
 # Production runbook
 
+Task projection/catalog extraction preserves current filtering and merge behavior,
+including partial in-memory changes before an exception. It introduces no database
+migration, cache policy or runtime topology change. Publish/restore both modules and
+source manifest v12 with the entire immutable release.
+
 Detection task storage extraction preserves cache invalidation and existing partial
 failure behavior. JSON saves retain the fixed `.json.tmp` path and atomic replacement;
 failed replacement leaves the old target and temporary file. This batch changes no
@@ -10,7 +15,7 @@ caching and original exception boundaries. A malformed batch result still trigge
 the original per-image fallback; short valid batches are not padded or retried.
 Single-image build errors remain outside its prediction catch. This structural
 batch does not add initialization locking or change concurrency, topology or model
-parameters. Deploy/rollback all OCR modules and manifest v11 as one complete release.
+parameters. Deploy/rollback all OCR modules and manifest v12 as one complete release.
 
 Detection result modules preserve the existing in-process inference topology.
 Filtering still annotates candidate dictionaries, parsers still prefer nonempty
@@ -42,7 +47,7 @@ incoming store together, preserving existing records and audit evidence.
 Comparison extraction preserves attempts, media, uncertain-call evidence and the
 existing review/audit ordering. A failed final save can leave a persisted attempt;
 retry is not a recovery action. Use the usual complete-release restart and rollback
-with matching manifest v11, retaining historical snapshots. This batch does not
+with matching manifest v12, retaining historical snapshots. This batch does not
 activate an independent label worker or modify deployment topology.
 
 Standard-route extraction keeps the current jobs, write locks and complete-release

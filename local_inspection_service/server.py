@@ -23013,114 +23013,38 @@ def hydrate_auto_optimize_background_from_ai_task(state: dict[str, Any]) -> bool
                                               normalize_background=lambda: safe_background_set_id)
 
 
+from .detection.task_projection import TaskProjection
+from .detection.task_catalog import TaskCatalog, TaskCatalogSources, TaskCatalogAccess, TaskModelRegistry
+
+_detection_task_projection = TaskProjection(
+    lookup=lambda config: accessory_lookup_by_id(config), audit=lambda record: record_audit_fields(record),
+    background=lambda task_id: ai_detection_task_background_record(task_id),
+    public_path=lambda value: public_path_sanitized(value), model_id=lambda task_id: ai_detection_task_model_id(task_id),
+)
+_detection_task_catalog = TaskCatalog(
+    sources=TaskCatalogSources(config=lambda: load_config(), tasks=lambda: load_ai_detection_tasks(),
+                               trained=lambda *args: list_trained_model_specs(*args),
+                               accessory_uid=lambda item: accessory_uid(item), serialize_accessory=lambda item: serialize_accessory(item)),
+    access=TaskCatalogAccess(user=lambda: _request_user.get(),
+                             visible=lambda record, user, target: record_visible_to_user(record, user, target),
+                             owner_username=lambda record: record_owner_username(record)),
+    registry=TaskModelRegistry(base_spec=lambda: MODEL_REGISTRY[AI_DETECTION_MODEL_ID], label=lambda: AI_DETECTION_LABEL,
+                               tasks_path=lambda: AI_DETECTION_TASKS_PATH, legacy_owner=lambda: LEGACY_OWNER_ID,
+                               model_id=lambda task_id: ai_detection_task_model_id(task_id)),
+    project=lambda task, config: serialize_ai_detection_task(task, config),
+)
+
+
 def serialize_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    audit = record_audit_fields(task)
-    counts = normalize_ai_detection_task_counts(task.get("required_accessory_counts") or {})
-    selected_ids = [str(item_id) for item_id in task.get("selected_accessory_ids") or counts.keys() if str(item_id) in counts]
-    if not selected_ids:
-        selected_ids = list(counts.keys())
-    accessories_by_id = accessory_lookup_by_id(config)
-    saved_labels = {str(k): str(v) for k, v in (task.get("accessory_labels") or {}).items()}
-    accessory_names: list[str] = []
-    accessory_labels: dict[str, str] = {}
-    missing_accessory_ids: list[str] = []
-    for item_id in selected_ids:
-        item = accessories_by_id.get(item_id)
-        label = str((item or {}).get("name") or (item or {}).get("label") or saved_labels.get(item_id) or item_id)
-        accessory_names.append(label)
-        accessory_labels[item_id] = label
-        if item is None:
-            missing_accessory_ids.append(item_id)
-    fallback_name = " + ".join(accessory_names) if accessory_names else "AI 检测任务"
-    task_id = sanitize_ai_detection_task_id(task.get("id"))
-    payload = {
-        "id": task_id,
-        "name": clean_ai_detection_task_name(task.get("name"), fallback_name),
-        "model_id": ai_detection_task_model_id(task_id),
-        "selected_accessory_ids": selected_ids,
-        "required_accessory_counts": {item_id: counts.get(item_id, 1) for item_id in selected_ids},
-        "accessory_names": accessory_names,
-        "accessory_labels": accessory_labels,
-        "accessory_count": len(selected_ids),
-        "missing_accessory_ids": missing_accessory_ids,
-        "created_at": audit["created_at"],
-        "updated_at": audit["updated_at"],
-        "source": str(task.get("source") or "ai_detection_workbench"),
-        "owner_user_id": audit["owner_user_id"],
-        "owner_username": audit["owner_username"],
-    }
-    background_set_id, environment_background = ai_detection_task_background_record(task_id)
-    if background_set_id:
-        payload["background_set_id"] = background_set_id
-        payload["environment_background"] = public_path_sanitized(environment_background)
-    return payload
+    return _detection_task_projection.serialize_ai_detection_task(task, config)
 
 
 def list_ai_detection_task_model_specs(config: dict[str, Any] | None = None, target_user_id: str | None = None) -> list[dict[str, Any]]:
-    config = config or load_config()
-    specs: list[dict[str, Any]] = []
-    user = _request_user.get()
-    for task in load_ai_detection_tasks():
-        if user and not record_visible_to_user(task, user, target_user_id):
-            continue
-        payload = serialize_ai_detection_task(task, config)
-        task_id = payload["id"]
-        if not task_id or not payload["selected_accessory_ids"]:
-            continue
-        specs.append(
-            {
-                **MODEL_REGISTRY[AI_DETECTION_MODEL_ID],
-                "id": payload["model_id"],
-                "run_id": task_id,
-                "task_id": task_id,
-                "task_label": payload["name"],
-                "task_source": "ai_detection_task_config",
-                "is_specialized": True,
-                "is_ai_detection": True,
-                "variant": "ai_detection",
-                "label": AI_DETECTION_LABEL,
-                "description": "AI检测工具台创建的无训练任务，按配件画像调用无状态 AI 检测。",
-                "selected_accessory_ids": payload["selected_accessory_ids"],
-                "required_accessory_counts": payload["required_accessory_counts"],
-                "accessory_names": payload["accessory_names"],
-                "accessory_labels": payload["accessory_labels"],
-                "artifact_path": "",
-                "metadata_path": str(AI_DETECTION_TASKS_PATH),
-                "missing_accessory_ids": payload["missing_accessory_ids"],
-                "created_at": payload["created_at"],
-                "updated_at": payload["updated_at"],
-                "owner_user_id": payload["owner_user_id"],
-                "owner_username": payload["owner_username"],
-            }
-        )
-    return specs
+    return _detection_task_catalog.list_ai_detection_task_model_specs(config, target_user_id)
 
 
 def ai_detection_task_payload_from_request(request: AiDetectionTaskRequest, config: dict[str, Any]) -> dict[str, Any]:
-    raw_counts: dict[str, Any] = {}
-    for item_id, count in (request.required_accessory_counts or {}).items():
-        raw_counts[str(item_id)] = count
-    for item in request.accessories or []:
-        raw_counts[str(item.accessory_id)] = item.required_count
-    counts = normalize_ai_detection_task_counts(raw_counts)
-    if not counts:
-        raise HTTPException(status_code=400, detail="AI detection task requires at least one accessory")
-    accessories_by_id = accessory_lookup_by_id(config)
-    unknown = [item_id for item_id in counts if item_id not in accessories_by_id]
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Unknown accessory IDs: {unknown}")
-    accessory_labels = {
-        item_id: str(accessories_by_id[item_id].get("name") or accessories_by_id[item_id].get("label") or item_id)
-        for item_id in counts
-    }
-    fallback_name = " + ".join(accessory_labels.values())
-    return {
-        "name": clean_ai_detection_task_name(request.name, fallback_name),
-        "selected_accessory_ids": list(counts.keys()),
-        "required_accessory_counts": counts,
-        "accessory_labels": accessory_labels,
-        "source": "ai_detection_workbench",
-    }
+    return _detection_task_projection.ai_detection_task_payload_from_request(request, config)
 
 
 def ai_detection_tasks_response(
@@ -23130,46 +23054,7 @@ def ai_detection_tasks_response(
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    user = user or _request_user.get()
-    raw_tasks = load_ai_detection_tasks()
-    if user:
-        raw_tasks = [task for task in raw_tasks if record_visible_to_user(task, user, target_user_id)]
-    tasks = [serialize_ai_detection_task(task, config) for task in raw_tasks]
-    seen_ids = {str(task.get("id") or "") for task in tasks}
-    trained_specs = [
-        spec
-        for spec in list_trained_model_specs(config)
-        if not user or record_visible_to_user(spec, user, target_user_id)
-    ]
-    for spec in list_ai_detection_specialized_model_specs(config, trained_specs, target_user_id):
-        task_id = str(spec.get("task_id") or spec.get("run_id") or "").strip()
-        if not task_id or task_id in seen_ids:
-            continue
-        names = [str(name) for name in spec.get("accessory_names") or [] if str(name).strip()]
-        tasks.append(
-            {
-                "id": task_id,
-                "name": str(spec.get("task_label") or (" + ".join(names) if names else task_id)),
-                "model_id": str(spec.get("id") or ai_detection_task_model_id(task_id)),
-                "source": str(spec.get("task_source") or "trained_model_ai_sync"),
-                "task_type": "trained_model_ai",
-                "accessory_count": len(spec.get("selected_accessory_ids") or []),
-                "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
-                "accessory_names": names,
-                "accessory_labels": spec.get("accessory_labels") or {},
-                "required_accessory_counts": spec.get("required_accessory_counts") or {},
-                "missing_accessory_ids": spec.get("missing_accessory_ids") or [],
-                "created_at": spec.get("created_at") or 0,
-                "updated_at": spec.get("updated_at") or spec.get("created_at") or 0,
-                "owner_user_id": spec.get("owner_user_id") or LEGACY_OWNER_ID,
-                "owner_username": spec.get("owner_username") or record_owner_username(spec),
-            }
-        )
-        seen_ids.add(task_id)
-    return {
-        "tasks": tasks,
-        "selected_task_id": selected_id or (tasks[0]["id"] if tasks else ""),
-    }
+    return _detection_task_catalog.ai_detection_tasks_response(config, selected_id, user=user, target_user_id=target_user_id)
 
 
 def list_ai_detection_specialized_model_specs(
@@ -23177,61 +23062,7 @@ def list_ai_detection_specialized_model_specs(
     trained_specs: list[dict[str, Any]] | None = None,
     target_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    config = config or load_config()
-    trained_specs = trained_specs if trained_specs is not None else list_trained_model_specs()
-    accessories_by_id = {
-        str(item.get("id") or accessory_uid(item)): serialize_accessory(item)
-        for item in config.get("accessories", [])
-    }
-    grouped: dict[str, dict[str, Any]] = {
-        str(spec["task_id"]): spec
-        for spec in list_ai_detection_task_model_specs(config, target_user_id)
-    }
-    for spec in trained_specs:
-        task_id = str(spec.get("task_id") or spec.get("run_id") or "")
-        if not task_id:
-            continue
-        selected_accessory_ids = [str(item_id) for item_id in spec.get("selected_accessory_ids") or []]
-        if not selected_accessory_ids:
-            continue
-        required_counts = {
-            str(k): max(1, int(v))
-            for k, v in (spec.get("required_accessory_counts") or {}).items()
-        } or {item_id: 1 for item_id in selected_accessory_ids}
-        accessory_names = [
-            str((accessories_by_id.get(item_id) or {}).get("name") or (spec.get("accessory_labels") or {}).get(item_id) or item_id)
-            for item_id in selected_accessory_ids
-        ]
-        current = grouped.setdefault(
-            task_id,
-            {
-                **MODEL_REGISTRY[AI_DETECTION_MODEL_ID],
-                "id": ai_detection_task_model_id(task_id),
-                "run_id": str(spec.get("run_id") or task_id),
-                "task_id": task_id,
-                "is_specialized": True,
-                "is_ai_detection": True,
-                "variant": "ai_detection",
-                "label": AI_DETECTION_LABEL,
-                "description": "按当前任务配件画像调用无状态 AI 检测。",
-                "selected_accessory_ids": selected_accessory_ids,
-                "required_accessory_counts": required_counts,
-                "accessory_names": accessory_names,
-                "accessory_labels": {item_id: accessory_names[idx] for idx, item_id in enumerate(selected_accessory_ids)},
-                "artifact_path": "",
-                "metadata_path": "",
-                "created_at": spec.get("created_at") or 0,
-                "updated_at": spec.get("updated_at") or spec.get("created_at") or 0,
-                "owner_user_id": spec.get("owner_user_id") or LEGACY_OWNER_ID,
-                "owner_username": spec.get("owner_username") or record_owner_username(spec),
-            },
-        )
-        for item_id in selected_accessory_ids:
-            if item_id not in current["selected_accessory_ids"]:
-                current["selected_accessory_ids"].append(item_id)
-                current["accessory_names"].append(str((accessories_by_id.get(item_id) or {}).get("name") or item_id))
-        current["required_accessory_counts"].update(required_counts)
-    return list(grouped.values())
+    return _detection_task_catalog.list_ai_detection_specialized_model_specs(config, trained_specs, target_user_id)
 
 
 def selected_model_spec(model_id: str | None, config: dict[str, Any] | None = None) -> dict[str, Any]:
