@@ -1,5 +1,12 @@
 # PostgreSQL runtime operations
 
+Legacy incoming catalog, review/list and retention workflows obtain the current
+thread repository through `IncomingWrites.repository` at each original entry point.
+Activation retains draft-save then repository activation then task publication;
+review retains the repository's atomic decision/audit operation. JSON alternatives
+keep the shared reentrant guard and their original file-write order. No SQL, lock,
+index or migration changes accompany this extraction.
+
 Incoming-text persistence uses seven lazy repository entries in the extracted store.
 Reference and inspection writes validate their row before selecting a repository;
 audit selects it first and serializes only on PostgreSQL. SQL single reads remain

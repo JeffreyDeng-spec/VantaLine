@@ -1,8 +1,9 @@
 {
-  "version": 7,
+  "version": 8,
   "sources": [
     "server.py",
     "text_inspection/incoming_analysis.py",
+    "text_inspection/incoming_execution.py",
     "text_inspection/beta_comparison.py",
     "text_inspection/comparison_submission.py",
     "text_inspection_v2.py",

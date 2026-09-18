@@ -1,5 +1,18 @@
 # Architecture
 
+Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
+registered as five catalog routes and four inspection routes around the unchanged
+Beta route. Catalog, capture execution, human reviews and retention have explicit
+services and narrow account, record, media, OCR and write capabilities. Repository,
+identity, path and policy providers are resolved at use time; services hold no user
+or connection. Capture OCR remains synchronous inside its existing async handler.
+The root keeps compatible helper forwards and aliases to actual route handlers.
+
+Workflow callback getters resolve only at their original call expressions, after
+preceding work and before argument effects. Missing callbacks retain argument
+evaluation and the original exception or fail-closed projection. Request identities
+and database connections remain transient; no new retry policy is introduced.
+
 The OCR result-mapping getter preserves the original lookup after prediction and
 before result truth/item access. Missing callbacks fail at the same point; no
 extra OCR, rendering, parsing or serialization retry is introduced.
@@ -65,7 +78,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v7 includes both
+policy or callback caching is introduced. Source manifest v8 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -147,7 +160,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v7 for new tasks.
+`accessories/preparation.py`, included in source manifest v8 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

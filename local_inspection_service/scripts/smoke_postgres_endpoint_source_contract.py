@@ -348,6 +348,31 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(edits, attribute))
 
+    # Legacy workflows retain five real repository entries after extraction.
+    for filename, expected in {
+        "incoming_catalog.py": {"update_incoming_text_reference_rules"},
+        "incoming_reviews.py": {"duplicate", "review_incoming_text_inspection", "list_incoming_text_inspections"},
+        "incoming_retention.py": {"purge"},
+    }.items():
+        path = text_path.with_name(filename)
+        workflow = SourceContract(injected_repository=True, repository_expression="self.writes.repository")
+        workflow.visit(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
+        require(workflow.runtime_repository_entry_call_count == len(expected)
+                and workflow.functions_with_runtime_repository_entry == expected,
+                "legacy incoming workflow repository entries changed: " + filename)
+        contract.runtime_repository_entry_call_count += workflow.runtime_repository_entry_call_count
+        for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                          "functions_with_runtime_repository_entry"):
+            getattr(contract, attribute).update(getattr(workflow, attribute))
+    compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name) and node.func.id == "IncomingWrites"]
+    require(len(compositions) == 1, "expected one shared incoming write-capability composition")
+    repository = next(keyword.value for keyword in compositions[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "incoming workflows must resolve their thread repository lazily")
+    contract.runtime_repository_entry_call_count -= 1
+
     missing_adapters = sorted(REQUIRED_RUNTIME_ADAPTERS - contract.imported_names)
     require(not missing_adapters, "server.py missing runtime record adapters: " + ",".join(missing_adapters))
 
