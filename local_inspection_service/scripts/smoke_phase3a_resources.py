@@ -198,6 +198,8 @@ def ids(items: list[dict], key: str = "id") -> set[str]:
 
 
 def main() -> None:
+    from local_inspection_service.scripts.model_profiles_fixture import install
+    install(server)
     assert_react_ai_task_delete_gated()
     client = TestClient(server.app, base_url="https://testserver")
     response = client.post(

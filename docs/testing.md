@@ -1,5 +1,29 @@
 # Testing
 
+`python scripts/smoke_detection_task_store.py --postgres` covers fifteen synthetic
+groups. The initial seven passed against the unchanged root implementation before
+extraction. Contracts cover normalization, shallow aliases, cache early returns,
+JSON I/O and replacement failures, raw single-task writes, repeated repository
+selection, background hydration, independent stores, late root providers and real
+PostgreSQL replace/upsert/readback in a disposable schema. No model/device is used.
+The PostgreSQL source gate follows all three actual store entries and the root's
+lazy factory binding without reducing its original total-entry threshold.
+The original phase3a resource and phase3b detection smokes also run in CI. Both use
+the existing explicit model-profile fixture; the frontend source contract follows
+the current workspace-relative routes and cancellable image/video calls. Original
+ownership, list/delete and image-admission HTTP assertions remain intact.
+Three failure matrices cover nine read, fourteen write and four background failures,
+requiring the original exception, one attempt, cache invalidation and unchanged
+storage or explicit temporary-file residue. The exists fault targets the task file
+only, so a fixture directory probe cannot consume it before the storage operation. Five argument-effect traces, four
+preceding-work traces and five missing-callback traces reject late/early capture
+and skipped argument evaluation. The initial seven business groups and all six
+added groups pass against the actual original root; the original PostgreSQL group
+also passes in a newly created empty local test database. The independent service
+composition group is verified separately. PostgreSQL runs use disposable schemas
+in an isolated test database. No default or production database is required.
+
+
 `python scripts/smoke_detection_ocr.py` covers twenty synthetic groups. Nine passed
 against the original root before extraction: keywords/profiles, matching thresholds,
 manual classification, image geometry, scoring failures, crop fallbacks, attachment

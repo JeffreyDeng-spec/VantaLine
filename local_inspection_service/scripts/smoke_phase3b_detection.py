@@ -71,17 +71,20 @@ def assert_react_detection_routes() -> None:
     page = (REPO_ROOT / "local_inspection_service" / "frontend" / "src" / "features" / "detection" / "DetectionWorkbenchPage.tsx").read_text(encoding="utf-8")
     expected_shell = {
         "DetectionWorkbenchPage import": "DetectionWorkbenchPage",
-        "inspect route": 'path="/inspect"',
-        "ai-inspect route": 'path="/ai-inspect"',
+        "inspect route": 'path="inspect"',
+        "ai-inspect route": 'path="ai-inspect"',
         "inspect placeholder exclusion": '"inspect"',
         "aiInspect placeholder exclusion": '"aiInspect"',
     }
     missing_shell = [label for label, snippet in expected_shell.items() if snippet not in shell]
     if missing_shell:
         raise AssertionError("React detection route wiring missing: " + ", ".join(missing_shell))
+    routes = (REPO_ROOT / "local_inspection_service" / "frontend" / "src" / "app" / "SiteRoutes.tsx").read_text(encoding="utf-8")
+    if '<Route path="/workspace/*" element={<WorkspaceRoute />} />' not in routes:
+        raise AssertionError("Detection routes must remain under the workspace route")
     expected_page = {
-        "image analyze upload": "analyzeImage(form)",
-        "video analyze upload": "analyzeVideo(form)",
+        "image analyze upload": "analyzeImage(form, { signal: controller.signal })",
+        "video analyze upload": "analyzeVideo(form, { signal: controller.signal })",
         "AI task query": "getAiTasks(auth)",
         "camera runtime": "navigator.mediaDevices?.getUserMedia",
         "result metrics": "DetectionMetrics",
@@ -101,6 +104,8 @@ def post_bad_image(client: TestClient, model_id: str | None = None):
 
 
 def main() -> None:
+    from local_inspection_service.scripts.model_profiles_fixture import install
+    install(server)
     assert_react_detection_routes()
     if server.route_allowed_permissions("/api/analyze/image", "POST") != ("inspection", "ai_detection"):
         raise AssertionError("analyze image route must allow inspection or ai_detection before endpoint model guard")
