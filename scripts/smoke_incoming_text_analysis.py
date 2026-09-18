@@ -217,8 +217,9 @@ class AnalysisContracts(unittest.TestCase):
     def test_beta_first_getter_and_serialization_errors_are_not_retried(self):
         blob=picture();policy=beta.BetaPolicy(lambda:3600,lambda:16_000_000,lambda:10000)
         error=RuntimeError('observer');getter=Mock(side_effect=[error,lambda image:[]]);service=beta.BetaComparison(policy,getter)
-        with patch.object(comparison_engine,'compare_images') as compare:
+        with patch.object(comparison_engine,'compare_images',return_value={'ok':True}) as compare:
             result=service.run('alice','observer',blob,blob)
+            getter.assert_called_once()
             self.assertEqual(result['error_code'],'RuntimeError');self.assertEqual(result['decision'],'REVIEW_REQUIRED')
             self.assertIs(service.run('alice','observer',blob,blob),result)
             getter.assert_called_once();compare.assert_not_called()
