@@ -2,7 +2,7 @@
 
 The incoming-text medium OCR engine now calls the shared `runtime.paddle` bootstrap
 through its existing late provider. Its model parameters, initialization lock and
-prediction behavior are unchanged. Source manifest v39 includes the separated small
+prediction behavior are unchanged. Source manifest v40 includes the separated small
 model runtime and detection OCR producers; existing task snapshots remain immutable.
 
 Legacy incoming-text routes are assembled from `incoming_catalog`,
@@ -10,7 +10,7 @@ Legacy incoming-text routes are assembled from `incoming_catalog`,
 `incoming_api`. Same-capture returns still precede capacity and image processing;
 a losing insert removes only its own source. Quality evaluation remains outside the
 engine catch, while OCR/evidence failures settle as review-required. Clone metadata
-continues to share source files. Source provenance v39 includes the relocated OCR
+continues to share source files. Source provenance v40 includes the relocated OCR
 input orchestration; historical records and model snapshots are not rewritten.
 
 Incoming-text OCR initialization and Beta comparison cache now have explicit service

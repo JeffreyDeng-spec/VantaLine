@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Worker bundle extraction keeps initial, retry, completion and failed task-update ordering and
+ignores false update return values as before. It adds no connection, transaction, schema or lock
+behavior. File cleanup and progress finalization retain their separate failure boundaries.
+
 Transfer progress retains the same task-update callback, shared state and periodic write order.
 It adds no connection, transaction, schema, advisory-lock or request-identity behavior. Exceptions
 from progress conversion/update remain swallowed; event waiting is outside that catch boundary.
@@ -94,7 +98,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v39 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v40 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

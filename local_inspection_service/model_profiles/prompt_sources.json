@@ -1,7 +1,9 @@
 {
-  "version": 39,
+  "version": 40,
   "sources": [
     "server.py",
+    "training/worker_bundle_metadata.py",
+    "training/worker_bundle_submission.py",
     "training/worker_transfers.py",
     "training/transfer_progress.py",
     "training/remote_training.py",

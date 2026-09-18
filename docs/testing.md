@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_worker_bundle.py` runs 25 synthetic groups.
+Seventeen original business groups passed before migration on Windows and Linux;
+23 expanded groups also pass against saved original function bodies. Contracts retain
+exact metadata, byte accounting, shared upload state and the existing one-time streamed
+to form fallback. Three narrow getters retain resolve, form and updater selection before
+argument effects. Tests verify original cleanup and error precedence with temporary
+archives and synthetic transport/progress substitutes; no real uploads or training occur.
+
 `python scripts/smoke_training_worker_transfers.py` runs 29 synthetic groups.
 Seventeen original business groups passed before migration on Windows and Linux;
 26 expanded groups also pass against saved original function bodies. Contracts retain

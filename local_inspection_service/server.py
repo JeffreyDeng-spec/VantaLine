@@ -19812,40 +19812,26 @@ def dataset_file_manifest(dataset_dir: Path) -> list[dict[str, Any]]:
     return _training_dataset_archives.dataset_file_manifest(dataset_dir)
 
 
+from .training.worker_bundle_metadata import WorkerBundleMetadata
+from .training.worker_bundle_submission import WorkerBundleFiles, WorkerBundleTransport, WorkerBundleTimeout, WorkerBundleSubmission
+
+_worker_bundle_metadata = WorkerBundleMetadata(lambda path: file_sha256(path), lambda path: dataset_file_manifest(path))
+_worker_bundle_timeout = WorkerBundleTimeout(lambda: remote_training_timeout_seconds())
+_worker_bundle_submission = WorkerBundleSubmission(
+    WorkerBundleFiles(lambda: resolve_service_path, lambda path, job_id: build_worker_training_bundle(path, job_id),
+                      lambda *args: worker_training_bundle_metadata(*args)),
+    WorkerBundleTransport(lambda: worker_training_upload_timeout_seconds(), lambda *args, **kwargs: _start_transfer_progress_thread(*args, **kwargs),
+                          lambda *args, **kwargs: windows_worker_upload_bundle_streamed(*args, **kwargs),
+                          lambda: windows_worker_form_request),
+    lambda: update_training_task, lambda: time.time(), lambda seconds: time.sleep(seconds),
+)
+
 def worker_training_bundle_metadata(job_id: str, task: dict[str, Any], dataset: dict[str, Any], dataset_dir: Path, archive_path: Path) -> dict[str, Any]:
-    return {
-        "bundle_version": 1,
-        "job_id": job_id,
-        "task_id": str(task.get("task_id") or job_id),
-        "task_type": "training",
-        "action": "train_model",
-        "owner_user_id": str(task.get("owner_user_id") or ""),
-        "owner_username": str(task.get("owner_username") or ""),
-        "source_dataset_id": str(task.get("source_dataset_id") or Path(str(dataset.get("dataset_dir") or dataset_dir)).name),
-        "selected_accessory_ids": [str(item) for item in task.get("selected_accessory_ids") or []],
-        "sample_count": max(1, min(20000, int(task.get("sample_count") or 1))),
-        "train_mode": str(task.get("train_mode") or task.get("mode") or task.get("model_variant") or "yolo_ocr"),
-        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
-        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
-        "dataset_archive": {
-            "filename": archive_path.name,
-            "size": archive_path.stat().st_size,
-            "sha256": file_sha256(archive_path),
-        },
-        "dataset_files": dataset_file_manifest(dataset_dir),
-        "callback": {
-            "import_target": "training_runs",
-            "expected_artifacts": ["model", "logs", "result_manifest"],
-        },
-    }
-
-
+    return _worker_bundle_metadata.worker_training_bundle_metadata(job_id, task, dataset, dataset_dir, archive_path)
 def worker_training_upload_timeout_seconds() -> float:
     # The bundle upload travels over a cross-region Tailscale link; give it a
     # generous ceiling so a slow-but-progressing transfer is not killed.
-    return max(1800.0, remote_training_timeout_seconds())
-
-
+    return _worker_bundle_timeout.worker_training_upload_timeout_seconds()
 from .training.worker_transfers import WorkerTransfers
 from .training.transfer_progress import TransferProgress
 
@@ -19869,81 +19855,7 @@ def windows_worker_upload_bundle_streamed(
 ) -> dict[str, Any]:
     return _worker_transfers.windows_worker_upload_bundle_streamed(path, metadata_json=metadata_json, archive_path=archive_path, state=state, timeout_seconds=timeout_seconds)
 def post_worker_training_bundle(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
-    dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
-    temp_dir, archive_path = build_worker_training_bundle(dataset_dir, job_id)
-    try:
-        metadata = worker_training_bundle_metadata(job_id, task, dataset, dataset_dir, archive_path)
-        metadata_json = json.dumps(metadata, ensure_ascii=False)
-        archive_bytes = archive_path.stat().st_size
-        bundle_mb = round(archive_bytes / (1024 * 1024), 1)
-        update_training_task(
-            job_id,
-            progress=20,
-            worker_bundle_size_mb=bundle_mb,
-            worker_upload_status="running",
-            worker_upload_started_at=int(time.time()),
-            worker_upload_total_bytes=archive_bytes,
-            worker_upload_sent_bytes=0,
-            note=f"已压缩 HK 样本集（{bundle_mb}MB，仅训练所需图像），正在上传到 Windows Worker。",
-        )
-        timeout_seconds = worker_training_upload_timeout_seconds()
-        last_error: Exception | None = None
-        for attempt in range(1, 3):
-            upload_state: dict[str, int] = {"done": 0, "total": archive_bytes}
-            stop_event, progress_thread = _start_transfer_progress_thread(
-                job_id,
-                upload_state,
-                done_field="worker_upload_sent_bytes",
-                total_field="worker_upload_total_bytes",
-                status_field="worker_upload_status",
-            )
-            try:
-                if attempt == 1:
-                    body = windows_worker_upload_bundle_streamed(
-                        "/training/jobs/import",
-                        metadata_json=metadata_json,
-                        archive_path=archive_path,
-                        state=upload_state,
-                        timeout_seconds=timeout_seconds,
-                    )
-                else:
-                    # Fallback path: proven (non-streaming) form upload for reliability.
-                    with archive_path.open("rb") as handle:
-                        body = windows_worker_form_request(
-                            "POST",
-                            "/training/jobs/import",
-                            data={"metadata": metadata_json},
-                            files={"dataset_archive": (archive_path.name, handle, "application/zip")},
-                            timeout_seconds=timeout_seconds,
-                        )
-                update_training_task(
-                    job_id,
-                    worker_upload_status="completed",
-                    worker_upload_sent_bytes=archive_bytes,
-                    worker_upload_total_bytes=archive_bytes,
-                    worker_upload_completed_at=int(time.time()),
-                )
-                return body
-            except RuntimeError as exc:
-                last_error = exc
-                if attempt >= 2:
-                    update_training_task(job_id, worker_upload_status="failed")
-                    break
-                update_training_task(
-                    job_id,
-                    progress=20,
-                    worker_upload_status="running",
-                    note=f"上传到 Windows Worker 失败（第 {attempt} 次），正在重试：{str(exc)[:160]}",
-                )
-                time.sleep(5)
-            finally:
-                stop_event.set()
-                progress_thread.join(timeout=2.0)
-        raise last_error if last_error else RuntimeError("Windows worker bundle upload failed")
-    finally:
-        temp_dir.cleanup()
-
-
+    return _worker_bundle_submission.post_worker_training_bundle(job_id, task, dataset)
 from .training.remote_training import RemoteTrainingSettings, RemoteTrainingPaths, RemoteTraining
 from .training.worker_compatibility import worker_training_payload, worker_training_terminal_status, WorkerArtifactSummary
 

@@ -1,67 +1,71 @@
 # VantaLine release management
 
-Streamed worker transport and progress modules ship with source manifest v39 as one immutable
+Worker bundle metadata/submission and source manifest v40 ship as one immutable package.
+Historical snapshots, worker topology and release commands remain. This extraction neither enables
+retired worker execution nor changes fallback policy; rollback restores the previous whole release.
+
+Streamed worker transport and progress modules ship with source manifest v40 as one immutable
 package. Existing worker topology and release commands remain. This is a structural extraction;
 no worker is enabled, schema added or partial-file deployment introduced.
 
-Remote training and worker compatibility modules ship with source manifest v39 as one immutable
+Remote training and worker compatibility modules ship with source manifest v40 as one immutable
 package. Historical model snapshots remain unchanged. No worker topology, schema, dependency,
 release command or retired-feature behavior changes; rollback restores the previous whole package.
 
 Background query, validation, upload services and HTTP adapters ship together with source manifest
-v39. The three relocated business source files are included for new task fingerprints; stored model
+v40. The three relocated business source files are included for new task fingerprints; stored model
 snapshots remain intact. No route, migration, worker topology or release command changes.
 
-Background Codex transport, task runner and submission ship together with source manifest v39.
+Background Codex transport, task runner and submission ship together with source manifest v40.
 The manifest records the actual relocated sources without rewriting historical model bindings.
 This batch does not enable a separate label worker or alter deployment/rollback commands.
 
-The three background write modules ship together with source manifest v39, which records their
+The three background write modules ship together with source manifest v40, which records their
 actual sources for new task fingerprints. Historical task bindings and fingerprints remain
 unchanged. There is no topology, schema, model-provider or deployment-command change.
 
 Background manifest, seeding, catalog and selection modules ship as one immutable-package change.
-Source manifest v39 includes their actual sources for new task fingerprints and leaves historical
+Source manifest v40 includes their actual sources for new task fingerprints and leaves historical
 bindings untouched. There is no schema or worker-mode change; rollback uses the previous whole
 release while preserving background assets and manifests.
 
 Jobs query, task mutation and HTTP adapter modules ship with the complete immutable package.
-Source manifest v39 tracks the moved query/mutation and image-control adapter sources for new fingerprints without rewriting
+Source manifest v40 tracks the moved query/mutation and image-control adapter sources for new fingerprints without rewriting
 historical snapshots. This batch adds no schema, migration or worker topology; whole-release
 rollback preserves task records and existing control-operation evidence.
 
-RunPod transfer service/store/API move together in the immutable release. Source manifest v39
+RunPod transfer service/store/API move together in the immutable release. Source manifest v40
 tracks the moved business and file-persistence sources for new task fingerprints; historical
 snapshots remain unchanged. No migration or worker-topology change accompanies this batch, and
 rollback uses the previous complete release while retaining transfer evidence and queued tasks.
 
 The training launch/status module extraction is an immutable-package-only change. Source manifest
-v39 includes the moved launch and status business files; historical task fingerprints remain intact.
+v40 includes the moved launch and status business files; historical task fingerprints remain intact.
 No schema, migration, worker topology or training/model policy changes. Rollback restores the whole
 prior release while retaining queued tasks and their model bindings.
 
-CI includes training input/state and immutable preview-fingerprint contracts. Source manifest v39
+CI includes training input/state and immutable preview-fingerprint contracts. Source manifest v40
 and all four cache/approval/dataset/status modules must travel together. This extraction changes no
 route, schema, migration, model/prompt policy or worker topology. Whole-package rollback preserves
 stored task snapshots, preview approvals and runtime task settlement records.
 
 CI includes preview workflow and artifact contracts. Publish the four preview workflow modules
-with source manifest v39 in one immutable release. No route/schema, migration, model policy or
+with source manifest v40 in one immutable release. No route/schema, migration, model policy or
 worker topology change. Restore the previous complete package on failure; preserve preview files,
 plan JSON, user state and historical task snapshots according to existing write semantics.
 
 CI includes full preview renderer contracts and the original pixel/metadata/call fingerprints.
-Ship renderer, its typed ports and source manifest v39 in one immutable package. No API, model,
+Ship renderer, its typed ports and source manifest v40 in one immutable package. No API, model,
 prompt policy, dependency, migration or process topology changes. Whole-package rollback preserves
 existing task snapshots and generated images/datasets; individual source files must not be copied.
 
-CI includes preview layout contracts. Publish geometry, masks, placement and source manifest v39
+CI includes preview layout contracts. Publish geometry, masks, placement and source manifest v40
 in the same complete release. This batch changes no routes, dependency versions, migrations,
 worker topology or rendering algorithm. Rollback restores the prior package and source manifest;
 stored task snapshots and generated datasets remain intact.
 
 CI includes deterministic background pixel and orchestration contracts. Ship both background
-modules and source manifest v39 in the same immutable release. No dependency, migration, route,
+modules and source manifest v40 in the same immutable release. No dependency, migration, route,
 worker topology or rendering algorithm changes. Rollback restores the complete prior package and
 its matching source list, preserving historical snapshots and existing generated datasets.
 
@@ -71,32 +75,32 @@ worker topology or source-manifest version change is introduced. Roll back the w
 package while retaining resource records, files and historical model references.
 
 CI adds resource-catalog contracts. Ship the dataset catalog, resource query and HTTP adapters
-with source manifest v39 in the complete immutable release. Routes, storage schema and process
+with source manifest v40 in the complete immutable release. Routes, storage schema and process
 topology retain their existing contracts. Rollback restores the entire previous package while
 retaining task records and historical model snapshots.
 
 CI includes the archive/artifact contract. Package all three new file-handling modules and
-source manifest v39 with the whole release. No database migration, endpoint, deployment service,
+source manifest v40 with the whole release. No database migration, endpoint, deployment service,
 worker contract or dependency is added. Restore the previous complete release and retain task
 records, archives, imported artifacts and historical model references.
 
 CI includes the offline RunPod flow contract. Ship submission, output-parser and flow modules
-with source manifest v39. This batch changes no request/worker contract, dependency, service,
+with source manifest v40. This batch changes no request/worker contract, dependency, service,
 migration or deployment topology. Rollback restores the complete prior release while retaining
 remote job identifiers, task evidence and stored model snapshots.
 
 CI includes the training dataset contract. Ship all four sample-generation modules and source
-manifest v39 as part of the same immutable release. There is no database migration, worker
+manifest v40 as part of the same immutable release. There is no database migration, worker
 switch, new dependency or training process change. Whole-release rollback retains task/model
 snapshots and existing sample files; this extraction performs no media cleanup.
 
 CI includes the offline training runner/submission contract. Package the three extracted
-training modules together with source manifest v39. Training still runs through the existing
+training modules together with source manifest v40. Training still runs through the existing
 process/thread topology; no new service, dependency, environment key or migration is added.
 Rollback restores the previous complete release while retaining frozen model references.
 
 CI runs the training-state service contracts. Deploy all four completion/state modules
-with source manifest v39 in the same immutable package. No migration, environment setting,
+with source manifest v40 in the same immutable package. No migration, environment setting,
 worker topology or release restart change accompanies this batch; rollback uses the prior
 whole package and retains task/call records and frozen model references.
 
@@ -107,25 +111,25 @@ It requires no new environment variable or migration and rolls back as a complet
 Training lifecycle CI adds synthetic process/permission contracts and an isolated
 PostgreSQL deletion/late-update scenario. Ship the lifecycle, views and runtime owner
 modules together. Existing startup callbacks and process topology remain; the model
-source manifest advances to v39 to cover all three moved files. Rollback remains
+source manifest advances to v40 to cover all three moved files. Rollback remains
 a complete immutable release.
 
 Pipeline store CI adds synthetic and isolated PostgreSQL contracts. The repository
 source gate inspects all eight real task/state selections and thirteen root forwards,
 without counting composition callbacks twice or lowering its original threshold.
-Ship the two stores, pure state policy and source manifest v39 in the whole release.
+Ship the two stores, pure state policy and source manifest v40 in the whole release.
 Worker launch, migrations and rollback topology are unchanged.
 
 Training storage CI now exercises its disposable PostgreSQL schema and eight moved
 helpers. The database source gate counts the three actual extracted entries, excludes
 the composition callback from totals and retains the original minimum threshold.
 Ship both training modules as part of the immutable release; launch and rollback
-commands and topology remain unchanged. Source manifest v39 now includes both
+commands and topology remain unchanged. Source manifest v40 now includes both
 training identity and storage so relocated selection/binding inputs remain covered.
 
 Backend CI now includes training discovery contracts with a disposable PostgreSQL
 schema, and dependency checks admit the training/pipeline packages. Publish all three
-new modules and source manifest v39 with the complete immutable release. This batch
+new modules and source manifest v40 with the complete immutable release. This batch
 does not change worker startup, release commands or rollback topology.
 
 Warmup method, path resolver, model loader and error formatter use narrow callback
@@ -135,18 +139,18 @@ before them. No retry, lock or thread admission policy is added.
 
 Warmup CI adds synthetic policy, prediction and runtime contracts while retaining
 the startup callback in the assembled application baseline. Ship the three relocated
-warmup modules and manifest v39 together. Worker topology and release commands remain.
+warmup modules and manifest v40 together. Worker topology and release commands remain.
 
 Local model factory lookup uses a narrow getter after path resolution and before
 string conversion, preserving callback replacement and missing-callable argument
 effects. Existing cache publication order and exception boundaries remain unchanged.
 
 The local-model runtime batch adds synthetic selection/cache coverage and ships both
-new modules with manifest v39. It retains the current warmup entry points, in-process
+new modules with manifest v40. It retains the current warmup entry points, in-process
 inference and immutable whole-release deployment/rollback.
 
 Task projection/catalog CI adds the focused synthetic smoke and keeps the original
-resource and detection endpoint checks. Manifest v39 records the new model-input
+resource and detection endpoint checks. Manifest v40 records the new model-input
 assembly sources. Whole-release rollout/rollback and worker startup are unchanged.
 
 The detection task-store batch adds its synthetic and disposable-PostgreSQL smoke
@@ -154,12 +158,12 @@ to backend CI and updates the repository source gate to inspect the extracted st
 Deployment/rollback remains the complete immutable release with the current topology.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v39 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v40 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
 The detection OCR batch adds its synthetic smoke and ships `runtime.paddle` plus
-five OCR modules with source manifest v39. Local factories never load real models in
+five OCR modules with source manifest v40. Local factories never load real models in
 these contracts. Keep the complete application and incoming/OCR regression checks;
 release startup, worker topology and whole-package rollback remain unchanged.
 Attachment crop, score and match getters capture the current callable at each
@@ -171,18 +175,18 @@ retry or model-initialization lock is introduced.
 
 The detection-result extraction adds synthetic backend smoke and admits the new
 `detection` package to dependency-direction checks. It preserves the HTTP contract,
-model parameters, worker topology and release commands. Ship source manifest v39
+model parameters, worker topology and release commands. Ship source manifest v40
 with all five detection modules to retain their source coverage for new tasks.
 Historical snapshots remain untouched; whole-release rollback is the recovery unit.
 
 The legacy incoming workflow batch adds its focused smoke to backend CI, retains
 both original incoming endpoint and repository checks, and compares the complete
 assembled HTTP baseline. It does not change worker topology or launch commands.
-Source manifest v39 records the relocated OCR input orchestrator for new snapshots.
+Source manifest v40 records the relocated OCR input orchestrator for new snapshots.
 Rollback remains the previous immutable release with existing persistent state.
 
 OCR/Beta CI adds ten offline initialization, image, cache and composition groups.
-Ship the analysis, comparison-cache and HTTP modules with manifest v39 and the root
+Ship the analysis, comparison-cache and HTTP modules with manifest v40 and the root
 state aliases. Model names, flags, business prompt versions and deployment topology
 are unchanged. Full-runtime CI must retain the existing incoming/Beta endpoint and
 model-snapshot checks before any sequential production rollout.
@@ -193,7 +197,7 @@ remain required. Ship both the runtime file adapter and legacy store with the ro
 aliases in the immutable artifact; database schema and worker topology are unchanged.
 
 Comparison/review CI adds eight offline boundary groups and six route-identity
-checks. Ship the submission, review, API and port modules plus manifest v39 together;
+checks. Ship the submission, review, API and port modules plus manifest v40 together;
 the source list now includes the actual comparison input and strict-prompt files.
 Business prompt text/version stays unchanged. Retain old task evidence on a normal
 whole-release rollback; no new worker mode is enabled by this package.
@@ -205,11 +209,11 @@ the immutable artifact. Runtime topology and complete-release rollback stay unch
 
 Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
 application identity checks. Ship these modules and their root adapters together.
-Manifest v39 and normal whole-release restart/rollback apply; no new topology or
+Manifest v40 and normal whole-release restart/rollback apply; no new topology or
 model configuration is enabled by this structural batch.
 
 Text-media CI adds real image/PDF and application-composition contracts. Package
-both media/image modules with source manifest v39, which covers their migrated
+both media/image modules with source manifest v40, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
 dependency upgrade is needed; ordinary complete-release restart/rollback applies.
 Media fault injection preserves first-error evidence without retries. Callback and
@@ -269,7 +273,7 @@ Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.
 
-Preparation CI adds synthetic workflow contracts and source manifest v39 includes
+Preparation CI adds synthetic workflow contracts and source manifest v40 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
 
