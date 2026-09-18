@@ -118,7 +118,9 @@ class DetectionContracts(unittest.TestCase):
         from local_inspection_service.detection.rules import CountRules
         for boundary in ['class_names','class_labels','generic_names','generic_labels','rule_class_labels','manual_labels']:
             with self.subTest(boundary=boundary):
-                error=RuntimeError(boundary);success={0:'Zero',1:'Manual','manual':'Manual'};target=Mock(side_effect=[error,success])
+                error=RuntimeError(boundary)
+                success={'manual':'Manual'} if boundary=='manual_labels' else {0:'Zero',1:'Manual'}
+                target=Mock(side_effect=[error,success])
                 if boundary.startswith('rule_') or boundary=='manual_labels':
                     policy=CountRules(target if boundary.startswith('rule_') else lambda:{0:'Zero'},target if boundary=='manual_labels' else lambda:{'manual':'Manual'})
                     invoke=lambda:policy.apply([],{'confidence_threshold':.5,'required_classes':[],'min_counts':{},'ocr':{'enabled':False}}, {})
