@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Codex API dependency CI adds explicit-composition and compatibility tests while
+retaining all existing PostgreSQL, CLI and worker-exit tests. Include the request,
+validation and dependency modules together in the immutable package; the worker
+process topology and release start/stop procedure remain unchanged.
+
 Label dependency CI adds explicit-port isolation and registrar lifecycle contracts,
 while preserving the real PostgreSQL and complete-application gates. Include the new
 label dependency module in the immutable package. Worker process separation remains

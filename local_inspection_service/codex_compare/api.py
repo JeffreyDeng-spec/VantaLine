@@ -3,16 +3,15 @@ from __future__ import annotations
 import json
 import os
 import re
-from fastapi import File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from .dependencies import (ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports, RepositoryFactory)
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Literal
+from ..schemas.codex_compare import Retry, Review
+from .http_contract import PREFIX
 from ..storage.codex_comparisons import CodexComparisonsRepository
 from ..storage.agent_operations import OperationConflict, OperationDenied
 from .contracts import MAX_BYTES, digest, box
 from .media import MediaStore
-
-PREFIX = '/api/text-compare-codex'
 
 
 def enabled_owners():
@@ -42,26 +41,16 @@ def public(task, detail=True):
     return result
 
 
-class Retry(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    request_id: str = Field(pattern=r'^[A-Za-z0-9_.-]{8,128}$')
-
-
-class Review(Retry):
-    decision: Literal['MATCH', 'DIFFERENCES', 'REVIEW_REQUIRED']
-    note: str = Field(max_length=4000)
-
-
-def register(ns):
-    app = ns['app']
+def register(app: FastAPI, access: ComparisonAccess, repository_factory: RepositoryFactory,
+             standards: StandardLibrary, media_dependencies: ComparisonMedia, documents: DocumentImports):
 
     def context():
-        ns['require_permission']('inspection')
-        owner = ns['_text_v2_owner']()[0]
-        repository = ns['runtime_postgres_repository_or_none']()
+        access.require_permission('inspection')
+        owner = access.owner()[0]
+        repository = repository_factory()
         if repository is None:
             raise HTTPException(503, 'Codex Beta 需要 PostgreSQL')
-        return owner, CodexComparisonsRepository(repository), MediaStore(ns['DATA_DIR'] / 'codex_comparisons' / 'media')
+        return owner, CodexComparisonsRepository(repository), MediaStore(media_dependencies.data_directory() / 'codex_comparisons' / 'media')
 
     def enabled(owner):
         if owner not in enabled_owners():
@@ -88,12 +77,12 @@ def register(ns):
             raise HTTPException(422, str(exc)[:300] if isinstance(exc, ValueError) else '输入或证据文件无法读取') from exc
 
     from .batch_api import register as register_batches
-    register_batches(ns, context, enabled, owned, call)
+    register_batches(app, access, standards, media_dependencies, documents, context, enabled, owned, call)
 
     @app.get(PREFIX + '/capabilities')
     def capabilities():
-        ns['require_permission']('inspection')
-        owner = ns['_text_v2_owner']()[0]
+        access.require_permission('inspection')
+        owner = access.owner()[0]
         return {'enabled': owner in enabled_owners() and configured(), 'model': os.environ.get('VANTALINE_CODEX_COMPARE_MODEL', ''), 'timeout_seconds': 600, 'concurrency': 1}
 
     @app.post(PREFIX + '/tasks')
@@ -105,14 +94,14 @@ def register(ns):
             enabled(owner)
             if not re.fullmatch(r'[A-Za-z0-9_.-]{8,128}', request_id):
                 raise HTTPException(422, 'Invalid request_id')
-            asset = ns['_text_v2_owned']('assets', standard_asset_id, owner)
-            standard = ns['_text_v2_owned']('standards', str((asset or {}).get('standard_id', '')), owner)
+            asset = standards.owned('assets', standard_asset_id, owner)
+            standard = standards.owned('standards', str((asset or {}).get('standard_id', '')), owner)
             snapshot = next((x for x in (standard or {}).get('confirmed_assets', []) if x.get('id') == standard_asset_id), None)
             if not asset or not standard or standard.get('status') != 'confirmed' or standard.get('standard_type') != 'label' or not snapshot:
                 raise HTTPException(404, '请选择已确认的标签标准')
             if standard.get('current_revision_id') != expected_revision:
                 raise HTTPException(409, '标准版本已更新，请重新选择')
-            reference = ns['_text_v2_asset_bytes']({**asset, 'sha256': snapshot['sha256']}, owner)
+            reference = media_dependencies.asset_bytes({**asset, 'sha256': snapshot['sha256']}, owner)
             if digest(reference) != snapshot['sha256']:
                 raise HTTPException(409, '标准原图校验失败')
             if len(reference_region) > 200:

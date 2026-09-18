@@ -3,30 +3,19 @@ import asyncio
 import copy
 from pathlib import Path
 import time
-from fastapi import File, Form, HTTPException, UploadFile, Query
-from pydantic import Field
-from .api import PREFIX, Retry, Review
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Query
+from collections.abc import Callable
+from .dependencies import (ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports, Context, OwnedTask, MapErrors)
+from ..schemas.codex_compare import Retry, Review, SelectOrder, Rename, Rerun
+from .http_contract import PREFIX
 from .contracts import MAX_BYTES, TERMINAL, digest, box
 from .batch_contracts import VERSION, MAX_LABELS, MAX_REFERENCES, new_label, public_batch, public_label, matching, reference
 from ..storage.agent_operations import OperationConflict
 
 
-class SelectOrder(Retry):
-    standard_id: str = Field(max_length=100)
-
-
-class Rename(Retry):
-    name: str = Field(min_length=1, max_length=120)
-
-
-class Rerun(Retry):
-    label_ids: list[str] = Field(min_length=1, max_length=MAX_LABELS)
-    # Optional manual correspondence is frozen into the new batch only.
-    matches: dict[str, dict] = Field(default_factory=dict)
-
-
-def register(ns, context, enabled, owned, call):
-    app = ns['app']
+def register(app: FastAPI, access: ComparisonAccess, standards: StandardLibrary,
+             media_dependencies: ComparisonMedia, documents: DocumentImports, context: Context,
+             enabled: Callable[[str], None], owned: OwnedTask, call: MapErrors):
 
     def batch(repo, owner, bid):
         value = owned(repo, owner, bid)
@@ -35,15 +24,15 @@ def register(ns, context, enabled, owned, call):
         return value
 
     def frozen_order(owner, standard_id, media):
-        standard = ns['_text_v2_owned']('standards', standard_id, owner)
+        standard = standards.owned('standards', standard_id, owner)
         if not standard or standard.get('status') == 'deleted' or standard.get('standard_type') != 'label':
             raise HTTPException(404, '标签订单不存在')
-        assets = [a for a in ns['_text_v2_load']('assets') if a.get('standard_id') == standard_id and a.get('owner_user_id') == owner]
+        assets = [a for a in standards.load('assets') if a.get('standard_id') == standard_id and a.get('owner_user_id') == owner]
         if not assets or len(assets) > MAX_REFERENCES:
             raise HTTPException(422, '订单图片为空或超过 500 张')
         refs, hashes = {}, {}
         for a in sorted(assets, key=lambda a: a.get('ordinal', 0)):
-            data = ns['_text_v2_asset_bytes'](a, owner)
+            data = media_dependencies.asset_bytes(a, owner)
             sha = digest(data)
             source = {k: a[k] for k in ('id', 'ordinal', 'source_part', 'paragraph_index', 'context') if k in a}
             if sha in hashes:
@@ -128,33 +117,33 @@ def register(ns, context, enabled, owned, call):
                 return public_batch(current)
             try:
                 if filename.lower().endswith('.docx'):
-                    entries, blobs = ns['extract_docx_candidates'](data)
+                    entries, blobs = documents.docx(data)
                     ext = '.docx'
                 elif filename.lower().endswith('.doc'):
-                    entries, blobs = ns['extract_doc_images'](data)
+                    entries, blobs = documents.doc(data)
                     ext = '.doc'
                 else:
                     raise ValueError('仅支持 DOC / DOCX')
                 stdid = 'std_' + digest({'owner': owner, 'batch': bid, 'request': request_id})[:32]
                 now = int(time.time())
-                old = ns['_text_v2_owned']('standards', stdid, owner)
+                old = standards.owned('standards', stdid, owner)
                 if not old:
-                    path = ns['_text_v2_media_path'](owner, stdid, 'source'+ext)
-                    ns['_text_v2_write'](path, data)
-                    standard = {'id': stdid, 'owner_user_id': owner, 'owner_username': ns['_text_v2_owner']()[1],
+                    path = media_dependencies.media_path(owner, stdid, 'source'+ext)
+                    media_dependencies.write(path, data)
+                    standard = {'id': stdid, 'owner_user_id': owner, 'owner_username': access.owner()[1],
                                 'name': Path(filename).stem[:120] or '新订单', 'material_code': 'IMPORT-'+stdid[-12:],
                                 'version_label': 'V1', 'standard_type': 'label', 'status': 'draft', 'source_sha256': digest(data),
                                 'source_path': str(path), 'created_at': now, 'updated_at': now, 'asset_count': len(entries),
                                 'import_source': VERSION}
-                    ns['_text_v2_save']('standards', standard, insert_only=True)
+                    standards.save('standards', standard, insert_only=True)
                 # Deterministic IDs permit explicit import retry after interrupted persistence.
                 for index, entry in enumerate(entries):
                     aid = 'ast_'+digest({'standard': stdid, 'index': index})[:32]
-                    if ns['_text_v2_owned']('assets', aid, owner):
+                    if standards.owned('assets', aid, owner):
                         continue
-                    path = ns['_text_v2_media_path'](owner, stdid, aid+'.bin')
-                    ns['_text_v2_write'](path, blobs[index])
-                    ns['_text_v2_save']('assets', {**entry, 'id': aid, 'standard_id': stdid, 'owner_user_id': owner,
+                    path = media_dependencies.media_path(owner, stdid, aid+'.bin')
+                    media_dependencies.write(path, blobs[index])
+                    standards.save('assets', {**entry, 'id': aid, 'standard_id': stdid, 'owner_user_id': owner,
                          'asset_kind': 'label_candidate', 'media_path': str(path), 'status': 'needs_confirmation',
                          'classification_source': 'unclassified', 'classification_reason': '由 Codex 批次匹配，不调用旧分类流程',
                          'created_at': now, 'updated_at': now}, insert_only=True)
@@ -202,8 +191,8 @@ def register(ns, context, enabled, owned, call):
     def submit(bid: str, body: Retry):
         owner, repo, _ = context(); enabled(owner)
         current = batch(repo, owner, bid)
-        standard = ns['_text_v2_owned']('standards', current['inputs'].get('standard_id', ''), owner)
-        assets = [a for a in ns['_text_v2_load']('assets') if a.get('standard_id') == current['inputs'].get('standard_id') and a.get('owner_user_id') == owner]
+        standard = standards.owned('standards', current['inputs'].get('standard_id', ''), owner)
+        assets = [a for a in standards.load('assets') if a.get('standard_id') == current['inputs'].get('standard_id') and a.get('owner_user_id') == owner]
         # Library helpers end read transactions; never call them under the queue lock.
         order_digest = digest(sorted((a['id'], a.get('sha256'), a.get('updated_at')) for a in assets))
         def freeze(t):

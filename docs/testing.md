@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_codex_dependencies.py` adds four groups for concurrent two-app
+identity/repository isolation, frozen-source hashes, dynamic owner/model configuration,
+capabilities without PostgreSQL, history/cancel after admission removal and endpoint-
+specific upload-read/permission order. It also fixes shared-export identity and exact
+report value semantics (bool/nonfinite boxes, boundary coordinates, whitespace and
+summary keys). Five request classes and three pure validators were AST-compared.
+All 55 existing Codex tests pass before and after migration with isolated PostgreSQL;
+only the two registration fixtures changed, preserving the existing business assertions.
+
 `python scripts/smoke_label_dependencies.py` adds seven isolated groups for two-app
 configuration and concurrent identity isolation, async-to-thread repository acquisition,
 prior None/empty/old model references, late resolver replacement and missing-provider

@@ -34647,7 +34647,32 @@ register_comparison_history(globals())
 resolve_label_extraction = register_label_extraction(globals())
 register_agent_api(globals())
 from local_inspection_service.codex_compare.api import register as register_codex_compare
-register_codex_compare(globals())
+from .codex_compare.dependencies import ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports
+_codex_standard_library = StandardLibrary(
+    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    load=lambda kind: _text_v2_load(kind),
+    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
+)
+_codex_media = ComparisonMedia(
+    data_directory=lambda: DATA_DIR,
+    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
+    media_path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
+    write=lambda path, data: _text_v2_write(path, data),
+)
+register_codex_compare(
+    app,
+    ComparisonAccess(
+        require_permission=lambda permission: require_permission(permission),
+        owner=lambda: _text_v2_owner(),
+    ),
+    repository_factory=lambda: runtime_postgres_repository_or_none(),
+    standards=_codex_standard_library,
+    media_dependencies=_codex_media,
+    documents=DocumentImports(
+        docx=lambda data: extract_docx_candidates(data),
+        doc=lambda data: extract_doc_images(data),
+    ),
+)
 
 from .label_inspection.api import register as register_label_inspection
 from .label_inspection.dependencies import LabelAccess, RepositoryLifecycle, LabelImports

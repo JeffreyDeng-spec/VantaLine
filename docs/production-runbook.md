@@ -1,5 +1,10 @@
 # Production runbook
 
+Codex dependency extraction uses the existing complete-release restart/rollback.
+The independent Codex worker is unchanged. Preserve partially imported standard/media
+records and immutable task evidence on failure; do not auto-retry document/model work
+or copy individual modules between releases. No data or topology migration is needed.
+
 Label dependency extraction keeps the existing embedded topology: one PDF import
 thread and two detection threads in the Web process. Startup, stop-event signaling,
 claim and cleanup behavior are unchanged. Use the normal whole-release restart and

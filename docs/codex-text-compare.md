@@ -1,5 +1,12 @@
 # Codex label inspection beta
 
+The Web API now composes typed capabilities for access, standard records, document
+extraction and media operations instead of passing the server namespace. Batch and
+single-image requests retain their different authorization/read order and existing
+partial import persistence. Shared request/value contracts are acyclic with compatible
+exports. The independent Codex worker, paid execution and 600-second task policy are
+unchanged by this extraction; no new model call or historical rewrite is introduced.
+
 Worker completion requires an observed successful process exit, reader EOF and
 valid completion/session events after draining the queue. Final session/usage
 metadata is pulsed before settlement. A process exiting during a database heartbeat

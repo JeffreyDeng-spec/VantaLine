@@ -89,6 +89,9 @@
       "name": "Codex text comparison",
       "paths": [
         "local_inspection_service/codex_compare/**",
+        "local_inspection_service/schemas/codex_compare.py",
+        "scripts/smoke_codex_dependencies.py",
+        "tests/codex_compare/**",
         "local_inspection_service/storage/codex_comparisons.py",
         "local_inspection_service/frontend/src/features/codex-compare/**",
         "deploy/vantaline-codex-compare.service"
