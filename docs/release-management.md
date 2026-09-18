@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Local model factory lookup uses a narrow getter after path resolution and before
+string conversion, preserving callback replacement and missing-callable argument
+effects. Existing cache publication order and exception boundaries remain unchanged.
+
 The local-model runtime batch adds synthetic selection/cache coverage and ships both
 new modules with manifest v13. It retains the current warmup entry points, in-process
 inference and immutable whole-release deployment/rollback.

@@ -1,5 +1,9 @@
 # Configuration reference
 
+Local model factory lookup uses a narrow getter after path resolution and before
+string conversion, preserving callback replacement and missing-callable argument
+effects. Existing cache publication order and exception boundaries remain unchanged.
+
 Local model selection/cache extraction adds no settings or selection rules. Current
 source manifest v13 includes `detection/model_selection.py` and `detection/local_models.py`
 so new fingerprints cover the moved specification and actual weight-instance choice.

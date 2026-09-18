@@ -1,5 +1,9 @@
 # Architecture
 
+Local model factory lookup uses a narrow getter after path resolution and before
+string conversion, preserving callback replacement and missing-callable argument
+effects. Existing cache publication order and exception boundaries remain unchanged.
+
 `detection.model_selection` owns ordered specification selection, including the
 legacy trained-provider TypeError fallback. `detection.local_models.LocalModels`
 owns per-process model instances and resolved path aliases; initialization calls no

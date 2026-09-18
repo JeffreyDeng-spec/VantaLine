@@ -10,7 +10,7 @@ Model = TypeVar("Model")
 
 class LocalModels(Generic[Model]):
     def __init__(self, select: Callable[[str | None, Record | None], Record],
-                 factory: Callable[[str], Model], legacy_specs: Callable[[], list[Record]],
+                 factory: Callable[[], Callable[[str], Model]], legacy_specs: Callable[[], list[Record]],
                  trained_specs: TrainedSpecs):
         self.select, self.factory = select, factory
         self.legacy_specs, self.trained_specs = legacy_specs, trained_specs
@@ -34,7 +34,7 @@ class LocalModels(Generic[Model]):
                     self.models[model_id] = self.models[cached_id]
                     self.paths[model_id] = resolved_model_path
                     return self.models[model_id]
-            self.models[model_id] = self.factory(str(model_path))
+            self.models[model_id] = self.factory()(str(model_path))
             self.paths[model_id] = resolved_model_path
         return self.models[model_id]
 

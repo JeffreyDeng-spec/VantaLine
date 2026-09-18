@@ -1758,7 +1758,7 @@ _model_selection = ModelSelection(
     default_id=lambda: DEFAULT_MODEL_ID, removed=lambda feature: removed_phase1_feature(feature),
 )
 _local_models = LocalModels(
-    select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda path: YOLO(path),
+    select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda: YOLO,
     legacy_specs=lambda: legacy_model_specs(), trained_specs=lambda *args: list_trained_model_specs(*args),
 )
 # Compatibility objects for existing maintenance scripts; state belongs to LocalModels.

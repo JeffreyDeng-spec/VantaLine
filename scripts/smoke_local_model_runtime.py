@@ -146,8 +146,8 @@ class LocalModelContracts(unittest.TestCase):
         registry=Mock(return_value=self.registry);default=Mock(return_value='default');removed=Mock()
         selection=ModelSelection(specialized,trained,registry,default,removed)
         factory=Mock(side_effect=lambda path:object());legacy=Mock(return_value=[])
-        first=LocalModels(selection.selected_model_spec,factory,legacy,trained)
-        second=LocalModels(selection.selected_model_spec,factory,legacy,trained)
+        first=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained)
+        second=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained)
         for provider in (specialized,trained,registry,default,removed,factory,legacy):provider.assert_not_called()
         self.assertIs(self.api._models,self.api._local_models.models)
         self.assertIs(self.api._model_paths,self.api._local_models.paths)
@@ -155,6 +155,227 @@ class LocalModelContracts(unittest.TestCase):
         one=first.model();two=second.model();self.assertIsNot(one,two);self.assertEqual(factory.call_count,2)
         first.models.pop('default');self.assertIs(second.model(),two);self.assertNotIn('default',first.models)
         self.assertEqual(first.paths['default'],self.path.resolve())
+
+
+    def test_existing_model_callbacks_preserve_first_failure_and_cache(self):
+        api = self.api
+        names = ('list_ai_detection_specialized_model_specs', 'list_trained_model_specs',
+            'removed_phase1_feature', 'selected_model_spec', 'YOLO', 'legacy_model_specs')
+        cases = [
+            ('list_ai_detection_specialized_model_specs', lambda: api.selected_model_spec('default', {}), []),
+            ('list_trained_model_specs', lambda: api.selected_model_spec('default', {}), []),
+            ('removed_phase1_feature', lambda: api.selected_model_spec('label_sheet_local_match', {}), None),
+            ('selected_model_spec', lambda: api.model('default', {}), self.registry['default']),
+            ('YOLO', lambda: api.model('default', {}), object()),
+            ('legacy_model_specs', lambda: api.yolo_loaded_model_ids({}), []),
+            ('legacy_model_specs', lambda: api.yolo_model_ready('default', {}), []),
+            ('list_trained_model_specs', lambda: api.yolo_loaded_model_ids({}), []),
+        ]
+        for target, operation, valid in cases:
+            with self.subTest(target=target, operation=operation):
+                self.models.clear(); self.paths.clear()
+                self.paths['known'] = self.path.resolve()
+                before_models = dict(self.models); before_paths = dict(self.paths)
+                events = []; attempts = []; error = RuntimeError('first model boundary')
+                with ExitStack() as stack:
+                    for name in names:
+                        original = getattr(api, name)
+                        def invoke(*args, _name=name, _original=original, **kwargs):
+                            events.append(_name)
+                            if _name == target:
+                                attempts.append(args)
+                                if len(attempts) == 1:
+                                    raise error
+                                return valid
+                            return _original(*args, **kwargs)
+                        stack.enter_context(patch.object(api, name, invoke))
+                    with self.assertRaises(RuntimeError) as raised:
+                        operation()
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(attempts), 1)
+                self.assertEqual(events[-1], target)
+                self.assertEqual(self.models, before_models)
+                self.assertEqual(self.paths, before_paths)
+
+    def test_trained_typeerror_fallback_stops_after_second_failure(self):
+        api = self.api; config = {'fixture': True}
+        for second_error in (TypeError('second typeerror'), RuntimeError('second runtimeerror')):
+            with self.subTest(second=type(second_error).__name__):
+                self.trained.reset_mock()
+                self.trained.side_effect = [TypeError('original compatibility trigger'), second_error,
+                                           [self.registry['default']]]
+                with self.assertRaises(type(second_error)) as raised:
+                    api.selected_model_spec('default', config)
+                self.assertIs(raised.exception, second_error)
+                self.assertEqual(self.trained.call_args_list, [call(config), call()])
+                self.factory.assert_not_called()
+                self.assertEqual(self.models, {}); self.assertEqual(self.paths, {})
+        self.trained.reset_mock(); error = RuntimeError('no compatibility fallback')
+        self.trained.side_effect = [error, [self.registry['default']]]
+        with self.assertRaises(RuntimeError) as raised:
+            api.selected_model_spec('default', config)
+        self.assertIs(raised.exception, error)
+        self.trained.assert_called_once_with(config)
+
+    def test_filesystem_failures_stop_before_cache_publication(self):
+        api = self.api
+        for method in ('exists', 'resolve'):
+            with self.subTest(method=method):
+                error = OSError('first path failure'); attempts = []
+                original = getattr(Path, method)
+                def fail_once(path, *args, **kwargs):
+                    attempts.append(path)
+                    if len(attempts) == 1:
+                        raise error
+                    return original(path, *args, **kwargs)
+                with patch.object(Path, method, fail_once):
+                    with self.assertRaises(OSError) as raised:
+                        api.model('default', {})
+                self.assertIs(raised.exception, error)
+                self.assertEqual(attempts, [self.path])
+                self.assertEqual(self.models, {}); self.assertEqual(self.paths, {})
+                self.factory.assert_not_called()
+
+    def test_new_registry_default_ports_preserve_reads_and_first_failure(self):
+        selection = self.api._model_selection
+        for field, fail_at, requested in [('registry', 1, 'default'), ('registry', 2, 'default'),
+                                          ('default_id', 1, None)]:
+            with self.subTest(field=field, fail_at=fail_at):
+                events = []; calls = []; error = RuntimeError('new model policy port')
+                original = getattr(selection, field)
+                def fail_once(*args, **kwargs):
+                    calls.append(args); events.append('port')
+                    if len(calls) == fail_at:
+                        raise error
+                    return original(*args, **kwargs)
+                with ExitStack() as stack:
+                    stack.enter_context(patch.object(selection, field, fail_once))
+                    for name in ('specialized', 'trained'):
+                        original_callback = getattr(selection, name)
+                        def observe(*args, _name=name, _original=original_callback, **kwargs):
+                            events.append(_name)
+                            return _original(*args, **kwargs)
+                        stack.enter_context(patch.object(selection, name, observe))
+                    with self.assertRaises(RuntimeError) as raised:
+                        self.api.selected_model_spec(requested, {})
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(calls), fail_at)
+                self.assertEqual(events[-1], 'port')
+                self.factory.assert_not_called()
+
+
+    def test_factory_capture_before_path_string_and_after_resolution(self):
+        api = self.api
+        for mode in ('ordinary', 'prior-replacement', 'missing'):
+            with self.subTest(mode=mode):
+                self.models.clear(); self.paths.clear()
+                events = []; armed = False; instances = {name: object() for name in ('A', 'B', 'C')}
+                factories = {name: (lambda value, name=name: (events.append(name), instances[name])[1])
+                             for name in instances}
+                original_resolve = Path.resolve; original_string = Path.__str__
+                def resolve(path, *args, **kwargs):
+                    nonlocal armed
+                    result = original_resolve(path, *args, **kwargs)
+                    if mode == 'prior-replacement':
+                        events.append('prior'); api.YOLO = factories['B']
+                    elif mode == 'missing':
+                        events.append('prior'); api.YOLO = None
+                    armed = True
+                    return result
+                def stringify(path):
+                    nonlocal armed
+                    if armed:
+                        armed = False; events.append('str'); api.YOLO = factories['C']
+                    return original_string(path)
+                with patch.object(api, 'YOLO', factories['A']), patch.object(Path, 'resolve', resolve), \
+                        patch.object(Path, '__str__', stringify):
+                    if mode == 'missing':
+                        with self.assertRaises(TypeError):
+                            api.model('default', {})
+                    else:
+                        result = api.model('default', {})
+                expected = ['str', 'A'] if mode == 'ordinary' else ['prior', 'str', 'B']
+                if mode == 'missing':
+                    self.assertEqual(events, ['prior', 'str'])
+                    self.assertEqual(self.models, {}); self.assertEqual(self.paths, {})
+                else:
+                    self.assertEqual(events, expected)
+                    self.assertIs(result, instances[expected[-1]])
+                    self.assertIs(self.models['default'], result)
+                    self.assertEqual(self.paths['default'], self.path.resolve())
+
+
+    def test_cache_publication_failure_preserves_original_partial_state(self):
+        api = self.api
+        for failing in ('models', 'paths'):
+            with self.subTest(failing=failing):
+                error = RuntimeError('first cache write'); events = []; instance = object()
+                class Cache(dict):
+                    def __init__(self, name):
+                        super().__init__(); self.name = name; self.writes = 0
+                    def __setitem__(self, key, value):
+                        self.writes += 1; events.append(self.name)
+                        if self.name == failing and self.writes == 1:
+                            raise error
+                        return super().__setitem__(key, value)
+                models, paths = Cache('models'), Cache('paths')
+                with ExitStack() as stack:
+                    stack.enter_context(patch.object(api, '_models', models))
+                    stack.enter_context(patch.object(api, '_model_paths', paths))
+                    # Bind the actual state owner after migration; old function bodies
+                    # consume the same temporary dictionaries through root aliases.
+                    owner = getattr(api, '_local_models', None)
+                    if owner is not None:
+                        stack.enter_context(patch.object(owner, 'models', models))
+                        stack.enter_context(patch.object(owner, 'paths', paths))
+                    factory = stack.enter_context(patch.object(api, 'YOLO', return_value=instance))
+                    with self.assertRaises(RuntimeError) as raised:
+                        api.model('default', {})
+                self.assertIs(raised.exception, error)
+                self.assertEqual(events, ['models'] if failing == 'models' else ['models', 'paths'])
+                self.assertEqual(models, {} if failing == 'models' else {'default': instance})
+                self.assertEqual(paths, {})
+                factory.assert_called_once_with(str(self.path))
+
+
+    def test_loaded_path_errors_skip_once_or_propagate_without_retry(self):
+        api = self.api; self.models['cached'] = object(); self.paths['cached'] = self.path.resolve()
+        self.legacy.return_value = [{'id': 'alias', 'path': self.path}]
+        for kind in (OSError, TypeError, ValueError):
+            with self.subTest(error=kind.__name__):
+                error = kind('first loaded path failure'); calls = []
+                original = Path.resolve
+                def fail_once(path, *args, **kwargs):
+                    calls.append(path)
+                    if len(calls) == 1:
+                        raise error
+                    return original(path, *args, **kwargs)
+                with patch.object(Path, 'resolve', fail_once):
+                    if kind is ValueError:
+                        with self.assertRaises(ValueError) as raised:
+                            api.yolo_loaded_model_ids({})
+                        self.assertIs(raised.exception, error)
+                    else:
+                        self.assertEqual(api.yolo_loaded_model_ids({}), ['cached'])
+                self.assertEqual(calls, [self.path])
+                self.assertEqual(set(self.models), {'cached'}); self.assertEqual(set(self.paths), {'cached'})
+                self.factory.assert_not_called()
+
+    def test_falsey_cached_instances_are_retained_by_id_and_path(self):
+        api = self.api
+        class FalseyModel:
+            def __bool__(self): return False
+        for cached in (None, FalseyModel()):
+            with self.subTest(cached=cached):
+                self.models.clear(); self.paths.clear(); self.models['default'] = cached
+                self.assertIs(api.model('default', {}), cached)
+                self.assertEqual(self.paths, {})
+                self.paths['default'] = self.path.resolve()
+                self.registry['alias'] = {'id': 'alias', 'path': self.path}
+                self.assertIs(api.model('alias', {}), cached)
+                self.assertIs(self.models['alias'], cached)
+                self.assertEqual(self.paths['alias'], self.path.resolve())
+                self.factory.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()
