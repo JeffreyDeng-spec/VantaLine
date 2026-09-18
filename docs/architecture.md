@@ -1,5 +1,10 @@
 # Architecture
 
+Training catalog path, resolver, audit, OCR and pipeline callbacks use seven narrow
+getters at nine original argument expressions. This preserves callback capture
+before argument effects, including prior replacement and missing callbacks. Finder
+repository selection, lazy snapshots and partial-failure state remain unchanged.
+
 Training discovery now lives in `training.model_catalog.TrainedModelCatalog`,
 with filesystem, accessory, pipeline and identity/audit ports. `training.task_lookup`
 creates same-thread operation snapshots; `pipeline.training_links` resolves the

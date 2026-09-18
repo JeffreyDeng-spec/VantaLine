@@ -22772,15 +22772,15 @@ _training_links = TrainingLinks(tasks=lambda: load_pipeline_tasks(), name=lambda
 _trained_model_catalog = TrainedModelCatalog(
     config=lambda: load_config(),
     files=TrainingFiles(roots=lambda: training_run_roots(), finder=lambda: training_task_finder(),
-        task_path=lambda name: training_task_path(name), read=lambda path: load_json_file_mtime_cached(path),
-        output=lambda: OUTPUT_DIR, resolve=lambda path: resolve_service_path(path)),
+        task_path=lambda: training_task_path, read=lambda path: load_json_file_mtime_cached(path),
+        output=lambda: OUTPUT_DIR, resolve=lambda: resolve_service_path),
     accessories=TrainingAccessories(uid=lambda item: accessory_uid(item), serialize=lambda item: serialize_accessory(item),
-        uses_ocr=lambda item: accessory_uses_ocr(item), profiles=lambda items, labels: build_ocr_accessory_profiles(items, labels)),
+        uses_ocr=lambda: accessory_uses_ocr, profiles=lambda: build_ocr_accessory_profiles),
     pipeline=TrainingPipeline(tasks=lambda: load_pipeline_tasks(),
-        link=lambda run_id, tasks: pipeline_task_link_for_training_run(run_id, tasks),
-        method=lambda method: normalize_pipeline_detection_method(method)),
+        link=lambda: pipeline_task_link_for_training_run,
+        method=lambda: normalize_pipeline_detection_method),
     access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
-        audit=lambda record, path: record_audit_fields(record, path)),
+        audit=lambda: record_audit_fields),
     rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config),
 )
 

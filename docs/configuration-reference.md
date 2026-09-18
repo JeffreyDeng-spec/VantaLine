@@ -1,5 +1,10 @@
 # Configuration reference
 
+Training catalog path, resolver, audit, OCR and pipeline callbacks use seven narrow
+getters at nine original argument expressions. This preserves callback capture
+before argument effects, including prior replacement and missing callbacks. Finder
+repository selection, lazy snapshots and partial-failure state remain unchanged.
+
 Training model discovery keeps existing config fallback, task/manifest/metadata
 precedence, accessory counts and OCR variant selection. It adds no environment or
 business API setting. Source manifest v15 includes `training/task_lookup.py`,

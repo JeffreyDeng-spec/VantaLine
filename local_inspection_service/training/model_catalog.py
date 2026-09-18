@@ -12,32 +12,32 @@ Record = dict[str, Any]
 class TrainingFiles:
     roots: Callable[[], Sequence[Path]]
     finder: Callable[[], TaskFinder]
-    task_path: Callable[[str], Path]
+    task_path: Callable[[], Callable[[str], Path]]
     read: Callable[[Path], Any]
     output: Callable[[], Path]
-    resolve: Callable[[str], Path]
+    resolve: Callable[[], Callable[[str], Path]]
 
 
 @dataclass(frozen=True)
 class TrainingAccessories:
     uid: Callable[[Record], str]
     serialize: Callable[[Record], Record]
-    uses_ocr: Callable[[Record], bool]
-    profiles: Callable[[list[Record], dict[str, str]], Record]
+    uses_ocr: Callable[[], Callable[[Record], bool]]
+    profiles: Callable[[], Callable[[list[Record], dict[str, str]], Record]]
 
 
 @dataclass(frozen=True)
 class TrainingPipeline:
     tasks: Callable[[], list[Record]]
-    link: Callable[[str, list[Record]], dict[str, str]]
-    method: Callable[[str], str]
+    link: Callable[[], Callable[[str, list[Record]], dict[str, str]]]
+    method: Callable[[], Callable[[str], str]]
 
 
 @dataclass(frozen=True)
 class TrainingAccess:
     current_user: Callable[[], Record | None]
     visible: Callable[[Record, Record], bool]
-    audit: Callable[[Record, Path], Record]
+    audit: Callable[[], Callable[[Record, Path], Record]]
 
 
 class TrainedModelCatalog:
@@ -62,7 +62,7 @@ class TrainedModelCatalog:
         pipeline_tasks = self.pipeline.tasks()
         pipeline_tasks_by_id = {str(item.get("id") or ""): item for item in pipeline_tasks}
         for run_dir in sorted(run_dirs, key=lambda p: p.stat().st_mtime, reverse=True):
-            task = find_training_task_for_path(self.files.task_path(run_dir.name)) or {}
+            task = find_training_task_for_path(self.files.task_path()(run_dir.name)) or {}
             if task.get("action") != "train_model":
                 continue
             weights = run_dir / "weights" / "best.pt"
@@ -72,14 +72,14 @@ class TrainedModelCatalog:
                 meta = {}
             manifest_path = self.files.output() / "training_datasets" / run_dir.name / "manifest.json"
             if task.get("manifest_path"):
-                manifest_path = self.files.resolve(task["manifest_path"])
+                manifest_path = self.files.resolve()(task["manifest_path"])
             manifest = self.files.read(manifest_path)
             if not isinstance(manifest, dict):
                 manifest = {}
-            audit = self.access.audit({**manifest, **task}, run_dir)
+            audit = self.access.audit()({**manifest, **task}, run_dir)
             raw_class_names = [str(name or f"class_{idx}") for idx, name in enumerate(manifest.get("class_names") or ["accessory"])]
             task_id_value = str(task.get("task_id") or manifest.get("task_id") or run_dir.name)
-            pipeline_link = self.pipeline.link(run_dir.name, pipeline_tasks)
+            pipeline_link = self.pipeline.link()(run_dir.name, pipeline_tasks)
             pipeline_task_id = str(
                 task.get("pipeline_task_id") or manifest.get("pipeline_task_id") or meta.get("pipeline_task_id") or pipeline_link.get("pipeline_task_id") or ""
             )
@@ -125,15 +125,15 @@ class TrainedModelCatalog:
                 ocr_accessory_ids = {
                     str(item_id)
                     for item_id in selected_accessory_ids
-                    if self.accessories.uses_ocr(accessories_by_id.get(str(item_id), {}))
+                    if self.accessories.uses_ocr()(accessories_by_id.get(str(item_id), {}))
                 }
             if not ocr_accessory_ids and pipeline_task_id:
                 pipeline_task = pipeline_tasks_by_id.get(pipeline_task_id)
-                if pipeline_task and self.pipeline.method(str(pipeline_task.get("detection_method") or "")) == "yolo_ocr":
+                if pipeline_task and self.pipeline.method()(str(pipeline_task.get("detection_method") or "")) == "yolo_ocr":
                     ocr_accessory_ids = {
                         str(item_id)
                         for item_id in selected_accessory_ids
-                        if self.accessories.uses_ocr(accessories_by_id.get(str(item_id), {}))
+                        if self.accessories.uses_ocr()(accessories_by_id.get(str(item_id), {}))
                     }
                     if not ocr_accessory_ids and selected_accessory_ids:
                         ocr_accessory_ids = {str(selected_accessory_ids[0])}
@@ -145,7 +145,7 @@ class TrainedModelCatalog:
             if pipeline_task_id:
                 pipeline_task = pipeline_tasks_by_id.get(pipeline_task_id)
                 pipeline_task_requires_ocr = bool(
-                    pipeline_task and self.pipeline.method(str(pipeline_task.get("detection_method") or "")) == "yolo_ocr"
+                    pipeline_task and self.pipeline.method()(str(pipeline_task.get("detection_method") or "")) == "yolo_ocr"
                 )
             if ocr_accessory_ids or pipeline_task_requires_ocr:
                 sibling_variant = "yolo" if available_variants[0] == "yolo_ocr" else "yolo_ocr"
@@ -176,7 +176,7 @@ class TrainedModelCatalog:
                         "class_accessory_map": {v: k for k, v in accessory_class_map.items()},
                         "ocr_accessory_ids": spec_ocr_accessory_ids,
                         "ocr_model_class_ids": spec_ocr_model_class_ids,
-                        "ocr_accessory_profiles": self.accessories.profiles(
+                        "ocr_accessory_profiles": self.accessories.profiles()(
                             [accessories_by_id.get(str(item_id), {}) for item_id in spec_ocr_accessory_ids],
                             accessory_labels,
                         ) if spec_uses_ocr else {},

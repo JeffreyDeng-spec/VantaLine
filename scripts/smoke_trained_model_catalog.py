@@ -296,11 +296,11 @@ class TrainedCatalogContracts(unittest.TestCase):
                 LookupRows(row_raw_json_list,file_stem_identifier,lambda task,value,row:task.get('id')==value))
             links=TrainingLinks(f.pipeline_load,lambda task:task.get('name',''))
             catalog=TrainedModelCatalog(f.config_load,
-                TrainingFiles(lambda:[f.runs],lookup.training_task_finder,lambda name:f.root/(name+'.json'),
-                    f.read,lambda:f.output,lambda path:f.root/path),
-                TrainingAccessories(lambda item:'generated',dict,f.uses_ocr,f.profiles),
-                TrainingPipeline(f.pipeline_load,links.pipeline_task_link_for_training_run,lambda method:method),
-                TrainingAccess(user.get,f.visible,f.audit),f.rules)
+                TrainingFiles(lambda:[f.runs],lookup.training_task_finder,lambda:(lambda name:f.root/(name+'.json')),
+                    f.read,lambda:f.output,lambda:(lambda path:f.root/path)),
+                TrainingAccessories(lambda item:'generated',dict,lambda:f.uses_ocr,lambda:f.profiles),
+                TrainingPipeline(f.pipeline_load,lambda:links.pipeline_task_link_for_training_run,lambda:(lambda method:method)),
+                TrainingAccess(user.get,f.visible,lambda:f.audit),f.rules)
             f.repository.assert_not_called(); f.config_load.assert_not_called(); f.pipeline_load.assert_not_called()
             return catalog,lookup,user
         first,first_lookup,first_user=compose(self.f); second,second_lookup,second_user=compose(other)
@@ -341,6 +341,256 @@ class TrainedCatalogContracts(unittest.TestCase):
                     self.assertEqual(self.api.training_task_finder()(Path('two.json'))['id'],'two')
                     self.assertEqual(self.f.repo.fetch_all.call_count,2); self.f.file_loader.assert_not_called()
             finally: control.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))
+
+
+    def test_catalog_callback_first_failures_preserve_original_exception(self):
+        api = self.api; f = self.f
+        f.run(task={'model_variant': 'yolo_ocr', 'manifest_path': 'custom-manifest.json',
+                    'pipeline_task_id': 'p', 'owner_user_id': 'alice'})
+        f.config['accessories'].append({'id': '', 'name': 'Generated'})
+        f.pipeline = [{'id': 'p', 'model_run_id': 'run', 'detection_method': 'yolo_ocr'}]
+        api._request_user.set({'id': 'alice'})
+        names = ('load_config', 'training_run_roots', 'training_task_finder', 'load_pipeline_tasks',
+            'training_task_path', 'load_training_task', 'load_json_file_mtime_cached', 'resolve_service_path',
+            'record_audit_fields', 'pipeline_task_link_for_training_run', 'accessory_uid',
+            'serialize_accessory', 'accessory_uses_ocr', 'build_ocr_accessory_profiles',
+            'normalize_pipeline_detection_method', 'apply_task_rule_override_to_spec', 'record_visible_to_user')
+        originals = {name: getattr(api, name) for name in names}
+        for target in names:
+            with self.subTest(target=target), ExitStack() as stack:
+                error = RuntimeError('first catalog callback'); events = []; attempts = []
+                for name, original in originals.items():
+                    def invoke(*args, _name=name, _original=original, **kwargs):
+                        events.append(_name)
+                        if _name == target:
+                            attempts.append(args)
+                            if len(attempts) == 1: raise error
+                        return _original(*args, **kwargs)
+                    stack.enter_context(patch.object(api, name, invoke))
+                with self.assertRaises(RuntimeError) as raised:
+                    api.list_trained_model_specs(None)
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(attempts), 1); self.assertEqual(events[-1], target)
+
+    def test_finder_first_failures_are_not_automatically_retried(self):
+        api = self.api; f = self.f
+        for target in ('repository', 'get', 'fetch_all', 'row_raw_json_list', 'put',
+                       'file_stem_identifier', 'training_task_matches_identifier'):
+            with self.subTest(target=target), ExitStack() as stack:
+                error = RuntimeError('first finder callback'); events = []; attempts = []
+                f.cache.clear(); repo = Mock(); f.repo = repo
+                repo.fetch_all.return_value = [{'raw_json': {'id': 'one'}}]
+                bindings = [(api, 'runtime_postgres_repository_or_none', 'repository'),
+                    (api, 'store_read_cache_get', 'get'), (repo, 'fetch_all', 'fetch_all'),
+                    (api, 'row_raw_json_list', 'row_raw_json_list'), (api, 'store_read_cache_put', 'put'),
+                    (api, 'file_stem_identifier', 'file_stem_identifier'),
+                    (api, 'training_task_matches_identifier', 'training_task_matches_identifier')]
+                for owner, name, label in bindings:
+                    original = getattr(owner, name)
+                    def invoke(*args, _label=label, _original=original, **kwargs):
+                        events.append(_label)
+                        if _label == target:
+                            attempts.append(args)
+                            if len(attempts) == 1: raise error
+                        return _original(*args, **kwargs)
+                    stack.enter_context(patch.object(owner, name, invoke))
+                with self.assertRaises(RuntimeError) as raised:
+                    finder = api.training_task_finder()
+                    finder(Path('one.json'))
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(attempts), 1); self.assertEqual(events[-1], target)
+                f.file_loader.assert_not_called()
+                if target in ('repository', 'get', 'fetch_all', 'row_raw_json_list', 'put'):
+                    self.assertNotIn('training_task_pairs', f.cache)
+                else:
+                    self.assertEqual(f.cache['training_task_pairs'][0][0], {'id': 'one'})
+
+
+    def test_catalog_filesystem_failures_are_not_retried(self):
+        api = self.api; f = self.f; run = f.run()
+        for name in ('exists', 'iterdir', 'is_dir', 'stat'):
+            with self.subTest(boundary=name):
+                original = getattr(Path, name); error = OSError('first filesystem boundary')
+                hits = []; run_stats = []
+                def fail_once(path, *args, **kwargs):
+                    target = path == (f.runs if name in ('exists', 'iterdir') else run)
+                    if name == 'stat' and path == run:
+                        run_stats.append(path)
+                        # The first run stat belongs to is_dir; the second is sorting.
+                        target = len(run_stats) == 2
+                    if target:
+                        hits.append(path)
+                        if len(hits) == 1: raise error
+                    return original(path, *args, **kwargs)
+                with patch.object(Path, name, fail_once):
+                    with self.assertRaises(OSError) as raised:
+                        api.list_trained_model_specs(f.config)
+                self.assertIs(raised.exception, error); self.assertEqual(len(hits), 1)
+                if name == 'stat': self.assertEqual(len(run_stats), 2)
+                f.read.assert_not_called(); f.rules.assert_not_called()
+
+
+    def test_catalog_callbacks_capture_before_arguments_and_after_pipeline_load(self):
+        api = self.api
+        targets = {'resolve': 'resolve_service_path', 'audit': 'record_audit_fields',
+            'uses': 'accessory_uses_ocr', 'uses_second': 'accessory_uses_ocr', 'method_first': 'normalize_pipeline_detection_method',
+            'method_second': 'normalize_pipeline_detection_method', 'profiles': 'build_ocr_accessory_profiles',
+            'task_path': 'training_task_path', 'link': 'pipeline_task_link_for_training_run'}
+        for mode, target in targets.items():
+            for variant in ('ordinary', 'prior', 'missing'):
+                with self.subTest(mode=mode, variant=variant), ExitStack() as stack:
+                    directory = stack.enter_context(tempfile.TemporaryDirectory(prefix='catalog-capture-'))
+                    f = Fixture(Path(directory)); f.bind(api, stack); f.run()
+                    events = []; swapped = False; armed = False
+                    def value(*args):
+                        if mode == 'resolve': return f.root/'custom.json'
+                        if mode == 'audit': return dict(created_at=1, updated_at=2, owner_user_id='alice', owner_username='Alice')
+                        if mode.startswith('uses'): return False
+                        if mode.startswith('method'): return 'yolo_ocr'
+                        if mode in ('profiles', 'link'): return {}
+                        return f.root/(args[0]+'.json')
+                    def callback(label, *args):
+                        first = not events
+                        events.append(label)
+                        if mode == 'uses_second' and first and variant != 'ordinary':
+                            events.append('prior')
+                            setattr(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
+                        return value(*args)
+                    def swap():
+                        nonlocal swapped
+                        if not swapped:
+                            swapped = True; events.append('arg')
+                            setattr(api, target, lambda *args: callback('C', *args))
+                    def preceding():
+                        if variant != 'ordinary' and mode != 'uses_second':
+                            events.append('prior')
+                            setattr(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
+                        return f.pipeline
+                    f.pipeline_load.side_effect = preceding
+                    stack.enter_context(patch.object(api, target, lambda *args: callback('A', *args)))
+                    class Task(dict):
+                        def __iter__(self): return super().__iter__()
+                        def keys(self):
+                            if mode == 'audit': swap()
+                            return super().keys()
+                        def __getitem__(self, key):
+                            if mode == 'resolve' and key == 'manifest_path': swap()
+                            return super().__getitem__(key)
+                    task = Task(f.tasks['run']); f.tasks['run'] = task
+                    if mode == 'resolve':
+                        task['manifest_path'] = 'custom.json'; f.files[f.root/'custom.json'] = {'class_names': ['raw']}
+                    if mode.startswith('uses'):
+                        class Identifier:
+                            count = 0
+                            def __str__(self):
+                                self.count += 1
+                                if self.count == (5 if mode == 'uses_second' else 4): swap()
+                                return 'a'
+                        task['selected_accessory_ids'] = [Identifier()]
+                        if mode == 'uses_second':
+                            task['pipeline_task_id'] = 'p'
+                            f.pipeline = [{'id': 'p', 'detection_method': 'yolo_ocr'}]
+                    if mode.startswith('method'):
+                        class Pipeline(dict):
+                            def get(self, key, *args):
+                                if key == 'detection_method': swap()
+                                return super().get(key, *args)
+                        task['pipeline_task_id'] = 'p'; f.pipeline = [Pipeline(id='p', detection_method='yolo_ocr')]
+                        if mode == 'method_second': task['ocr_accessory_ids'] = ['a']
+                    if mode == 'profiles':
+                        class Identifier(str):
+                            def __str__(self):
+                                if armed: swap()
+                                return self
+                        class Meta(dict):
+                            def get(self, key, *args):
+                                nonlocal armed
+                                if key == 'note': armed = True
+                                return super().get(key, *args)
+                        task['ocr_accessory_ids'] = [Identifier('a')]
+                        f.files[f.runs/'run/library_metadata.json'] = Meta(note='fixture')
+                    if mode in ('task_path', 'link'):
+                        class Run(type(Path())):
+                            @property
+                            def name(path):
+                                path.reads = getattr(path, 'reads', 0) + 1
+                                if path.reads == (1 if mode == 'task_path' else 3): swap()
+                                return super().name
+                        run = Run(f.runs/'run')
+                        class Root:
+                            def exists(self): return True
+                            def iterdir(self): return [run]
+                        stack.enter_context(patch.object(api, 'training_run_roots', lambda: [Root()]))
+                    if variant == 'missing':
+                        with self.assertRaises(TypeError): api.list_trained_model_specs(f.config)
+                        expected = ['prior', 'arg']
+                    else:
+                        api.list_trained_model_specs(f.config)
+                        expected = ['arg', 'A'] if variant == 'ordinary' else ['prior', 'arg', 'B']
+                        if mode == 'method_first': expected.append('C')
+                    if mode == 'uses_second':
+                        expected = ['A', 'arg', 'A'] if variant == 'ordinary' else (['A', 'prior', 'arg'] if variant == 'missing' else ['A', 'prior', 'arg', 'B'])
+                    self.assertEqual(events, expected)
+
+
+    def test_direct_pipeline_link_failures_are_not_retried(self):
+        api = self.api; f = self.f
+        f.pipeline = [{'id': 'pipe', 'model_run_id': 'run', 'name': 'Name'}]
+        for target in ('load_pipeline_tasks', 'task_record_name'):
+            with self.subTest(target=target):
+                error = RuntimeError('first link boundary'); calls = []
+                original = getattr(api, target)
+                def fail_once(*args):
+                    calls.append(args)
+                    if len(calls) == 1: raise error
+                    return original(*args)
+                with patch.object(api, target, fail_once):
+                    with self.assertRaises(RuntimeError) as raised:
+                        api.pipeline_task_link_for_training_run('run')
+                self.assertIs(raised.exception, error); self.assertEqual(len(calls), 1)
+
+    def test_second_catalog_reads_and_ocr_calls_are_not_retried(self):
+        api = self.api; f = self.f
+        f.run(task={'pipeline_task_id': 'p'})
+        f.pipeline = [{'id': 'p', 'detection_method': 'yolo_ocr'}]
+        for target in ('load_json_file_mtime_cached', 'accessory_uses_ocr', 'normalize_pipeline_detection_method'):
+            with self.subTest(target=target):
+                error = RuntimeError('second catalog boundary'); calls = []
+                original = getattr(api, target)
+                def fail_second(*args):
+                    calls.append(args)
+                    if len(calls) == 2: raise error
+                    return original(*args)
+                with patch.object(api, target, fail_second):
+                    with self.assertRaises(RuntimeError) as raised:
+                        api.list_trained_model_specs(f.config)
+                self.assertIs(raised.exception, error); self.assertEqual(len(calls), 2)
+
+    def test_new_catalog_and_loader_getters_fail_once(self):
+        from dataclasses import replace
+        api = self.api; catalog = api._trained_model_catalog
+        cases = [('files', 'task_path'), ('files', 'resolve'), ('files', 'output'),
+                 ('access', 'audit'), ('access', 'current_user'), ('accessories', 'uses_ocr'),
+                 ('accessories', 'profiles'), ('pipeline', 'method'), ('pipeline', 'link'),
+                 ('lookup', 'file_loader')]
+        for owner, field in cases:
+            with self.subTest(owner=owner, field=field), ExitStack() as stack:
+                directory = stack.enter_context(tempfile.TemporaryDirectory(prefix='catalog-getter-'))
+                f = Fixture(Path(directory)); f.bind(api, stack)
+                f.run(task={'manifest_path': 'custom.json', 'pipeline_task_id': 'p'})
+                f.pipeline = [{'id': 'p', 'detection_method': 'yolo_ocr'}]
+                error = RuntimeError('first getter failure'); calls = []
+                original = getattr(api._training_task_lookup, field) if owner == 'lookup' else getattr(getattr(catalog, owner), field)
+                def fail_once():
+                    calls.append(field)
+                    if len(calls) == 1: raise error
+                    return original()
+                if owner == 'lookup': stack.enter_context(patch.object(api._training_task_lookup, field, fail_once))
+                else: stack.enter_context(patch.object(catalog, owner, replace(getattr(catalog, owner), **{field: fail_once})))
+                with self.assertRaises(RuntimeError) as raised:
+                    if owner == 'lookup': api.training_task_finder()
+                    else: api.list_trained_model_specs(f.config)
+                self.assertIs(raised.exception, error); self.assertEqual(calls, [field])
 
 
 if __name__ == '__main__': unittest.main()

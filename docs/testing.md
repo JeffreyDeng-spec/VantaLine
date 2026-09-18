@@ -1,9 +1,13 @@
 # Testing
 
-`python scripts/smoke_trained_model_catalog.py --postgres` covers twelve groups:
+`python scripts/smoke_trained_model_catalog.py --postgres` covers nineteen groups:
 ten offline groups and the isolated PostgreSQL group first passed against the
-original three root functions; one additional group checks lazy independent service
-construction and late composition callbacks. Contracts include finder loader identity,
+original three root functions; two groups check lazy independent service
+construction, late composition callbacks and new getter failures. Seventeen business
+groups also run against immutable original function bodies. Added failure contracts
+cover callback/filesystem boundaries, second reads and second OCR/method calls;
+27 traces cover nine original callback expressions with normal, prior-replaced and
+missing callbacks. No first failure is automatically retried. Contracts include finder loader identity,
 single lazy scan, local/shared snapshot aliases, partial failures without retry,
 first-match links, duplicate roots, complete variant payloads, missing artifacts,
 malformed counts/maps, final identity filtering and two accounts through `to_thread`.
