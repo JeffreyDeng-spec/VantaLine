@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_presence_results.py` runs 19 synthetic groups.
+Fourteen original business groups passed before migration on Windows and Linux;
+17 expanded groups also pass against saved original function bodies. Contracts retain
+count precedence, confidence bounds, duplicate IDs, provider metadata merge order and field reads.
+Policies refresh between required items. First-failure recovery fixtures reject hidden retries;
+TypeError/ValueError count fallback behavior remains unchanged.
+No paid model calls, external requests or device operations run in these contracts.
+
 `python scripts/smoke_detection_failures.py` runs 20 synthetic groups.
 Twelve original business groups passed before migration on Windows and Linux;
 16 expanded groups also pass against saved original function bodies. Contracts retain
