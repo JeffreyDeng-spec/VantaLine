@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_training_background_tasks.py` runs 34 synthetic groups.
+Twenty original business groups passed before migration on Windows and Linux;
+28 expanded groups also pass against saved original function bodies, including the
+original model snapshot decorator. Contracts retain exact prompts/process commands,
+timeout evidence, thread save/register/start order, late-bound callbacks and settlement
+failure boundaries. Narrow getters preserve function selection before effectful arguments.
+Independent compositions use isolated files and fake processes/threads; no real model,
+paid inference, physical PLC or production data is used.
+
 `python scripts/smoke_training_background_writes.py` runs 25 synthetic groups.
 Fifteen original business groups passed before migration on Windows and Linux;
 21 expanded groups also pass against saved original function bodies. The original

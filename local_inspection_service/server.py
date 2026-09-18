@@ -19430,58 +19430,37 @@ _task_background_store = TaskBackgroundStore(
 
 def create_background_variants_from_source(source_path: Path, set_dir: Path, count: int = 5) -> list[Path]:
     return _background_variants.create_background_variants_from_source(source_path, set_dir, count)
+from .training.background_codex import CodexBackgroundPaths, CodexBackgroundGeneration, CodexBackgroundThread
+from .training.background_task_runner import BackgroundTaskRecords, BackgroundTaskGeneration, BackgroundTaskRunner
+from .training.background_task_submission import BackgroundTaskSubmission
+from .training.submission import TrainingSubmissionRecords, TrainingSubmissionThreads
+
+_background_codex_generation = CodexBackgroundGeneration(
+    lambda command: shutil.which(command), CodexBackgroundPaths(lambda: IMAGE_WORKER_LOG_DIR, lambda: ROOT),
+    lambda identifier: safe_name(identifier), lambda: subprocess.Popen,
+)
+_background_codex_thread = CodexBackgroundThread(
+    lambda: threading.Thread, lambda: run_codex_background_generation, lambda identifier: safe_name(identifier),
+)
+_background_task_runner = BackgroundTaskRunner(
+    BackgroundTaskRecords(lambda identifier: find_training_task(identifier), lambda identifier: training_task_path(identifier),
+                          lambda: load_training_task, lambda: update_training_task),
+    BackgroundTaskGeneration(lambda: BACKGROUND_SETS_DIR, lambda identifier: safe_background_set_id(identifier),
+                            lambda: update_background_set_manifest,
+                            lambda source_path, set_dir, count=5: create_background_variants_from_source(source_path, set_dir, count),
+                            lambda source_path, set_dir, set_id, count=5: run_codex_background_generation(source_path, set_dir, set_id, count), lambda path: image_file_list(path)),
+    lambda: time.time(), resolve_model_profiles,
+)
+_background_task_submission = BackgroundTaskSubmission(
+    TrainingSubmissionRecords(lambda task: save_training_task(task), lambda task: public_training_task(task)),
+    TrainingSubmissionThreads(lambda: run_background_set_task, lambda **kwargs: threading.Thread(**kwargs), lambda: _training_task_threads),
+    lambda: current_owner_fields(), lambda: time.time(), lambda: uuid.uuid4(),
+)
+
 def run_codex_background_generation(source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
-    if not shutil.which("codex") or not source_path.exists():
-        return []
-    set_dir.mkdir(parents=True, exist_ok=True)
-    log_path = IMAGE_WORKER_LOG_DIR / f"background_{safe_name(set_id)}_codexcli.log"
-    outputs = [set_dir / f"codex_{safe_name(set_id)}_{idx:02d}.png" for idx in range(1, count + 1)]
-    prompt = "\n".join(
-        [
-            "You are the ImageWorker for the local assembly-line inspection service.",
-            "",
-            "Use the attached reference image as the source environment. Generate realistic, empty, overhead-view background PNGs of the same surface type and same environment. Keep camera geometry, material texture, scratches, dust, lighting, rails/edges if present, and mild natural variation. Do not add objects, text, labels, watermarks, hands, people, manuals, bottles, tools, or parts.",
-            "",
-            "Save the final PNG files exactly here:",
-            *[str(path) for path in outputs],
-        ]
-    )
-    command = [
-        "codex",
-        "exec",
-        "--sandbox",
-        "workspace-write",
-        "-C",
-        str(ROOT),
-        "-i",
-        str(source_path),
-        "-",
-    ]
-    try:
-        with log_path.open("w", encoding="utf-8", errors="replace") as log:
-            process = subprocess.Popen(command, cwd=str(ROOT), stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT, text=True)
-            process.communicate(prompt + "\n", timeout=900)
-    except subprocess.TimeoutExpired:
-        try:
-            process.kill()  # type: ignore[name-defined]
-        except Exception:
-            pass
-        return [path for path in outputs if path.exists()]
-    except Exception:
-        return []
-    return [path for path in outputs if path.exists()]
-
-
+    return _background_codex_generation.run_codex_background_generation(source_path, set_dir, set_id, count)
 def start_codex_background_generation(source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> None:
-    thread = threading.Thread(
-        target=run_codex_background_generation,
-        args=(source_path, set_dir, set_id, count),
-        name=f"codex-background-worker-{safe_name(set_id)}",
-        daemon=True,
-    )
-    thread.start()
-
-
+    return _background_codex_thread.start_codex_background_generation(source_path, set_dir, set_id, count)
 def ensure_background_set_minimum_images(set_id: str, min_count: int = 6) -> None:
     return _background_minimum_images.ensure_background_set_minimum_images(set_id, min_count)
 def unique_background_set_id(base_id: str) -> str:
@@ -19554,81 +19533,10 @@ def validate_task_environment_background_image(task_id: str, task: dict[str, Any
     }
 
 
-@pinned_model_profiles(resolve_model_profiles, lambda identity: find_training_task(identity))
 def run_background_set_task(job_id: str) -> None:
-    task = load_training_task(training_task_path(job_id))
-    if not task:
-        return
-    set_id = str(task.get("background_set_id") or "")
-    source_path = Path(str(task.get("source_path") or ""))
-    set_dir = BACKGROUND_SETS_DIR / safe_background_set_id(set_id)
-    try:
-        if not source_path.exists():
-            raise RuntimeError("上传的背景源图不存在。")
-        update_training_task(job_id, status="running", progress=8, started_at=int(time.time()), note="背景任务已启动，正在准备源图。")
-        update_background_set_manifest(set_id, status="generating", updated_at=int(time.time()))
-        local_variants = create_background_variants_from_source(source_path, set_dir, 5)
-        if len(local_variants) < 5:
-            raise RuntimeError(f"本地背景变体生成不足：{len(local_variants)}/5。")
-        update_training_task(
-            job_id,
-            status="running",
-            progress=42,
-            generated_image_count=1 + len(local_variants),
-            note=f"本地背景变体已生成 {len(local_variants)}/5，正在等待 AI 背景生成。",
-        )
-        codex_outputs = run_codex_background_generation(source_path, set_dir, set_id, 5)
-        if len(codex_outputs) < 5:
-            raise RuntimeError(f"AI 背景生成不足：{len(codex_outputs)}/5。")
-        image_count = len(image_file_list(set_dir))
-        update_background_set_manifest(
-            set_id,
-            status="ready",
-            generation_method="queued_codexcli_imgworker_plus_local_same_environment_fallback",
-            image_count=image_count,
-            completed_at=int(time.time()),
-            updated_at=int(time.time()),
-        )
-        update_training_task(
-            job_id,
-            status="completed",
-            progress=100,
-            completed_at=int(time.time()),
-            generated_image_count=image_count,
-            note=f"背景集已生成完成，共 {image_count} 张。",
-        )
-    except Exception as exc:
-        update_background_set_manifest(set_id, status="failed", error=str(exc), updated_at=int(time.time()))
-        update_training_task(job_id, status="failed", progress=100, completed_at=int(time.time()), error=str(exc), note=f"背景生成失败：{exc}")
-
-
+    return _background_task_runner.run_background_set_task(job_id)
 def enqueue_background_set_task(set_id: str, name: str, source_path: Path) -> dict[str, Any]:
-    job_id = f"background_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    task = {
-        "job_id": job_id,
-        "task_id": job_id,
-        "candidate_id": job_id,
-        "candidate_name": name or set_id.replace("_", " "),
-        "label": f"添加背景：{name or set_id.replace('_', ' ')}",
-        "queue_kind": "training",
-        "action": "generate_background_set",
-        "status": "queued",
-        "progress": 0,
-        "created_at": int(time.time()),
-        "background_set_id": set_id,
-        "source_path": str(source_path),
-        "sample_count": 0,
-        "estimated_minutes": 10,
-        "note": "背景生成任务已加入队列；完成前该背景集不会进入可选列表。",
-        **current_owner_fields(),
-    }
-    save_training_task(task)
-    thread = threading.Thread(target=run_background_set_task, args=(job_id,), daemon=True, name=f"background-set-task-{job_id}")
-    _training_task_threads[job_id] = thread
-    thread.start()
-    return public_training_task(task)
-
-
+    return _background_task_submission.enqueue_background_set_task(set_id, name, source_path)
 def training_background_library(background_set_id: str | None = None) -> list[dict[str, Any]]:
     return _training_background_library.training_background_library(background_set_id)
 
