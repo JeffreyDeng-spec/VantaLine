@@ -19683,34 +19683,16 @@ def windows_worker_headers() -> dict[str, str]:
     return _training_executor_settings.windows_worker_headers()
 
 
+from .training.legacy_worker_requests import LegacyWorkerSettings, LegacyWorkerRequests, windows_worker_status as _retired_worker_status
+
+_legacy_worker_requests = LegacyWorkerRequests(
+    LegacyWorkerSettings(lambda: windows_worker_base_url(), lambda: windows_worker_headers(), lambda: windows_worker_timeout_seconds()),
+    lambda *args, **kwargs: requests.request(*args, **kwargs),
+    lambda *args, **kwargs: windows_worker_request(*args, **kwargs), lambda seconds: time.sleep(seconds),
+)
+
 def windows_worker_request(method: str, path: str, *, json_body: dict[str, Any] | None = None, timeout_seconds: float | None = None) -> dict[str, Any]:
-    raise RuntimeError("Windows Worker execution is retired. Production training uses RunPod.")
-    base_url = windows_worker_base_url()
-    if not base_url:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
-    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
-    try:
-        response = requests.request(
-            method,
-            url,
-            json=json_body,
-            headers=windows_worker_headers(),
-            timeout=timeout_seconds or windows_worker_timeout_seconds(),
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {"message": response.text[:500]}
-    if response.status_code >= 400:
-        detail = body.get("detail") if isinstance(body, dict) else body
-        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
-    if not isinstance(body, dict):
-        return {"result": body}
-    return body
-
-
+    return _legacy_worker_requests.windows_worker_request(method, path, json_body=json_body, timeout_seconds=timeout_seconds)
 def windows_worker_form_request(
     method: str,
     path: str,
@@ -19719,43 +19701,9 @@ def windows_worker_form_request(
     files: dict[str, Any] | None = None,
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
-    raise RuntimeError("Windows Worker execution is retired. Production training uses RunPod.")
-    base_url = windows_worker_base_url()
-    if not base_url:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
-    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
-    try:
-        response = requests.request(
-            method,
-            url,
-            data=data,
-            files=files,
-            headers=windows_worker_headers(),
-            timeout=timeout_seconds or windows_worker_timeout_seconds(),
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {"message": response.text[:500]}
-    if response.status_code >= 400:
-        detail = body.get("detail") if isinstance(body, dict) else body
-        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
-    if not isinstance(body, dict):
-        return {"result": body}
-    return body
-
-
+    return _legacy_worker_requests.windows_worker_form_request(method, path, data=data, files=files, timeout_seconds=timeout_seconds)
 def windows_worker_status(*, force: bool = False, probe: bool = True, include_services: bool = False) -> dict[str, Any]:
-    return {
-        "configured": False,
-        "ok": False,
-        "status": "retired",
-        "message": "Windows Worker execution is retired. Production training uses RunPod.",
-    }
-
-
+    return _retired_worker_status(force=force, probe=probe, include_services=include_services)
 def training_execution_status(*, include_worker_probe: bool = False, include_worker_services: bool = False) -> dict[str, Any]:
     return _training_executor_settings.training_execution_status(include_worker_probe=include_worker_probe, include_worker_services=include_worker_services)
 
@@ -20236,19 +20184,7 @@ def windows_worker_request_with_retry(
     attempts: int = 3,
     backoff_seconds: float = 4.0,
 ) -> dict[str, Any]:
-    raise RuntimeError("Windows Worker execution is retired. Production training uses RunPod.")
-    last_exc: Exception | None = None
-    for attempt in range(max(1, attempts)):
-        try:
-            return windows_worker_request(method, path, json_body=json_body, timeout_seconds=timeout_seconds)
-        except RuntimeError as exc:
-            last_exc = exc
-            if attempt + 1 >= attempts:
-                break
-            time.sleep(backoff_seconds * (attempt + 1))
-    raise last_exc if last_exc else RuntimeError("Windows worker request failed")
-
-
+    return _legacy_worker_requests.windows_worker_request_with_retry(method, path, json_body=json_body, timeout_seconds=timeout_seconds, attempts=attempts, backoff_seconds=backoff_seconds)
 from .training.worker_watcher import (
     worker_training_watcher_enabled as _retired_worker_watcher_enabled,
     _worker_training_watch_once as _retired_worker_watch_once,

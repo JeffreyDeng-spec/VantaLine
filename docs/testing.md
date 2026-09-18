@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_training_worker_retired_requests.py` runs 7 synthetic groups.
+Six original business groups passed before migration on Windows and Linux;
+6 expanded groups also pass against saved original function bodies. Contracts retain
+immediate retirement rejection, exact error text, Python argument binding and fresh
+status payloads. Poison parameters and transport substitutes prove no configuration,
+parameter, network, retry, sleep or service-probe work occurs in the retired paths.
+
 `python scripts/smoke_training_worker_watcher.py` runs 14 synthetic groups.
 Eleven original business groups passed before migration on Windows and Linux;
 12 expanded groups also pass against saved original function bodies. Contracts retain

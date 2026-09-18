@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Retired worker request/status extraction adds no database access or connection state. Its public
+request methods immediately reject and its status response is a fresh constant projection; all
+existing task settlement and transaction ownership remains with callers.
+
 Retired watcher extraction performs no task reads/writes from enabled, watch-once or startup
 entry points and creates no database connection. The dormant loop receives a tick callback but
 is not started. Connection, transaction and advisory-lock behavior remain unchanged.
@@ -106,7 +110,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v42 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v43 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
