@@ -1,5 +1,19 @@
 # Architecture
 
+Training catalog path, resolver, audit, OCR and pipeline callbacks use seven narrow
+getters at nine original argument expressions. This preserves callback capture
+before argument effects, including prior replacement and missing callbacks. Finder
+repository selection, lazy snapshots and partial-failure state remain unchanged.
+
+Training discovery now lives in `training.model_catalog.TrainedModelCatalog`,
+with filesystem, accessory, pipeline and identity/audit ports. `training.task_lookup`
+creates same-thread operation snapshots; `pipeline.training_links` resolves the
+first matching task. The catalog depends on a link callback, not the pipeline
+service implementation. Root forwards remain late-bound during migration. Repeated
+roots, missing weight files, stable mtime ordering and shared variant fields keep
+their prior semantics. Request identity is read only after model assembly and rule
+overrides. Training execution and pipeline orchestration remain in the entry point.
+
 Warmup method, path resolver, model loader and error formatter use narrow callback
 getters at their original expressions, after preceding work and before argument
 conversion. Missing callbacks retain argument effects; new getter failures stop
@@ -46,7 +60,7 @@ store instance; test replacements belong at its ports. Root background resolver 
 prefix remain late-bound for compatibility.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v14 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v15 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
@@ -71,7 +85,7 @@ rules and overlays now live in `detection.geometry`, `postprocessing`, `results`
 service receive narrow label providers; the parser resolves the root postprocessor
 at use time. These modules own no model, worker, identity or database state. Internal
 pure helper substitutions belong in their actual modules, not unrelated root aliases.
-Manifest v14 includes these five modules so relocation retains source provenance.
+Manifest v15 includes these five modules so relocation retains source provenance.
 Provider and postprocessor exceptions propagate without an automatic retry.
 
 Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
@@ -152,7 +166,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v14 includes both
+policy or callback caching is introduced. Source manifest v15 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -234,7 +248,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v14 for new tasks.
+`accessories/preparation.py`, included in source manifest v15 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an
