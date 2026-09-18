@@ -77,13 +77,13 @@ def capture():
         for owner, attribute, getters in bindings:
             original = getattr(owner, attribute)
             for getter in getters:
-                assert getter() is original
+                assert getter() == original  # Bound methods are recreated on attribute access.
             replacement = lambda *args, **kwargs: None
             with patch.object(owner, attribute, replacement):
                 for getter in getters:
                     assert getter() is replacement
             for getter in getters:
-                assert getter() is original
+                assert getter() == original
         for name in ("import_text_inspection_standard", "list_text_inspection_standards",
                      "get_text_inspection_standard", "get_text_inspection_asset_content",
                      "add_text_inspection_standard_asset", "patch_text_inspection_asset",
