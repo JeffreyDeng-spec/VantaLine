@@ -1,5 +1,11 @@
 # Production runbook
 
+Standard-route extraction keeps the current jobs, write locks and complete-release
+restart procedure. Partial imports and edit evidence retain existing behavior; a
+repository-factory failure after media creation can leave that file. No cleanup or
+schema migration is bundled. Rollback restores the full prior package and retains
+standard revisions, feedback, source files and uncertain classification attempts.
+
 Revision/diagnostic extraction retains caller-owned transactions, baseline writes,
 partial-failure evidence and existing log handling. It introduces no schema change,
 worker switch or cleanup. Ship all three modules with the matching entry point and

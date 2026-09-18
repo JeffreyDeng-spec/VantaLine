@@ -33973,299 +33973,64 @@ def _text_v2_apply_revision(
     return _text_revisions.apply(standard, assets, action=action, asset_id=asset_id, now=now)
 
 
-@app.post("/api/text-inspection/standards/import")
-async def import_text_inspection_standard(
-    file: UploadFile = File(...),
-    name: str = Form(...),
-    material_code: str = Form(...),
-    version_label: str = Form(...),
-) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, owner_username = _text_v2_owner()
-    clean_name = bounded_text(name.strip(), 120)
-    clean_material = bounded_text(material_code.strip(), 120)
-    clean_version = bounded_text(version_label.strip(), 80)
-    if not clean_name or not clean_material or not clean_version:
-        raise HTTPException(status_code=400, detail="标准名称、物料编码和版本不能为空")
-    contents = await file.read(100 * 1024 * 1024 + 1)
-    if not contents or len(contents) > 100 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="标准文档不能为空且不能超过 100MB")
-    filename = (file.filename or "").lower()
-    if filename.endswith(".pdf") or contents.startswith(b"%PDF-"):
-        raise HTTPException(410, "旧说明书流程已只读，请在文字检验新建任务中导入 PDF")
-    digest = sha256_bytes(contents)
-    duplicate = next((
-        item for item in _text_v2_load("standards")
-        if str(item.get("owner_user_id")) == owner_user_id
-        and item.get("source_sha256") == digest
-        and item.get("material_code") == clean_material
-        and item.get("version_label") == clean_version
-    ), None)
-    if duplicate:
-        if duplicate.get('status') == 'deleted':
-            raise HTTPException(status_code=409, detail='该物料版本已删除并保留历史，请使用新的版本号导入')
-        return {**_text_v2_public(duplicate), "duplicate": True}
-    standard_id = "std_" + uuid.uuid4().hex
-    now = int(time.time())
-    try:
-        if filename.endswith(".doc") and not filename.endswith(".docx"):
-            metadata, blobs = await asyncio.to_thread(extract_doc_images, contents)
-            standard_type, extension = "label", ".doc"
-        elif filename.endswith(".docx"):
-            metadata, blobs = extract_docx_candidates(contents)
-            standard_type, extension = "label", ".docx"
-        elif filename.endswith(".pdf"):
-            info = inspect_pdf(contents)
-            metadata = [{"asset_id": f"asset_{index:04d}_{digest[:12]}", "ordinal": index, "status": "page", "category": "manual_page", "classification_confidence": 1.0} for index in range(1, int(info["page_count"]) + 1)]
-            blobs, standard_type, extension = [], "manual", ".pdf"
-        else:
-            raise HTTPException(status_code=400, detail="仅支持 DOC、DOCX 或 PDF 标准文档")
-    except DocImageUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except DocImageError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except UnsafeDocument as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    source_path = _text_v2_media_path(owner_user_id, standard_id, "source" + extension)
-    _text_v2_write(source_path, contents)
-    standard = {"id": standard_id, "owner_user_id": owner_user_id, "owner_username": owner_username, "name": clean_name, "material_code": clean_material, "version_label": clean_version, "standard_type": standard_type, "status": "draft", "source_sha256": digest, "source_path": str(source_path), "created_at": now, "updated_at": now, "asset_count": len(metadata)}
-    if not _text_v2_save("standards", standard, insert_only=True):
-        raise HTTPException(status_code=409, detail="相同物料、版本和类型的标准已存在")
-    for index, item in enumerate(metadata):
-        asset_id = "ast_" + uuid.uuid4().hex
-        asset_path = ""
-        if standard_type == "label":
-            suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/bmp": ".bmp", "image/gif": ".gif", "image/tiff": ".tiff", "image/emf": ".emf", "image/wmf": ".wmf"}.get(str(item.get("mime_type")), ".bin")
-            path = _text_v2_media_path(owner_user_id, standard_id, f"{asset_id}{suffix}")
-            _text_v2_write(path, blobs[index])
-            asset_path = str(path)
-        asset = {**item, "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id, "asset_kind": "label_candidate" if standard_type == "label" else "manual_page", "media_path": asset_path, "created_at": now, "updated_at": now}
-        if standard_type == 'label':
-            asset.update(status='needs_confirmation', classification_source='unclassified', classification_reason='等待视觉模型识别')
-        _text_v2_save("assets", asset, insert_only=True)
-    if standard_type == 'label':
-        try:
-            document_import_jobs.start(standard_id, owner_user_id)
-        except HTTPException as exc:
-            document_import_jobs.mark_unavailable(standard_id, owner_user_id, str(exc.detail))
-        standard = _text_v2_owned('standards', standard_id, owner_user_id) or standard
-    return {**_text_v2_public(standard), "assets": [_text_v2_public(item) for item in _text_v2_load("assets") if item.get("standard_id") == standard_id]}
+from .text_inspection.standard_api import register as register_text_standards
+from .text_inspection.standard_imports import StandardImports
+from .text_inspection.standard_library import StandardLibrary as TextStandardLibrary
+from .text_inspection.standard_edits import StandardEdits
+from .text_inspection.standard_ports import (
+    StandardAccess, StandardRecords, StandardWrites, StandardMedia,
+    StandardRevisions, StandardParsers, StandardClassification, StandardPreparation,
+)
+from .text_inspection import preparation_policy as _standard_preparation_policy
 
-
-@app.get("/api/text-inspection/standards")
-def list_text_inspection_standards() -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    items = [_text_v2_public(item) for item in _text_v2_load("standards") if str(item.get("owner_user_id")) == owner_user_id and item.get('status') != 'deleted']
-    return {"items": sorted(items, key=lambda item: int(item.get("created_at") or 0), reverse=True)}
-
-
-@app.get("/api/text-inspection/standards/{standard_id}")
-def get_text_inspection_standard(standard_id: str) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    standard = _text_v2_owned("standards", standard_id, owner_user_id)
-    if not standard:
-        raise HTTPException(status_code=404, detail="标准不存在")
-    if standard.get('classification', {}).get('state') == 'processing':
-        document_import_jobs.refresh(standard_id, owner_user_id)
-        standard = _text_v2_owned('standards', standard_id, owner_user_id) or standard
-    assets = [_text_v2_public(item) for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
-    return {**_text_v2_public(standard), "assets": sorted(assets, key=lambda item: int(item.get("ordinal") or 0))}
-
-
-@app.get("/api/text-inspection/assets/{asset_id}/content")
-def get_text_inspection_asset_content(asset_id: str) -> Response:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    asset = _text_v2_owned("assets", asset_id, owner_user_id)
-    if not asset:
-        raise HTTPException(status_code=404, detail="资源不存在")
-    if not asset.get("media_path"):
-        _text_v2_asset_bytes(asset, owner_user_id)
-    contents = _text_v2_asset_bytes(asset, owner_user_id)
-    mime = str(asset.get("mime_type") or ("image/png" if asset.get("asset_kind") == "manual_page" else "application/octet-stream"))
-    return Response(content=contents, media_type=mime, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
-
-
-@app.post("/api/text-inspection/standards/{standard_id}/assets")
-async def add_text_inspection_standard_asset(
-    standard_id: str,
-    file: UploadFile = File(...),
-    expected_revision: str = Form(""),
-) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    standard = _text_v2_owned("standards", standard_id, owner_user_id)
-    if standard and standard.get("standard_type") == "manual":
-        raise HTTPException(410, "旧说明书标准仅供查阅，请新建任务导入 PDF")
-    if not standard:
-        raise HTTPException(status_code=404, detail="标准不存在")
-    if standard.get("standard_type") != "label":
-        raise HTTPException(status_code=409, detail="说明书标准不支持追加标签图片")
-    if standard.get('status') == 'deleted':
-        raise HTTPException(status_code=409, detail='订单已删除')
-    expected = _text_v2_expected_revision(expected_revision)
-    contents = await file.read()
-    contents, mime, suffix, source_format = _text_v2_prepare_image(contents)
-    now = int(time.time())
-    asset_id = "ast_" + uuid.uuid4().hex
-    media_path = _text_v2_media_path(owner_user_id, standard_id, f"{asset_id}{suffix}")
-    asset = {
-        "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
-        "asset_kind": "label_candidate", "ordinal": 0, "status": "candidate",
-        "sha256": sha256_bytes(contents), "mime_type": mime, "category": "label",
-        "context": bounded_text(file.filename or "新增标签图片", 160),
-        "source_format": source_format,
-        "classification_source": "human", "media_path": str(media_path),
-        "created_at": now, "updated_at": now,
-    }
-    _text_v2_write(media_path, contents)
-    if standard.get("preparation_required"):
-        asset["preparation_required"] = True
-    repository = runtime_postgres_repository_or_none()
-    try:
-        if repository is not None:
-            asset, standard = repository.add_text_inspection_standard_asset(
-                standard_id, owner_user_id, asset,
-                revision_id="rev_" + uuid.uuid4().hex, updated_at=now, expected_revision=expected,
-            )
-        else:
-            with _incoming_text_store_lock:
-                standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
-                if not standard or standard.get("standard_type") != "label" or standard.get('status') == 'deleted':
-                    raise HTTPException(status_code=409, detail="标准状态已变化，请刷新后重试")
-                current_revision = int(standard.get("revision_number") or 0)
-                if expected is not None and expected != current_revision:
-                    raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试")
-                assets = [
-                    item for item in _text_v2_load("assets")
-                    if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id
-                ]
-                asset["ordinal"] = max((int(item.get("ordinal") or 0) for item in assets), default=0) + 1
-                if not _text_v2_save("assets", asset, insert_only=True):
-                    raise HTTPException(status_code=409, detail="标签图片序号冲突，请刷新后重试")
-                assets.append(asset)
-                if standard.get("status") == "confirmed":
-                    _text_v2_apply_revision(standard, assets, action="add", asset_id=asset_id, now=now)
-                else:
-                    standard["asset_count"] = len(_text_v2_confirmed_snapshot(assets))
-                    standard["updated_at"] = now
-                _text_v2_save("standards", standard)
-    except HTTPException:
-        media_path.unlink(missing_ok=True)
-        raise
-    except Exception as exc:
-        media_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试") from exc
-    return {"asset": _text_v2_public(asset), "standard": _text_v2_public(standard)}
-
-
-@app.patch("/api/text-inspection/standards/{standard_id}/assets/{asset_id}")
-async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: Request) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    standard = _text_v2_owned("standards", standard_id, owner_user_id)
-    if standard and standard.get("standard_type") == "manual":
-        raise HTTPException(410, "旧说明书标准仅供查阅，请新建任务导入 PDF")
-    asset = _text_v2_owned("assets", asset_id, owner_user_id)
-    if not standard or not asset or asset.get("standard_id") != standard_id:
-        raise HTTPException(status_code=404, detail="标准资源不存在")
-    body = await request.json()
-    action = str(body.get("action") or "") if isinstance(body, dict) else ""
-    status_by_action = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate", "review": "needs_confirmation"}
-    if action not in status_by_action:
-        raise HTTPException(status_code=400, detail="action 必须为 restore、remove、exclude、confirm 或 review")
-    expected = _text_v2_expected_revision(body.get("expected_revision") if isinstance(body, dict) else None)
-    updated_at = int(time.time())
-    revision_id = "rev_" + uuid.uuid4().hex
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        try:
-            asset, standard = repository.patch_text_inspection_asset(
-                standard_id, asset_id, owner_user_id, action, updated_at,
-                revision_id=revision_id, expected_revision=expected,
-            )
-        except Exception as exc:
-            raise HTTPException(status_code=409, detail="标准或资源状态已变化，请刷新后重试") from exc
-    else:
-        with _incoming_text_store_lock:
-            authoritative_standard = _text_v2_owned("standards", standard_id, owner_user_id)
-            authoritative_asset = _text_v2_owned("assets", asset_id, owner_user_id)
-            if not authoritative_standard or not authoritative_asset or authoritative_standard.get('status') == 'deleted':
-                raise HTTPException(status_code=409, detail="标准或资源状态已变化，请刷新后重试")
-            current_revision = int(authoritative_standard.get("revision_number") or 0)
-            if expected is not None and expected != current_revision:
-                raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试")
-            asset = authoritative_asset
-            target_status = status_by_action[action]
-            if asset.get("status") != target_status or asset.get("classification_source") != "human":
-                asset.setdefault("original_classification", {key: asset.get(key) for key in ("status", "category", "classification_source", "classification_reason")})
-                asset["status"] = target_status
-                asset["updated_at"] = updated_at
-                asset["classification_source"] = "human"
-                _text_v2_save("assets", asset)
-                assets = [
-                    item for item in _text_v2_load("assets")
-                    if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id
-                ]
-                if authoritative_standard.get("status") == "confirmed":
-                    _text_v2_apply_revision(
-                        authoritative_standard, assets,
-                        action="review" if action == "review" else "restore" if action in {"restore", "confirm"} else "remove",
-                        asset_id=asset_id, now=updated_at,
-                    )
-                else:
-                    authoritative_standard["asset_count"] = len(_text_v2_confirmed_snapshot(assets))
-                    authoritative_standard["updated_at"] = updated_at
-                _text_v2_save("standards", authoritative_standard)
-            standard = authoritative_standard
-    feedback = {"id": "fb_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "asset_id": asset_id, "action": action, "created_at": int(time.time())}
-    _text_v2_save("feedback", feedback, insert_only=True)
-    return {**_text_v2_public(asset), "standard": _text_v2_public(standard)}
-
-
-@app.post("/api/text-inspection/standards/{standard_id}/confirm")
-def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    standard = _text_v2_owned("standards", standard_id, owner_user_id)
-    if standard and standard.get("standard_type") == "manual":
-        raise HTTPException(410, "旧说明书标准仅供查阅，请新建任务导入 PDF")
-    if not standard:
-        raise HTTPException(status_code=404, detail="标准不存在")
-    from local_inspection_service.standard_preparation_jobs import enabled as preparation_enabled
-    if standard.get("standard_type") == "label" and (preparation_enabled(owner_user_id) or standard.get("preparation_required")):
-        standard_preparation_jobs.start(standard_id, owner_user_id)
-        return _text_v2_public(_text_v2_owned("standards", standard_id, owner_user_id) or standard)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        try:
-            return _text_v2_public(repository.confirm_text_inspection_standard(
-                standard_id, owner_user_id, int(time.time()), revision_id="rev_" + uuid.uuid4().hex,
-            ))
-        except Exception as exc:
-            raise HTTPException(status_code=409, detail="标准无法确认，请刷新候选状态后重试") from exc
-    if standard.get("status") == "confirmed":
-        return _text_v2_public(standard)
-    with _incoming_text_store_lock:
-        standard = _text_v2_owned("standards", standard_id, owner_user_id) or {}
-        if standard.get('status') == 'deleted' or standard.get('classification', {}).get('state') == 'processing':
-            raise HTTPException(status_code=409, detail='订单已删除或仍在识别中')
-        if standard.get("status") == "confirmed":
-            return _text_v2_public(standard)
-        all_assets = [item for item in _text_v2_load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
-        if any(item.get("status") == "needs_confirmation" for item in all_assets):
-            raise HTTPException(status_code=409, detail="还有待确认图片，请逐张选择保留或排除后再启用")
-        selected = [item for item in all_assets if item.get("status") in {"candidate", "page"}]
-        if not selected:
-            raise HTTPException(status_code=409, detail="至少确认一个标签或标准页面")
-        standard["status"] = "confirmed"
-        standard["confirmed_at"] = standard["updated_at"] = int(time.time())
-        selected.sort(key=lambda item: int(item.get("ordinal") or 0))
-        _text_v2_apply_revision(standard, selected, action="confirm", asset_id="", now=standard["confirmed_at"])
-        _text_v2_save("standards", standard)
-    return _text_v2_public(standard)
+_standard_access = StandardAccess(
+    require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+    owner=lambda: _text_v2_owner(),
+)
+_standard_records = StandardRecords(
+    load=lambda kind: _text_v2_load(kind),
+    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
+    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    public=lambda: _text_v2_public,
+)
+_standard_media = StandardMedia(
+    path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
+    write=lambda: _text_v2_write,
+    digest=lambda contents: sha256_bytes(contents),
+)
+_standard_imports = StandardImports(
+    _standard_access, _standard_records, _standard_media,
+    StandardParsers(doc=lambda: extract_doc_images,
+                    docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data)),
+    StandardClassification(start=lambda standard, owner: document_import_jobs.start(standard, owner),
+                           mark_unavailable=lambda: document_import_jobs.mark_unavailable),
+    bounded_text=lambda: bounded_text,
+)
+_standard_library = TextStandardLibrary(
+    _standard_access, _standard_records,
+    refresh=lambda standard, owner: document_import_jobs.refresh(standard, owner),
+    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
+)
+_standard_edits = StandardEdits(
+    _standard_access, _standard_records,
+    StandardWrites(repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock),
+    _standard_media,
+    StandardRevisions(expected=lambda: _text_v2_expected_revision,
+                      snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
+                      apply=lambda: _text_v2_apply_revision),
+    StandardPreparation(start=lambda standard, owner: standard_preparation_jobs.start(standard, owner),
+                        enabled=lambda owner: _standard_preparation_policy.enabled(owner)),
+    prepare_image=lambda contents: _text_v2_prepare_image(contents),
+    bounded_text=lambda: bounded_text,
+)
+_standard_routes = register_text_standards(app, _standard_imports, _standard_library, _standard_edits)
+import_text_inspection_standard = _standard_routes.import_text_inspection_standard
+list_text_inspection_standards = _standard_routes.list_text_inspection_standards
+get_text_inspection_standard = _standard_routes.get_text_inspection_standard
+get_text_inspection_asset_content = _standard_routes.get_text_inspection_asset_content
+add_text_inspection_standard_asset = _standard_routes.add_text_inspection_standard_asset
+patch_text_inspection_asset = _standard_routes.patch_text_inspection_asset
+confirm_text_inspection_standard = _standard_routes.confirm_text_inspection_standard
 
 
 from local_inspection_service.text_inspection.diagnostics import (

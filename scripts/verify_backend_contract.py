@@ -61,6 +61,37 @@ def capture():
         assert server._text_v2_diagnostic_event is diagnostics.diagnostic_event
         assert server._text_v2_provider_diagnostics is diagnostics.provider_diagnostics
         assert server._text_diagnostics.logger() is server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER
+        assert server._standard_imports.records is server._standard_library.records is server._standard_edits.records
+        assert server._standard_imports.access is server._standard_library.access is server._standard_edits.access
+        assert server._standard_edits.writes.guard() is server._incoming_text_store_lock
+        from unittest.mock import patch
+        bindings = (
+            (server, "bounded_text", (server._standard_imports.bounded_text, server._standard_edits.bounded_text)),
+            (server, "extract_doc_images", (server._standard_imports.parsers.doc,)),
+            (server, "_text_v2_write", (server._standard_media.write,)),
+            (server.document_import_jobs, "mark_unavailable", (server._standard_imports.classification.mark_unavailable,)),
+            (server, "_text_v2_expected_revision", (server._standard_edits.revisions.expected,)),
+            (server, "_text_v2_public", (server._standard_records.public,)),
+            (server, "_text_v2_apply_revision", (server._standard_edits.revisions.apply,)),
+        )
+        for owner, attribute, getters in bindings:
+            original = getattr(owner, attribute)
+            for getter in getters:
+                assert getter() == original  # Bound methods are recreated on attribute access.
+            replacement = lambda *args, **kwargs: None
+            with patch.object(owner, attribute, replacement):
+                for getter in getters:
+                    assert getter() is replacement
+            for getter in getters:
+                assert getter() == original
+        for name in ("import_text_inspection_standard", "list_text_inspection_standards",
+                     "get_text_inspection_standard", "get_text_inspection_asset_content",
+                     "add_text_inspection_standard_asset", "patch_text_inspection_asset",
+                     "confirm_text_inspection_standard"):
+            endpoint = getattr(server, name)
+            assert endpoint is getattr(server._standard_routes, name)
+            assert [route.endpoint for route in server.app.routes if route.name == name] == [endpoint]
+
         assert server._text_records.dependencies.guard() is server._preparation_records.guard()
         assert server.standard_preparation_jobs.records is server._preparation_records
         assert server.standard_preparation_jobs.media_dependencies is server._preparation_media

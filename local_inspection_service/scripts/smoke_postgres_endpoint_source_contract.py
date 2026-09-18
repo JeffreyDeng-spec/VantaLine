@@ -104,8 +104,9 @@ REQUIRED_RUNTIME_ENTRY_HELPERS = frozenset(
 
 
 class SourceContract(ast.NodeVisitor):
-    def __init__(self, injected_repository: bool = False) -> None:
+    def __init__(self, injected_repository: bool = False, repository_expression: str = "self.dependencies.runtime_repository") -> None:
         self.injected_repository = injected_repository
+        self.repository_expression = repository_expression
         self.imported_names: set[str] = set()
         self.called_attributes: set[str] = set()
         self.string_literals: set[str] = set()
@@ -137,7 +138,7 @@ class SourceContract(ast.NodeVisitor):
             self.called_attributes.add(node.func.attr)
         direct = isinstance(node.func, ast.Name) and node.func.id == "runtime_postgres_repository_or_none"
         injected = self.injected_repository and ast.dump(node.func) == ast.dump(
-            ast.parse("self.dependencies.runtime_repository", mode="eval").body
+            ast.parse(self.repository_expression, mode="eval").body
         )
         if direct or injected:
             self.runtime_repository_entry_call_count += 1
@@ -291,6 +292,30 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(text_records, attribute))
     contract.runtime_repository_entry_call_count += text_records.runtime_repository_entry_call_count
+    edits_path = text_path.with_name("standard_edits.py")
+    edits = SourceContract(injected_repository=True, repository_expression="self.writes.repository")
+    edits.visit(ast.parse(edits_path.read_text(encoding="utf-8"), filename=str(edits_path)))
+    require(edits.runtime_repository_entry_call_count == 3, "standard edits must retain three actual lazy repository entries")
+    require(edits.functions_with_runtime_repository_entry == {
+        "add_text_inspection_standard_asset", "patch_text_inspection_asset", "confirm_text_inspection_standard"
+    }, "each standard write workflow must obtain its own thread repository")
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "text_inspection.standard_edits"
+                and any(alias.name == "StandardEdits" for alias in node.names)
+                for node in tree.body), "server missing standard edit service composition")
+    writes = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+              and isinstance(node.func, ast.Name) and node.func.id == "StandardWrites"]
+    require(len(writes) == 1, "expected one standard write-capability composition")
+    repository = next(keyword.value for keyword in writes[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "standard edit composition must supply the thread repository lazily")
+    # Count actual workflow entries, not the forwarding lambda a second time.
+    contract.runtime_repository_entry_call_count -= 1
+    contract.runtime_repository_entry_call_count += edits.runtime_repository_entry_call_count
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(edits, attribute))
+
     missing_adapters = sorted(REQUIRED_RUNTIME_ADAPTERS - contract.imported_names)
     require(not missing_adapters, "server.py missing runtime record adapters: " + ",".join(missing_adapters))
 
