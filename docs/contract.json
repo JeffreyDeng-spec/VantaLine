@@ -34,7 +34,7 @@
   "impact_rules": [
     {
       "name": "Detection result policies",
-      "paths": ["local_inspection_service/detection/**", "scripts/smoke_detection_results.py", "scripts/smoke_detection_ocr.py", "scripts/smoke_detection_task_store.py", "scripts/smoke_detection_task_catalog.py", "scripts/smoke_local_model_runtime.py", "local_inspection_service/runtime/paddle.py"],
+      "paths": ["local_inspection_service/detection/**", "scripts/smoke_detection_results.py", "scripts/smoke_detection_ocr.py", "scripts/smoke_detection_task_store.py", "scripts/smoke_detection_task_catalog.py", "scripts/smoke_local_model_runtime.py", "scripts/smoke_yolo_warmup.py", "local_inspection_service/runtime/yolo_warmup.py", "local_inspection_service/runtime/paddle.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
