@@ -1,5 +1,9 @@
 # Configuration reference
 
+The preview renderer has no new configuration. Its tests select the original metadata
+golden by the imported OpenCV version because the existing lock includes overlapping
+OpenCV distributions; this change does not alter that production dependency lock.
+
 Preview rendering adds no setting or algorithm. Existing repeated object size/center and generic
 asset calls are preserved along with the shared random stream, stable document-first ordering,
 one optional sprite rematch and paste metadata override order. Detection threshold providers retain

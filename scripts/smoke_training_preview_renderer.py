@@ -189,7 +189,11 @@ class PreviewRendererContracts(unittest.TestCase):
     def fixture(self, **kwargs): return RenderFixture(self.api, self.root, **kwargs).install(self.stack)
 
     def test_original_pixels_full_metadata_call_sequence_and_rng_goldens(self):
-        baseline = json.loads((Path(__file__).resolve().parents[1] / 'tests/backend_contract/training_preview_renderer.json').read_text())
+        # The production lock includes overlapping OpenCV distributions. Select by
+        # the imported runtime version, never by the observed output or hash.
+        name = ('training_preview_renderer_opencv410.json' if cv2.__version__ == '4.10.0'
+                else 'training_preview_renderer.json')
+        baseline = json.loads((Path(__file__).resolve().parents[1] / 'tests/backend_contract' / name).read_text())
         for name, (settings, accessories, kwargs) in CASES.items():
             with self.subTest(case=name), ExitStack() as stack:
                 fixture = RenderFixture(self.api, self.root, **settings).install(stack)

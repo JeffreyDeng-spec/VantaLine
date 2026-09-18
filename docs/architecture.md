@@ -1,5 +1,8 @@
 # Architecture
 
+Preview renderer contracts retain exact original-runtime baselines for OpenCV 4.10 and
+4.13/5; runtime selection affects only test expectations, not application composition.
+
 Six narrow getters preserve callback capture before shape/list access, truth tests and metadata
 string conversion. Existing Name-only providers remain direct. Per-record mask lookups use local
 builtin dictionaries and do not require extra getters; rendering algorithms remain unchanged.
