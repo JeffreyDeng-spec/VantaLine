@@ -1,7 +1,9 @@
 {
-  "version": 37,
+  "version": 38,
   "sources": [
     "server.py",
+    "training/remote_training.py",
+    "training/worker_compatibility.py",
     "training/background_validation.py",
     "training/background_query.py",
     "training/background_uploads.py",

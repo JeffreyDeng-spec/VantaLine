@@ -19982,71 +19982,19 @@ def post_worker_training_bundle(job_id: str, task: dict[str, Any], dataset: dict
         temp_dir.cleanup()
 
 
+from .training.remote_training import RemoteTrainingSettings, RemoteTrainingPaths, RemoteTraining
+from .training.worker_compatibility import worker_training_payload, worker_training_terminal_status, WorkerArtifactSummary
+
+_remote_training = RemoteTraining(
+    RemoteTrainingSettings(lambda: remote_training_endpoint(), lambda value: masked_url_for_status(value),
+                           lambda: os.environ, lambda: remote_training_timeout_seconds()),
+    RemoteTrainingPaths(lambda: resolve_service_path, lambda path, job_id: package_training_dataset(path, job_id)),
+    lambda: update_training_task, lambda: requests.post, lambda: time.time(),
+)
+_worker_artifact_summary = WorkerArtifactSummary(lambda value: public_path_sanitized(value))
+
 def run_remote_training_task(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> None:
-    endpoint = remote_training_endpoint()
-    if not endpoint:
-        raise RuntimeError(
-            "Remote training executor is enabled but no private Windows training endpoint is configured. "
-            f"Set {REMOTE_TRAINING_ENDPOINT_ENV} to a URL reachable only over Tailscale/reverse tunnel/VPN, "
-            f"and set {REMOTE_TRAINING_API_KEY_ENV} if that service requires a bearer token."
-        )
-    dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
-    update_training_task(
-        job_id,
-        status="running",
-        progress=78,
-        note="样本已生成，正在提交到 Windows 远程训练端点。",
-        training_executor="remote",
-        remote_training_endpoint=masked_url_for_status(endpoint),
-        **dataset,
-    )
-    temp_dir, archive_path = package_training_dataset(dataset_dir, job_id)
-    headers: dict[str, str] = {}
-    api_key = os.environ.get(REMOTE_TRAINING_API_KEY_ENV, "").strip()
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    metadata = {
-        "job_id": job_id,
-        "train_mode": task.get("train_mode") or task.get("mode") or "yolo_ocr",
-        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
-        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
-        "dataset_yaml": str(dataset.get("dataset_yaml") or ""),
-        "manifest_path": str(dataset.get("manifest_path") or ""),
-        "source": "vantaline_cloud",
-    }
-    try:
-        with archive_path.open("rb") as handle:
-            response = requests.post(
-                endpoint,
-                data={"metadata": json.dumps(metadata, ensure_ascii=False)},
-                files={"dataset_archive": (archive_path.name, handle, "application/zip")},
-                headers=headers,
-                timeout=remote_training_timeout_seconds(),
-            )
-        response.raise_for_status()
-        try:
-            body = response.json()
-        except ValueError:
-            body = {"status": "submitted", "message": response.text[:300]}
-        if not isinstance(body, dict):
-            body = {"status": "submitted", "message": str(body)[:300]}
-        remote_status = str(body.get("status") or body.get("state") or "submitted").strip().lower()
-        remote_job_id = str(body.get("job_id") or body.get("id") or "").strip()
-        completed = remote_status in {"completed", "succeeded", "success", "done"}
-        update_training_task(
-            job_id,
-            status="completed" if completed else "running",
-            progress=100 if completed else 90,
-            completed_at=int(time.time()) if completed else 0,
-            remote_training_status=remote_status,
-            remote_training_job_id=remote_job_id,
-            remote_training_response={key: value for key, value in body.items() if key not in {"api_key", "token", "secret"}},
-            note="Windows 远程训练已完成。" if completed else "训练任务已提交到 Windows 远程端点，等待远程训练服务处理。",
-        )
-    finally:
-        temp_dir.cleanup()
-
-
+    return _remote_training.run_remote_training_task(job_id, task, dataset)
 def runpod_yolo_endpoint_id() -> str:
     return _training_executor_settings.runpod_yolo_endpoint_id()
 
@@ -20182,19 +20130,6 @@ def run_runpod_training_task(job_id: str, task: dict[str, Any], dataset: dict[st
     return _runpod_flow.run_runpod_training_task(job_id, task, dataset)
 
 
-def worker_training_payload(task: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "selected_accessory_ids": [str(item) for item in task.get("selected_accessory_ids") or []],
-        "sample_count": max(1, min(20000, int(task.get("sample_count") or 1))),
-        "train_mode": str(task.get("train_mode") or task.get("mode") or task.get("model_variant") or "yolo_ocr"),
-        "approved_preview_id": task.get("approved_preview_id") or None,
-        "dataset_id": task.get("source_dataset_id") or task.get("dataset_id") or None,
-        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
-        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
-        "background_set_id": task.get("background_set_id") or None,
-    }
-
-
 def run_worker_dataset_generation_task(job_id: str, task: dict[str, Any]) -> None:
     update_training_task(
         job_id,
@@ -20270,26 +20205,8 @@ def run_worker_training_task(job_id: str, task: dict[str, Any], dataset: dict[st
     )
 
 
-def worker_training_terminal_status(status: str) -> bool:
-    return status.lower() in {"completed", "failed", "cancelled", "canceled", "stopped"}
-
-
 def worker_training_artifact_summary(item: dict[str, Any]) -> dict[str, Any]:
-    allowed = {
-        "id",
-        "run_id",
-        "task_id",
-        "label",
-        "display_name",
-        "status",
-        "sample_count",
-        "selected_accessory_ids",
-        "artifact_path",
-        "dataset_yaml",
-    }
-    return {key: public_path_sanitized(value) for key, value in item.items() if key in allowed}
-
-
+    return _worker_artifact_summary.worker_training_artifact_summary(item)
 def import_worker_training_artifacts(task: dict[str, Any], artifacts: dict[str, Any]) -> dict[str, Any]:
     if task.get("worker_artifacts_imported_at"):
         return {}
