@@ -1,11 +1,13 @@
 # Testing
 
-`python scripts/smoke_training_record_store.py --postgres` adds seventeen groups.
+`python scripts/smoke_training_record_store.py --postgres` adds twenty-one groups.
 Eleven behavior groups passed with the original eight functions, including an
-isolated PostgreSQL replay. Fifteen expanded business groups also pass against the original functions. Two
+isolated PostgreSQL replay. Nineteen expanded business groups also pass against the original functions. Two
 interface groups check independent instances and getter failures. Added contracts
 cover callback/file first failures, nine callback capture traces and directory
-resolution after task-id conversion. Tests cover
+resolution after task-id conversion. Nested repository selection failures, internal
+read failures, serialization and per-row decoder selection are checked separately.
+Tests cover
 freeze/invalidation/lock/write order, missing resolver, existing None/empty snapshots,
 scoped deep copies, two async thread saves, cross-thread lock probes, nested RLock
 release after failure, partial file writes, JSON raw types, repeated repository

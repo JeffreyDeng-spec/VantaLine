@@ -403,25 +403,80 @@ class TrainingStoreContracts(unittest.TestCase):
                 return original(target,*args,**kwargs)
             with self.subTest(name=name),patch.object(Path,name,fail):
                 with self.assertRaises(OSError) as caught:api.load_training_task_records()
-            self.assertIs(caught.exception,error);self.assertEqual(callback.call_count,1)
+                self.assertIs(caught.exception,error);self.assertEqual(callback.call_count,1)
 
     def test_new_getters_fail_once_before_dependent_effects(self):
         from dataclasses import replace
         service=self.api._training_records;f=self.f;f.repo=Mock();f.repo.fetch_all.return_value=[]
-        for name in ('decode','encode','resolver','guard','directory'):
-            with self.subTest(name=name),ExitStack() as stack:
-                f.events.clear();value=task();error=RuntimeError('getter-'+name)
+        for case in ('decode','decode_read','encode','resolver','guard','directory','directory_list'):
+            name=case.split('_')[0]
+            with self.subTest(case=case),ExitStack() as stack:
+                f.events.clear();value=task();error=RuntimeError('getter-'+case)
+                f.repo=Mock();f.repo.fetch_all.return_value=[{'raw_json':value}]
                 owner=service.rows if name in ('decode','encode') else service
                 original=getattr(owner,name);callback=Mock(side_effect=[error,original()])
                 if name in ('decode','encode'):stack.enter_context(patch.object(service,'rows',replace(service.rows,**{name:callback})))
                 else:stack.enter_context(patch.object(service,name,callback))
-                if name=='decode':action=service.load_training_task_records
+                if case=='decode_read':action=lambda:service.load_training_task(Path('job.json'))
+                elif case=='directory_list':f.repo=None;action=service.load_training_task_records
+                elif name=='decode':action=service.load_training_task_records
                 elif name=='directory':action=lambda:service.training_task_path('job')
                 else:action=lambda:service.save_training_task(value)
                 with self.assertRaises(RuntimeError) as caught:action()
                 self.assertIs(caught.exception,error);self.assertEqual(callback.call_count,1)
                 self.assertTrue(f.guard.available_to_other_thread())
                 if name=='resolver':self.assertEqual(f.events,[]);self.assertNotIn('model_profiles',value)
+
+    def test_json_serialization_first_failure_is_not_retried(self):
+        error=TypeError('serialize');value=task();path=self.f.seed('job',{'old':True});previous=path.read_text();callback=Mock(side_effect=[error,json.dumps(value)])
+        with patch.object(json,'dumps',callback):
+            with self.assertRaises(TypeError) as caught:self.api.save_training_task(value)
+        self.assertIs(caught.exception,error);self.assertEqual(callback.call_count,1)
+        self.assertTrue(self.f.guard.available_to_other_thread());self.assertEqual(path.read_text(),previous)
+        self.assertIn('model_profiles',value);self.assertEqual(self.f.cached,[])
+
+    def test_internal_read_failures_are_not_retried(self):
+        service=self.api._training_records;f=self.f;f.seed('job',task())
+        for name,operation,valid in [('load_training_task','list',task()),('load_training_task','find',task()),
+                                     ('load_training_task_records','fallback',[]),('training_task_path','find',f.directory/'job.json')]:
+            with self.subTest(name=name,operation=operation),ExitStack() as stack:
+                error=RuntimeError(name);callback=Mock(side_effect=[error,valid]);stack.enter_context(patch.object(service,name,callback))
+                if operation=='fallback':stack.enter_context(patch.object(service,'load_training_task',return_value=None))
+                action=service.load_training_task_records if operation=='list' else lambda:service.find_training_task('job')
+                with self.assertRaises(RuntimeError) as caught:action()
+                self.assertIs(caught.exception,error);self.assertEqual(callback.call_count,1)
+
+    def test_single_read_decoder_is_selected_after_fetch_and_for_each_row(self):
+        api=self.api;f=self.f;f.repo=Mock();value=task()
+        for missing in (False,True):
+            with self.subTest(missing=missing),ExitStack() as stack:
+                events=[]
+                def c(rows):events.append('C');return [value]
+                def b(rows):events.append('B');api.row_raw_json_list=c;return []
+                def a(rows):events.append('A');return [value]
+                def fetch(table):events.append('fetch');api.row_raw_json_list=None if missing else b;return [{},{}]
+                stack.enter_context(patch.object(api,'row_raw_json_list',a));f.repo.fetch_all.side_effect=fetch
+                if missing:
+                    with self.assertRaises(TypeError):api.load_training_task(Path('job.json'))
+                    self.assertEqual(events,['fetch'])
+                else:
+                    self.assertIs(api.load_training_task(Path('job.json')),value);self.assertEqual(events,['fetch','B','C'])
+        f.repo.fetch_all.side_effect=None;f.repo.fetch_all.return_value=[]
+        with patch.object(api,'row_raw_json_list',side_effect=AssertionError('empty rows decoded')) as decoder:
+            self.assertIsNone(api.load_training_task(Path('job.json')));decoder.assert_not_called()
+
+    def test_nested_repository_first_failures_are_not_retried(self):
+        api=self.api;f=self.f;f.seed('job',task())
+        for operation in ('list','find_direct','find_fallback'):
+            with self.subTest(operation=operation):
+                f.events.clear();error=RuntimeError('nested-'+operation)
+                f.choices=[error,None] if operation=='find_direct' else [None,error,None]
+                action=api.load_training_task_records if operation=='list' else lambda:api.find_training_task('absent')
+                with self.assertRaises(RuntimeError) as caught:action()
+                self.assertIs(caught.exception,error)
+                selections=[event for event in f.events if isinstance(event,tuple) and event[0]=='repository']
+                self.assertEqual(len(selections),1 if operation=='find_direct' else 2)
+                self.assertEqual(f.choices,[None])
 
     @unittest.skipUnless(PG_CHECK,'use --postgres with an isolated test DSN')
     def test_real_postgres_upsert_alias_update_and_snapshot_persistence(self):

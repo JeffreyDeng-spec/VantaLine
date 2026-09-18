@@ -4,7 +4,8 @@ Training storage CI now exercises its disposable PostgreSQL schema and eight mov
 helpers. The database source gate counts the three actual extracted entries, excludes
 the composition callback from totals and retains the original minimum threshold.
 Ship both training modules as part of the immutable release; launch and rollback
-commands, topology and source manifest v16 remain unchanged.
+commands and topology remain unchanged. Source manifest v16 now includes both
+training identity and storage so relocated selection/binding inputs remain covered.
 
 Backend CI now includes training discovery contracts with a disposable PostgreSQL
 schema, and dependency checks admit the training/pipeline packages. Publish all three
