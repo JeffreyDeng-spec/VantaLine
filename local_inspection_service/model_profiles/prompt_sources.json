@@ -1,7 +1,8 @@
 {
-  "version": 48,
+  "version": 49,
   "sources": [
     "server.py",
+    "detection/annotation.py",
     "detection/presence_results.py",
     "detection/failure_projection.py",
     "detection/failure_results.py",

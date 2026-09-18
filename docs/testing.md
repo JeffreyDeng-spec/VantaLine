@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_detection_annotation.py` runs 21 synthetic groups.
+Fifteen original business groups passed before migration on Windows and Linux;
+18 expanded groups also pass against saved original function bodies. Contracts retain
+geometry rounding, strict coordinate types, drawing order, image copies and output behavior.
+Backend policies refresh at original expression boundaries. First-failure recovery fixtures
+reject hidden retries; existing partial-file residues and None-only fallback remain intact.
+Synthetic images and image-backend substitutes avoid models, production media and device I/O.
+
 `python scripts/smoke_presence_results.py` runs 19 synthetic groups.
 Fourteen original business groups passed before migration on Windows and Linux;
 17 expanded groups also pass against saved original function bodies. Contracts retain
