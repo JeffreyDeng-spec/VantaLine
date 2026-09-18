@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from fastapi import FastAPI, HTTPException
@@ -62,7 +62,7 @@ class AgentContracts(unittest.TestCase):
                 f.events.append(('transition',owner,identifier,kwargs))
                 if f.transition_error:raise f.transition_error
                 return {'id':identifier,'status':'cancel_requested','version':5,'payload':'hidden'}
-        repo=Repo()
+        repo=Repo();f.repo=repo;f.app=app
         def factory():f.events.append(('repository',who.get()));return repo if f.pg else None
         api.register(app,AgentAccess(current,admin),AgentAccounts(store,find),factory)
         self.assertEqual(f.events,[])
@@ -109,6 +109,31 @@ class AgentContracts(unittest.TestCase):
             self.assertEqual((response.status_code,response.json()),(code,{'detail':str(error)}));self.assertEqual(sum(e[0]=='set' for e in f.events),1)
         f.policy_error=None;f.events.clear();self.assertEqual(f.client.put(url,headers=headers,json=body).json(),{'id':'alice',**body,'cloud_targets':[]})
         self.assertEqual([e[0] for e in f.events],['admin','user','store','find','repository','set'])
+    def test_unknown_policy_and_cancel_writes_are_never_retried(self):
+        cases=[
+            ('set_policy','put','/api/agent/policy/alice',
+             {'expected_version':0,'enabled':True,'budget':10},('alice',),
+             {'expected_version':0,'enabled':True,'budget':10,'cloud_targets':[]}),
+            ('transition','post','/api/operations/alice-job/cancel',
+             {'expected_version':4},('alice','alice-job'),{'expected_version':4,'event':'cancel'}),
+        ]
+        for operation,method,url,body,args,kwargs in cases:
+            for propagate in (True,False):
+                with self.subTest(operation=operation,propagate=propagate):
+                    f=self.fixture('unknown-'+operation+str(propagate))
+                    failure=RuntimeError('synthetic unknown write result')
+                    write=Mock(side_effect=[failure,{'id':'unexpected-success'}])
+                    with patch.object(f.repo,operation,write):
+                        if propagate:
+                            with TestClient(f.app,raise_server_exceptions=True) as client:
+                                with self.assertRaises(RuntimeError) as caught:
+                                    client.request(method,url,headers={'x-owner':'alice'},json=body)
+                                self.assertIs(caught.exception,failure)
+                        else:
+                            response=f.client.request(method,url,headers={'x-owner':'alice'},json=body)
+                            self.assertEqual((response.status_code,response.text),(500,'Internal Server Error'))
+                    write.assert_called_once_with(*args,**kwargs)
+
     def test_cancel_owner_version_errors_and_existing_access_order(self):
         f=self.fixture('cancel');url='/api/operations/alice-job/cancel';headers={'x-owner':'alice'}
         self.assertEqual(f.client.post(url,headers={'x-owner':'bob'},json={'expected_version':4}).status_code,404)

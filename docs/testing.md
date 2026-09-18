@@ -6,6 +6,9 @@ concurrent two-app account isolation, admin policy validation and error ordering
 and cancel ownership/version/error behavior with public-field filtering. Existing
 real PostgreSQL operation smoke also passes before and after; only registration
 fixtures change, preserving budget, unknown-outcome, concurrency and audit assertions.
+A fifth group makes policy writes and cancellation transitions fail once while a
+second call would succeed. Each writes once, preserves the original exception and
+returns the existing generic HTTP 500; unknown outcomes never trigger a retry.
 
 `python scripts/smoke_document_job_dependencies.py` adds nine offline groups for
 native ASGI account isolation, JSON change-only writes and PG transaction forwarding,
