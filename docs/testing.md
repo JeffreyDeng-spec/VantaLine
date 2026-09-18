@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_training_worker_watcher.py` runs 14 synthetic groups.
+Eleven original business groups passed before migration on Windows and Linux;
+12 expanded groups also pass against saved original function bodies. Contracts retain
+disabled entry points, startup handler identity, interval clamping, original exception
+reporting and per-iteration callback lookup. Fake events and bounded loop substitutes
+verify lifecycle behavior without starting real threads or worker processes.
+
 `python scripts/smoke_training_worker_artifacts.py` runs 17 synthetic groups.
 Twelve original business groups passed before migration on Windows and Linux;
 15 expanded groups also pass against saved original function bodies. Contracts retain

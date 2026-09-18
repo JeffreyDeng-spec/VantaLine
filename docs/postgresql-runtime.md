@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Retired watcher extraction performs no task reads/writes from enabled, watch-once or startup
+entry points and creates no database connection. The dormant loop receives a tick callback but
+is not started. Connection, transaction and advisory-lock behavior remain unchanged.
+
 Worker artifact extraction returns the same imported-path/error fields and does not persist the
 training record itself. It adds no repository, connection, transaction or advisory-lock changes;
 partial file writes remain separate from caller-owned task settlement.
@@ -102,7 +106,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v41 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v42 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

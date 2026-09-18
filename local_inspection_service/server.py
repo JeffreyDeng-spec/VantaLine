@@ -20249,37 +20249,30 @@ def windows_worker_request_with_retry(
     raise last_exc if last_exc else RuntimeError("Windows worker request failed")
 
 
+from .training.worker_watcher import (
+    worker_training_watcher_enabled as _retired_worker_watcher_enabled,
+    _worker_training_watch_once as _retired_worker_watch_once,
+    start_worker_training_watcher as _retired_worker_watcher_start,
+    WorkerWatcherSettings, WorkerWatcherLoop,
+)
+
+_worker_watcher_settings = WorkerWatcherSettings(lambda: os.environ)
+_worker_watcher_loop = WorkerWatcherLoop(
+    lambda: worker_training_watcher_interval_seconds(), lambda: _worker_training_watch_once(),
+    lambda: traceback.print_exc(file=sys.stderr), lambda seconds: time.sleep(seconds),
+)
+
 def worker_training_watcher_enabled() -> bool:
-    return False
-
-
+    return _retired_worker_watcher_enabled()
 def worker_training_watcher_interval_seconds() -> float:
-    try:
-        return max(5.0, min(600.0, float(os.environ.get("INSPECTION_WORKER_WATCHER_INTERVAL_SECONDS", "") or 20.0)))
-    except (TypeError, ValueError):
-        return 20.0
-
-
+    return _worker_watcher_settings.worker_training_watcher_interval_seconds()
 def _worker_training_watch_once() -> int:
-    """Windows-worker execution is retired; historical worker records are read-only."""
-    return 0
-
-
+    return _retired_worker_watch_once()
 def _worker_training_watcher_loop() -> None:
-    interval = worker_training_watcher_interval_seconds()
-    while True:
-        try:
-            _worker_training_watch_once()
-        except Exception:  # noqa: BLE001 - 守护线程必须保持存活
-            traceback.print_exc(file=sys.stderr)
-        time.sleep(interval)
-
-
+    return _worker_watcher_loop._worker_training_watcher_loop()
 @app.on_event("startup")
 def start_worker_training_watcher() -> None:
-    return None
-
-
+    return _retired_worker_watcher_start()
 from .training.runner import TrainingRunner, TrainingRunnerRecords, TrainingRunnerPaths, TrainingDatasetExecution, TrainingLocalExecution
 from .training.submission import (
     TrainingSubmission, TrainingSubmissionPolicy, TrainingSubmissionIdentity, TrainingSubmissionRecords, TrainingSubmissionThreads,

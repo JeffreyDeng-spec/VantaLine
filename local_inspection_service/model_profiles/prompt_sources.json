@@ -1,7 +1,8 @@
 {
-  "version": 41,
+  "version": 42,
   "sources": [
     "server.py",
+    "training/worker_watcher.py",
     "training/worker_artifacts.py",
     "training/worker_bundle_metadata.py",
     "training/worker_bundle_submission.py",
