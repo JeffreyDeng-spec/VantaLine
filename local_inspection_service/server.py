@@ -34668,7 +34668,47 @@ document_import_jobs = register_document_import_jobs(
     ),
 )
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
-standard_preparation_jobs = register_standard_preparation(globals())
+from .text_inspection.preparation_ports import PreparationAccess, PreparationRecords, PreparationMedia, PreparationModels, PreparationHistory
+from .text_inspection.preparation_jobs import PreparationJobs
+_preparation_records = PreparationRecords(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    guard=lambda: _incoming_text_store_lock,
+    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    load=lambda kind: _text_v2_load(kind),
+    save=lambda kind, value: _text_v2_save(kind, value),
+    apply_revision=lambda standard, assets, **kwargs: _text_v2_apply_revision(standard, assets, **kwargs),
+)
+_preparation_media = PreparationMedia(
+    path=lambda owner, identifier, name: _text_v2_media_path(owner, identifier, name),
+    write=lambda path, data: _text_v2_write(path, data),
+    digest=lambda data: sha256_bytes(data),
+    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
+    data_url=lambda data, mime: _text_v2_data_url(data, mime),
+    read_verified=lambda path, owner, identifier, **kwargs: _text_v2_read_verified(path, owner, identifier, **kwargs),
+)
+_preparation_models = PreparationModels(
+    settings=lambda purpose: ai_detection_settings(purpose),
+    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+    call_tool=lambda name, payload: call_ai_mcp_tool(name, payload),
+    diagnostics=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
+)
+standard_preparation_jobs = register_standard_preparation(
+    app,
+    PreparationAccess(
+        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+        owner=lambda: _text_v2_owner(),
+    ),
+    _preparation_records,
+    PreparationHistory(
+        record_table=lambda: TEXT_INSPECTION_TABLES["records"],
+        raw_rows=lambda rows: row_raw_json_list(rows),
+        public=lambda record: _text_v2_public(record),
+        attempt_writer=lambda: _text_v2_update_attempt,
+    ),
+    _preparation_media,
+    PreparationJobs(_preparation_records, _preparation_media, _preparation_models,
+                    clear_repository=lambda: clear_thread_runtime_repository_selection()),
+)
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
 from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
 _history_records = HistoryRecords(

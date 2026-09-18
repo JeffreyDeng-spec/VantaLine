@@ -1,5 +1,16 @@
 # Text inspection v2
 
+Standard preparation HTTP routes, jobs and snapshot policy now have explicit
+ports. Existing attempt identity and processing-state checks are preserved: a late
+interrupted result is diagnostic evidence; source changes can retain a draft result
+without publishing it. Publication still checks source and current asset/job state;
+this extraction does not add a job-ID guard to result settlement. JSON view calls
+retain their existing writes, and PostgreSQL publication remains atomic. OCR and
+prompt algorithms, history snapshots and recovery behavior are unchanged.
+HTTP timeout settlement captures its compare-and-set writer before constructing the
+timeout record. Background settlement resolves the writer after that construction.
+Neither an unknown provider result nor an unknown final-publication write is retried.
+
 Label extraction now receives typed account, persistence, verified-media and model
 capabilities. Capability reads retain their existing expired-draft cleanup side
 effect: history/confirmed roots stay protected and failed tombstone claims cannot

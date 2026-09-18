@@ -1,5 +1,25 @@
 # Testing
 
+`python scripts/smoke_preparation_dependencies.py` adds nine offline groups for
+native HTTP timeout/CAS races, JSON write/lock ordering, PostgreSQL forwarding,
+slot admission and thread-start failures, captured settings, late-result/source
+changes and snapshot compatibility. The assembled application checks shared port
+identity. Keep the six original endpoint modes and real PostgreSQL preparation
+claim/publication/history/rollback smoke. The new port fixture is not a substitute
+for real PostgreSQL. No real model or PLC is used.
+First provider and final-publication failures are injected with a succeeding second
+call available: neither may retry. Final-publication failure propagates before one
+connection clear and slot release. Timeout tests replace the writer during timestamp
+evaluation: worker settlement reads the replacement, while HTTP settlement retains
+the writer captured before entering timeout. Missing and failing HTTP writers retain
+their original failure ordering without retry.
+
+Local Linux endpoint cross-checks use a fail-if-called YOLO import substitute
+because that test environment lacks ultralytics; CI installs the locked runtime.
+Windows recovery smoke exposed an intermittent `os.replace` access error in the
+unchanged JSON helper. This batch does not change file locking or claim to fix it;
+Linux cross-checks and required CI supplement, rather than erase, that evidence.
+
 `python scripts/smoke_extraction_dependencies.py` adds six offline groups covering
 native ASGI two-app isolation and returned resolver closures; frozen worker settings,
 insert-only losers and save-failure cleanup; history-pinned/failed-tombstone retention;
