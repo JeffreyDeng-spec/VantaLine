@@ -34274,7 +34274,7 @@ from local_inspection_service.text_inspection.diagnostics import (
 )
 
 _text_diagnostics = TextDiagnostics(
-    digest=lambda contents: sha256_bytes(contents),
+    digest=lambda: sha256_bytes,
     logger=lambda: TEXT_INSPECTION_DIAGNOSTIC_LOGGER,
 )
 

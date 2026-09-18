@@ -6,6 +6,9 @@ snapshot providers, diagnostic hashing and the logger are explicit capabilities;
 the root retains compatible exports and thin forwards. The revision service keeps
 caller-owned transaction boundaries and the original partial-failure behavior.
 These modules do not own request identities, database connections or worker state.
+Diagnostic hashing resolves its callback at the original call expression, after
+preceding fields and before message conversion. The logger remains late-bound;
+neither capability is cached or checked eagerly.
 
 `text_inspection.media.TextMedia` owns account-scoped evidence paths, verified
 reads, atomic file replacement and lazy PDF page caches, with explicit record ports.

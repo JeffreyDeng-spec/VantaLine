@@ -74,7 +74,7 @@ def provider_diagnostics(provider: dict[str, Any], settings: dict[str, Any]) -> 
 
 
 class TextDiagnostics:
-    def __init__(self, digest: Callable[[bytes], str], logger: Callable[[], logging.Logger]):
+    def __init__(self, digest: Callable[[], Callable[[bytes], str]], logger: Callable[[], logging.Logger]):
         self.digest = digest
         self.logger = logger
 
@@ -89,7 +89,7 @@ class TextDiagnostics:
             pass
         return {
             "bytes": len(contents),
-            "sha256": self.digest(contents),
+            "sha256": self.digest()(contents),
             "source_format": str(source_format or ""),
             "mime_type": str(mime_type or ""),
             "width": int(width),
@@ -113,7 +113,7 @@ class TextDiagnostics:
             "failure_stage": failure.get("stage"),
             "error_type": failure.get("error_type"),
             "error_message_sha256": (
-                self.digest(str(failure.get("message") or "").encode("utf-8", errors="replace"))
+                self.digest()(str(failure.get("message") or "").encode("utf-8", errors="replace"))
                 if failure.get("message") else ""
             ),
             "elapsed_ms": max(0, int(time.time() * 1000) - int(diagnostics.get("request_received_at_ms") or 0)),

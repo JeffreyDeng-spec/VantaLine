@@ -1,12 +1,22 @@
 # Testing
 
-`python scripts/smoke_text_revisions.py` adds six synthetic groups: exact revision
+`python scripts/smoke_text_revisions.py --root` adds nine synthetic groups: exact revision
 write order and shared snapshot objects; baseline conflicts and partial failures;
 expected-revision validation and snapshot compatibility; copied public projections
 and legacy URL/error rules; diagnostic bounds/redaction/clock rollback; and real
 image metadata with late logger replacement and hashed failure messages. The full
 application contract asserts identical exports and logger composition. Existing
 text endpoint modes, history, document jobs and model-binding checks remain required.
+All six original groups first pass against the old entry-point implementation.
+Added matrices require the same exception object and no retry for revision load,
+baseline insert and final insert, preserving persisted baseline and shared mutated
+snapshot evidence. Image/error hashing, logger acquisition and log output each
+fail once with a succeeding second call available; later stages must not run.
+Logger acquisition failure is a new explicit-port contract, distinct from the old
+entry point's logger attribute lookup. Root A-to-B-to-C and missing-callback tests
+retain the hash lookup window before message conversion, without logging that text.
+Root tests disable Ultralytics automatic installation. Local Linux verification
+uses the existing fail-if-called YOLO substitute and real image libraries.
 
 `python scripts/smoke_text_media.py --root` adds eight groups using synthetic media:
 path/account/hash/size checks and failed atomic replacement; resolved symlink

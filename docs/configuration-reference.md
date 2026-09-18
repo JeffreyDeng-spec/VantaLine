@@ -4,6 +4,8 @@ Revision/projection/diagnostic extraction introduces no setting. Diagnostic limi
 logger replacement, public fields and expected-revision errors retain their values.
 Source manifest remains v5: these helpers do not move model-input producers.
 New fingerprints change normally with listed source edits; old snapshots remain.
+Diagnostic hash callback lookup and missing-callable errors retain their evaluation
+order. An absent failure message does not obtain a hash callback.
 
 Text media extraction introduces no setting or image-policy change. Provider
 maximum side and JPEG quality retain their values and are obtained through explicit

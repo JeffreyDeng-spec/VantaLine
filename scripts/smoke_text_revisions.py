@@ -3,8 +3,10 @@ import copy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -15,6 +17,9 @@ from local_inspection_service.text_inspection.revisions import RevisionRecords, 
 from local_inspection_service.text_inspection.projection import public_record
 from local_inspection_service.text_inspection import diagnostics
 from local_inspection_service.text_inspection.preparation_policy import snapshot
+
+ROOT='--root' in sys.argv
+sys.argv=[arg for arg in sys.argv if arg!='--root']
 
 
 class Fixture:
@@ -116,7 +121,7 @@ class RevisionContracts(unittest.TestCase):
 
     def test_image_diagnostics_and_late_logger_hash_only_error_message(self):
         logger=Mock();current=[logger];digest=lambda b:hashlib.sha256(b).hexdigest()
-        service=diagnostics.TextDiagnostics(digest,lambda:current[0])
+        service=diagnostics.TextDiagnostics(lambda:digest,lambda:current[0])
         stream=io.BytesIO();Image.new('RGB',(100,200),'white').save(stream,format='PNG');blob=stream.getvalue()
         metadata=service.image_diagnostics(blob,source_format='PNG',mime_type='image/png')
         self.assertEqual((metadata['width'],metadata['height'],metadata['sha256']),(100,200,digest(blob)))
@@ -128,6 +133,98 @@ class RevisionContracts(unittest.TestCase):
         text=current[0].info.call_args.args[1];self.assertNotIn('private customer text',text)
         self.assertEqual(json.loads(text)['error_message_sha256'],digest(b'private customer text'))
         self.assertEqual(json.loads(text)['elapsed_ms'],1000)
+
+
+    def test_revision_first_failure_preserves_exception_and_partial_state(self):
+        for mode in ('load','baseline','edit'):
+            with self.subTest(mode=mode):
+                f=Fixture();before=copy.deepcopy(f.standard);events=[]
+                error=RuntimeError('unknown '+mode+' outcome');failure=Mock(side_effect=[error,[] if mode=='load' else True])
+                def load(kind):
+                    events.append(('load',kind))
+                    return failure() if mode=='load' else f.load(kind)
+                def save(kind,value,*,insert_only=False):
+                    events.append(('save',value['action'],value,insert_only))
+                    return failure() if value['action']==mode else f.save(kind,value,insert_only=insert_only)
+                f.service.records=RevisionRecords(load,save)
+                with self.assertRaises(RuntimeError) as caught:f.apply()
+                self.assertIs(caught.exception,error);failure.assert_called_once_with()
+                self.assertEqual([e[:2] for e in events],[('load','revisions')]+([] if mode=='load' else [('save','baseline')])+([('save','edit')] if mode=='edit' else []))
+                self.assertTrue(all(e[3] is True for e in events if e[0]=='save'))
+                if mode!='edit':self.assertEqual(f.standard,before);self.assertEqual(f.saved,[])
+                else:
+                    failed_revision=events[-1][2]
+                    self.assertEqual([value['action'] for value in f.saved],['baseline'])
+                    self.assertEqual(f.standard['revision_number'],2)
+                    self.assertEqual(f.standard['current_revision_id'],failed_revision['id'])
+                    self.assertIs(f.standard['confirmed_assets'],failed_revision['confirmed_assets'])
+                    self.assertIs(f.standard['confirmed_assets'],f.snapshot_value)
+                    self.assertIs(f.standard['confirmed_asset_ids'],failed_revision['confirmed_asset_ids'])
+                    self.assertNotIn(failed_revision,f.saved)
+
+    def test_diagnostic_first_failure_has_no_retry_or_later_output(self):
+        for mode in ('image-digest','failure-digest','logger','info'):
+            with self.subTest(mode=mode):
+                events=[];error=RuntimeError('unknown '+mode+' outcome');logger=Mock()
+                failure=Mock(side_effect=[error,logger if mode=='logger' else 'hash' if mode.endswith('digest') else None])
+                def digest(data):
+                    events.append('digest')
+                    return failure() if mode.endswith('digest') else 'hash'
+                def get_logger():
+                    events.append('logger');return failure() if mode=='logger' else logger
+                def info(*args):events.append('info');return failure()
+                logger.info.side_effect=info
+                original=diagnostics.diagnostic_value
+                def serialize(value,**kwargs):events.append('serialize');return original(value,**kwargs)
+                def clock():events.append('clock');return 2
+                service=diagnostics.TextDiagnostics(lambda:digest,get_logger)
+                record={'id':'record','diagnostics':{'failure':{'message':'synthetic private text'},'request_received_at_ms':1000}}
+                with patch.object(diagnostics.time,'time',side_effect=clock),patch.object(diagnostics,'diagnostic_value',side_effect=serialize):
+                    with self.assertRaises(RuntimeError) as caught:
+                        if mode=='image-digest':service.image_diagnostics(b'broken',source_format='unknown',mime_type='fixture')
+                        else:service.write_server_diagnostic(record)
+                self.assertIs(caught.exception,error);failure.assert_called_once_with()
+                expected=['digest'] if mode.endswith('digest') else ['digest','clock','logger']
+                if mode=='info':
+                    # Redaction recursively visits payload values before one output.
+                    self.assertEqual(events[:3],expected);self.assertTrue(all(e=='serialize' for e in events[3:-1]))
+                    self.assertEqual(events[-1],'info');logger.info.assert_called_once()
+                    payload=json.loads(logger.info.call_args.args[1])
+                    self.assertEqual((payload['inspection_id'],payload['error_message_sha256'],payload['elapsed_ms']),('record','hash',1000))
+                    self.assertNotIn('synthetic private text',logger.info.call_args.args[1])
+                else:self.assertEqual(events,expected);logger.info.assert_not_called()
+        untouched=Mock(side_effect=AssertionError('absent message must not resolve digest'))
+        logger=Mock();diagnostics.TextDiagnostics(untouched,lambda:logger).write_server_diagnostic({})
+        untouched.assert_not_called();logger.info.assert_called_once()
+
+    @unittest.skipUnless(ROOT,'requires full application runtime')
+    def test_application_digest_capture_and_missing_callback_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder)/'local_inspection_service/static').mkdir(parents=True)
+            os.environ.update(LOCAL_INSPECTION_ROOT=folder,VANTALINE_DATA_STORE='json',VANTALINE_LABEL_INSPECTION_ENABLED='false',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',YOLO_AUTOINSTALL='false')
+            from local_inspection_service import server
+            for mode in ('capture','missing'):
+                events=[];logger=Mock()
+                def digest_a(data):events.append('A');return 'hashA'
+                def digest_b(data):events.append('B');return 'hashB'
+                def digest_c(data):events.append('C');return 'hashC'
+                class Message:
+                    def __str__(self):events.append('argument');server.sha256_bytes=digest_c;return 'synthetic message'
+                class Failure(dict):
+                    def get(self,key,*args):
+                        if key=='error_type':
+                            events.append('before')
+                            if events.count('before')==1:server.sha256_bytes=None if mode=='missing' else digest_b
+                        return super().get(key,*args)
+                record={'diagnostics':{'failure':Failure(message=Message(),error_type='synthetic')}}
+                with patch.object(server,'sha256_bytes',digest_a),patch.object(server,'TEXT_INSPECTION_DIAGNOSTIC_LOGGER',logger):
+                    for _ in range(1 if mode=='missing' else 2):
+                        try:server._text_v2_write_server_diagnostic(record)
+                        except TypeError:self.assertEqual(mode,'missing')
+                        else:self.assertEqual(mode,'capture')
+                self.assertEqual(events,['before','argument'] if mode=='missing' else ['before','argument','B','before','argument','C'])
+                self.assertEqual(logger.info.call_count,0 if mode=='missing' else 2)
+                self.assertTrue(all('synthetic message' not in str(call) for call in logger.info.call_args_list))
 
 
 if __name__=='__main__':unittest.main(verbosity=2)
