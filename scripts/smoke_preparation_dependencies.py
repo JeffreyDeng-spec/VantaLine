@@ -101,7 +101,7 @@ class PreparationContracts(unittest.TestCase):
         with patch.object(api.time,'time',return_value=131):self.assertEqual(client.get('/api/text-inspection/prepared-comparisons/record').json()['status'],'review_required')
         self.assertEqual([e for e in f.events if e[0]=='save'],[('save','records','record')]);self.assertEqual(len(calls),1)
         clear=Mock();failure=Mock(side_effect=RuntimeError('CAS unavailable'))
-        with self.assertRaises(RuntimeError):qwen.settle_timeout(SimpleNamespace(_text_v2_update_attempt=failure,clear_thread_runtime_repository_selection=clear),original)
+        with self.assertRaises(RuntimeError):qwen.settle_timeout(failure,clear,original)
         failure.assert_called_once();clear.assert_called_once()
     def test_json_publication_order_all_writes_pg_arguments_and_failure_unlock(self):
         f=Fixture(self)
@@ -186,16 +186,16 @@ class PreparationContracts(unittest.TestCase):
         self.assertEqual(f.clears,1);self.slot_free(f)
 
     def test_worker_timeout_resolves_writer_after_timestamp(self):
-        for mode in ['timer','worker']:
+        for mode in ['timer','worker','callback']:
             with self.subTest(mode=mode):
                 events=[];record={'id':'record','created_at':0,'deadline_at':10,'status':'attempting','diagnostics':{}}
                 first=Mock(side_effect=lambda *args:events.append('first'))
                 second=Mock(side_effect=lambda *args:events.append('second'))
                 clear=Mock(side_effect=lambda:events.append('clear'))
-                namespace=SimpleNamespace(_text_v2_update_attempt=first,clear_thread_runtime_repository_selection=clear)
-                def now():events.append('clock');namespace._text_v2_update_attempt=second;return 100
+                records=SimpleNamespace(update_attempt=first)
+                def now():events.append('clock');records.update_attempt=second;return 100
                 if mode=='timer':
-                    with patch.object(qwen.time,'time',side_effect=now):qwen.settle_timeout(namespace,record)
+                    with patch.object(qwen.time,'time',side_effect=now):qwen.settle_timeout(lambda kind,value:records.update_attempt(kind,value),clear,record)
                     self.assertEqual(events,['clock','second','clear'])
                     self.assertEqual(record['status'],'attempting');self.assertEqual(record['diagnostics'],{})
                 else:
@@ -205,8 +205,13 @@ class PreparationContracts(unittest.TestCase):
                         try:return next(clocks)
                         except StopIteration:return now()
                     with patch.object(qwen.threading,'Timer') as timer,patch.object(qwen.time,'time',side_effect=worker_clock),patch.object(qwen,'expired',return_value=True):
-                        qwen.run(namespace,None,record,b'',{})
+                        qwen.run(records,None,clear,None,record,b'',{},None)
                     timer.return_value.start.assert_called_once();timer.return_value.cancel.assert_called_once()
+                    if mode=='callback':
+                        events.clear();first.reset_mock();second.reset_mock();clear.reset_mock();records.update_attempt=first
+                        original=copy.deepcopy(record)
+                        with patch.object(qwen.time,'time',side_effect=now):timer.call_args.args[1]()
+                        self.assertEqual(record,original)
                     self.assertEqual(events,['clock','second','clear'])
                 first.assert_not_called();second.assert_called_once();clear.assert_called_once()
                 self.assertEqual(second.call_args.args[0],'records');self.assertEqual(second.call_args.args[1]['updated_at'],100)

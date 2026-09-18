@@ -271,9 +271,13 @@ def main():
     assert_status(admin.post(route,json=graphics_body),409,"graphics stale save rejected")
     from types import SimpleNamespace
     from local_inspection_service.standard_preparation_compare import run
+    from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia
     legacy=dict(diagnostics={"template":{"elements":[]}})
     writes=[]
-    run(SimpleNamespace(_text_v2_save=lambda kind,value:writes.append(copy.deepcopy(value)),clear_thread_runtime_repository_selection=lambda:None),None,legacy,b'')
+    run(ComparisonRecords(lambda kind: [], lambda kind,value:writes.append(copy.deepcopy(value)),
+        lambda *args: None, lambda *args: False, copy.deepcopy),
+        ComparisonMedia(lambda *args: None, lambda *args: None, lambda data: ''),
+        lambda:None, None, legacy, b'', os.getenv)
     assert legacy["decision"]=="REVIEW_REQUIRED" and legacy["diagnostics"]["phase"]=="unsupported_template"
     assert len(writes)==1,"legacy empty worker terminates before OCR or slots"
     print("preparation routes/auth/version/dedup/manual/graphics: PASS")

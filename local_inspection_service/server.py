@@ -34851,8 +34851,15 @@ async def compare_text_inspection_label(
         captured_upload = await captured_file.read(10 * 1024 * 1024 + 1)
     if confirmed_snapshot.get("preparation"):
         from local_inspection_service.standard_preparation_compare import submit
-        return submit(globals(), standard_preparation_jobs, owner_user_id, owner_username,
-                      standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
+        from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
+        return submit(
+            ComparisonRecords(_text_v2_load, _text_v2_save, _text_v2_owned, _text_v2_update_attempt, _text_v2_public),
+            ComparisonMedia(_text_v2_media_path, _text_v2_write, sha256_bytes),
+            ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
+            clear_thread_runtime_repository_selection,
+            lambda name, default, environment=os: environment.getenv(name, default),
+            standard_preparation_jobs, owner_user_id, owner_username,
+            standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
     from local_inspection_service.qwen_evidence_jobs import enabled as qwen_evidence_enabled
     if qwen_evidence_enabled(owner_user_id):
         raise HTTPException(status_code=409, detail="该标准尚未生成元素模板，请先在标准库启用并完成标准准备；无需提取实拍标签。")

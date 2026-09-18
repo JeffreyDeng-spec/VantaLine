@@ -16,8 +16,8 @@ class Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             record = dict(id='r', owner_user_id='a', standard_id='s', diagnostics={'phase':'mapping'})
             saved = []
-            s = SimpleNamespace(_text_v2_media_path=lambda *args: Path(folder)/args[-1],
-                _text_v2_write=lambda p,b: p.write_bytes(b))
+            s = SimpleNamespace(path=lambda *args: Path(folder)/args[-1],
+                write=lambda p,b: p.write_bytes(b))
             emit = model_call_audit.recorder(s, record, 'mapping', lambda phase: saved.append(phase), 'secret-fixture')
             emit('request', {'text':'secret-fixture data:image/png;base64,YWJjZA=='})
             file = record['diagnostics']['model_audits'][0]['files']['request']

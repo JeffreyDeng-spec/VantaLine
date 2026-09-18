@@ -12,6 +12,7 @@ from local_inspection_service import evidence_matching as matching
 from local_inspection_service import qwen_evidence_jobs as jobs
 from local_inspection_service import qwen_ocr_evidence as ocr
 from local_inspection_service import standard_preparation as engine
+from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia
 
 
 def observation(text='Batterv Pack', identity='o'):
@@ -107,7 +108,11 @@ class Tests(unittest.TestCase):
                     reread_version=reread.VERSION if enabled else None))
             save('records', record)
             with patch.object(ocr, 'recognize', recognize), patch.object(jobs, 'llm', return_value=({'mappings': []}, {})):
-                jobs.run(namespace, SimpleNamespace(media=lambda *args: blob), record, blob, dict(model='test',api_key='fixture'))
+                jobs.run(
+                    ComparisonRecords(lambda kind: [], save, owned, update, copy.deepcopy),
+                    ComparisonMedia(namespace._text_v2_media_path, namespace._text_v2_write, namespace.sha256_bytes),
+                    namespace.clear_thread_runtime_repository_selection,
+                    SimpleNamespace(media=lambda *args: blob), record, blob, dict(model='test',api_key='fixture'), None)
             return store['records', identity]
         first = run('first')
         self.assertEqual(len(calls), 3)

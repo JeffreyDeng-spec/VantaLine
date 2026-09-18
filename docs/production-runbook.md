@@ -1,5 +1,13 @@
 # Production runbook
 
+Prepared comparison dependency extraction keeps both existing module-level slots,
+daemon threads and timer behavior. Timer cancellation does not join its callback;
+settlement still relies on the existing compare-and-set. Local final-save failure
+can prevent cleanup/release, while Qwen final CAS failure still cancels the timer
+and clears the connection; cleanup failure can prevent release. Retain these known
+boundaries during structural migration. Preserve unknown-call records and private
+evidence, and roll back only the complete release; no new worker topology is enabled.
+
 Preparation module extraction retains the current daemon job, single preparation
 slot and whole-release restart/rollback. Keep attempts, snapshots and revision
 media. Existing cleanup failure can prevent slot release; a duplicate-claim view

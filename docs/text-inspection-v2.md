@@ -1,5 +1,16 @@
 # Text inspection v2
 
+Prepared comparisons no longer copy the server namespace. Submission still writes
+original media and a display-only preview before insert-only claim, and duplicate
+requests return the existing owned record or reject an inconsistent fingerprint.
+Thread-start failure retains its attempting record. OCR cache claims and mapping
+attempts remain durable before calls; unknown cache entries cannot trigger replay.
+A late timer cannot replace a completed result, and late work cannot reverse a
+successful timeout settlement. These guarantees concern the existing Qwen CAS path;
+local OCR retains its existing final-save behavior and independent commissioning.
+Unknown mapping and region-call outcomes are never retried for the same claim.
+The existing algorithm may still run the other separately claimed reread mode.
+
 Standard preparation HTTP routes, jobs and snapshot policy now have explicit
 ports. Existing attempt identity and processing-state checks are preserved: a late
 interrupted result is diagnostic evidence; source changes can retain a draft result
