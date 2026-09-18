@@ -1,0 +1,70 @@
+{
+  "baseline_commit": "cc34564a1ed2e5cb6b71e8b29403481d08ab9fec",
+  "cases": {
+    "synthetic123": {
+      "sha": "a5613306d282a54d4c920290f98ada9d976c4caf88c6b245b3b3891f53b5145c",
+      "meta": {
+        "background_id": "synthetic_conveyor_fallback",
+        "background_source": "generated_same_environment_fallback",
+        "background_source_asset": null,
+        "background_library_size": 0,
+        "background_split_pool_size": 0,
+        "background_split_pool_isolated": false
+      },
+      "next": 547815
+    },
+    "fit123": {
+      "sha": "e33ff014d315c8d5bb03d6e21f41273f6fa6a7fa6545957dd57b714fd98040b2",
+      "meta": {
+        "background_crop_scale": 1.0546,
+        "background_crop_xywh": [
+          0,
+          1,
+          11,
+          6
+        ],
+        "background_resized_size_px": [
+          11,
+          7
+        ],
+        "background_original_size_px": [
+          11,
+          7
+        ]
+      },
+      "next": 53821
+    },
+    "augment1": {
+      "sha": "8858ef19cca008d3e7db494563484af6be86ab5c42ec12458ae0b435195d4b6f",
+      "meta": {
+        "background_augmentation": {
+          "crop_shift": true,
+          "brightness_delta": 12.613,
+          "contrast": 1.0121,
+          "noise_std": 1.505,
+          "blur_kernel": 3,
+          "glare_applied": false,
+          "glare_alpha": 0.0,
+          "texture_lines": 14
+        }
+      },
+      "next": 817538
+    },
+    "augment4": {
+      "sha": "e4a8311e5e8af422b1e948a0ecbc345cf3844516dfc3b0d882ffda8745c78c3a",
+      "meta": {
+        "background_augmentation": {
+          "crop_shift": true,
+          "brightness_delta": 0.317,
+          "contrast": 1.0898,
+          "noise_std": 4.417,
+          "blur_kernel": 5,
+          "glare_applied": false,
+          "glare_alpha": 0.0,
+          "texture_lines": 7
+        }
+      },
+      "next": 655105
+    }
+  }
+}
