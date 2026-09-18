@@ -1,5 +1,11 @@
 # Architecture
 
+Historical comparison routes and projections now live in `text_inspection.history`.
+Typed account, record and verified-media capabilities replace namespace injection;
+`comparison_history` re-exports the same six public objects for existing consumers.
+Media decoders remain lazy imports. Ordering, JSON fallback, PostgreSQL adapters,
+revision selection and diagnostic visibility are unchanged.
+
 Codex single-image and batch registration now uses explicit account, repository,
 standard-library, media and document-import capabilities. Repository/identity lookups
 remain lazy and thread-local; source-library reads stay outside the queue transaction.

@@ -34642,7 +34642,26 @@ document_import_jobs = register_document_import_jobs(globals())
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
 standard_preparation_jobs = register_standard_preparation(globals())
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
-register_comparison_history(globals())
+from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
+_history_records = HistoryRecords(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    load=lambda kind: _text_v2_load(kind),
+    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
+    public=lambda record: _text_v2_public(record),
+)
+_history_media = HistoryMedia(
+    path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
+    read_verified=lambda path, owner, standard, **kwargs: _text_v2_read_verified(path, owner, standard, **kwargs),
+)
+register_comparison_history(
+    app,
+    HistoryAccess(
+        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+        owner=lambda: _text_v2_owner(),
+    ),
+    _history_records,
+    _history_media,
+)
 
 resolve_label_extraction = register_label_extraction(globals())
 register_agent_api(globals())

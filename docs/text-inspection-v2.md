@@ -1,5 +1,10 @@
 # Text inspection v2
 
+Comparison history now registers through explicit account, record and media ports
+in `text_inspection.history`. Existing consumers import the same projection/state
+objects through the compatibility module. Old revision selection, evidence hashes,
+redaction, pagination and account isolation retain their existing behavior.
+
 Label API, detection-worker and PDF-worker registration now uses typed explicit
 capabilities rather than the server namespace. HTTP ownership, imports, settings,
 historical references, queue claims and paid-call processing are unchanged. Model

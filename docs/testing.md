@@ -1,5 +1,16 @@
 # Testing
 
+`python scripts/smoke_history_dependencies.py` covers seven isolated groups: native
+ASGI concurrent account/app isolation and PostgreSQL adapter arguments; permission,
+filter and cursor ordering; immutable revision/hash evidence failures; real PNG/JPEG
+orientation and thumbnail behavior; and compatibility export/cursor/state semantics.
+Invalid cursors fail before repository, JSON or media access. A verified reader's
+first error propagates unchanged without a second read or rendering, even when a
+second read would succeed; this covers all five supported media variants.
+The PostgreSQL adapter here is a substitute; existing real PostgreSQL label smoke
+and the original JSON-backed comparison-history smoke remain required. Original
+functions and handler bodies were AST-compared before and after migration.
+
 `python scripts/smoke_codex_dependencies.py` adds four groups for concurrent two-app
 identity/repository isolation, frozen-source hashes, dynamic owner/model configuration,
 capabilities without PostgreSQL, history/cancel after admission removal and endpoint-

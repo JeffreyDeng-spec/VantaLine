@@ -1,5 +1,10 @@
 # Production runbook
 
+History extraction requires only the existing complete-release restart/rollback.
+Keep the compatibility module and new history package in the same release. No data,
+index, cursor format or worker-topology migration is introduced; preserve immutable
+revision/media evidence during rollback.
+
 Codex dependency extraction uses the existing complete-release restart/rollback.
 The independent Codex worker is unchanged. Preserve partially imported standard/media
 records and immutable task evidence on failure; do not auto-retry document/model work

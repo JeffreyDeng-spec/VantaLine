@@ -185,6 +185,7 @@ jobs:
           python scripts/smoke_accessory_routing.py
           python scripts/smoke_label_dependencies.py
           python scripts/smoke_codex_dependencies.py
+          python scripts/smoke_history_dependencies.py
           python local_inspection_service/scripts/smoke_auth_rbac.py
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py

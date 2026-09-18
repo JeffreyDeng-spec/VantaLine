@@ -1,5 +1,9 @@
 # VantaLine release management
 
+History dependency CI adds native ASGI and evidence-media contracts alongside the
+original history and PostgreSQL label gates. Package `text_inspection.history`, its
+ports and the compatibility export together; use normal complete-release rollback.
+
 Codex API dependency CI adds explicit-composition and compatibility tests while
 retaining all existing PostgreSQL, CLI and worker-exit tests. Include the request,
 validation and dependency modules together in the immutable package; the worker
