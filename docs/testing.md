@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_remote_compatibility.py` runs 20 synthetic groups.
+Eleven original business groups passed before migration on Windows and Linux;
+17 expanded groups also pass against saved original function bodies. Contracts retain
+exact request metadata, one HTTP submission, status normalization, top-level response
+filtering, archive closure and original cleanup/error boundaries. Three narrow getters
+preserve callback selection before effectful arguments; pure payload/status projections
+remain unchanged. Tests use real temporary archives and network substitutes only.
+
 `python scripts/smoke_training_background_api.py` runs 26 synthetic groups.
 Fifteen original HTTP/business groups passed before migration on Windows and Linux;
 22 expanded groups also pass against saved original function bodies. Contracts retain

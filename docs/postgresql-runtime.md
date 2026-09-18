@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Remote training extraction retains the existing task-update callback and its initial/final write
+order. It adds no repository, schema, connection or advisory-lock change; archive cleanup remains
+separate from database task persistence.
+
 Background capture retains one task save followed by optimization-state save under the existing
 shared lock. It keeps row-persistence interfaces, shared environment metadata and partial-write
 ordering. This module move introduces no schema, transaction or advisory-lock optimization.
@@ -86,7 +90,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v37 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v38 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
