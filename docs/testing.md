@@ -1,5 +1,18 @@
 # Testing
 
+`python scripts/smoke_extraction_dependencies.py` adds six offline groups covering
+native ASGI two-app isolation and returned resolver closures; frozen worker settings,
+insert-only losers and save-failure cleanup; history-pinned/failed-tombstone retention;
+and media authorization/hash/headers plus revision-loser file cleanup. File checks
+use only disposable directories; symlink retention is checked where creation is
+permitted. Original extraction/bbox endpoint tests and real PostgreSQL revision-race
+smoke remain required. Windows endpoint tests need a short temporary root to avoid
+the existing 271-character generated path; no production path behavior is changed.
+Both workers propagate a first final-save error without retry, even when a second
+save would succeed, and clear their connection once afterward. Exact-deadline and
+just-after-deadline reads preserve the strict comparison and never settle storage;
+the eventual worker result remains readable without launching a second call.
+
 `python scripts/smoke_agent_dependencies.py` drives four original native-ASGI groups
 before and after extraction: dynamic commissioning and PostgreSQL availability,
 concurrent two-app account isolation, admin policy validation and error ordering,

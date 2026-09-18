@@ -1,5 +1,10 @@
 # Architecture
 
+Label extraction registration now lives in `text_inspection.extraction_api` and
+takes explicit account, record, media, model and cleanup capabilities. The old
+registrar export remains identical. This dependency batch retains the existing
+nested workflow; geometry, bounding-box algorithms and worker topology are unchanged.
+
 Agent HTTP discovery, policy and operation inspection/cancellation now live in
 `agent.api`, with narrow identity, account-store and repository factory capabilities.
 Strict requests live in `schemas.agent` and the public projection in `agent.projection`;

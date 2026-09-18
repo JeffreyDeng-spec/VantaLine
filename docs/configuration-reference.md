@@ -1,5 +1,10 @@
 # Configuration reference
 
+Extraction dependency ports preserve the existing account gates, external-VLM flag,
+image/document model settings and single-attempt arguments. Upload reads remain
+bounded at 10 MiB plus one byte; verified media reads retain the explicit 100 MiB
+limit and evidence hash. No setting or model/prompt change is introduced.
+
 Agent dependency extraction adds no setting or authorization. Commissioning still
 reads `VANTALINE_WEBMCP_ACCOUNTS` dynamically and skips database access for excluded
 accounts. Policy routes retain admin checks and strict request types; operation

@@ -1,5 +1,11 @@
 # Text inspection v2
 
+Label extraction now receives typed account, persistence, verified-media and model
+capabilities. Capability reads retain their existing expired-draft cleanup side
+effect: history/confirmed roots stay protected and failed tombstone claims cannot
+delete media. Immutable edits, single-call provider behavior and evidence byte/hash
+validation are unchanged; this batch adds no historical-data cleanup policy.
+
 Document classification routes and background jobs use explicit dependency ports.
 Attempts are still persisted before media reads/provider calls; repeated content
 reuses the same job-local result, including failures. Human selections and deleted
