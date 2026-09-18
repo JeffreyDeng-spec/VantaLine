@@ -24,7 +24,7 @@ class IncomingCapacity:
 
 class IncomingRetention:
     def __init__(self, inspections: IncomingInspections, media: IncomingMedia, writes: IncomingWrites,
-                 json: IncomingJSON, audit: Callable[[Record], None], system_owner: Callable[[], str]):
+                 json: IncomingJSON, audit: Callable[[], Callable[[Record], None]], system_owner: Callable[[], str]):
         self.inspections, self.media, self.writes = inspections, media, writes
         self.json, self.audit, self.system_owner = json, audit, system_owner
 
@@ -69,7 +69,7 @@ class IncomingRetention:
                         changed = True
             updated_records += int(changed)
         if updated_records:
-            self.audit(
+            self.audit()(
                 {
                     "id": f"incoming_retention_{cutoff // 86400}",
                     "event_type": "incoming_text.evidence_retention_purge",

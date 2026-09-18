@@ -74,6 +74,33 @@ def capture():
         assert server._incoming_catalog.writes is server._incoming_reviews.writes is server._incoming_retention.writes
         assert server._incoming_writes.guard() is server._incoming_text_store_lock
         assert server._incoming_json.paths is server._incoming_text_store.paths
+        incoming_getters = (
+            (server._incoming_task_access.allowed, "incoming_text_task_access_allowed"),
+            (server._incoming_access.task, "require_incoming_text_task"),
+            (server._incoming_access.record, "require_record_access"),
+            (server._incoming_tasks.public, "pipeline_task_public"),
+            (server._incoming_media.output, "output_write_dir_for_owner"),
+            (server._incoming_media.decode, "decode_incoming_reference"),
+            (server._incoming_reviews.decode_rows, "row_raw_json_list"),
+            (server._incoming_execution.ocr.field, "_field_observation"),
+            (server._incoming_execution.imaging.rectify, "rectify_label"),
+            (server._incoming_execution.imaging.similarity, "local_visual_similarity"),
+            (server._incoming_execution.imaging.annotate, "annotate_inspection"),
+            (server._incoming_execution.capacity, "require_incoming_text_storage_capacity"),
+            (server._incoming_retention.audit, "append_incoming_text_audit"),
+        )
+        for getter, name in incoming_getters:
+            original = getattr(server, name)
+            assert getter() is original
+            replacement = lambda *args, **kwargs: None
+            try:
+                setattr(server, name, replacement)
+                assert getter() is replacement
+                setattr(server, name, None)
+                assert getter() is None
+            finally:
+                setattr(server, name, original)
+            assert getter() is original
         for routes in (server._incoming_catalog_routes, server._incoming_inspection_routes):
             for name in routes.__dataclass_fields__:
                 endpoint = getattr(server, name)

@@ -34396,7 +34396,7 @@ from .text_inspection.incoming_api import register_catalog as register_incoming_
 
 _incoming_task_access = IncomingTaskAccess(
     load=lambda task_id: load_pipeline_task(task_id), user=lambda: current_auth_user(),
-    allowed=lambda task, user: incoming_text_task_access_allowed(task, user),
+    allowed=lambda: incoming_text_task_access_allowed,
 )
 
 
@@ -34448,8 +34448,8 @@ def _duplicate_incoming_capture(owner_user_id: str, task_id: str, capture_id: st
 
 _incoming_access = IncomingAccess(
     permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-    user=lambda: current_auth_user(), task=lambda task_id, **kwargs: require_incoming_text_task(task_id, **kwargs),
-    record=lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
+    user=lambda: current_auth_user(), task=lambda: require_incoming_text_task,
+    record=lambda: require_record_access,
     owner=lambda record: record_owner_id(record), task_allowed=lambda task, user: incoming_text_task_access_allowed(task, user),
 )
 _incoming_references = IncomingReferences(
@@ -34463,11 +34463,11 @@ _incoming_inspections = IncomingInspections(
 )
 _incoming_tasks = IncomingTasks(
     all=lambda: load_pipeline_tasks(), save=lambda task: save_pipeline_task(task),
-    public=lambda task, config: pipeline_task_public(task, config), config=lambda: scope_config_for_user(load_config()),
+    public=lambda: pipeline_task_public, config=lambda: scope_config_for_user(load_config()),
 )
 _incoming_media = IncomingMedia(
-    output=lambda name, owner: output_write_dir_for_owner(name, owner), root=lambda: OUTPUT_DIR,
-    under=lambda path, root: path_is_under(path, root), decode=lambda data, name: decode_incoming_reference(data, name),
+    output=lambda: output_write_dir_for_owner, root=lambda: OUTPUT_DIR,
+    under=lambda path, root: path_is_under(path, root), decode=lambda: decode_incoming_reference,
 )
 _incoming_writes = IncomingWrites(
     repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
@@ -34482,23 +34482,23 @@ _incoming_catalog = IncomingCatalog(
 )
 _incoming_reviews = IncomingReviews(
     _incoming_access, _incoming_inspections, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
-    decode_rows=lambda rows: row_raw_json_list(rows), public=lambda record: incoming_text_public(record),
+    decode_rows=lambda: row_raw_json_list, public=lambda record: incoming_text_public(record),
 )
 _incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
 _incoming_execution = IncomingExecution(
     _incoming_access, _incoming_references, _incoming_inspections, _incoming_media,
     IncomingOCR(observe=lambda image: incoming_text_ocr_observations(image),
                 corroborate=lambda image, rules: incoming_text_corroboration_observations(image, rules),
-                field=lambda rule, first, second, corrected, reference: _field_observation(rule, first, second, corrected, reference)),
-    IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda image, size: rectify_label(image, size),
-                    similarity=lambda reference, corrected, region: local_visual_similarity(reference, corrected, region),
-                    annotate=lambda image, fields: annotate_inspection(image, fields)),
-    capacity=lambda size: require_incoming_text_storage_capacity(size), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+                field=lambda: _field_observation),
+    IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda: rectify_label,
+                    similarity=lambda: local_visual_similarity,
+                    annotate=lambda: annotate_inspection),
+    capacity=lambda: require_incoming_text_storage_capacity, verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
     public=lambda record: incoming_text_public(record),
 )
 _incoming_retention = IncomingRetention(
     _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
-    audit=lambda event: append_incoming_text_audit(event), system_owner=lambda: SYSTEM_OWNER_ID,
+    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID,
 )
 _incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task

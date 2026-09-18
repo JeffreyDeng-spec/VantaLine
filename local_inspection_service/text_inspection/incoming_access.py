@@ -28,13 +28,13 @@ def task_access_allowed(task: Record, user: Record, is_admin: Callable[[Record],
 
 class IncomingTaskAccess:
     def __init__(self, load: Callable[[str], Record | None], user: Callable[[], Record],
-                 allowed: Callable[[Record, Record], bool]):
+                 allowed: Callable[[], Callable[[Record, Record], bool]]):
         self.load, self.user, self.allowed = load, user, allowed
 
     def require(self, task_id: str, *, write: bool = False) -> Record:
         task = self.load(task_id)
         if not task or str(task.get("task_kind") or "") != "incoming_material_text":
             raise HTTPException(status_code=404, detail="包材文字检验任务不存在")
-        if not self.allowed(task, self.user()):
+        if not self.allowed()(task, self.user()):
             raise HTTPException(status_code=404, detail="包材文字检验任务不存在")
         return task

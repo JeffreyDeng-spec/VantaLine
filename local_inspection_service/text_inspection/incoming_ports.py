@@ -30,8 +30,8 @@ class SaveIncoming(Protocol):
 class IncomingAccess:
     permission: Permission
     user: Callable[[], Record]
-    task: RequireTask
-    record: RequireRecord
+    task: Callable[[], RequireTask]
+    record: Callable[[], RequireRecord]
     owner: Callable[[Record], str]
     task_allowed: Callable[[Record, Record], bool]
 
@@ -55,16 +55,16 @@ class IncomingInspections:
 class IncomingTasks:
     all: Callable[[], list[Record]]
     save: Callable[[Record], Any]
-    public: Callable[[Record, Record], Record]
+    public: Callable[[], Callable[[Record, Record], Record]]
     config: Callable[[], Record]
 
 
 @dataclass(frozen=True)
 class IncomingMedia:
-    output: Callable[[str, str], Path]
+    output: Callable[[], Callable[[str, str], Path]]
     root: Callable[[], Path]
     under: Callable[[Path, Path], bool]
-    decode: Callable[[bytes, str], tuple[np.ndarray, str]]
+    decode: Callable[[], Callable[[bytes, str], tuple[np.ndarray, str]]]
 
 
 @dataclass(frozen=True)
@@ -84,12 +84,12 @@ class IncomingJSON:
 class IncomingOCR:
     observe: Callable[[np.ndarray], list[TextObservation]]
     corroborate: Callable[[np.ndarray, list[Record]], dict[str, list[TextObservation]]]
-    field: Callable[[Record, list[TextObservation], list[TextObservation], np.ndarray, np.ndarray], TextObservation | None]
+    field: Callable[[], Callable[[Record, list[TextObservation], list[TextObservation], np.ndarray, np.ndarray], TextObservation | None]]
 
 
 @dataclass(frozen=True)
 class IncomingImaging:
     quality: Callable[[np.ndarray], Record]
-    rectify: Callable[[np.ndarray, tuple[int, int]], tuple[np.ndarray, Record]]
-    similarity: Callable[[np.ndarray, np.ndarray, Record], float | None]
-    annotate: Callable[[np.ndarray, list[Record]], np.ndarray]
+    rectify: Callable[[], Callable[[np.ndarray, tuple[int, int]], tuple[np.ndarray, Record]]]
+    similarity: Callable[[], Callable[[np.ndarray, np.ndarray, Record], float | None]]
+    annotate: Callable[[], Callable[[np.ndarray, list[Record]], np.ndarray]]

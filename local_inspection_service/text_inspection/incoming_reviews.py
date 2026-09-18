@@ -13,7 +13,7 @@ from .incoming_ports import IncomingAccess, IncomingInspections, IncomingTasks, 
 class IncomingReviews:
     def __init__(self, access: IncomingAccess, inspections: IncomingInspections, tasks: IncomingTasks,
                  media: IncomingMedia, writes: IncomingWrites, json: IncomingJSON,
-                 decode_rows: Callable[[list[dict[str, Any]]], list[dict[str, Any]]],
+                 decode_rows: Callable[[], Callable[[list[dict[str, Any]]], list[dict[str, Any]]]],
                  public: Callable[[dict[str, Any]], dict[str, Any]]):
         self.access, self.inspections, self.tasks = access, inspections, tasks
         self.media, self.writes, self.json = media, writes, json
@@ -26,7 +26,7 @@ class IncomingReviews:
                 "incoming_text_inspections",
                 {"owner_user_id": owner_user_id, "task_id": task_id, "capture_id": capture_id},
             )
-            values = self.decode_rows([row]) if row else []
+            values = self.decode_rows()([row]) if row else []
             return values[0] if values else None
         return next(
             (
@@ -45,7 +45,7 @@ class IncomingReviews:
             raise HTTPException(status_code=404, detail="检验记录不存在")
         # The task owner is authoritative. Legacy shared assignments do not grant
         # access after the self-owned task model was introduced.
-        self.access.task(str(inspection.get("task_id")))
+        self.access.task()(str(inspection.get("task_id")))
         key = {"source": "source_path", "corrected": "corrected_path", "annotated": "annotated_path"}.get(asset_kind)
         path = Path(str(inspection.get(key or "") or ""))
         if not key or not path.exists() or not self.media.under(path, self.media.root()):
@@ -58,7 +58,7 @@ class IncomingReviews:
         if not inspection:
             raise HTTPException(status_code=404, detail="检验记录不存在")
         # Only the task owner (or a platform administrator) may disposition records.
-        self.access.task(str(inspection.get("task_id") or ""))
+        self.access.task()(str(inspection.get("task_id") or ""))
         if inspection.get("auto_decision") != INCOMING_TEXT_REVIEW_REQUIRED:
             raise HTTPException(status_code=409, detail="只有需复核记录可以人工处理")
         decision = request.decision.strip().upper()
@@ -139,7 +139,7 @@ class IncomingReviews:
                 limit=bounded,
             )
             return {
-                "items": [self.public(item) for item in self.decode_rows(result.get("items") or [])],
+                "items": [self.public(item) for item in self.decode_rows()(result.get("items") or [])],
                 "total": int(result.get("total") or 0),
                 "summary": result.get("summary") or {},
             }

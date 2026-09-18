@@ -22,7 +22,7 @@ class IncomingCatalog:
         self.public, self.verified = public, verified
 
     def get_incoming_text_task(self, task_id: str) -> dict[str, Any]:
-        task = self.access.task(task_id)
+        task = self.access.task()(task_id)
         references = [
             self.public(item)
             for item in self.references.all()
@@ -31,7 +31,7 @@ class IncomingCatalog:
         references.sort(key=lambda item: int(item.get("created_at") or 0), reverse=True)
         active_items = [item for item in references if item.get("status") == "active"]
         active = active_items[0] if len(active_items) == 1 else None
-        public_task = self.tasks.public(task, self.tasks.config())
+        public_task = self.tasks.public()(task, self.tasks.config())
         public_task["status"] = "ready" if active else "configuration_error" if active_items else "setup_required"
         public_task["active_reference_id"] = str(active.get("id") or "") if active else ""
         public_task["reference_version_label"] = str(active.get("version_label") or "") if active else ""
@@ -47,8 +47,8 @@ class IncomingCatalog:
         reference = self.references.load(reference_id)
         if not reference:
             raise HTTPException(status_code=404, detail="标准版本不存在")
-        self.access.record(reference, self.access.user())
-        self.access.task(str(reference.get("task_id")))
+        self.access.record()(reference, self.access.user())
+        self.access.task()(str(reference.get("task_id")))
         key = {"source": "source_path", "canonical": "canonical_path"}.get(asset_kind)
         path = Path(str(reference.get(key or "") or ""))
         if not key or not path.exists() or not self.media.under(path, self.media.root()):
@@ -57,15 +57,15 @@ class IncomingCatalog:
 
     async def create_incoming_text_reference(self, task_id: str, file: Upload, version_label: str) -> dict[str, Any]:
         self.access.permission("incoming_material_config", detail="没有包材文字标准配置权限")
-        task = self.access.task(task_id, write=True)
+        task = self.access.task()(task_id, write=True)
         clean_version = version_label.strip()
         if not clean_version or len(clean_version) > 40:
             raise HTTPException(status_code=400, detail="标准版本号必须为 1–40 个字符")
         contents = await file.read()
-        image, suffix = self.media.decode(contents, file.filename or "reference")
+        image, suffix = self.media.decode()(contents, file.filename or "reference")
         owner_user_id = str(task.get("owner_user_id") or self.access.owner(task))
         reference_id = f"itref_{uuid.uuid4().hex[:12]}"
-        output_dir = self.media.output(f"incoming_text/references/{task_id}", owner_user_id)
+        output_dir = self.media.output()(f"incoming_text/references/{task_id}", owner_user_id)
         source_path = output_dir / f"{reference_id}{suffix}"
         canonical_path = output_dir / f"{reference_id}_canonical.png"
         source_path.write_bytes(contents)
@@ -106,8 +106,8 @@ class IncomingCatalog:
         reference = self.references.load(reference_id)
         if not reference:
             raise HTTPException(status_code=404, detail="标准版本不存在")
-        self.access.record(reference, self.access.user(), write=True)
-        self.access.task(str(reference.get("task_id")), write=True)
+        self.access.record()(reference, self.access.user(), write=True)
+        self.access.task()(str(reference.get("task_id")), write=True)
         if reference.get("status") != "draft":
             raise HTTPException(status_code=409, detail="已启用的标准不可修改，请新建版本")
         try:
@@ -143,7 +143,7 @@ class IncomingCatalog:
                             item["status"] = "archived"
                     values = [reference if str(item.get("id")) == reference_id else item for item in values]
                     self.json.write(self.json.paths.references(), values)
-            task = self.access.task(str(reference.get("task_id")), write=True)
+            task = self.access.task()(str(reference.get("task_id")), write=True)
             task.update(
                 {
                     "status": "ready",
@@ -162,8 +162,8 @@ class IncomingCatalog:
         source = self.references.load(reference_id)
         if not source:
             raise HTTPException(status_code=404, detail="标准版本不存在")
-        self.access.record(source, self.access.user(), write=True)
-        self.access.task(str(source.get("task_id") or ""), write=True)
+        self.access.record()(source, self.access.user(), write=True)
+        self.access.task()(str(source.get("task_id") or ""), write=True)
         clean_version = version_label.strip()
         if not clean_version or len(clean_version) > 40:
             raise HTTPException(status_code=400, detail="标准版本号必须为 1–40 个字符")

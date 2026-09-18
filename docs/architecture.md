@@ -8,6 +8,11 @@ identity, path and policy providers are resolved at use time; services hold no u
 or connection. Capture OCR remains synchronous inside its existing async handler.
 The root keeps compatible helper forwards and aliases to actual route handlers.
 
+Workflow callback getters resolve only at their original call expressions, after
+preceding work and before argument effects. Missing callbacks retain argument
+evaluation and the original exception or fail-closed projection. Request identities
+and database connections remain transient; no new retry policy is introduced.
+
 The OCR result-mapping getter preserves the original lookup after prediction and
 before result truth/item access. Missing callbacks fail at the same point; no
 extra OCR, rendering, parsing or serialization retry is introduced.

@@ -3,6 +3,7 @@ import asyncio
 import copy
 from contextvars import ContextVar
 from dataclasses import replace
+from contextlib import ExitStack
 import hashlib
 from pathlib import Path
 import sys
@@ -65,7 +66,7 @@ class Fixture:
         self.repository = None
         self.fail_write_number, self.write_number = 0, 0
         self.permission = Mock()
-        self.task_access = incoming_access.IncomingTaskAccess(self.load_task, self.user, self.allowed)
+        self.task_access = incoming_access.IncomingTaskAccess(self.load_task, self.user, lambda:self.allowed)
         self.require_task = Mock(side_effect=self.task_access.require)
         self.record_access = Mock()
         self.save_task = Mock()
@@ -81,7 +82,7 @@ class Fixture:
         self.save_inspection = Mock(side_effect=lambda record, **kw: self.save('inspections', record, **kw))
         self.audit = Mock()
         self.access = IncomingAccess(lambda *a, **kw: self.permission(*a, **kw), self.user,
-            lambda *a, **kw: self.require_task(*a, **kw), lambda *a, **kw: self.record_access(*a, **kw),
+            lambda:self.require_task, lambda:self.record_access,
             lambda value: str(value.get('owner_user_id') or ''), self.allowed)
         self.references = IncomingReferences(lambda: copy.deepcopy(self.state['references']),
             lambda identity: self.find('references', identity), lambda *a, **kw: self.save_reference(*a, **kw))
@@ -89,21 +90,21 @@ class Fixture:
             lambda identity: self.find('inspections', identity), lambda *a, **kw: self.save_inspection(*a, **kw),
             lambda *a: self.reviews.duplicate(*a))
         self.tasks = IncomingTasks(lambda: copy.deepcopy(self.task_records), lambda task: self.save_task(task),
-            lambda task, config: copy.deepcopy(task), lambda: {'user': self.context.get()})
-        self.media = IncomingMedia(self.output, lambda: self.root, lambda path, root: path.resolve().is_relative_to(root.resolve()),
-            lambda data, name: (cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR), '.png'))
+            lambda:lambda task, config: copy.deepcopy(task), lambda: {'user': self.context.get()})
+        self.media = IncomingMedia(lambda:self.output, lambda: self.root, lambda path, root: path.resolve().is_relative_to(root.resolve()),
+            lambda:lambda data, name: (cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR), '.png'))
         self.writes = IncomingWrites(lambda: self.repository, lambda: self.lock)
         self.paths = IncomingPaths(lambda: self.root/'references.json', lambda: self.root/'inspections.json', lambda: self.root/'audit.json')
         self.json = IncomingJSON(self.paths, lambda path: copy.deepcopy(self.state[path.stem]), self.write)
         public = lambda record: incoming_access.public_record(record, lambda value: value)
         self.catalog = IncomingCatalog(self.access, self.references, self.tasks, self.media, self.writes, self.json, public, lambda: False)
         self.reviews = IncomingReviews(self.access, self.inspections, self.tasks, self.media, self.writes, self.json,
-            lambda rows: [row['raw_json'] for row in rows], public)
+            lambda:lambda rows: [row['raw_json'] for row in rows], public)
         self.execution = IncomingExecution(self.access, self.references, self.inspections, self.media,
-            IncomingOCR(lambda image: self.observe(image), lambda *a: self.corroborate(*a), lambda *a: self.field(*a)),
-            IncomingImaging(lambda image: self.quality(image), lambda *a: self.rectify(*a), lambda *a: self.similarity(*a), lambda *a: self.annotate(*a)),
-            lambda size: self.capacity(size), lambda: False, public)
-        self.retention = IncomingRetention(self.inspections, self.media, self.writes, self.json, self.audit, lambda: 'system')
+            IncomingOCR(lambda image: self.observe(image), lambda *a: self.corroborate(*a), lambda:self.field),
+            IncomingImaging(lambda image: self.quality(image), lambda:self.rectify, lambda:self.similarity, lambda:self.annotate),
+            lambda:self.capacity, lambda: False, public)
+        self.retention = IncomingRetention(self.inspections, self.media, self.writes, self.json, lambda:self.audit, lambda: 'system')
     def user(self):
         return {'id': self.context.get()}
     def allowed(self, task, user):
@@ -147,6 +148,267 @@ class Fixture:
 
 
 class Workflows(unittest.TestCase):
+    def first_failure(self, error, success):
+        attempts=[]
+        def call(*args,**kwargs):
+            attempts.append(1)
+            if len(attempts)==1:raise error
+            return success(*args,**kwargs)
+        return Mock(side_effect=call)
+
+    def test_catalog_first_failures_preserve_partial_state_without_retry(self):
+        for boundary in ['create','activate_pg','activate_read','activate_write','publish','clone']:
+            with self.subTest(boundary=boundary):
+                f=Fixture(self);error=RuntimeError(boundary)
+                if boundary=='create':
+                    target=self.first_failure(error,lambda record,**kw:f.save('references',record,**kw));f.save_reference.side_effect=target
+                    invoke=lambda:asyncio.run(f.catalog.create_incoming_text_reference('task',Upload(),'v1'))
+                else:
+                    reference=f.active_reference();reference['status']='draft'
+                    if boundary=='clone':
+                        target=self.first_failure(error,lambda record,**kw:f.save('references',record,**kw));f.save_reference.side_effect=target
+                        invoke=lambda:f.catalog.clone_incoming_text_reference('itref_one','v2')
+                    else:
+                        invoke=lambda:f.catalog.update_incoming_text_reference_rules('itref_one',IncomingTextRulesRequest(rules=[RULE],activate=True))
+                        if boundary=='activate_pg':
+                            f.repository=Mock();target=self.first_failure(error,lambda *args:None);f.repository.activate_incoming_text_reference=target
+                        elif boundary=='publish':
+                            target=self.first_failure(error,lambda task:None);f.save_task.side_effect=target
+                        else:
+                            if boundary=='activate_read':
+                                target=self.first_failure(error,f.json.read);f.catalog.json=replace(f.json,read=target)
+                            else:
+                                target=self.first_failure(error,f.json.write);f.catalog.json=replace(f.json,write=target)
+                with self.assertRaises(RuntimeError) as caught:invoke()
+                self.assertIs(caught.exception,error);target.assert_called_once()
+                if boundary=='create':self.assertEqual(f.state['references'],[]);self.assertEqual(len(list(f.root.rglob('itref_*'))),2)
+                elif boundary=='publish':self.assertEqual(f.find('references','itref_one')['status'],'active')
+                else:self.assertEqual(f.find('references','itref_one')['status'],'draft')
+                if boundary!='publish':f.save_task.assert_not_called()
+
+    def test_execution_first_failures_keep_claim_and_completion_boundaries(self):
+        for boundary in ['claim','final','quality','observe','corroborate','field','annotate','imwrite']:
+            with self.subTest(boundary=boundary):
+                f=Fixture(self);f.active_reference();error=RuntimeError(boundary)
+                with ExitStack() as stack:
+                    if boundary in ('claim','final'):
+                        save=f.save_inspection.side_effect;target=self.first_failure(error,save)
+                        f.save_inspection.side_effect=lambda record,**kw:target(record,**kw) if bool(kw.get('insert_only'))==(boundary=='claim') else save(record,**kw)
+                    elif boundary=='imwrite':
+                        target=self.first_failure(error,incoming_execution.cv2.imwrite);stack.enter_context(patch.object(incoming_execution.cv2,'imwrite',target))
+                    else:
+                        success={'quality':lambda image:{'accepted':True},'observe':lambda image:[],
+                                 'corroborate':lambda *args:{},'field':lambda *args:None,'annotate':lambda image,fields:image.copy()}[boundary]
+                        target=self.first_failure(error,success);getattr(f,boundary).side_effect=target
+                    invoke=lambda:asyncio.run(f.execution.inspect_incoming_text('task',Upload(),'capture-0001'))
+                    if boundary in ('claim','final','quality'):
+                        with self.assertRaises(RuntimeError) as caught:invoke()
+                        self.assertIs(caught.exception,error)
+                    else:
+                        result=invoke();self.assertEqual(result['status'],'completed_with_error');self.assertEqual(result['error_code'],'RuntimeError')
+                        self.assertEqual(result['auto_decision'],'REVIEW_REQUIRED');self.assertEqual(result['final_decision'],'')
+                    target.assert_called_once()
+                if boundary=='claim':self.assertEqual(f.state['inspections'],[]);f.quality.assert_not_called()
+                elif boundary in ('final','quality'):self.assertEqual(f.state['inspections'][0]['status'],'processing')
+                else:self.assertEqual(f.state['inspections'][0]['status'],'completed_with_error')
+                if boundary in ('claim','quality'):f.observe.assert_not_called()
+                if boundary=='observe':f.corroborate.assert_not_called()
+                if boundary in ('observe','corroborate'):f.field.assert_not_called()
+                if boundary in ('observe','corroborate','field'):f.annotate.assert_not_called()
+                self.assertEqual(len(list(f.root.rglob('itinsp_*_source*'))),1)
+
+    def test_review_read_and_list_decode_first_errors_are_not_retried(self):
+        for boundary in ['review_read','list_decode']:
+            with self.subTest(boundary=boundary):
+                f=Fixture(self);f.inspection();error=RuntimeError(boundary)
+                if boundary=='review_read':
+                    target=self.first_failure(error,f.json.read);f.reviews.json=replace(f.json,read=target)
+                    invoke=lambda:f.reviews.review_incoming_text_inspection('itinsp_one',IncomingTextReviewRequest(decision='RELEASED',reason='checked'))
+                else:
+                    f.repository=Mock();f.repository.list_incoming_text_inspections.return_value={'items':[{'raw_json':{'id':'one'}}],'total':1,'summary':{}}
+                    target=self.first_failure(error,lambda rows:[row['raw_json'] for row in rows]);f.reviews.decode_rows=lambda:target
+                    invoke=lambda:f.reviews.list_incoming_text_inspections()
+                with self.assertRaises(RuntimeError) as caught:invoke()
+                self.assertIs(caught.exception,error);target.assert_called_once();self.assertEqual(f.events,[])
+                self.assertEqual(f.state['inspections'][0]['final_decision'],'');self.assertEqual(f.state['audit'],[])
+
+    def test_retention_first_failures_preserve_evidence_and_audit_order(self):
+        for boundary in ['audit','unlink','mark','read','write']:
+            with self.subTest(boundary=boundary):
+                f=Fixture(self);path=f.root/'source.png';path.write_bytes(b'evidence');f.inspection(source_path=str(path),created_at=1)
+                error=OSError(boundary) if boundary=='unlink' else RuntimeError(boundary)
+                with ExitStack() as stack:
+                    stack.enter_context(patch.dict(incoming_retention.os.environ,{'VANTALINE_INCOMING_TEXT_IMAGE_RETENTION_DAYS':'1'}))
+                    stack.enter_context(patch.object(incoming_retention.time,'time',return_value=100000))
+                    if boundary=='audit':target=self.first_failure(error,lambda event:None);f.audit.side_effect=target
+                    elif boundary=='unlink':
+                        target=self.first_failure(error,Path.unlink)
+                        def unlink(candidate,*args,**kwargs):return target(candidate,*args,**kwargs)
+                        stack.enter_context(patch.object(Path,'unlink',unlink))
+                    elif boundary=='mark':
+                        f.repository=Mock();f.repository.incoming_text_retention_candidates.return_value=copy.deepcopy(f.state['inspections'])
+                        target=self.first_failure(error,lambda *args,**kwargs:True);f.repository.mark_incoming_text_evidence_purged=target
+                    elif boundary=='read':target=self.first_failure(error,f.json.read);f.retention.json=replace(f.json,read=target)
+                    else:target=self.first_failure(error,f.json.write);f.retention.json=replace(f.json,write=target)
+                    if boundary=='unlink':self.assertEqual(f.retention.purge(),{'records':0,'files':0})
+                    else:
+                        with self.assertRaises(RuntimeError) as caught:f.retention.purge()
+                        self.assertIs(caught.exception,error)
+                    target.assert_called_once()
+                self.assertEqual(path.exists(),boundary=='unlink')
+                if boundary=='audit':self.assertEqual(f.state['inspections'][0]['evidence_purged_at'],100000)
+                else:self.assertNotIn('evidence_purged_at',f.state['inspections'][0]);f.audit.assert_not_called()
+
+    def test_json_comparisons_and_mutations_share_the_write_lock(self):
+        for domain in ['activate','review','retention']:
+            with self.subTest(domain=domain):
+                f=Fixture(self);probes=[];armed=[False]
+                def probe(label):
+                    if not armed[0]:return
+                    def other_thread():
+                        acquired=f.lock.acquire(blocking=False);probes.append((label,acquired))
+                        if acquired:f.lock.release()
+                    thread=threading.Thread(target=other_thread);thread.start();thread.join(2);self.assertFalse(thread.is_alive())
+                class Record(dict):
+                    def get(self,key,*args):probe('get');return super().get(key,*args)
+                    def __setitem__(self,key,value):probe('set');return super().__setitem__(key,value)
+                    def update(self,*args,**kwargs):probe('update');return super().update(*args,**kwargs)
+                def read(path):
+                    armed[0]=True;probe('read')
+                    return [Record(value) for value in copy.deepcopy(f.state[path.stem])]
+                def write(path,values):
+                    probe('write');armed[0]=False;f.write(path,values)
+                io=replace(f.json,read=read,write=write)
+                if domain=='activate':
+                    ref=f.active_reference();ref['status']='draft';f.state['references'].append({**ref,'id':'itref_old','status':'active'})
+                    f.catalog.json=io;f.catalog.update_incoming_text_reference_rules('itref_one',IncomingTextRulesRequest(rules=[RULE],activate=True))
+                    self.assertIn(('set',False),probes)
+                elif domain=='review':
+                    f.inspection();f.reviews.json=io
+                    f.reviews.review_incoming_text_inspection('itinsp_one',IncomingTextReviewRequest(decision='RELEASED',reason='checked'))
+                    self.assertIn(('update',False),probes)
+                else:
+                    f.inspection(created_at=1);f.retention.json=io
+                    with patch.dict(incoming_retention.os.environ,{'VANTALINE_INCOMING_TEXT_IMAGE_RETENTION_DAYS':'1'}),patch.object(incoming_retention.time,'time',return_value=100000):f.retention.purge()
+                    self.assertIn(('set',False),probes)
+                self.assertIn(('get',False),probes);self.assertIn(('write',False),probes)
+                self.assertEqual(probes.count(('read',False)),2 if domain=='review' else 1)
+                self.assertTrue(all(not acquired for _,acquired in probes));self.assertTrue(all(not acquired for acquired in f.lock_probes))
+                released=[]
+                def after():
+                    acquired=f.lock.acquire(blocking=False);released.append(acquired)
+                    if acquired:f.lock.release()
+                thread=threading.Thread(target=after);thread.start();thread.join(2);self.assertFalse(thread.is_alive());self.assertEqual(released,[True])
+
+    def capture_trial(self, mode, missing=False):
+        f=Fixture(self);events=[];cell=[];patches=[]
+        class Stop(BaseException):pass
+        def marker(label):
+            def call(*args,**kwargs):events.append(label);raise Stop()
+            return call
+        a,b,c=marker('A'),None if missing else marker('B'),marker('C');cell.append(a)
+        def prior(value):events.append('prior');cell[0]=b;return value
+        def argument(value):events.append('argument');cell[0]=c;return value
+        def getter():events.append('capture');return cell[0]
+        class Mapping(dict):
+            def get(self,key,default=None):
+                value=super().get(key,default)
+                return argument(value) if key==self.trigger else value
+        class ItemMapping(dict):
+            def __getitem__(self,key):
+                value=super().__getitem__(key)
+                return argument(value) if key==self.trigger else value
+        def mapping(value,key,item=False):
+            result=(ItemMapping if item else Mapping)(value);result.trigger=key;return result
+        def execution():
+            f.active_reference();return lambda:asyncio.run(f.execution.inspect_incoming_text('task',Upload(),'capture-0001'))
+        if mode=='allowed':
+            f.task_access.load=lambda identity:prior(f.load_task(identity));f.task_access.user=lambda:argument({'id':'alice'});f.task_access.allowed=getter
+            invoke=lambda:f.task_access.require('task')
+        elif mode in ('record','task'):
+            ref=f.active_reference()
+            if mode=='task':ref=mapping(ref,'task_id')
+            f.catalog.references=replace(f.references,load=lambda identity:prior(ref))
+            f.catalog.access=replace(f.access,**({'record':getter,'user':lambda:argument({'id':'alice'})} if mode=='record' else {'task':getter}))
+            invoke=lambda:f.catalog.get_incoming_text_reference_asset('itref_one','canonical')
+        elif mode=='public':
+            f.catalog.references=replace(f.references,all=lambda:prior([]))
+            f.catalog.tasks=replace(f.tasks,public=getter,config=lambda:argument({}))
+            invoke=lambda:f.catalog.get_incoming_text_task('task')
+        elif mode=='decode':
+            class File(Upload):
+                async def read(self,size=-1):return prior(await super().read(size))
+                @property
+                def filename(self):return argument('sample.png')
+            f.catalog.media=replace(f.media,decode=getter)
+            invoke=lambda:asyncio.run(f.catalog.create_incoming_text_reference('task',File(),'v1'))
+        elif mode=='rows':
+            f.repository=Mock();f.repository.list_incoming_text_inspections.side_effect=lambda **kwargs:prior(mapping({'items':[]},'items'))
+            f.reviews.decode_rows=getter;invoke=lambda:f.reviews.list_incoming_text_inspections()
+        elif mode=='field':
+            invoke=execution();f.corroborate.side_effect=lambda *args:prior(mapping({},'model'))
+            f.execution.ocr=replace(f.execution.ocr,field=getter)
+        elif mode=='annotate':
+            invoke=execution();result=mapping({'fields':[]},'fields',True)
+            patches=[patch.object(incoming_execution,'decide_inspection',return_value=result),patch.object(incoming_execution,'apply_commissioning_gate',side_effect=lambda value,**kwargs:prior(value))]
+            f.execution.imaging=replace(f.execution.imaging,annotate=getter)
+        elif mode=='rectify':
+            invoke=execution()
+            class Shape:
+                def __getitem__(self,key):return argument(320)
+            patches=[patch.object(incoming_execution.cv2,'imread',side_effect=lambda *args:prior(types.SimpleNamespace(shape=Shape())))]
+            f.execution.imaging=replace(f.execution.imaging,rectify=getter)
+        elif mode=='similarity':
+            invoke=execution();rule=mapping(dict(RULE),'region_normalized',True)
+            patches=[patch.object(incoming_execution,'normalize_field_rules',return_value=[rule])]
+            f.field.side_effect=lambda *args:prior(None);f.execution.imaging=replace(f.execution.imaging,similarity=getter)
+        elif mode=='capacity':
+            invoke=execution();counts=[0]
+            class Blob(bytes):
+                def __len__(self):
+                    counts[0]+=1
+                    if counts[0]==3:argument(None)
+                    return super().__len__()
+            f.execution.inspections=replace(f.inspections,duplicate=lambda *args:prior(None));f.execution.capacity=getter
+            invoke=lambda:asyncio.run(f.execution.inspect_incoming_text('task',Upload(Blob(picture())),'capture-0001'))
+        elif mode=='output':
+            class TaskId(str):
+                def __format__(self,spec):return argument('task')
+            decode=f.media.decode();f.catalog.media=replace(f.media,decode=lambda:lambda *args:prior(decode(*args)),output=getter)
+            invoke=lambda:asyncio.run(f.catalog.create_incoming_text_reference(TaskId('task'),Upload(),'v1'))
+        elif mode=='audit':
+            f.inspection(created_at=1);counts=[0]
+            def clock():
+                counts[0]+=1
+                if counts[0]==3:argument(None)
+                return 10_000_000
+            def write(*args):f.json.write(*args);prior(None)
+            f.retention.json=replace(f.json,write=write);f.retention.audit=getter
+            patches=[patch.object(incoming_retention.time,'time',side_effect=clock)]
+            invoke=f.retention.purge
+        else:raise AssertionError(mode)
+        with ExitStack() as stack:
+            for context in patches:stack.enter_context(context)
+            try:
+                result=invoke()
+                if missing:self.assertEqual(result.get('error_code'),'TypeError');events.append('TypeError')
+                else:self.fail('capture callback not invoked')
+            except Stop:
+                if missing:self.fail('missing callback unexpectedly invoked another callback')
+            except TypeError:
+                if not missing:raise
+                events.append('TypeError')
+        expected=['prior','capture']+['argument']*(2 if mode=='rectify' else 1)+['TypeError' if missing else 'B']
+        self.assertEqual(events,expected)
+
+    def test_thirteen_callbacks_capture_after_preceding_work_before_arguments(self):
+        for mode in ['allowed','record','task','public','decode','rows','field','annotate','audit','rectify','similarity','capacity','output']:
+            with self.subTest(mode=mode):self.capture_trial(mode)
+
+    def test_missing_callbacks_keep_argument_effects_and_original_failure_projection(self):
+        for mode in ['allowed','record','task','public','decode','rows','field','annotate','audit','rectify','similarity','capacity','output']:
+            with self.subTest(mode=mode):self.capture_trial(mode,missing=True)
+
     def test_owner_projection_and_media_permission_order(self):
         f = Fixture(self)
         self.assertEqual(f.task_access.require('task', write=True)['id'], 'task')

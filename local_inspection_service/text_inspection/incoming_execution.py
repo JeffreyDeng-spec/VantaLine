@@ -15,7 +15,7 @@ from .incoming_ports import IncomingAccess, IncomingReferences, IncomingInspecti
 class IncomingExecution:
     def __init__(self, access: IncomingAccess, references: IncomingReferences, inspections: IncomingInspections,
                  media: IncomingMedia, ocr: IncomingOCR, imaging: IncomingImaging,
-                 capacity: Callable[[int], None], verified: Callable[[], bool],
+                 capacity: Callable[[], Callable[[int], None]], verified: Callable[[], bool],
                  public: Callable[[dict[str, Any]], dict[str, Any]]):
         self.access, self.references, self.inspections = access, references, inspections
         self.media, self.ocr, self.imaging = media, ocr, imaging
@@ -23,7 +23,7 @@ class IncomingExecution:
 
     async def inspect_incoming_text(self, task_id: str, file: Upload, capture_id: str) -> dict[str, Any]:
         self.access.permission("inspection", detail="没有来料检验权限")
-        task = self.access.task(task_id)
+        task = self.access.task()(task_id)
         capture_id = capture_id.strip()
         if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", capture_id):
             raise HTTPException(status_code=400, detail="capture_id 格式错误")
@@ -37,7 +37,7 @@ class IncomingExecution:
             if duplicate.get("source_sha256") != source_hash:
                 raise HTTPException(status_code=409, detail="同一 capture_id 对应了不同图片")
             return self.public(duplicate)
-        self.capacity(len(contents))
+        self.capacity()(len(contents))
         active_references = [
             item
             for item in self.references.all()
@@ -55,7 +55,7 @@ class IncomingExecution:
         if image_width * image_height > 40_000_000 or min(image_width, image_height) < 300:
             raise HTTPException(status_code=400, detail="拍照图片尺寸不符合要求")
         inspection_id = f"itinsp_{uuid.uuid4().hex[:14]}"
-        output_dir = self.media.output(f"incoming_text/inspections/{task_id}", owner_user_id)
+        output_dir = self.media.output()(f"incoming_text/inspections/{task_id}", owner_user_id)
         source_suffix = ".png" if contents[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
         source_path = output_dir / f"{inspection_id}_source{source_suffix}"
         source_path.write_bytes(contents)
@@ -92,7 +92,7 @@ class IncomingExecution:
             reference_image = cv2.imread(str(reference.get("canonical_path") or ""), cv2.IMREAD_COLOR)
             if reference_image is None:
                 raise RuntimeError("reference_image_missing")
-            corrected, alignment = self.imaging.rectify(image, (reference_image.shape[1], reference_image.shape[0]))
+            corrected, alignment = self.imaging.rectify()(image, (reference_image.shape[1], reference_image.shape[0]))
             can_run_ocr = bool(quality.get("accepted") and alignment.get("accepted"))
             rules = normalize_field_rules(reference.get("rules"))
             first = self.ocr.observe(corrected) if can_run_ocr else []
@@ -100,7 +100,7 @@ class IncomingExecution:
             enhanced = cv2.cvtColor(cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8, 8)).apply(gray), cv2.COLOR_GRAY2BGR)
             second_by_field = self.ocr.corroborate(enhanced, rules) if can_run_ocr else {}
             observations = {
-                rule["field_id"]: self.ocr.field(
+                rule["field_id"]: self.ocr.field()(
                     rule, first, second_by_field.get(str(rule["field_id"]), []), corrected, reference_image
                 )
                 for rule in rules
@@ -108,14 +108,14 @@ class IncomingExecution:
             similarities = {
                 rule["field_id"]: score
                 for rule in rules
-                for score in [self.imaging.similarity(reference_image, corrected, rule["region_normalized"])]
+                for score in [self.imaging.similarity()(reference_image, corrected, rule["region_normalized"])]
                 if score is not None
             }
             result = decide_inspection(rules, observations, quality=quality, alignment=alignment, visual_similarities=similarities)
             result = apply_commissioning_gate(
                 result, automatic_decisions_verified=self.verified()
             )
-            annotated = self.imaging.annotate(corrected, result["fields"])
+            annotated = self.imaging.annotate()(corrected, result["fields"])
             corrected_path = output_dir / f"{inspection_id}_corrected.jpg"
             annotated_path = output_dir / f"{inspection_id}_annotated.jpg"
             if not cv2.imwrite(str(corrected_path), corrected) or not cv2.imwrite(str(annotated_path), annotated):

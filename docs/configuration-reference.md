@@ -7,6 +7,11 @@ repository and paths; nothing caches a user or a database connection. Source man
 v8 includes `text_inspection/incoming_execution.py`, the actual CLAHE/OCR input
 orchestrator, without changing OCR parameters, business prompt versions or old snapshots.
 
+Workflow callback getters resolve only at their original call expressions, after
+preceding work and before argument effects. Missing callbacks retain argument
+evaluation and the original exception or fail-closed projection. Request identities
+and database connections remain transient; no new retry policy is introduced.
+
 The OCR result-mapping getter preserves the original lookup after prediction and
 before result truth/item access. Missing callbacks fail at the same point; no
 extra OCR, rendering, parsing or serialization retry is introduced.
