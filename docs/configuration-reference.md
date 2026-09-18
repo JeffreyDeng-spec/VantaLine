@@ -5,6 +5,9 @@ Standard-route extraction introduces no configuration. Permission, account gates
 preparation enablement retain their existing behavior. Identity and job providers
 remain late-bound. Model-input producers stay in their existing modules and source
 manifest v5 continues; stored task bindings and historical fingerprints are retained.
+Provider getters resolve at the original call expressions, without eager caching
+or callable validation. This includes exception-detail conversion and PostgreSQL
+confirmation before projection; no new retry or cleanup policy is introduced.
 
 Revision/projection/diagnostic extraction introduces no setting. Diagnostic limits,
 logger replacement, public fields and expected-revision errors retain their values.

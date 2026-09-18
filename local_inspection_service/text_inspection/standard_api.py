@@ -48,7 +48,7 @@ def register(app: FastAPI, imports: StandardImports, library: StandardLibrary, e
 
     @app.patch("/api/text-inspection/standards/{standard_id}/assets/{asset_id}")
     async def patch_text_inspection_asset(standard_id: str, asset_id: str, request: Request) -> dict[str, Any]:
-        return await edits.patch_text_inspection_asset(standard_id, asset_id, request.json)
+        return await edits.patch_text_inspection_asset(standard_id, asset_id, lambda: request.json())
 
     @app.post("/api/text-inspection/standards/{standard_id}/confirm")
     def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:

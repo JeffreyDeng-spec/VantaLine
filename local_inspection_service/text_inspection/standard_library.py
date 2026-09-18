@@ -13,7 +13,7 @@ class StandardLibrary:
     def list_text_inspection_standards(self) -> Record:
         self.access.require_permission("inspection", detail="没有文字检验权限")
         owner_user_id, _ = self.access.owner()
-        items = [self.records.public(item) for item in self.records.load("standards") if str(item.get("owner_user_id")) == owner_user_id and item.get('status') != 'deleted']
+        items = [self.records.public()(item) for item in self.records.load("standards") if str(item.get("owner_user_id")) == owner_user_id and item.get('status') != 'deleted']
         return {"items": sorted(items, key=lambda item: int(item.get("created_at") or 0), reverse=True)}
 
     def get_text_inspection_standard(self, standard_id: str) -> Record:
@@ -25,8 +25,8 @@ class StandardLibrary:
         if standard.get('classification', {}).get('state') == 'processing':
             self.refresh(standard_id, owner_user_id)
             standard = self.records.owned('standards', standard_id, owner_user_id) or standard
-        assets = [self.records.public(item) for item in self.records.load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
-        return {**self.records.public(standard), "assets": sorted(assets, key=lambda item: int(item.get("ordinal") or 0))}
+        assets = [self.records.public()(item) for item in self.records.load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
+        return {**self.records.public()(standard), "assets": sorted(assets, key=lambda item: int(item.get("ordinal") or 0))}
 
     def get_text_inspection_asset_content(self, asset_id: str) -> tuple[bytes, str]:
         self.access.require_permission("inspection", detail="没有文字检验权限")

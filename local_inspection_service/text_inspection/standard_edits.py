@@ -12,7 +12,7 @@ class StandardEdits:
     def __init__(self, access: StandardAccess, records: StandardRecords,
                  writes: StandardWrites, media: StandardMedia, revisions: StandardRevisions,
                  preparation: StandardPreparation, prepare_image: Callable[[bytes], tuple[bytes, str, str, str]],
-                 bounded_text: Callable[[str, int], str]):
+                 bounded_text: Callable[[], Callable[[str, int], str]]):
         self.access, self.records, self.writes, self.media = access, records, writes, media
         self.revisions, self.preparation = revisions, preparation
         self.prepare_image, self.bounded_text = prepare_image, bounded_text
@@ -29,7 +29,7 @@ class StandardEdits:
             raise HTTPException(status_code=409, detail="说明书标准不支持追加标签图片")
         if standard.get('status') == 'deleted':
             raise HTTPException(status_code=409, detail='订单已删除')
-        expected = self.revisions.expected(expected_revision)
+        expected = self.revisions.expected()(expected_revision)
         contents = await file.read()
         contents, mime, suffix, source_format = self.prepare_image(contents)
         now = int(time.time())
@@ -39,12 +39,12 @@ class StandardEdits:
             "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id,
             "asset_kind": "label_candidate", "ordinal": 0, "status": "candidate",
             "sha256": self.media.digest(contents), "mime_type": mime, "category": "label",
-            "context": self.bounded_text(file.filename or "新增标签图片", 160),
+            "context": self.bounded_text()(file.filename or "新增标签图片", 160),
             "source_format": source_format,
             "classification_source": "human", "media_path": str(media_path),
             "created_at": now, "updated_at": now,
         }
-        self.media.write(media_path, contents)
+        self.media.write()(media_path, contents)
         if standard.get("preparation_required"):
             asset["preparation_required"] = True
         repository = self.writes.repository()
@@ -71,7 +71,7 @@ class StandardEdits:
                         raise HTTPException(status_code=409, detail="标签图片序号冲突，请刷新后重试")
                     assets.append(asset)
                     if standard.get("status") == "confirmed":
-                        self.revisions.apply(standard, assets, action="add", asset_id=asset_id, now=now)
+                        self.revisions.apply()(standard, assets, action="add", asset_id=asset_id, now=now)
                     else:
                         standard["asset_count"] = len(self.revisions.snapshot(assets))
                         standard["updated_at"] = now
@@ -82,7 +82,7 @@ class StandardEdits:
         except Exception as exc:
             media_path.unlink(missing_ok=True)
             raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试") from exc
-        return {"asset": self.records.public(asset), "standard": self.records.public(standard)}
+        return {"asset": self.records.public()(asset), "standard": self.records.public()(standard)}
 
     async def patch_text_inspection_asset(self, standard_id: str, asset_id: str, read_body: Callable[[], Awaitable[Any]]) -> Record:
         self.access.require_permission("inspection", detail="没有文字检验权限")
@@ -98,7 +98,7 @@ class StandardEdits:
         status_by_action = {"restore": "candidate", "remove": "excluded", "exclude": "excluded", "confirm": "candidate", "review": "needs_confirmation"}
         if action not in status_by_action:
             raise HTTPException(status_code=400, detail="action 必须为 restore、remove、exclude、confirm 或 review")
-        expected = self.revisions.expected(body.get("expected_revision") if isinstance(body, dict) else None)
+        expected = self.revisions.expected()(body.get("expected_revision") if isinstance(body, dict) else None)
         updated_at = int(time.time())
         revision_id = "rev_" + uuid.uuid4().hex
         repository = self.writes.repository()
@@ -132,7 +132,7 @@ class StandardEdits:
                         if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id
                     ]
                     if authoritative_standard.get("status") == "confirmed":
-                        self.revisions.apply(
+                        self.revisions.apply()(
                             authoritative_standard, assets,
                             action="review" if action == "review" else "restore" if action in {"restore", "confirm"} else "remove",
                             asset_id=asset_id, now=updated_at,
@@ -144,7 +144,7 @@ class StandardEdits:
                 standard = authoritative_standard
         feedback = {"id": "fb_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "standard_id": standard_id, "asset_id": asset_id, "action": action, "created_at": int(time.time())}
         self.records.save("feedback", feedback, insert_only=True)
-        return {**self.records.public(asset), "standard": self.records.public(standard)}
+        return {**self.records.public()(asset), "standard": self.records.public()(standard)}
 
     def confirm_text_inspection_standard(self, standard_id: str) -> Record:
         self.access.require_permission("inspection", detail="没有文字检验权限")
@@ -156,23 +156,23 @@ class StandardEdits:
             raise HTTPException(status_code=404, detail="标准不存在")
         if standard.get("standard_type") == "label" and (self.preparation.enabled(owner_user_id) or standard.get("preparation_required")):
             self.preparation.start(standard_id, owner_user_id)
-            return self.records.public(self.records.owned("standards", standard_id, owner_user_id) or standard)
+            return self.records.public()(self.records.owned("standards", standard_id, owner_user_id) or standard)
         repository = self.writes.repository()
         if repository is not None:
             try:
-                return self.records.public(repository.confirm_text_inspection_standard(
+                return self.records.public()(repository.confirm_text_inspection_standard(
                     standard_id, owner_user_id, int(time.time()), revision_id="rev_" + uuid.uuid4().hex,
                 ))
             except Exception as exc:
                 raise HTTPException(status_code=409, detail="标准无法确认，请刷新候选状态后重试") from exc
         if standard.get("status") == "confirmed":
-            return self.records.public(standard)
+            return self.records.public()(standard)
         with self.writes.guard():
             standard = self.records.owned("standards", standard_id, owner_user_id) or {}
             if standard.get('status') == 'deleted' or standard.get('classification', {}).get('state') == 'processing':
                 raise HTTPException(status_code=409, detail='订单已删除或仍在识别中')
             if standard.get("status") == "confirmed":
-                return self.records.public(standard)
+                return self.records.public()(standard)
             all_assets = [item for item in self.records.load("assets") if item.get("standard_id") == standard_id and item.get("owner_user_id") == owner_user_id]
             if any(item.get("status") == "needs_confirmation" for item in all_assets):
                 raise HTTPException(status_code=409, detail="还有待确认图片，请逐张选择保留或排除后再启用")
@@ -182,6 +182,6 @@ class StandardEdits:
             standard["status"] = "confirmed"
             standard["confirmed_at"] = standard["updated_at"] = int(time.time())
             selected.sort(key=lambda item: int(item.get("ordinal") or 0))
-            self.revisions.apply(standard, selected, action="confirm", asset_id="", now=standard["confirmed_at"])
+            self.revisions.apply()(standard, selected, action="confirm", asset_id="", now=standard["confirmed_at"])
             self.records.save("standards", standard)
-        return self.records.public(standard)
+        return self.records.public()(standard)

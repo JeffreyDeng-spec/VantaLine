@@ -52,13 +52,13 @@ def handlers():
           "_text_v2_apply_revision": lambda *a, **kw: None}
     service = StandardEdits(
         StandardAccess(lambda *args, **kwargs: None, lambda: ns["_text_v2_owner"]()),
-        StandardRecords(lambda kind: copy.deepcopy(store[kind]), save, owned, copy.deepcopy),
+        StandardRecords(lambda kind: copy.deepcopy(store[kind]), save, owned, lambda: copy.deepcopy),
         StandardWrites(lambda: None, lambda: ns["_incoming_text_store_lock"]),
-        StandardMedia(lambda *args: None, lambda *args: None, lambda data: "unused"),
-        StandardRevisions(lambda value: value, ns["_text_v2_confirmed_snapshot"], ns["_text_v2_apply_revision"]),
+        StandardMedia(lambda *args: None, lambda: lambda *args: None, lambda data: "unused"),
+        StandardRevisions(lambda: lambda value: value, ns["_text_v2_confirmed_snapshot"], lambda: ns["_text_v2_apply_revision"]),
         StandardPreparation(lambda *args: None, lambda owner: False),
         prepare_image=lambda data: (data, "image/png", ".png", "PNG"),
-        bounded_text=lambda value, limit: value[:limit],
+        bounded_text=lambda: lambda value, limit: value[:limit],
     )
     routes = register(FastAPI(), None, None, service)
     ns["patch_text_inspection_asset"] = routes.patch_text_inspection_asset

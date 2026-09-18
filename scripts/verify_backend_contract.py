@@ -64,6 +64,26 @@ def capture():
         assert server._standard_imports.records is server._standard_library.records is server._standard_edits.records
         assert server._standard_imports.access is server._standard_library.access is server._standard_edits.access
         assert server._standard_edits.writes.guard() is server._incoming_text_store_lock
+        from unittest.mock import patch
+        bindings = (
+            (server, "bounded_text", (server._standard_imports.bounded_text, server._standard_edits.bounded_text)),
+            (server, "extract_doc_images", (server._standard_imports.parsers.doc,)),
+            (server, "_text_v2_write", (server._standard_media.write,)),
+            (server.document_import_jobs, "mark_unavailable", (server._standard_imports.classification.mark_unavailable,)),
+            (server, "_text_v2_expected_revision", (server._standard_edits.revisions.expected,)),
+            (server, "_text_v2_public", (server._standard_records.public,)),
+            (server, "_text_v2_apply_revision", (server._standard_edits.revisions.apply,)),
+        )
+        for owner, attribute, getters in bindings:
+            original = getattr(owner, attribute)
+            for getter in getters:
+                assert getter() is original
+            replacement = lambda *args, **kwargs: None
+            with patch.object(owner, attribute, replacement):
+                for getter in getters:
+                    assert getter() is replacement
+            for getter in getters:
+                assert getter() is original
         for name in ("import_text_inspection_standard", "list_text_inspection_standards",
                      "get_text_inspection_standard", "get_text_inspection_asset_content",
                      "add_text_inspection_standard_asset", "patch_text_inspection_asset",

@@ -13,7 +13,7 @@ from .standard_ports import (Record, Upload, StandardAccess, StandardRecords,
 class StandardImports:
     def __init__(self, access: StandardAccess, records: StandardRecords,
                  media: StandardMedia, parsers: StandardParsers,
-                 classification: StandardClassification, bounded_text: Callable[[str, int], str]):
+                 classification: StandardClassification, bounded_text: Callable[[], Callable[[str, int], str]]):
         self.access, self.records, self.media = access, records, media
         self.parsers, self.classification = parsers, classification
         self.bounded_text = bounded_text
@@ -21,9 +21,9 @@ class StandardImports:
     async def import_text_inspection_standard(self, file: Upload, name: str, material_code: str, version_label: str) -> Record:
         self.access.require_permission("inspection", detail="没有文字检验权限")
         owner_user_id, owner_username = self.access.owner()
-        clean_name = self.bounded_text(name.strip(), 120)
-        clean_material = self.bounded_text(material_code.strip(), 120)
-        clean_version = self.bounded_text(version_label.strip(), 80)
+        clean_name = self.bounded_text()(name.strip(), 120)
+        clean_material = self.bounded_text()(material_code.strip(), 120)
+        clean_version = self.bounded_text()(version_label.strip(), 80)
         if not clean_name or not clean_material or not clean_version:
             raise HTTPException(status_code=400, detail="标准名称、物料编码和版本不能为空")
         contents = await file.read(100 * 1024 * 1024 + 1)
@@ -43,12 +43,12 @@ class StandardImports:
         if duplicate:
             if duplicate.get('status') == 'deleted':
                 raise HTTPException(status_code=409, detail='该物料版本已删除并保留历史，请使用新的版本号导入')
-            return {**self.records.public(duplicate), "duplicate": True}
+            return {**self.records.public()(duplicate), "duplicate": True}
         standard_id = "std_" + uuid.uuid4().hex
         now = int(time.time())
         try:
             if filename.endswith(".doc") and not filename.endswith(".docx"):
-                metadata, blobs = await asyncio.to_thread(self.parsers.doc, contents)
+                metadata, blobs = await asyncio.to_thread(self.parsers.doc(), contents)
                 standard_type, extension = "label", ".doc"
             elif filename.endswith(".docx"):
                 metadata, blobs = self.parsers.docx(contents)
@@ -66,7 +66,7 @@ class StandardImports:
         except UnsafeDocument as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         source_path = self.media.path(owner_user_id, standard_id, "source" + extension)
-        self.media.write(source_path, contents)
+        self.media.write()(source_path, contents)
         standard = {"id": standard_id, "owner_user_id": owner_user_id, "owner_username": owner_username, "name": clean_name, "material_code": clean_material, "version_label": clean_version, "standard_type": standard_type, "status": "draft", "source_sha256": digest, "source_path": str(source_path), "created_at": now, "updated_at": now, "asset_count": len(metadata)}
         if not self.records.save("standards", standard, insert_only=True):
             raise HTTPException(status_code=409, detail="相同物料、版本和类型的标准已存在")
@@ -76,7 +76,7 @@ class StandardImports:
             if standard_type == "label":
                 suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/bmp": ".bmp", "image/gif": ".gif", "image/tiff": ".tiff", "image/emf": ".emf", "image/wmf": ".wmf"}.get(str(item.get("mime_type")), ".bin")
                 path = self.media.path(owner_user_id, standard_id, f"{asset_id}{suffix}")
-                self.media.write(path, blobs[index])
+                self.media.write()(path, blobs[index])
                 asset_path = str(path)
             asset = {**item, "id": asset_id, "standard_id": standard_id, "owner_user_id": owner_user_id, "asset_kind": "label_candidate" if standard_type == "label" else "manual_page", "media_path": asset_path, "created_at": now, "updated_at": now}
             if standard_type == 'label':
@@ -86,6 +86,6 @@ class StandardImports:
             try:
                 self.classification.start(standard_id, owner_user_id)
             except HTTPException as exc:
-                self.classification.mark_unavailable(standard_id, owner_user_id, str(exc.detail))
+                self.classification.mark_unavailable()(standard_id, owner_user_id, str(exc.detail))
             standard = self.records.owned('standards', standard_id, owner_user_id) or standard
-        return {**self.records.public(standard), "assets": [self.records.public(item) for item in self.records.load("assets") if item.get("standard_id") == standard_id]}
+        return {**self.records.public()(standard), "assets": [self.records.public()(item) for item in self.records.load("assets") if item.get("standard_id") == standard_id]}

@@ -1,6 +1,6 @@
 # Testing
 
-`python scripts/smoke_text_standards.py` adds seven synthetic groups for import
+`python scripts/smoke_text_standards.py` adds twelve synthetic groups for import
 validation/duplicate/parser ordering, DOC thread identity and DOCX synchronous
 execution, partial writes and job failures, retrieval/media behavior, add cleanup,
 patch feedback/exception boundaries, confirmation priority, and interleaved native
@@ -9,6 +9,16 @@ checks now call real service/HTTP adapters through explicit test capabilities in
 of compiling functions from the entry-point source. Their behavioral assertions are
 retained. Source checks follow all three migrated repository entries without counting
 the composition lambda twice; assembled HTTP checks verify all seven handler aliases.
+Seven original groups first pass against old business function bodies through
+argument adapters; the candidate route harness in that check does not establish
+the old request-body timing, which has a separate original/candidate trace and
+the existing full endpoint baseline. Ten explicit dependency event sequences cover
+argument evaluation, DOC queue admission, projection and permission-before-JSON.
+Four first-error matrices cover thirteen parser, job, write, database and JSON-body
+boundaries. Each offers a succeeding second call and requires the original error
+or HTTP cause, one attempt, preserved prior evidence and existing cleanup/lock order.
+The original DOC thread identity and ContextVar assertions remain. The assembled
+application verifies that each new getter follows live replacement and restoration.
 
 `python scripts/smoke_text_revisions.py --root` adds nine synthetic groups: exact revision
 write order and shared snapshot objects; baseline conflicts and partial failures;

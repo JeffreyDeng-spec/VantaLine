@@ -33991,20 +33991,20 @@ _standard_records = StandardRecords(
     load=lambda kind: _text_v2_load(kind),
     save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
     owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    public=lambda record: _text_v2_public(record),
+    public=lambda: _text_v2_public,
 )
 _standard_media = StandardMedia(
     path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
-    write=lambda path, contents: _text_v2_write(path, contents),
+    write=lambda: _text_v2_write,
     digest=lambda contents: sha256_bytes(contents),
 )
 _standard_imports = StandardImports(
     _standard_access, _standard_records, _standard_media,
-    StandardParsers(doc=lambda data: extract_doc_images(data),
+    StandardParsers(doc=lambda: extract_doc_images,
                     docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data)),
     StandardClassification(start=lambda standard, owner: document_import_jobs.start(standard, owner),
-                           mark_unavailable=lambda standard, owner, reason: document_import_jobs.mark_unavailable(standard, owner, reason)),
-    bounded_text=lambda value, limit: bounded_text(value, limit),
+                           mark_unavailable=lambda: document_import_jobs.mark_unavailable),
+    bounded_text=lambda: bounded_text,
 )
 _standard_library = TextStandardLibrary(
     _standard_access, _standard_records,
@@ -34015,13 +34015,13 @@ _standard_edits = StandardEdits(
     _standard_access, _standard_records,
     StandardWrites(repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock),
     _standard_media,
-    StandardRevisions(expected=lambda value: _text_v2_expected_revision(value),
+    StandardRevisions(expected=lambda: _text_v2_expected_revision,
                       snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
-                      apply=lambda standard, assets, **kwargs: _text_v2_apply_revision(standard, assets, **kwargs)),
+                      apply=lambda: _text_v2_apply_revision),
     StandardPreparation(start=lambda standard, owner: standard_preparation_jobs.start(standard, owner),
                         enabled=lambda owner: _standard_preparation_policy.enabled(owner)),
     prepare_image=lambda contents: _text_v2_prepare_image(contents),
-    bounded_text=lambda value, limit: bounded_text(value, limit),
+    bounded_text=lambda: bounded_text,
 )
 _standard_routes = register_text_standards(app, _standard_imports, _standard_library, _standard_edits)
 import_text_inspection_standard = _standard_routes.import_text_inspection_standard

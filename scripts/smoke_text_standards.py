@@ -10,8 +10,11 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch, AsyncMock
+from types import SimpleNamespace
+from dataclasses import replace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.text_inspection import standard_ports as ports, standard_imports as imports, standard_edits as edits, standard_api as api
 import httpx
 from fastapi import FastAPI, HTTPException
 from local_inspection_service.text_inspection.standard_api import register
@@ -35,6 +38,104 @@ class Upload:
         return self.data if size < 0 else self.data[:size]
 
 
+def capture_trial(case):
+ events=[];std={'id':'standard','owner_user_id':'alice','standard_type':'label','status':'draft','revision_number':0};asset={'id':'asset','standard_id':'standard','owner_user_id':'alice','status':'candidate'}
+ ns={}
+ def text_a(v,limit):events.append('textA');return str(v)
+ def text_b(v,limit):events.append('textB');return str(v)
+ def public_a(v):events.append('publicA');return dict(v)
+ def public_b(v):events.append('publicB');return dict(v)
+ def owned(kind,identity,owner):return std if kind=='standards' else asset
+ ns.update(require_permission=lambda *a,**k:None,_text_v2_owner=lambda:('alice','Alice'),bounded_text=text_a,sha256_bytes=lambda b:'hash',_text_v2_load=lambda kind:[asset] if kind=='assets' else [],
+ _text_v2_save=lambda *a,**k:True,_text_v2_owned=owned,_text_v2_public=public_a,
+ _text_v2_media_path=lambda *a:Path('/synthetic')/a[-1],_text_v2_write=lambda *a:events.append('writeA'),
+ _text_v2_prepare_image=lambda b:(b,'image/png','.png','PNG'),_text_v2_expected_revision=lambda v:events.append('expectedA'),
+ _text_v2_confirmed_snapshot=lambda v:[],_text_v2_apply_revision=lambda *a,**k:events.append('applyA'),
+ runtime_postgres_repository_or_none=lambda:None,_incoming_text_store_lock=threading.RLock(),
+ extract_doc_images=lambda b:(events.append('docA') or [],[]),extract_docx_candidates=lambda b:([],[]),inspect_pdf=lambda b:{},
+ DocImageUnavailable=imports.DocImageUnavailable,DocImageError=imports.DocImageError,UnsafeDocument=imports.UnsafeDocument,
+ document_import_jobs=SimpleNamespace(start=lambda *a:None,mark_unavailable=lambda *a:events.append('markA'),refresh=lambda *a:None),
+ standard_preparation_jobs=SimpleNamespace(start=lambda *a:None))
+ class Upload:
+  filename='fixture.docx'
+  async def read(self,*a):return b'synthetic'
+ upload=Upload()
+ name,material,version='name','material','version';body={'action':'review','expected_revision':None};prep_enabled=False
+ target='import_text_inspection_standard'
+ if case=='import_text':
+  class Name(str):
+   def strip(self):events.append('strip');ns['bounded_text']=text_b;return 'name'
+  name=Name('name')
+ elif case=='doc_queued':
+  upload.filename='fixture.doc'
+ elif case=='asset_write':
+  class Blobs(list):
+   def __getitem__(self,index):events.append('blob-index');ns['_text_v2_write']=lambda *a:events.append('writeB');return super().__getitem__(index)
+  ns['extract_docx_candidates']=lambda b:([{'mime_type':'image/png'}],Blobs([b'image']))
+ elif case=='unavailable':
+  class Message:
+   def __str__(self):events.append('reason');ns['document_import_jobs'].mark_unavailable=lambda *a:events.append('markB');return 'reason'
+  def start(*a):raise HTTPException(503,Message())
+  ns['document_import_jobs'].start=start
+ elif case=='add_text':
+  target='add_text_inspection_standard_asset'
+  class NamedUpload(Upload):
+   @property
+   def filename(self):events.append('filename');ns['bounded_text']=text_b;return 'image.png'
+  upload=NamedUpload()
+ elif case=='expected':
+  target='patch_text_inspection_asset'
+  class Body(dict):
+   def get(self,key,default=None):
+    if key=='expected_revision':events.append('expected-arg');ns['_text_v2_expected_revision']=lambda value:events.append('expectedB')
+    return super().get(key,default)
+  body=Body(body)
+ elif case=='public_db':
+  target='confirm_text_inspection_standard'
+  def confirm(*a,**k):events.append('db');ns['_text_v2_public']=public_b;return std
+  ns['runtime_postgres_repository_or_none']=lambda:SimpleNamespace(confirm_text_inspection_standard=confirm)
+ elif case=='public_owned':
+  target='confirm_text_inspection_standard';prep_enabled=True;calls=[]
+  def owned2(*a):
+   calls.append(1)
+   if len(calls)==2:events.append('owned-second');ns['_text_v2_public']=public_b
+   return std
+  ns['_text_v2_owned']=owned2
+ elif case=='apply_confirm':
+  target='confirm_text_inspection_standard'
+  class Standard(dict):
+   def __getitem__(self,key):
+    if key=='confirmed_at':events.append('confirmed-time');ns['_text_v2_apply_revision']=lambda *a,**k:events.append('applyB')
+    return super().__getitem__(key)
+  std=Standard(std)
+ elif case=='request_json':
+  target='patch_text_inspection_asset'
+ async def json_a():events.append('jsonA');return body
+ async def json_b():events.append('jsonB');return body
+ request=SimpleNamespace(json=json_a)
+ if case=='request_json':
+  ns['require_permission']=lambda *a,**k:setattr(request,'json',json_b)
+ async def queued(fn,*args):
+  events.append('queued');ns['extract_doc_images']=lambda b:(events.append('docB') or [],[])
+  return fn(*args)
+ access=ports.StandardAccess(lambda *a,**k:ns['require_permission'](*a,**k),lambda:ns['_text_v2_owner']())
+ records=ports.StandardRecords(lambda k:ns['_text_v2_load'](k),lambda *a,**k:ns['_text_v2_save'](*a,**k),lambda *a:ns['_text_v2_owned'](*a),lambda:ns['_text_v2_public'])
+ media=ports.StandardMedia(lambda *a:ns['_text_v2_media_path'](*a),lambda:ns['_text_v2_write'],lambda b:ns['sha256_bytes'](b))
+ imp=imports.StandardImports(access,records,media,ports.StandardParsers(lambda:ns['extract_doc_images'],lambda b:ns['extract_docx_candidates'](b),lambda b:ns['inspect_pdf'](b)),ports.StandardClassification(lambda *a:ns['document_import_jobs'].start(*a),lambda:ns['document_import_jobs'].mark_unavailable),lambda:ns['bounded_text'])
+ edit=edits.StandardEdits(access,records,ports.StandardWrites(lambda:ns['runtime_postgres_repository_or_none'](),lambda:ns['_incoming_text_store_lock']),media,
+ ports.StandardRevisions(lambda:ns['_text_v2_expected_revision'],lambda a:ns['_text_v2_confirmed_snapshot'](a),lambda:ns['_text_v2_apply_revision']),
+ ports.StandardPreparation(lambda *a:ns['standard_preparation_jobs'].start(*a),lambda owner:prep_enabled),lambda b:ns['_text_v2_prepare_image'](b),lambda:ns['bounded_text'])
+ fn=getattr(imp if target=='import_text_inspection_standard' else edit,target)
+ if case=='request_json':fn=api.register(FastAPI(),imp,None,edit).patch_text_inspection_asset
+ with patch.object(asyncio,'to_thread',side_effect=queued):
+  if target=='import_text_inspection_standard':asyncio.run(fn(upload,name,material,version))
+  elif target=='add_text_inspection_standard_asset':asyncio.run(fn('standard',upload,''))
+  elif target=='patch_text_inspection_asset':
+   arg=request if case=='request_json' else request.json
+   asyncio.run(fn('standard','asset',arg))
+  else:fn('standard')
+ return events
+
 class Fixture:
     def __init__(self, directory, owner='alice'):
         self.directory=Path(directory);self.events=[];self.owner=ContextVar('standard_owner',default=(owner,owner))
@@ -43,17 +144,17 @@ class Fixture:
         self.parser_result=([dict(ordinal=1,status='candidate',mime_type='image/png')],[b'image'])
         self.parser_error=None;self.start_error=None;self.unavailable_error=None;self.media_calls=0
         self.access=StandardAccess(self.require,lambda:self.owner.get())
-        self.records=StandardRecords(self.load,self.save,self.owned,self.public)
-        self.media=StandardMedia(self.path,self.write,lambda data:hashlib.sha256(data).hexdigest())
+        self.records=StandardRecords(self.load,self.save,self.owned,lambda:self.public)
+        self.media=StandardMedia(self.path,lambda:self.write,lambda data:hashlib.sha256(data).hexdigest())
         self.revision_service=TextRevisions(RevisionRecords(self.load,self.save),confirmed_snapshot)
         self.imports=StandardImports(self.access,self.records,self.media,
-            StandardParsers(lambda data:self.parse('doc',data),lambda data:self.parse('docx',data),lambda data:self.parse('pdf',data)),
-            StandardClassification(self.start,self.unavailable),lambda value,limit:value[:limit])
+            StandardParsers(lambda:lambda data:self.parse('doc',data),lambda data:self.parse('docx',data),lambda data:self.parse('pdf',data)),
+            StandardClassification(self.start,lambda:self.unavailable),lambda:lambda value,limit:value[:limit])
         self.library=StandardLibrary(self.access,self.records,self.refresh,self.asset_bytes)
         self.edits=StandardEdits(self.access,self.records,StandardWrites(self.repository,self.guard),self.media,
-            StandardRevisions(expected_revision,confirmed_snapshot,self.revision_service.apply),
+            StandardRevisions(lambda:expected_revision,confirmed_snapshot,lambda:self.revision_service.apply),
             StandardPreparation(self.prepare,lambda owner:self.preparation_enabled),
-            lambda data:(data,'image/png','.png','PNG'),lambda value,limit:value[:limit])
+            lambda data:(data,'image/png','.png','PNG'),lambda:lambda value,limit:value[:limit])
         self.app=FastAPI();self.routes=register(self.app,self.imports,self.library,self.edits)
         @self.app.middleware('http')
         async def identity(request,call_next):
@@ -117,6 +218,116 @@ class StandardContracts(unittest.TestCase):
     def setUp(self):
         self.temporary=tempfile.TemporaryDirectory(prefix='standards-');self.addCleanup(self.temporary.cleanup)
         self.f=Fixture(self.temporary.name)
+    def test_import_provider_first_errors_are_not_retried(self):
+        for mode in ('doc','docx','start','unavailable'):
+            with self.subTest(mode=mode):
+                f=Fixture(Path(self.temporary.name)/mode);error=RuntimeError('unknown '+mode+' outcome')
+                failed=Mock(side_effect=[error,f.parser_result if mode in {'doc','docx'} else None])
+                if mode=='doc':f.imports.parsers=replace(f.imports.parsers,doc=lambda:failed)
+                elif mode=='docx':f.imports.parsers=replace(f.imports.parsers,docx=failed)
+                elif mode=='start':f.imports.classification=replace(f.imports.classification,start=failed)
+                else:
+                    f.start_error=HTTPException(503,'unavailable')
+                    f.imports.classification=replace(f.imports.classification,mark_unavailable=lambda:failed)
+                with self.assertRaises(RuntimeError) as caught:f.import_file(Upload(filename='file.doc' if mode=='doc' else 'file.docx'))
+                self.assertIs(caught.exception,error);failed.assert_called_once()
+                parsed=mode in {'doc','docx'}
+                self.assertEqual(len(f.files),0 if parsed else 2)
+                self.assertTrue(all(path.exists() for path in f.files))
+                self.assertEqual(len(f.store['standards']),0 if parsed else 1)
+                self.assertEqual(len(f.store['assets']),0 if parsed else 1)
+                self.assertFalse(any(e[0] in {'public','owned'} for e in f.events))
+                if parsed:self.assertFalse(any(e[0] in {'write','save','start','unavailable'} for e in f.events))
+                if mode=='unavailable':self.assertEqual(sum(e[0]=='start' for e in f.events),1)
+
+    def test_import_first_write_error_retains_prior_evidence(self):
+        for kind in ('standards','assets'):
+            with self.subTest(kind=kind):
+                f=Fixture(Path(self.temporary.name)/kind);error=RuntimeError('unknown '+kind+' outcome')
+                failed=Mock(side_effect=[error,True]);attempts=[]
+                def save(table,value,*,insert_only=False):
+                    attempts.append((table,insert_only))
+                    return failed() if table==kind else f.save(table,value,insert_only=insert_only)
+                f.imports.records=replace(f.imports.records,save=save)
+                with self.assertRaises(RuntimeError) as caught:f.import_file(Upload())
+                self.assertIs(caught.exception,error);failed.assert_called_once_with()
+                self.assertEqual(attempts,[('standards',True)]+([('assets',True)] if kind=='assets' else []))
+                self.assertEqual(len(f.files),1 if kind=='standards' else 2)
+                self.assertTrue(all(path.exists() for path in f.files))
+                self.assertEqual(len(f.store['standards']),0 if kind=='standards' else 1)
+                self.assertEqual(f.store['assets'],[])
+                self.assertFalse(any(e[0] in {'start','unavailable','public'} for e in f.events))
+
+    def test_postgres_first_error_keeps_cause_and_cleanup_order(self):
+        for mode in ('add','patch','confirm'):
+            with self.subTest(mode=mode):
+                f=Fixture(Path(self.temporary.name)/mode);f.seed();before=copy.deepcopy(f.store)
+                error=RuntimeError('unknown database '+mode+' outcome');f.repo=Mock()
+                name={'add':'add_text_inspection_standard_asset','patch':'patch_text_inspection_asset','confirm':'confirm_text_inspection_standard'}[mode]
+                result=f.store['standards'][0] if mode=='confirm' else (f.store['assets'][0],f.store['standards'][0])
+                failed=getattr(f.repo,name);failed.side_effect=[error,result]
+                unlink=Path.unlink
+                with patch.object(Path,'unlink',autospec=True,side_effect=unlink) as removed:
+                    with self.assertRaises(HTTPException) as caught:
+                        if mode=='add':f.add()
+                        elif mode=='patch':f.patch()
+                        else:f.edits.confirm_text_inspection_standard('std')
+                self.assertEqual(caught.exception.status_code,409);self.assertIs(caught.exception.__cause__,error)
+                failed.assert_called_once();self.assertEqual(f.store,before)
+                self.assertFalse(any(e[0] in {'save','public','enter','exit'} for e in f.events))
+                if mode=='add':removed.assert_called_once_with(f.files[0],missing_ok=True);self.assertFalse(f.files[0].exists())
+                else:removed.assert_not_called();self.assertEqual(f.files,[])
+
+    def test_json_edit_first_error_keeps_prior_writes_and_releases_lock(self):
+        for mode in ('body','feedback','patch-standard','confirm-standard'):
+            with self.subTest(mode=mode):
+                f=Fixture(Path(self.temporary.name)/mode);f.seed();before=copy.deepcopy(f.store)
+                error=RuntimeError('unknown '+mode+' outcome');attempts=[]
+                if mode=='body':
+                    failed=AsyncMock(side_effect=[error,{'action':'review','expected_revision':0}])
+                    with self.assertRaises(RuntimeError) as caught:f.patch(read=failed)
+                    failed.assert_awaited_once_with();self.assertIs(caught.exception,error)
+                    self.assertEqual(f.store,before)
+                    self.assertFalse(any(e[0] in {'repository','enter','exit','save','public'} for e in f.events))
+                    continue
+                failed=Mock(side_effect=[error,True]);table='feedback' if mode=='feedback' else 'standards'
+                def save(kind,value,*,insert_only=False):
+                    attempts.append((kind,copy.deepcopy(value),insert_only))
+                    return failed() if kind==table else f.save(kind,value,insert_only=insert_only)
+                f.edits.records=replace(f.edits.records,save=save)
+                with self.assertRaises(RuntimeError) as caught:
+                    if mode=='confirm-standard':f.edits.confirm_text_inspection_standard('std')
+                    else:f.patch()
+                self.assertIs(caught.exception,error);failed.assert_called_once_with()
+                self.assertEqual(sum(e[0]=='enter' for e in f.events),1);self.assertEqual(sum(e[0]=='exit' for e in f.events),1)
+                self.assertFalse(any(e[0]=='public' for e in f.events));self.assertEqual(f.store['feedback'],[])
+                if mode=='confirm-standard':
+                    self.assertEqual([e[0] for e in attempts],['standards'])
+                    self.assertEqual(len(f.store['revisions']),1)
+                    self.assertEqual(attempts[0][1]['current_revision_id'],f.store['revisions'][0]['id'])
+                    self.assertEqual(f.store['standards'],before['standards'])
+                else:
+                    self.assertEqual([e[0] for e in attempts],['assets','standards']+(['feedback'] if mode=='feedback' else []))
+                    self.assertEqual(f.store['assets'][0]['status'],'needs_confirmation')
+                    self.assertEqual(f.store['revisions'],[])
+                    if mode=='patch-standard':self.assertEqual(f.store['standards'],before['standards'])
+                    else:self.assertEqual(f.store['standards'][0]['asset_count'],0)
+
+    def test_dependency_capture_matches_original_event_sequences(self):
+        expected={
+            'import_text':['strip','textA','textB','textB','writeA','publicA'],
+            'doc_queued':['textA','textA','textA','queued','docA','writeA','publicA'],
+            'asset_write':['textA','textA','textA','writeA','blob-index','writeA','publicA'],
+            'unavailable':['textA','textA','textA','writeA','reason','markA','publicA'],
+            'add_text':['expectedA','filename','textA','writeA','publicA','publicA'],
+            'expected':['jsonA','expected-arg','expectedA','publicA','publicA'],
+            'public_db':['db','publicA'], 'public_owned':['owned-second','publicA'],
+            'apply_confirm':['confirmed-time','applyA','publicA'],
+            'request_json':['jsonB','expectedA','publicA','publicA'],
+        }
+        for case,events in expected.items():
+            with self.subTest(case=case):self.assertEqual(capture_trial(case),events)
+
     def test_import_admission_duplicate_and_parser_thread_identity(self):
         f=self.f;u=Upload();
         with self.assertRaises(HTTPException) as error:f.import_file(u,name=' ')
@@ -150,7 +361,7 @@ class StandardContracts(unittest.TestCase):
                 writes.append(path)
                 if len(writes)==failure_at:raise OSError('write failed')
                 part.write(path,data)
-            part.imports.media=StandardMedia(part.path,failing_write,part.media.digest)
+            part.imports.media=StandardMedia(part.path,lambda:failing_write,part.media.digest)
             with self.assertRaisesRegex(OSError,'write failed'):part.import_file(Upload())
             self.assertEqual(len(writes),failure_at)
             self.assertEqual(len(part.store['standards']),0 if failure_at==1 else 1)
@@ -232,7 +443,7 @@ class StandardContracts(unittest.TestCase):
         self.assertTrue(any(e[0]=='prepare' for e in f.events));self.assertFalse(any(e[0]=='repository' for e in f.events))
         f.preparation_enabled=False;f.repo_error=None;f.repo=Mock();f.repo.confirm_text_inspection_standard.return_value=f.store['standards'][0]
         def broken(value):raise RuntimeError('projection')
-        records=StandardRecords(f.load,f.save,f.owned,broken);f.edits.records=records
+        records=StandardRecords(f.load,f.save,f.owned,lambda:broken);f.edits.records=records
         with self.assertRaises(HTTPException) as error:f.edits.confirm_text_inspection_standard('std')
         self.assertEqual(error.exception.status_code,409)
         f.repo=None
