@@ -1,9 +1,22 @@
 # Configuration reference
 
+Paddle settings and OCR thresholds are unchanged. `runtime.paddle` keeps setdefault
+semantics for environment flags and the exact English PP-OCRv6-small parameters;
+the incoming engine continues to use PP-OCRv6-medium. Source manifest v10 lists the
+actual bootstrap and five detection OCR modules. New snapshots record this source
+fingerprint; stored model versions, secret references and historical fingerprints
+remain untouched. No new business switch or worker mode is introduced.
+Attachment crop, score and match getters capture the current callable at each
+original expression, before argument effects. Missing callbacks still evaluate
+arguments and raise the original TypeError. Single-image OCR retains its existing
+Exception handling; batch failures retain the existing per-image fallback. No new
+retry or model-initialization lock is introduced.
+
+
 Detection result extraction changes no settings or thresholds. Label maps remain
 lazy providers. Existing specialized thresholds, geometry ratios, exact-count rules
 and manual-type requirements retain their original defaults and evaluation timing.
-Source manifest v9 includes all five migrated detection files, preserving source
+Source manifest v10 includes all five migrated detection files, preserving source
 coverage previously supplied by the monolithic root. New records use the actual
 source fingerprint; historical snapshots and model bindings are not rewritten.
 
@@ -11,7 +24,7 @@ Legacy incoming workflow extraction adds no business configuration. Existing
 automatic-decision admission, minimum free space and image retention settings retain
 their defaults and read timing. Narrow providers read current request identity,
 repository and paths; nothing caches a user or a database connection. Source manifest
-v8 includes `text_inspection/incoming_execution.py`, the actual CLAHE/OCR input
+v10 includes `text_inspection/incoming_execution.py`, the actual CLAHE/OCR input
 orchestrator, without changing OCR parameters, business prompt versions or old snapshots.
 
 Workflow callback getters resolve only at their original call expressions, after
@@ -25,7 +38,7 @@ extra OCR, rendering, parsing or serialization retry is introduced.
 
 OCR/Beta extraction preserves the PP-OCRv6 medium model names and orientation
 options, image thresholds, one-hour cache TTL and existing byte budgets. Limits and
-request identity remain lazy providers. Manifest v8 includes the actual migrated input
+request identity remain lazy providers. Manifest v10 includes the actual migrated input
 and OCR orchestration files, `text_inspection/incoming_analysis.py` and
 `text_inspection/beta_comparison.py`; stored fingerprints and business prompt versions
 are unchanged. No new worker mode or setting is introduced.
@@ -34,12 +47,12 @@ Incoming-text store extraction adds no setting. Its three file paths, row adapte
 and runtime repository selection remain late-bound. JSON records preserve original
 input values rather than replacing them with normalized SQL rows; PostgreSQL keeps
 its existing table constraints. Shared JSON formatting and exception behavior stay
-unchanged. Prompt-source manifest remains v8; no model-input source moved here.
+unchanged. Prompt-source manifest remains v10; no model-input source moved here.
 Decoder and JSON fallback capabilities preserve live callback replacement and
 missing-callback ordering without eager validation, retries or backend fallback.
 
 Comparison extraction keeps provider timeouts, external-media/automatic-MATCH
-admission and the business prompt version unchanged. Prompt-source manifest v8
+admission and the business prompt version unchanged. Prompt-source manifest v10
 adds `text_inspection/comparison_submission.py`, which now assembles model input,
 and `text_inspection_v2.py`, the actual strict-prompt definition previously absent
 from the list. New fingerprints reflect both files; stored snapshots are unchanged.
@@ -52,14 +65,14 @@ Standard-route extraction introduces no configuration. Permission, account gates
 100 MiB import read limit, legacy PDF read-only responses, expected revisions and
 preparation enablement retain their existing behavior. Identity and job providers
 remain late-bound. Model-input producers stay in their existing modules and source
-manifest v8 continues; stored task bindings and historical fingerprints are retained.
+manifest v10 continues; stored task bindings and historical fingerprints are retained.
 Provider getters resolve at the original call expressions, without eager caching
 or callable validation. This includes exception-detail conversion and PostgreSQL
 confirmation before projection; no new retry or cleanup policy is introduced.
 
 Revision/projection/diagnostic extraction introduces no setting. Diagnostic limits,
 logger replacement, public fields and expected-revision errors retain their values.
-Source manifest is v8; these helpers do not move model-input producers.
+Source manifest is v10; these helpers do not move model-input producers.
 New fingerprints change normally with listed source edits; old snapshots remain.
 Diagnostic hash callback lookup and missing-callable errors retain their evaluation
 order. An absent failure message does not obtain a hash callback.
@@ -69,7 +82,7 @@ maximum side and JPEG quality retain their values and are obtained through expli
 getters at the original expressions. Passthrough never reads JPEG quality; resize
 reads the maximum once for comparison and twice for thumbnail dimensions. Input
 byte/pixel limits, 1.5x PDF rendering, image fast paths and error
-messages remain. New source fingerprints use manifest v8 with the migrated media
+messages remain. New source fingerprints use manifest v10 with the migrated media
 and image sources; existing model versions, secret references and snapshots remain.
 
 Text record callback factories add no configuration. Each operation obtains only
@@ -85,7 +98,7 @@ Prepared comparison extraction adds no settings. Qwen resolution still obtains
 document settings, attaches OCR settings to that same dictionary, then validates
 both providers. Per-submission capabilities retain the submitted callbacks, model
 admission flag and usage recorder; local MATCH commissioning reads account lists
-at execution time. The prompt source manifest uses v8, but edits to listed
+at execution time. The prompt source manifest uses v10, but edits to listed
 source files naturally change new fingerprints. Stored snapshots are not rewritten.
 
 Preparation dependency extraction adds no settings. The existing preparation
@@ -134,7 +147,7 @@ with the item alone, then saves before AI-task upsert; non-applied AI still save
 the selected route. The retired `locate` route retains its existing 410 response.
 
 Source preparation adds no configuration or prompt-content change. New task source
-fingerprints use manifest v8, which includes the actual `accessories/preparation.py`
+fingerprints use manifest v10, which includes the actual `accessories/preparation.py`
 producer. Historical source fingerprints and model/secret references remain unchanged.
 Existing crop limits, source ordering, default sizes and profile call flags remain.
 
