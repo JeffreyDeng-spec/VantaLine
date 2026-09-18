@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_training_launch_workflows.py` runs 18 synthetic groups.
+Fourteen original HTTP/business groups passed before migration on Windows and Linux;
+16 expanded groups also pass against saved original function bodies. Contracts preserve
+request validation, scoped selection, approval, enqueue, clocks and partial state writes.
+Four callback getters retain nine argument-effect call boundaries with per-call refresh.
+Actual submission tests retain nullable backgrounds and frozen task model bindings.
+Independent application instances exercise threadpool identities and late physical-size reads.
+No real training process, paid inference, production database or physical PLC is used.
+
 `python scripts/smoke_training_input_state.py` runs 24 offline groups.
 Sixteen original business groups passed before migration on Windows and Linux;
 22 expanded groups pass against saved original function bodies. The original sprite

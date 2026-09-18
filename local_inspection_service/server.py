@@ -23726,40 +23726,31 @@ async def upload_ai_task_environment_background(
     return response
 
 
-@app.post("/api/training/start")
-def request_training(request: TrainingStartRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    full_config = load_config()
-    config = scope_config_for_user(full_config, user)
-    dataset = None
-    if request.dataset_id:
-        dataset = dataset_for_training(request.dataset_id, user=user)
-        selected = selected_accessories(config, dataset.get("selected_accessory_ids") or request.selected_accessory_ids)
-    else:
-        selected = selected_accessories(config, request.selected_accessory_ids)
-        validate_approved_preview(config, request, selected, user=user)
-        if ensure_training_assets_for_request(full_config, config, user, [item["id"] for item in selected]):
-            config = scope_config_for_user(full_config, user)
-            selected = selected_accessories(config, request.selected_accessory_ids)
-    task = enqueue_training_task(request, selected, "train_model", dataset=dataset)
-    training_state = {
-        "status": "queued",
-        "last_requested_at": int(time.time()),
-        "selected_accessory_ids": [item["id"] for item in selected],
-        "sample_count": task["sample_count"],
-        "mode": request.train_mode,
-        "epochs": task["epochs"],
-        "image_size": task["image_size"],
-        "background_set_id": task.get("background_set_id"),
-        "approved_preview_id": request.approved_preview_id,
-        "active_training_task_id": task["job_id"],
-        "note": task["note"],
-        "estimated_minutes": task["estimated_minutes"],
-    }
-    set_training_state_for_user(full_config, user, training_state)
-    merge_scoped_accessory_updates(full_config, config, user)
-    save_config(full_config)
-    return task
+from .training.launch_submission import LaunchConfiguration, LaunchInputs, TrainingLaunchSubmission
+from .training.status_query import TrainingStatusQuery
+from .training import launch_api as _training_launch_api
+
+_training_launch_submission = TrainingLaunchSubmission(
+    lambda: current_auth_user(),
+    LaunchConfiguration(lambda: load_config(), lambda full, user: scope_config_for_user(full, user),
+                        lambda: ensure_training_assets_for_request,
+                        lambda full, user, state: set_training_state_for_user(full, user, state),
+                        lambda full, config, user: merge_scoped_accessory_updates(full, config, user),
+                        lambda full: save_config(full)),
+    LaunchInputs(lambda: selected_accessories,
+                 lambda: dataset_for_training,
+                 lambda config, request, selected, **kwargs: validate_approved_preview(config, request, selected, **kwargs)),
+    lambda request, selected, action, **kwargs: enqueue_training_task(request, selected, action, **kwargs),
+    lambda: time.time(), lambda: BACKGROUND_SIZE_MM,
+)
+_training_status_query = TrainingStatusQuery(
+    lambda: current_auth_user(), lambda user: user_is_admin(user), lambda: load_config(),
+    lambda: scope_config_for_user,
+    lambda config, user, target: filtered_training_state(config, user, target),
+)
+
+
+request_training = _training_launch_api.register_start(app, _training_launch_submission)
 
 
 @app.get("/api/training/runpod/datasets/{job_id}/{token}/dataset.zip")
@@ -23853,43 +23844,7 @@ async def upload_runpod_training_artifact(job_id: str, token: str, request: Requ
     return {"ok": True, "sha256": sha, "size": total}
 
 
-@app.post("/api/training/generate")
-def request_sample_generation(request: TrainingStartRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    full_config = load_config()
-    config = scope_config_for_user(full_config, user)
-    selected = selected_accessories(config, request.selected_accessory_ids)
-    validate_approved_preview(config, request, selected, user=user)
-    if ensure_training_assets_for_request(full_config, config, user, [item["id"] for item in selected]):
-        config = scope_config_for_user(full_config, user)
-        selected = selected_accessories(config, request.selected_accessory_ids)
-    task = enqueue_training_task(request, selected, "generate_samples")
-    training_state = {
-        "status": "queued",
-        "last_requested_at": int(time.time()),
-        "selected_accessory_ids": [item["id"] for item in selected],
-        "sample_count": task["sample_count"],
-        "mode": request.train_mode,
-        "background_set_id": task.get("background_set_id"),
-        "approved_preview_id": request.approved_preview_id,
-        "preview_urls": [],
-        "previews": [],
-        "preview_cache_key": None,
-        "preview_sprite_versions": {},
-        "render_policy": {
-            "background_physical_size": BACKGROUND_SIZE_MM,
-            "physical_size_rule": "Object samples use clean alpha sprites scaled by physical_size; document samples paste the saved rectified full document directly at paper physical_size.",
-            "pose_collection_rule": "Pose Collection provides pose only; physical_size is applied only during preview and dataset rendering.",
-        },
-        "active_training_task_id": task["job_id"],
-        "note": task["note"],
-        "estimated_minutes": task["estimated_minutes"],
-        "estimated_gb": task["estimated_gb"],
-    }
-    set_training_state_for_user(full_config, user, training_state)
-    merge_scoped_accessory_updates(full_config, config, user)
-    save_config(full_config)
-    return task
+request_sample_generation = _training_launch_api.register_generate(app, _training_launch_submission)
 
 
 from .training.dataset_input import TrainingDatasetInput
@@ -23918,12 +23873,7 @@ def dataset_for_training(dataset_id: str, user: dict[str, Any] | None = None) ->
     return _training_dataset_input.dataset_for_training(dataset_id, user)
 
 
-@app.get("/api/training/status")
-def training_status(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    config = scope_config_for_user(load_config(), user, target_user_id)
-    return filtered_training_state(config, user, target_user_id)
+training_status = _training_launch_api.register_status(app, _training_status_query)
 
 
 def validate_approved_preview(
