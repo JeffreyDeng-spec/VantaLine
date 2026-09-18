@@ -16,6 +16,9 @@ and unchanged partial evidence/uncertain settlement. Fourteen original event tra
 thirteen A-to-B-to-C capture windows and thirteen missing-callback traces preserve
 argument effects and exception policy. The application contract also checks live
 replacement/restoration of all eleven new callback getters.
+The Beta source guard follows revision fields into the actual submission module and
+verifies its import, service composition, route registration and endpoint alias by
+AST. Its original business/frontend and record-store assertions remain required.
 
 `python scripts/smoke_text_standards.py` adds thirteen synthetic groups for import
 validation/duplicate/parser ordering, DOC thread identity and DOCX synchronous
