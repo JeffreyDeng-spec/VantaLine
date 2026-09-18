@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_background_api.py` runs 26 synthetic groups.
+Fifteen original HTTP/business groups passed before migration on Windows and Linux;
+22 expanded groups also pass against saved original function bodies. Contracts retain
+media permissions, upload validation, exact image analysis inputs, prompt-free formatting,
+owner selection and partial-file/state mutations. Five narrow getters preserve callback
+capture before argument effects. Real uploads, threadpool identities and temporary files
+exercise independent applications; paid inference, physical PLC and production data are not used.
+
 `python scripts/smoke_training_background_tasks.py` runs 34 synthetic groups.
 Twenty original business groups passed before migration on Windows and Linux;
 28 expanded groups also pass against saved original function bodies, including the

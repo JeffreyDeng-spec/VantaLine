@@ -19469,70 +19469,17 @@ def update_background_set_manifest(set_id: str, **updates: Any) -> dict[str, Any
     return _background_writes.update_background_set_manifest(set_id, **updates)
 def save_task_environment_background_set(task_id: str, source_path: Path, user: dict[str, Any], display_name: str = "") -> dict[str, Any]:
     return _task_background_store.save_task_environment_background_set(task_id, source_path, user, display_name)
+from .training.background_validation import BackgroundValidation
+
+_background_validation = BackgroundValidation(
+    lambda identifier: sanitize_ai_detection_task_id(identifier), lambda: AI_DETECTION_TASK_PREFIX,
+    lambda: time.time(), lambda: uuid.uuid4(),
+    lambda image, request_id, model_id=None, **kwargs: analyze_bgr(image, request_id, model_id, **kwargs),
+    lambda: bounded_text,
+)
+
 def validate_task_environment_background_image(task_id: str, task: dict[str, Any], source_path: Path) -> dict[str, Any]:
-    """Reject task empty-background captures that still contain required parts."""
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        raise HTTPException(status_code=404, detail="AI detection task not found")
-    image_bgr = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
-    if image_bgr is None:
-        raise HTTPException(status_code=400, detail="无法读取背景图片，请重新上传。")
-    model_id = f"{AI_DETECTION_TASK_PREFIX}{clean_task_id}"
-    request_id = f"background_probe_{clean_task_id}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    try:
-        result = analyze_bgr(image_bgr, request_id, model_id, image_path=source_path)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=f"背景图验收失败：AI 检测暂不可用（{bounded_text(str(exc), 120)}）。请稍后重试。",
-        ) from exc
-    ai_meta = result.get("ai") if isinstance(result.get("ai"), dict) else {}
-    if ai_meta.get("provider_failure") is True:
-        reason = bounded_text(ai_meta.get("failure_reason") or ai_meta.get("error") or "AI provider unavailable", 120)
-        raise HTTPException(status_code=503, detail=f"背景图验收失败：AI 检测不可用（{reason}）。请稍后重试。")
-    labels = task.get("accessory_labels") if isinstance(task.get("accessory_labels"), dict) else {}
-    detected: list[str] = []
-    detections = result.get("detections") if isinstance(result.get("detections"), list) else []
-    for item in detections:
-        if not isinstance(item, dict):
-            continue
-        try:
-            count = int(item.get("count") or 0)
-        except (TypeError, ValueError):
-            count = 0
-        if item.get("present") is True or count > 0:
-            accessory_id = str(item.get("accessory_id") or "")
-            label = bounded_text(item.get("label") or labels.get(accessory_id) or accessory_id or "目标配件", 80)
-            if label and label not in detected:
-                detected.append(label)
-    rule = result.get("rule") if isinstance(result.get("rule"), dict) else {}
-    counts = rule.get("counts") if isinstance(rule.get("counts"), dict) else {}
-    for accessory_id, raw_count in counts.items():
-        try:
-            count = int(raw_count or 0)
-        except (TypeError, ValueError):
-            count = 0
-        if count <= 0:
-            continue
-        item_id = str(accessory_id)
-        label = bounded_text(labels.get(item_id) or item_id or "目标配件", 80)
-        if label and label not in detected:
-            detected.append(label)
-    if detected:
-        raise HTTPException(
-            status_code=409,
-            detail=f"背景图检测到目标配件：{'、'.join(detected)}。请清空画面后重新拍摄空背景。",
-        )
-    return {
-        "status": "accepted",
-        "request_id": result.get("request_id") or request_id,
-        "latency_ms": ai_meta.get("latency_ms") or 0,
-        "provider_model": (result.get("model") if isinstance(result.get("model"), dict) else {}).get("provider_model") or "",
-    }
-
-
+    return _background_validation.validate_task_environment_background_image(task_id, task, source_path)
 def run_background_set_task(job_id: str) -> None:
     return _background_task_runner.run_background_set_task(job_id)
 def enqueue_background_set_task(set_id: str, name: str, source_path: Path) -> dict[str, Any]:
@@ -23333,120 +23280,42 @@ def update_stream(config_in: StreamConfig) -> dict[str, Any]:
     return {"status": "saved", "stream": config["stream"]}
 
 
-@app.get("/api/backgrounds/{set_id}/{image_name}")
-def background_image(set_id: str, image_name: str) -> FileResponse:
-    user = current_auth_user()
-    clean_id = safe_background_set_id(set_id)
-    if not any(item.get("id") == clean_id for item in list_background_sets(user)):
-        raise HTTPException(status_code=404, detail="Background image not found")
-    clean_name = Path(image_name).name
-    path = BACKGROUND_SETS_DIR / clean_id / clean_name
-    if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-        raise HTTPException(status_code=404, detail="Background image not found")
-    return FileResponse(path)
+from .training.background_query import BackgroundQuery
+from .training.background_uploads import (
+    BackgroundUploadPaths, BackgroundUploadRecords, BackgroundUpload,
+    BackgroundCaptureIdentity, BackgroundCapturePaths, BackgroundCaptureTasks,
+    BackgroundCaptureSets, BackgroundCaptureState, BackgroundCapture,
+)
+from .training import background_api as _training_background_api
 
-
-@app.get("/api/training/background-sets")
-def training_background_sets(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    sets = list_background_sets(user, target_user_id)
-    manifest = load_background_sets_manifest()
-    default_id = selected_background_set_id(manifest.get("default_set_id") or None, user, target_user_id)
-    return {"background_sets": sets, "default_set_id": default_id}
-
-
-@app.post("/api/training/background-sets")
-async def upload_training_background_set(
-    name: str = Form(""),
-    file: UploadFile = File(...),
-) -> dict[str, Any]:
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in IMAGE_REFERENCE_SUFFIXES:
-        raise HTTPException(status_code=400, detail="Only image background files are supported")
-    display_name = name.strip() or Path(file.filename or "background").stem
-    set_id = unique_background_set_id(display_name)
-    set_dir = BACKGROUND_SETS_DIR / set_id
-    set_dir.mkdir(parents=True, exist_ok=True)
-    source_path = set_dir / f"source{suffix or '.png'}"
-    with source_path.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
-    meta = update_background_set_manifest(
-        set_id,
-        id=set_id,
-        name=display_name,
-        description="用户上传背景生成的同环境背景集",
-        source=str(source_path),
-        created_at=int(time.time()),
-        generation_method="queued_codexcli_imgworker",
-        status="queued",
-        **current_owner_fields(),
-    )
-    task = enqueue_background_set_task(set_id, display_name, source_path)
-    return {
-        "status": "queued",
-        "task": task,
-        "task_id": task["job_id"],
-        "background_set": background_set_payload(set_id, meta),
-        **training_background_sets(),
-    }
-
-
-@app.post("/api/ai/tasks/{task_id}/environment-background")
-async def upload_ai_task_environment_background(
-    task_id: str,
-    file: UploadFile = File(...),
-) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        raise HTTPException(status_code=404, detail="AI detection task not found")
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in IMAGE_REFERENCE_SUFFIXES:
-        raise HTTPException(status_code=400, detail="Only image background files are supported")
-    user = current_auth_user()
-    tasks = load_ai_detection_tasks()
-    task = next((item for item in tasks if item.get("id") == clean_task_id), None)
-    if not task:
-        raise HTTPException(status_code=404, detail="AI detection task not found")
-    require_record_access(task, user, write=True)
-    capture_dir = output_write_dir_for_owner("task_environment_backgrounds", str(user.get("id") or "")) / clean_task_id
-    capture_dir.mkdir(parents=True, exist_ok=True)
-    source_path = capture_dir / f"environment_{int(time.time())}_{uuid.uuid4().hex[:6]}{suffix or '.jpg'}"
-    with source_path.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
-    validation = validate_task_environment_background_image(clean_task_id, task, source_path)
-    background_set = save_task_environment_background_set(
-        clean_task_id,
-        source_path,
-        user,
-        display_name=f"{task.get('name') or clean_task_id} · 空场景背景",
-    )
-    environment_background = {
-        "background_set_id": background_set["id"],
-        "captured_at": int(time.time()),
-        "source_path": str(source_path),
-        "source_url": public_output_url(source_path),
-        "background_source": background_set.get("source") or "",
-        "image_count": background_set.get("image_count") or 0,
-        "generation_method": background_set.get("generation_method") or "",
-        "validation": validation,
-    }
-    task["background_set_id"] = background_set["id"]
-    task["environment_background"] = environment_background
-    save_ai_detection_task(task)
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(clean_task_id)
-        state["background_set_id"] = background_set["id"]
-        state["environment_background"] = environment_background
-        state["task_name"] = task.get("name") or state.get("task_name") or ""
-        state["owner_user_id"] = task.get("owner_user_id") or state.get("owner_user_id") or str(user.get("id") or "")
-        state["owner_username"] = task.get("owner_username") or state.get("owner_username") or str(user.get("username") or "")
-        save_auto_optimize_state(state)
-    response = public_auto_optimize_state(clean_task_id, user=user)
-    response["status"] = "saved"
-    response["background_set"] = public_path_sanitized(background_set)
-    return response
-
+_background_query = BackgroundQuery(
+    lambda: current_auth_user(), lambda user: user_is_admin(user), lambda identifier: safe_background_set_id(identifier),
+    lambda *args, **kwargs: list_background_sets(*args, **kwargs), lambda: load_background_sets_manifest(),
+    lambda: selected_background_set_id,
+    lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES,
+)
+_background_upload = BackgroundUpload(
+    BackgroundUploadPaths(lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES),
+    BackgroundUploadRecords(lambda name: unique_background_set_id(name), lambda: update_background_set_manifest,
+                            lambda identifier, name, source: enqueue_background_set_task(identifier, name, source),
+                            lambda identifier, meta: background_set_payload(identifier, meta)),
+    lambda: current_owner_fields(), lambda: time.time(), lambda: training_background_sets(),
+)
+_background_capture = BackgroundCapture(
+    BackgroundCaptureIdentity(lambda identifier: sanitize_ai_detection_task_id(identifier), lambda: current_auth_user(), lambda value: public_path_sanitized(value)),
+    BackgroundCapturePaths(lambda: IMAGE_REFERENCE_SUFFIXES, lambda: output_write_dir_for_owner, lambda path: public_output_url(path)),
+    BackgroundCaptureTasks(lambda: load_ai_detection_tasks(), lambda record, user, **kwargs: require_record_access(record, user, **kwargs), lambda task: save_ai_detection_task(task)),
+    BackgroundCaptureSets(lambda identifier, task, path: validate_task_environment_background_image(identifier, task, path),
+                          lambda: save_task_environment_background_set),
+    BackgroundCaptureState(lambda: _auto_optimize_lock, lambda identifier: load_auto_optimize_state(identifier),
+                           lambda state: save_auto_optimize_state(state), lambda identifier, **kwargs: public_auto_optimize_state(identifier, **kwargs)),
+    lambda: time.time(), lambda: uuid.uuid4(),
+)
+_background_routes = _training_background_api.register(app, _background_query, _background_upload, _background_capture)
+background_image = _background_routes.background_image
+training_background_sets = _background_routes.training_background_sets
+upload_training_background_set = _background_routes.upload_training_background_set
+upload_ai_task_environment_background = _background_routes.upload_ai_task_environment_background
 
 from .training.launch_submission import LaunchConfiguration, LaunchInputs, TrainingLaunchSubmission
 from .training.status_query import TrainingStatusQuery

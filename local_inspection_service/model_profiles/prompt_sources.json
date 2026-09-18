@@ -1,7 +1,11 @@
 {
-  "version": 36,
+  "version": 37,
   "sources": [
     "server.py",
+    "training/background_validation.py",
+    "training/background_query.py",
+    "training/background_uploads.py",
+    "training/background_api.py",
     "training/background_codex.py",
     "training/background_task_runner.py",
     "training/background_task_submission.py",
