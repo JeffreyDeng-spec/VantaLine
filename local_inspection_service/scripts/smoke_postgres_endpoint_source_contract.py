@@ -474,6 +474,34 @@ def main() -> None:
                           "functions_with_runtime_repository_entry"):
             getattr(contract, attribute).update(getattr(pipeline_store, attribute))
 
+    lifecycle_path = ROOT / "local_inspection_service" / "training" / "task_lifecycle.py"
+    lifecycle = SourceContract(injected_repository=True, repository_expression="self.writes.repository")
+    lifecycle.visit(ast.parse(lifecycle_path.read_text(encoding="utf-8"), filename=str(lifecycle_path)))
+    require(lifecycle.runtime_repository_entry_call_count == 1
+            and lifecycle.functions_with_runtime_repository_entry == {"delete_training_task_record"},
+            "training deletion must retain its lazy repository selection")
+    require("training_tasks" in lifecycle.string_literals and "delete_by_primary_key" in lifecycle.called_attributes,
+            "training lifecycle missing actual task deletion")
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "training.task_lifecycle"
+                and any(alias.name == "TrainingTaskLifecycle" for alias in node.names)
+                for node in tree.body), "server missing training lifecycle composition")
+    writes = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+              and isinstance(node.func, ast.Name) and node.func.id == "TrainingTaskWrites"]
+    require(len(writes) == 1, "expected one training lifecycle write-port composition")
+    repository = next(keyword.value for keyword in writes[0].keywords if keyword.arg == "repository")
+    require(isinstance(repository, ast.Lambda) and ast.dump(repository.body) == ast.dump(
+                ast.parse("runtime_postgres_repository_or_none()", mode="eval").body),
+            "training deletion must obtain the current thread repository lazily")
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "delete_training_task_record")
+    require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+            and ast.dump(function.body[0].value) == ast.dump(ast.parse(
+                "_training_lifecycle.delete_training_task_record(job_id, user, missing_ok=missing_ok)", mode="eval").body),
+            "training deletion forward must use the authorized lifecycle")
+    contract.runtime_repository_entry_call_count += lifecycle.runtime_repository_entry_call_count - 1
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(lifecycle, attribute))
+
     # Legacy workflows retain five real repository entries after extraction.
     for filename, expected in {
         "incoming_catalog.py": {"update_incoming_text_reference_rules"},
