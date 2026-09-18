@@ -1,5 +1,45 @@
 # Testing
 
+`python scripts/smoke_detection_annotation.py` runs 21 synthetic groups.
+Fifteen original business groups passed before migration on Windows and Linux;
+18 expanded groups also pass against saved original function bodies. Contracts retain
+geometry rounding, strict coordinate types, drawing order, image copies and output behavior.
+Backend policies refresh at original expression boundaries. First-failure recovery fixtures
+reject hidden retries; existing partial-file residues and None-only fallback remain intact.
+Synthetic images and image-backend substitutes avoid models, production media and device I/O.
+
+`python scripts/smoke_presence_results.py` runs 19 synthetic groups.
+Fourteen original business groups passed before migration on Windows and Linux;
+17 expanded groups also pass against saved original function bodies. Contracts retain
+count precedence, confidence bounds, duplicate IDs, provider metadata merge order and field reads.
+Policies refresh between required items. First-failure recovery fixtures reject hidden retries;
+TypeError/ValueError count fallback behavior remains unchanged.
+No paid model calls, external requests or device operations run in these contracts.
+
+`python scripts/smoke_detection_failures.py` runs 20 synthetic groups.
+Twelve original business groups passed before migration on Windows and Linux;
+16 expanded groups also pass against saved original function bodies. Contracts retain
+failure records, provider metadata merge order, model projection aliases and exact field reads.
+Callbacks refresh after ID conversion and between items. First-failure recovery fixtures reject
+hidden retries without incidental failures. Existing error propagation remains unchanged.
+No paid model calls, external requests or device operations run in these contracts.
+
+`python scripts/smoke_presence_contracts.py` runs 20 synthetic groups.
+Thirteen original business groups passed before migration on Windows and Linux;
+17 expanded groups also pass against saved original function bodies. Contracts retain
+exact payload text, count coercion, response coverage and double-read order. Five formatter
+getters preserve callee selection before arguments and after prior conversions. First-failure
+fixtures reject hidden retries; existing TypeError/ValueError count fallbacks remain intact.
+No paid model calls, external requests or device operations run in these contracts.
+
+`python scripts/smoke_accessory_requirements.py` runs 21 synthetic groups.
+Fifteen original business groups passed before migration on Windows and Linux;
+19 expanded groups also pass against saved original function bodies. Contracts retain
+eager alias evaluation, first-wins alias lookup, last-wins UID/class indexes, duplicate selections,
+minimum counts and exact missing-metadata records. Per-expression policies preserve dynamic
+rebinding. First-failure then recovery fixtures reject retries; narrow class errors still skip.
+No model inference, external requests or device operations run in these contracts.
+
 `python scripts/smoke_training_worker_retired_flows.py` runs 12 synthetic groups.
 Nine original business groups passed before migration on Windows and Linux;
 10 expanded groups also pass against saved original function bodies. Contracts retain

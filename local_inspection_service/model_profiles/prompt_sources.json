@@ -1,7 +1,15 @@
 {
-  "version": 44,
+  "version": 49,
   "sources": [
     "server.py",
+    "detection/annotation.py",
+    "detection/presence_results.py",
+    "detection/failure_projection.py",
+    "detection/failure_results.py",
+    "detection/presence_payload.py",
+    "detection/presence_validation.py",
+    "accessories/lookup.py",
+    "detection/requirements.py",
     "training/legacy_worker_tasks.py",
     "training/legacy_worker_refresh.py",
     "training/legacy_worker_requests.py",

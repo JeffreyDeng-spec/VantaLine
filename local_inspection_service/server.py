@@ -20139,25 +20139,19 @@ def ai_detection_task_model_id(task_id: str) -> str:
     return _detection_task_model_id(task_id, AI_DETECTION_TASK_PREFIX)
 
 
+from .accessories.lookup import AccessoryLookup
+from .detection.requirements import RequiredAccessories
+
+_accessory_lookup = AccessoryLookup(lambda item: accessory_uid(item), lambda item: accessory_legacy_uid(item))
+_required_accessories = RequiredAccessories(lambda item: accessory_uid(item), lambda: CLASS_LABELS)
+
+
 def accessory_lookup_by_id(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    lookup: dict[str, dict[str, Any]] = {}
-    for item in config.get("accessories", []):
-        for raw_id in (item.get("id"), accessory_uid(item), accessory_legacy_uid(item)):
-            item_id = str(raw_id or "").strip()
-            if item_id and item_id not in lookup:
-                lookup[item_id] = item
-    return lookup
+    return _accessory_lookup.accessory_lookup_by_id(config)
 
 
 def accessory_id_aliases(item: dict[str, Any]) -> list[str]:
-    aliases: list[str] = []
-    seen: set[str] = set()
-    for raw_id in (item.get("id"), accessory_uid(item), accessory_legacy_uid(item)):
-        item_id = str(raw_id or "").strip()
-        if item_id and item_id not in seen:
-            seen.add(item_id)
-            aliases.append(item_id)
-    return aliases
+    return _accessory_lookup.accessory_id_aliases(item)
 
 
 def resolve_accessory_id(config: dict[str, Any], accessory_id: str) -> tuple[str, dict[str, Any]] | None:
@@ -20484,90 +20478,20 @@ from .detection.drawing import draw_detections
 
 
 def ai_required_accessories(config: dict[str, Any], spec: dict[str, Any]) -> list[tuple[dict[str, Any], int]]:
-    accessories = config.get("accessories", [])
-    by_id = {accessory_uid(item): item for item in accessories}
-    required: list[tuple[dict[str, Any], int]] = []
-    if spec.get("is_specialized"):
-        counts = {
-            str(k): max(1, int(v))
-            for k, v in (spec.get("required_accessory_counts") or {}).items()
-        }
-        ids = [str(item_id) for item_id in spec.get("selected_accessory_ids") or counts.keys()]
-        labels = {str(k): str(v) for k, v in (spec.get("accessory_labels") or {}).items()}
-        for item_id in ids:
-            item = by_id.get(item_id) or {
-                "id": item_id,
-                "class_id": -1,
-                "name": labels.get(item_id, item_id),
-                "material_type": "object",
-                "source_files": [],
-                "normalized_assets": [],
-            }
-            required.append((item, counts.get(item_id, 1)))
-        return required
+    return _required_accessories.ai_required_accessories(config, spec)
 
-    required_classes = [int(x) for x in config.get("required_classes", [])]
-    min_counts = {int(k): max(1, int(v)) for k, v in (config.get("min_counts") or {}).items()}
-    by_class: dict[int, dict[str, Any]] = {}
-    for item in accessories:
-        try:
-            by_class[int(item.get("class_id", -1))] = item
-        except (TypeError, ValueError):
-            continue
-    for class_id in required_classes:
-        item = by_class.get(class_id)
-        if not item:
-            item = {
-                "id": f"required_class_{class_id}",
-                "class_id": class_id,
-                "name": CLASS_LABELS.get(class_id, f"Required Class {class_id}"),
-                "material_type": "object" if class_id == 0 else "text",
-                "status": "missing_accessory_metadata",
-                "description": "Configured required class has no matching accessory metadata; fail closed.",
-                "source_files": [],
-                "normalized_assets": [],
-            }
-        required.append((item, min_counts.get(class_id, 1)))
-    if required:
-        return required
-    return []
+
+from .detection.presence_payload import PresencePayload
+from .detection.presence_validation import (
+    ai_detection_parsed_covers_required as _presence_covers_required,
+    coerce_detection_count as _presence_count,
+)
+
+_presence_payload = PresencePayload(lambda: string_list, lambda: bounded_text)
 
 
 def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dict[str, Any]:
-    payload_accessories = []
-    for required in required_accessories:
-        try:
-            expected_count = max(1, int(required.get("expected_count") or 1))
-        except (TypeError, ValueError):
-            expected_count = 1
-        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
-        text_cues = string_list(profile.get("distinguishing_text"), max_items=6, max_len=64)
-        tags = string_list(profile.get("tags"), max_items=5, max_len=40)
-        visual_signature = bounded_text(profile.get("visual_signature") or profile.get("description"), 180)
-        payload_accessories.append(
-            {
-                "accessory_id": str(required.get("accessory_id") or ""),
-                "name": bounded_text(required.get("name") or required.get("label") or required.get("accessory_id"), 80),
-                "expected_count": expected_count,
-                "material_type": bounded_text(required.get("material_type") or profile.get("material_type"), 32),
-                "visual_cue": visual_signature,
-                "text_cues": text_cues,
-                "tags": tags,
-            }
-        )
-    return {
-        "task": {
-            "policy": "presence_by_accessory_profile",
-            "expected_latency_seconds": 5,
-            "decision_rule": "passed is true only when every required accessory is present at exactly expected_count; undercounts and overcounts fail.",
-            "output_mode": "compact",
-            "required_accessories": payload_accessories,
-        },
-        "output_contract": {
-            "detections": "Array of {accessory_id,label,present,confidence,count,evidence}. Count is optional unless multiple visible instances matter.",
-            "rule": "Object with counts keyed by accessory_id.",
-        },
-    }
+    return _presence_payload.ai_detection_task_payload(required_accessories)
 
 
 def ai_detection_output_token_budget(required_count: int) -> int:
@@ -20584,35 +20508,22 @@ def ai_detection_provider_output_token_budget(required_count: int, settings: dic
 
 
 def ai_detection_parsed_covers_required(parsed: Any, required_ids: set[str]) -> bool:
-    """True when the provider response mentions at least one required accessory
-    id, either as a detection entry or a rule count. An empty or unrelated
-    response is a provider contract failure, not an all-missing verdict."""
-    if not required_ids:
-        return True
-    if not isinstance(parsed, dict):
-        return False
-    mentioned: set[str] = set()
-    detections = parsed.get("detections") if isinstance(parsed.get("detections"), list) else []
-    for det in detections:
-        if isinstance(det, dict) and det.get("accessory_id") is not None:
-            mentioned.add(str(det.get("accessory_id")))
-    rule = parsed.get("rule") if isinstance(parsed.get("rule"), dict) else {}
-    counts = rule.get("counts") if isinstance(rule.get("counts"), dict) else {}
-    mentioned.update(str(key) for key in counts.keys())
-    return bool(mentioned & required_ids)
+    return _presence_covers_required(parsed, required_ids)
 
 
 def coerce_detection_count(value: Any) -> int | None:
-    """Tolerant count parsing: JSON-mode providers may serialize whole numbers
-    as floats (1.0). Booleans, negatives, fractional floats, and strings are
-    rejected so ambiguous counts keep failing closed (see smoke_ai_detection)."""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value if value >= 0 else None
-    if isinstance(value, float):
-        return int(value) if value.is_integer() and value >= 0 else None
-    return None
+    return _presence_count(value)
+
+
+from .detection.failure_projection import FailureProjection
+from .detection.failure_results import DetectionFailureResult
+
+_failure_projection = FailureProjection(lambda: bounded_text, lambda settings: ai_tool_provider_meta(settings), lambda: AI_DETECTION_LABEL)
+_detection_failure_result = DetectionFailureResult(
+    lambda: ai_detection_settings(), lambda item, count: required_accessory_profile_payload(item, count),
+    lambda required, settings, *, reason, timed_out=False, latency_ms=0: ai_presence_failure_payload(required, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms),
+    lambda spec, settings: ai_model_payload(spec, settings),
+)
 
 
 def ai_presence_failure_payload(
@@ -20623,44 +20534,7 @@ def ai_presence_failure_payload(
     timed_out: bool = False,
     latency_ms: int = 0,
 ) -> dict[str, Any]:
-    missing_ids = [str(item.get("accessory_id") or "") for item in required_accessories if item.get("accessory_id")]
-    detections = [
-        {
-            "accessory_id": item_id,
-            "label": bounded_text(required.get("name") or required.get("label") or item_id, 120),
-            "present": False,
-            "confidence": 0.0,
-            "evidence": bounded_text(reason, 160),
-            "observed_text": [],
-        }
-        for required in required_accessories
-        for item_id in [str(required.get("accessory_id") or "")]
-        if item_id
-    ]
-    provider_meta = ai_tool_provider_meta(settings)
-    return {
-        "tool": "vision.inspect.presence",
-        "passed": len(missing_ids) == 0,
-        "rule": {
-            "match_policy": "ai_presence",
-            "label": AI_DETECTION_LABEL,
-            "present": [],
-            "missing": missing_ids,
-            "extra": [],
-            "counts": {item_id: 0 for item_id in missing_ids},
-        },
-        "detections": detections,
-        "ai": {
-            "latency_ms": latency_ms,
-            "timed_out": timed_out,
-            "provider_failure": True,
-            "failure_reason": bounded_text(reason, 240),
-            "raw_summary": bounded_text(reason, 240),
-            "provider_status": settings.get("status") or "",
-            "error": bounded_text(reason, 240),
-            **provider_meta,
-        },
-    }
+    return _failure_projection.ai_presence_failure_payload(required_accessories, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
 
 
 def ai_detection_failure_result(
@@ -20673,130 +20547,49 @@ def ai_detection_failure_result(
     timed_out: bool = False,
     latency_ms: int = 0,
 ) -> dict[str, Any]:
-    settings = ai_detection_settings()
-    required_accessories = [required_accessory_profile_payload(item, expected_count) for item, expected_count in required_items]
-    payload = ai_presence_failure_payload(required_accessories, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
-    return {
-        "request_id": request_id,
-        "passed": payload["passed"],
-        "model": ai_model_payload(spec, settings),
-        "rule": payload["rule"],
-        "detections": payload["detections"],
-        "annotated_url": annotated_url,
-        "ai": payload["ai"],
-    }
+    return _detection_failure_result.ai_detection_failure_result(request_id, spec, required_items, annotated_url, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
+
+
+from .detection.annotation import DetectionAnnotation, normalize_ai_box_2d as _normalize_ai_box_2d
+
+_detection_annotation = DetectionAnnotation(
+    lambda value: normalize_ai_box_2d(value), lambda: ai_box_2d_to_pixels,
+    lambda: bounded_text, lambda: cv2, lambda kind: output_write_dir(kind), lambda path: output_url(path),
+    lambda image, detections, rule: draw_ai_detection_boxes(image, detections, rule),
+    lambda image, request_id: write_ai_original_output(image, request_id),
+)
 
 
 def write_ai_original_output(image_bgr: np.ndarray, request_id: str) -> str:
-    out_name = f"{request_id}_ai_original.jpg"
-    out_path = output_write_dir("ai_detection") / out_name
-    cv2.imwrite(str(out_path), image_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    return output_url(out_path)
+    return _detection_annotation.write_ai_original_output(image_bgr, request_id)
 
 
 def normalize_ai_box_2d(value: Any) -> list[float] | None:
-    if not isinstance(value, (list, tuple)) or len(value) != 4:
-        return None
-    coords: list[float] = []
-    for raw in value:
-        if type(raw) not in (int, float):
-            return None
-        coord = float(raw)
-        if not math.isfinite(coord):
-            return None
-        coords.append(max(0.0, min(1000.0, coord)))
-    y_min, x_min, y_max, x_max = coords
-    if y_max <= y_min or x_max <= x_min:
-        return None
-    return [round(coord, 2) for coord in coords]
+    return _normalize_ai_box_2d(value)
 
 
 def ai_box_2d_to_pixels(box_2d: Any, image_shape: tuple[int, ...]) -> tuple[int, int, int, int] | None:
-    box = normalize_ai_box_2d(box_2d)
-    if not box:
-        return None
-    h, w = image_shape[:2]
-    if h <= 1 or w <= 1:
-        return None
-    y_min, x_min, y_max, x_max = box
-    x1 = max(0, min(w - 1, int(math.floor(x_min / 1000.0 * (w - 1)))))
-    y1 = max(0, min(h - 1, int(math.floor(y_min / 1000.0 * (h - 1)))))
-    x2 = max(0, min(w - 1, int(math.ceil(x_max / 1000.0 * (w - 1)))))
-    y2 = max(0, min(h - 1, int(math.ceil(y_max / 1000.0 * (h - 1)))))
-    if x2 <= x1 or y2 <= y1:
-        return None
-    return x1, y1, x2, y2
+    return _detection_annotation.ai_box_2d_to_pixels(box_2d, image_shape)
 
 
 def draw_ai_detection_boxes(image_bgr: np.ndarray, detections: list[dict[str, Any]], rule: dict[str, Any]) -> np.ndarray | None:
-    boxes: list[tuple[dict[str, Any], tuple[int, int, int, int]]] = []
-    for det in detections:
-        if not isinstance(det, dict):
-            continue
-        xyxy = ai_box_2d_to_pixels(det.get("box_2d"), image_bgr.shape)
-        if xyxy:
-            boxes.append((det, xyxy))
-    if not boxes:
-        return None
-
-    annotated = image_bgr.copy()
-    overlay = image_bgr.copy()
-    color = (32, 196, 92) if bool(rule.get("passed")) else (40, 180, 255)
-    thickness = max(2, int(round(min(image_bgr.shape[:2]) / 220)))
-    font_scale = max(0.45, min(0.7, min(image_bgr.shape[:2]) / 640.0))
-    font_thickness = max(1, thickness - 1)
-    for det, (x1, y1, x2, y2) in boxes:
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
-        label = bounded_text(det.get("label") or det.get("accessory_id") or "AI", 24)
-        try:
-            confidence = float(det.get("confidence") or 0.0)
-        except (TypeError, ValueError):
-            confidence = 0.0
-        text = f"{label} {confidence:.2f}" if confidence > 0 else label
-        (text_w, text_h), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-        label_y1 = max(0, y1 - text_h - baseline - 6)
-        label_y2 = min(image_bgr.shape[0] - 1, label_y1 + text_h + baseline + 6)
-        label_x2 = min(image_bgr.shape[1] - 1, x1 + text_w + 10)
-        cv2.rectangle(annotated, (x1, label_y1), (label_x2, label_y2), color, -1)
-        cv2.putText(
-            annotated,
-            text,
-            (x1 + 5, max(text_h + 2, label_y2 - baseline - 3)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            font_scale,
-            (255, 255, 255),
-            font_thickness,
-            cv2.LINE_AA,
-        )
-    return cv2.addWeighted(overlay, 0.10, annotated, 0.90, 0)
+    return _detection_annotation.draw_ai_detection_boxes(image_bgr, detections, rule)
 
 
 def write_ai_annotated_output(image_bgr: np.ndarray, request_id: str, detections: list[dict[str, Any]], rule: dict[str, Any]) -> str:
-    annotated = draw_ai_detection_boxes(image_bgr, detections, rule)
-    if annotated is None:
-        return write_ai_original_output(image_bgr, request_id)
-    out_name = f"{request_id}_ai_annotated.jpg"
-    out_path = output_write_dir("ai_detection") / out_name
-    cv2.imwrite(str(out_path), annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    return output_url(out_path)
+    return _detection_annotation.write_ai_annotated_output(image_bgr, request_id, detections, rule)
 
 
 def ai_model_payload(spec: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": spec["id"],
-        "label": spec.get("label", AI_DETECTION_LABEL),
-        "variant": "ai_detection",
-        "is_ai_detection": True,
-        "provider_model": settings.get("model") or "",
-        "uses_ocr": True,
-        "task_id": spec.get("task_id") or "",
-        "task_label": spec.get("task_label") or "",
-        "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
-        "required_accessory_counts": spec.get("required_accessory_counts") or {},
-        "accessory_names": spec.get("accessory_names") or [],
-        "accessory_labels": spec.get("accessory_labels") or {},
-    }
+    return _failure_projection.ai_model_payload(spec, settings)
+
+
+from .detection.presence_results import PresenceResults
+
+_presence_results = PresenceResults(
+    lambda: coerce_detection_count, lambda: bounded_text, lambda: string_list,
+    lambda settings: ai_tool_provider_meta(settings), lambda: AI_DETECTION_LABEL,
+)
 
 
 def normalize_ai_detection_result(
@@ -20805,105 +20598,7 @@ def normalize_ai_detection_result(
     latency_ms: int,
     settings: dict[str, Any],
 ) -> dict[str, Any]:
-    raw_detections = parsed.get("detections") if isinstance(parsed.get("detections"), list) else []
-    raw_by_id = {
-        str(det.get("accessory_id")): det
-        for det in raw_detections
-        if isinstance(det, dict) and det.get("accessory_id") is not None
-    }
-    raw_rule = parsed.get("rule") if isinstance(parsed.get("rule"), dict) else {}
-    raw_counts = raw_rule.get("counts") if isinstance(raw_rule.get("counts"), dict) else {}
-    detections = []
-    present_ids = []
-    missing_ids = []
-    counts: dict[str, int] = {}
-    count_mismatches: dict[str, dict[str, Any]] = {}
-    overcount_ids: list[str] = []
-    for required in required_accessories:
-        item_id = str(required.get("accessory_id") or "")
-        if not item_id:
-            continue
-        try:
-            expected_count = max(1, int(required.get("expected_count") or 1))
-        except (TypeError, ValueError):
-            expected_count = 1
-        raw = raw_by_id.get(item_id, {})
-        raw_confidence = raw.get("confidence", 0.5 if raw.get("present") is True else 0.0) if isinstance(raw, dict) else 0.0
-        try:
-            if isinstance(raw_confidence, bool):
-                raise ValueError("confidence must be numeric")
-            confidence_value = float(raw_confidence)
-            if not math.isfinite(confidence_value):
-                raise ValueError("confidence must be finite")
-            confidence = max(0.0, min(1.0, confidence_value))
-        except (TypeError, ValueError):
-            confidence = 0.0
-        provider_present = isinstance(raw, dict) and raw.get("present") is True
-        present = provider_present and confidence > 0.0
-        has_raw_count = item_id in raw_counts
-        rule_count = coerce_detection_count(raw_counts.get(item_id)) if has_raw_count else None
-        detection_count = coerce_detection_count(raw.get("count")) if isinstance(raw, dict) else None
-        if has_raw_count:
-            count = rule_count if rule_count is not None else 0
-        elif detection_count is not None:
-            count = detection_count
-        else:
-            count = 1 if present else 0
-        if not present:
-            count = 0
-        counts[item_id] = count
-        if present and count == expected_count:
-            present_ids.append(item_id)
-        else:
-            missing_ids.append(item_id)
-            if present or count != expected_count:
-                issue = "over_count" if count > expected_count else "under_count"
-                count_mismatches[item_id] = {
-                    "expected": expected_count,
-                    "found": count,
-                    "issue": issue,
-                }
-                if count > expected_count:
-                    overcount_ids.append(item_id)
-        detection = {
-            "accessory_id": item_id,
-            "label": bounded_text(raw.get("label") if isinstance(raw, dict) else required.get("name"), 120)
-            or bounded_text(required.get("name") or item_id, 120),
-            "present": item_id in present_ids,
-            "confidence": round(confidence, 4),
-            "evidence": bounded_text(raw.get("evidence") if isinstance(raw, dict) else "", 180),
-            "observed_text": string_list(raw.get("observed_text") if isinstance(raw, dict) else [], max_items=6, max_len=80),
-        }
-        if count > 1 or expected_count > 1 or (isinstance(raw, dict) and "count" in raw):
-            detection["count"] = count
-        detections.append(detection)
-    required_ids = {str(item.get("accessory_id") or "") for item in required_accessories}
-    raw_extra = [item for item in raw_rule.get("extra", []) if str(item) not in required_ids] if isinstance(raw_rule.get("extra"), list) else []
-    extra = string_list([*raw_extra, *overcount_ids], max_items=12)
-    passed = len(missing_ids) == 0
-    provider_meta = ai_tool_provider_meta(settings)
-    return {
-        "tool": "vision.inspect.presence",
-        "passed": passed,
-        "rule": {
-            "match_policy": "ai_presence",
-            "label": AI_DETECTION_LABEL,
-            "present": present_ids,
-            "missing": missing_ids,
-            "extra": extra,
-            "counts": counts,
-            "count_mismatches": count_mismatches,
-        },
-        "detections": detections,
-        "ai": {
-            "latency_ms": latency_ms,
-            "timed_out": False,
-            "provider_failure": False,
-            "raw_summary": bounded_text(parsed.get("raw_summary") or parsed.get("summary") or "", 240),
-            "provider_status": settings.get("status") or "",
-            **provider_meta,
-        },
-    }
+    return _presence_results.normalize_ai_detection_result(parsed, required_accessories, latency_ms, settings)
 
 
 @pinned_model_profiles(resolve_model_profiles)
