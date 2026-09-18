@@ -20601,6 +20601,52 @@ def normalize_ai_detection_result(
     return _presence_results.normalize_ai_detection_result(parsed, required_accessories, latency_ms, settings)
 
 
+from .detection.analysis import DetectionAnalysis
+from .detection.ai_analysis import AiDetectionAnalysis
+from .detection.analysis_ports import (
+    AnalysisInput, AnalysisRouting, AnalysisInference, AnalysisOutput,
+    AiProfiles, AiInspectionTools, AiAnalysisEvidence,
+)
+
+_ai_detection_analysis = AiDetectionAnalysis(
+    AiProfiles(
+        lambda config, spec: ai_required_accessories(config, spec), lambda item: accessory_uid(item),
+        lambda profile, item: normalize_accessory_ai_profile(profile, item),
+        lambda item: accessory_reference_image_contexts(item),
+        lambda item, count, profile: required_accessory_profile_payload(item, count, profile), lambda config: save_config(config),
+    ),
+    AiInspectionTools(
+        lambda: call_ai_mcp_tool, lambda: ai_detection_settings,
+        lambda: external_ai_mcp_enabled(), lambda image, request_id: write_mcp_inspection_image(image, request_id),
+        lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_REFERENCE_IMAGE_MAX_SIDE, lambda: AI_REFERENCE_IMAGE_QUALITY,
+    ),
+    AiAnalysisEvidence(
+        lambda image, request_id: write_ai_original_output(image, request_id),
+        lambda request_id, spec, required, url, *, reason: ai_detection_failure_result(request_id, spec, required, url, reason=reason),
+        lambda spec, settings: ai_model_payload(spec, settings),
+        lambda result, request_id, *, image_path=None: persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path),
+    ),
+)
+_detection_analysis = DetectionAnalysis(
+    AnalysisInput(lambda: load_config(), lambda: scope_config_for_user,
+                  lambda model_id, config: selected_model_spec(model_id, config),
+                  lambda: sanitize_ai_detection_task_id, lambda task_id: load_auto_optimize_state(task_id)),
+    AnalysisRouting(
+        lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path),
+        lambda image, request_id, spec, config, *, image_path=None: analyze_bgr_ai_detection(image, request_id, spec, config, image_path=image_path),
+        lambda feature: removed_phase1_feature(feature), lambda: bounded_text,
+    ),
+    AnalysisInference(
+        lambda: model, lambda: yolo_inference_device(), lambda result, spec: parse_detections(result, spec),
+        lambda image, detections, config, spec: attach_ocr_results(image, detections, config, spec),
+        lambda detections, config, spec: apply_rule(detections, config, spec),
+        lambda image, detections, rule: draw_detections(image, detections, rule),
+    ),
+    AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
+                   lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
+)
+
+
 @pinned_model_profiles(resolve_model_profiles)
 def analyze_bgr_ai_detection(
     image_bgr: np.ndarray,
@@ -20610,172 +20656,11 @@ def analyze_bgr_ai_detection(
     *,
     image_path: Path | None = None,
 ) -> dict[str, Any]:
-    required_items = ai_required_accessories(config, spec)
-    if not required_items:
-        annotated_url = write_ai_original_output(image_bgr, request_id)
-        result = ai_detection_failure_result(
-            request_id,
-            spec,
-            [],
-            annotated_url,
-            reason="AI detection task has no required accessories configured.",
-        )
-        persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path)
-        return result
-    changed = False
-    real_ids = {accessory_uid(item) for item in config.get("accessories", [])}
-    required_accessories: list[dict[str, Any]] = []
-    required_accessory_refs: list[dict[str, Any]] = []
-    reference_descriptors: list[dict[str, Any]] = []
-    for item, expected_count in required_items:
-        item_id = accessory_uid(item)
-        current_profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
-        if not current_profile or current_profile.get("accessory_id") != item_id:
-            profile_result = call_ai_mcp_tool(
-                "accessory.profile.generate",
-                {
-                    "accessory": item,
-                    "expected_count": expected_count,
-                    "allow_provider": False,
-                    "provider_config": ai_detection_settings("accessory"),
-                },
-            )
-            item["ai_profile"] = profile_result["profile"]
-            item["ai_profile_status"] = profile_result["status"]
-            current_profile = profile_result["profile"]
-            if item_id in real_ids:
-                changed = True
-        else:
-            normalized_profile = normalize_accessory_ai_profile(current_profile, item)
-            current_refs = normalized_profile.get("reference_images") if isinstance(normalized_profile.get("reference_images"), list) else []
-            if current_refs:
-                if normalized_profile != current_profile:
-                    item["ai_profile"] = normalized_profile
-                    current_profile = normalized_profile
-                    if item_id in real_ids:
-                        changed = True
-            else:
-                expected_refs = accessory_reference_image_contexts(item)
-                if expected_refs:
-                    normalized_profile["reference_images"] = expected_refs
-                    item["ai_profile"] = normalized_profile
-                    current_profile = normalized_profile
-                    if item_id in real_ids:
-                        changed = True
-        required_accessories.append(required_accessory_profile_payload(item, expected_count, current_profile))
-        required_accessory_refs.append({"accessory_id": item_id, "expected_count": expected_count})
-        if AI_REFERENCE_IMAGES_PER_ACCESSORY > 0:
-            reference_result = call_ai_mcp_tool(
-                "accessory.reference.collect",
-                {
-                    "accessory": item,
-                    "max_images": AI_REFERENCE_IMAGES_PER_ACCESSORY,
-                    "max_side": AI_REFERENCE_IMAGE_MAX_SIDE,
-                    "quality": AI_REFERENCE_IMAGE_QUALITY,
-                },
-            )
-            reference_descriptors.extend(reference_result.get("references") or [])
-    if changed:
-        save_config(config)
-    settings = ai_detection_settings()
-    mcp_image_path = write_mcp_inspection_image(image_bgr, request_id) if external_ai_mcp_enabled() else None
-    vision_result = call_ai_mcp_tool(
-        "vision.inspect.presence",
-        {
-            "inspection_image_bgr": image_bgr,
-            "inspection_image_path": str(mcp_image_path) if mcp_image_path else "",
-            "required_accessories": required_accessories,
-            "required_accessory_refs": required_accessory_refs,
-            "reference_descriptors": reference_descriptors,
-            "provider_config": settings,
-        },
-    )
-    ai_debug = vision_result.get("ai") if isinstance(vision_result.get("ai"), dict) else {}
-    for key in ("mcp_transport", "mcp_runtime", "mcp_dispatch_ms", "mcp_fallback_from", "mcp_fallback_error"):
-        if vision_result.get(key) is not None:
-            ai_debug = {**ai_debug, key: vision_result.get(key)}
-    rule = vision_result.get("rule") if isinstance(vision_result.get("rule"), dict) else {}
-    detections = vision_result.get("detections") if isinstance(vision_result.get("detections"), list) else []
-    annotated_url = write_ai_original_output(image_bgr, request_id)
-    result = {
-        "request_id": request_id,
-        "passed": bool(vision_result.get("passed")),
-        "model": ai_model_payload(spec, settings),
-        "rule": rule,
-        "detections": detections,
-        "annotated_url": annotated_url,
-        "ai": ai_debug,
-    }
-    persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path)
-    return result
+    return _ai_detection_analysis.analyze_bgr_ai_detection(image_bgr, request_id, spec, config, image_path=image_path)
 
 
 def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = None, *, image_path: Path | None = None) -> dict[str, Any]:
-    config = scope_config_for_user(load_config())
-    spec = selected_model_spec(model_id, config)
-    if spec.get("is_ai_detection"):
-        task_id = sanitize_ai_detection_task_id(spec.get("task_id") or spec.get("run_id") or "")
-        if task_id:
-            state = load_auto_optimize_state(task_id)
-            settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-            active_model_id = str(state.get("active_model_id") or "").strip()
-            if settings.get("enabled") and settings.get("serving_mode") == "promoted_yolo" and active_model_id:
-                try:
-                    promoted = analyze_bgr(image_bgr, request_id, active_model_id, image_path=image_path)
-                    promoted["ai_auto_optimize"] = {
-                        "serving_mode": "promoted_yolo",
-                        "ai_task_id": task_id,
-                        "active_model_id": active_model_id,
-                        "fallback_used": False,
-                    }
-                    return promoted
-                except Exception as exc:
-                    # Production should fall back to the API teacher if the promoted
-                    # student model is missing or temporarily unhealthy.
-                    fallback = analyze_bgr_ai_detection(image_bgr, request_id, spec, config, image_path=image_path)
-                    fallback["ai_auto_optimize"] = {
-                        "serving_mode": "api_primary",
-                        "ai_task_id": task_id,
-                        "active_model_id": active_model_id,
-                        "fallback_used": True,
-                        "fallback_reason": bounded_text(str(exc), 180),
-                    }
-                    return fallback
-        return analyze_bgr_ai_detection(image_bgr, request_id, spec, config, image_path=image_path)
-    if spec.get("is_label_sheet_match"):
-        removed_phase1_feature("Label Sheet")
-    try:
-        confidence_threshold = max(0.001, min(0.99, float(spec.get("confidence_threshold", config.get("confidence_threshold", 0.25)))))
-    except (TypeError, ValueError):
-        confidence_threshold = 0.25
-    result = model(str(spec["id"]), config).predict(
-        image_bgr,
-        imgsz=int(config["image_size"]),
-        device=yolo_inference_device(),
-        conf=confidence_threshold,
-        verbose=False,
-    )[0]
-    detections = parse_detections(result, spec)
-    if spec.get("uses_ocr", False):
-        detections = attach_ocr_results(image_bgr, detections, config, spec)
-    rule = apply_rule(detections, config, spec)
-    annotated = draw_detections(image_bgr, detections, rule)
-    out_name = f"{request_id}_annotated.jpg"
-    out_path = output_write_dir("inspection") / out_name
-    preview = resize_bgr_max_side(annotated, INSPECTION_PREVIEW_MAX_SIDE)
-    cv2.imwrite(str(out_path), preview, [int(cv2.IMWRITE_JPEG_QUALITY), INSPECTION_PREVIEW_JPEG_QUALITY])
-    return {
-        "request_id": request_id,
-        "passed": rule["passed"],
-        "model": {
-            "id": spec["id"],
-            "label": spec["label"],
-            "uses_ocr": bool(spec.get("uses_ocr", False)),
-        },
-        "rule": rule,
-        "detections": detections,
-        "annotated_url": output_url(out_path),
-    }
+    return _detection_analysis.analyze_bgr(image_bgr, request_id, model_id, image_path=image_path)
 
 
 from .auth.users import UserService

@@ -201,6 +201,8 @@ jobs:
           python scripts/smoke_incoming_text_workflows.py
           python scripts/smoke_accessory_requirements.py
           python scripts/smoke_presence_contracts.py
+          python scripts/smoke_detection_analysis.py
+          python scripts/smoke_ai_detection_analysis.py
           python scripts/smoke_detection_annotation.py
           python scripts/smoke_presence_results.py
           python scripts/smoke_detection_failures.py
