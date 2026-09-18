@@ -32,7 +32,7 @@ class HistoryContracts(unittest.TestCase):
 
     def fixture(self,name):
         app=FastAPI();identity=ContextVar('history-'+name,default='alice')
-        state=SimpleNamespace(permission=True,events=[],queries=[],reads=[],data={},records={},pg=True)
+        state=SimpleNamespace(permission=True,events=[],queries=[],reads=[],loads=[],paths=[],data={},records={},pg=True)
         @app.middleware('http')
         async def bind(request,call_next):
             token=identity.set(request.headers.get('x-owner','alice'))
@@ -49,13 +49,13 @@ class HistoryContracts(unittest.TestCase):
                          'display':{},'has_source':True,'error_type':'hidden'}]
         repo=Repo()
         def repository():state.events.append(('repository',));return repo if state.pg else None
-        def load(kind):raise AssertionError('PG history must not load JSON')
+        def load(kind):state.loads.append(kind);raise AssertionError('PG history must not load JSON')
         def owned(kind,key,uid):
             state.events.append(('owned',kind,key,uid))
             entry=state.records.get((kind,key))
             return copy.deepcopy(entry) if entry and entry.get('owner_user_id')==uid else None
         def read(path,uid,sid,**kwargs):state.reads.append((path,uid,sid,kwargs));return state.data[path]
-        def media_path(uid,sid,name):return Path(uid)/sid/name
+        def media_path(uid,sid,name):state.paths.append((uid,sid,name));return Path(uid)/sid/name
         history.register(app,HistoryAccess(permission,owner),HistoryRecords(repository,load,owned,copy.deepcopy),HistoryMedia(media_path,read))
         self.assertEqual(state.events,[])
         state.app=app;state.client=TestClient(app,raise_server_exceptions=False);self.addCleanup(state.client.close)
@@ -96,6 +96,41 @@ class HistoryContracts(unittest.TestCase):
         self.assertEqual(state.reads,[])
         response=state.client.get(PREFIX+'/record/diagnostics')
         self.assertEqual(response.json()['private'],'saved-evidence')
+
+    def test_invalid_cursor_fails_before_repository_or_evidence_access(self):
+        state=self.fixture('cursor-order')
+        response=state.client.get(PREFIX,params={'result':'all','cursor':'invalid'})
+        self.assertEqual((response.status_code,response.json()),(400,{'detail':'无效分页位置'}))
+        self.assertEqual(state.events,[('permission','inspection','没有文字检验权限'),('owner','alice')])
+        for calls in (state.queries,state.loads,state.paths,state.reads):self.assertEqual(calls,[])
+
+    def test_verified_read_first_failure_propagates_without_retry_or_rendering(self):
+        from local_inspection_service import evidence_preview, standard_preparation
+        for kind in ('reference','source','preview','thumbnail','annotated-preview'):
+            with self.subTest(kind=kind):
+                state=self.fixture('read-error-'+kind)
+                record=state.records['records','record']
+                record.update(reference_overlay_path='source.png',reference_overlay_sha256='source-hash',
+                              annotated_path='source.png',annotated_sha256='source-hash')
+                failure=OSError('synthetic first read failure')
+                class FirstReadFails(dict):
+                    attempts=0
+                    def __getitem__(self,key):
+                        self.attempts+=1
+                        if self.attempts==1:raise failure
+                        return super().__getitem__(key)
+                state.data=FirstReadFails(state.data)
+                endpoint=next(route.endpoint for route in state.app.routes
+                              if getattr(route,'path','')==PREFIX+'/{record_id}/media/{kind}')
+                with patch.object(standard_preparation,'decode') as decode, \
+                     patch.object(standard_preparation,'png') as png, \
+                     patch.object(evidence_preview,'create') as preview, \
+                     patch.object(history,'Response') as response:
+                    with self.assertRaises(OSError) as caught:endpoint(record_id='record',kind=kind)
+                    self.assertIs(caught.exception,failure)
+                    self.assertEqual(state.data.attempts,1)
+                    self.assertEqual(state.reads,[('source.png','alice','standard',{'expected_sha256':'source-hash'})])
+                    for callback in (decode,png,preview,response):callback.assert_not_called()
 
     def test_reference_overlay_priority_and_fixed_revision_hash_checks(self):
         state=self.fixture('reference');record=state.records['records','record']
