@@ -501,10 +501,12 @@ from .training.executor_settings import (
     WINDOWS_WORKER_TOKEN_ENV,
     ExecutorSettings, host_is_private_or_tailnet,
 )
-RUNPOD_YOLO_BASE_MODEL_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL"
-RUNPOD_YOLO_BASE_MODEL_SHA256_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_SHA256"
-RUNPOD_YOLO_BASE_MODEL_URL_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_URL"
-RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_URL_SHA256"
+from .training.runpod_submission import (
+    RUNPOD_YOLO_BASE_MODEL_ENV,
+    RUNPOD_YOLO_BASE_MODEL_SHA256_ENV,
+    RUNPOD_YOLO_BASE_MODEL_URL_ENV,
+    RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV,
+)
 CURSOR_IMAGE2_PROVIDER = "cursor_image2"
 WINDOWS_WORKER_IMAGE_PROVIDER = "windows_worker_image_fallback"
 LOCAL_CODEX_IMAGE_PROVIDER = "local_codex_image_worker"
@@ -21083,69 +21085,53 @@ def create_runpod_training_artifact_upload(job_id: str, task: dict[str, Any]) ->
     return {"url": url, "path": str(target_path)}
 
 
+from .training.runpod_submission import RunPodPayload, RunPodSubmission
+from .training.runpod_outputs import RunPodOutputParser, runpod_terminal_status
+from .training.runpod_flow import RunPodFlow, RunPodFlowSettings, RunPodFlowRecords, RunPodFlowInputs, RunPodFlowResults
+
+_runpod_payload = RunPodPayload(
+    upload=lambda job, task: create_runpod_training_artifact_upload(job, task),
+    timeout=lambda: runpod_yolo_job_timeout_seconds(), inline_limit=lambda: runpod_yolo_inline_dataset_max_bytes(),
+    environment=lambda: os.environ,
+)
+_runpod_submission = RunPodSubmission(
+    timeout=lambda: runpod_yolo_job_timeout_seconds(), ttl=lambda: runpod_yolo_dataset_token_ttl_seconds(),
+    request=lambda method, path, **kwargs: runpod_yolo_http_request(method, path, **kwargs),
+)
+_runpod_output_parser = RunPodOutputParser(bound_text=lambda: bounded_text)
+_runpod_flow = RunPodFlow(
+    RunPodFlowSettings(
+        endpoint=lambda: runpod_yolo_endpoint_id(), timeout=lambda: runpod_yolo_job_timeout_seconds(),
+        ttl=lambda: runpod_yolo_dataset_token_ttl_seconds(), poll=lambda: runpod_yolo_poll_interval_seconds(),
+    ),
+    RunPodFlowRecords(
+        update_provider=lambda: update_training_task, sync=lambda job: sync_training_state_from_task(job),
+        warmup=lambda: start_yolo_warmup,
+    ),
+    RunPodFlowInputs(
+        archive=lambda job, task, dataset: create_runpod_training_dataset_archive(job, task, dataset),
+        payload=lambda job, task, archive: runpod_training_input_payload(job, task, archive),
+        submit=lambda payload: submit_runpod_yolo_training(payload),
+    ),
+    RunPodFlowResults(
+        request=lambda: runpod_yolo_http_request,
+        summary=lambda value: runpod_public_response_summary(value), extract=lambda value: extract_runpod_worker_output(value),
+        import_artifacts=lambda: import_runpod_yolo_artifacts,
+        terminal=lambda: runpod_terminal_status, bound_text=lambda: bounded_text,
+    ),
+)
+
+
 def runpod_training_input_payload(job_id: str, task: dict[str, Any], archive: dict[str, Any]) -> dict[str, Any]:
-    artifact_upload = create_runpod_training_artifact_upload(job_id, task)
-    payload: dict[str, Any] = {
-        "job_id": job_id,
-        "train_mode": str(task.get("train_mode") or task.get("mode") or task.get("model_variant") or "yolo"),
-        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
-        "imgsz": max(320, min(1280, int(task.get("image_size") or 640))),
-        "dataset_sha256": str(archive["sha256"]),
-        "return_artifact_b64": False,
-        "artifact_upload_url": str(artifact_upload["url"]),
-        "inference_smoke": True,
-        "timeout_seconds": runpod_yolo_job_timeout_seconds(),
-    }
-    archive_path = Path(str(archive.get("path") or ""))
-    inline_limit = runpod_yolo_inline_dataset_max_bytes()
-    if inline_limit and archive_path.exists() and archive_path.stat().st_size <= inline_limit:
-        payload["dataset_archive_b64"] = base64.b64encode(archive_path.read_bytes()).decode("ascii")
-    else:
-        payload["dataset_url"] = str(archive["url"])
-    base_model_url = str(os.environ.get(RUNPOD_YOLO_BASE_MODEL_URL_ENV, "") or "").strip()
-    if base_model_url:
-        base_model_sha = str(os.environ.get(RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV, "") or "").strip()
-        if not base_model_sha:
-            raise RuntimeError(f"{RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV} is required when {RUNPOD_YOLO_BASE_MODEL_URL_ENV} is configured")
-        payload["base_model_url"] = base_model_url
-        payload["base_model_sha256"] = base_model_sha
-    else:
-        payload["base_model"] = str(os.environ.get(RUNPOD_YOLO_BASE_MODEL_ENV, "") or "/models/vantaline-yolo-base.pt").strip()
-        base_model_sha = str(os.environ.get(RUNPOD_YOLO_BASE_MODEL_SHA256_ENV, "") or "").strip()
-        if base_model_sha:
-            payload["base_model_sha256"] = base_model_sha
-    device = str(os.environ.get("VANTALINE_RUNPOD_YOLO_DEVICE", "") or "").strip()
-    if device:
-        payload["device"] = device
-    return payload
+    return _runpod_payload.runpod_training_input_payload(job_id, task, archive)
 
 
 def submit_runpod_yolo_training(payload: dict[str, Any]) -> dict[str, Any]:
-    timeout_ms = runpod_yolo_job_timeout_seconds() * 1000
-    ttl_ms = min(7 * 24 * 3600 * 1000, timeout_ms + runpod_yolo_dataset_token_ttl_seconds() * 1000)
-    body = {
-        "input": payload,
-        "policy": {
-            "executionTimeout": timeout_ms,
-            "ttl": ttl_ms,
-        },
-    }
-    return runpod_yolo_http_request("POST", "run", json_body=body)
+    return _runpod_submission.submit_runpod_yolo_training(payload)
 
 
 def extract_runpod_worker_output(status_body: dict[str, Any]) -> dict[str, Any]:
-    output = status_body.get("output")
-    if isinstance(output, str):
-        try:
-            output = json.loads(output)
-        except json.JSONDecodeError:
-            output = {"message": output}
-    if not isinstance(output, dict):
-        raise RuntimeError("RunPod completed without a JSON worker output")
-    if output.get("ok") is not True:
-        detail = output.get("error") or output.get("message") or output.get("status") or "worker failed"
-        raise RuntimeError(f"RunPod worker failed: {bounded_text(str(detail), 300)}")
-    return output
+    return _runpod_output_parser.extract_runpod_worker_output(status_body)
 
 
 def import_runpod_yolo_artifacts(task: dict[str, Any], output: dict[str, Any]) -> dict[str, Any]:
@@ -21221,85 +21207,10 @@ def import_runpod_yolo_artifacts(task: dict[str, Any], output: dict[str, Any]) -
     }
 
 
-def runpod_terminal_status(status: str) -> bool:
-    return status.upper() in {"COMPLETED", "FAILED", "CANCELLED", "CANCELED", "TIMED_OUT"}
 
 
 def run_runpod_training_task(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> None:
-    endpoint_id = runpod_yolo_endpoint_id()
-    update_training_task(
-        job_id,
-        status="running",
-        progress=78,
-        training_executor="runpod",
-        runpod_endpoint_id=endpoint_id,
-        remote_training_status="preparing_dataset",
-        note="样本已生成，正在准备 RunPod YOLO worker 训练数据包。",
-        **dataset,
-    )
-    archive = create_runpod_training_dataset_archive(job_id, task, dataset)
-    payload = runpod_training_input_payload(job_id, task, archive)
-    submission = submit_runpod_yolo_training(payload)
-    runpod_job_id = str(submission.get("id") or submission.get("job_id") or "").strip()
-    if not runpod_job_id:
-        raise RuntimeError("RunPod did not return a job id")
-    update_training_task(
-        job_id,
-        status="running",
-        progress=82,
-        training_executor="runpod",
-        remote_training_job_id=runpod_job_id,
-        runpod_job_id=runpod_job_id,
-        remote_training_status=str(submission.get("status") or "IN_QUEUE"),
-        remote_training_response=runpod_public_response_summary(submission),
-        note="训练任务已提交到 RunPod YOLO worker，等待远端处理。",
-    )
-    started = time.monotonic()
-    timeout_seconds = runpod_yolo_job_timeout_seconds() + runpod_yolo_dataset_token_ttl_seconds()
-    poll_interval = runpod_yolo_poll_interval_seconds()
-    last_status_body: dict[str, Any] = submission
-    while True:
-        if time.monotonic() - started > timeout_seconds:
-            raise RuntimeError("RunPod training status polling exceeded configured timeout")
-        time.sleep(poll_interval)
-        status_body = runpod_yolo_http_request("GET", f"status/{quote(runpod_job_id, safe='')}")
-        last_status_body = status_body
-        remote_status = str(status_body.get("status") or "").strip().upper()
-        progress = 86 if remote_status == "IN_QUEUE" else 92 if remote_status == "IN_PROGRESS" else 96
-        update_training_task(
-            job_id,
-            status="running" if not runpod_terminal_status(remote_status) else str(task.get("status") or "running"),
-            progress=progress,
-            remote_training_status=remote_status or "UNKNOWN",
-            remote_training_response=runpod_public_response_summary(status_body),
-            note=f"RunPod YOLO worker 状态：{remote_status or 'UNKNOWN'}。",
-        )
-        if remote_status == "COMPLETED":
-            output = extract_runpod_worker_output(status_body)
-            import_updates = import_runpod_yolo_artifacts({**task, "job_id": job_id, "runpod_job_id": runpod_job_id}, output)
-            update_training_task(
-                job_id,
-                status="completed",
-                progress=100,
-                completed_at=int(time.time()),
-                remote_training_status=remote_status,
-                remote_training_response=runpod_public_response_summary(status_body),
-                runpod_training_output=runpod_public_response_summary(output),
-                current_epoch=max(1, min(500, int(task.get("epochs") or 1))),
-                total_epochs=max(1, min(500, int(task.get("epochs") or 1))),
-                note="RunPod YOLO worker 训练完成，模型已导入训练库。",
-                **import_updates,
-            )
-            sync_training_state_from_task(job_id)
-            variant = str(task.get("model_variant") or task.get("mode") or "yolo")
-            variant = variant if variant in {"yolo", "yolo_ocr"} else "yolo"
-            start_yolo_warmup("training_completed", [f"trained_{job_id}__{variant}"])
-            return
-        if remote_status in {"FAILED", "CANCELLED", "CANCELED", "TIMED_OUT"}:
-            detail = (status_body.get("error") or status_body.get("message") or status_body.get("output") or remote_status)
-            raise RuntimeError(f"RunPod training ended with {remote_status}: {bounded_text(str(detail), 300)}")
-        if not remote_status and runpod_terminal_status(str(last_status_body.get("status") or "")):
-            raise RuntimeError("RunPod training ended without a readable status")
+    return _runpod_flow.run_runpod_training_task(job_id, task, dataset)
 
 
 def worker_training_payload(task: dict[str, Any]) -> dict[str, Any]:
