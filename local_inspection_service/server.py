@@ -19300,13 +19300,23 @@ def physical_render_size_for_sprite(item: dict[str, Any], material_type: str, sp
     return sprite_render_size_px(item, sprite_meta, material_type)
 
 
-def constrained_center_range(axis_min: int, axis_max: int, half_extent: int) -> tuple[int, int]:
-    low = int(axis_min) + int(half_extent)
-    high = int(axis_max) - int(half_extent)
-    if low <= high:
-        return low, high
-    center = int(round((int(axis_min) + int(axis_max)) / 2))
-    return center, center
+from .training.preview_geometry import (constrained_center_range, polygon_max_pair_distance_px,
+                                        rotated_rect_overlap_area, rotated_rect_tuple)
+from .training.preview_masks import PreviewMasks, contour_to_polygon, mask_from_polygon
+from .training.preview_placement import PreviewPlacement
+
+_preview_masks = PreviewMasks(
+    lambda: contour_to_polygon,
+    lambda mask, ratio: visible_polygons_from_mask(mask, ratio),
+)
+_preview_placement = PreviewPlacement(
+    lambda: PREVIEW_CANVAS_SIZE_PX,
+    lambda: constrained_center_range,
+    lambda center, size, angle: rotated_rect_tuple(center, size, angle),
+    lambda: rotated_rect_overlap_area,
+    lambda rng, size, angle, roi: random_center_inside_background(rng, size, angle, roi),
+    lambda center, size, angle, placed: object_placement_overlap_area(center, size, angle, placed),
+)
 
 
 def random_center_inside_background(
@@ -19315,42 +19325,11 @@ def random_center_inside_background(
     angle: float,
     roi: tuple[int, int, int, int] = BACKGROUND_ROI_PX,
 ) -> tuple[int, int]:
-    target_w, target_h = target_size
-    radians = np.deg2rad(angle)
-    cos_a = abs(float(np.cos(radians)))
-    sin_a = abs(float(np.sin(radians)))
-    half_w = int(np.ceil((target_w * cos_a + target_h * sin_a) / 2)) + 12
-    half_h = int(np.ceil((target_w * sin_a + target_h * cos_a) / 2)) + 12
-    x1, y1, x2, y2 = roi
-    min_x, max_x = x1 + half_w, x2 - half_w
-    min_y, max_y = y1 + half_h, y2 - half_h
-    if min_x >= max_x:
-        min_x, max_x = constrained_center_range(0, PREVIEW_CANVAS_SIZE_PX[0], half_w)
-    if min_y >= max_y:
-        min_y, max_y = constrained_center_range(0, PREVIEW_CANVAS_SIZE_PX[1], half_h)
-    return (int(rng.integers(min_x, max_x + 1)), int(rng.integers(min_y, max_y + 1)))
+    return _preview_placement.random_center_inside_background(rng, target_size, angle, roi)
 
 
-def rotated_rect_tuple(
-    center: tuple[int, int],
-    target_size: tuple[int, int],
-    angle: float,
-) -> tuple[tuple[float, float], tuple[float, float], float]:
-    return (
-        (float(center[0]), float(center[1])),
-        (max(1.0, float(target_size[0])), max(1.0, float(target_size[1]))),
-        float(angle),
-    )
 
 
-def rotated_rect_overlap_area(
-    a: tuple[tuple[float, float], tuple[float, float], float],
-    b: tuple[tuple[float, float], tuple[float, float], float],
-) -> float:
-    status, points = cv2.rotatedRectangleIntersection(a, b)
-    if status == cv2.INTERSECT_NONE or points is None:
-        return 0.0
-    return abs(float(cv2.contourArea(points)))
 
 
 def object_placement_overlap_area(
@@ -19359,11 +19338,7 @@ def object_placement_overlap_area(
     angle: float,
     placed_objects: list[dict[str, Any]],
 ) -> float:
-    candidate = rotated_rect_tuple(center, target_size, angle)
-    total = 0.0
-    for placed in placed_objects:
-        total += rotated_rect_overlap_area(candidate, placed["rect"])
-    return total
+    return _preview_placement.object_placement_overlap_area(center, target_size, angle, placed_objects)
 
 
 def choose_object_center_inside_background(
@@ -19373,98 +19348,25 @@ def choose_object_center_inside_background(
     placed_objects: list[dict[str, Any]],
     roi: tuple[int, int, int, int] = BACKGROUND_ROI_PX,
 ) -> tuple[tuple[int, int], dict[str, Any]]:
-    best_center = random_center_inside_background(rng, target_size, angle, roi)
-    best_overlap = object_placement_overlap_area(best_center, target_size, angle, placed_objects)
-    attempts = 1
-    if best_overlap <= 0.5:
-        return best_center, {"object_non_overlap_attempts": attempts, "object_overlap_area_px": 0.0, "object_non_overlap_pass": True}
-    for attempts in range(2, 181):
-        center = random_center_inside_background(rng, target_size, angle, roi)
-        overlap = object_placement_overlap_area(center, target_size, angle, placed_objects)
-        if overlap < best_overlap:
-            best_center = center
-            best_overlap = overlap
-        if overlap <= 0.5:
-            return center, {"object_non_overlap_attempts": attempts, "object_overlap_area_px": 0.0, "object_non_overlap_pass": True}
-    return best_center, {
-        "object_non_overlap_attempts": attempts,
-        "object_overlap_area_px": round(float(best_overlap), 3),
-        "object_non_overlap_pass": bool(best_overlap <= 0.5),
-    }
+    return _preview_placement.choose_object_center_inside_background(rng, target_size, angle, placed_objects, roi)
 
 
 def placement_box_points(center: tuple[int, int], target_size: tuple[int, int], angle: float) -> list[list[int]]:
-    points = cv2.boxPoints(rotated_rect_tuple(center, target_size, angle))
-    return [[int(round(x)), int(round(y))] for x, y in points.tolist()]
+    return _preview_placement.placement_box_points(center, target_size, angle)
 
 
-def mask_from_polygon(shape: tuple[int, int], polygon: list[list[int]]) -> np.ndarray:
-    mask = np.zeros(shape, dtype=np.uint8)
-    points = np.array(polygon or [], dtype=np.int32)
-    if len(points) >= 3:
-        cv2.fillPoly(mask, [points], 255)
-    return mask
 
 
-def contour_to_polygon(contour: np.ndarray, shape: tuple[int, int], epsilon_ratio: float = 0.0035) -> list[list[int]]:
-    epsilon = max(1.0, cv2.arcLength(contour, True) * epsilon_ratio)
-    approx = cv2.approxPolyDP(contour, epsilon, True)
-    if len(approx) < 3:
-        rect = cv2.minAreaRect(contour)
-        approx = cv2.boxPoints(rect).astype(np.int32).reshape(-1, 1, 2)
-    height, width = shape[:2]
-    points: list[list[int]] = []
-    for point in approx.reshape(-1, 2):
-        x = int(np.clip(point[0], 0, width - 1))
-        y = int(np.clip(point[1], 0, height - 1))
-        if not points or points[-1] != [x, y]:
-            points.append([x, y])
-    if len(points) > 2 and points[0] == points[-1]:
-        points.pop()
-    return points if len(points) >= 3 else []
 
 
 def visible_polygons_from_mask(mask: np.ndarray, epsilon_ratio: float = 0.0035) -> list[list[list[int]]]:
-    if mask is None or mask.size == 0:
-        return []
-    binary = (mask > 24).astype(np.uint8) * 255
-    if int(cv2.countNonZero(binary)) < 12:
-        return []
-    kernel = np.ones((3, 3), dtype=np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return []
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    max_area = max(float(cv2.contourArea(contour)) for contour in contours)
-    polygons = []
-    for contour in contours:
-        area = float(cv2.contourArea(contour))
-        if area < 12 or area < max_area * 0.015:
-            continue
-        polygon = contour_to_polygon(contour, binary.shape, epsilon_ratio)
-        if polygon:
-            polygons.append(polygon)
-    return polygons
+    return _preview_masks.visible_polygons_from_mask(mask, epsilon_ratio)
 
 
 def visible_polygon_from_mask(mask: np.ndarray, epsilon_ratio: float = 0.0035) -> list[list[int]]:
-    polygons = visible_polygons_from_mask(mask, epsilon_ratio)
-    return polygons[0] if polygons else []
+    return _preview_masks.visible_polygon_from_mask(mask, epsilon_ratio)
 
 
-def polygon_max_pair_distance_px(polygon: list[list[int]] | None) -> float:
-    if not polygon:
-        return 0.0
-    best = 0.0
-    for index, point_a in enumerate(polygon):
-        for point_b in polygon[index + 1 :]:
-            best = max(
-                best,
-                math.hypot(float(point_a[0]) - float(point_b[0]), float(point_a[1]) - float(point_b[1])),
-            )
-    return best
 
 
 from .training.background_library import BackgroundPaths, BackgroundSetLookup, TrainingBackgroundLibrary
