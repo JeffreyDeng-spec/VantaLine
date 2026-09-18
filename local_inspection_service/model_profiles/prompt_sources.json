@@ -1,7 +1,10 @@
 {
-  "version": 23,
+  "version": 24,
   "sources": [
     "server.py",
+    "training/dataset_archives.py",
+    "training/runpod_exports.py",
+    "training/runpod_artifacts.py",
     "training/runpod_submission.py",
     "training/runpod_outputs.py",
     "training/runpod_flow.py",

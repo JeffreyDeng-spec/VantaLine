@@ -20644,13 +20644,37 @@ def training_execution_status(*, include_worker_probe: bool = False, include_wor
     return _training_executor_settings.training_execution_status(include_worker_probe=include_worker_probe, include_worker_services=include_worker_services)
 
 
+from .training.dataset_archives import DatasetArchives, file_sha256 as strict_training_file_sha256
+from .training.runpod_exports import RunPodExports, RunPodExportPaths, RunPodExportPolicy
+from .training.runpod_artifacts import RunPodArtifacts, RunPodArtifactPaths
+
+_training_dataset_archives = DatasetArchives(
+    safe_name=lambda name: safe_name(name), skip_dirs=lambda: WORKER_BUNDLE_SKIP_DIRS,
+    jpeg_quality=lambda: WORKER_BUNDLE_JPEG_QUALITY, digest=lambda path: file_sha256(path),
+)
+_runpod_exports = RunPodExports(
+    RunPodExportPaths(
+        resolve=lambda: resolve_service_path, output=lambda kind, owner: output_write_dir_for_owner(kind, owner),
+        safe_name=lambda value: safe_name(value),
+    ),
+    RunPodExportPolicy(
+        token_hash=lambda token: runpod_dataset_token_hash(token), ttl=lambda: runpod_yolo_dataset_token_ttl_seconds(),
+        public_base=lambda: runpod_yolo_public_base_url(),
+    ),
+    bundle=lambda directory, job: build_worker_training_bundle(directory, job), digest=lambda path: file_sha256(path),
+    update_provider=lambda: update_training_task,
+)
+_runpod_artifacts = RunPodArtifacts(
+    RunPodArtifactPaths(
+        resolve=lambda value: resolve_service_path(value), output_root=lambda: OUTPUT_DIR,
+        output=lambda: output_write_dir_for_owner,
+    ),
+    find=lambda job: find_training_task(job), summary=lambda value: runpod_public_response_summary(value),
+)
+
+
 def package_training_dataset(dataset_dir: Path, job_id: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
-    if not dataset_dir.exists() or not dataset_dir.is_dir():
-        raise RuntimeError(f"Training dataset directory is missing: {dataset_dir}")
-    temp_dir = tempfile.TemporaryDirectory(prefix=f"vantaline_{safe_name(job_id)}_")
-    archive_base = Path(temp_dir.name) / "dataset"
-    archive_path = Path(shutil.make_archive(str(archive_base), "zip", root_dir=str(dataset_dir)))
-    return temp_dir, archive_path
+    return _training_dataset_archives.package_training_dataset(dataset_dir, job_id)
 
 
 # Directories inside a generated dataset that the remote trainer never needs.
@@ -20661,57 +20685,15 @@ WORKER_BUNDLE_JPEG_QUALITY = 90
 
 
 def build_worker_training_bundle(dataset_dir: Path, job_id: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
-    """Package a *training-only* copy of the dataset for the Windows worker.
-
-    The HK->worker hop runs over a cross-region Tailscale link, so a raw 360MB+
-    archive of lossless PNG samples reliably blows past the request timeout.
-    We therefore (1) drop UI-only preview/debug folders and (2) transcode the
-    PNG training images to high-quality JPEG. YOLO matches labels by file stem,
-    so converting the extension is safe and keeps the dataset trainable while
-    cutting the payload several-fold.
-    """
-    if not dataset_dir.exists() or not dataset_dir.is_dir():
-        raise RuntimeError(f"Training dataset directory is missing: {dataset_dir}")
-    temp_dir = tempfile.TemporaryDirectory(prefix=f"vantaline_worker_{safe_name(job_id)}_")
-    staging_dir = Path(temp_dir.name) / "dataset"
-    staging_dir.mkdir(parents=True, exist_ok=True)
-    for source in sorted(item for item in dataset_dir.rglob("*") if item.is_file()):
-        rel = source.relative_to(dataset_dir)
-        if rel.parts and rel.parts[0].lower() in WORKER_BUNDLE_SKIP_DIRS:
-            continue
-        is_training_image = bool(rel.parts) and rel.parts[0].lower() == "images" and source.suffix.lower() in {".png", ".bmp", ".tiff", ".tif"}
-        if is_training_image:
-            target = (staging_dir / rel).with_suffix(".jpg")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with Image.open(source) as handle:
-                    handle.convert("RGB").save(target, format="JPEG", quality=WORKER_BUNDLE_JPEG_QUALITY)
-                continue
-            except (OSError, ValueError):
-                target = staging_dir / rel
-        else:
-            target = staging_dir / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-    archive_base = Path(temp_dir.name) / "dataset"
-    archive_path = Path(shutil.make_archive(str(archive_base), "zip", root_dir=str(staging_dir)))
-    return temp_dir, archive_path
+    return _training_dataset_archives.build_worker_training_bundle(dataset_dir, job_id)
 
 
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+# Retain the original late override of the earlier best-effort hash helper.
+file_sha256 = strict_training_file_sha256
 
 
 def dataset_file_manifest(dataset_dir: Path) -> list[dict[str, Any]]:
-    files = []
-    for path in sorted(item for item in dataset_dir.rglob("*") if item.is_file()):
-        rel = path.relative_to(dataset_dir).as_posix()
-        files.append({"path": rel, "size": path.stat().st_size, "sha256": file_sha256(path)})
-    return files
+    return _training_dataset_archives.dataset_file_manifest(dataset_dir)
 
 
 def worker_training_bundle_metadata(job_id: str, task: dict[str, Any], dataset: dict[str, Any], dataset_dir: Path, archive_path: Path) -> dict[str, Any]:
@@ -21018,71 +21000,11 @@ def runpod_public_response_summary(value: Any) -> Any:
 
 
 def create_runpod_training_dataset_archive(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
-    dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
-    temp_dir, archive_path = build_worker_training_bundle(dataset_dir, job_id)
-    try:
-        owner_id = str(task.get("owner_user_id") or "")
-        export_dir = output_write_dir_for_owner("runpod_training_datasets", owner_id) / safe_name(job_id)
-        if export_dir.exists():
-            shutil.rmtree(export_dir)
-        export_dir.mkdir(parents=True, exist_ok=True)
-        target_path = export_dir / "dataset.zip"
-        shutil.copy2(archive_path, target_path)
-        token = secrets.token_urlsafe(32)
-        token_hash = runpod_dataset_token_hash(token)
-        expires_at = int(time.time()) + runpod_yolo_dataset_token_ttl_seconds()
-        public_base = runpod_yolo_public_base_url()
-        url = f"{public_base}/api/training/runpod/datasets/{quote(job_id, safe='')}/{quote(token, safe='')}/dataset.zip"
-        sha = file_sha256(target_path)
-        metadata = {
-            "job_id": job_id,
-            "path": str(target_path),
-            "sha256": sha,
-            "size": target_path.stat().st_size,
-            "token_sha256": token_hash,
-            "expires_at": expires_at,
-            "created_at": int(time.time()),
-        }
-        (export_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        update_training_task(
-            job_id,
-            runpod_dataset_archive_path=str(target_path),
-            runpod_dataset_archive_sha256=sha,
-            runpod_dataset_archive_size=target_path.stat().st_size,
-            runpod_dataset_token_sha256=token_hash,
-            runpod_dataset_token_expires_at=expires_at,
-            runpod_dataset_public_host=urlsplit(public_base).netloc,
-            worker_bundle_size_mb=round(target_path.stat().st_size / (1024 * 1024), 1),
-            note="已生成 RunPod 训练数据包，等待远端 worker 拉取。",
-        )
-        return {"url": url, "sha256": sha, "size": target_path.stat().st_size, "path": str(target_path)}
-    finally:
-        temp_dir.cleanup()
+    return _runpod_exports.create_runpod_training_dataset_archive(job_id, task, dataset)
 
 
 def create_runpod_training_artifact_upload(job_id: str, task: dict[str, Any]) -> dict[str, Any]:
-    owner_id = str(task.get("owner_user_id") or "")
-    clean_job_id = str(job_id or "").strip()
-    artifact_dir_name = re.sub(r"[^A-Za-z0-9_.@-]+", "_", clean_job_id).strip("._") or "runpod_training"
-    export_dir = output_write_dir_for_owner("runpod_training_artifacts", owner_id) / artifact_dir_name
-    if export_dir.exists():
-        shutil.rmtree(export_dir)
-    export_dir.mkdir(parents=True, exist_ok=True)
-    target_path = export_dir / "run.zip"
-    token = secrets.token_urlsafe(32)
-    token_hash = runpod_dataset_token_hash(token)
-    expires_at = int(time.time()) + runpod_yolo_dataset_token_ttl_seconds()
-    public_base = runpod_yolo_public_base_url()
-    url = f"{public_base}/api/training/runpod/artifacts/{quote(clean_job_id, safe='')}/{quote(token, safe='')}/run.zip"
-    update_training_task(
-        job_id,
-        runpod_artifact_upload_path=str(target_path),
-        runpod_artifact_token_sha256=token_hash,
-        runpod_artifact_token_expires_at=expires_at,
-        runpod_artifact_public_host=urlsplit(public_base).netloc,
-        note="已生成 RunPod 训练产物上传地址，等待远端 worker 上传。",
-    )
-    return {"url": url, "path": str(target_path)}
+    return _runpod_exports.create_runpod_training_artifact_upload(job_id, task)
 
 
 from .training.runpod_submission import RunPodPayload, RunPodSubmission
@@ -21135,76 +21057,7 @@ def extract_runpod_worker_output(status_body: dict[str, Any]) -> dict[str, Any]:
 
 
 def import_runpod_yolo_artifacts(task: dict[str, Any], output: dict[str, Any]) -> dict[str, Any]:
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    artifacts = output.get("artifacts") if isinstance(output.get("artifacts"), dict) else {}
-    best = artifacts.get("best_pt") if isinstance(artifacts.get("best_pt"), dict) else {}
-    raw_b64 = str(best.get("artifact_b64") or "").strip()
-    uploaded_archive_path: Path | None = None
-    if raw_b64:
-        try:
-            payload = base64.b64decode(raw_b64, validate=True)
-        except (ValueError, binascii.Error) as exc:
-            raise RuntimeError("RunPod best.pt artifact is not valid base64") from exc
-    else:
-        latest_task = find_training_task(job_id) or task
-        archive_raw = str(latest_task.get("runpod_artifact_archive_path") or latest_task.get("runpod_artifact_upload_path") or "").strip()
-        if not archive_raw:
-            raise RuntimeError("RunPod worker completed but did not return or upload a best.pt artifact")
-        uploaded_archive_path = Path(archive_raw).expanduser()
-        if not uploaded_archive_path.is_absolute():
-            uploaded_archive_path = resolve_service_path(archive_raw)
-        uploaded_archive_path = uploaded_archive_path.resolve()
-        try:
-            uploaded_archive_path.relative_to(OUTPUT_DIR.resolve())
-        except ValueError as exc:
-            raise RuntimeError("RunPod artifact archive path is outside the output directory") from exc
-        if not uploaded_archive_path.exists() or not uploaded_archive_path.is_file():
-            raise RuntimeError("RunPod uploaded artifact archive is missing")
-        try:
-            with zipfile.ZipFile(uploaded_archive_path) as archive:
-                best_members = [
-                    name
-                    for name in archive.namelist()
-                    if name.replace("\\", "/").endswith("weights/best.pt") and not name.endswith("/")
-                ]
-                if not best_members:
-                    raise RuntimeError("RunPod uploaded artifact archive does not contain weights/best.pt")
-                payload = archive.read(sorted(best_members)[0])
-        except zipfile.BadZipFile as exc:
-            raise RuntimeError("RunPod uploaded artifact archive is not a valid zip") from exc
-    expected_sha = str(best.get("sha256") or "").strip().lower()
-    actual_sha = hashlib.sha256(payload).hexdigest()
-    if expected_sha and actual_sha != expected_sha:
-        raise RuntimeError("RunPod best.pt checksum mismatch")
-    run_dir = output_write_dir_for_owner("training_runs", str(task.get("owner_user_id") or "")) / job_id
-    weights_dir = run_dir / "weights"
-    weights_dir.mkdir(parents=True, exist_ok=True)
-    best_path = weights_dir / "best.pt"
-    best_path.write_bytes(payload)
-    if uploaded_archive_path is not None:
-        shutil.copy2(uploaded_archive_path, run_dir / "runpod_artifacts.zip")
-    metadata = {
-        "display_name": task.get("label") or job_id,
-        "note": "Imported from RunPod YOLO training worker.",
-        "pipeline_task_id": str(task.get("pipeline_task_id") or ""),
-        "pipeline_task_name": str(task.get("pipeline_task_name") or ""),
-        "runpod_job_id": task.get("runpod_job_id") or task.get("remote_training_job_id") or "",
-        "runpod_worker": output.get("worker") or "",
-        "runpod_contract_version": output.get("contract_version") or 0,
-        "runpod_best_pt_sha256": actual_sha,
-        "runpod_artifact_archive_path": str(uploaded_archive_path or ""),
-        "updated_at": int(time.time()),
-    }
-    (run_dir / "library_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    (run_dir / "runpod_result.json").write_text(json.dumps(runpod_public_response_summary(output), indent=2, ensure_ascii=False), encoding="utf-8")
-    return {
-        "worker_artifacts_imported_at": int(time.time()),
-        "worker_artifact_import_error": "",
-        "training_run_dir": str(run_dir),
-        "imported_model_path": str(best_path),
-        "runpod_best_pt_sha256": actual_sha,
-        "worker_artifact_sha256": actual_sha,
-    }
+    return _runpod_artifacts.import_runpod_yolo_artifacts(task, output)
 
 
 
