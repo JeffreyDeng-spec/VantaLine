@@ -1,5 +1,22 @@
 # Testing
 
+`python scripts/smoke_text_media.py --root` adds eight groups using synthetic media:
+path/account/hash/size checks and failed atomic replacement; resolved symlink
+behavior; real PDF caching and cache-failure rules; PDF close/write/save failures;
+original-byte versus image fallback behavior; provider copies/annotations, data URLs and similarity; and
+application composition with dynamic resize policy. PyMuPDF is already in the
+production lock. Local Windows lacks it, so this suite runs on Linux with real
+PIL/cv2/PyMuPDF; only the root import uses the documented fail-if-called YOLO substitute.
+CI uses the complete locked runtime. Source-fingerprint tests cover both new files
+and preserve stored historical fingerprints.
+The original six offline groups and a new failure group also pass against the old
+entry-point implementation through argument adapters. Eight first-error cases make
+a succeeding second call available for replacement, cached read, PDF load/render/
+encode/close, page write and metadata save; the original error and partial evidence
+must remain without retry or source rerender. Root tests preserve the owned callback
+A-to-B-to-C capture window, missing-callable order and policy changes during image
+open/transpose. Getter counts and passthrough/failure short circuits remain explicit.
+
 `python scripts/smoke_text_record_store.py --root --postgres` runs eight groups:
 nine table encodings and payload aliases; JSON unique keys/order/copy behavior;
 account/status CAS and reentrant lock failures; exact SQL dispatch without JSON

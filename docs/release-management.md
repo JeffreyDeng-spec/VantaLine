@@ -1,5 +1,12 @@
 # VantaLine release management
 
+Text-media CI adds real image/PDF and application-composition contracts. Package
+both media/image modules with source manifest v5, which covers their migrated
+model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
+dependency upgrade is needed; ordinary complete-release restart/rollback applies.
+Media fault injection preserves first-error evidence without retries. Callback and
+resize-policy contracts retain the original evaluation timing before publication.
+
 Text-record CI adds isolated JSON/SQL contracts and real PostgreSQL competing
 submissions/updates. Existing HTTP and source contracts remain required; source
 checks follow the actual extracted repository instead of lowering coverage gates.
@@ -16,10 +23,10 @@ the previously deployed HTTP/worker timeout-capture contracts remain mandatory.
 Preparation dependency CI adds isolated timeout, transaction, admission and
 late-result contracts while preserving the original endpoint and PostgreSQL gates.
 Ship API, job, policy and port modules with their compatibility module in one
-immutable release. Source manifest membership/version remains unchanged because the
-prompt and classification producers have not moved; changed tracked source bytes
-naturally produce a new fingerprint for new tasks. Historical fingerprints remain
-untouched. Use the existing complete-release rollback.
+immutable release. Preparation prompt and classification producers retain their
+source locations. Changed tracked source bytes naturally produce a new fingerprint
+for new tasks; historical fingerprints remain untouched. Use the existing
+complete-release rollback.
 
 Extraction dependency CI adds isolated identity, worker and evidence-retention
 contracts alongside existing extraction/bbox and PostgreSQL race checks. Ship the
@@ -54,7 +61,7 @@ Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.
 
-Preparation CI adds synthetic workflow contracts and source manifest v4 includes
+Preparation CI adds synthetic workflow contracts and source manifest v5 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
 

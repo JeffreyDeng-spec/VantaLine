@@ -33919,35 +33919,33 @@ def _text_v2_owner() -> tuple[str, str]:
     return str(user.get("id") or ""), str(user.get("username") or "")
 
 
+from local_inspection_service.text_inspection.media import TextMedia, TextMediaRecords
+from local_inspection_service.text_inspection.images import (
+    prepare_image as _text_v2_prepare_image, annotate as _text_v2_annotate,
+    data_url as _text_v2_data_url, similarity as _text_v2_similarity,
+    prepare_provider_image as _prepare_text_provider_image,
+)
+
+_text_media = TextMedia(
+    directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
+    digest=lambda contents: sha256_bytes(contents),
+    records=TextMediaRecords(
+        owned=lambda: _text_v2_owned,
+        save=lambda kind, value: _text_v2_save(kind, value),
+    ),
+)
+
+
 def _text_v2_media_path(owner_user_id: str, standard_id: str, filename: str) -> Path:
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", owner_user_id + standard_id + filename):
-        raise HTTPException(status_code=400, detail="资源标识无效")
-    base = (TEXT_INSPECTION_MEDIA_DIR / owner_user_id / standard_id).resolve()
-    target = (base / filename).resolve()
-    if base not in target.parents:
-        raise HTTPException(status_code=400, detail="资源路径无效")
-    return target
+    return _text_media.media_path(owner_user_id, standard_id, filename)
 
 
 def _text_v2_write(path: Path, contents: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.parent / f".{uuid.uuid4().hex[:12]}.tmp"
-    temp.write_bytes(contents)
-    os.replace(temp, path)
+    return _text_media.write(path, contents)
 
 
 def _text_v2_read_verified(path_value: str, owner_user_id: str, standard_id: str, *, expected_sha256: str = "", max_bytes: int = 120 * 1024 * 1024) -> bytes:
-    path = Path(path_value).resolve()
-    allowed = (TEXT_INSPECTION_MEDIA_DIR / owner_user_id / standard_id).resolve()
-    if allowed not in path.parents or not path.is_file() or path.is_symlink():
-        raise HTTPException(status_code=404, detail="标准资源不存在")
-    stat = path.stat()
-    if stat.st_size <= 0 or stat.st_size > max_bytes:
-        raise HTTPException(status_code=409, detail="标准资源大小异常")
-    contents = path.read_bytes()
-    if expected_sha256 and sha256_bytes(contents) != expected_sha256:
-        raise HTTPException(status_code=409, detail="标准资源完整性校验失败")
-    return contents
+    return _text_media.read_verified(path_value, owner_user_id, standard_id, expected_sha256=expected_sha256, max_bytes=max_bytes)
 
 
 def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
@@ -33979,38 +33977,7 @@ def _text_v2_public(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
-    media_path = str(asset.get("media_path") or "")
-    if media_path:
-        return _text_v2_read_verified(media_path, owner_user_id, str(asset.get("standard_id") or ""), expected_sha256=str(asset.get("sha256") or ""))
-    if asset.get("asset_kind") != "manual_page":
-        raise HTTPException(status_code=404, detail="标准资源不存在")
-    standard = _text_v2_owned("standards", str(asset.get("standard_id") or ""), owner_user_id)
-    if not standard:
-        raise HTTPException(status_code=404, detail="说明书标准源文件不存在")
-    source_bytes = _text_v2_read_verified(str(standard.get("source_path") or ""), owner_user_id, str(standard.get("id") or ""), expected_sha256=str(standard.get("source_sha256") or ""))
-    import fitz
-
-    document = fitz.open(stream=source_bytes, filetype="pdf")
-    try:
-        page_index = int(asset.get("ordinal") or 0) - 1
-        if page_index < 0 or page_index >= document.page_count:
-            raise HTTPException(status_code=404, detail="标准页不存在")
-        page = document.load_page(page_index)
-        matrix = fitz.Matrix(1.5, 1.5)
-        projected = page.rect * matrix
-        if projected.width * projected.height > 20_000_000:
-            raise HTTPException(status_code=400, detail="标准页渲染像素过大")
-        pixmap = page.get_pixmap(matrix=matrix, alpha=False)
-        contents = pixmap.tobytes("png")
-    finally:
-        document.close()
-    path = _text_v2_media_path(owner_user_id, str(asset["standard_id"]), f"{asset['id']}.png")
-    _text_v2_write(path, contents)
-    asset["media_path"] = str(path)
-    asset["sha256"] = sha256_bytes(contents)
-    asset["updated_at"] = int(time.time())
-    _text_v2_save("assets", asset)
-    return contents
+    return _text_media.asset_bytes(asset, owner_user_id)
 
 
 def _text_v2_confirmed_snapshot(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -34369,12 +34336,6 @@ def confirm_text_inspection_standard(standard_id: str) -> dict[str, Any]:
     return _text_v2_public(standard)
 
 
-def _text_v2_data_url(contents: bytes, mime: str = "") -> str:
-    if not mime:
-        mime = "image/png" if contents.startswith(b"\x89PNG") else "image/jpeg"
-    return f"data:{mime};base64,{base64.b64encode(contents).decode('ascii')}"
-
-
 def _text_v2_diagnostic_value(value: Any, *, depth: int = 0) -> Any:
     """Bound diagnostic payloads and remove credentials or embedded media."""
     if depth > 6:
@@ -34487,92 +34448,9 @@ def _text_v2_write_server_diagnostic(record: dict[str, Any]) -> None:
     )
 
 
-def _text_v2_prepare_image(contents: bytes, *, max_bytes: int = 10 * 1024 * 1024) -> tuple[bytes, str, str, str]:
-    """Trust decoded image content, then normalize uncommon readable formats."""
-    if not contents or len(contents) > max_bytes:
-        raise HTTPException(status_code=400, detail="图片必须存在且不超过 10MB")
-    try:
-        with Image.open(io.BytesIO(contents)) as image:
-            image_format = str(image.format or "").upper()
-            width, height = image.size
-            if width * height > 20_000_000 or min(width, height) < 100:
-                raise HTTPException(status_code=400, detail="实物图片像素尺寸不符合要求")
-            image.seek(0)
-            image.load()
-            if image_format in {"PNG", "JPEG", "JPG", "WEBP"}:
-                decoded = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
-                if decoded is not None:
-                    formats = {"PNG": ("image/png", ".png"), "JPEG": ("image/jpeg", ".jpg"), "JPG": ("image/jpeg", ".jpg"), "WEBP": ("image/webp", ".webp")}
-                    mime, suffix = formats[image_format]
-                    return contents, mime, suffix, image_format
-            normalized = ImageOps.exif_transpose(image)
-            if normalized.mode in {"RGBA", "LA"} or "transparency" in normalized.info:
-                rgba = normalized.convert("RGBA")
-                rgb = Image.new("RGB", rgba.size, "white")
-                rgb.paste(rgba, mask=rgba.getchannel("A"))
-            else:
-                rgb = normalized.convert("RGB")
-            output = io.BytesIO()
-            rgb.save(output, format="JPEG", quality=95, optimize=True)
-            prepared = output.getvalue()
-    except Exception as exc:
-        if isinstance(exc, HTTPException):
-            raise
-        raise HTTPException(status_code=400, detail="图片格式损坏或当前服务器无法解码") from exc
-    decoded = cv2.imdecode(np.frombuffer(prepared, np.uint8), cv2.IMREAD_COLOR)
-    if decoded is None:
-        raise HTTPException(status_code=400, detail="图片无法完整解码")
-    return prepared, "image/jpeg", ".jpg", image_format or "UNKNOWN"
-
-
 def _text_v2_prepare_provider_image(contents: bytes, mime_type: str) -> tuple[bytes, str, str]:
-    """Bound only the model copy while preserving full-resolution audit evidence."""
-    try:
-        with Image.open(io.BytesIO(contents)) as image:
-            image_format = str(image.format or "").upper() or "UNKNOWN"
-            width, height = image.size
-            if max(width, height) <= TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE:
-                return contents, mime_type, image_format
-            working = ImageOps.exif_transpose(image)
-            working.thumbnail(
-                (TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE, TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE),
-                Image.Resampling.LANCZOS,
-            )
-            if working.mode in {"RGBA", "LA"} or "transparency" in working.info:
-                rgba = working.convert("RGBA")
-                rgb = Image.new("RGB", rgba.size, "white")
-                rgb.paste(rgba, mask=rgba.getchannel("A"))
-            else:
-                rgb = working.convert("RGB")
-            output = io.BytesIO()
-            rgb.save(
-                output,
-                format="JPEG",
-                quality=TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY,
-                optimize=True,
-            )
-            prepared = output.getvalue()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="图片无法为模型生成兼容副本") from exc
-    return prepared, "image/jpeg", "JPEG"
-
-
-def _text_v2_annotate(contents: bytes, differences: list[dict[str, Any]]) -> bytes:
-    image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
-    if image is None:
-        raise ValueError("capture image decode failed")
-    height, width = image.shape[:2]
-    for index, difference in enumerate(differences, start=1):
-        box = difference.get("box") or []
-        if len(box) != 4:
-            continue
-        x1, y1, x2, y2 = (int(float(box[0]) * width), int(float(box[1]) * height), int(float(box[2]) * width), int(float(box[3]) * height))
-        cv2.rectangle(image, (x1, y1), (x2, y2), (20, 20, 235), max(3, width // 500))
-        cv2.putText(image, str(index), (x1, max(24, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 235), 2, cv2.LINE_AA)
-    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    if not ok:
-        raise ValueError("annotation encode failed")
-    return encoded.tobytes()
+    return _prepare_text_provider_image(contents, mime_type,
+        max_side=lambda: TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE, jpeg_quality=lambda: TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY)
 
 
 from local_inspection_service.label_extraction_api import register as register_label_extraction
@@ -35004,18 +34882,6 @@ async def create_text_manual_session(request: Request) -> dict[str, Any]:
     raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
 
 
-def _text_v2_similarity(left: bytes, right: bytes) -> float:
-    a = cv2.imdecode(np.frombuffer(left, np.uint8), cv2.IMREAD_GRAYSCALE)
-    b = cv2.imdecode(np.frombuffer(right, np.uint8), cv2.IMREAD_GRAYSCALE)
-    if a is None or b is None:
-        return 0.0
-    a = cv2.resize(a, (160, 220), interpolation=cv2.INTER_AREA)
-    b = cv2.resize(b, (160, 220), interpolation=cv2.INTER_AREA)
-    direct = 1.0 - float(np.mean(cv2.absdiff(a, b))) / 255.0
-    hist_a = cv2.calcHist([a], [0], None, [32], [0, 256])
-    hist_b = cv2.calcHist([b], [0], None, [32], [0, 256])
-    hist = max(0.0, float(cv2.compareHist(hist_a, hist_b, cv2.HISTCMP_CORREL)))
-    return max(0.0, min(1.0, direct * 0.65 + hist * 0.35))
 
 
 @app.post("/api/text-inspection/manual/sessions/{session_id}/pages")

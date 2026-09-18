@@ -1,5 +1,13 @@
 # Configuration reference
 
+Text media extraction introduces no setting or image-policy change. Provider
+maximum side and JPEG quality retain their values and are obtained through explicit
+getters at the original expressions. Passthrough never reads JPEG quality; resize
+reads the maximum once for comparison and twice for thumbnail dimensions. Input
+byte/pixel limits, 1.5x PDF rendering, image fast paths and error
+messages remain. New source fingerprints use manifest v5 with the migrated media
+and image sources; existing model versions, secret references and snapshots remain.
+
 Text record callback factories add no configuration. Each operation obtains only
 its required reader/writer/decoder; missing callbacks preserve their original error
 ordering rather than silently choosing another persistence backend.
@@ -13,7 +21,7 @@ Prepared comparison extraction adds no settings. Qwen resolution still obtains
 document settings, attaches OCR settings to that same dictionary, then validates
 both providers. Per-submission capabilities retain the submitted callbacks, model
 admission flag and usage recorder; local MATCH commissioning reads account lists
-at execution time. The prompt source manifest stays at v4, but edits to listed
+at execution time. The prompt source manifest uses v5, but edits to listed
 source files naturally change new fingerprints. Stored snapshots are not rewritten.
 
 Preparation dependency extraction adds no settings. The existing preparation
@@ -62,7 +70,7 @@ with the item alone, then saves before AI-task upsert; non-applied AI still save
 the selected route. The retired `locate` route retains its existing 410 response.
 
 Source preparation adds no configuration or prompt-content change. New task source
-fingerprints use manifest v4, which includes the actual `accessories/preparation.py`
+fingerprints use manifest v5, which includes the actual `accessories/preparation.py`
 producer. Historical source fingerprints and model/secret references remain unchanged.
 Existing crop limits, source ordering, default sizes and profile call flags remain.
 
