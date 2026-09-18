@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Worker artifact extraction returns the same imported-path/error fields and does not persist the
+training record itself. It adds no repository, connection, transaction or advisory-lock changes;
+partial file writes remain separate from caller-owned task settlement.
+
 Worker bundle extraction keeps initial, retry, completion and failed task-update ordering and
 ignores false update return values as before. It adds no connection, transaction, schema or lock
 behavior. File cleanup and progress finalization retain their separate failure boundaries.
@@ -98,7 +102,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v40 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v41 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

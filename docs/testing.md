@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_worker_artifacts.py` runs 17 synthetic groups.
+Twelve original business groups passed before migration on Windows and Linux;
+15 expanded groups also pass against saved original function bodies. Contracts retain
+strict base64/checksum validation, exact metadata, filename fallback and partial file
+writes on failure. Two narrow getters retain owner path and filename callback selection
+before argument effects. Existing metadata and partial model/copy evidence remain on
+errors. Temporary files and synthetic payloads are used; no model is loaded.
+
 `python scripts/smoke_training_worker_bundle.py` runs 25 synthetic groups.
 Seventeen original business groups passed before migration on Windows and Linux;
 23 expanded groups also pass against saved original function bodies. Contracts retain
