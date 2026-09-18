@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'local_inspection_service'
-PACKAGES = ('model_profiles', 'runtime', 'schemas', 'analytics', 'auth', 'records', 'accessories', 'label_inspection', 'codex_compare', 'text_inspection')
+PACKAGES = ('model_profiles', 'runtime', 'schemas', 'analytics', 'auth', 'records', 'accessories', 'label_inspection', 'codex_compare', 'text_inspection', 'agent')
 
 
 def inspect_module(source, module, is_package=False):

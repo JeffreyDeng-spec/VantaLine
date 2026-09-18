@@ -34692,7 +34692,13 @@ register_comparison_history(
 )
 
 resolve_label_extraction = register_label_extraction(globals())
-register_agent_api(globals())
+from .agent.dependencies import AgentAccess, AgentAccounts
+register_agent_api(
+    app,
+    AgentAccess(current_user=lambda: current_auth_user(), require_admin=lambda: require_admin_role()),
+    AgentAccounts(load=lambda: load_auth_store(), find=lambda store, identifier: find_user(store, identifier)),
+    repositories=lambda: runtime_postgres_repository_or_none(),
+)
 from local_inspection_service.codex_compare.api import register as register_codex_compare
 from .codex_compare.dependencies import ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports
 _codex_standard_library = StandardLibrary(

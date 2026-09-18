@@ -88,6 +88,7 @@ def main():
         from fastapi import FastAPI, HTTPException
         from fastapi.testclient import TestClient
         from local_inspection_service.agent_api import register
+        from local_inspection_service.agent.dependencies import AgentAccess, AgentAccounts
         app=FastAPI()
         principal=ContextVar("fixture_principal",default=None)
         accounts={owner:{"id":owner,"role":"admin","permissions":["agent_config","inspection"]},"account-b":{"id":"account-b","role":"user","permissions":["inspection"]}}
@@ -102,7 +103,7 @@ def main():
             token=principal.set(accounts.get(request.headers.get("x-fixture-account")))
             try: return await call_next(request)
             finally: principal.reset(token)
-        register({"app":app,"current_auth_user":current_user,"require_admin_role":require_admin,"runtime_postgres_repository_or_none":lambda:repository,"find_user":lambda store,key:accounts.get(key),"load_auth_store":lambda:accounts})
+        register(app,AgentAccess(current_user,require_admin),AgentAccounts(lambda:accounts,lambda store,key:accounts.get(key)),lambda:repository)
         with TestClient(app) as client:
             headers={"x-fixture-account":owner}
             assert client.get("/api/agent/capabilities").status_code==401

@@ -1,5 +1,11 @@
 # Architecture
 
+Agent HTTP discovery, policy and operation inspection/cancellation now live in
+`agent.api`, with narrow identity, account-store and repository factory capabilities.
+Strict requests live in `schemas.agent` and the public projection in `agent.projection`;
+the old module re-exports identical objects. Durable operation transactions and
+commissioning gates are unchanged; operation submission remains unavailable.
+
 Document classification now separates `text_inspection.document_api` from
 `document_jobs`, composed with explicit account, record, model/transport, media and
 connection-cleanup capabilities. Repository lookup and shared JSON lock stay lazy;

@@ -1,5 +1,11 @@
 # Agent platform implementation status
 
+The HTTP boundary is now composed through `agent.api` and explicit account and
+repository providers. Strict request schemas and the public operation projection
+have independent modules and retain compatibility exports. This structural change
+adds no operation submission or platform capability; outstanding acceptance below
+remains unchanged.
+
 **Status: Authoritative — development foundation, not full-platform acceptance**
 
 The target remains every effective business operation through structured tools,
