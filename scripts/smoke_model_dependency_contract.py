@@ -80,7 +80,7 @@ def main():
 
     manifest_path = Path(__file__).resolve().parents[1] / 'local_inspection_service/model_profiles/prompt_sources.json'
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-    assert {'label_inspection/manual.py', 'evidence_matching.py', 'accessories/policy.py', 'accessories/image_job_metadata.py', 'accessories/preparation.py', 'text_inspection/media.py', 'text_inspection/images.py', 'text_inspection/comparison_submission.py', 'text_inspection_v2.py', 'text_inspection/incoming_analysis.py', 'text_inspection/beta_comparison.py', 'text_inspection/incoming_execution.py'} <= set(manifest['sources'])
+    assert {'label_inspection/manual.py', 'evidence_matching.py', 'accessories/policy.py', 'accessories/image_job_metadata.py', 'accessories/preparation.py', 'text_inspection/media.py', 'text_inspection/images.py', 'text_inspection/comparison_submission.py', 'text_inspection_v2.py', 'text_inspection/incoming_analysis.py', 'text_inspection/beta_comparison.py', 'text_inspection/incoming_execution.py', 'detection/geometry.py', 'detection/postprocessing.py', 'detection/results.py', 'detection/rules.py', 'detection/drawing.py'} <= set(manifest['sources'])
     with tempfile.TemporaryDirectory(prefix='model-source-contract-') as directory:
         root = Path(directory)
         for name in manifest['sources']:

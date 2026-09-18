@@ -1,5 +1,7 @@
 """Synthetic detection-result contracts; no model execution or device I/O."""
 import copy
+from dataclasses import replace
+from contextlib import ExitStack
 import os
 from pathlib import Path
 import sys
@@ -67,6 +69,96 @@ class DetectionContracts(unittest.TestCase):
         policy.apply([], {'confidence_threshold':.5, 'required_classes':[], 'min_counts':{}, 'ocr':{'enabled':False,'manual_types':[]}}, {})
         # dict.get evaluates its default keys expression even when manual_types is supplied.
         manual.assert_called_once()
+
+    def test_dedupe_exact_overlap_area_and_absorption_boundaries(self):
+        api=self.api
+        for x,expected in [(87,1),(88,2)]:
+            large=detection(cls=2,confidence=.9);small=detection(cls=2,confidence=.8,box=(x,0,x+20,10))
+            self.assertEqual(len(api.dedupe_detections([large,small])),expected)
+        large=detection(cls=1,confidence=.54,box=(0,0,500,500));adjacent=detection(cls=1,confidence=.53,box=(542,0,1042,500))
+        self.assertEqual(api.dedupe_detections([large,adjacent]),[large,adjacent])
+        for width,expected in [(22,1),(23,2)]:
+            large=detection(cls=1,confidence=.9);fragment=detection(cls=1,confidence=.8,box=(100,0,100+width,100))
+            self.assertEqual(len(api.dedupe_detections([large,fragment])),expected)
+
+    def test_complete_parser_records_and_short_obb_preprocessing(self):
+        api=self.api;spec=specialized()
+        expected={'class_id':8,'accessory_id':'acc-nut','yolo_accessory_id':'acc-nut','resolved_accessory_id':'acc-nut',
+                  'resolution_source':'yolo','class_name':'Nut','label':'Nut','model_class_id':0,'model_class_name':'model-nut',
+                  'confidence':.8912,'polygon':[[10.11,20.22],[80.33,20.22],[80.33,90.44],[10.11,90.44]]}
+        result=types.SimpleNamespace(orig_shape=(1000,1000,3),boxes=Boxes(),masks=None,obb=None)
+        with patch.object(api,'postprocess_detections',side_effect=lambda values,shape,selected:values) as post:
+            self.assertEqual(api.parse_detections(result,spec),[expected]);post.assert_called_once()
+            self.assertIs(post.call_args.args[2],spec)
+        class OBB:
+            xyxyxyxy=Tensor([[[10.111,20.222],[80.333,90.444]]]);cls=Tensor([0]);conf=Tensor([.89123])
+            def __len__(self):return 1
+        result.boxes=None;result.obb=OBB()
+        with patch.object(api,'postprocess_detections',side_effect=lambda values,shape,selected:values) as post:
+            self.assertEqual(api.parse_detections(result,spec),[{**expected,'polygon':[[10.11,20.22],[80.33,90.44]]}]);post.assert_called_once()
+        result.boxes=Boxes();result.masks=types.SimpleNamespace(xy=[np.array([[10,20],[80,90]])])
+        with patch.object(api,'postprocess_detections',side_effect=lambda values,shape,selected:values) as post:
+            self.assertEqual(api.parse_detections(result,spec),[]);self.assertEqual(post.call_args.args[0],[])
+
+    def test_normal_drawing_fill_edge_text_and_blend(self):
+        import cv2
+        image=np.zeros((300,400,3),np.uint8);det=detection(box=(70,100,230,230),manual_label='Manual')
+        with patch.object(cv2,'fillPoly',wraps=cv2.fillPoly) as fill,patch.object(cv2,'polylines',wraps=cv2.polylines) as edge,patch.object(cv2,'putText',wraps=cv2.putText) as text,patch.object(cv2,'addWeighted',wraps=cv2.addWeighted) as blend:
+            rendered=self.api.draw_detections(image,[det],{'passed':True})
+        fill.assert_called_once();edge.assert_called_once();blend.assert_called_once();self.assertEqual(text.call_count,2)
+        self.assertEqual(text.call_args_list[0].args[1],'Manual 0.90');self.assertEqual(text.call_args_list[1].args[1],'TRUE: exact parts match')
+        self.assertEqual(blend.call_args.args[1],.16);self.assertEqual(blend.call_args.args[3:],(.84,0))
+        self.assertEqual(edge.call_args.kwargs,{'isClosed':True,'color':(38,82,255),'thickness':3,'lineType':cv2.LINE_AA})
+        self.assertEqual(rendered[150,150].tolist(),[6,13,41]);self.assertEqual(rendered[150,70].tolist(),[38,82,255])
+        self.assertEqual(rendered[200,250].tolist(),[0,0,0]);self.assertFalse(image.any())
+
+    def test_new_label_provider_failures_are_not_retried(self):
+        # New dependency-factory behavior is checked separately from old mapping operations.
+        from local_inspection_service.detection.results import DetectionLabels,DetectionResults
+        from local_inspection_service.detection.rules import CountRules
+        for boundary in ['class_names','class_labels','generic_names','generic_labels','rule_class_labels','manual_labels']:
+            with self.subTest(boundary=boundary):
+                error=RuntimeError(boundary);success={0:'Zero',1:'Manual','manual':'Manual'};target=Mock(side_effect=[error,success])
+                if boundary.startswith('rule_') or boundary=='manual_labels':
+                    policy=CountRules(target if boundary.startswith('rule_') else lambda:{0:'Zero'},target if boundary=='manual_labels' else lambda:{'manual':'Manual'})
+                    invoke=lambda:policy.apply([],{'confidence_threshold':.5,'required_classes':[],'min_counts':{},'ocr':{'enabled':False}}, {})
+                else:
+                    labels=DetectionLabels(lambda:{0:'Zero'},lambda:{0:'Zero'},lambda:{1:'Manual'},lambda:{1:'Manual'})
+                    service=DetectionResults(replace(labels,**{boundary:target}),lambda values,shape,spec:values)
+                    invoke=lambda:service.names(1 if boundary.startswith('generic') else 0,{'uses_ocr':boundary.startswith('generic')})
+                with self.assertRaises(RuntimeError) as caught:invoke()
+                self.assertIs(caught.exception,error);target.assert_called_once()
+
+    def test_original_mapping_and_postprocess_first_errors_are_not_retried(self):
+        api=self.api
+        for boundary in ['class_get','label_get','rule_items','manual_keys','post_boxes','post_obb']:
+            with self.subTest(boundary=boundary):
+                error=RuntimeError(boundary);calls=[]
+                def first_error():
+                    calls.append(1)
+                    if len(calls)==1:raise error
+                class Mapping(dict):
+                    def get(self,*args):first_error();return super().get(*args)
+                    def items(self):first_error();return super().items()
+                    def keys(self):first_error();return super().keys()
+                with ExitStack() as stack:
+                    if boundary in ('class_get','label_get'):
+                        stack.enter_context(patch.object(api,'CLASS_NAMES' if boundary=='class_get' else 'CLASS_LABELS',Mapping({0:'Zero'})))
+                        invoke=lambda:api.detection_names_for_business_class(0,{})
+                    elif boundary in ('rule_items','manual_keys'):
+                        stack.enter_context(patch.object(api,'CLASS_LABELS' if boundary=='rule_items' else 'MANUAL_TYPE_LABELS',Mapping({0:'Zero'} if boundary=='rule_items' else {'manual':'Manual'})))
+                        invoke=lambda:api.apply_rule([],{'confidence_threshold':.5,'required_classes':[],'min_counts':{},'ocr':{'enabled':False}}, {})
+                    else:
+                        result=types.SimpleNamespace(orig_shape=(1000,1000),boxes=Boxes(),masks=None,obb=None)
+                        if boundary=='post_obb':
+                            class OBB:
+                                xyxyxyxy=Tensor([[[0,0],[100,0],[100,100],[0,100]]]);cls=Tensor([0]);conf=Tensor([.9])
+                                def __len__(self):return 1
+                            result.boxes=None;result.obb=OBB()
+                        def post(values,shape,spec):first_error();return values
+                        stack.enter_context(patch.object(api,'postprocess_detections',post));invoke=lambda:api.parse_detections(result,specialized())
+                    with self.assertRaises(RuntimeError) as caught:invoke()
+                    self.assertIs(caught.exception,error);self.assertEqual(calls,[1])
 
     def test_geometry_degenerate_overlap_and_distance(self):
         a = detection(box=(0,0,10,10))['polygon']; contained = detection(box=(2,2,8,8))['polygon']

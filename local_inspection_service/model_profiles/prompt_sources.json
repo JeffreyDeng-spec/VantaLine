@@ -1,7 +1,12 @@
 {
-  "version": 8,
+  "version": 9,
   "sources": [
     "server.py",
+    "detection/geometry.py",
+    "detection/postprocessing.py",
+    "detection/results.py",
+    "detection/rules.py",
+    "detection/drawing.py",
     "text_inspection/incoming_analysis.py",
     "text_inspection/incoming_execution.py",
     "text_inspection/beta_comparison.py",

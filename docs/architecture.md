@@ -6,6 +6,8 @@ rules and overlays now live in `detection.geometry`, `postprocessing`, `results`
 service receive narrow label providers; the parser resolves the root postprocessor
 at use time. These modules own no model, worker, identity or database state. Internal
 pure helper substitutions belong in their actual modules, not unrelated root aliases.
+Manifest v9 includes these five modules so relocation retains source provenance.
+Provider and postprocessor exceptions propagate without an automatic retry.
 
 Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
 registered as five catalog routes and four inspection routes around the unchanged
