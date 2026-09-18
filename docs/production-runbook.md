@@ -1,5 +1,12 @@
 # Production runbook
 
+OCR and Beta services remain inside the existing Web process; restarting clears
+these process-local states as before. A failed initialization remains retryable on
+a later request; Beta failed comparisons retain their prior cached-review behavior.
+The migrated PDF decoder still lacks an explicit close and does not share raster
+size checks; those existing boundaries are not changed here. Roll back the complete
+release with its matching source manifest and retain task snapshots and records.
+
 Incoming-store extraction retains the shared JSON lock and file replacement rules.
 Invalid JSON or read OSError still yields an empty list, while invalid UTF-8 propagates.
 Replacement failure keeps the old target and completed temporary file; this batch
@@ -10,7 +17,7 @@ incoming store together, preserving existing records and audit evidence.
 Comparison extraction preserves attempts, media, uncertain-call evidence and the
 existing review/audit ordering. A failed final save can leave a persisted attempt;
 retry is not a recovery action. Use the usual complete-release restart and rollback
-with matching manifest v6, retaining historical snapshots. This batch does not
+with matching manifest v7, retaining historical snapshots. This batch does not
 activate an independent label worker or modify deployment topology.
 
 Standard-route extraction keeps the current jobs, write locks and complete-release

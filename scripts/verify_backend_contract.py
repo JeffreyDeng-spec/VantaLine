@@ -59,6 +59,16 @@ def capture():
         assert server._incoming_text_store.paths.inspections() == server.INCOMING_TEXT_INSPECTIONS_PATH
         assert server._incoming_text_store.paths.audit() == server.INCOMING_TEXT_AUDIT_PATH
         assert server._incoming_text_store.rows.decode() is server.row_raw_json_list
+        from local_inspection_service.text_inspection import incoming_analysis
+        assert server.decode_incoming_reference is incoming_analysis.decode_reference
+        assert server._ocr_result_mapping is incoming_analysis.result_mapping
+        assert server._field_observation is incoming_analysis.field_observation
+        assert server._incoming_text_ocr_lock is server._incoming_ocr_engine.lock
+        assert server._text_compare_beta_cache is server._beta_comparison.cache
+        assert server._text_compare_beta_cache_lock is server._beta_comparison.lock
+        assert server._beta_comparison.observer() is server.incoming_text_ocr_observations
+        assert [route.endpoint for route in server.app.routes if route.name == "analyze_text_compare_beta"] == [server.analyze_text_compare_beta]
+
 
         assert server._text_media.directory() == server.TEXT_INSPECTION_MEDIA_DIR
         from local_inspection_service.text_inspection.projection import public_record
