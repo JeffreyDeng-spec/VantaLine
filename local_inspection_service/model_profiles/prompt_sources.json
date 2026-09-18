@@ -1,7 +1,11 @@
 {
-  "version": 21,
+  "version": 22,
   "sources": [
     "server.py",
+    "training/estimates.py",
+    "training/annotations.py",
+    "training/sample_plan.py",
+    "training/dataset_generation.py",
     "training/runner.py",
     "training/submission.py",
     "training/local_process.py",

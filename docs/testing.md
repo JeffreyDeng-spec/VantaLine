@@ -1,5 +1,26 @@
 # Testing
 
+`python scripts/smoke_training_dataset.py` covers twenty-seven offline groups. Seventeen
+passed on the actual original ten functions before extraction. Twenty-three expanded business
+groups pass on the saved original functions. Independent composition, shared async/threadpool
+identity and new getter failures supply four additional groups. Twenty-one capture traces,
+per-sample/per-label lookup and first-error-then-recovery cases preserve callback timing,
+exception identity, call counts, HTTP normalization/save precedence and partial file writes.
+Tests fix seeded sample order, RNG threshold/rounding, shared list identity, duplicate-ID
+reindexing, label dimensions and exact bytes, YAML name collisions, request background versus
+task ownership, metadata types and distributions, progress scheduling, configuration error
+order and six file/metadata failure residues. Real synthetic images test bbox position, palette
+indexing and unmodified input pixels; rendering and external transports are substitutes.
+Fully and partly out-of-frame boxes have exact unit and generated-file assertions; clipping
+the coordinates before normalization is rejected because it changes the original amodal labels.
+The non-CI `verify_task_pipeline.py` has one existing geometry assertion expecting `[57, 143]`
+where the current fixed 1280/600 px/mm scale produces `[85, 213]`. That exact assertion fails
+identically on the actual original and fixed dataset implementations. The other
+eleven checks pass, including sample distribution, background metadata, 64 document renders,
+detection rules and pipeline handoff, with a synthetic model resolver and forbidden external
+network/process operations. The legacy assertions remain intact; its full main is
+not reported as passing. Geometry scaling is outside this structural extraction.
+
 `python scripts/smoke_training_runner.py` covers twenty-nine offline groups. Sixteen passed on
 the original four functions before extraction. Twenty-six expanded business groups also
 pass on the saved original functions, including their actual model-binding decorator.

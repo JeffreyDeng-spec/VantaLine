@@ -1,11 +1,16 @@
 # RunPod YOLO Training Worker
 
+The Web-side sample plan, labels/YAML, annotation previews and dataset manifest now come
+from explicit `training` modules. Sample contents, seed behavior and archive/RunPod input
+contracts are unchanged. Source manifest v16 covers those relocated producers. No worker
+service, submission retry, archive format or GPU execution policy changes in this extraction.
+
 Training dispatch now enters `training.runner.TrainingRunner`; task construction lives in
 `training.submission`. The existing RunPod request adapter, server-side RunPod payload builder
 and worker package stay unchanged. Samples-only tasks still complete before executor dispatch.
 The runner binds saved model references once before its separate task load and delegates to
 the original RunPod flow; ordinary training threads gain no new identity propagation. New
-source fingerprints use manifest v15, while historical task references remain untouched.
+source fingerprints use manifest v16, while historical task references remain untouched.
 
 The Web-side executor settings now live in `training/executor_settings.py`, and the active
 HTTP adapter/response summary in `training/runpod_client.py`. Dataset/archive input assembly,
