@@ -198,6 +198,45 @@ class StoreContracts(unittest.TestCase):
                 expected=['fetch','rowsA'] if mode=='load' else ['fetch','rowsB'] if mode=='owned' else ['fetch']
                 self.assertEqual(events,expected,mode)
 
+            # Capture after preceding work, but before evaluating call arguments.
+            for mode in ('reader','writer','decoder'):
+                events=[]
+                def callback(name):
+                    return lambda *args:events.append(name) or []
+                callbacks={name:callback(name) for name in ('A','B','C')}
+                attribute={'reader':'_incoming_text_json_list','writer':'_save_incoming_text_json_list',
+                           'decoder':'row_raw_json_list'}[mode]
+                repository=Mock(spec=PostgresRuntimeRepository)
+                def factory():
+                    events.append('factory')
+                    if mode!='writer' and events.count('factory')==1:
+                        setattr(server,attribute,callbacks['B'])
+                    return repository if mode=='decoder' else None
+                def read(path):
+                    events.append('read')
+                    if events.count('read')==1:setattr(server,attribute,callbacks['B'])
+                    return []
+                def fetch(*args):
+                    events.append('fetch');setattr(server,attribute,callbacks['C'])
+                    return []
+                class Kind(str):
+                    def __format__(self,spec):
+                        events.append('path')
+                        if mode=='reader' or events.count('path')%2==0:
+                            setattr(server,attribute,callbacks['C'])
+                        return str(self)
+                repository.fetch_all.side_effect=fetch
+                with patch.object(server,'runtime_postgres_repository_or_none',side_effect=factory),patch.object(server,attribute,callbacks['A']):
+                    if mode=='writer':
+                        with patch.object(server,'_incoming_text_json_list',side_effect=read):
+                            for _ in range(2):server._text_v2_save(Kind('records'),sample())
+                    else:
+                        for _ in range(2):server._text_v2_load(Kind('records'))
+                expected={'reader':['factory','path','B','factory','path','C'],
+                          'writer':['factory','path','read','path','B','factory','path','read','path','C'],
+                          'decoder':['factory','fetch','B','factory','fetch','C']}[mode]
+                self.assertEqual(events,expected,mode)
+
     def test_first_io_failure_is_preserved_without_retry_or_fallback(self):
         modes=('factory','json-read','json-write','json-cas-write','fetch_all',
                'fetch_one_by_columns','insert_row_once','upsert_row','update_text_attempt')

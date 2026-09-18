@@ -12,6 +12,9 @@ and verifies its composition binding in the entry point.
 The root group replaces callbacks while paths and queries are evaluated, preserving
 reader/writer/decoder capture order and missing-callable errors. Owned lookup still
 resolves its decoder after a successful query and skips it for an absent row.
+An A-to-B-to-C replacement matrix also rejects entry-time caching: prior factory
+or read work selects B, argument evaluation selects C, the current call uses B,
+and the next call uses C.
 Nine first-error I/O cases allow a succeeding second call but require the original
 error exactly once, with no JSON fallback or later write. Cross-thread nonblocking
 lock probes cover the copy phase of save and the status comparison of CAS, including
