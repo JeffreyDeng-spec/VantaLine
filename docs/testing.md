@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_training_preview_layout.py` runs 22 offline contract groups.
+Seventeen passed on the actual original twelve functions on Windows and Linux before migration;
+20 expanded business groups also pass on saved originals. Contracts retain ROI capture, lazy
+axis fallback, random call order, inclusive endpoints, attempt 180, earliest tie, rounding, real
+intersections, mask pixels, contour clipping, threshold equality and stable ordering. Added cases
+check callback capture before argument effects, refresh between axes/list items and first-error
+propagation without retry. Independent services and new getter failure cases add two groups.
+No PLC or model calls occur.
+
 `python scripts/smoke_training_backgrounds.py` covers 22 offline groups. Thirteen passed
 against the original seven functions on Windows and Linux before extraction; 20 expanded business groups also pass on the originals. Pixel fingerprints,
 metadata and subsequent RNG state are fixed in `tests/backend_contract/training_background_pixels.json`

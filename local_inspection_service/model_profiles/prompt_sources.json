@@ -1,7 +1,10 @@
 {
-  "version": 26,
+  "version": 27,
   "sources": [
     "server.py",
+    "training/preview_geometry.py",
+    "training/preview_masks.py",
+    "training/preview_placement.py",
     "training/background_library.py",
     "training/background_rendering.py",
     "training/dataset_catalog.py",
