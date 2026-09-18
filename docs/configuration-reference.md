@@ -1,8 +1,10 @@
 # Configuration reference
 
 Text media extraction introduces no setting or image-policy change. Provider
-maximum side and JPEG quality retain their values and are passed explicitly by the
-entry point. Input byte/pixel limits, 1.5x PDF rendering, image fast paths and error
+maximum side and JPEG quality retain their values and are obtained through explicit
+getters at the original expressions. Passthrough never reads JPEG quality; resize
+reads the maximum once for comparison and twice for thumbnail dimensions. Input
+byte/pixel limits, 1.5x PDF rendering, image fast paths and error
 messages remain. New source fingerprints use manifest v5 with the migrated media
 and image sources; existing model versions, secret references and snapshots remain.
 

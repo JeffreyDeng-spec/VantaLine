@@ -4,6 +4,8 @@ Text-media CI adds real image/PDF and application-composition contracts. Package
 both media/image modules with source manifest v5, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
 dependency upgrade is needed; ordinary complete-release restart/rollback applies.
+Media fault injection preserves first-error evidence without retries. Callback and
+resize-policy contracts retain the original evaluation timing before publication.
 
 Text-record CI adds isolated JSON/SQL contracts and real PostgreSQL competing
 submissions/updates. Existing HTTP and source contracts remain required; source

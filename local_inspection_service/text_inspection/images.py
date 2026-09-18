@@ -1,6 +1,7 @@
 """Image decoding, model copies and annotation with explicit resize policy."""
 import io
 import base64
+from collections.abc import Callable
 from typing import Any
 import cv2
 import numpy as np
@@ -46,17 +47,17 @@ def prepare_image(contents: bytes, *, max_bytes: int = 10 * 1024 * 1024) -> tupl
     return prepared, "image/jpeg", ".jpg", image_format or "UNKNOWN"
 
 
-def prepare_provider_image(contents: bytes, mime_type: str, *, max_side: int, jpeg_quality: int) -> tuple[bytes, str, str]:
+def prepare_provider_image(contents: bytes, mime_type: str, *, max_side: Callable[[], int], jpeg_quality: Callable[[], int]) -> tuple[bytes, str, str]:
     """Bound only the model copy while preserving full-resolution audit evidence."""
     try:
         with Image.open(io.BytesIO(contents)) as image:
             image_format = str(image.format or "").upper() or "UNKNOWN"
             width, height = image.size
-            if max(width, height) <= max_side:
+            if max(width, height) <= max_side():
                 return contents, mime_type, image_format
             working = ImageOps.exif_transpose(image)
             working.thumbnail(
-                (max_side, max_side),
+                (max_side(), max_side()),
                 Image.Resampling.LANCZOS,
             )
             if working.mode in {"RGBA", "LA"} or "transparency" in working.info:
@@ -69,7 +70,7 @@ def prepare_provider_image(contents: bytes, mime_type: str, *, max_side: int, jp
             rgb.save(
                 output,
                 format="JPEG",
-                quality=jpeg_quality,
+                quality=jpeg_quality(),
                 optimize=True,
             )
             prepared = output.getvalue()

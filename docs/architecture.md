@@ -3,8 +3,11 @@
 `text_inspection.media.TextMedia` owns account-scoped evidence paths, verified
 reads, atomic file replacement and lazy PDF page caches, with explicit record ports.
 `text_inspection.images` owns the original image decoding, provider-copy and
-annotation, data-URL and similarity functions. The entry point keeps compatible exports/forwards and reads
-resize constants for each provider-copy call. Source manifest v5 includes both
+annotation, data-URL and similarity functions. The entry point keeps compatible
+exports/forwards and provides narrow getters for resize constants at their original
+comparison, thumbnail and encoding expressions. The owned-record callback is
+resolved after preceding asset checks and before its identifier argument. No eager
+policy or callback caching is introduced. Source manifest v5 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL

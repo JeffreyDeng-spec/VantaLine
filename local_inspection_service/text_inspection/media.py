@@ -14,7 +14,7 @@ Record = dict[str, Any]
 
 @dataclass(frozen=True)
 class TextMediaRecords:
-    owned: Callable[[str, str, str], Record | None]
+    owned: Callable[[], Callable[[str, str, str], Record | None]]
     save: Callable[[str, Record], bool]
 
 
@@ -59,7 +59,7 @@ class TextMedia:
             return self.read_verified(media_path, owner_user_id, str(asset.get("standard_id") or ""), expected_sha256=str(asset.get("sha256") or ""))
         if asset.get("asset_kind") != "manual_page":
             raise HTTPException(status_code=404, detail="标准资源不存在")
-        standard = self.records.owned("standards", str(asset.get("standard_id") or ""), owner_user_id)
+        standard = self.records.owned()("standards", str(asset.get("standard_id") or ""), owner_user_id)
         if not standard:
             raise HTTPException(status_code=404, detail="说明书标准源文件不存在")
         source_bytes = self.read_verified(str(standard.get("source_path") or ""), owner_user_id, str(standard.get("id") or ""), expected_sha256=str(standard.get("source_sha256") or ""))

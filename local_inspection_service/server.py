@@ -33930,7 +33930,7 @@ _text_media = TextMedia(
     directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
     digest=lambda contents: sha256_bytes(contents),
     records=TextMediaRecords(
-        owned=lambda kind, identity, owner: _text_v2_owned(kind, identity, owner),
+        owned=lambda: _text_v2_owned,
         save=lambda kind, value: _text_v2_save(kind, value),
     ),
 )
@@ -34450,7 +34450,7 @@ def _text_v2_write_server_diagnostic(record: dict[str, Any]) -> None:
 
 def _text_v2_prepare_provider_image(contents: bytes, mime_type: str) -> tuple[bytes, str, str]:
     return _prepare_text_provider_image(contents, mime_type,
-        max_side=TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE, jpeg_quality=TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY)
+        max_side=lambda: TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE, jpeg_quality=lambda: TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY)
 
 
 from local_inspection_service.label_extraction_api import register as register_label_extraction
