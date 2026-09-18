@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Profile-cache extraction retains its existing JSON cache store and adds no database connection,
+transaction, schema or advisory-lock change. Cache file updates remain separate from caller-owned
+task settlement and model-call accounting.
+
 Retired task settlement uses the same update callback exactly once and preserves its failure
 behavior and return-value handling. Retired refresh performs no persistence and returns the same
 public projection object. The extraction adds no connection, transaction, advisory lock or schema;
@@ -115,7 +119,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v50 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v52 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

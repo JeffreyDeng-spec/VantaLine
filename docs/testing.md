@@ -1,5 +1,22 @@
 # Testing
 
+`python scripts/smoke_profile_cache.py` runs 30 synthetic groups. Twenty-one original
+business groups and 26 expanded original-body groups pass on Windows/Linux. Contracts
+retain canonical keys, exact prompts, reference order, expiry margins, write permissions,
+atomic replacement and partial-file/record effects. Provider creation still records the same
+single-call evidence and failure result; no replay is introduced. Explicit path, provider,
+clock and formatting capabilities retain original evaluation order without constructor I/O.
+Temporary files and synthetic providers avoid production records and paid inference.
+
+`python scripts/smoke_presence_inspection.py` runs 29 synthetic groups. Twenty original
+business groups and 25 expanded original-body groups pass on Windows/Linux. Contracts
+retain exact prompts, cache budgets, image/reference selection, timing and metadata order.
+Only a successful uncovered Qwen result permits the existing one coverage retry; exceptions
+and unknown outcomes do not create another provider attempt. First-error recovery matrices
+cover early failure paths, provider/policy reads, JSON rendering and partial result mutations.
+Independent services use explicit capabilities; the MCP tool registry retains the actual adapter.
+Models, transports and images are synthetic; tests do not access real devices or paid inference.
+
 `python scripts/smoke_detection_analysis.py` and `python scripts/smoke_ai_detection_analysis.py`
 run 20 and 20 synthetic groups. Original Windows/Linux baselines passed 12 and 13 groups;
 expanded original-body replays retain 15 and 16 groups. Contracts cover routing, confidence bounds,
