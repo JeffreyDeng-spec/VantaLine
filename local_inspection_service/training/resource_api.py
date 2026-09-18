@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from .dataset_catalog import FindDataset
 from .resource_queries import ResourcePayload
+from .resource_mutations import TrainingResourceMutations
+from ..schemas.training import TrainingResourceUpdateRequest
 
 Record = dict[str, Any]
 
@@ -42,3 +44,36 @@ def register(app: FastAPI, access: ResourceReadAccess,
         return access.sanitize({"status": "ready", "dataset": item})
 
     return ResourceReadRoutes(training_resources, training_dataset_detail)
+
+
+@dataclass(frozen=True)
+class ResourceWriteRoutes:
+    delete_training_dataset: Callable[[str], Record]
+    update_training_dataset: Callable[[str, TrainingResourceUpdateRequest], Record]
+    delete_training_dataset_sample: Callable[[str, str], Record]
+    delete_training_model: Callable[[str], Record]
+    update_training_model: Callable[[str, TrainingResourceUpdateRequest], Record]
+
+
+def register_writes(app: FastAPI, mutations: TrainingResourceMutations) -> ResourceWriteRoutes:
+    @app.delete("/api/training/resources/datasets/{dataset_id}")
+    def delete_training_dataset(dataset_id: str) -> dict[str, Any]:
+        return mutations.delete_training_dataset(dataset_id)
+
+    @app.patch("/api/training/resources/datasets/{dataset_id}")
+    def update_training_dataset(dataset_id: str, request: TrainingResourceUpdateRequest) -> dict[str, Any]:
+        return mutations.update_training_dataset(dataset_id, request)
+
+    @app.delete("/api/training/resources/datasets/{dataset_id}/samples/{sample_name}")
+    def delete_training_dataset_sample(dataset_id: str, sample_name: str) -> dict[str, Any]:
+        return mutations.delete_training_dataset_sample(dataset_id, sample_name)
+
+    @app.delete("/api/training/resources/models/{run_id}")
+    def delete_training_model(run_id: str) -> dict[str, Any]:
+        return mutations.delete_training_model(run_id)
+
+    @app.patch("/api/training/resources/models/{run_id}")
+    def update_training_model(run_id: str, request: TrainingResourceUpdateRequest) -> dict[str, Any]:
+        return mutations.update_training_model(run_id, request)
+
+    return ResourceWriteRoutes(delete_training_dataset, update_training_dataset, delete_training_dataset_sample, delete_training_model, update_training_model)

@@ -1,5 +1,10 @@
 # VantaLine release management
 
+CI adds the resource-mutation contract with an isolated PostgreSQL schema. Package mutation and
+link services plus the five HTTP adapters in the complete immutable release. No migration, setting,
+worker topology or source-manifest version change is introduced. Roll back the whole previous
+package while retaining resource records, files and historical model references.
+
 CI adds resource-catalog contracts. Ship the dataset catalog, resource query and HTTP adapters
 with source manifest v25 in the complete immutable release. Routes, storage schema and process
 topology retain their existing contracts. Rollback restores the entire previous package while

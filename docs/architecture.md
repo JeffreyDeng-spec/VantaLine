@@ -1,5 +1,15 @@
 # Architecture
 
+Resource writes use three narrow getters at four owner/path argument boundaries.
+Marker conditions, permissions, mutations and saves remain inside the existing process guard.
+Existing partial filesystem effects and exception handling remain unchanged.
+
+Training resource modification and removal now use `training/resource_mutations.py` and five
+thin adapters in `training/resource_api.py`. `training/dataset_links.py` and
+`pipeline/resource_links.py` retain their existing shared guards around load, record mutation
+and persistence. The composition root supplies late identity, permission, catalog and retirement
+ports. Constructors perform no I/O; each application owns its service bindings.
+
 Dataset sample resolution and audit timestamps, model path resolution, configuration scope
 and the resource HTTP payload use six narrow callback getters. Each lookup remains before
 its original argument effects; request identity and visibility checks keep their existing order.

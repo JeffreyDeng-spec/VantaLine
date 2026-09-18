@@ -1,5 +1,12 @@
 # PostgreSQL runtime operations
 
+Resource retirement markers keep the existing pipeline/training process guards and persistence
+callbacks. Pipeline markers pass all loaded tasks plus the changed object references to the existing
+batch helper; PostgreSQL still upserts changed rows. Training markers save matching tasks one at a
+time. These are the same sequential writes, not a new transaction across filesystem, training and
+pipeline records. A later failure leaves earlier writes intact; no compensating writes or retry is
+added. Synthetic PostgreSQL contracts verify account isolation and preserved model snapshots.
+
 Training state synchronization now uses explicit storage ports but keeps the existing
 configuration, pipeline and candidate persistence functions and write-lock behavior. No SQL,
 DDL, connection lifecycle or transaction scope changes here. Completion synchronization is

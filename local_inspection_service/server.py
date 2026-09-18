@@ -24712,210 +24712,75 @@ training_resources = _training_resource_routes.training_resources
 training_dataset_detail = _training_resource_routes.training_dataset_detail
 
 
+from .training.resource_mutations import (ResourceRetirement, ResourceWriteAccess,
+                                         ResourceWriteCatalog, TrainingResourceMutations)
+from .training.dataset_links import DatasetLinkRecords, TrainingDatasetLinks
+from .pipeline.resource_links import PipelineResourceLinks
+from .training.resource_api import register_writes as register_training_resource_writes
+
+_training_dataset_links = TrainingDatasetLinks(
+    lambda: _training_task_lock,
+    DatasetLinkRecords(lambda: load_training_task_records(), lambda task: save_training_task(task),
+                       lambda task: training_task_dataset_resource_id(task)),
+    lambda record, user: record_mutable_by_user(record, user),
+    lambda value: clean_training_resource_id(value),
+)
+_pipeline_resource_links = PipelineResourceLinks(
+    lambda: _pipeline_tasks_lock, lambda: load_pipeline_tasks(),
+    lambda tasks, changed: save_pipeline_task_batch_changes(tasks, changed),
+    lambda record, user: record_mutable_by_user(record, user),
+)
+_training_resource_mutations = TrainingResourceMutations(
+    ResourceWriteAccess(lambda: current_auth_user(),
+                        lambda record, user, **options: require_record_access(record, user, **options),
+                        lambda record: record_owner_id(record),
+                        lambda: assert_unique_dataset_name,
+                        lambda: assert_unique_model_name),
+    ResourceWriteCatalog(lambda dataset_id, **options: find_dataset_resource(dataset_id, **options),
+                         lambda: list_trained_model_specs(), lambda: resolve_service_path,
+                         lambda **options: training_resources_payload(**options)),
+    ResourceRetirement(lambda identifier, user, **options: delete_training_dataset_resource(identifier, user, **options),
+                       lambda identifier, user, **options: delete_training_model_resource(identifier, user, **options),
+                       lambda identifier, user: mark_training_task_dataset_deleted(identifier, user),
+                       lambda identifier, user: mark_pipeline_dataset_deleted(identifier, user),
+                       lambda identifier, user: mark_pipeline_model_deleted(identifier, user)),
+)
+
+
 def delete_training_dataset_resource(dataset_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
-    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False, write=True)
-    if not dataset_dir or not item:
-        if missing_ok:
-            return None
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    shutil.rmtree(dataset_dir)
-    return item
+    return _training_resource_mutations.delete_training_dataset_resource(dataset_id, user, missing_ok=missing_ok)
 
 
 def mark_pipeline_dataset_deleted(dataset_id: str, user: dict[str, Any]) -> int:
-    clean_id = str(dataset_id or "").strip()
-    if not clean_id:
-        return 0
-    now = int(time.time())
-    changed = 0
-    with _pipeline_tasks_lock:
-        tasks = load_pipeline_tasks()
-        changed_tasks: list[dict[str, Any]] = []
-        for task in tasks:
-            linked_ids = {str(task.get("dataset_id") or ""), str(task.get("samples_task_id") or "")}
-            if clean_id not in linked_ids or not record_mutable_by_user(task, user):
-                continue
-            task.update({"dataset_status": "deleted", "dataset_deleted_at": now, "updated_at": now})
-            changed_tasks.append(task)
-            changed += 1
-        save_pipeline_task_batch_changes(tasks, changed_tasks)
-    return changed
+    return _pipeline_resource_links.mark_pipeline_dataset_deleted(dataset_id, user)
 
 
 def mark_training_task_dataset_deleted(dataset_id: str, user: dict[str, Any]) -> int:
-    clean_id = clean_training_resource_id(dataset_id)
-    if not clean_id:
-        return 0
-    now = int(time.time())
-    changed = 0
-    with _training_task_lock:
-        for task in load_training_task_records():
-            if task.get("action") not in {"generate_samples", "train_model"}:
-                continue
-            if training_task_dataset_resource_id(task) != clean_id:
-                continue
-            if not record_mutable_by_user(task, user):
-                continue
-            task.update({"dataset_status": "deleted", "dataset_deleted_at": now, "updated_at": now})
-            save_training_task(task)
-            changed += 1
-    return changed
+    return _training_dataset_links.mark_training_task_dataset_deleted(dataset_id, user)
 
 
-@app.delete("/api/training/resources/datasets/{dataset_id}")
-def delete_training_dataset(dataset_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    deleted_item = delete_training_dataset_resource(dataset_id, user, missing_ok=True)
-    affected_training_tasks = mark_training_task_dataset_deleted(dataset_id, user)
-    affected_pipeline_tasks = mark_pipeline_dataset_deleted(dataset_id, user)
-    if not deleted_item and not affected_training_tasks and not affected_pipeline_tasks:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    return {
-        "status": "deleted",
-        "dataset_id": dataset_id,
-        "affected_training_tasks": affected_training_tasks,
-        "affected_pipeline_tasks": affected_pipeline_tasks,
-        **training_resources_payload(user=user),
-    }
+_training_resource_write_routes = register_training_resource_writes(app, _training_resource_mutations)
+delete_training_dataset = _training_resource_write_routes.delete_training_dataset
+update_training_dataset = _training_resource_write_routes.update_training_dataset
+delete_training_dataset_sample = _training_resource_write_routes.delete_training_dataset_sample
+delete_training_model = _training_resource_write_routes.delete_training_model
+update_training_model = _training_resource_write_routes.update_training_model
 
 
-@app.patch("/api/training/resources/datasets/{dataset_id}")
-def update_training_dataset(dataset_id: str, request: TrainingResourceUpdateRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False, write=True)
-    if not dataset_dir or not item:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    manifest_path = dataset_dir / "manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail="Dataset manifest is unreadable") from exc
-    if request.display_name is not None:
-        next_display_name = request.display_name.strip() or dataset_id
-        assert_unique_dataset_name(next_display_name, record_owner_id(item), user, exclude_dataset_id=dataset_id)
-        manifest["display_name"] = next_display_name
-    if request.note is not None:
-        manifest["note"] = request.note.strip()
-    manifest["updated_at"] = int(time.time())
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return {"status": "updated", "dataset_id": dataset_id, **training_resources_payload(user=user)}
 
 
-@app.delete("/api/training/resources/datasets/{dataset_id}/samples/{sample_name}")
-def delete_training_dataset_sample(dataset_id: str, sample_name: str) -> dict[str, Any]:
-    user = current_auth_user()
-    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False, write=True)
-    if not dataset_dir or not item:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    sample_stem = Path(sample_name).stem
-    removed = 0
-    for split in ("train", "val", "test"):
-        for path in (
-            dataset_dir / "images" / split / f"{sample_stem}.png",
-            dataset_dir / "labels" / split / f"{sample_stem}.txt",
-            dataset_dir / "previews" / split / f"{sample_stem}_boxed.jpg",
-        ):
-            if path.exists():
-                path.unlink()
-                removed += 1
-    manifest_path = dataset_dir / "manifest.json"
-    removed_manifest_records = 0
-    if manifest_path.exists():
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            raw_samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
-            samples = [
-                item
-                for item in raw_samples
-                if not isinstance(item, dict) or Path(str(item.get("image") or "")).stem != sample_stem
-            ]
-            removed_manifest_records = len(raw_samples) - len(samples)
-            manifest["samples"] = samples
-            manifest["sample_count"] = len(samples)
-            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        except (OSError, json.JSONDecodeError):
-            pass
-    if removed == 0 and removed_manifest_records == 0:
-        raise HTTPException(status_code=404, detail="Sample not found")
-    return {
-        "status": "deleted",
-        "dataset_id": dataset_id,
-        "sample": sample_name,
-        "removed_files": removed,
-        "removed_manifest_records": removed_manifest_records,
-        **training_resources_payload(user=user),
-    }
 
 
 def delete_training_model_resource(run_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
-    clean_id = re.sub(r"^trained_", "", run_id)
-    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
-    run_dir = resolve_service_path(spec.get("run_dir")) if spec else None
-    if not run_dir or not run_dir.exists() or not run_dir.is_dir() or not spec:
-        if missing_ok:
-            return None
-        raise HTTPException(status_code=404, detail="Model run not found")
-    require_record_access(spec, user, write=True)
-    shutil.rmtree(run_dir)
-    return spec
+    return _training_resource_mutations.delete_training_model_resource(run_id, user, missing_ok=missing_ok)
 
 
 def mark_pipeline_model_deleted(run_id: str, user: dict[str, Any]) -> int:
-    clean_id = re.sub(r"^trained_", "", str(run_id or ""))
-    clean_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)
-    if not clean_id:
-        return 0
-    now = int(time.time())
-    changed = 0
-    with _pipeline_tasks_lock:
-        tasks = load_pipeline_tasks()
-        changed_tasks: list[dict[str, Any]] = []
-        for task in tasks:
-            linked_ids = {
-                str(task.get("model_run_id") or ""),
-                str(task.get("training_task_id") or ""),
-                re.sub(r"^trained_", "", str(task.get("ai_model_id") or "")),
-            }
-            if clean_id not in linked_ids or not record_mutable_by_user(task, user):
-                continue
-            task.update({"model_status": "deleted", "model_exists": False, "model_deleted_at": now, "updated_at": now})
-            changed_tasks.append(task)
-            changed += 1
-        save_pipeline_task_batch_changes(tasks, changed_tasks)
-    return changed
+    return _pipeline_resource_links.mark_pipeline_model_deleted(run_id, user)
 
 
-@app.delete("/api/training/resources/models/{run_id}")
-def delete_training_model(run_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    delete_training_model_resource(run_id, user)
-    affected_tasks = mark_pipeline_model_deleted(run_id, user)
-    return {"status": "deleted", "run_id": run_id, **training_resources_payload(user=user)}
 
 
-@app.patch("/api/training/resources/models/{run_id}")
-def update_training_model(run_id: str, request: TrainingResourceUpdateRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    clean_id = re.sub(r"^trained_", "", run_id)
-    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
-    run_dir = resolve_service_path(spec.get("run_dir")) if spec else None
-    if not run_dir or not run_dir.exists() or not run_dir.is_dir() or not spec:
-        raise HTTPException(status_code=404, detail="Model run not found")
-    require_record_access(spec, user, write=True)
-    meta_path = run_dir / "library_metadata.json"
-    try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-    except json.JSONDecodeError:
-        meta = {}
-    if request.display_name is not None:
-        next_display_name = request.display_name.strip() or clean_id
-        assert_unique_model_name(next_display_name, record_owner_id(spec), exclude_run_id=str(spec.get("run_id") or ""))
-        meta["display_name"] = next_display_name
-    if request.note is not None:
-        meta["note"] = request.note.strip()
-    meta["updated_at"] = int(time.time())
-    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    return {"status": "updated", "run_id": run_id, **training_resources_payload(user=user)}
 
 
 @app.get("/api/training/plan")
