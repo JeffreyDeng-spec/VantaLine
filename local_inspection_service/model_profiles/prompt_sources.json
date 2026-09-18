@@ -1,7 +1,9 @@
 {
-  "version": 38,
+  "version": 39,
   "sources": [
     "server.py",
+    "training/worker_transfers.py",
+    "training/transfer_progress.py",
     "training/remote_training.py",
     "training/worker_compatibility.py",
     "training/background_validation.py",

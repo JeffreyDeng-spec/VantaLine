@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_worker_transfers.py` runs 29 synthetic groups.
+Seventeen original business groups passed before migration on Windows and Linux;
+26 expanded groups also pass against saved original function bodies. Contracts retain
+exact UTF-8 multipart bytes, 262144-byte chunks, lazy archive reads, shared counters,
+response closure, JSON/length fallbacks and exception boundaries. Three narrow getters
+preserve callback selection before headers, job formatting and counter conversion.
+Fake events and threads verify progress flushing without real worker execution.
+
 `python scripts/smoke_training_remote_compatibility.py` runs 20 synthetic groups.
 Eleven original business groups passed before migration on Windows and Linux;
 17 expanded groups also pass against saved original function bodies. Contracts retain

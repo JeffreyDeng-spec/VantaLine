@@ -19846,6 +19846,19 @@ def worker_training_upload_timeout_seconds() -> float:
     return max(1800.0, remote_training_timeout_seconds())
 
 
+from .training.worker_transfers import WorkerTransfers
+from .training.transfer_progress import TransferProgress
+
+_worker_transfers = WorkerTransfers(
+    lambda: windows_worker_base_url(), lambda: windows_worker_headers(),
+    lambda *args, **kwargs: requests.post(*args, **kwargs),
+    lambda: requests.get, lambda: uuid.uuid4(),
+)
+_transfer_progress = TransferProgress(
+    lambda: update_training_task,
+    lambda: threading.Event(), lambda: threading.Thread,
+)
+
 def windows_worker_upload_bundle_streamed(
     path: str,
     *,
@@ -19854,58 +19867,7 @@ def windows_worker_upload_bundle_streamed(
     state: dict[str, int],
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    """Stream a multipart upload to the worker while tracking sent bytes in `state`
-    (no extra deps): a generator body paced by socket back-pressure gives a real
-    upload progress bar. Content-Length is set so the request is not chunked."""
-    base_url = windows_worker_base_url()
-    if not base_url:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
-    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
-    boundary = f"----vantaline{uuid.uuid4().hex}"
-    file_size = archive_path.stat().st_size
-    preamble = (
-        f"--{boundary}\r\n"
-        'Content-Disposition: form-data; name="metadata"\r\n\r\n'
-        f"{metadata_json}\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="dataset_archive"; filename="{archive_path.name}"\r\n'
-        "Content-Type: application/zip\r\n\r\n"
-    ).encode("utf-8")
-    epilogue = f"\r\n--{boundary}--\r\n".encode("utf-8")
-    content_length = len(preamble) + file_size + len(epilogue)
-    state["total"] = file_size
-    state["done"] = 0
-
-    def _body():
-        yield preamble
-        with archive_path.open("rb") as handle:
-            while True:
-                chunk = handle.read(262144)
-                if not chunk:
-                    break
-                state["done"] = int(state.get("done", 0)) + len(chunk)
-                yield chunk
-        yield epilogue
-
-    headers = {
-        **windows_worker_headers(),
-        "Content-Type": f"multipart/form-data; boundary={boundary}",
-        "Content-Length": str(content_length),
-    }
-    try:
-        response = requests.post(url, data=_body(), headers=headers, timeout=timeout_seconds)
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {"message": response.text[:500]}
-    if response.status_code >= 400:
-        detail = body.get("detail") if isinstance(body, dict) else body
-        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
-    return body if isinstance(body, dict) else {"result": body}
-
-
+    return _worker_transfers.windows_worker_upload_bundle_streamed(path, metadata_json=metadata_json, archive_path=archive_path, state=state, timeout_seconds=timeout_seconds)
 def post_worker_training_bundle(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
     dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
     temp_dir, archive_path = build_worker_training_bundle(dataset_dir, job_id)
@@ -20270,62 +20232,9 @@ def _start_transfer_progress_thread(
     status_field: str,
     interval: float = 1.5,
 ) -> tuple[threading.Event, threading.Thread]:
-    """Periodically flush an in-memory byte counter to the training task file so the
-    frontend can render a live transfer progress bar without per-chunk disk writes."""
-    stop = threading.Event()
-
-    def _loop() -> None:
-        while not stop.wait(interval):
-            try:
-                update_training_task(
-                    job_id,
-                    **{
-                        done_field: int(state.get("done", 0)),
-                        total_field: int(state.get("total", 0)),
-                        status_field: "running",
-                    },
-                )
-            except Exception:  # noqa: BLE001 - progress flushing must never break the transfer
-                pass
-
-    thread = threading.Thread(target=_loop, name=f"transfer-progress-{job_id}", daemon=True)
-    thread.start()
-    return stop, thread
-
-
+    return _transfer_progress._start_transfer_progress_thread(job_id, state, done_field=done_field, total_field=total_field, status_field=status_field, interval=interval)
 def windows_worker_get_json_streamed(path: str, *, state: dict[str, int], timeout_seconds: float) -> dict[str, Any]:
-    """GET a JSON body from the worker while tracking received bytes in `state`
-    (state['done']/state['total']) so download progress can be surfaced live."""
-    base_url = windows_worker_base_url()
-    if not base_url:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
-    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
-    buffer = io.BytesIO()
-    try:
-        with requests.get(
-            url,
-            headers=windows_worker_headers(),
-            timeout=timeout_seconds,
-            stream=True,
-        ) as response:
-            if response.status_code >= 400:
-                raise RuntimeError(f"Windows worker returned HTTP {response.status_code}")
-            try:
-                state["total"] = int(response.headers.get("Content-Length") or 0)
-            except (TypeError, ValueError):
-                state["total"] = 0
-            for chunk in response.iter_content(chunk_size=262144):
-                if chunk:
-                    buffer.write(chunk)
-                    state["done"] = buffer.tell()
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
-    try:
-        return json.loads(buffer.getvalue().decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as exc:
-        raise RuntimeError(f"Windows worker returned non-JSON artifacts: {exc}") from exc
-
-
+    return _worker_transfers.windows_worker_get_json_streamed(path, state=state, timeout_seconds=timeout_seconds)
 def refresh_worker_training_task(task: dict[str, Any], *, include_artifacts: bool = False) -> dict[str, Any]:
     public = public_training_task(task)
     public["executor_retired"] = True
