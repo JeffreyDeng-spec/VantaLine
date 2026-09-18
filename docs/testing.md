@@ -1,5 +1,19 @@
 # Testing
 
+`python scripts/smoke_training_preview_renderer.py` runs 17 synthetic groups.
+Twelve business groups passed on the actual original renderer on Windows and Linux before migration;
+15 expanded groups also pass on originals. Original pixel, complete metadata, callback sequence
+and RNG fingerprints remain fixed in `tests/backend_contract/training_preview_renderer.json`.
+Cases cover documents, sprites, rematching, placeholders, masks, occlusion, threshold short-circuiting,
+partial output and first-error propagation. Six callback getters preserve ten argument-effect
+capture windows and refresh at each call; two Name-only calls share those typed field interfaces.
+Independent renderers and new getter failures are checked separately. No real model or PLC calls.
+The imported OpenCV 4.10.0 runtime uses its separate original-implementation golden file.
+The production lock includes overlapping OpenCV distributions; 4.10 yields 0.6752 instead
+of 0.6751 for the first placeholder label occlusion. All other metadata, pixels, calls
+and RNG fingerprints match. The original 4.13/5 baseline stays unchanged; no tolerance
+or output-based fallback is used, and production dependencies are not changed.
+
 `python scripts/smoke_training_preview_layout.py` runs 22 offline contract groups.
 Seventeen passed on the actual original twelve functions on Windows and Linux before migration;
 20 expanded business groups also pass on saved originals. Contracts retain ROI capture, lazy
