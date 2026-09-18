@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Transfer progress retains the same task-update callback, shared state and periodic write order.
+It adds no connection, transaction, schema, advisory-lock or request-identity behavior. Exceptions
+from progress conversion/update remain swallowed; event waiting is outside that catch boundary.
+
 Remote training extraction retains the existing task-update callback and its initial/final write
 order. It adds no repository, schema, connection or advisory-lock change; archive cleanup remains
 separate from database task persistence.
@@ -90,7 +94,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v38 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v39 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
