@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_runpod_transfer.py` runs 23 synthetic groups.
+Seventeen original HTTP/business groups passed before migration on Windows and Linux;
+21 expanded groups also pass against saved original function bodies. Contracts preserve
+token/expiry checks, path validation, streamed size limits, hashing, atomic replacement,
+partial files, exception causes and cleanup behavior without retries. Resolver/update getters
+capture callbacks before argument effects. Independent applications use synthetic streaming
+and isolated storage; no real RunPod request, training process or PLC is involved.
+
 `python scripts/smoke_training_launch_workflows.py` runs 18 synthetic groups.
 Fourteen original HTTP/business groups passed before migration on Windows and Linux;
 16 expanded groups also pass against saved original function bodies. Contracts preserve

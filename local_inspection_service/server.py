@@ -23753,95 +23753,19 @@ _training_status_query = TrainingStatusQuery(
 request_training = _training_launch_api.register_start(app, _training_launch_submission)
 
 
-@app.get("/api/training/runpod/datasets/{job_id}/{token}/dataset.zip")
-def download_runpod_training_dataset(job_id: str, token: str) -> FileResponse:
-    clean_job_id = str(job_id or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_.@-]{1,160}", clean_job_id):
-        raise HTTPException(status_code=404, detail="Training dataset not found")
-    task = find_training_task(clean_job_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Training dataset not found")
-    expected_hash = str(task.get("runpod_dataset_token_sha256") or "").strip()
-    if not expected_hash or not hmac.compare_digest(expected_hash, runpod_dataset_token_hash(token)):
-        raise HTTPException(status_code=404, detail="Training dataset not found")
-    expires_at = int(task.get("runpod_dataset_token_expires_at") or 0)
-    if expires_at and expires_at < int(time.time()):
-        raise HTTPException(status_code=410, detail="Training dataset URL expired")
-    archive_path = resolve_service_path(task.get("runpod_dataset_archive_path") or "")
-    try:
-        archive_path.relative_to(OUTPUT_DIR.resolve())
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Training dataset not found") from exc
-    if not archive_path.exists() or not archive_path.is_file():
-        raise HTTPException(status_code=404, detail="Training dataset not found")
-    download_name = re.sub(r"[^A-Za-z0-9_.@-]+", "_", clean_job_id).strip("._") or "training"
-    return FileResponse(
-        archive_path,
-        media_type="application/zip",
-        filename=f"{download_name}_dataset.zip",
-        headers={"Cache-Control": "no-store"},
-    )
+from .training.runpod_transfer import RunPodTrainingTransfer, TransferPaths
+from .training.runpod_upload_store import RunPodUploadStore
+from .training import runpod_transfer_api as _training_transfer_api
 
-
-@app.put("/api/training/runpod/artifacts/{job_id}/{token}/run.zip")
-async def upload_runpod_training_artifact(job_id: str, token: str, request: Request) -> dict[str, Any]:
-    clean_job_id = str(job_id or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_.@-]{1,160}", clean_job_id):
-        raise HTTPException(status_code=404, detail="Training artifact upload not found")
-    task = find_training_task(clean_job_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Training artifact upload not found")
-    expected_hash = str(task.get("runpod_artifact_token_sha256") or "").strip()
-    if not expected_hash or not hmac.compare_digest(expected_hash, runpod_dataset_token_hash(token)):
-        raise HTTPException(status_code=404, detail="Training artifact upload not found")
-    expires_at = int(task.get("runpod_artifact_token_expires_at") or 0)
-    if expires_at and expires_at < int(time.time()):
-        raise HTTPException(status_code=410, detail="Training artifact upload URL expired")
-    target_raw = str(task.get("runpod_artifact_upload_path") or "").strip()
-    if not target_raw:
-        raise HTTPException(status_code=404, detail="Training artifact upload not found")
-    target_path = Path(target_raw).expanduser()
-    if not target_path.is_absolute():
-        target_path = resolve_service_path(target_raw, for_write=True)
-    target_path = target_path.resolve()
-    try:
-        target_path.relative_to(OUTPUT_DIR.resolve())
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Training artifact upload not found") from exc
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = target_path.with_suffix(target_path.suffix + ".uploading")
-    max_bytes = runpod_yolo_artifact_max_bytes()
-    digest = hashlib.sha256()
-    total = 0
-    try:
-        with tmp_path.open("wb") as handle:
-            async for chunk in request.stream():
-                if not chunk:
-                    continue
-                total += len(chunk)
-                if total > max_bytes:
-                    raise HTTPException(status_code=413, detail="Training artifact upload is too large")
-                digest.update(chunk)
-                handle.write(chunk)
-        if total <= 0:
-            raise HTTPException(status_code=400, detail="Training artifact upload is empty")
-        tmp_path.replace(target_path)
-    except Exception:
-        try:
-            tmp_path.unlink()
-        except OSError:
-            pass
-        raise
-    sha = digest.hexdigest()
-    update_training_task(
-        clean_job_id,
-        runpod_artifact_archive_path=str(target_path),
-        runpod_artifact_archive_sha256=sha,
-        runpod_artifact_archive_size=total,
-        runpod_artifact_uploaded_at=int(time.time()),
-        note="RunPod 训练产物已上传，等待平台导入模型。",
-    )
-    return {"ok": True, "sha256": sha, "size": total}
+_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes())
+_training_transfer = RunPodTrainingTransfer(
+    lambda job: find_training_task(job), lambda token: runpod_dataset_token_hash(token), lambda: time.time(),
+    TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR),
+    _training_upload_store, lambda: update_training_task,
+)
+_training_transfer_routes = _training_transfer_api.register(app, _training_transfer)
+download_runpod_training_dataset = _training_transfer_routes.download_runpod_training_dataset
+upload_runpod_training_artifact = _training_transfer_routes.upload_runpod_training_artifact
 
 
 request_sample_generation = _training_launch_api.register_generate(app, _training_launch_submission)
