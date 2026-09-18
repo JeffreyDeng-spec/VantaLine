@@ -19019,101 +19019,43 @@ def list_codex_image_jobs(user: dict[str, Any] | None = None, target_user_id: st
     return jobs
 
 
+from .training.task_identity import training_task_identity_values, training_task_matches_identifier, training_task_sort_key
+from .training.record_store import TrainingRecordStore, TrainingRows
+
+_training_records = TrainingRecordStore(
+    repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR,
+    guard=lambda: _training_task_lock, resolver=lambda: resolve_model_profiles,
+    invalidate=lambda key: store_read_cache_invalidate(key),
+    rows=TrainingRows(encode=lambda: training_task_row,
+                      decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
+    enrich=lambda *args: enrich_record_audit_fields(*args),
+)
+
+
 def training_task_path(task_id: str) -> Path:
-    safe_task_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(task_id)).strip("._") or "training_task"
-    return TRAINING_TASKS_DIR / f"{safe_task_id}.json"
+    return _training_records.training_task_path(task_id)
 
 
-def training_task_identity_values(task: dict[str, Any], row: dict[str, Any] | None = None) -> set[str]:
-    values: set[str] = set()
-    if row:
-        for key in ("id", "job_id"):
-            value = str(row.get(key) or "").strip()
-            if value:
-                values.add(value)
-    for key in ("id", "job_id", "task_id", "remote_training_job_id"):
-        value = str(task.get(key) or "").strip()
-        if value:
-            values.add(value)
-    return values
 
 
-def training_task_matches_identifier(
-    task: dict[str, Any],
-    requested: str,
-    row: dict[str, Any] | None = None,
-) -> bool:
-    clean_requested = str(requested or "").strip()
-    return bool(clean_requested and clean_requested in training_task_identity_values(task, row))
 
 
-def training_task_sort_key(task: dict[str, Any]) -> tuple[float, str]:
-    updated_at = task.get("updated_at") or task.get("created_at") or task.get("completed_at") or task.get("started_at") or 0
-    try:
-        timestamp = float(updated_at)
-    except (TypeError, ValueError):
-        timestamp = 0.0
-    return timestamp, str(task.get("job_id") or task.get("task_id") or task.get("id") or "")
 
 
 def load_training_task_records() -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        tasks = row_raw_json_list(repository.fetch_all("training_tasks"))
-        tasks.sort(key=training_task_sort_key, reverse=True)
-        return [enrich_record_audit_fields(task) for task in tasks]
-    records: list[dict[str, Any]] = []
-    for path in sorted(TRAINING_TASKS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
-        task = load_training_task(path)
-        if task:
-            records.append(enrich_record_audit_fields(task, path))
-    return records
+    return _training_records.load_training_task_records()
 
 
 def save_training_task(task: dict[str, Any]) -> None:
-    freeze_model_record(resolve_model_profiles, task)
-    store_read_cache_invalidate("training_task_pairs")
-    with _training_task_lock:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            row = training_task_row(task, fallback_id=str(task.get("job_id") or task.get("task_id") or task.get("id") or ""))
-            if row:
-                repository.upsert_row("training_tasks", row)
-            return
-        training_task_path(str(task["job_id"])).write_text(json.dumps(task, indent=2), encoding="utf-8")
+    return _training_records.save_training_task(task)
 
 
 def load_training_task(path: Path) -> dict[str, Any] | None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        requested = file_stem_identifier(path)
-        for row in repository.fetch_all("training_tasks"):
-            raw_tasks = row_raw_json_list([row])
-            task = raw_tasks[0] if raw_tasks else {}
-            if task and training_task_matches_identifier(task, requested, row):
-                return task
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    return _training_records.load_training_task(path)
 
 
 def find_training_task(job_id: str) -> dict[str, Any] | None:
-    requested = str(job_id or "").strip()
-    if not requested:
-        return None
-    direct = load_training_task(training_task_path(requested))
-    if direct and (
-        str(direct.get("job_id") or "") == requested
-        or str(direct.get("task_id") or "") == requested
-        or str(direct.get("remote_training_job_id") or "") == requested
-    ):
-        return direct
-    for task in load_training_task_records():
-        if training_task_matches_identifier(task, requested):
-            return task
-    return None
+    return _training_records.find_training_task(job_id)
 
 
 def training_task_uses_worker(task: dict[str, Any]) -> bool:

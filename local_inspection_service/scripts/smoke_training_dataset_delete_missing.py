@@ -100,6 +100,8 @@ def dataset_by_id(payload: dict[str, object], dataset_id: str) -> dict[str, obje
 
 
 def main() -> None:
+    from local_inspection_service.scripts.model_profiles_fixture import install
+    install(server)
     client = TestClient(server.app, base_url="https://testserver")
     admin = bootstrap_admin(client)
 
