@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_detection_upload.py` runs 24 offline groups. The 17 original
+business groups and 21 expanded original-body groups passed on Windows/Linux before migration.
+Contracts retain uploaded-file evidence, image decode errors, video sampling/limits, per-frame
+callback refresh, AI projection aliases and model-snapshot restoration. First-error recovery
+matrices prohibit retries at file, callback and dependency boundaries. The actual HTTP routes and
+PLC guard follow the moved implementation; structural mutations must be explicitly rejected.
+Synthetic images/videos and providers avoid paid inference, cameras and physical PLC activity.
+
 `python scripts/smoke_profile_cache.py` runs 30 synthetic groups. Twenty-one original
 business groups and 26 expanded original-body groups pass on Windows/Linux. Contracts
 retain canonical keys, exact prompts, reference order, expiry margins, write permissions,

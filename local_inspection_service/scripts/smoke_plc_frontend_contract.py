@@ -67,6 +67,51 @@ def require_detection_analysis_boundary(server: str, implementations: dict[str, 
         raise AssertionError("Ordinary analysis must delegate through the pinned AI entry")
 
 
+def require_detection_upload_boundary(server: str, implementations: dict[str, str]) -> None:
+    """Follow ordinary upload adapters and their composition to actual no-PLC bodies."""
+    tree = ast.parse(server)
+    contract = (
+        ('analyze_image', '_image_upload', 'ImageUpload', 'image_upload.py', 'detection.image_upload',
+         ["app.post('/api/analyze/image')"]),
+        ('analyze_video', '_video_upload', 'VideoUpload', 'video_upload.py', 'detection.video_upload',
+         ["app.post('/api/analyze/video')", 'pinned_model_profiles(resolve_model_profiles)']),
+    )
+    for name, receiver, cls, filename, module, decorators in contract:
+        roots = [n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == name]
+        expected = ast.parse('async def entry():\n    return await '+receiver+'.'+name+'(file, model_id)').body[0]
+        if len(roots) != 1 or ast.dump(ast.Module(body=roots[0].body, type_ignores=[])) != ast.dump(ast.Module(body=expected.body, type_ignores=[])):
+            raise AssertionError('Upload root must forward to the inspected implementation: '+name)
+        if [ast.dump(d) for d in roots[0].decorator_list] != [ast.dump(ast.parse(d, mode='eval').body) for d in decorators]:
+            raise AssertionError('Upload HTTP/snapshot decorators changed: '+name)
+        bindings = [n for n in tree.body if isinstance(n, (ast.Assign, ast.AnnAssign))
+                    and any(isinstance(t, ast.Name) and t.id == receiver for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))]
+        if len(bindings) != 1 or not isinstance(bindings[0].value, ast.Call) or not isinstance(bindings[0].value.func, ast.Name) or bindings[0].value.func.id != cls:
+            raise AssertionError('Upload adapter must construct the inspected class: '+receiver)
+        imports = [(n,a) for n in tree.body if isinstance(n,(ast.Import,ast.ImportFrom)) for a in n.names if (a.asname or a.name.split('.')[0]) == cls]
+        shadowed = any((isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name == cls)
+            or (isinstance(n,(ast.Assign,ast.AnnAssign,ast.AugAssign)) and any(isinstance(t,ast.Name) and t.id == cls for t in (n.targets if isinstance(n,ast.Assign) else [n.target]))) for n in tree.body)
+        if len(imports) != 1 or shadowed or not isinstance(imports[0][0],ast.ImportFrom) or imports[0][0].level != 1 or imports[0][0].module != module or imports[0][1].name != cls:
+            raise AssertionError('Upload class must come from the inspected module: '+cls)
+        classes = [n for n in ast.parse(implementations[filename]).body if isinstance(n,ast.ClassDef) and n.name == cls]
+        methods = [n for c in classes for n in c.body if isinstance(n,ast.AsyncFunctionDef) and n.name == name]
+        if len(classes) != 1 or len(methods) != 1:
+            raise AssertionError('Upload PLC guard must inspect the actual method: '+name)
+        index = 4 if name == 'analyze_image' else 5
+        if len(bindings[0].value.args) <= index:raise AssertionError('Upload analysis dependency missing')
+        analyze = bindings[0].value.args[index]
+        if not isinstance(analyze,ast.Lambda) or not isinstance(analyze.body,ast.Call) or not isinstance(analyze.body.func,ast.Name) or analyze.body.func.id != 'analyze_bgr':
+            raise AssertionError('Ordinary uploads must delegate to the guarded analysis entry')
+    # Include helpers and injected callables, not only an empty HTTP adapter.
+    selected = {'_upload_access','_upload_paths','_image_upload','_video_upload','_video_summary'}
+    wiring = [ast.unparse(n) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id in selected for t in n.targets)]
+    for source in [*implementations.values(),*wiring]:
+        if 'plc_sync' in source or 'dispatch_plc_for_detection' in source or 'plc_web_serial' in source:
+            raise AssertionError('Ordinary image/video implementations must not generate PLC plans')
+    ordered = [n.name for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in ('analyze_image','analyze_camera_image','analyze_video','update_stream')]
+    if ordered != ['analyze_image','analyze_camera_image','analyze_video','update_stream']:
+        raise AssertionError('Upload/camera route declaration order changed')
+
+
 def main() -> None:
     rules = (FRONTEND / "features" / "rules" / "RulesPage.tsx").read_text(encoding="utf-8")
     rules += (FRONTEND / "features" / "rules" / "DeviceSettings.tsx").read_text(encoding="utf-8")
@@ -142,13 +187,16 @@ def main() -> None:
         name: (ROOT / "local_inspection_service" / "detection" / name).read_text(encoding="utf-8")
         for name in ("analysis.py", "ai_analysis.py")
     })
+    upload_implementations = {name: (ROOT / "local_inspection_service" / "detection" / name).read_text(encoding="utf-8")
+                             for name in ("image_upload.py", "video_upload.py", "video_results.py", "upload_ports.py")}
+    require_detection_upload_boundary(server, upload_implementations)
     if server.count("await dispatch_plc_for_detection_async(") != 0:
         raise AssertionError("server-side pyserial dispatch must have zero call sites")
-    if "plc_sync" in server[server.index('@app.post("/api/analyze/image")'):server.index('@app.post("/api/analyze/camera")')]:
+    if "plc_sync" in (server[server.index('@app.post("/api/analyze/image")'):server.index('@app.post("/api/analyze/camera")')] + upload_implementations["image_upload.py"]):
         raise AssertionError("ordinary image endpoint must not generate PLC plans")
     video_start = server.index('@app.post("/api/analyze/video")')
     video_end = server.index('@app.post("/api/stream/config")', video_start)
-    if "dispatch_plc_for_detection" in server[video_start:video_end]:
+    if "dispatch_plc_for_detection" in (server[video_start:video_end] + upload_implementations["video_upload.py"]):
         raise AssertionError("video endpoint must not generate PLC plans")
     require(
         web_serial,

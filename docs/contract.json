@@ -44,7 +44,7 @@
     },
     {
       "name": "Detection result policies",
-      "paths": ["local_inspection_service/detection/**", "scripts/smoke_detection_results.py", "scripts/smoke_presence_contracts.py", "scripts/smoke_detection_failures.py", "scripts/smoke_presence_results.py", "scripts/smoke_detection_annotation.py", "scripts/smoke_detection_analysis.py", "scripts/smoke_ai_detection_analysis.py", "scripts/smoke_presence_inspection.py", "scripts/smoke_profile_cache.py", "scripts/smoke_detection_ocr.py", "scripts/smoke_detection_task_store.py", "scripts/smoke_detection_task_catalog.py", "scripts/smoke_local_model_runtime.py", "scripts/smoke_yolo_warmup.py", "local_inspection_service/runtime/yolo_warmup.py", "local_inspection_service/runtime/paddle.py"],
+      "paths": ["local_inspection_service/detection/**", "scripts/smoke_detection_results.py", "scripts/smoke_presence_contracts.py", "scripts/smoke_detection_failures.py", "scripts/smoke_presence_results.py", "scripts/smoke_detection_annotation.py", "scripts/smoke_detection_analysis.py", "scripts/smoke_ai_detection_analysis.py", "scripts/smoke_presence_inspection.py", "scripts/smoke_profile_cache.py", "scripts/smoke_detection_upload.py", "scripts/smoke_detection_ocr.py", "scripts/smoke_detection_task_store.py", "scripts/smoke_detection_task_catalog.py", "scripts/smoke_local_model_runtime.py", "scripts/smoke_yolo_warmup.py", "local_inspection_service/runtime/yolo_warmup.py", "local_inspection_service/runtime/paddle.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {

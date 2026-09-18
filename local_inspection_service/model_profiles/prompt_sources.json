@@ -1,7 +1,11 @@
 {
-  "version": 52,
+  "version": 53,
   "sources": [
     "server.py",
+    "detection/upload_ports.py",
+    "detection/image_upload.py",
+    "detection/video_results.py",
+    "detection/video_upload.py",
     "detection/profile_cache_policy.py",
     "detection/profile_cache_store.py",
     "detection/profile_cache.py",
