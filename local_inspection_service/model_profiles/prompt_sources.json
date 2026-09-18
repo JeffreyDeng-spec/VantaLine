@@ -1,7 +1,11 @@
 {
-  "version": 19,
+  "version": 20,
   "sources": [
     "server.py",
+    "training/user_state.py",
+    "training/task_models.py",
+    "pipeline/training_sync.py",
+    "detection/training_candidate_sync.py",
     "training/executor_settings.py",
     "training/runpod_client.py",
     "runtime/training_tasks.py",
