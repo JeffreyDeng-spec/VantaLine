@@ -34252,282 +34252,82 @@ register_label_inspection(
 )
 
 
-@app.post("/api/text-inspection/label/compare")
-async def compare_text_inspection_label(
-    captured_file: UploadFile | None = File(None),
-    standard_asset_id: str = Form(...),
-    comparison_id: str = Form(...),
-    extraction_id: str = Form(""),
-) -> dict[str, Any]:
-    request_received_at_ms = int(time.time() * 1000)
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, owner_username = _text_v2_owner()
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{8,128}", comparison_id):
-        raise HTTPException(status_code=400, detail="comparison_id 格式错误")
-    asset = _text_v2_owned("assets", standard_asset_id, owner_user_id)
-    standard = _text_v2_owned("standards", str(asset.get("standard_id") if asset else ""), owner_user_id)
-    confirmed_snapshot = next((item for item in standard.get("confirmed_assets", []) if str(item.get("id")) == standard_asset_id), None) if standard else None
-    if not asset or not standard or standard.get("status") != "confirmed" or not confirmed_snapshot:
-        raise HTTPException(status_code=404, detail="已确认标准标签不存在")
-    extraction = None
-    if bool(captured_file) == bool(extraction_id):
-        raise HTTPException(status_code=400, detail="请提供已确认提取或实物图片中的一种")
-    if extraction_id:
-        captured_upload, extraction = resolve_label_extraction(extraction_id, owner_user_id, standard_asset_id, standard)
-    else:
-        captured_upload = await captured_file.read(10 * 1024 * 1024 + 1)
-    if confirmed_snapshot.get("preparation"):
-        from local_inspection_service.standard_preparation_compare import submit
-        from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
-        return submit(
-            ComparisonRecords(_text_v2_load, _text_v2_save, _text_v2_owned, _text_v2_update_attempt, _text_v2_public),
-            ComparisonMedia(_text_v2_media_path, _text_v2_write, sha256_bytes),
-            ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
-            clear_thread_runtime_repository_selection,
-            lambda name, default, environment=os: environment.getenv(name, default),
-            standard_preparation_jobs, owner_user_id, owner_username,
-            standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
-    from local_inspection_service.qwen_evidence_jobs import enabled as qwen_evidence_enabled
-    if qwen_evidence_enabled(owner_user_id):
-        raise HTTPException(status_code=409, detail="该标准尚未生成元素模板，请先在标准库启用并完成标准准备；无需提取实拍标签。")
-    captured_upload_sha256 = sha256_bytes(captured_upload)
-    captured, captured_mime, source_suffix, captured_source_format = _text_v2_prepare_image(captured_upload, max_bytes=100 * 1024 * 1024 if extraction else 10 * 1024 * 1024)
-    asset = {**asset, "sha256": str(confirmed_snapshot.get("sha256") or "")}
-    reference_original = _text_v2_asset_bytes(asset, owner_user_id)
-    reference, reference_mime, _, reference_source_format = _text_v2_prepare_image(reference_original)
-    settings = ai_detection_settings("document")
-    provider_settings = {
-        **settings,
-        "timeout_seconds": max(
-            TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
-            float(settings.get("timeout_seconds") or 0),
-        ),
-    }
-    provider_reference, provider_reference_mime, provider_reference_format = _text_v2_prepare_provider_image(reference, reference_mime)
-    provider_captured, provider_captured_mime, provider_captured_format = _text_v2_prepare_provider_image(captured, captured_mime)
-    fingerprint_payload = {
-        "reference_sha256": sha256_bytes(reference_original), "reference_bytes": len(reference_original),
-        "prepared_reference_sha256": sha256_bytes(reference), "prepared_reference_bytes": len(reference),
-        "captured_upload_sha256": captured_upload_sha256, "captured_upload_bytes": len(captured_upload),
-        "captured_sha256": sha256_bytes(captured), "captured_bytes": len(captured),
-        "standard_asset_id": standard_asset_id, "provider": settings.get("provider"),
-        "standard_revision_id": standard.get("current_revision_id", ""),
-        "standard_revision_number": int(standard.get("revision_number") or 0),
-        "model": settings.get("model"), "prompt_version": TEXT_INSPECTION_PROMPT_VERSION,
-        "schema_version": "text-compare-result-v1",
-    }
-    if extraction_id:
-        fingerprint_payload["extraction_id"] = extraction_id
-    fingerprint = sha256_bytes(json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode())
-    existing = next((item for item in _text_v2_load("records") if item.get("owner_user_id") == owner_user_id and item.get("comparison_id") == comparison_id), None)
-    if existing:
-        if existing.get("fingerprint") != fingerprint:
-            raise HTTPException(status_code=409, detail="comparison_id 已用于其他图片")
-        if existing.get("status") == "attempting":
-            return {**_text_v2_public(existing), "decision": "REVIEW_REQUIRED", "message": "上次模型请求结果不确定，为避免重复计费未自动重试。"}
-        return _text_v2_public(existing)
-    now = int(time.time())
-    diagnostics: dict[str, Any] = {
-        "schema_version": "text-inspection-diagnostics-v1",
-        "request_received_at_ms": request_received_at_ms,
-        "request": {
-            "comparison_id": comparison_id,
-            "standard_id": standard["id"],
-            "standard_asset_id": standard_asset_id,
-            "standard_revision_id": standard.get("current_revision_id", ""),
-            "standard_revision_number": int(standard.get("revision_number") or 0),
-            "uploaded_actual": {
-                "bytes": len(captured_upload),
-                "sha256": captured_upload_sha256,
-                "filename_suffix": Path(str(captured_file.filename or "")).suffix.lower()[:20] if captured_file else ".png",
-                "declared_content_type": str(captured_file.content_type or "")[:120] if captured_file else "image/png",
-            },
-            "prepared_actual": _text_v2_image_diagnostics(
-                captured, source_format=captured_source_format, mime_type=captured_mime,
-            ),
-            "prepared_reference": _text_v2_image_diagnostics(
-                reference, source_format=reference_source_format, mime_type=reference_mime,
-            ),
-            "provider_actual": _text_v2_image_diagnostics(
-                provider_captured, source_format=provider_captured_format, mime_type=provider_captured_mime,
-            ),
-            "provider_reference": _text_v2_image_diagnostics(
-                provider_reference, source_format=provider_reference_format, mime_type=provider_reference_mime,
-            ),
-        },
-        "provider_config": {
-            "provider": settings.get("provider") or "",
-            "model": settings.get("model") or "",
-            "endpoint_host": urlsplit(str(settings.get("base_url") or "")).hostname or "",
-            "timeout_seconds": provider_settings.get("timeout_seconds"),
-            "configured": bool(settings.get("configured")),
-            "api_key_present": bool(settings.get("api_key_present")),
-            "key_source_name": settings.get("key_source_name") or "",
-            "max_attempts": 1,
-            "max_tokens": 1800,
-            "external_vlm_enabled": TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-            "automatic_match_verified": TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED,
-        },
-        "events": [],
-    }
-    _text_v2_diagnostic_event(diagnostics, "input_prepared", "ok")
-    if extraction:
-        diagnostics["extraction"] = extraction
-    record = {"id": "ins_" + uuid.uuid4().hex, "owner_user_id": owner_user_id, "owner_username": owner_username, "standard_id": standard["id"], "standard_asset_id": standard_asset_id, "standard_revision_id": standard.get("current_revision_id", ""), "standard_revision_number": int(standard.get("revision_number") or 0), "reference_sha256": fingerprint_payload["reference_sha256"], "reference_source_format": reference_source_format, "comparison_id": comparison_id, "fingerprint": fingerprint, "fingerprint_components": fingerprint_payload, "status": "attempting", "attempt_id": "attempt_" + uuid.uuid4().hex, "attempt_started_at": now, "auto_decision": "REVIEW_REQUIRED", "final_decision": "", "source_upload_sha256": captured_upload_sha256, "source_sha256": sha256_bytes(captured), "source_format": captured_source_format, "created_at": now, "updated_at": now, "prompt_version": TEXT_INSPECTION_PROMPT_VERSION, "result_schema_version": "text-compare-result-v1", "planned_provider": settings.get("provider"), "planned_model": settings.get("model"), "differences": [], "diagnostics": diagnostics}
-    record["history_display"] = comparison_display_snapshot(standard, asset)
-    source_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-source{source_suffix}")
-    _text_v2_write(source_path, captured)
-    record["source_path"] = str(source_path)
-    if not _text_v2_save("records", record, insert_only=True):
-        winner = next((item for item in _text_v2_load("records") if item.get("owner_user_id") == owner_user_id and item.get("comparison_id") == comparison_id), None)
-        if winner and winner.get("fingerprint") == fingerprint:
-            return _text_v2_public(winner)
-        raise HTTPException(status_code=409, detail="comparison_id 已用于其他输入")
-    if not TEXT_INSPECTION_EXTERNAL_VLM_ENABLED:
-        _text_v2_diagnostic_event(diagnostics, "external_media_gate", "blocked")
-        record.update({"status": "review_required", "decision": "REVIEW_REQUIRED", "message": "外部图片比对尚未完成客户授权和生产启用，请人工复核。", "attempt_finished_at": int(time.time()), "external_media_sent": False, "external_media_send_status": "not_sent"})
-        _text_v2_save("records", record)
-        _text_v2_write_server_diagnostic(record)
-        return _text_v2_public(record)
-    user_content = [
-        {"type": "text", "text": "STANDARD_LABEL"},
-        {"type": "image_url", "image_url": {"url": _text_v2_data_url(provider_reference, provider_reference_mime), "detail": "high"}},
-        {"type": "text", "text": "CAPTURED_LABEL"},
-        {"type": "image_url", "image_url": {"url": _text_v2_data_url(provider_captured, provider_captured_mime), "detail": "high"}},
-    ]
-    failure_stage = "provider_call"
-    try:
-        record["external_media_send_status"] = "attempting"
-        record["external_media_sent"] = None
-        _text_v2_diagnostic_event(diagnostics, "provider_call", "started")
-        _text_v2_save("records", record)
-        provider = call_ai_mcp_tool("provider.gemini.generate_json", {"provider_config": provider_settings, "system_prompt": strict_compare_prompt(), "user_content": user_content, "max_tokens": 1800, "max_attempts": 1})
-        diagnostics["provider_result"] = _text_v2_provider_diagnostics(provider, provider_settings)
-        _text_v2_diagnostic_event(
-            diagnostics,
-            "provider_call",
-            "ok" if provider.get("ok") else "failed",
-            details={
-                "latency_ms": provider.get("latency_ms"),
-                "timed_out": provider.get("timed_out"),
-                "http_status": provider.get("http_status"),
-                "error_type": provider.get("error_type"),
-            },
-        )
-        record["external_media_sent"] = True
-        record["external_media_send_status"] = "sent"
-        if not provider.get("ok"):
-            failure_stage = "provider_result"
-            raise ValueError(str(provider.get("error") or "模型服务异常"))
-        failure_stage = "response_validation"
-        normalized_response = normalize_vlm_provider_result(
-            provider.get("parsed"),
-            str(provider.get("provider") or provider_settings.get("provider") or ""),
-        )
-        diagnostics["normalized_response"] = _text_v2_diagnostic_value(normalized_response)
-        checked = validate_vlm_result(normalized_response)
-        _text_v2_diagnostic_event(diagnostics, "response_validation", "ok", details={"decision": checked.get("decision")})
-        if checked["decision"] == "MATCH" and not TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED:
-            checked = {"decision": "REVIEW_REQUIRED", "differences": [], "message": "模型未发现差异，但自动通过尚未完成现场验收，请人工确认。"}
-            _text_v2_diagnostic_event(diagnostics, "automatic_match_gate", "blocked")
-        record.update(checked)
-        record["auto_decision"] = checked["decision"]
-        record["status"] = "completed" if checked["decision"] != "REVIEW_REQUIRED" else "review_required"
-        record["provider"] = provider.get("provider") or settings.get("provider")
-        record["model"] = provider.get("model") or settings.get("model")
-        record["latency_ms"] = provider.get("latency_ms")
-        failure_stage = "annotation"
-        annotated = _text_v2_annotate(captured, checked["differences"])
-        annotated_path = _text_v2_media_path(owner_user_id, standard["id"], f"{record['id']}-annotated.jpg")
-        _text_v2_write(annotated_path, annotated)
-        record["annotated_path"] = str(annotated_path)
-        record["annotated_sha256"] = sha256_bytes(annotated)
-        record["annotated_image_data_url"] = f"/api/text-inspection/inspections/{record['id']}/evidence/annotated"
-        _text_v2_diagnostic_event(diagnostics, "annotation", "ok", details={"bytes": len(annotated), "sha256": record["annotated_sha256"]})
-        _text_v2_diagnostic_event(diagnostics, "completed", "ok", details={"decision": record.get("decision")})
-    except Exception as exc:
-        provider_error_type = (
-            str(provider.get("error_type") or "")
-            if failure_stage == "provider_result" and isinstance(provider, dict)
-            else ""
-        )
-        error_type = provider_error_type or type(exc).__name__
-        diagnostics["failure"] = {
-            "stage": failure_stage,
-            "error_type": error_type,
-            "message": str(exc)[:1000],
-        }
-        _text_v2_diagnostic_event(
-            diagnostics,
-            failure_stage,
-            "failed",
-            details={"error_type": error_type, "message": str(exc)},
-        )
-        record.update({"decision": "REVIEW_REQUIRED", "auto_decision": "REVIEW_REQUIRED", "status": "uncertain", "message": "模型请求结果不确定；为避免重复计费不会自动重试，请人工复核。", "error_code": error_type, "differences": [], "charge_status": "uncertain", "external_media_send_status": "uncertain", "external_media_sent": None})
-    record["attempt_finished_at"] = int(time.time())
-    record["updated_at"] = int(time.time())
-    _text_v2_save("records", record)
-    _text_v2_write_server_diagnostic(record)
-    return _text_v2_public(record)
+from .text_inspection.inspection_api import register as register_text_inspections
+from .text_inspection.comparison_submission import ComparisonSubmission
+from .text_inspection.inspection_reviews import InspectionReviews
+from .text_inspection.inspection_ports import (
+    InspectionAccess, InspectionRecords, SubmissionPolicy, SubmissionImages,
+    SubmissionModels, SubmissionDiagnostics, SubmissionMedia,
+)
+from . import qwen_evidence_jobs as _qwen_evidence_policy
 
 
-@app.get("/api/text-inspection/inspections/{inspection_id}/evidence/{kind}")
-def get_text_inspection_v2_evidence(inspection_id: str, kind: str) -> Response:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, _ = _text_v2_owner()
-    record = _text_v2_owned("records", inspection_id, owner_user_id)
-    if not record or kind not in {"source", "annotated"}:
-        raise HTTPException(status_code=404, detail="检验证据不存在")
-    expected = str(record.get("source_sha256") or "") if kind == "source" else str(record.get("annotated_sha256") or "")
-    contents = _text_v2_read_verified(str(record.get(f"{kind}_path") or ""), owner_user_id, str(record.get("standard_id") or ""), expected_sha256=expected, max_bytes=20 * 1024 * 1024)
-    mime = "image/png" if contents.startswith(b"\x89PNG") else "image/jpeg"
-    return Response(content=contents, media_type=mime, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction):
+    from local_inspection_service.standard_preparation_compare import submit
+    from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
+    return submit(
+        ComparisonRecords(_text_v2_load, _text_v2_save, _text_v2_owned, _text_v2_update_attempt, _text_v2_public),
+        ComparisonMedia(_text_v2_media_path, _text_v2_write, sha256_bytes),
+        ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
+        clear_thread_runtime_repository_selection,
+        lambda name, default, environment=os: environment.getenv(name, default),
+        standard_preparation_jobs, owner_user_id, owner_username,
+        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
 
 
-@app.post("/api/text-inspection/manual/sessions")
-async def create_text_manual_session(request: Request) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
-
-
-
-
-@app.post("/api/text-inspection/manual/sessions/{session_id}/pages")
-async def inspect_text_manual_page(
-    session_id: str,
-    captured_file: UploadFile = File(...),
-    capture_id: str = Form(...),
-    standard_asset_id: str = Form(""),
-) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
-
-
-@app.post("/api/text-inspection/manual/sessions/{session_id}/complete")
-def complete_text_manual_session(session_id: str) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    raise HTTPException(410, "旧说明书历史仅供查阅，请新建任务导入 PDF")
-
-
-@app.post("/api/text-inspection/inspections/{inspection_id}/review")
-async def review_text_inspection_v2(inspection_id: str, request: Request) -> dict[str, Any]:
-    require_permission("inspection", detail="没有文字检验权限")
-    owner_user_id, owner_username = _text_v2_owner()
-    record = _text_v2_owned("records", inspection_id, owner_user_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="检验记录不存在")
-    standard = _text_v2_owned("standards", record.get("standard_id", ""), owner_user_id)
-    if record.get("standard_type") == "manual" or (standard and standard.get("standard_type") == "manual"):
-        raise HTTPException(status_code=410, detail="旧说明书历史仅供查阅，请在文字检验重新导入 PDF")
-    body = await request.json()
-    decision = str(body.get("decision") or "") if isinstance(body, dict) else ""
-    reason = bounded_text(body.get("reason") if isinstance(body, dict) else "", 500).strip()
-    if decision not in {"PASS", "FAIL"} or not reason:
-        raise HTTPException(status_code=400, detail="强制放行或判退必须填写原因")
-    record.update({"final_decision": decision, "review_reason": reason, "reviewed_by_user_id": owner_user_id, "reviewed_by_username": owner_username, "reviewed_at": int(time.time()), "updated_at": int(time.time())})
-    _text_v2_save("records", record)
-    append_incoming_text_audit({"id": "audit_" + uuid.uuid4().hex, "event_type": "text_inspection_v2_review", "entity_type": "text_inspection_record", "entity_id": inspection_id, "created_at": int(time.time()), "actor_user_id": owner_user_id, "payload": {"decision": decision, "reason": reason, "training_pool": "pending_review" if decision == "PASS" else ""}})
-    return _text_v2_public(record)
+_inspection_access = InspectionAccess(
+    require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+    owner=lambda: _text_v2_owner(),
+)
+_inspection_records = InspectionRecords(
+    owned=lambda: _text_v2_owned,
+    save=lambda kind, record, **kwargs: _text_v2_save(kind, record, **kwargs),
+    public=lambda record: _text_v2_public(record),
+)
+_comparison_submission = ComparisonSubmission(
+    _inspection_access, _inspection_records, load=lambda kind: _text_v2_load(kind),
+    media=SubmissionMedia(path=lambda: _text_v2_media_path,
+                          write=lambda path, data: _text_v2_write(path, data), digest=lambda: sha256_bytes),
+    images=SubmissionImages(
+        prepare=lambda: _text_v2_prepare_image,
+        provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime),
+        asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
+        annotate=lambda: _text_v2_annotate,
+        data_url=lambda data, mime: _text_v2_data_url(data, mime),
+    ),
+    models=SubmissionModels(settings=lambda purpose: ai_detection_settings(purpose),
+                            call=lambda: call_ai_mcp_tool,
+                            prompt=lambda: strict_compare_prompt(),
+                            normalize=lambda: normalize_vlm_provider_result,
+                            validate=lambda value: validate_vlm_result(value)),
+    policy=SubmissionPolicy(timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
+                            prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION,
+                            external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+                            automatic_match_verified=lambda: TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED,
+                            qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner)),
+    diagnostics=SubmissionDiagnostics(
+        image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs),
+        event=lambda: _text_v2_diagnostic_event,
+        provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
+        value=lambda value: _text_v2_diagnostic_value(value),
+        write=lambda record: _text_v2_write_server_diagnostic(record),
+    ),
+    prepared_submit=lambda *args: _submit_prepared_text_comparison(*args),
+    resolve_extraction=lambda *args: resolve_label_extraction(*args),
+    display_snapshot=lambda standard, asset: comparison_display_snapshot(standard, asset),
+)
+_inspection_reviews = InspectionReviews(
+    _inspection_access, _inspection_records,
+    read_verified=lambda: _text_v2_read_verified,
+    audit=lambda: append_incoming_text_audit, bounded_text=lambda: bounded_text,
+)
+_inspection_routes = register_text_inspections(app, _comparison_submission, _inspection_reviews, _inspection_access)
+compare_text_inspection_label = _inspection_routes.compare_text_inspection_label
+get_text_inspection_v2_evidence = _inspection_routes.get_text_inspection_v2_evidence
+create_text_manual_session = _inspection_routes.create_text_manual_session
+inspect_text_manual_page = _inspection_routes.inspect_text_manual_page
+complete_text_manual_session = _inspection_routes.complete_text_manual_session
+review_text_inspection_v2 = _inspection_routes.review_text_inspection_v2
 
 
 # ---------------------------------------------------------------------------

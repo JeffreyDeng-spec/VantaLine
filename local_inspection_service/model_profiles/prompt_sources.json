@@ -1,7 +1,9 @@
 {
-  "version": 5,
+  "version": 6,
   "sources": [
     "server.py",
+    "text_inspection/comparison_submission.py",
+    "text_inspection_v2.py",
     "text_inspection/media.py",
     "text_inspection/images.py",
     "accessories/policy.py",

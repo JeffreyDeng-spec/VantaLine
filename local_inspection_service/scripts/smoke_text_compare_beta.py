@@ -1,4 +1,5 @@
 from __future__ import annotations
+import ast
 import sys
 from pathlib import Path
 import cv2
@@ -46,7 +47,19 @@ def main():
     assert 'params.get("session_id")' in redirect and 'params.get("inspection_id")' in redirect
     assert "历史记录（只读）" in history and "原记录未保留实物照片" in history
     assert "has_photo" in history and "final_decision" in history
-    assert "standard_revision_id" in source and "standard_revision_number" in source
+    comparison_source = (APP_DIR / "text_inspection/comparison_submission.py").read_text(encoding="utf-8")
+    assert "standard_revision_id" in comparison_source and "standard_revision_number" in comparison_source
+    tree = ast.parse(source)
+    assert any(isinstance(node, ast.ImportFrom) and node.module == "text_inspection.comparison_submission"
+               and any(alias.name == "ComparisonSubmission" for alias in node.names) for node in tree.body)
+    assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
+                   for target in node.targets if isinstance(target, ast.Name)}
+    composition = assignments["_comparison_submission"]
+    assert isinstance(composition, ast.Call) and isinstance(composition.func, ast.Name) and composition.func.id == "ComparisonSubmission"
+    assert ast.dump(assignments["_inspection_routes"]) == ast.dump(ast.parse(
+        "register_text_inspections(app, _comparison_submission, _inspection_reviews, _inspection_access)", mode="eval").body)
+    assert ast.dump(assignments["compare_text_inspection_label"]) == ast.dump(ast.parse(
+        "_inspection_routes.compare_text_inspection_label", mode="eval").body)
     record_source = (APP_DIR / "text_inspection/record_store.py").read_text(encoding="utf-8")
     assert '"revisions": "text_inspection_standard_revisions"' in record_source
     assert "tables=lambda: TEXT_INSPECTION_TABLES," in source
