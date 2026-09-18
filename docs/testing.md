@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_training_preview_workflows.py` runs 25 synthetic groups.
+Nineteen original business/HTTP groups passed before migration on Windows and Linux;
+23 expanded groups also pass against saved original function bodies. Contracts preserve
+GET scope/sanitization, POST request defaults, exact error ordering, preview files and JSON,
+partial failures, state updates and callback refresh. Nine narrow callback getters retain
+capture before argument effects; first exceptions are never retried. Independent applications
+exercise threadpool identity and storage isolation without constructor reads or worker starts.
+No paid inference, real PLC, customer records or production database is used.
+
 `python scripts/smoke_training_preview_renderer.py` runs 17 synthetic groups.
 Twelve business groups passed on the actual original renderer on Windows and Linux before migration;
 15 expanded groups also pass on originals. Original pixel, complete metadata, callback sequence
