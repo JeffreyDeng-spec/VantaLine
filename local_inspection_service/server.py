@@ -24631,64 +24631,47 @@ def filtered_training_state(
     return training
 
 
+from .training.dataset_catalog import (DatasetAccess, DatasetAudit, DatasetCatalog, DatasetPaths,
+                                       clean_training_resource_id)
+from .training.resource_queries import (ResourceAccess, ResourceConfiguration, ResourceDatasets,
+                                        ResourceRecords, TrainingResources)
+from .training.resource_api import ResourceReadAccess, register as register_training_resource_api
+
+_dataset_catalog = DatasetCatalog(
+    DatasetPaths(lambda: OUTPUT_DIR, lambda: resolve_service_path,
+                 lambda: training_dataset_roots(), lambda value: clean_training_resource_id(value)),
+    lambda path: load_json_file_mtime_cached(path),
+    DatasetAudit(lambda record, path: record_audit_fields(record, path),
+                 lambda: record_created_at,
+                 lambda: record_updated_at),
+    DatasetAccess(lambda record, user: record_visible_to_user(record, user),
+                  lambda record, user: record_mutable_by_user(record, user)),
+    lambda path, **options: dataset_resource_item(path, **options),
+)
+_training_resources = TrainingResources(
+    ResourceDatasets(lambda: training_dataset_roots(),
+                     lambda path, **options: dataset_resource_item(path, **options),
+                     lambda task: training_task_dataset_resource_id(task)),
+    ResourceRecords(lambda **options: list_training_tasks(**options),
+                    lambda: list_trained_model_specs(), lambda: load_ai_detection_tasks()),
+    ResourceConfiguration(lambda: load_config(),
+                          lambda: scope_config_for_user,
+                          lambda task, config: serialize_ai_detection_task(task, config)),
+    ResourceAccess(lambda record, user, target: record_visible_to_user(record, user, target),
+                   lambda record: record_owner_username(record), lambda: LEGACY_OWNER_ID,
+                   lambda record: public_path_sanitized(record)),
+    lambda: resolve_service_path, lambda: OUTPUT_DIR,
+)
+
+
 def dataset_resource_item(dataset_dir: Path, *, include_samples: bool = True) -> dict[str, Any] | None:
-    manifest_path = dataset_dir / "manifest.json"
-    if not manifest_path.exists():
-        return None
-    manifest = load_json_file_mtime_cached(manifest_path)
-    if not isinstance(manifest, dict):
-        return None
-    raw_samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
-    audit = record_audit_fields(manifest, dataset_dir)
-    samples = []
-    if include_samples:
-        # Per-sample hydration touches the filesystem (resolve + exists + stat fallbacks),
-        # so it only runs when the caller actually needs sample payloads.
-        for sample in raw_samples:
-            if not isinstance(sample, dict):
-                continue
-            sample_path = resolve_service_path(sample.get("image")) if sample.get("image") else dataset_dir
-            sample_copy = dict(sample)
-            sample_copy.update(
-                {
-                    "created_at": record_created_at(sample_copy, sample_path if sample_path.exists() else dataset_dir),
-                    "updated_at": record_updated_at(sample_copy, sample_path if sample_path.exists() else dataset_dir),
-                    "owner_user_id": str(sample_copy.get("owner_user_id") or audit["owner_user_id"]),
-                    "owner_username": str(sample_copy.get("owner_username") or audit["owner_username"]),
-                }
-            )
-            samples.append(sample_copy)
-    sample_count = len(samples) if include_samples else len([s for s in raw_samples if isinstance(s, dict)])
-    item = {
-        "id": dataset_dir.name,
-        "kind": "dataset",
-        "display_name": manifest.get("display_name") or dataset_dir.name,
-        "note": manifest.get("note") or "",
-        "path": str(dataset_dir),
-        "manifest_path": str(manifest_path),
-        "sample_count": sample_count or manifest.get("sample_count") or 0,
-        "created_at": audit["created_at"],
-        "updated_at": audit["updated_at"],
-        "selected_accessory_ids": manifest.get("selected_accessory_ids") or [],
-        "background_set_id": manifest.get("background_set_id") or "",
-        "owner_user_id": audit["owner_user_id"],
-        "owner_username": audit["owner_username"],
-        "samples_loaded": bool(include_samples),
-    }
-    if include_samples:
-        item["samples"] = samples
-    return item
+    return _dataset_catalog.dataset_resource_item(dataset_dir, include_samples=include_samples)
 
 
-def clean_training_resource_id(value: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value or "")).strip("._")
 
 
 def training_task_dataset_resource_id(task: dict[str, Any]) -> str:
-    dataset_dir_value = str(task.get("dataset_dir") or "").strip()
-    if not dataset_dir_value:
-        return ""
-    return clean_training_resource_id(Path(dataset_dir_value).name)
+    return _dataset_catalog.training_task_dataset_resource_id(task)
 
 
 def find_dataset_resource(
@@ -24698,38 +24681,15 @@ def find_dataset_resource(
     include_samples: bool = False,
     write: bool = False,
 ) -> tuple[Path | None, dict[str, Any] | None]:
-    clean_id = clean_training_resource_id(dataset_id)
-    if not clean_id:
-        return None, None
-    for root in training_dataset_roots():
-        candidate_dir = root / clean_id
-        if not candidate_dir.exists() or not candidate_dir.is_dir():
-            continue
-        item = dataset_resource_item(candidate_dir, include_samples=include_samples)
-        if not item:
-            continue
-        if user:
-            allowed = record_mutable_by_user(item, user) if write else record_visible_to_user(item, user)
-            if not allowed:
-                continue
-        return candidate_dir, item
-    return None, None
+    return _dataset_catalog.find_dataset_resource(dataset_id, user, include_samples=include_samples, write=write)
 
 
 def training_dataset_roots() -> list[Path]:
-    roots = [OUTPUT_DIR / "training_datasets"]
-    users_root = OUTPUT_DIR / "users"
-    if users_root.exists():
-        roots.extend(path / "training_datasets" for path in users_root.iterdir() if path.is_dir())
-    return roots
+    return _dataset_catalog.training_dataset_roots()
 
 
 def training_run_roots() -> list[Path]:
-    roots = [OUTPUT_DIR / "training_runs"]
-    users_root = OUTPUT_DIR / "users"
-    if users_root.exists():
-        roots.extend(path / "training_runs" for path in users_root.iterdir() if path.is_dir())
-    return roots
+    return _dataset_catalog.training_run_roots()
 
 
 def training_resources_payload(
@@ -24738,126 +24698,18 @@ def training_resources_payload(
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    datasets = []
-    for datasets_dir in training_dataset_roots():
-        if not datasets_dir.exists():
-            continue
-        for dataset_dir in sorted([p for p in datasets_dir.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True):
-            item = dataset_resource_item(dataset_dir, include_samples=include_samples)
-            if item:
-                if user and not record_visible_to_user(item, user, target_user_id):
-                    continue
-                datasets.append(item)
-    task_items = list_training_tasks(user=user, target_user_id=target_user_id)
-    dataset_ids = {item["id"] for item in datasets}
-    for task in task_items:
-        dataset_dir_value = task.get("dataset_dir")
-        if task.get("action") not in {"generate_samples", "train_model"} or not dataset_dir_value:
-            continue
-        if str(task.get("dataset_status") or "") == "deleted":
-            continue
-        dataset_id = training_task_dataset_resource_id(task)
-        if not dataset_id:
-            continue
-        if dataset_id in dataset_ids:
-            continue
-        datasets.append(
-            {
-                "id": dataset_id,
-                "kind": "dataset",
-                "display_name": task.get("label") or dataset_id,
-                "note": "样本文件缺失或已被删除；这是任务记录中的历史资源。",
-                "path": str(dataset_dir_value),
-                "manifest_path": str(task.get("manifest_path") or ""),
-                "sample_count": int(task.get("completed_samples") or task.get("sample_count") or 0),
-                "created_at": int(task.get("created_at") or 0),
-                "selected_accessory_ids": task.get("selected_accessory_ids") or [],
-                "background_set_id": task.get("background_set_id") or "",
-                "owner_user_id": str(task.get("owner_user_id") or ""),
-                "owner_username": str(task.get("owner_username") or ""),
-                "samples": [] if include_samples else None,
-                "samples_loaded": bool(include_samples),
-                "missing_files": True,
-            }
-        )
-        dataset_ids.add(dataset_id)
-    specs = list_trained_model_specs()
-    models = []
-    for spec in specs:
-        if user and not record_visible_to_user(spec, user, target_user_id):
-            continue
-        model_path = Path(spec["path"])
-        run_id = str(spec["run_id"])
-        run_dir = resolve_service_path(spec.get("run_dir") or (OUTPUT_DIR / "training_runs" / run_id))
-        timestamp_path = model_path if model_path.exists() else run_dir
-        models.append(
-            {
-                "id": spec["id"],
-                "run_id": run_id,
-                "task_id": spec["task_id"],
-                "pipeline_task_id": spec.get("pipeline_task_id") or "",
-                "pipeline_task_name": spec.get("pipeline_task_name") or "",
-                "variant": spec["variant"],
-                "kind": "model",
-                "label": spec["label"],
-                "note": spec.get("note") or "",
-                "path": str(model_path),
-                "exists": model_path.exists(),
-                "uses_ocr": bool(spec.get("uses_ocr", False)),
-                "created_at": int(spec.get("created_at") or (timestamp_path.stat().st_mtime if timestamp_path.exists() else 0)),
-                "updated_at": int(spec.get("updated_at") or spec.get("created_at") or (timestamp_path.stat().st_mtime if timestamp_path.exists() else 0)),
-                "accessory_names": spec.get("accessory_names") or [],
-                "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
-                "owner_user_id": str(spec.get("owner_user_id") or LEGACY_OWNER_ID),
-                "owner_username": str(spec.get("owner_username") or record_owner_username(spec)),
-            }
-        )
-    completed_tasks = []
-    for task in task_items:
-        if task.get("action") not in {"generate_samples", "train_model"}:
-            continue
-        task_id = str(task.get("job_id") or "")
-        completed_tasks.append(
-            {
-                **task,
-                "dataset": next((item for item in datasets if item["id"] == task_id), None),
-                "models": [item for item in models if item.get("task_id") == task_id],
-            }
-        )
-    config = scope_config_for_user(load_config(), user, target_user_id) if user else load_config()
-    # sync_ready_pipeline_ai_detection_tasks is a permanent no-op, so the former
-    # load-and-maybe-save of pipeline tasks here was removed from this read path.
-    ai_detection_tasks = [
-        {**serialize_ai_detection_task(task, config), "kind": "ai_detection_task", "task_type": "ai_detection"}
-        for task in load_ai_detection_tasks()
-        if not user or record_visible_to_user(task, user, target_user_id)
-    ]
-    return public_path_sanitized({
-        "datasets": datasets,
-        "models": models,
-        "tasks": task_items,
-        "training_tasks": completed_tasks,
-        "ai_detection_tasks": ai_detection_tasks,
-    })
+    return _training_resources.training_resources_payload(include_samples=include_samples, user=user, target_user_id=target_user_id)
 
 
-@app.get("/api/training/resources")
-def training_resources(include_samples: bool = False, user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    return training_resources_payload(
-        include_samples=include_samples,
-        user=user,
-        target_user_id=user_id if user_is_admin(user) else None,
-    )
-
-
-@app.get("/api/training/resources/datasets/{dataset_id}/detail")
-def training_dataset_detail(dataset_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    _, item = find_dataset_resource(dataset_id, user=user, include_samples=True)
-    if not item:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    return public_path_sanitized({"status": "ready", "dataset": item})
+_training_resource_routes = register_training_resource_api(
+    app,
+    ResourceReadAccess(lambda: current_auth_user(), lambda user: user_is_admin(user),
+                       lambda record: public_path_sanitized(record)),
+    lambda: training_resources_payload,
+    lambda dataset_id, **options: find_dataset_resource(dataset_id, **options),
+)
+training_resources = _training_resource_routes.training_resources
+training_dataset_detail = _training_resource_routes.training_dataset_detail
 
 
 def delete_training_dataset_resource(dataset_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
