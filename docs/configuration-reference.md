@@ -1,5 +1,10 @@
 # Configuration reference
 
+Warmup method, path resolver, model loader and error formatter use narrow callback
+getters at their original expressions, after preceding work and before argument
+conversion. Missing callbacks retain argument effects; new getter failures stop
+before them. No retry, lock or thread admission policy is added.
+
 Warmup extraction preserves all `VANTALINE_YOLO_PREWARM*` defaults and read timing.
 Explicit model lists retain duplicates, implicit candidates apply the original limits
 before final deduplication, and no admission or concurrency setting is added. Manifest

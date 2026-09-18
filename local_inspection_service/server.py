@@ -1771,20 +1771,20 @@ from .detection.warmup_prediction import WarmupPrediction
 from .runtime.yolo_warmup import YoloWarmup, WarmupOperations
 
 _warmup_candidates = WarmupCandidates(
-    pipeline=WarmupPipeline(tasks=lambda: load_pipeline_tasks(), method=lambda value: normalize_pipeline_detection_method(value),
+    pipeline=WarmupPipeline(tasks=lambda: load_pipeline_tasks(), method=lambda: normalize_pipeline_detection_method,
                             status=lambda task: pipeline_task_model_status(task), model_id=lambda task: pipeline_task_model_id(task)),
     models=WarmupModels(default_id=lambda: DEFAULT_MODEL_ID, trained=lambda *args: list_trained_model_specs(*args),
-                        resolve=lambda value: resolve_service_path(value)), limit=lambda: yolo_warmup_limit(),
+                        resolve=lambda: resolve_service_path), limit=lambda: yolo_warmup_limit(),
 )
 _warmup_prediction = WarmupPrediction(
     select=lambda model_id, config: selected_model_spec(model_id, config),
-    load=lambda model_id, config: model(model_id, config), device=lambda: yolo_inference_device(),
+    load=lambda: model, device=lambda: yolo_inference_device(),
 )
 _yolo_warmup_runtime = YoloWarmup(WarmupOperations(
     enabled=lambda: yolo_warmup_enabled(), config=lambda: load_config(),
     candidates=lambda config: yolo_warmup_configured_model_ids(config),
     warm=lambda model_id, config: warm_yolo_model_once(model_id, config),
-    loaded_ids=lambda config: yolo_loaded_model_ids(config), error_text=lambda value, limit: bounded_text(value, limit),
+    loaded_ids=lambda config: yolo_loaded_model_ids(config), error_text=lambda: bounded_text,
 ))
 _yolo_warmup_lock = _yolo_warmup_runtime.lock
 _yolo_warmup_state = _yolo_warmup_runtime.state

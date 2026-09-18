@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Warmup method, path resolver, model loader and error formatter use narrow callback
+getters at their original expressions, after preceding work and before argument
+conversion. Missing callbacks retain argument effects; new getter failures stop
+before them. No retry, lock or thread admission policy is added.
+
 Warmup CI adds synthetic policy, prediction and runtime contracts while retaining
 the startup callback in the assembled application baseline. Ship the three relocated
 warmup modules and manifest v14 together. Worker topology and release commands remain.

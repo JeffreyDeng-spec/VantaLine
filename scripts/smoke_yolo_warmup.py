@@ -193,7 +193,7 @@ class WarmupContracts(unittest.TestCase):
         from local_inspection_service.runtime import yolo_warmup as runtime
         observed=[]
         instance=runtime.YoloWarmup(runtime.WarmupOperations(lambda:True,lambda:{},lambda config:['one'],
-            lambda model_id,config:None,lambda config:[],lambda text,limit:text))
+            lambda model_id,config:None,lambda config:[],lambda:(lambda text,limit:text)))
         def probe():
             results=[]
             def acquire():
@@ -210,6 +210,318 @@ class WarmupContracts(unittest.TestCase):
         with patch.object(self.api.time,'sleep'),patch.object(self.api,'load_config',return_value={}),             patch.object(self.api,'warm_yolo_model_once',side_effect=KeyboardInterrupt('stop')):
             with self.assertRaises(KeyboardInterrupt):self.api.yolo_warmup_worker(model_ids=['one'])
         self.assertEqual(self.state['status'],'running');self.assertEqual(self.state['completed_at'],0)
+
+
+    def test_candidate_first_failures_stop_without_retry(self):
+        api = self.api
+        config = {'active_model_id': 'active'}
+        fixture = {'load_pipeline_tasks': [{'stage': 'library', 'detection_method': 'yolo', 'id': 'p'}],
+            'normalize_pipeline_detection_method': 'yolo', 'pipeline_task_model_status': 'available',
+            'pipeline_task_model_id': 'p', 'list_trained_model_specs': [{'id': 'trained', 'path': 'fixture'}],
+            'resolve_service_path': Path('fixture'), 'yolo_warmup_limit': 6}
+        for target in fixture:
+            with self.subTest(target=target), ExitStack() as stack:
+                events = []; attempts = []; error = RuntimeError('first candidate boundary')
+                before = copy.deepcopy(self.state)
+                for name, result in fixture.items():
+                    def invoke(*args, _name=name, _result=result):
+                        events.append(_name)
+                        if _name == target:
+                            attempts.append(args)
+                            if len(attempts) == 1:
+                                raise error
+                        return _result
+                    stack.enter_context(patch.object(api, name, invoke))
+                with self.assertRaises(RuntimeError) as raised:
+                    api.yolo_warmup_configured_model_ids(config)
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(attempts), 1); self.assertEqual(events[-1], target)
+                self.assertEqual(self.state, before)
+
+    def test_prediction_boundaries_fail_once_without_prediction_retry(self):
+        api = self.api
+        for target in ('selected_model_spec', 'model', 'yolo_inference_device', 'predict'):
+            with self.subTest(target=target), ExitStack() as stack:
+                predictor = Mock(); events = []; attempts = []; error = RuntimeError('first prediction boundary')
+                for owner, name, value in [(api, 'selected_model_spec', {'id': 'actual'}),
+                        (api, 'model', predictor), (api, 'yolo_inference_device', 'cpu'),
+                        (predictor, 'predict', [])]:
+                    def invoke(*args, _name=name, _value=value, **kwargs):
+                        events.append(_name)
+                        if _name == target:
+                            attempts.append(args)
+                            if len(attempts) == 1:
+                                raise error
+                        return _value
+                    stack.enter_context(patch.object(owner, name, invoke))
+                with self.assertRaises(RuntimeError) as raised:
+                    api.warm_yolo_model_once('requested', {})
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(attempts), 1); self.assertEqual(events[-1], target)
+                self.assertEqual(self.state['status'], 'idle')
+
+    def test_runtime_prerun_and_public_boundaries_fail_once(self):
+        api = self.api
+        cases = [('yolo_warmup_enabled', lambda: api.yolo_warmup_worker()),
+                 ('yolo_warmup_enabled', lambda: api.start_yolo_warmup()),
+                 ('load_config', lambda: api.yolo_warmup_worker()),
+                 ('yolo_warmup_configured_model_ids', lambda: api.yolo_warmup_worker()),
+                 ('yolo_loaded_model_ids', lambda: api.public_yolo_warmup_status({}))]
+        values = {'yolo_warmup_enabled': True, 'load_config': {},
+                  'yolo_warmup_configured_model_ids': [], 'yolo_loaded_model_ids': []}
+        for target, operation in cases:
+            with self.subTest(target=target), ExitStack() as stack:
+                events = []; attempts = []; error = RuntimeError('first runtime boundary')
+                before = copy.deepcopy(self.state)
+                for name, value in values.items():
+                    def invoke(*args, _name=name, _value=value):
+                        events.append(_name)
+                        if _name == target:
+                            attempts.append(args)
+                            if len(attempts) == 1:
+                                raise error
+                        return _value
+                    stack.enter_context(patch.object(api, name, invoke))
+                sleep = stack.enter_context(patch.object(api.time, 'sleep'))
+                thread = stack.enter_context(patch.object(api.threading, 'Thread'))
+                warm = stack.enter_context(patch.object(api, 'warm_yolo_model_once'))
+                with self.assertRaises(RuntimeError) as raised:
+                    operation()
+                self.assertIs(raised.exception, error)
+                self.assertEqual(len(attempts), 1); self.assertEqual(events[-1], target)
+                self.assertEqual(self.state, before); thread.assert_not_called(); warm.assert_not_called()
+
+    def test_worker_handled_failure_and_formatter_failure_are_not_retried(self):
+        api = self.api
+        for formatter_fails in (False, True):
+            with self.subTest(formatter=formatter_fails):
+                error = RuntimeError('original warm failure'); format_error = ValueError('first formatter failure')
+                calls = []; formatted = []
+                def warm(model_id, config):
+                    calls.append(model_id)
+                    if len(calls) == 1:
+                        raise error
+                def format_once(text, limit):
+                    formatted.append((text, limit))
+                    if formatter_fails and len(formatted) == 1:
+                        raise format_error
+                    return text
+                with patch.object(api.time, 'sleep'), patch.object(api.time, 'time', side_effect=[10, 20]), \
+                        patch.object(api, 'load_config', return_value={}), \
+                        patch.object(api, 'warm_yolo_model_once', warm), patch.object(api, 'bounded_text', format_once):
+                    if formatter_fails:
+                        with self.assertRaises(ValueError) as raised:
+                            api.yolo_warmup_worker('fixture', ['one', 'two'])
+                        self.assertIs(raised.exception, format_error)
+                    else:
+                        api.yolo_warmup_worker('fixture', ['one', 'two'])
+                self.assertEqual(calls, ['one'] if formatter_fails else ['one', 'two'])
+                self.assertEqual(formatted, [('original warm failure', 180)])
+                self.assertEqual(self.state['status'], 'running' if formatter_fails else 'completed_with_errors')
+                self.assertEqual(self.state['completed_at'], 0 if formatter_fails else 20)
+                self.assertEqual(self.state['failed_model_ids'], [] if formatter_fails else
+                    [{'model_id': 'one', 'error': 'original warm failure'}])
+                self.assertEqual(self.state['completed_model_ids'], [] if formatter_fails else ['two'])
+
+    def test_thread_construction_and_start_failures_are_not_retried(self):
+        api = self.api
+        for boundary in ('construct', 'start'):
+            with self.subTest(boundary=boundary):
+                error = RuntimeError('first thread failure'); thread = Mock()
+                before = copy.deepcopy(self.state)
+                if boundary == 'start':
+                    thread.start.side_effect = [error, None]
+                with patch.object(api.threading, 'Thread', side_effect=[error, thread] if boundary == 'construct' else None,
+                                  return_value=thread) as factory:
+                    with self.assertRaises(RuntimeError) as raised:
+                        api.start_yolo_warmup('fixture', ['one'])
+                self.assertIs(raised.exception, error); factory.assert_called_once()
+                self.assertEqual(thread.start.call_count, 0 if boundary == 'construct' else 1)
+                self.assertEqual(self.state, before)
+
+
+    def test_callback_capture_at_original_argument_boundaries(self):
+        api = self.api
+        targets = {'method': 'normalize_pipeline_detection_method', 'resolve': 'resolve_service_path',
+                   'load': 'model', 'error': 'bounded_text'}
+        for mode, target in targets.items():
+            for variant in ('ordinary', 'prior', 'missing'):
+                with self.subTest(mode=mode, variant=variant), ExitStack() as stack:
+                    events = []
+                    class Predictor:
+                        def predict(self, *args, **kwargs): events.append('predict')
+                    def callback(label, *args):
+                        events.append(label)
+                        return {'method': 'yolo', 'resolve': Path('fixture'),
+                                'load': Predictor(), 'error': 'formatted'}[mode]
+                    def swap_argument():
+                        events.append('arg'); setattr(api, target, lambda *args: callback('C', *args))
+                    def prior(value):
+                        if variant != 'ordinary':
+                            events.append('prior')
+                            setattr(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
+                        return value
+                    class Input(dict):
+                        def get(self, key, *args):
+                            if (mode == 'method' and key == 'detection_method') or (mode == 'resolve' and key == 'path'):
+                                swap_argument()
+                            return super().get(key, *args)
+                    class Identifier:
+                        def __str__(self): swap_argument(); return 'actual'
+                    class WarmError(RuntimeError):
+                        def __str__(self): swap_argument(); return 'synthetic'
+                    def warm(*args):
+                        prior(None); raise WarmError()
+                    values = {'DEFAULT_MODEL_ID': 'default', 'yolo_warmup_limit': lambda: 6,
+                        'load_pipeline_tasks': lambda: prior([Input(stage='library', detection_method='yolo')]) if mode == 'method' else [],
+                        'normalize_pipeline_detection_method': lambda value: value,
+                        'pipeline_task_model_status': lambda value: 'available',
+                        'pipeline_task_model_id': lambda value: 'pipe',
+                        'list_trained_model_specs': lambda config: prior([Input(id='trained', path='fixture')]) if mode == 'resolve' else [],
+                        'resolve_service_path': lambda value: Path(value),
+                        'selected_model_spec': lambda *args: prior({'id': Identifier()}) if mode == 'load' else {'id': 'actual'},
+                        'model': lambda *args: Predictor(), 'yolo_inference_device': lambda: 'cpu',
+                        'yolo_warmup_enabled': lambda: True, 'load_config': lambda: {},
+                        'bounded_text': lambda *args: 'ordinary'}
+                    for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+                    stack.enter_context(patch.object(api, target, lambda *args: callback('A', *args)))
+                    if mode == 'error':
+                        stack.enter_context(patch.object(api, 'warm_yolo_model_once', warm))
+                        stack.enter_context(patch.object(api.time, 'sleep'))
+                        stack.enter_context(patch.object(api.time, 'time', return_value=100))
+                    def operation():
+                        if mode in ('method', 'resolve'):
+                            return api.yolo_warmup_configured_model_ids({'active_model_id': 'default'})
+                        if mode == 'load': return api.warm_yolo_model_once('requested', {})
+                        return api.yolo_warmup_worker(model_ids=['one'])
+                    if variant == 'missing':
+                        with self.assertRaises(TypeError): operation()
+                        expected = ['prior', 'arg']
+                    else:
+                        operation()
+                        expected = ['arg', 'A'] if variant == 'ordinary' else ['prior', 'arg', 'B']
+                        if mode == 'load': expected.append('predict')
+                    self.assertEqual(events, expected)
+                    if mode == 'error':
+                        self.assertEqual(self.state['status'], 'running' if variant == 'missing' else 'completed_with_errors')
+                        self.assertEqual(self.state['failed_model_ids'], [] if variant == 'missing' else
+                            [{'model_id': 'one', 'error': 'formatted'}])
+
+
+    def test_new_default_and_worker_getters_fail_before_downstream_work(self):
+        from dataclasses import replace
+        api = self.api; candidates = api._warmup_candidates
+        error = RuntimeError('first default getter')
+        default = Mock(side_effect=[error, 'default'])
+        with patch.object(candidates, 'models', replace(candidates.models, default_id=default)), \
+                patch.object(api, 'load_pipeline_tasks') as tasks:
+            with self.assertRaises(RuntimeError) as raised:
+                api.yolo_warmup_configured_model_ids({})
+        self.assertIs(raised.exception, error); default.assert_called_once_with(); tasks.assert_not_called()
+        worker_error = RuntimeError('first worker getter'); worker = Mock(side_effect=[worker_error, lambda *args: None])
+        before = copy.deepcopy(self.state)
+        with patch.object(api.threading, 'Thread') as thread:
+            with self.assertRaises(RuntimeError) as raised:
+                api._yolo_warmup_runtime.start_yolo_warmup('fixture', [], worker=worker)
+        self.assertIs(raised.exception, worker_error); worker.assert_called_once_with(); thread.assert_not_called()
+        self.assertEqual(self.state, before)
+
+
+    def test_disabled_worker_and_start_updates_hold_the_runtime_lock(self):
+        from local_inspection_service.runtime import yolo_warmup as runtime
+        for operation in ('worker', 'start'):
+            with self.subTest(operation=operation):
+                enabled = Mock(return_value=False)
+                providers = [Mock() for _ in range(5)]
+                instance = runtime.YoloWarmup(runtime.WarmupOperations(enabled, *providers))
+                instance.state.update(reason='previous', model_ids=['old'], completed_model_ids=['old'],
+                    failed_model_ids=[{'model_id': 'earlier', 'error': 'old'}], started_at=7, completed_at=9, error='old')
+                expected = {**instance.state, 'enabled': False, 'status': 'disabled', 'error': ''}
+                observed = []
+                class CheckedState(dict):
+                    def update(state, *args, **kwargs):
+                        result = []
+                        def probe():
+                            acquired = instance.lock.acquire(blocking=False)
+                            result.append(acquired)
+                            if acquired: instance.lock.release()
+                        probe_thread = threading.Thread(target=probe)
+                        probe_thread.start(); probe_thread.join(2)
+                        self.assertFalse(probe_thread.is_alive())
+                        self.assertEqual(result, [False]); observed.append('locked')
+                        return super().update(*args, **kwargs)
+                instance.state = CheckedState(instance.state)
+                worker_getter = Mock()
+                # Record attempts to start a warmup thread while allowing only our
+                # named probe thread to exercise the actual lock from another thread.
+                actual_thread = threading.Thread
+                launched = []
+                def thread_factory(*args, **kwargs):
+                    if kwargs.get('name', '').startswith('yolo-warmup-'):
+                        launched.append(kwargs)
+                        return Mock()
+                    return actual_thread(*args, **kwargs)
+                with patch.object(runtime.time, 'sleep') as sleep, patch.object(runtime.threading, 'Thread', thread_factory):
+                    if operation == 'worker': instance.yolo_warmup_worker('fixture', ['new'])
+                    else: instance.start_yolo_warmup('fixture', ['new'], worker=worker_getter)
+                self.assertEqual(observed, ['locked']); self.assertEqual(instance.state, expected)
+                enabled.assert_called_once_with(); sleep.assert_not_called(); worker_getter.assert_not_called()
+                for provider in providers: provider.assert_not_called()
+                self.assertEqual(launched, [])
+
+
+    def test_new_callback_getters_fail_before_evaluating_arguments(self):
+        from dataclasses import replace
+        api = self.api
+        for mode in ('method', 'resolve', 'load', 'error'):
+            with self.subTest(mode=mode), ExitStack() as stack:
+                arguments = []; error = RuntimeError('first callback getter')
+                predictor = Mock()
+                valid = {'method': lambda value: 'yolo', 'resolve': lambda value: Path(value),
+                         'load': lambda *args: predictor, 'error': lambda text, limit: text}[mode]
+                getter = Mock(side_effect=[error, valid])
+                class Input(dict):
+                    def get(self, key, *args):
+                        if (mode == 'method' and key == 'detection_method') or (mode == 'resolve' and key == 'path'):
+                            arguments.append(key)
+                        return super().get(key, *args)
+                class Identifier:
+                    def __str__(self): arguments.append('id'); return 'actual'
+                class WarmError(RuntimeError):
+                    def __str__(self): arguments.append('error'); return 'warm failure'
+                values = {'load_pipeline_tasks': lambda: [Input(stage='library', detection_method='yolo')] if mode == 'method' else [],
+                    'normalize_pipeline_detection_method': lambda value: value,
+                    'pipeline_task_model_status': lambda task: 'available', 'pipeline_task_model_id': lambda task: 'pipe',
+                    'list_trained_model_specs': lambda config: [Input(id='trained', path='fixture')] if mode == 'resolve' else [],
+                    'yolo_warmup_limit': lambda: 6, 'selected_model_spec': lambda *args: {'id': Identifier()},
+                    'yolo_inference_device': lambda: 'cpu', 'load_config': lambda: {}}
+                for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+                if mode == 'method':
+                    owner = api._warmup_candidates
+                    stack.enter_context(patch.object(owner, 'pipeline', replace(owner.pipeline, method=getter)))
+                elif mode == 'resolve':
+                    owner = api._warmup_candidates
+                    stack.enter_context(patch.object(owner, 'models', replace(owner.models, resolve=getter)))
+                elif mode == 'load':
+                    stack.enter_context(patch.object(api._warmup_prediction, 'load', getter))
+                else:
+                    owner = api._yolo_warmup_runtime
+                    stack.enter_context(patch.object(owner, 'operations', replace(owner.operations, error_text=getter)))
+                    warm = stack.enter_context(patch.object(api, 'warm_yolo_model_once', side_effect=WarmError()))
+                    stack.enter_context(patch.object(api.time, 'sleep'))
+                with self.assertRaises(RuntimeError) as raised:
+                    if mode in ('method', 'resolve'):
+                        api.yolo_warmup_configured_model_ids({'active_model_id': 'default'})
+                    elif mode == 'load': api.warm_yolo_model_once('requested', {})
+                    else: api.yolo_warmup_worker(model_ids=['one'])
+                self.assertIs(raised.exception, error); getter.assert_called_once_with()
+                self.assertEqual(arguments, []); predictor.predict.assert_not_called()
+                if mode == 'error':
+                    warm.assert_called_once_with('one', {})
+                    self.assertEqual(self.state['status'], 'running')
+                    self.assertEqual(self.state['completed_at'], 0)
+                    self.assertEqual(self.state['completed_model_ids'], [])
+                    self.assertEqual(self.state['failed_model_ids'], [])
 
 
 if __name__=='__main__':unittest.main()

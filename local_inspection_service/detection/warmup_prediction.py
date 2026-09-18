@@ -11,7 +11,7 @@ class Predictor(Protocol):
 
 
 class WarmupPrediction:
-    def __init__(self, select: Callable[[str, Record], Record], load: Callable[[str, Record], Predictor],
+    def __init__(self, select: Callable[[str, Record], Record], load: Callable[[], Callable[[str, Record], Predictor]],
                  device: Callable[[], str | int]):
         self.select, self.load, self.device = select, load, device
 
@@ -19,7 +19,7 @@ class WarmupPrediction:
         spec = self.select(model_id, config)
         if spec.get("is_ai_detection") or spec.get("is_label_sheet_match"):
             return
-        yolo_model = self.load(str(spec["id"]), config)
+        yolo_model = self.load()(str(spec["id"]), config)
         dummy = np.zeros((96, 96, 3), dtype=np.uint8)
         try:
             imgsz = max(320, min(1280, int(config.get("image_size") or 640)))

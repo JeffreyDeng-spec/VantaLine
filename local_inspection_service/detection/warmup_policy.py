@@ -23,7 +23,7 @@ def yolo_warmup_limit() -> int:
 @dataclass(frozen=True)
 class WarmupPipeline:
     tasks: Callable[[], list[Record]]
-    method: Callable[[str], str]
+    method: Callable[[], Callable[[str], str]]
     status: Callable[[Record], str]
     model_id: Callable[[Record], str]
 
@@ -32,7 +32,7 @@ class WarmupPipeline:
 class WarmupModels:
     default_id: Callable[[], str]
     trained: TrainedSpecs
-    resolve: Callable[[str], Path]
+    resolve: Callable[[], Callable[[str], Path]]
 
 
 class WarmupCandidates:
@@ -56,7 +56,7 @@ class WarmupCandidates:
                 task for task in self.pipeline.tasks()
                 if isinstance(task, dict)
                 and str(task.get("stage") or "") == "library"
-                and self.pipeline.method(str(task.get("detection_method") or "")) in {"yolo", "yolo_ocr"}
+                and self.pipeline.method()(str(task.get("detection_method") or "")) in {"yolo", "yolo_ocr"}
                 and self.pipeline.status(task) == "available"
             ],
             key=lambda task: int(task.get("updated_at") or task.get("created_at") or 0),
@@ -75,7 +75,7 @@ class WarmupCandidates:
         )
         seen_paths: set[str] = set()
         for spec in trained_specs:
-            path = str(self.models.resolve(spec.get("path") or spec.get("artifact_path") or ""))
+            path = str(self.models.resolve()(spec.get("path") or spec.get("artifact_path") or ""))
             if path in seen_paths:
                 continue
             seen_paths.add(path)

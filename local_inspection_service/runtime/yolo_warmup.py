@@ -17,7 +17,7 @@ class WarmupOperations:
     candidates: Callable[[Record], list[str]]
     warm: Callable[[str, Record], None]
     loaded_ids: Callable[[Record], list[str]]
-    error_text: Callable[[str, int], str]
+    error_text: Callable[[], Callable[[str, int], str]]
 
 
 class YoloWarmup:
@@ -78,7 +78,7 @@ class YoloWarmup:
                 self.operations.warm(model_id, config)
                 completed.append(model_id)
             except Exception as exc:  # noqa: BLE001 - warmup must not block serving
-                failed.append({"model_id": model_id, "error": self.operations.error_text(str(exc), 180)})
+                failed.append({"model_id": model_id, "error": self.operations.error_text()(str(exc), 180)})
             with self.lock:
                 self.state["completed_model_ids"] = completed
                 self.state["failed_model_ids"] = failed
