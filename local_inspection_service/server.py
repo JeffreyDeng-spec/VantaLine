@@ -20515,6 +20515,17 @@ def coerce_detection_count(value: Any) -> int | None:
     return _presence_count(value)
 
 
+from .detection.failure_projection import FailureProjection
+from .detection.failure_results import DetectionFailureResult
+
+_failure_projection = FailureProjection(lambda: bounded_text, lambda settings: ai_tool_provider_meta(settings), lambda: AI_DETECTION_LABEL)
+_detection_failure_result = DetectionFailureResult(
+    lambda: ai_detection_settings(), lambda item, count: required_accessory_profile_payload(item, count),
+    lambda required, settings, *, reason, timed_out=False, latency_ms=0: ai_presence_failure_payload(required, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms),
+    lambda spec, settings: ai_model_payload(spec, settings),
+)
+
+
 def ai_presence_failure_payload(
     required_accessories: list[dict[str, Any]],
     settings: dict[str, Any],
@@ -20523,44 +20534,7 @@ def ai_presence_failure_payload(
     timed_out: bool = False,
     latency_ms: int = 0,
 ) -> dict[str, Any]:
-    missing_ids = [str(item.get("accessory_id") or "") for item in required_accessories if item.get("accessory_id")]
-    detections = [
-        {
-            "accessory_id": item_id,
-            "label": bounded_text(required.get("name") or required.get("label") or item_id, 120),
-            "present": False,
-            "confidence": 0.0,
-            "evidence": bounded_text(reason, 160),
-            "observed_text": [],
-        }
-        for required in required_accessories
-        for item_id in [str(required.get("accessory_id") or "")]
-        if item_id
-    ]
-    provider_meta = ai_tool_provider_meta(settings)
-    return {
-        "tool": "vision.inspect.presence",
-        "passed": len(missing_ids) == 0,
-        "rule": {
-            "match_policy": "ai_presence",
-            "label": AI_DETECTION_LABEL,
-            "present": [],
-            "missing": missing_ids,
-            "extra": [],
-            "counts": {item_id: 0 for item_id in missing_ids},
-        },
-        "detections": detections,
-        "ai": {
-            "latency_ms": latency_ms,
-            "timed_out": timed_out,
-            "provider_failure": True,
-            "failure_reason": bounded_text(reason, 240),
-            "raw_summary": bounded_text(reason, 240),
-            "provider_status": settings.get("status") or "",
-            "error": bounded_text(reason, 240),
-            **provider_meta,
-        },
-    }
+    return _failure_projection.ai_presence_failure_payload(required_accessories, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
 
 
 def ai_detection_failure_result(
@@ -20573,18 +20547,7 @@ def ai_detection_failure_result(
     timed_out: bool = False,
     latency_ms: int = 0,
 ) -> dict[str, Any]:
-    settings = ai_detection_settings()
-    required_accessories = [required_accessory_profile_payload(item, expected_count) for item, expected_count in required_items]
-    payload = ai_presence_failure_payload(required_accessories, settings, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
-    return {
-        "request_id": request_id,
-        "passed": payload["passed"],
-        "model": ai_model_payload(spec, settings),
-        "rule": payload["rule"],
-        "detections": payload["detections"],
-        "annotated_url": annotated_url,
-        "ai": payload["ai"],
-    }
+    return _detection_failure_result.ai_detection_failure_result(request_id, spec, required_items, annotated_url, reason=reason, timed_out=timed_out, latency_ms=latency_ms)
 
 
 def write_ai_original_output(image_bgr: np.ndarray, request_id: str) -> str:
@@ -20683,20 +20646,7 @@ def write_ai_annotated_output(image_bgr: np.ndarray, request_id: str, detections
 
 
 def ai_model_payload(spec: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": spec["id"],
-        "label": spec.get("label", AI_DETECTION_LABEL),
-        "variant": "ai_detection",
-        "is_ai_detection": True,
-        "provider_model": settings.get("model") or "",
-        "uses_ocr": True,
-        "task_id": spec.get("task_id") or "",
-        "task_label": spec.get("task_label") or "",
-        "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
-        "required_accessory_counts": spec.get("required_accessory_counts") or {},
-        "accessory_names": spec.get("accessory_names") or [],
-        "accessory_labels": spec.get("accessory_labels") or {},
-    }
+    return _failure_projection.ai_model_payload(spec, settings)
 
 
 def normalize_ai_detection_result(

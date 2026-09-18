@@ -1,7 +1,9 @@
 {
-  "version": 46,
+  "version": 47,
   "sources": [
     "server.py",
+    "detection/failure_projection.py",
+    "detection/failure_results.py",
     "detection/presence_payload.py",
     "detection/presence_validation.py",
     "accessories/lookup.py",
