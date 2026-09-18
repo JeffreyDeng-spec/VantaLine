@@ -13694,66 +13694,37 @@ def tool_accessory_reference_collect(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+from .detection.profile_cache_policy import ProfileCachePolicy
+from .detection.profile_cache_store import ProfileCacheStore
+from .detection.profile_cache import ProfileCacheFlow, CacheRecords, CacheEvidence, CacheProviders, CacheTiming
+
+_profile_cache_policy = ProfileCachePolicy(
+    lambda: string_list, lambda: AI_PROFILE_CACHE_VERSION, lambda: AI_PROFILE_REFERENCE_MODE,
+    lambda: AI_DETECTION_SYSTEM_PROMPT, lambda required: ai_detection_task_payload(required),
+    lambda required: build_reference_sheet_descriptor(required),
+)
+_profile_cache_store = ProfileCacheStore(lambda: DATA_DIR, lambda: AI_PROFILE_CACHE_PATH, lambda: os)
+_profile_cache_flow = ProfileCacheFlow(
+    CacheRecords(lambda: load_ai_profile_cache(), lambda cache: save_ai_profile_cache(cache)),
+    CacheEvidence(lambda required, settings: required_accessory_cache_key(required, settings),
+                  lambda required: profile_reference_descriptors(required),
+                  lambda required, references: cached_profile_context_content(required, references)),
+    CacheProviders(lambda settings: ai_provider_from_settings(settings), lambda: GeminiAiProvider, lambda: AiProviderError),
+    CacheTiming(lambda: time.time(), lambda: AI_PROFILE_CACHE_TTL_SECONDS),
+    lambda: AI_DETECTION_SYSTEM_PROMPT, lambda: bounded_text,
+)
+
+
 def load_ai_profile_cache() -> dict[str, Any]:
-    if not AI_PROFILE_CACHE_PATH.exists():
-        return {"entries": {}}
-    try:
-        raw = json.loads(AI_PROFILE_CACHE_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        raw = {}
-    if not isinstance(raw, dict):
-        raw = {}
-    entries = raw.get("entries") if isinstance(raw.get("entries"), dict) else {}
-    return {"entries": entries}
+    return _profile_cache_store.load_ai_profile_cache()
 
 
 def save_ai_profile_cache(cache: dict[str, Any]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {"entries": cache.get("entries") if isinstance(cache.get("entries"), dict) else {}}
-    tmp_path = AI_PROFILE_CACHE_PATH.with_name(f"{AI_PROFILE_CACHE_PATH.name}.tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    try:
-        os.chmod(tmp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp_path, AI_PROFILE_CACHE_PATH)
-    try:
-        os.chmod(AI_PROFILE_CACHE_PATH, 0o600)
-    except OSError:
-        pass
+    return _profile_cache_store.save_ai_profile_cache(cache)
 
 
 def required_accessory_cache_key(required_accessories: list[dict[str, Any]], settings: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
-    cache_items: list[dict[str, Any]] = []
-    for required in required_accessories:
-        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
-        references = [
-            {
-                "source_path": str(ref.get("source_path") or ""),
-                "sha256": str(ref.get("sha256") or ""),
-            }
-            for ref in profile.get("reference_images", [])
-            if isinstance(ref, dict) and ref.get("source_path")
-        ]
-        cache_items.append(
-            {
-                "accessory_id": str(required.get("accessory_id") or ""),
-                "expected_count": int(required.get("expected_count") or 1),
-                "visual_signature": profile.get("visual_signature") or "",
-                "distinguishing_text": string_list(profile.get("distinguishing_text"), max_items=12),
-                "references": references,
-            }
-        )
-    payload = {
-        "version": AI_PROFILE_CACHE_VERSION,
-        "reference_mode": AI_PROFILE_REFERENCE_MODE,
-        "provider": settings.get("provider"),
-        "model": settings.get("model"),
-        "system": hashlib.sha256(AI_DETECTION_SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:16],
-        "required": sorted(cache_items, key=lambda item: item["accessory_id"]),
-    }
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
-    return digest, cache_items
+    return _profile_cache_policy.required_accessory_cache_key(required_accessories, settings)
 
 
 def fit_image_into_cell(image: np.ndarray, width: int, height: int) -> np.ndarray:
@@ -13857,109 +13828,15 @@ def build_reference_sheet_descriptor(required_accessories: list[dict[str, Any]])
 
 
 def profile_reference_descriptors(required_accessories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    sheet = build_reference_sheet_descriptor(required_accessories)
-    return [sheet] if sheet else []
+    return _profile_cache_policy.profile_reference_descriptors(required_accessories)
 
 
 def cached_profile_context_content(required_accessories: list[dict[str, Any]], references: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    content: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": (
-                "REQUIRED_ACCESSORY_PROFILE_CONTEXT: reuse this context for later inspection images. "
-                "Reference images are examples of required accessories only; never count them as present in an inspection image.\n"
-                + json.dumps(ai_detection_task_payload(required_accessories), ensure_ascii=False)
-            ),
-        }
-    ]
-    for ref in references:
-        item_id = str(ref.get("accessory_id") or "")
-        if not item_id or not ref.get("data_url"):
-            continue
-        if ref.get("mode") == AI_PROFILE_REFERENCE_MODE:
-            content.append(
-                {
-                    "type": "text",
-                    "text": (
-                        "CACHED_REFERENCE_SHEET: one image containing all required accessory reference tiles. "
-                        "Use it only as appearance evidence and ID mapping. Never count objects in this sheet as present "
-                        "in the inspection image. Sheet item mapping:\n"
-                        + json.dumps(ref.get("sheet_items") or [], ensure_ascii=False)
-                    ),
-                }
-            )
-        else:
-            content.append(
-                {
-                    "type": "text",
-                    "text": f"CACHED_REFERENCE_IMAGE for accessory_id={item_id}. Use as profile appearance evidence only.",
-                }
-            )
-        content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
-    return content
+    return _profile_cache_policy.cached_profile_context_content(required_accessories, references)
 
 
 def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], settings: dict[str, Any]) -> dict[str, Any]:
-    if settings.get("provider") != "gemini" or not settings.get("configured"):
-        return {"enabled": False, "status": "unsupported_provider", "name": "", "reference_images": 0, "provider_call_count": 0}
-    cache_key, _ = required_accessory_cache_key(required_accessories, settings)
-    cache = load_ai_profile_cache()
-    entries = cache.setdefault("entries", {})
-    now = int(time.time())
-    existing = entries.get(cache_key) if isinstance(entries.get(cache_key), dict) else None
-    if existing and existing.get("name") and int(existing.get("expires_at") or 0) > now + 60:
-        return {
-            "enabled": True,
-            "status": "hit",
-            "name": existing["name"],
-            "reference_images": int(existing.get("reference_images") or 0),
-            "cache_key": cache_key[:12],
-            "provider_call_count": 0,
-        }
-    references = profile_reference_descriptors(required_accessories)
-    if not references:
-        return {"enabled": False, "status": "no_reference_images", "name": "", "reference_images": 0, "provider_call_count": 0}
-    try:
-        provider = ai_provider_from_settings(settings)
-        if not isinstance(provider, GeminiAiProvider):
-            raise AiProviderError("Provider does not support Gemini cachedContent")
-        created = provider.create_cached_content(
-            AI_DETECTION_SYSTEM_PROMPT,
-            cached_profile_context_content(required_accessories, references),
-            display_name=f"inspection-profile-{cache_key[:12]}",
-            ttl_seconds=AI_PROFILE_CACHE_TTL_SECONDS,
-        )
-        entries[cache_key] = {
-            "name": created["name"],
-            "provider": settings.get("provider"),
-            "model": settings.get("model"),
-            "created_at": now,
-            "expires_at": now + AI_PROFILE_CACHE_TTL_SECONDS,
-            "reference_images": len(references),
-            "latency_ms": created.get("latency_ms", 0),
-            "usage_metadata": created.get("usage_metadata") or {},
-        }
-        save_ai_profile_cache(cache)
-        return {
-            "enabled": True,
-            "status": "created",
-            "name": created["name"],
-            "reference_images": len(references),
-            "latency_ms": created.get("latency_ms", 0),
-            "usage_metadata": created.get("usage_metadata") or {},
-            "cache_key": cache_key[:12],
-            "provider_call_count": 1,
-        }
-    except Exception as exc:
-        return {
-            "enabled": False,
-            "status": "create_failed",
-            "name": "",
-            "reference_images": len(references),
-            "error": bounded_text(str(exc), 220),
-            "cache_key": cache_key[:12],
-            "provider_call_count": 1,
-        }
+    return _profile_cache_flow.ensure_required_profile_cache(required_accessories, settings)
 
 
 def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:

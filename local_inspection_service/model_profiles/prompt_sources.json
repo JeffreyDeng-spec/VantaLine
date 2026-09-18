@@ -1,7 +1,10 @@
 {
-  "version": 51,
+  "version": 52,
   "sources": [
     "server.py",
+    "detection/profile_cache_policy.py",
+    "detection/profile_cache_store.py",
+    "detection/profile_cache.py",
     "detection/presence_inspection_ports.py",
     "detection/presence_inspection.py",
     "detection/analysis_ports.py",

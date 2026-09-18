@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_profile_cache.py` runs 30 synthetic groups. Twenty-one original
+business groups and 26 expanded original-body groups pass on Windows/Linux. Contracts
+retain canonical keys, exact prompts, reference order, expiry margins, write permissions,
+atomic replacement and partial-file/record effects. Provider creation still records the same
+single-call evidence and failure result; no replay is introduced. Explicit path, provider,
+clock and formatting capabilities retain original evaluation order without constructor I/O.
+Temporary files and synthetic providers avoid production records and paid inference.
+
 `python scripts/smoke_presence_inspection.py` runs 29 synthetic groups. Twenty original
 business groups and 25 expanded original-body groups pass on Windows/Linux. Contracts
 retain exact prompts, cache budgets, image/reference selection, timing and metadata order.
