@@ -1,5 +1,18 @@
 # Architecture
 
+Local model factory lookup uses a narrow getter after path resolution and before
+string conversion, preserving callback replacement and missing-callable argument
+effects. Existing cache publication order and exception boundaries remain unchanged.
+
+`detection.model_selection` owns ordered specification selection, including the
+legacy trained-provider TypeError fallback. `detection.local_models.LocalModels`
+owns per-process model instances and resolved path aliases; initialization calls no
+providers. Root `_models`/`_model_paths` remain references to those same dictionaries
+for maintenance scripts using pop/clear. Reassigning root variables is not a runtime
+replacement seam; tests use the service or mutate the compatibility objects.
+Selection, factory and catalog providers remain lazy. Warmup state, startup and
+threading behavior are unchanged; this extraction does not add a model-loading lock.
+
 `detection.task_projection` now owns task display/request mapping, while
 `detection.task_catalog` owns native and training-derived task model catalogs and
 list response assembly. Narrow providers supply records, current request identity,
@@ -19,7 +32,7 @@ store instance; test replacements belong at its ports. Root background resolver 
 prefix remain late-bound for compatibility.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v12 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v13 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
@@ -44,7 +57,7 @@ rules and overlays now live in `detection.geometry`, `postprocessing`, `results`
 service receive narrow label providers; the parser resolves the root postprocessor
 at use time. These modules own no model, worker, identity or database state. Internal
 pure helper substitutions belong in their actual modules, not unrelated root aliases.
-Manifest v12 includes these five modules so relocation retains source provenance.
+Manifest v13 includes these five modules so relocation retains source provenance.
 Provider and postprocessor exceptions propagate without an automatic retry.
 
 Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
@@ -125,7 +138,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v12 includes both
+policy or callback caching is introduced. Source manifest v13 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -207,7 +220,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v12 for new tasks.
+`accessories/preparation.py`, included in source manifest v13 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

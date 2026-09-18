@@ -1,5 +1,22 @@
 # Testing
 
+`python scripts/smoke_local_model_runtime.py` adds seventeen groups; eight first passed
+against the unchanged root. Fifteen business groups also pass against the original
+function bodies. Synthetic model factories and temporary placeholder
+files cover selection priority, removed-ID behavior, TypeError fallback, cache-hit
+validation, by-ID and resolved-path aliases, failed loading, stale path readiness,
+empty-ID branches, lazy construction and independent instance state. The real YOLO
+constructor is never called. Source contracts require both new modules and verify
+per-file fingerprint sensitivity while keeping old snapshots frozen.
+First-failure checks cover selection, factory, catalog/ready calls, file lookups,
+registry policies and partial cache writes. The original one-shot TypeError fallback
+remains; unknown errors and its second failure are not retried. Path discovery skips
+TypeError/OSError once and propagates ValueError. Cached None/falsey instances retain
+identity. Three callback traces protect construction after resolution and before
+path string conversion, including replacement and a missing callable.
+Remote-model rejection asserts the complete original error messages; this caught
+and corrected a mechanical identifier substitution inside string literals.
+
 `python scripts/smoke_detection_task_catalog.py` adds thirteen synthetic groups.
 The original eight first passed against the unchanged root; eleven business groups, including added
 failure and complete-output contracts, also pass against its immutable function
