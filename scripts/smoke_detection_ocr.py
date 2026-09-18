@@ -315,9 +315,10 @@ class OCRContracts(unittest.TestCase):
         # OpenCV may start equivalent rectangle vertices at either long edge.
         # Verify the real geometry, then test both edge orders explicitly so a
         # platform-specific tie does not masquerade as a changed crop algorithm.
-        actual_points=cv2.boxPoints(cv2.minAreaRect(np.asarray(polygon,np.float32)))
+        rectangle=cv2.minAreaRect(np.asarray(polygon,np.float32))
+        actual_points=cv2.boxPoints(rectangle)
         self.assertEqual(sorted(map(tuple,actual_points.tolist())),sorted(map(tuple,polygon)))
-        with patch.object(cv2,'boxPoints',return_value=np.asarray([[8,1],[1,1],[1,4],[8,4]],np.float32)):
+        with patch.object(cv2,'boxPoints',return_value=np.asarray([[8,1],[1,1],[1,4],[8,4]],np.float32)) as vertices:
             unscaled,details=api.crop_detection_region(image,polygon,padding=1,max_long_side=0)
             np.testing.assert_array_equal(unscaled,expected)
             self.assertEqual(details,{'long_edge_angle':180.0,'predicted_rotation':270,'fallback_rotations':[90]})
@@ -325,13 +326,15 @@ class OCRContracts(unittest.TestCase):
             np.testing.assert_array_equal(crop,cv2.resize(expected,(3,5),interpolation=cv2.INTER_AREA))
             self.assertLessEqual(max(crop.shape[:2]),5);self.assertIn(orientation['predicted_rotation'],(0,90,180,270))
             self.assertEqual(orientation['fallback_rotations'],[(orientation['predicted_rotation']+180)%360]);np.testing.assert_array_equal(image,original)
-        with patch.object(cv2,'boxPoints',return_value=np.asarray(polygon,np.float32)):
+            self.assertEqual([call.args for call in vertices.call_args_list],[(rectangle,),(rectangle,)])
+        with patch.object(cv2,'boxPoints',return_value=np.asarray(polygon,np.float32)) as vertices:
             opposite,opposite_details=api.crop_detection_region(image,polygon,padding=1,max_long_side=0)
             np.testing.assert_array_equal(opposite,np.rot90(masked,k=3))
             self.assertEqual(opposite_details,{'long_edge_angle':0.0,'predicted_rotation':90,'fallback_rotations':[270]})
             bounded,bounded_details=api.crop_detection_region(image,polygon,padding=1,max_long_side=5)
             np.testing.assert_array_equal(bounded,cv2.resize(np.rot90(masked,k=3),(3,5),interpolation=cv2.INTER_AREA))
             self.assertEqual(bounded_details,opposite_details);np.testing.assert_array_equal(image,original)
+            self.assertEqual([call.args for call in vertices.call_args_list],[(rectangle,),(rectangle,)])
 
     def test_scoring_rgb_batch_fallback_zip_and_exception_boundaries(self):
         api=self.api;image=np.full((3,4,3),(10,20,30),np.uint8);model=Mock()
