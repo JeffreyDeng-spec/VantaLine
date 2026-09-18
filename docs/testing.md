@@ -1,6 +1,6 @@
 # Testing
 
-`python scripts/smoke_text_standards.py` adds twelve synthetic groups for import
+`python scripts/smoke_text_standards.py` adds thirteen synthetic groups for import
 validation/duplicate/parser ordering, DOC thread identity and DOCX synchronous
 execution, partial writes and job failures, retrieval/media behavior, add cleanup,
 patch feedback/exception boundaries, confirmation priority, and interleaved native
@@ -14,6 +14,8 @@ argument adapters; the candidate route harness in that check does not establish
 the old request-body timing, which has a separate original/candidate trace and
 the existing full endpoint baseline. Ten explicit dependency event sequences cover
 argument evaluation, DOC queue admission, projection and permission-before-JSON.
+Seven A-to-B-to-C traces also bracket the capture point with earlier business work
+and later argument evaluation, rejecting entry caching for six getter capabilities.
 Four first-error matrices cover thirteen parser, job, write, database and JSON-body
 boundaries. Each offers a succeeding second call and requires the original error
 or HTTP cause, one attempt, preserved prior evidence and existing cleanup/lock order.

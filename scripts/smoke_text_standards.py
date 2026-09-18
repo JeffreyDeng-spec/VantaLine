@@ -38,13 +38,14 @@ class Upload:
         return self.data if size < 0 else self.data[:size]
 
 
-def capture_trial(case):
+def capture_trial(case, window=False):
  events=[];std={'id':'standard','owner_user_id':'alice','standard_type':'label','status':'draft','revision_number':0};asset={'id':'asset','standard_id':'standard','owner_user_id':'alice','status':'candidate'}
  ns={}
  def text_a(v,limit):events.append('textA');return str(v)
  def text_b(v,limit):events.append('textB');return str(v)
  def public_a(v):events.append('publicA');return dict(v)
  def public_b(v):events.append('publicB');return dict(v)
+ def public_c(v):events.append('publicC');return dict(v)
  def owned(kind,identity,owner):return std if kind=='standards' else asset
  ns.update(require_permission=lambda *a,**k:None,_text_v2_owner=lambda:('alice','Alice'),bounded_text=text_a,sha256_bytes=lambda b:'hash',_text_v2_load=lambda kind:[asset] if kind=='assets' else [],
  _text_v2_save=lambda *a,**k:True,_text_v2_owned=owned,_text_v2_public=public_a,
@@ -68,14 +69,24 @@ def capture_trial(case):
   name=Name('name')
  elif case=='doc_queued':
   upload.filename='fixture.doc'
+  if window:
+   class Name(str):
+    def strip(self):ns['extract_doc_images']=lambda b:(events.append('docB') or [],[]);return 'name'
+   name=Name('name')
  elif case=='asset_write':
   class Blobs(list):
-   def __getitem__(self,index):events.append('blob-index');ns['_text_v2_write']=lambda *a:events.append('writeB');return super().__getitem__(index)
+   def __getitem__(self,index):events.append('blob-index');ns['_text_v2_write']=lambda *a:events.append('writeC' if window else 'writeB');return super().__getitem__(index)
   ns['extract_docx_candidates']=lambda b:([{'mime_type':'image/png'}],Blobs([b'image']))
+  if window:
+   def source_write(*a):
+    events.append('writeA');ns['_text_v2_write']=lambda *a:events.append('writeB')
+   ns['_text_v2_write']=source_write
  elif case=='unavailable':
   class Message:
-   def __str__(self):events.append('reason');ns['document_import_jobs'].mark_unavailable=lambda *a:events.append('markB');return 'reason'
-  def start(*a):raise HTTPException(503,Message())
+   def __str__(self):events.append('reason');ns['document_import_jobs'].mark_unavailable=lambda *a:events.append('markC' if window else 'markB');return 'reason'
+  def start(*a):
+   if window:ns['document_import_jobs'].mark_unavailable=lambda *a:events.append('markB')
+   raise HTTPException(503,Message())
   ns['document_import_jobs'].start=start
  elif case=='add_text':
   target='add_text_inspection_standard_asset'
@@ -87,36 +98,49 @@ def capture_trial(case):
   target='patch_text_inspection_asset'
   class Body(dict):
    def get(self,key,default=None):
-    if key=='expected_revision':events.append('expected-arg');ns['_text_v2_expected_revision']=lambda value:events.append('expectedB')
+    if key=='expected_revision':events.append('expected-arg');ns['_text_v2_expected_revision']=lambda value:events.append('expectedC' if window else 'expectedB')
     return super().get(key,default)
   body=Body(body)
  elif case=='public_db':
   target='confirm_text_inspection_standard'
-  def confirm(*a,**k):events.append('db');ns['_text_v2_public']=public_b;return std
-  ns['runtime_postgres_repository_or_none']=lambda:SimpleNamespace(confirm_text_inspection_standard=confirm)
+  def confirm(*a,**k):events.append('db');ns['_text_v2_public']=public_c if window else public_b;return std
+  def repository():
+   if window:ns['_text_v2_public']=public_b
+   return SimpleNamespace(confirm_text_inspection_standard=confirm)
+  ns['runtime_postgres_repository_or_none']=repository
  elif case=='public_owned':
   target='confirm_text_inspection_standard';prep_enabled=True;calls=[]
   def owned2(*a):
    calls.append(1)
-   if len(calls)==2:events.append('owned-second');ns['_text_v2_public']=public_b
+   if len(calls)==2:events.append('owned-second');ns['_text_v2_public']=public_c if window else public_b
    return std
   ns['_text_v2_owned']=owned2
+  if window:ns['standard_preparation_jobs'].start=lambda *a:ns.update(_text_v2_public=public_b)
  elif case=='apply_confirm':
   target='confirm_text_inspection_standard'
   class Standard(dict):
    def __getitem__(self,key):
-    if key=='confirmed_at':events.append('confirmed-time');ns['_text_v2_apply_revision']=lambda *a,**k:events.append('applyB')
+    if key=='confirmed_at':events.append('confirmed-time');ns['_text_v2_apply_revision']=lambda *a,**k:events.append('applyC' if window else 'applyB')
     return super().__getitem__(key)
   std=Standard(std)
+  if window:
+   class Asset(dict):
+    def get(self,key,default=None):
+     if key=='ordinal':ns['_text_v2_apply_revision']=lambda *a,**k:events.append('applyB')
+     return super().get(key,default)
+   asset=Asset(asset)
  elif case=='request_json':
   target='patch_text_inspection_asset'
- async def json_a():events.append('jsonA');return body
+ async def json_a():
+  events.append('jsonA')
+  if window and case=='expected':ns['_text_v2_expected_revision']=lambda value:events.append('expectedB')
+  return body
  async def json_b():events.append('jsonB');return body
  request=SimpleNamespace(json=json_a)
  if case=='request_json':
   ns['require_permission']=lambda *a,**k:setattr(request,'json',json_b)
  async def queued(fn,*args):
-  events.append('queued');ns['extract_doc_images']=lambda b:(events.append('docB') or [],[])
+  events.append('queued');ns['extract_doc_images']=lambda b:(events.append('docC' if window else 'docB') or [],[])
   return fn(*args)
  access=ports.StandardAccess(lambda *a,**k:ns['require_permission'](*a,**k),lambda:ns['_text_v2_owner']())
  records=ports.StandardRecords(lambda k:ns['_text_v2_load'](k),lambda *a,**k:ns['_text_v2_save'](*a,**k),lambda *a:ns['_text_v2_owned'](*a),lambda:ns['_text_v2_public'])
@@ -327,6 +351,20 @@ class StandardContracts(unittest.TestCase):
         }
         for case,events in expected.items():
             with self.subTest(case=case):self.assertEqual(capture_trial(case),events)
+
+    def test_capture_window_rejects_entry_caching_and_late_lookup(self):
+        # Prior business work switches A to B; evaluating the call's arguments
+        # switches B to C. The current call must use B, never cached A or late C.
+        expected={
+            'doc_queued':['textA','textA','textA','queued','docB','writeA','publicA'],
+            'asset_write':['textA','textA','textA','writeA','blob-index','writeB','publicA'],
+            'unavailable':['textA','textA','textA','writeA','reason','markB','publicA'],
+            'expected':['jsonA','expected-arg','expectedB','publicA','publicA'],
+            'public_db':['db','publicB'], 'public_owned':['owned-second','publicB'],
+            'apply_confirm':['confirmed-time','applyB','publicA'],
+        }
+        for case,events in expected.items():
+            with self.subTest(case=case):self.assertEqual(capture_trial(case,window=True),events)
 
     def test_import_admission_duplicate_and_parser_thread_identity(self):
         f=self.f;u=Upload();
