@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Background task services continue using the existing training record persistence interface and
+filesystem background manifest. Model bindings remain frozen at task save and restored at run.
+There is no database schema, transaction, connection lifecycle or advisory-lock change.
+
 Background write services keep the existing filesystem assets and JSON manifest behavior.
 They introduce no database schema, connection, advisory-lock or transaction change.
 
@@ -78,7 +82,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v35 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v36 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
