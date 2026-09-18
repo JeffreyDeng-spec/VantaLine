@@ -19,6 +19,10 @@ and prevent downstream work. The cache also retains a falsey non-None model.
 Sixteen business groups replay against actual original root bodies; the new provider
 group, engine factory group, root composition group and class-based batch group are
 checked separately and are not claimed as old factory behavior.
+Crop pixel contracts verify real rectangle geometry and explicitly cover both
+possible first-long-edge directions. This retains exact masks, rotation metadata
+and resized pixels without assuming a platform-specific OpenCV vertex start order.
+
 
 
 `python scripts/smoke_detection_results.py` covers fourteen synthetic groups.
