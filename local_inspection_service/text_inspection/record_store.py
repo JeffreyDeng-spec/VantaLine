@@ -48,9 +48,9 @@ class TextRecordDependencies:
     guard: Callable[[], AbstractContextManager[Any]]
     directory: Callable[[], Path]
     tables: Callable[[], dict[str, str]]
-    read_json: Callable[[Path], list[Record]]
-    write_json: Callable[[Path, list[Record]], None]
-    raw_rows: Callable[[list[Record]], list[Record]]
+    json_reader: Callable[[], Callable[[Path], list[Record]]]
+    json_writer: Callable[[], Callable[[Path, list[Record]], None]]
+    row_decoder: Callable[[], Callable[[list[Record]], list[Record]]]
 
 
 class TextRecordStore:
@@ -63,8 +63,8 @@ class TextRecordStore:
     def load(self, kind: str) -> list[dict[str, Any]]:
         repository = self.dependencies.runtime_repository()
         if repository is not None:
-            return self.dependencies.raw_rows(repository.fetch_all(self.dependencies.tables()[kind]))
-        return self.dependencies.read_json(self.json_path(kind))
+            return self.dependencies.row_decoder()(repository.fetch_all(self.dependencies.tables()[kind]))
+        return self.dependencies.json_reader()(self.json_path(kind))
 
     def save(self, kind: str, value: dict[str, Any], *, insert_only: bool = False) -> bool:
         repository = self.dependencies.runtime_repository()
@@ -75,7 +75,7 @@ class TextRecordStore:
             repository.upsert_row(self.dependencies.tables()[kind], row)
             return True
         with self.dependencies.guard():
-            values = self.dependencies.read_json(self.json_path(kind))
+            values = self.dependencies.json_reader()(self.json_path(kind))
             index = next((i for i, item in enumerate(values) if str(item.get("id")) == str(value.get("id"))), None)
             unique_fields = {
                 "standards": ("owner_user_id", "material_code", "version_label", "standard_type"),
@@ -91,7 +91,7 @@ class TextRecordStore:
                 values.insert(0, copy.deepcopy(value))
             else:
                 values[index] = copy.deepcopy(value)
-            self.dependencies.write_json(self.json_path(kind), values)
+            self.dependencies.json_writer()(self.json_path(kind), values)
             return True
 
     def update_attempt(self, kind: str, value: dict[str, Any], expected_status: str = "attempting") -> bool:
@@ -111,6 +111,6 @@ class TextRecordStore:
             repository = self.dependencies.runtime_repository()
             if repository is not None:
                 row = repository.fetch_one_by_columns(self.dependencies.tables()[kind], {"id": record_id, "owner_user_id": owner_user_id})
-                values = self.dependencies.raw_rows([row]) if row else []
+                values = self.dependencies.row_decoder()([row]) if row else []
                 return values[0] if values else None
         return next((item for item in self.load(kind) if str(item.get("id")) == record_id and str(item.get("owner_user_id")) == owner_user_id), None)

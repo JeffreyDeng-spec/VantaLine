@@ -1,6 +1,6 @@
 # Testing
 
-`python scripts/smoke_text_record_store.py --root --postgres` runs six groups:
+`python scripts/smoke_text_record_store.py --root --postgres` runs eight groups:
 nine table encodings and payload aliases; JSON unique keys/order/copy behavior;
 account/status CAS and reentrant lock failures; exact SQL dispatch without JSON
 fallback; real application lock/factory/table composition; and two independent
@@ -9,6 +9,13 @@ explicit test DSN and disposable schema. Source contracts now inspect the extrac
 implementation and all compatibility forwards; the minimum repository gate remains.
 The original Beta smoke checks the revisions-table mapping in `record_store.py`
 and verifies its composition binding in the entry point.
+The root group replaces callbacks while paths and queries are evaluated, preserving
+reader/writer/decoder capture order and missing-callable errors. Owned lookup still
+resolves its decoder after a successful query and skips it for an absent row.
+Nine first-error I/O cases allow a succeeding second call but require the original
+error exactly once, with no JSON fallback or later write. Cross-thread nonblocking
+lock probes cover the copy phase of save and the status comparison of CAS, including
+the original nested lock and exception-release checks.
 
 `python scripts/smoke_comparison_dependencies.py` has ten synthetic groups:
 duplicate/conflicting requests and per-submission callback isolation; admission and

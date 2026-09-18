@@ -26,7 +26,7 @@ class Fixture:
     def __init__(self):
         self.repository=None; self.events=[]; self.values={}; self.lock=threading.RLock(); self.depth=0
         self.store=TextRecordStore(TextRecordDependencies(self.repo,self.guard,lambda:Path('/fixture'),
-            lambda:TEXT_INSPECTION_TABLES,self.read,self.write,row_raw_json_list))
+            lambda:TEXT_INSPECTION_TABLES,lambda:self.read,lambda:self.write,lambda:row_raw_json_list))
     def repo(self): self.events.append(('repository',self.depth)); return self.repository
     @contextmanager
     def guard(self):
@@ -101,7 +101,7 @@ class StoreContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'unsupported_attempt_kind'):f.store.update_attempt('assets',original)
         self.assertEqual(f.events,[])
         def fail(*args): raise RuntimeError('write failed')
-        f.store.dependencies=replace(f.store.dependencies,write_json=fail)
+        f.store.dependencies=replace(f.store.dependencies,json_writer=lambda:fail)
         with self.assertRaisesRegex(RuntimeError,'write failed'): f.store.save('records',original)
         self.assertEqual(f.depth,0)
         f.events.clear()
@@ -159,6 +159,105 @@ class StoreContracts(unittest.TestCase):
                 repository.fetch_all.assert_called_once_with('alternate_records')
             with patch.object(server,'TEXT_INSPECTION_JSON_DIR',root/'other-json'):
                 self.assertEqual(server._text_v2_json_path('records'),root/'other-json'/'records.json')
+            for mode in ('read','write','missing-reader','missing-writer'):
+                events=[]
+                reader_a=lambda path:events.append('readA') or []
+                reader_b=lambda path:events.append('readB') or []
+                writer_a=lambda path,values:events.append('writeA')
+                writer_b=lambda path,values:events.append('writeB')
+                class Kind(str):
+                    def __format__(self,spec):
+                        events.append('path')
+                        if mode in {'read','missing-reader'}:server._incoming_text_json_list=reader_b
+                        elif events.count('path')==2:server._save_incoming_text_json_list=writer_b
+                        return str(self)
+                with patch.object(server,'runtime_postgres_repository_or_none',return_value=None),patch.object(server,'_incoming_text_json_list',None if mode=='missing-reader' else reader_a),patch.object(server,'_save_incoming_text_json_list',None if mode=='missing-writer' else writer_a):
+                    def invoke():
+                        if mode in {'read','missing-reader'}:return server._text_v2_load(Kind('records'))
+                        return server._text_v2_save(Kind('records'),sample())
+                    if mode.startswith('missing'):
+                        with self.assertRaises(TypeError):invoke()
+                    else:invoke()
+                expected={'read':['path','readA'],'write':['path','readA','path','writeA'],
+                    'missing-reader':['path'],'missing-writer':['path','readA','path']}[mode]
+                self.assertEqual(events,expected,mode)
+            for mode in ('load','owned','missing','missing-decoder'):
+                events=[]
+                rows_a=lambda rows:events.append('rowsA') or rows
+                rows_b=lambda rows:events.append('rowsB') or rows
+                def fetch(*args):
+                    events.append('fetch');server.row_raw_json_list=rows_b
+                    return [] if mode in {'load','missing-decoder'} else None if mode=='missing' else {'id':'r'}
+                repository=Mock(spec=PostgresRuntimeRepository)
+                repository.fetch_all.side_effect=fetch;repository.fetch_one_by_columns.side_effect=fetch
+                with patch.object(server,'runtime_postgres_repository_or_none',return_value=repository),patch.object(server,'row_raw_json_list',None if mode=='missing-decoder' else rows_a):
+                    if mode=='missing-decoder':
+                        with self.assertRaises(TypeError):server._text_v2_load('records')
+                    elif mode=='load':server._text_v2_load('records')
+                    else:server._text_v2_owned('records','r','alice')
+                expected=['fetch','rowsA'] if mode=='load' else ['fetch','rowsB'] if mode=='owned' else ['fetch']
+                self.assertEqual(events,expected,mode)
+
+    def test_first_io_failure_is_preserved_without_retry_or_fallback(self):
+        modes=('factory','json-read','json-write','json-cas-write','fetch_all',
+               'fetch_one_by_columns','insert_row_once','upsert_row','update_text_attempt')
+        for mode in modes:
+            with self.subTest(mode=mode):
+                f=Fixture();value=sample();error=RuntimeError('unknown '+mode+' outcome')
+                if mode=='json-cas-write':f.store.save('records',value)
+                before=copy.deepcopy(f.values);f.events.clear()
+                fallback=[] if mode in {'json-read','fetch_all'} else True if mode in {'insert_row_once','update_text_attempt'} else None
+                failure=Mock(side_effect=[error,fallback])
+                if mode=='factory':
+                    f.store.dependencies=replace(f.store.dependencies,runtime_repository=failure)
+                    invoke=lambda:f.store.load('records')
+                elif mode=='json-read':
+                    f.store.dependencies=replace(f.store.dependencies,json_reader=lambda:failure)
+                    invoke=lambda:f.store.load('records')
+                elif mode in {'json-write','json-cas-write'}:
+                    f.store.dependencies=replace(f.store.dependencies,json_writer=lambda:failure)
+                    invoke=(lambda:f.store.save('records',value)) if mode=='json-write' else (lambda:f.store.update_attempt('records',{**value,'status':'completed'}))
+                else:
+                    repository=Mock(spec=PostgresRuntimeRepository);f.repository=repository
+                    setattr(repository,mode,failure)
+                    if mode=='fetch_all':invoke=lambda:f.store.load('records')
+                    elif mode=='fetch_one_by_columns':invoke=lambda:f.store.owned('records','first','alice')
+                    elif mode=='insert_row_once':invoke=lambda:f.store.save('records',value,insert_only=True)
+                    elif mode=='upsert_row':invoke=lambda:f.store.save('records',value)
+                    else:invoke=lambda:f.store.update_attempt('records',value)
+                with self.assertRaises(RuntimeError) as caught:invoke()
+                self.assertIs(caught.exception,error);failure.assert_called_once()
+                self.assertEqual(f.values,before);self.assertEqual(f.depth,0)
+                self.assertFalse(any(e[0]=='write' for e in f.events))
+                if mode=='factory':self.assertEqual(f.events,[])
+                elif mode in {'json-read','json-write','json-cas-write'}:
+                    self.assertEqual(failure.call_args.args[0],Path('/fixture/records.json'))
+                    if mode=='json-cas-write':self.assertIn(('enter',2),f.events)
+                else:
+                    self.assertTrue(all(e[0]=='repository' for e in f.events))
+                    self.assertEqual(len(repository.method_calls),1);self.assertEqual(repository.method_calls[0][0],mode)
+
+    def test_lock_covers_copy_and_compare_until_write(self):
+        f=Fixture();probes=[]
+        def locked():
+            acquired=[]
+            def contender():
+                success=f.lock.acquire(False);acquired.append(success)
+                if success:f.lock.release()
+            thread=threading.Thread(target=contender);thread.start();thread.join(timeout=2)
+            self.assertFalse(thread.is_alive());self.assertEqual(acquired,[False]);probes.append(True)
+        class Input(dict):
+            def __deepcopy__(self,memo):locked();return copy.deepcopy(dict(self),memo)
+        self.assertTrue(f.store.save('records',Input(sample())))
+        self.assertEqual(len(probes),1)
+        class Previous(dict):
+            def get(self,key,default=None):
+                if key=='status':locked()
+                return super().get(key,default)
+        f.values[Path('/fixture/records.json')]=[Previous(sample())]
+        self.assertTrue(f.store.update_attempt('records',{**sample(),'status':'completed'}))
+        self.assertEqual(len(probes),2);self.assertEqual(f.depth,0)
+        self.assertIn(('enter',2),f.events)
 
     @unittest.skipUnless(POSTGRES,'requires isolated PostgreSQL')
     def test_real_postgres_duplicate_claim_and_late_update(self):
@@ -168,7 +267,7 @@ class StoreContracts(unittest.TestCase):
         dsn=os.environ['VANTALINE_POSTGRES_DSN']; schema='text_records_'+uuid.uuid4().hex
         local=threading.local()
         def forbidden(*args):raise AssertionError('PostgreSQL fell back to JSON')
-        store=TextRecordStore(TextRecordDependencies(lambda:local.repo,forbidden,lambda:Path('/unused'),lambda:TEXT_INSPECTION_TABLES,forbidden,forbidden,row_raw_json_list))
+        store=TextRecordStore(TextRecordDependencies(lambda:local.repo,forbidden,lambda:Path('/unused'),lambda:TEXT_INSPECTION_TABLES,forbidden,forbidden,lambda:row_raw_json_list))
         with psycopg.connect(dsn,autocommit=True) as control:
             control.execute(postgres_ddl(schema))
             try:

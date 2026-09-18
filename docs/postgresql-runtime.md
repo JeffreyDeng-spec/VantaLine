@@ -6,6 +6,10 @@ operations; no connection is cached by this service. Only records/OCR evidence u
 indexed owned lookup, while other kinds retain their existing list/filter path.
 JSON insert-only checks and normal upserts retain distinct semantics. Repository
 errors do not fall back to JSON. Existing transaction/advisory locks are unchanged.
+Unknown read/write outcomes propagate once without a new retry policy. JSON save
+holds the shared lock through duplicate checks, copy and write; compare-and-set holds
+it through the status check and nested save. Neither sequence is split into separate
+lock regions by this extraction.
 
 Candidate repository extraction retains existing transaction and lock placement.
 Load may repair and upsert legacy job metadata; GET holds the original outer RLock

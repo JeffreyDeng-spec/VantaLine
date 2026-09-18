@@ -33888,9 +33888,9 @@ _text_records = TextRecordStore(TextRecordDependencies(
     guard=lambda: _incoming_text_store_lock,
     directory=lambda: TEXT_INSPECTION_JSON_DIR,
     tables=lambda: TEXT_INSPECTION_TABLES,
-    read_json=lambda path: _incoming_text_json_list(path),
-    write_json=lambda path, values: _save_incoming_text_json_list(path, values),
-    raw_rows=lambda rows: row_raw_json_list(rows),
+    json_reader=lambda: _incoming_text_json_list,
+    json_writer=lambda: _save_incoming_text_json_list,
+    row_decoder=lambda: row_raw_json_list,
 ))
 
 
