@@ -18913,27 +18913,7 @@ def public_training_task(task: dict[str, Any]) -> dict[str, Any]:
     return _training_views.public_training_task(task)
 
 
-def parse_yolo_epoch_progress(log_path: Path, total_epochs: int) -> tuple[int, int] | None:
-    if not log_path.exists():
-        return None
-    try:
-        with log_path.open("rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            size = fh.tell()
-            fh.seek(max(0, size - 131072), os.SEEK_SET)
-            text = fh.read().decode("utf-8", errors="ignore")
-    except OSError:
-        return None
-    matches = re.findall(r"(?:^|\s)(\d{1,4})/(\d{1,4})(?=\s)", text, flags=re.MULTILINE)
-    parsed: list[tuple[int, int]] = []
-    for current_raw, total_raw in matches:
-        current, total = int(current_raw), int(total_raw)
-        if current <= 0 or total <= 0:
-            continue
-        if total_epochs and total != total_epochs:
-            continue
-        parsed.append((current, total))
-    return parsed[-1] if parsed else None
+from .training.local_process import parse_yolo_epoch_progress, yolo_cli_command
 
 
 def update_training_task(job_id: str, **updates: Any) -> dict[str, Any]:
@@ -22038,119 +22018,37 @@ def start_worker_training_watcher() -> None:
     return None
 
 
-@pinned_model_profiles(resolve_model_profiles, lambda identity: find_training_task(identity))
+from .training.runner import TrainingRunner, TrainingRunnerRecords, TrainingRunnerPaths, TrainingDatasetExecution, TrainingLocalExecution
+from .training.submission import (
+    TrainingSubmission, TrainingSubmissionPolicy, TrainingSubmissionIdentity, TrainingSubmissionRecords, TrainingSubmissionThreads,
+)
+
+_training_runner = TrainingRunner(
+    records=TrainingRunnerRecords(find=lambda job_id: find_training_task(job_id), path=lambda job_id: training_task_path(job_id),
+        load=lambda: load_training_task, update_provider=lambda: update_training_task,
+        sync=lambda job_id: sync_training_state_from_task(job_id)),
+    paths=TrainingRunnerPaths(resolve=lambda: resolve_service_path, tasks=lambda: TRAINING_TASKS_DIR, app=lambda: APP_DIR,
+        output=lambda: output_write_dir_for_owner),
+    datasets=TrainingDatasetExecution(mode=lambda: training_executor_mode(), generate=lambda task: generate_training_dataset(task),
+        runpod=lambda job_id, task, dataset: run_runpod_training_task(job_id, task, dataset),
+        remote=lambda job_id, task, dataset: run_remote_training_task(job_id, task, dataset)),
+    local=TrainingLocalExecution(base_model=lambda: detect_base_model(), device=lambda: yolo_inference_device(), cli=lambda: yolo_cli_command(),
+        start=lambda: subprocess.Popen, progress=lambda path, epochs: parse_yolo_epoch_progress(path, epochs),
+        warmup=lambda: start_yolo_warmup),
+    resolver=resolve_model_profiles,
+)
+_training_submission = TrainingSubmission(
+    policy=TrainingSubmissionPolicy(estimate=lambda: training_estimate, uses_ocr=lambda item: accessory_uses_ocr(item)),
+    identity=TrainingSubmissionIdentity(user=lambda: _request_user.get(), owner=lambda: current_owner_fields(),
+        background=lambda: selected_background_set_id),
+    records=TrainingSubmissionRecords(save=lambda task: save_training_task(task), public=lambda task: public_training_task(task)),
+    threads=TrainingSubmissionThreads(target=lambda: run_training_task, create=lambda **kwargs: threading.Thread(**kwargs),
+        records=lambda: _training_task_threads),
+)
+
+
 def run_training_task(job_id: str) -> None:
-    task = load_training_task(training_task_path(job_id))
-    if not task:
-        return
-    try:
-        update_training_task(job_id, status="running", progress=5, started_at=int(time.time()), note="任务已启动。")
-        executor_mode = training_executor_mode()
-        task_dataset_yaml = resolve_service_path(task.get("dataset_yaml", ""))
-        has_local_dataset = bool(task.get("dataset_yaml") and task_dataset_yaml.exists())
-        if task.get("dataset_yaml") and task_dataset_yaml.exists():
-            dataset = {
-                "dataset_dir": str(resolve_service_path(task.get("dataset_dir", "")) if task.get("dataset_dir") else task_dataset_yaml.parent),
-                "dataset_yaml": str(task_dataset_yaml),
-                "manifest_path": str(task.get("manifest_path") or ""),
-            }
-            update_training_task(job_id, status="running", progress=74, note="已选择样本集，正在启动 YOLO 训练。", **dataset)
-        else:
-            dataset = generate_training_dataset(task)
-        if task.get("action") == "generate_samples":
-            update_training_task(job_id, status="completed", progress=100, completed_at=int(time.time()), note="训练样本已生成完成。", **dataset)
-            sync_training_state_from_task(job_id)
-            return
-        if executor_mode == "runpod":
-            run_runpod_training_task(job_id, task, dataset)
-            return
-        if training_executor_mode() == "remote":
-            run_remote_training_task(job_id, task, dataset)
-            return
-        update_training_task(job_id, status="running", progress=76, note="样本已生成，正在启动 YOLO 训练。", **dataset)
-        run_dir = output_write_dir_for_owner("training_runs", str(task.get("owner_user_id") or ""))
-        # Detection-only training: transfer-learn from a COCO-pretrained bbox
-        # detector (not the old segmentation checkpoint).
-        model_path = detect_base_model()
-        epochs = max(1, min(500, int(task.get("epochs") or 1)))
-        image_size = max(320, min(1280, int(task.get("image_size") or 640)))
-        training_device = yolo_inference_device()
-        training_device_text = str(training_device).strip().lower()
-        cpu_training = training_device_text == "cpu"
-        command = [
-            yolo_cli_command(),
-            "detect",
-            "train",
-            f"model={model_path}",
-            f"data={dataset['dataset_yaml']}",
-            f"imgsz={image_size}",
-            f"epochs={epochs}",
-            "batch=1" if cpu_training else "batch=0.72",
-            f"device={training_device}",
-            "cache=False" if cpu_training else "cache=ram",
-            "workers=0",
-            "amp=False" if cpu_training else "amp=True",
-            "patience=25",
-            "optimizer=auto",
-            "mosaic=0.0",
-            "mixup=0.0",
-            "copy_paste=0.0",
-            "plots=False" if cpu_training else "plots=True",
-            f"project={run_dir}",
-            f"name={job_id}",
-            "exist_ok=True",
-        ]
-        log_path = TRAINING_TASKS_DIR / f"{job_id}.log"
-        with log_path.open("w", encoding="utf-8") as log:
-            process = subprocess.Popen(command, cwd=str(APP_DIR), stdout=log, stderr=subprocess.STDOUT, text=True)
-            update_training_task(
-                job_id,
-                training_command=command,
-                training_log_path=str(log_path),
-                training_pid=process.pid,
-                current_epoch=0,
-                total_epochs=epochs,
-                progress=82,
-                note=f"YOLO 训练已启动：Epoch 0/{epochs}。",
-            )
-            last_epoch = 0
-            while process.poll() is None:
-                parsed_epoch = parse_yolo_epoch_progress(log_path, epochs)
-                if parsed_epoch and parsed_epoch[0] != last_epoch:
-                    last_epoch = parsed_epoch[0]
-                    epoch_progress = min(98, 82 + int((last_epoch / max(1, epochs)) * 16))
-                    update_training_task(
-                        job_id,
-                        status="running",
-                        progress=epoch_progress,
-                        current_epoch=last_epoch,
-                        total_epochs=parsed_epoch[1],
-                        note=f"YOLO 训练中：Epoch {last_epoch}/{parsed_epoch[1]}。",
-                    )
-                time.sleep(5)
-            return_code = process.returncode
-            parsed_epoch = parse_yolo_epoch_progress(log_path, epochs)
-            if parsed_epoch:
-                last_epoch = max(last_epoch, parsed_epoch[0])
-        update_training_task(
-            job_id,
-            status="completed" if return_code == 0 else "failed",
-            progress=100,
-            completed_at=int(time.time()),
-            return_code=return_code,
-            current_epoch=epochs if return_code == 0 else last_epoch,
-            total_epochs=epochs,
-            training_run_dir=str(run_dir / job_id),
-            note="模型训练已完成。" if return_code == 0 else "模型训练失败，请查看训练日志。",
-        )
-        sync_training_state_from_task(job_id)
-        if return_code == 0:
-            variant = str(task.get("model_variant") or task.get("mode") or "yolo")
-            variant = variant if variant in {"yolo", "yolo_ocr"} else "yolo"
-            start_yolo_warmup("training_completed", [f"trained_{job_id}__{variant}"])
-    except Exception as exc:
-        update_training_task(job_id, status="failed", progress=100, completed_at=int(time.time()), error=str(exc), note=f"任务失败：{exc}")
-        sync_training_state_from_task(job_id)
+    return _training_runner.run_training_task(job_id)
 
 
 def enqueue_training_task(
@@ -22159,69 +22057,7 @@ def enqueue_training_task(
     action: str,
     dataset: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    sample_count = max(1, min(20000, int(dataset.get("sample_count") if dataset else request.sample_count)))
-    epochs = max(1, min(500, int(request.epochs)))
-    image_size = max(320, min(1280, int(request.image_size)))
-    estimate = training_estimate(
-        sample_count,
-        include_training=action == "train_model",
-        include_generation=action == "generate_samples" or (action == "train_model" and not dataset),
-        epochs=epochs,
-        image_size=image_size,
-        selected_count=len(selected),
-        train_mode=request.train_mode,
-    )
-    job_id = f"{'train' if action == 'train_model' else 'samples'}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    task = {
-        "job_id": job_id,
-        "task_id": job_id,
-        "candidate_id": job_id,
-        "candidate_name": "训练模型" if action == "train_model" else "生成训练样本",
-        "label": "训练模型" if action == "train_model" else "生成训练样本",
-        "queue_kind": "training",
-        "action": action,
-        "status": "queued",
-        "progress": 0,
-        "created_at": int(time.time()),
-        "selected_accessory_ids": [item["id"] for item in selected],
-        "required_accessory_counts": {str(item["id"]): 1 for item in selected},
-        "accessory_class_map": {str(idx): str(item["id"]) for idx, item in enumerate(selected)},
-        "class_accessory_map": {str(item["id"]): idx for idx, item in enumerate(selected)},
-        "ocr_accessory_ids": [str(item["id"]) for item in selected if accessory_uses_ocr(item)],
-        "model_variant": request.train_mode,
-        "sample_count": sample_count,
-        "mode": request.train_mode,
-        "epochs": epochs,
-        "image_size": image_size,
-        "background_set_id": selected_background_set_id(request.background_set_id, _request_user.get()),
-        "approved_preview_id": request.approved_preview_id,
-        "preview_pose_family_policy": "auto",
-        "note": "任务已加入队列。",
-        **current_owner_fields(),
-        **estimate,
-    }
-    pipeline_task_id = str(request.pipeline_task_id or "").strip()
-    pipeline_task_name = str(request.pipeline_task_name or "").strip()
-    if pipeline_task_id:
-        task["pipeline_task_id"] = pipeline_task_id[:128]
-    if pipeline_task_name:
-        task["pipeline_task_name"] = pipeline_task_name[:160]
-    if dataset:
-        task.update(
-            {
-                "source_dataset_id": dataset["id"],
-                "dataset_dir": dataset.get("dataset_dir", ""),
-                "dataset_yaml": dataset.get("dataset_yaml", ""),
-                "manifest_path": dataset.get("manifest_path", ""),
-                "label": dataset.get("display_name") or task["label"],
-                "candidate_name": dataset.get("display_name") or task["candidate_name"],
-            }
-        )
-    save_training_task(task)
-    thread = threading.Thread(target=run_training_task, args=(job_id,), name=f"training-task-{job_id}", daemon=True)
-    _training_task_threads[job_id] = thread
-    thread.start()
-    return public_training_task(task)
+    return _training_submission.enqueue_training_task(request, selected, action, dataset)
 
 
 from .training.task_lookup import TrainingTaskLookup, LookupCache, LookupRows
@@ -22473,22 +22309,6 @@ def detect_base_model() -> str:
     return "yolo26s.pt"
 
 
-def yolo_cli_command() -> str:
-    configured = os.environ.get("INSPECTION_YOLO_COMMAND", "").strip()
-    if configured:
-        return configured
-    discovered = shutil.which("yolo")
-    if discovered:
-        return discovered
-    candidates = []
-    virtual_env = os.environ.get("VIRTUAL_ENV", "").strip()
-    if virtual_env:
-        candidates.append(Path(virtual_env) / "bin" / "yolo")
-    candidates.append(Path(sys.executable).parent / "yolo")
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    return "yolo"
 
 
 from .runtime.paddle import prepare_runtime as prepare_paddle_runtime, DetectionOCREngine

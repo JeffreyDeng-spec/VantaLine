@@ -1,5 +1,28 @@
 # Testing
 
+`python scripts/smoke_training_runner.py` covers twenty-nine offline groups. Sixteen passed on
+the original four functions before extraction. Twenty-six expanded business groups also
+pass on the saved original functions, including their actual model-binding decorator.
+New getter and independent composition groups verify independent runners,
+submissions and identities, zero-call construction and missing-resolver failure. Tests keep
+binding and body task reads distinct, check historical/empty/ambient snapshots, async thread
+scope isolation, exact command/request counts, poll/parse/sleep order, terminal and failure
+settlement, save/register/start/publication ordering, failed-step residue, late target capture,
+CLI lookup and bounded log parsing. Processes, external executors and submission threads are
+substitutes; no real training or paid call is started. Forty-five capture traces and
+first-error matrices preserve per-branch call counts and legal failure settlement.
+They cover every update provider, process I/O, clocks, log-reader and CLI boundaries,
+BaseException propagation and both failure-message conversions.
+Ordinary Thread identity behavior is
+unchanged; asyncio tests validate only the existing native thread-pool propagation.
+Generation, RunPod and remote execution each have an independent unknown-outcome fixture
+whose second call would succeed: each must be called once, settle failure once within the
+saved model scope, and never fall through to another executor or a local process.
+The non-CI `smoke_phase3d_pipeline.py` main still asserts retired worker bypass metadata
+(`training_executor=local` and `worker_sample_generation_bypassed`). Replaying that exact
+assertion against sample-completion updates from both saved original and migrated runners
+fails identically; the legacy script remains unchanged and is not counted as passing.
+
 `python scripts/smoke_training_state_services.py` covers twenty-one groups. Twelve first
 passed against the original thirteen functions; the added group composes independent domain
 services and identities. Nineteen expanded business groups also pass on the original
