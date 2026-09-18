@@ -14694,70 +14694,26 @@ def text_accessory_confirm_detail(
     }
 
 
+from .training.preview_cache import SpriteVersionInputs, TrainingPreviewCache
+
+_training_preview_cache = TrainingPreviewCache(
+    SpriteVersionInputs(lambda item: clean_sprite_assets(item), lambda item: accessory_uid(item),
+                        lambda item: accessory_material_type(item), lambda item: object_alpha_material_policy(item)),
+    lambda: PREVIEW_CACHE_SCHEMA_VERSION, lambda: resolve_service_path,
+    lambda item: accessory_sprite_version(item),
+)
+
+
 def accessory_sprite_version(item: dict[str, Any]) -> str:
-    sprites = clean_sprite_assets(item)
-    parts = [
-        PREVIEW_CACHE_SCHEMA_VERSION,
-        str(accessory_uid(item)),
-        str(accessory_material_type(item)),
-        str(object_alpha_material_policy(item)) if accessory_material_type(item) == "object" else "",
-        json.dumps(item.get("physical_size") or {}, sort_keys=True, separators=(",", ":")),
-        str(item.get("clean_sprite_status") or ""),
-        str(item.get("clean_sprite_preprocessed_at") or 0),
-        str(item.get("clean_sprite_count") or len(sprites)),
-        str(item.get("clean_sprite_expected_count") or ""),
-    ]
-    for idx, asset in enumerate(sprites):
-        path = resolve_service_path(asset.get("path"))
-        try:
-            stat = path.stat()
-            mtime_ns = stat.st_mtime_ns
-            size = stat.st_size
-        except OSError:
-            mtime_ns = 0
-            size = 0
-        parts.extend(
-            [
-                str(idx + 1),
-                str(path),
-                str(mtime_ns),
-                str(size),
-                str(asset.get("task_id") or ""),
-                str(asset.get("source_position") or asset.get("pose_position") or ""),
-                str(asset.get("source_pose_family") or asset.get("pose_family") or ""),
-                str(asset.get("material_alpha_policy") or ""),
-                str(asset.get("object_alpha_material_policy") or ""),
-                json.dumps(asset.get("physical_size_mm") or {}, sort_keys=True, separators=(",", ":")),
-                json.dumps(asset.get("source_object_bbox_xyxy") or [], separators=(",", ":")),
-                json.dumps(asset.get("source_object_size_px") or [], separators=(",", ":")),
-                str(asset.get("source_long_side_px") or ""),
-                str(asset.get("source_short_side_px") or ""),
-                str(asset.get("source_long_edge_axis") or ""),
-                str(asset.get("source_short_edge_axis") or ""),
-                str(asset.get("source_long_short_ratio") or ""),
-                json.dumps(asset.get("normalized_bbox_xyxy") or [], separators=(",", ":")),
-                json.dumps(asset.get("render_footprint_px") or [], separators=(",", ":")),
-                json.dumps(asset.get("render_footprint_mm") or [], separators=(",", ":")),
-                json.dumps(asset.get("render_size_hint_px") or [], separators=(",", ":")),
-            ]
-        )
-    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
+    return _training_preview_cache.accessory_sprite_version(item)
 
 
 def preview_cache_key(selected: list[dict[str, Any]]) -> str:
-    raw = "|".join(f"{accessory_uid(item)}:{accessory_sprite_version(item)}" for item in selected)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return _training_preview_cache.preview_cache_key(selected)
 
 
 def training_preview_metadata_missing(training: dict[str, Any], selected: list[dict[str, Any]]) -> bool:
-    has_object = any(accessory_material_type(item) == "object" for item in selected)
-    has_preview_state = bool(training.get("preview_urls") or training.get("previews") or training.get("last_preview_id"))
-    if not has_object or not has_preview_state:
-        return False
-    if not training.get("preview_cache_key"):
-        return True
-    sprite_versions = training.get("preview_sprite_versions")
-    return not isinstance(sprite_versions, dict) or not sprite_versions
+    return _training_preview_cache.training_preview_metadata_missing(training, selected)
 
 
 def available_object_pose_families(item: dict[str, Any]) -> list[str]:
@@ -23936,34 +23892,30 @@ def request_sample_generation(request: TrainingStartRequest) -> dict[str, Any]:
     return task
 
 
+from .training.dataset_input import TrainingDatasetInput
+from .training.preview_approval import TrainingPreviewApproval
+from .training.status_projection import StatusAccess, StatusPreview, StatusTasks, TrainingStatusProjection
+
+_training_dataset_input = TrainingDatasetInput(
+    lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs),
+    lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
+    lambda: public_path_sanitized,
+)
+_training_preview_approval = TrainingPreviewApproval(
+    lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id,
+    lambda selected: preview_cache_key(selected),
+)
+_training_status_projection = TrainingStatusProjection(
+    StatusTasks(lambda job: find_training_task(job), lambda task: public_refreshed_training_task(task)),
+    StatusAccess(lambda task, user, target: record_visible_to_user(task, user, target),
+                 lambda user: user_is_admin(user), lambda record: record_owner_id(record)),
+    StatusPreview(lambda: selected_accessories, lambda selected: preview_cache_key(selected),
+                  lambda state, selected: training_preview_metadata_missing(state, selected)),
+)
+
+
 def dataset_for_training(dataset_id: str, user: dict[str, Any] | None = None) -> dict[str, Any]:
-    dataset_dir, item = find_dataset_resource(dataset_id, user=user, include_samples=False)
-    if dataset_dir is None or item is None:
-        raise HTTPException(status_code=404, detail="Training dataset not found")
-    manifest_path = dataset_dir / "manifest.json"
-    dataset_yaml = dataset_dir / "dataset.yaml"
-    if not dataset_dir.exists() or not manifest_path.exists() or not dataset_yaml.exists():
-        raise HTTPException(status_code=404, detail="Training dataset not found")
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail="Training dataset manifest is unreadable") from exc
-    if user and item:
-        require_record_access(item, user)
-    samples = public_path_sanitized(manifest.get("samples") if isinstance(manifest.get("samples"), list) else [])
-    sample_count = len(samples) or int(manifest.get("sample_count") or 0)
-    if sample_count <= 0:
-        raise HTTPException(status_code=409, detail="Training dataset has no samples")
-    return {
-        "id": dataset_dir.name,
-        "dataset_dir": str(dataset_dir),
-        "dataset_yaml": str(dataset_yaml),
-        "manifest_path": str(manifest_path),
-        "sample_count": sample_count,
-        "selected_accessory_ids": manifest.get("selected_accessory_ids") or [],
-        "background_set_id": manifest.get("background_set_id") or "",
-        "display_name": manifest.get("display_name") or dataset_dir.name,
-    }
+    return _training_dataset_input.dataset_for_training(dataset_id, user)
 
 
 @app.get("/api/training/status")
@@ -23980,35 +23932,7 @@ def validate_approved_preview(
     selected: list[dict[str, Any]],
     user: dict[str, Any] | None = None,
 ) -> None:
-    if not request.approved_preview_id:
-        return
-    preview_path = TRAINING_JOBS_DIR / f"{request.approved_preview_id}.json"
-    if not preview_path.exists():
-        raise HTTPException(status_code=409, detail="Approved preview is no longer available. Generate a fresh preview.")
-    try:
-        preview = json.loads(preview_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=409, detail="Approved preview metadata is unreadable. Generate a fresh preview.") from exc
-
-    selected_ids = [item["id"] for item in selected]
-    preview_ids = [item.get("id") for item in preview.get("selected_accessories", []) if isinstance(item, dict)]
-    if preview_ids != selected_ids:
-        raise HTTPException(status_code=409, detail="Approved preview does not match the selected accessories.")
-    requested_background_set_id = selected_background_set_id(request.background_set_id, user)
-    if preview.get("background_set_id") != requested_background_set_id:
-        raise HTTPException(status_code=409, detail="Approved preview does not match the selected background set. Generate a fresh preview.")
-
-    current_cache_key = preview_cache_key(selected) if selected else None
-    if preview.get("preview_cache_key") != current_cache_key:
-        config["training"].update(
-            {
-                "preview_urls": [],
-                "previews": [],
-                "preview_stale_reason": "clean_sprite_version_changed",
-                "current_preview_cache_key": current_cache_key,
-            }
-        )
-        raise HTTPException(status_code=409, detail="Approved preview is stale. Generate a fresh preview.")
+    return _training_preview_approval.validate_approved_preview(config, request, selected, user)
 
 
 def filtered_training_state(
@@ -24016,71 +23940,7 @@ def filtered_training_state(
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    training = config["training"]
-    def hydrate_active_task(state: dict[str, Any], scoped_target_user_id: str | None = None) -> None:
-        active_task_id = str(state.get("active_training_task_id") or "").strip()
-        if not active_task_id:
-            return
-        task = find_training_task(active_task_id)
-        task_visible = bool(task) and (user is None or record_visible_to_user(task, user, scoped_target_user_id))
-        if task and task_visible:
-            task = public_refreshed_training_task(task)
-            for key in (
-                "status",
-                "progress",
-                "note",
-                "error",
-                "current_epoch",
-                "total_epochs",
-                "completed_at",
-                "stopped_at",
-                "cancelled_at",
-                "return_code",
-                "training_executor",
-                "worker_sample_generation_bypassed",
-                "worker_training_bypassed",
-                "remote_training_status",
-                "remote_training_poll_error",
-            ):
-                if key in task:
-                    state[key] = task.get(key)
-            if task.get("dataset_dir"):
-                state["dataset_id"] = task.get("dataset_id") or task.get("source_dataset_id") or task.get("job_id")
-            if task.get("action"):
-                state["active_training_action"] = task.get("action")
-        elif state.get("status") in {"queued", "running"}:
-            state["status"] = "stopped"
-            state["progress"] = 100
-            state["note"] = "训练任务记录已删除或不可用；请重新发起任务。"
-            state["error"] = "Active training task record is missing. Start a new task."
-
-    hydrate_active_task(training, target_user_id)
-    if isinstance(training.get("training_states"), list):
-        for child in training["training_states"]:
-            if not isinstance(child, dict):
-                continue
-            child_target_user_id = target_user_id
-            if user and user_is_admin(user) and not child_target_user_id:
-                child_target_user_id = record_owner_id(child)
-            hydrate_active_task(child, child_target_user_id)
-    selected = selected_accessories(config, training.get("selected_accessory_ids", []))
-    current_cache_key = preview_cache_key(selected) if selected else None
-    stale_reason = None
-    if training_preview_metadata_missing(training, selected):
-        stale_reason = "missing_preview_sprite_version"
-    elif training.get("preview_cache_key") and current_cache_key and training.get("preview_cache_key") != current_cache_key:
-        stale_reason = "clean_sprite_version_changed"
-    if stale_reason:
-        training = dict(training)
-        training.update(
-            {
-                "preview_urls": [],
-                "previews": [],
-                "preview_stale_reason": stale_reason,
-                "current_preview_cache_key": current_cache_key,
-            }
-        )
-    return training
+    return _training_status_projection.filtered_training_state(config, user, target_user_id)
 
 
 from .training.dataset_catalog import (DatasetAccess, DatasetAudit, DatasetCatalog, DatasetPaths,

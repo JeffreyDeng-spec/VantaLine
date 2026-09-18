@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_training_input_state.py` runs 24 offline groups.
+Sixteen original business groups passed before migration on Windows and Linux;
+22 expanded groups pass against saved original function bodies. The original sprite
+fingerprint is retained in `tests/backend_contract/training_preview_cache.json`.
+Four narrow callback getters preserve argument-effect order and per-asset resolver refresh.
+Contracts preserve stat OSError zeroing, exact HTTP errors and causes, no automatic retry,
+approval mutations, sanitized sample counts and visible task settlement before state projection.
+Two independent compositions retain their own configuration and identity without constructor reads.
+No production data, paid inference or physical PLC is used.
+
 `python scripts/smoke_training_preview_workflows.py` runs 25 synthetic groups.
 Nineteen original business/HTTP groups passed before migration on Windows and Linux;
 23 expanded groups also pass against saved original function bodies. Contracts preserve

@@ -1,5 +1,9 @@
 # PostgreSQL runtime operations
 
+Training state projection remains capable of settling interrupted visible tasks via the existing
+training lifecycle write path. Moving it to `training/status_projection.py` does not remove write
+locks or make all training GET operations pure reads; settlement errors still propagate.
+
 Resource retirement markers keep the existing pipeline/training process guards and persistence
 callbacks. Pipeline markers pass all loaded tasks plus the changed object references to the existing
 batch helper; PostgreSQL still upserts changed rows. Training markers save matching tasks one at a
@@ -55,7 +59,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v29 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v30 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
