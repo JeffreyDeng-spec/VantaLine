@@ -19350,139 +19350,56 @@ def load_training_background_manifest() -> dict[str, Any]:
     return _training_background_library.load_training_background_manifest()
 
 
-def safe_background_set_id(value: str | None) -> str:
-    raw = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value or "").strip()).strip("_")
-    return raw or "green_conveyor"
+from .training.background_manifest import BackgroundManifest
+from .training.background_catalog import (
+    safe_background_set_id, BackgroundImageFiles, BackgroundCatalogPaths,
+    BackgroundCatalogRecords, BackgroundCatalogAccess, BackgroundCatalog,
+)
+from .training.background_seeding import BackgroundSeedPaths, BackgroundSeeding
+from .training.background_selection import BackgroundSelection
 
-
+_background_manifest = BackgroundManifest(lambda: BACKGROUND_DIR, lambda: BACKGROUND_SETS_MANIFEST)
+_background_image_files = BackgroundImageFiles(lambda: IMAGE_REFERENCE_SUFFIXES)
+_background_seeding = BackgroundSeeding(
+    BackgroundSeedPaths(lambda: DEFAULT_BACKGROUND_IMAGE, lambda: BACKGROUND_SETS_DIR),
+    lambda: load_background_sets_manifest(), lambda manifest: write_background_sets_manifest(manifest),
+    lambda identifier: ensure_background_set_minimum_images(identifier), lambda: seed_default_background_set(), lambda: time.time(),
+)
+_background_catalog = BackgroundCatalog(
+    BackgroundCatalogPaths(lambda: BACKGROUND_SETS_DIR, lambda: OUTPUT_DIR),
+    BackgroundCatalogRecords(lambda: load_background_sets_manifest(), lambda: background_set_dirs(),
+                             lambda: background_set_payload),
+    BackgroundCatalogAccess(lambda: SYSTEM_OWNER_ID, lambda meta, path: record_audit_fields(meta, path),
+                            lambda item, user, target: record_visible_to_user(item, user, target)),
+    lambda identifier: safe_background_set_id(identifier), lambda path: image_file_list(path), lambda path: public_output_url(path),
+)
+_background_selection = BackgroundSelection(
+    lambda: safe_background_set_id, lambda user, target: list_background_sets(user, target),
+    lambda: load_background_sets_manifest(), lambda identifier: selected_background_set_id(identifier),
+    lambda: image_file_list, lambda: BACKGROUND_SETS_DIR,
+)
 def load_background_sets_manifest() -> dict[str, Any]:
-    try:
-        return json.loads(BACKGROUND_SETS_MANIFEST.read_text(encoding="utf-8")) if BACKGROUND_SETS_MANIFEST.exists() else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
+    return _background_manifest.load_background_sets_manifest()
 def write_background_sets_manifest(manifest: dict[str, Any]) -> None:
-    BACKGROUND_DIR.mkdir(parents=True, exist_ok=True)
-    BACKGROUND_SETS_MANIFEST.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-
-
+    return _background_manifest.write_background_sets_manifest(manifest)
 def image_file_list(path: Path) -> list[Path]:
-    if not path.exists() or not path.is_dir():
-        return []
-    return sorted(
-        item
-        for item in path.iterdir()
-        if item.is_file() and item.suffix.lower() in IMAGE_REFERENCE_SUFFIXES
-    )
-
-
+    return _background_image_files.image_file_list(path)
 def seed_default_background_set() -> None:
-    if not DEFAULT_BACKGROUND_IMAGE.exists():
-        return
-    manifest = load_background_sets_manifest()
-    sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-    default_id = "green_conveyor"
-    set_dir = BACKGROUND_SETS_DIR / default_id
-    set_dir.mkdir(parents=True, exist_ok=True)
-    original_target = set_dir / DEFAULT_BACKGROUND_IMAGE.name
-    if not original_target.exists():
-        shutil.copy2(DEFAULT_BACKGROUND_IMAGE, original_target)
-    ensure_background_set_minimum_images(default_id)
-    sets.setdefault(
-        default_id,
-        {
-            "id": default_id,
-            "name": "绿色传送带",
-            "description": "同一生产环境的绿色传送带背景集",
-            "source": str(DEFAULT_BACKGROUND_IMAGE),
-            "created_at": int(time.time()),
-            "generation_method": "seeded_from_existing_background",
-        },
-    )
-    manifest["sets"] = sets
-    manifest.setdefault("default_set_id", default_id)
-    write_background_sets_manifest(manifest)
-
-
+    return _background_seeding.seed_default_background_set()
 def background_set_dirs() -> list[Path]:
-    seed_default_background_set()
-    dirs = [path for path in BACKGROUND_SETS_DIR.iterdir() if path.is_dir()] if BACKGROUND_SETS_DIR.exists() else []
-    return sorted(dirs, key=lambda path: path.name)
-
-
+    return _background_seeding.background_set_dirs()
 def background_set_payload(set_id: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:
-    clean_id = safe_background_set_id(set_id)
-    set_dir = BACKGROUND_SETS_DIR / clean_id
-    images = image_file_list(set_dir)
-    meta = dict(meta or {})
-    if clean_id == "green_conveyor" and not meta.get("owner_user_id"):
-        meta["owner_user_id"] = SYSTEM_OWNER_ID
-        meta["owner_username"] = "system"
-        meta["shared_with_user_ids"] = ["*"]
-    audit = record_audit_fields(meta, set_dir)
-    return {
-        "id": clean_id,
-        "name": meta.get("name") or clean_id.replace("_", " "),
-        "description": meta.get("description") or "",
-        "source": meta.get("source") or "",
-        "created_at": audit["created_at"],
-        "updated_at": audit["updated_at"],
-        "owner_user_id": audit["owner_user_id"],
-        "owner_username": audit["owner_username"],
-        "shared_with_user_ids": meta.get("shared_with_user_ids") if isinstance(meta.get("shared_with_user_ids"), list) else [],
-        "generation_method": meta.get("generation_method") or "",
-        "status": meta.get("status") or ("ready" if images else "empty"),
-        "image_count": len(images),
-        "images": [
-            {
-                "name": path.name,
-                "path": str(path),
-                "url": public_output_url(path) if str(path).startswith(str(OUTPUT_DIR)) else f"/api/backgrounds/{clean_id}/{path.name}",
-            }
-            for path in images
-        ],
-    }
-
-
+    return _background_catalog.background_set_payload(set_id, meta)
 def list_background_sets(user: dict[str, Any] | None = None, target_user_id: str | None = None) -> list[dict[str, Any]]:
-    manifest = load_background_sets_manifest()
-    meta_sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-    ids = {path.name for path in background_set_dirs()} | {safe_background_set_id(item) for item in meta_sets.keys()}
-    items = [
-        background_set_payload(set_id, meta_sets.get(set_id) or meta_sets.get(safe_background_set_id(set_id)) or {})
-        for set_id in sorted(ids)
-    ]
-    if user:
-        items = [item for item in items if record_visible_to_user(item, user, target_user_id)]
-    return items
-
-
+    return _background_catalog.list_background_sets(user, target_user_id)
 def selected_background_set_id(
     background_set_id: str | None,
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> str | None:
-    requested = safe_background_set_id(background_set_id)
-    available = {
-        item["id"]
-        for item in list_background_sets(user, target_user_id)
-        if item.get("image_count", 0) > 0 and str(item.get("status") or "ready") == "ready"
-    }
-    if requested in available:
-        return requested
-    manifest = load_background_sets_manifest()
-    default_id = safe_background_set_id(manifest.get("default_set_id") or "green_conveyor")
-    return default_id if default_id in available else (sorted(available)[0] if available else None)
-
-
+    return _background_selection.selected_background_set_id(background_set_id, user, target_user_id)
 def background_set_image_files(background_set_id: str | None) -> list[Path]:
-    selected_id = selected_background_set_id(background_set_id)
-    if not selected_id:
-        return []
-    return image_file_list(BACKGROUND_SETS_DIR / selected_id)
-
-
+    return _background_selection.background_set_image_files(background_set_id)
 def create_background_variants_from_source(source_path: Path, set_dir: Path, count: int = 5) -> list[Path]:
     image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
     if image is None:

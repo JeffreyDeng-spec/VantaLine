@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_training_background_catalog.py` runs 25 synthetic groups.
+Seventeen original business groups passed before migration on Windows and Linux;
+22 expanded groups also pass against saved original function bodies. Contracts preserve
+JSON error conversion, partial seeding writes, eager clocks, pre-seed manifest snapshots,
+normalized-ID collisions, shallow aliases, permissions and selection short circuits.
+Three callback getters preserve four call sites and refresh per invocation. Independent
+compositions interleave real temporary files; no real training or production data is used.
+
 `python scripts/smoke_training_jobs_api.py` runs 19 synthetic groups.
 Sixteen original HTTP/business groups passed before migration on Windows and Linux;
 17 expanded groups also pass against saved original function bodies. Contracts preserve

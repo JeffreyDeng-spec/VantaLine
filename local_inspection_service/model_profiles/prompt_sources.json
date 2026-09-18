@@ -1,7 +1,11 @@
 {
-  "version": 33,
+  "version": 34,
   "sources": [
     "server.py",
+    "training/background_manifest.py",
+    "training/background_catalog.py",
+    "training/background_seeding.py",
+    "training/background_selection.py",
     "training/jobs_query.py",
     "training/task_mutations.py",
     "training/jobs_api.py",
