@@ -1,5 +1,12 @@
 # Configuration reference
 
+Detection result extraction changes no settings or thresholds. Label maps remain
+lazy providers. Existing specialized thresholds, geometry ratios, exact-count rules
+and manual-type requirements retain their original defaults and evaluation timing.
+Source manifest v9 includes all five migrated detection files, preserving source
+coverage previously supplied by the monolithic root. New records use the actual
+source fingerprint; historical snapshots and model bindings are not rewritten.
+
 Legacy incoming workflow extraction adds no business configuration. Existing
 automatic-decision admission, minimum free space and image retention settings retain
 their defaults and read timing. Narrow providers read current request identity,

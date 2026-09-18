@@ -23653,46 +23653,17 @@ def safe_name(filename: str) -> str:
     return f"{int(time.time())}_{uuid.uuid4().hex[:8]}_{stem}{suffix}"
 
 
-def polygon_overlap_ratio(poly_a: list[list[float]], poly_b: list[list[float]]) -> float:
-    pts_a = np.array(poly_a, dtype=np.float32)
-    pts_b = np.array(poly_b, dtype=np.float32)
-    area_a = float(cv2.contourArea(pts_a))
-    area_b = float(cv2.contourArea(pts_b))
-    if area_a <= 0 or area_b <= 0:
-        return 0.0
-    intersection_area, _ = cv2.intersectConvexConvex(pts_a, pts_b)
-    return float(intersection_area) / min(area_a, area_b)
+from .detection.geometry import (
+    polygon_overlap_ratio, polygon_area, polygon_bbox, bbox_gap, bbox_overlap_ratio
+)
 
 
-def polygon_area(poly: list[list[float]]) -> float:
-    return abs(float(cv2.contourArea(np.array(poly, dtype=np.float32))))
 
 
-def polygon_bbox(poly: list[list[float]]) -> tuple[float, float, float, float]:
-    pts = np.array(poly, dtype=np.float32)
-    xs = pts[:, 0]
-    ys = pts[:, 1]
-    return float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())
 
 
-def bbox_gap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    dx = max(bx1 - ax2, ax1 - bx2, 0)
-    dy = max(by1 - ay2, ay1 - by2, 0)
-    return float((dx * dx + dy * dy) ** 0.5)
 
 
-def bbox_overlap_ratio(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-    iw, ih = max(ix2 - ix1, 0), max(iy2 - iy1, 0)
-    inter = iw * ih
-    area_a = max((ax2 - ax1) * (ay2 - ay1), 1)
-    area_b = max((bx2 - bx1) * (by2 - by1), 1)
-    return float(inter / min(area_a, area_b))
 
 
 def normalize_ocr_text(text: str) -> str:
@@ -24156,299 +24127,33 @@ def attach_ocr_results(
     return detections
 
 
-def filter_detections(
-    detections: list[dict[str, Any]],
-    image_shape: tuple[int, int],
-    spec: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    height, width = image_shape
-    image_area = max(height * width, 1)
-    is_specialized = bool((spec or {}).get("is_specialized"))
-    try:
-        specialized_threshold = max(0.001, min(0.99, float((spec or {}).get("confidence_threshold", 0.25))))
-    except (TypeError, ValueError):
-        specialized_threshold = 0.25
-    filtered = []
-    for det in detections:
-        area = polygon_area(det["polygon"])
-        det["area_px"] = round(area, 2)
-        cls_id = int(det["class_id"])
-        confidence = float(det["confidence"])
-        area_ratio = area / image_area
-        if is_specialized:
-            if confidence < specialized_threshold or area_ratio < 0.0005:
-                continue
-            filtered.append(det)
-            continue
-        if cls_id == 0 and (
-            confidence < 0.55
-            or area_ratio < 0.0015
-            or (area_ratio < 0.003 and confidence < 0.85)
-        ):
-            continue
-        if cls_id in (1, 2, 3, 4, 99) and (confidence < 0.30 or area_ratio < 0.006):
-            continue
-        filtered.append(det)
-    return filtered
+from .detection.postprocessing import filter_detections, dedupe_detections, postprocess_detections
 
 
-def dedupe_detections(
-    detections: list[dict[str, Any]],
-    overlap_threshold: float = 0.08,
-    adjacent_gap_px: float = 42.0,
-    absorb_area_ratio: float = 0.22,
-) -> list[dict[str, Any]]:
-    kept: list[dict[str, Any]] = []
-    for det in sorted(detections, key=lambda item: float(item["confidence"]), reverse=True):
-        cls_id = int(det["class_id"])
-        det_area = polygon_area(det["polygon"])
-        det_bbox = polygon_bbox(det["polygon"])
-        duplicate = False
-        for other in kept:
-            if int(other["class_id"]) != cls_id:
-                continue
-            other_area = polygon_area(other["polygon"])
-            other_bbox = polygon_bbox(other["polygon"])
-            min_area = max(min(det_area, other_area), 1)
-            max_area = max(det_area, other_area, 1)
-            overlap = bbox_overlap_ratio(det_bbox, other_bbox)
-            close = bbox_gap(det_bbox, other_bbox) <= adjacent_gap_px
-            small_fragment = min_area / max_area <= absorb_area_ratio
-            near_small_fragment = cls_id == 1 and small_fragment and (overlap >= overlap_threshold or close)
-            low_conf_adjacent_manual = (
-                cls_id == 1
-                and close
-                and max(det_area, other_area) < 250000
-                and float(det["confidence"]) < 0.55
-                and float(other["confidence"]) < 0.55
-            )
-            strong_overlap_duplicate = overlap >= 0.85
-            near_duplicate = small_fragment and overlap >= 0.65
-            if strong_overlap_duplicate or near_small_fragment or low_conf_adjacent_manual or near_duplicate:
-                duplicate = True
-                break
-        if not duplicate:
-            kept.append(det)
-    return kept
 
 
-def postprocess_detections(
-    detections: list[dict[str, Any]],
-    image_shape: tuple[int, int],
-    spec: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    return dedupe_detections(filter_detections(detections, image_shape, spec))
 
 
-def detection_names_for_business_class(business_cls_id: int, spec: dict[str, Any]) -> tuple[str, str]:
-    if spec.get("is_specialized"):
-        name = str(spec.get("rule_class_labels", {}).get(business_cls_id) or spec.get("model_class_names", {}).get(business_cls_id, f"class_{business_cls_id}"))
-        return name, name
-    if spec.get("uses_ocr") and business_cls_id == 1:
-        return GENERIC_DETECTION_CLASS_NAMES[1], GENERIC_DETECTION_LABELS[1]
-    return CLASS_NAMES.get(business_cls_id, f"class_{business_cls_id}"), CLASS_LABELS.get(business_cls_id, f"Class {business_cls_id}")
+from .detection.results import DetectionLabels, DetectionResults
+
+_detection_results = DetectionResults(
+    DetectionLabels(class_names=lambda: CLASS_NAMES, class_labels=lambda: CLASS_LABELS,
+                    generic_names=lambda: GENERIC_DETECTION_CLASS_NAMES, generic_labels=lambda: GENERIC_DETECTION_LABELS),
+    postprocess=lambda detections, shape, spec: postprocess_detections(detections, shape, spec),
+)
+detection_names_for_business_class = _detection_results.names
+parse_detections = _detection_results.parse
 
 
-def parse_detections(result: Any, spec: dict[str, Any]) -> list[dict[str, Any]]:
-    detections = []
-    image_shape = tuple(int(x) for x in result.orig_shape[:2])
-    model_to_business = spec["model_to_business_class"]
-    model_class_names = spec["model_class_names"]
-    model_to_accessory_id = {int(k): str(v) for k, v in (spec.get("model_to_accessory_id") or {}).items()}
-    if result.boxes is not None and len(result.boxes) > 0:
-        classes = result.boxes.cls.cpu().numpy().astype(int)
-        confidences = result.boxes.conf.cpu().numpy()
-        if result.masks is not None:
-            polygons = list(result.masks.xy)
-        else:
-            # Detection model (boxes only, no mask): synthesise an axis-aligned
-            # rectangle polygon from each xyxy box so the downstream count / OCR /
-            # drawing pipeline keeps working unchanged.
-            xyxy = result.boxes.xyxy.cpu().numpy()
-            polygons = [
-                np.array([[bx1, by1], [bx2, by1], [bx2, by2], [bx1, by2]], dtype=np.float32)
-                for bx1, by1, bx2, by2 in xyxy
-            ]
-        for model_cls_id, conf, polygon in zip(classes, confidences, polygons):
-            business_cls_id = model_to_business.get(int(model_cls_id))
-            if business_cls_id is None or len(polygon) < 3:
-                continue
-            accessory_id = model_to_accessory_id.get(int(model_cls_id))
-            class_name, label = detection_names_for_business_class(business_cls_id, spec)
-            detections.append(
-                {
-                    "class_id": business_cls_id,
-                    "accessory_id": accessory_id,
-                    "yolo_accessory_id": accessory_id,
-                    "resolved_accessory_id": accessory_id,
-                    "resolution_source": "yolo",
-                    "class_name": class_name,
-                    "label": label,
-                    "model_class_id": int(model_cls_id),
-                    "model_class_name": model_class_names.get(int(model_cls_id), f"class_{int(model_cls_id)}"),
-                    "confidence": round(float(conf), 4),
-                    "polygon": [[round(float(x), 2), round(float(y), 2)] for x, y in polygon],
-                }
-            )
-        return postprocess_detections(detections, image_shape, spec)
-
-    if result.obb is None or len(result.obb) == 0:
-        return []
-    polygons = result.obb.xyxyxyxy.cpu().numpy()
-    classes = result.obb.cls.cpu().numpy().astype(int)
-    confidences = result.obb.conf.cpu().numpy()
-    for model_cls_id, conf, polygon in zip(classes, confidences, polygons):
-        business_cls_id = model_to_business.get(int(model_cls_id))
-        if business_cls_id is None:
-            continue
-        accessory_id = model_to_accessory_id.get(int(model_cls_id))
-        class_name, label = detection_names_for_business_class(business_cls_id, spec)
-        detections.append(
-            {
-                "class_id": business_cls_id,
-                "accessory_id": accessory_id,
-                "yolo_accessory_id": accessory_id,
-                "resolved_accessory_id": accessory_id,
-                "resolution_source": "yolo",
-                "class_name": class_name,
-                "label": label,
-                "model_class_id": int(model_cls_id),
-                "model_class_name": model_class_names.get(int(model_cls_id), f"class_{int(model_cls_id)}"),
-                "confidence": round(float(conf), 4),
-                "polygon": [[round(float(x), 2), round(float(y), 2)] for x, y in polygon],
-            }
-        )
-    return postprocess_detections(detections, image_shape, spec)
 
 
-def apply_rule(detections: list[dict[str, Any]], config: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
-    threshold = float(spec.get("confidence_threshold", config["confidence_threshold"]))
-    if spec.get("is_specialized"):
-        required_accessory_counts = {
-            str(k): max(0, int(v))
-            for k, v in (spec.get("required_accessory_counts") or {}).items()
-        }
-        if not required_accessory_counts:
-            required_accessory_counts = {str(item_id): 1 for item_id in spec.get("selected_accessory_ids") or []}
-        required_keys = list(required_accessory_counts.keys())
-        class_labels = {str(k): str(v) for k, v in (spec.get("accessory_labels") or {}).items()}
-        rule_source = "task"
-        rule_task_id = spec.get("task_id")
-        rule_label = " + ".join(str(x) for x in spec.get("accessory_names") or []) or str(spec.get("label") or "")
-    else:
-        required_keys = [int(x) for x in config["required_classes"]]
-        required_accessory_counts = {}
-        min_counts = {int(k): int(v) for k, v in config["min_counts"].items()}
-        class_labels = {int(k): str(v) for k, v in CLASS_LABELS.items()}
-        rule_source = "global"
-        rule_task_id = None
-        rule_label = "通用规则"
-    count_by_rule_key: Counter[Any] = Counter()
-    max_conf_by_rule_key: defaultdict[Any, float] = defaultdict(float)
-    for det in detections:
-        conf = float(det["confidence"])
-        if conf >= threshold:
-            rule_key: Any = str(det.get("resolved_accessory_id") or det.get("accessory_id")) if spec.get("is_specialized") else int(det["class_id"])
-            if spec.get("is_specialized") and (not rule_key or rule_key == "None"):
-                continue
-            count_by_rule_key[rule_key] += 1
-            max_conf_by_rule_key[rule_key] = max(max_conf_by_rule_key[rule_key], conf)
+from .detection.rules import CountRules
 
-    missing = []
-    present = []
-    extra = []
-    for rule_key in required_keys:
-        need = required_accessory_counts.get(str(rule_key), min_counts.get(rule_key, 1) if not spec.get("is_specialized") else 1)
-        found = count_by_rule_key.get(rule_key, 0)
-        row = {
-            "class_id": rule_key,
-            "label": class_labels.get(rule_key, f"Class {rule_key}"),
-            "required": need,
-            "found": found,
-            "max_confidence": round(max_conf_by_rule_key.get(rule_key, 0.0), 4),
-        }
-        if spec.get("is_specialized"):
-            row["accessory_id"] = str(rule_key)
-        if found == need:
-            present.append(row)
-        elif found > need:
-            row["issue"] = "extra"
-            extra.append(row)
-            missing.append(row)
-        else:
-            row["issue"] = "missing"
-            missing.append(row)
-
-    manual_type_counts: Counter[str] = Counter()
-    for det in detections:
-        if int(det["class_id"]) == 1:
-            manual_type = det.get("manual_type") or det.get("ocr", {}).get("manual_type")
-            if manual_type and manual_type != "unknown":
-                manual_type_counts[str(manual_type)] += 1
-
-    ocr_config = config.get("ocr", {})
-    required_manual_types = [str(x) for x in ocr_config.get("manual_types", MANUAL_TYPE_LABELS.keys())]
-    manual_type_missing = []
-    manual_type_present = []
-    if not spec.get("is_specialized") and ocr_config.get("enabled", True) and ocr_config.get("require_manual_types", True):
-        for manual_type in required_manual_types:
-            row = {
-                "manual_type": manual_type,
-                "label": MANUAL_TYPE_LABELS.get(manual_type, manual_type),
-                "required": 1,
-                "found": manual_type_counts.get(manual_type, 0),
-            }
-            if row["found"] == 1:
-                manual_type_present.append(row)
-            else:
-                row["issue"] = "extra" if row["found"] > 1 else "missing"
-                manual_type_missing.append(row)
-
-    passed = len(missing) == 0 and len(manual_type_missing) == 0
-    return {
-        "passed": passed,
-        "threshold": threshold,
-        "match_policy": "exact_count",
-        "source": rule_source,
-        "task_id": rule_task_id,
-        "label": rule_label,
-        "present": present,
-        "missing": missing,
-        "extra": extra,
-        "counts": {class_labels.get(k, str(k)): v for k, v in sorted(count_by_rule_key.items(), key=lambda item: str(item[0]))},
-        "ocr_enabled": bool(spec.get("uses_ocr", False) and ocr_config.get("enabled", True)),
-        "manual_type_counts": {
-            MANUAL_TYPE_LABELS.get(k, k): v for k, v in sorted(manual_type_counts.items())
-        },
-        "manual_type_present": manual_type_present,
-        "manual_type_missing": manual_type_missing,
-    }
+_detection_rules = CountRules(class_labels=lambda: CLASS_LABELS, manual_labels=lambda: MANUAL_TYPE_LABELS)
+apply_rule = _detection_rules.apply
 
 
-def draw_detections(image_bgr: np.ndarray, detections: list[dict[str, Any]], rule: dict[str, Any]) -> np.ndarray:
-    annotated = image_bgr.copy()
-    overlay = image_bgr.copy()
-    palette = {
-        0: (38, 82, 255),
-        1: (255, 120, 30),
-    }
-    for det in detections:
-        cls_id = int(det["class_id"])
-        color = palette.get(cls_id, (255, 255, 255))
-        pts = np.array(det["polygon"], dtype=np.int32)
-        cv2.fillPoly(overlay, [pts], color)
-        cv2.polylines(annotated, [pts], isClosed=True, color=color, thickness=3, lineType=cv2.LINE_AA)
-        x, y = pts[0]
-        display_label = det.get("manual_label", det["label"])
-        text = f"{display_label} {det['confidence']:.2f}"
-        cv2.putText(annotated, text, (int(x), max(int(y) - 8, 22)), cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 2)
-
-    annotated = cv2.addWeighted(overlay, 0.16, annotated, 0.84, 0)
-    banner_color = (42, 150, 75) if rule["passed"] else (48, 60, 220)
-    cv2.rectangle(annotated, (0, 0), (annotated.shape[1], 48), banner_color, -1)
-    status = "TRUE: exact parts match" if rule["passed"] else "FALSE: count mismatch"
-    cv2.putText(annotated, status, (18, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.82, (255, 255, 255), 2)
-    return annotated
+from .detection.drawing import draw_detections
 
 
 def ai_required_accessories(config: dict[str, Any], spec: dict[str, Any]) -> list[tuple[dict[str, Any], int]]:

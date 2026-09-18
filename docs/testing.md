@@ -1,5 +1,19 @@
 # Testing
 
+`python scripts/smoke_detection_results.py` covers fourteen synthetic groups.
+Eight original business groups passed against the entry-point implementation before
+extraction. Four additional business groups cover exact overlap/area/absorption
+boundaries, complete parser records and short OBB/mask handling, real overlay
+pixels and drawing calls, and original mapping/postprocessor first-error behavior.
+Replay those twelve groups against the original function bodies. Two composition
+groups cover root aliases, independent lazy label providers and newly introduced
+provider failures; they are not claimed as original factory behavior.
+First-error probes permit a valid second call and require the original exception
+and one invocation. Keep the existing exact-count, manual-type and YOLO-shape
+smoke assertions. No model prediction or device I/O is required. Source-contract
+checks require all five migrated detection files and verify that editing each
+changes the new-task fingerprint without rewriting stored snapshots.
+
 `python scripts/smoke_incoming_text_workflows.py` covers seventeen groups: owner-only task access,
 projection/media checks, reference creation and clone failures, activation order,
 repeat/insert-loser admission, OCR and quality failure boundaries, review partial

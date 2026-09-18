@@ -1,5 +1,11 @@
 # VantaLine release management
 
+The detection-result extraction adds synthetic backend smoke and admits the new
+`detection` package to dependency-direction checks. It preserves the HTTP contract,
+model parameters, worker topology and release commands. Ship source manifest v9
+with all five detection modules to retain their source coverage for new tasks.
+Historical snapshots remain untouched; whole-release rollback is the recovery unit.
+
 The legacy incoming workflow batch adds its focused smoke to backend CI, retains
 both original incoming endpoint and repository checks, and compares the complete
 assembled HTTP baseline. It does not change worker topology or launch commands.
