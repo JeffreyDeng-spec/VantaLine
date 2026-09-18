@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_accessory_requirements.py` runs 21 synthetic groups.
+Fifteen original business groups passed before migration on Windows and Linux;
+19 expanded groups also pass against saved original function bodies. Contracts retain
+eager alias evaluation, first-wins alias lookup, last-wins UID/class indexes, duplicate selections,
+minimum counts and exact missing-metadata records. Per-expression policies preserve dynamic
+rebinding. First-failure then recovery fixtures reject retries; narrow class errors still skip.
+No model inference, external requests or device operations run in these contracts.
+
 `python scripts/smoke_training_worker_retired_flows.py` runs 12 synthetic groups.
 Nine original business groups passed before migration on Windows and Linux;
 10 expanded groups also pass against saved original function bodies. Contracts retain

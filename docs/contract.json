@@ -49,7 +49,7 @@
     },
     {
       "name": "Accessory catalog",
-      "paths": ["local_inspection_service/accessories/**", "scripts/smoke_accessory_catalog.py", "scripts/smoke_accessory_candidates.py", "scripts/smoke_accessory_files.py", "scripts/smoke_accessory_management.py", "scripts/smoke_accessory_gallery.py", "scripts/smoke_image_job_metadata.py", "scripts/smoke_accessory_preparation.py", "scripts/smoke_accessory_routing.py"],
+      "paths": ["local_inspection_service/accessories/**", "scripts/smoke_accessory_catalog.py", "scripts/smoke_accessory_candidates.py", "scripts/smoke_accessory_files.py", "scripts/smoke_accessory_management.py", "scripts/smoke_accessory_gallery.py", "scripts/smoke_image_job_metadata.py", "scripts/smoke_accessory_preparation.py", "scripts/smoke_accessory_routing.py", "scripts/smoke_accessory_requirements.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {

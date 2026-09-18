@@ -199,6 +199,7 @@ jobs:
           python scripts/smoke_incoming_text_store.py --root --postgres
           python scripts/smoke_incoming_text_analysis.py --root
           python scripts/smoke_incoming_text_workflows.py
+          python scripts/smoke_accessory_requirements.py
           python scripts/smoke_detection_results.py
           python scripts/smoke_detection_ocr.py
           python scripts/smoke_detection_task_store.py --postgres

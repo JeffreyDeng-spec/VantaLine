@@ -20139,25 +20139,19 @@ def ai_detection_task_model_id(task_id: str) -> str:
     return _detection_task_model_id(task_id, AI_DETECTION_TASK_PREFIX)
 
 
+from .accessories.lookup import AccessoryLookup
+from .detection.requirements import RequiredAccessories
+
+_accessory_lookup = AccessoryLookup(lambda item: accessory_uid(item), lambda item: accessory_legacy_uid(item))
+_required_accessories = RequiredAccessories(lambda item: accessory_uid(item), lambda: CLASS_LABELS)
+
+
 def accessory_lookup_by_id(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    lookup: dict[str, dict[str, Any]] = {}
-    for item in config.get("accessories", []):
-        for raw_id in (item.get("id"), accessory_uid(item), accessory_legacy_uid(item)):
-            item_id = str(raw_id or "").strip()
-            if item_id and item_id not in lookup:
-                lookup[item_id] = item
-    return lookup
+    return _accessory_lookup.accessory_lookup_by_id(config)
 
 
 def accessory_id_aliases(item: dict[str, Any]) -> list[str]:
-    aliases: list[str] = []
-    seen: set[str] = set()
-    for raw_id in (item.get("id"), accessory_uid(item), accessory_legacy_uid(item)):
-        item_id = str(raw_id or "").strip()
-        if item_id and item_id not in seen:
-            seen.add(item_id)
-            aliases.append(item_id)
-    return aliases
+    return _accessory_lookup.accessory_id_aliases(item)
 
 
 def resolve_accessory_id(config: dict[str, Any], accessory_id: str) -> tuple[str, dict[str, Any]] | None:
@@ -20484,53 +20478,7 @@ from .detection.drawing import draw_detections
 
 
 def ai_required_accessories(config: dict[str, Any], spec: dict[str, Any]) -> list[tuple[dict[str, Any], int]]:
-    accessories = config.get("accessories", [])
-    by_id = {accessory_uid(item): item for item in accessories}
-    required: list[tuple[dict[str, Any], int]] = []
-    if spec.get("is_specialized"):
-        counts = {
-            str(k): max(1, int(v))
-            for k, v in (spec.get("required_accessory_counts") or {}).items()
-        }
-        ids = [str(item_id) for item_id in spec.get("selected_accessory_ids") or counts.keys()]
-        labels = {str(k): str(v) for k, v in (spec.get("accessory_labels") or {}).items()}
-        for item_id in ids:
-            item = by_id.get(item_id) or {
-                "id": item_id,
-                "class_id": -1,
-                "name": labels.get(item_id, item_id),
-                "material_type": "object",
-                "source_files": [],
-                "normalized_assets": [],
-            }
-            required.append((item, counts.get(item_id, 1)))
-        return required
-
-    required_classes = [int(x) for x in config.get("required_classes", [])]
-    min_counts = {int(k): max(1, int(v)) for k, v in (config.get("min_counts") or {}).items()}
-    by_class: dict[int, dict[str, Any]] = {}
-    for item in accessories:
-        try:
-            by_class[int(item.get("class_id", -1))] = item
-        except (TypeError, ValueError):
-            continue
-    for class_id in required_classes:
-        item = by_class.get(class_id)
-        if not item:
-            item = {
-                "id": f"required_class_{class_id}",
-                "class_id": class_id,
-                "name": CLASS_LABELS.get(class_id, f"Required Class {class_id}"),
-                "material_type": "object" if class_id == 0 else "text",
-                "status": "missing_accessory_metadata",
-                "description": "Configured required class has no matching accessory metadata; fail closed.",
-                "source_files": [],
-                "normalized_assets": [],
-            }
-        required.append((item, min_counts.get(class_id, 1)))
-    if required:
-        return required
-    return []
+    return _required_accessories.ai_required_accessories(config, spec)
 
 
 def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dict[str, Any]:
