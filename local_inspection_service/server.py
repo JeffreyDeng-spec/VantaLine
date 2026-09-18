@@ -34422,7 +34422,9 @@ def incoming_text_ocr_engine() -> Any:
 
 
 def incoming_text_ocr_observations(image: np.ndarray) -> list[TextObservation]:
-    return _incoming_observations(image, engine=lambda: incoming_text_ocr_engine())
+    return _incoming_observations(
+        image, engine=lambda: incoming_text_ocr_engine(), mapping_provider=lambda: _ocr_result_mapping,
+    )
 
 
 def incoming_text_corroboration_observations(

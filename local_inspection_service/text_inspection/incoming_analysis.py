@@ -86,9 +86,12 @@ def result_mapping(value: Any) -> dict[str, Any]:
     return {}
 
 
-def observations(image: np.ndarray, engine: Callable[[], Any]) -> list[TextObservation]:
+def observations(
+    image: np.ndarray, engine: Callable[[], Any], *,
+    mapping_provider: Callable[[], Callable[[Any], dict[str, Any]]] = lambda: result_mapping,
+) -> list[TextObservation]:
     result_items = engine().predict(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    result = result_mapping(result_items[0] if result_items else {})
+    result = mapping_provider()(result_items[0] if result_items else {})
     texts = list(result.get("rec_texts") or [])
     scores = list(result.get("rec_scores") or [])
     polygons = list(result.get("rec_polys") or result.get("dt_polys") or [])

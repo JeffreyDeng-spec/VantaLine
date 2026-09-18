@@ -1,5 +1,9 @@
 # Configuration reference
 
+The OCR result-mapping getter preserves the original lookup after prediction and
+before result truth/item access. Missing callbacks fail at the same point; no
+extra OCR, rendering, parsing or serialization retry is introduced.
+
 OCR/Beta extraction preserves the PP-OCRv6 medium model names and orientation
 options, image thresholds, one-hour cache TTL and existing byte budgets. Limits and
 request identity remain lazy providers. Manifest v7 adds the actual migrated input

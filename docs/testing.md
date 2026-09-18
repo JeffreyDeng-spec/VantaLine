@@ -1,6 +1,6 @@
 # Testing
 
-`python scripts/smoke_incoming_text_analysis.py --root` adds ten synthetic groups:
+`python scripts/smoke_incoming_text_analysis.py --root` adds sixteen synthetic groups:
 OCR single initialization/failure retry/instance isolation; result mapping and color
 order; critical-region crops; absence thresholds; raster limits; real PDF behavior;
 Beta concurrent single-flight/observer capture; TTL, budget and cached-object rules;
@@ -9,6 +9,13 @@ cv2/PyMuPDF and the documented root-import YOLO substitute; no Paddle model down
 or paid inference occur. Old source checks now inspect actual model parameters and
 extend the normalization prohibition to both new algorithm modules. The original
 incoming/Beta HTTP concurrency smoke remains required.
+The original nine business groups first pass against actual old main functions.
+Additional matrices offer successful second calls but require one attempt for five
+OCR/parsing, two PDF and two Beta getter/serialization failures. Cross-thread probes
+cover preparation, cache insertion, TTL cleanup and budget eviction under their
+existing locks. Decode-time observer replacement and cache-hit skipping are tested;
+three real-root mapping traces preserve capture before result truth/item effects,
+including missing-callback failure. No production model is initialized.
 
 `python scripts/smoke_incoming_text_store.py --root --postgres` covers thirteen groups:
 JSON reference/inspection key differences and original input; lazy factory and SQL

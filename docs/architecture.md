@@ -1,5 +1,9 @@
 # Architecture
 
+The OCR result-mapping getter preserves the original lookup after prediction and
+before result truth/item access. Missing callbacks fail at the same point; no
+extra OCR, rendering, parsing or serialization retry is introduced.
+
 Legacy image/OCR evidence now lives in `text_inspection.incoming_analysis`.
 `IncomingOCREngine` owns its lazy model and initialization RLock; prediction remains
 outside that lock. `beta_comparison.BetaComparison` owns its cache and full-comparison

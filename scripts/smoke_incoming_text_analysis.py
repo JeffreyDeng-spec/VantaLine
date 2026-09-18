@@ -178,6 +178,123 @@ class AnalysisContracts(unittest.TestCase):
         events.clear()
         with self.assertRaises(HTTPException):asyncio.run(handler(Upload('reference',content_type='invalid',events=events),Upload('captured',events=events),'comparison-01'))
         self.assertEqual(events,[('permission',)])
+    def test_ocr_first_errors_are_not_retried(self):
+        image=np.zeros((20,20,3),np.uint8)
+        rule={'field_id':'x','importance':'critical','region_normalized':{'x':0,'y':0,'width':1,'height':1}}
+        for boundary in ['json','engine','predict','mapping','corroboration']:
+            with self.subTest(boundary=boundary):
+                error=RuntimeError(boundary);model=Mock();model.predict.return_value=[]
+                success=model if boundary=='engine' else ({} if boundary in ('json','mapping') else [])
+                callback=Mock(side_effect=[error,success])
+                with self.assertRaises(RuntimeError) as caught:
+                    if boundary=='json':analysis.result_mapping(types.SimpleNamespace(json=callback))
+                    elif boundary=='engine':analysis.observations(image,callback)
+                    elif boundary=='predict':
+                        model.predict=callback;analysis.observations(image,lambda:model)
+                    elif boundary=='mapping':
+                        with patch.object(analysis,'result_mapping',callback):analysis.observations(image,lambda:model)
+                    else:analysis.corroboration(image,[rule],callback)
+                self.assertIs(caught.exception,error);callback.assert_called_once()
+                if boundary=='engine':model.predict.assert_not_called()
+
+    @unittest.skipUnless(fitz is not None,'requires production PyMuPDF; run this group on Linux')
+    def test_pdf_first_open_and_render_errors_are_not_retried(self):
+        for boundary in ['open','render']:
+            with self.subTest(boundary=boundary):
+                error=OSError(boundary);pixmap=Mock();pixmap.tobytes.return_value=picture()
+                page=Mock();page.get_pixmap.return_value=pixmap
+                document=Mock();document.page_count=1;document.__getitem__=Mock(return_value=page)
+                opening=Mock(return_value=document)
+                if boundary=='open':opening.side_effect=[error,document]
+                else:page.get_pixmap.side_effect=[error,pixmap]
+                with patch.object(fitz,'open',opening),self.assertRaises(HTTPException) as caught:
+                    analysis.decode_reference(b'%PDF-fixture','reference.pdf')
+                self.assertEqual((caught.exception.status_code,caught.exception.detail),(400,'无法解析标准稿 PDF'))
+                opening.assert_called_once();pixmap.tobytes.assert_not_called();document.close.assert_not_called()
+                if boundary=='open':page.get_pixmap.assert_not_called()
+                else:page.get_pixmap.assert_called_once()
+
+    def test_beta_first_getter_and_serialization_errors_are_not_retried(self):
+        blob=picture();policy=beta.BetaPolicy(lambda:3600,lambda:16_000_000,lambda:10000)
+        error=RuntimeError('observer');getter=Mock(side_effect=[error,lambda image:[]]);service=beta.BetaComparison(policy,getter)
+        with patch.object(comparison_engine,'compare_images') as compare:
+            result=service.run('alice','observer',blob,blob)
+            self.assertEqual(result['error_code'],'RuntimeError');self.assertEqual(result['decision'],'REVIEW_REQUIRED')
+            self.assertIs(service.run('alice','observer',blob,blob),result)
+            getter.assert_called_once();compare.assert_not_called()
+        error=ValueError('serialize');serializer=Mock(side_effect=[error,'{}'])
+        service=beta.BetaComparison(policy,lambda:lambda image:[])
+        with patch.object(comparison_engine,'compare_images',return_value={}) as compare,patch.object(beta.json,'dumps',serializer):
+            with self.assertRaises(ValueError) as caught:service.run('alice','serialize',blob,blob)
+        self.assertIs(caught.exception,error);serializer.assert_called_once();compare.assert_called_once();self.assertEqual(service.cache,{})
+
+    def test_beta_observer_is_captured_after_decode_and_skipped_on_cache_hit(self):
+        blob=picture();image=np.zeros((300,300,3),np.uint8)
+        for missing in [False,True]:
+            with self.subTest(missing=missing):
+                first=Mock(return_value=[]);second=None if missing else Mock(return_value=[]);third=Mock(return_value=[])
+                current=[first];getter=Mock(side_effect=lambda:current[0]);service=beta.BetaComparison(beta.BetaPolicy(lambda:3600,lambda:16_000_000,lambda:10000),getter)
+                def decode(*args):current[0]=second;return image
+                def compare(reference,captured,identifier,observe):
+                    self.assertIs(observe,second);current[0]=third;observe(reference);observe(captured);return {'ok':True}
+                with patch.object(beta.cv2,'imdecode',side_effect=decode) as decoder,patch.object(comparison_engine,'compare_images',side_effect=compare) as compared:
+                    result=service.run('alice','window',blob,blob)
+                    self.assertIs(service.run('alice','window',blob,blob),result)
+                    self.assertEqual(decoder.call_count,2);compared.assert_called_once();getter.assert_called_once()
+                first.assert_not_called();third.assert_not_called()
+                if missing:self.assertEqual(result['error_code'],'TypeError')
+                else:self.assertEqual(second.call_count,2)
+
+    def test_initialization_and_cache_mutations_keep_their_complete_locks(self):
+        probes=[]
+        def probe(lock,label):
+            def other_thread():
+                acquired=lock.acquire(blocking=False);probes.append((label,acquired))
+                if acquired:lock.release()
+            thread=threading.Thread(target=other_thread);thread.start();thread.join(2);self.assertFalse(thread.is_alive())
+        instance=analysis.IncomingOCREngine(lambda:probe(instance.lock,'prepare'),lambda:object());instance.get()
+        limits={'bytes':10000};service=beta.BetaComparison(beta.BetaPolicy(lambda:10,lambda:16_000_000,lambda:limits['bytes']),lambda:lambda image:[])
+        class Cache(dict):
+            def __setitem__(self,key,value):probe(service.lock,'insert');return super().__setitem__(key,value)
+            def pop(self,*args):probe(service.lock,'pop');return super().pop(*args)
+        service.cache=Cache();blob=picture()
+        with patch.object(comparison_engine,'compare_images',return_value={}),patch.object(beta.time,'monotonic',return_value=100):service.run('alice','old',blob,blob)
+        limits['bytes']=0
+        with patch.object(comparison_engine,'compare_images',return_value={}),patch.object(beta.time,'monotonic',return_value=111):service.run('alice','new',blob,blob)
+        self.assertEqual(probes,[('prepare',False),('insert',False),('pop',False),('insert',False),('pop',False)])
+        self.assertEqual(service.cache,{})
+
+    @unittest.skipUnless(ROOT_CHECK,'use --root for application composition')
+    def test_root_mapping_capture_and_missing_callback_argument_order(self):
+        # The mapping callable is resolved after predict, before result truth/item access.
+        if 'local_inspection_service.server' not in sys.modules:
+            directory=tempfile.mkdtemp(prefix='incoming-mapping-')
+            (Path(directory)/'local_inspection_service/static').mkdir(parents=True)
+            self.addCleanup(__import__('shutil').rmtree,directory)
+            os.environ.update(LOCAL_INSPECTION_ROOT=directory,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
+        from local_inspection_service import server
+        image=np.zeros((2,2,3),np.uint8)
+        for mode in ['plain','switch','missing']:
+            with self.subTest(mode=mode):
+                events=[]
+                def callback(label):
+                    def run(value):events.append(label);return {'rec_texts':[label]}
+                    return run
+                a,b,c=callback('A'),callback('B'),callback('C')
+                class Items:
+                    def __bool__(self):events.append('bool');server._ocr_result_mapping=c;return True
+                    def __getitem__(self,key):events.append(('item',key));return {}
+                def predict(value):
+                    events.append('predict')
+                    if mode!='plain':server._ocr_result_mapping=b if mode=='switch' else None
+                    return Items()
+                model=Mock(predict=Mock(side_effect=predict))
+                with patch.object(server,'incoming_text_ocr_engine',return_value=model),patch.object(server,'_ocr_result_mapping',a):
+                    if mode=='missing':
+                        with self.assertRaises(TypeError):server.incoming_text_ocr_observations(image)
+                    else:self.assertEqual([item.text for item in server.incoming_text_ocr_observations(image)],['A' if mode=='plain' else 'B'])
+                self.assertEqual(events,['predict','bool',('item',0)]+([] if mode=='missing' else ['A' if mode=='plain' else 'B']))
+
     @unittest.skipUnless(ROOT_CHECK,'use --root for application composition')
     def test_root_owns_process_state_and_keeps_dynamic_observer(self):
         with tempfile.TemporaryDirectory(prefix='incoming-analysis-') as directory:
