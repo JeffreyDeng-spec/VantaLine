@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_presence_contracts.py` runs 20 synthetic groups.
+Thirteen original business groups passed before migration on Windows and Linux;
+17 expanded groups also pass against saved original function bodies. Contracts retain
+exact payload text, count coercion, response coverage and double-read order. Five formatter
+getters preserve callee selection before arguments and after prior conversions. First-failure
+fixtures reject hidden retries; existing TypeError/ValueError count fallbacks remain intact.
+No paid model calls, external requests or device operations run in these contracts.
+
 `python scripts/smoke_accessory_requirements.py` runs 21 synthetic groups.
 Fifteen original business groups passed before migration on Windows and Linux;
 19 expanded groups also pass against saved original function bodies. Contracts retain

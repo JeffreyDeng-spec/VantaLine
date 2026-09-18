@@ -20481,41 +20481,17 @@ def ai_required_accessories(config: dict[str, Any], spec: dict[str, Any]) -> lis
     return _required_accessories.ai_required_accessories(config, spec)
 
 
+from .detection.presence_payload import PresencePayload
+from .detection.presence_validation import (
+    ai_detection_parsed_covers_required as _presence_covers_required,
+    coerce_detection_count as _presence_count,
+)
+
+_presence_payload = PresencePayload(lambda: string_list, lambda: bounded_text)
+
+
 def ai_detection_task_payload(required_accessories: list[dict[str, Any]]) -> dict[str, Any]:
-    payload_accessories = []
-    for required in required_accessories:
-        try:
-            expected_count = max(1, int(required.get("expected_count") or 1))
-        except (TypeError, ValueError):
-            expected_count = 1
-        profile = required.get("profile") if isinstance(required.get("profile"), dict) else {}
-        text_cues = string_list(profile.get("distinguishing_text"), max_items=6, max_len=64)
-        tags = string_list(profile.get("tags"), max_items=5, max_len=40)
-        visual_signature = bounded_text(profile.get("visual_signature") or profile.get("description"), 180)
-        payload_accessories.append(
-            {
-                "accessory_id": str(required.get("accessory_id") or ""),
-                "name": bounded_text(required.get("name") or required.get("label") or required.get("accessory_id"), 80),
-                "expected_count": expected_count,
-                "material_type": bounded_text(required.get("material_type") or profile.get("material_type"), 32),
-                "visual_cue": visual_signature,
-                "text_cues": text_cues,
-                "tags": tags,
-            }
-        )
-    return {
-        "task": {
-            "policy": "presence_by_accessory_profile",
-            "expected_latency_seconds": 5,
-            "decision_rule": "passed is true only when every required accessory is present at exactly expected_count; undercounts and overcounts fail.",
-            "output_mode": "compact",
-            "required_accessories": payload_accessories,
-        },
-        "output_contract": {
-            "detections": "Array of {accessory_id,label,present,confidence,count,evidence}. Count is optional unless multiple visible instances matter.",
-            "rule": "Object with counts keyed by accessory_id.",
-        },
-    }
+    return _presence_payload.ai_detection_task_payload(required_accessories)
 
 
 def ai_detection_output_token_budget(required_count: int) -> int:
@@ -20532,35 +20508,11 @@ def ai_detection_provider_output_token_budget(required_count: int, settings: dic
 
 
 def ai_detection_parsed_covers_required(parsed: Any, required_ids: set[str]) -> bool:
-    """True when the provider response mentions at least one required accessory
-    id, either as a detection entry or a rule count. An empty or unrelated
-    response is a provider contract failure, not an all-missing verdict."""
-    if not required_ids:
-        return True
-    if not isinstance(parsed, dict):
-        return False
-    mentioned: set[str] = set()
-    detections = parsed.get("detections") if isinstance(parsed.get("detections"), list) else []
-    for det in detections:
-        if isinstance(det, dict) and det.get("accessory_id") is not None:
-            mentioned.add(str(det.get("accessory_id")))
-    rule = parsed.get("rule") if isinstance(parsed.get("rule"), dict) else {}
-    counts = rule.get("counts") if isinstance(rule.get("counts"), dict) else {}
-    mentioned.update(str(key) for key in counts.keys())
-    return bool(mentioned & required_ids)
+    return _presence_covers_required(parsed, required_ids)
 
 
 def coerce_detection_count(value: Any) -> int | None:
-    """Tolerant count parsing: JSON-mode providers may serialize whole numbers
-    as floats (1.0). Booleans, negatives, fractional floats, and strings are
-    rejected so ambiguous counts keep failing closed (see smoke_ai_detection)."""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value if value >= 0 else None
-    if isinstance(value, float):
-        return int(value) if value.is_integer() and value >= 0 else None
-    return None
+    return _presence_count(value)
 
 
 def ai_presence_failure_payload(

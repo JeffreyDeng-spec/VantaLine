@@ -1,7 +1,9 @@
 {
-  "version": 45,
+  "version": 46,
   "sources": [
     "server.py",
+    "detection/presence_payload.py",
+    "detection/presence_validation.py",
     "accessories/lookup.py",
     "detection/requirements.py",
     "training/legacy_worker_tasks.py",
