@@ -48,7 +48,7 @@ def register(app: FastAPI, access: PreparationAccess, storage: PreparationRecord
         if record.get("status") == "attempting" and time.time()-record["created_at"] > 120:
             if record.get("ocr_provider") == "qwen_ocr":
                 from ..qwen_evidence_jobs import timeout
-                timeout(history.update_attempt, record)
+                timeout(history.attempt_writer(), record)
                 return history.public(storage.owned("records", record_id, uid))
             record.update(status="review_required", decision="REVIEW_REQUIRED", message="任务超时或服务重启，请复核；未自动重跑。")
             storage.save("records", record)

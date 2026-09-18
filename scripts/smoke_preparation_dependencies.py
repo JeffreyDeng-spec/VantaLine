@@ -66,7 +66,7 @@ class Fixture:
         assert self.assets[0]['preparation_attempt']['state']=='classifying'
         self.calls.append((name,copy.deepcopy(payload)));self.provider_hook()
         return {'ok':True,'parsed':{'kind':'label_design','coverage_complete':True,'missing_regions':[],'reason':'fixture','elements':[{k:e[k] for k in ['id','state','reason']} for e in self.elements]}}
-    def clear(self):self.clears+=1
+    def clear(self):self.events.append(('clear',));self.clears+=1
     def start(self,fail=False):
         fixture=self
         class Thread:
@@ -88,7 +88,7 @@ class PreparationContracts(unittest.TestCase):
         self.assertEqual(kind,'records');self.assertEqual(changed['diagnostics']['elapsed_ms'],120000);self.assertEqual(changed['status'],'review_required')
         app=FastAPI();calls=[]
         def raced_update(kind,value):calls.append((kind,value));f.record.update(status='completed',decision='MATCH');return False
-        history=PreparationHistory(lambda:'text_inspection_records',lambda rows:rows,copy.deepcopy,raced_update)
+        history=PreparationHistory(lambda:'text_inspection_records',lambda rows:rows,copy.deepcopy,lambda:raced_update)
         api.register(app,PreparationAccess(lambda *a,**k:None,lambda:('alice','fixture')),f.records,history,f.media,f.jobs)
         client=TestClient(app);self.addCleanup(client.close)
         with patch.object(api.time,'time',return_value=130):
@@ -153,6 +153,92 @@ class PreparationContracts(unittest.TestCase):
                 if mode=='attempt':self.assertEqual(attempt,{'id':'newer','state':'classifying'});self.assertNotIn('preparation_revisions',f.assets[0])
                 if mode=='interrupted':self.assertEqual(attempt['state'],'review');self.assertIn('late_result',attempt);self.assertNotIn('preparation_revisions',f.assets[0])
                 if mode=='source':self.assertEqual(attempt['state'],'ready');self.assertEqual(len(f.assets[0]['preparation_revisions']),1);self.assertEqual(f.assets[0]['sha256'],'changed-source')
+    def test_unknown_provider_outcome_never_retries_or_publishes(self):
+        f=Fixture(self);error=RuntimeError('unknown provider outcome')
+        f.provider_hook=Mock(side_effect=[error,None])
+        f.start();f.events.clear();f.run()
+        self.assertEqual(len(f.calls),1);f.provider_hook.assert_called_once()
+        attempt=f.assets[0]['preparation_attempt']
+        self.assertEqual(attempt['state'],'review')
+        self.assertEqual(attempt['diagnostics']['failure'],'RuntimeError')
+        self.assertEqual(attempt['diagnostics']['reason_code'],'processing_failed')
+        self.assertNotIn('active_preparation',f.assets[0]);self.assertNotIn('preparation_revisions',f.assets[0])
+        self.assertEqual(f.standard['preparation_job']['state'],'completed')
+        self.assertEqual(f.clears,1);self.assertEqual(f.events[-1],('clear',));self.slot_free(f)
+
+    def test_final_publication_failure_propagates_once_then_clears_and_releases(self):
+        f=Fixture(self);f.start();f.events.clear();error=RuntimeError('unknown publication outcome')
+        original=f.jobs.mutate;publications=[];release=f.jobs.slots.release
+        def mutate(*args,**kwargs):
+            if kwargs.get('publish'):
+                publications.append((args,kwargs));f.events.append(('finish',))
+                if len(publications)==1:raise error
+            return original(*args,**kwargs)
+        def released():f.events.append(('release',));release()
+        with patch.object(f.jobs,'mutate',side_effect=mutate),patch.object(f.jobs.slots,'release',side_effect=released) as release_spy:
+            with self.assertRaises(RuntimeError) as caught:f.run()
+            self.assertIs(caught.exception,error);release_spy.assert_called_once()
+        self.assertEqual(len(publications),1);self.assertEqual(len(f.calls),1)
+        self.assertEqual(f.events[-3:],[('finish',),('clear',),('release',)])
+        self.assertEqual(f.assets[0]['preparation_attempt']['state'],'classifying')
+        self.assertEqual(f.standard['preparation_job']['state'],'processing')
+        self.assertNotIn('active_preparation',f.assets[0]);self.assertNotIn('preparation_revisions',f.assets[0])
+        self.assertEqual(f.clears,1);self.slot_free(f)
+
+    def test_worker_timeout_resolves_writer_after_timestamp(self):
+        for mode in ['timer','worker']:
+            with self.subTest(mode=mode):
+                events=[];record={'id':'record','created_at':0,'deadline_at':10,'status':'attempting','diagnostics':{}}
+                first=Mock(side_effect=lambda *args:events.append('first'))
+                second=Mock(side_effect=lambda *args:events.append('second'))
+                clear=Mock(side_effect=lambda:events.append('clear'))
+                namespace=SimpleNamespace(_text_v2_update_attempt=first,clear_thread_runtime_repository_selection=clear)
+                def now():events.append('clock');namespace._text_v2_update_attempt=second;return 100
+                if mode=='timer':
+                    with patch.object(qwen.time,'time',side_effect=now):qwen.settle_timeout(namespace,record)
+                    self.assertEqual(events,['clock','second','clear'])
+                    self.assertEqual(record['status'],'attempting');self.assertEqual(record['diagnostics'],{})
+                else:
+                    # The already-expired worker never acquires a slot or reaches a provider.
+                    clocks=iter([100,100])
+                    def worker_clock():
+                        try:return next(clocks)
+                        except StopIteration:return now()
+                    with patch.object(qwen.threading,'Timer') as timer,patch.object(qwen.time,'time',side_effect=worker_clock),patch.object(qwen,'expired',return_value=True):
+                        qwen.run(namespace,None,record,b'',{})
+                    timer.return_value.start.assert_called_once();timer.return_value.cancel.assert_called_once()
+                    self.assertEqual(events,['clock','second','clear'])
+                first.assert_not_called();second.assert_called_once();clear.assert_called_once()
+                self.assertEqual(second.call_args.args[0],'records');self.assertEqual(second.call_args.args[1]['updated_at'],100)
+
+    def test_http_timeout_captures_writer_before_timestamp_without_retry(self):
+        for mode in ['success','missing','failure']:
+            with self.subTest(mode=mode):
+                f=Fixture(self);app=FastAPI();events=[];error=RuntimeError('unknown CAS outcome')
+                first=Mock(side_effect=[error,True] if mode=='failure' else lambda *args:events.append('first'))
+                second=Mock(side_effect=lambda *args:events.append('second'))
+                current=[None if mode=='missing' else first]
+                def writer():events.append('capture');return current[0]
+                history=PreparationHistory(lambda:'text_inspection_records',lambda rows:rows,copy.deepcopy,writer)
+                api.register(app,PreparationAccess(lambda *a,**k:None,lambda:('alice','fixture')),f.records,history,f.media,f.jobs)
+                endpoint=next(r.endpoint for r in app.routes if getattr(r,'path','')=='/api/text-inspection/prepared-comparisons/{record_id}')
+                def now():
+                    events.append('clock')
+                    if events.count('clock')==2:current[0]=second
+                    return 131
+                with patch.object(api.time,'time',side_effect=now):
+                    if mode=='missing':
+                        with self.assertRaises(TypeError):endpoint('record')
+                    elif mode=='failure':
+                        with self.assertRaises(RuntimeError) as caught:endpoint('record')
+                        self.assertIs(caught.exception,error)
+                    else:self.assertEqual(endpoint('record')['status'],'attempting')
+                self.assertEqual(events[:3],['clock','capture','clock']);second.assert_not_called()
+                if mode=='missing':first.assert_not_called()
+                else:
+                    first.assert_called_once();self.assertEqual(first.call_args.args[1]['updated_at'],131)
+                self.assertEqual(f.record['status'],'attempting');self.assertEqual(f.calls,[])
+
     def test_snapshot_compatibility_order_and_deep_copy(self):
         self.assertIs(compatibility.PreparationJobs,jobs_module.PreparationJobs);self.assertIs(compatibility.register,api.register)
         for name in ['PROCESSING','enabled','snapshot']:self.assertIs(getattr(compatibility,name),getattr(policy,name))

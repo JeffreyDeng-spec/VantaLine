@@ -62,4 +62,4 @@ class PreparationHistory:
     record_table: Callable[[], str]
     raw_rows: Callable[[list[Record]], list[Record]]
     public: Callable[[Record], Record]
-    update_attempt: Callable[[str, Record], bool]
+    attempt_writer: Callable[[], Callable[[str, Record], bool]]

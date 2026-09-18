@@ -296,7 +296,7 @@ def run(s, jobs, record, upload, resolved):
     finally:
         try:
             if expired(record):
-                timeout(s._text_v2_update_attempt, record)
+                timeout(lambda kind, value: s._text_v2_update_attempt(kind, value), record)
             else:
                 record["diagnostics"]["elapsed_ms"] = round((time.monotonic()-started)*1000)
                 record["updated_at"] = int(time.time())
@@ -310,6 +310,6 @@ def run(s, jobs, record, upload, resolved):
 
 def settle_timeout(s, record):
     try:
-        timeout(s._text_v2_update_attempt, record)
+        timeout(lambda kind, value: s._text_v2_update_attempt(kind, value), record)
     finally:
         s.clear_thread_runtime_repository_selection()

@@ -34703,7 +34703,7 @@ standard_preparation_jobs = register_standard_preparation(
         record_table=lambda: TEXT_INSPECTION_TABLES["records"],
         raw_rows=lambda rows: row_raw_json_list(rows),
         public=lambda record: _text_v2_public(record),
-        update_attempt=lambda kind, value: _text_v2_update_attempt(kind, value),
+        attempt_writer=lambda: _text_v2_update_attempt,
     ),
     _preparation_media,
     PreparationJobs(_preparation_records, _preparation_media, _preparation_models,

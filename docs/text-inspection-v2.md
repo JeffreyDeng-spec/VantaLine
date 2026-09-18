@@ -7,6 +7,9 @@ without publishing it. Publication still checks source and current asset/job sta
 this extraction does not add a job-ID guard to result settlement. JSON view calls
 retain their existing writes, and PostgreSQL publication remains atomic. OCR and
 prompt algorithms, history snapshots and recovery behavior are unchanged.
+HTTP timeout settlement captures its compare-and-set writer before constructing the
+timeout record. Background settlement resolves the writer after that construction.
+Neither an unknown provider result nor an unknown final-publication write is retried.
 
 Label extraction now receives typed account, persistence, verified-media and model
 capabilities. Capability reads retain their existing expired-draft cleanup side

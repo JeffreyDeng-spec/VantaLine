@@ -5,7 +5,9 @@ Standard preparation is split into `text_inspection.preparation_api`,
 and history capabilities replace namespace injection; the composition root shares
 one record/media capability pair with the job service. Compatibility exports remain.
 Qwen timeout settlement takes its compare-and-set callback explicitly; the
-comparison GET rereads the authoritative record after settlement. OCR, classification,
+comparison GET captures its writer before timeout and rereads the authoritative
+record after settlement. Worker timeout paths resolve their writer after timestamp
+evaluation, preserving their distinct original lookup boundaries. OCR, classification,
 recovery, prompt sources, transaction order and embedded thread topology are unchanged.
 
 Label extraction registration now lives in `text_inspection.extraction_api` and

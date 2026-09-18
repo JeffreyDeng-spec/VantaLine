@@ -5,6 +5,8 @@ account allowlist and external-model admission remain; the resolved settings obj
 is captured at submission, with no new deep-copy or immutability guarantee. Verified
 history media retains its 120 MiB default. Provider timeouts and single-attempt
 arguments remain unchanged; this is not the independent label-worker cutover.
+The HTTP history port supplies a per-request writer factory rather than a global
+connection; worker settlement retains its later callback lookup.
 
 Extraction dependency ports preserve the existing account gates, external-VLM flag,
 image/document model settings and single-attempt arguments. Upload reads remain
