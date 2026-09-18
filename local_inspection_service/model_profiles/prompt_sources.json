@@ -1,7 +1,11 @@
 {
-  "version": 29,
+  "version": 30,
   "sources": [
     "server.py",
+    "training/preview_cache.py",
+    "training/preview_approval.py",
+    "training/dataset_input.py",
+    "training/status_projection.py",
     "training/preview_query.py",
     "training/preview_submission.py",
     "training/preview_artifacts.py",
