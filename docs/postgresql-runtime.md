@@ -1,5 +1,26 @@
 # PostgreSQL runtime operations
 
+Retired task settlement uses the same update callback exactly once and preserves its failure
+behavior and return-value handling. Retired refresh performs no persistence and returns the same
+public projection object. The extraction adds no connection, transaction, advisory lock or schema;
+updater selection occurs before timestamp evaluation as in the original call expression.
+
+Retired worker request/status extraction adds no database access or connection state. Its public
+request methods immediately reject and its status response is a fresh constant projection; all
+existing task settlement and transaction ownership remains with callers.
+
+Retired watcher extraction performs no task reads/writes from enabled, watch-once or startup
+entry points and creates no database connection. The dormant loop receives a tick callback but
+is not started. Connection, transaction and advisory-lock behavior remain unchanged.
+
+Worker artifact extraction returns the same imported-path/error fields and does not persist the
+training record itself. It adds no repository, connection, transaction or advisory-lock changes;
+partial file writes remain separate from caller-owned task settlement.
+
+Worker bundle extraction keeps initial, retry, completion and failed task-update ordering and
+ignores false update return values as before. It adds no connection, transaction, schema or lock
+behavior. File cleanup and progress finalization retain their separate failure boundaries.
+
 Transfer progress retains the same task-update callback, shared state and periodic write order.
 It adds no connection, transaction, schema, advisory-lock or request-identity behavior. Exceptions
 from progress conversion/update remain swallowed; event waiting is outside that catch boundary.
@@ -94,7 +115,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v39 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v44 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

@@ -1,5 +1,32 @@
 # Production runbook
 
+Retired worker dataset/training entry points perform their single failed-task update and return;
+task/dataset inputs are not inspected. The updater is captured before reading the clock. Retired
+refresh is a public projection only and ignores include_artifacts, with no task write, clock read
+or remote call. Existing notes and partial projection mutations remain; historical remote logic
+stays unreachable. Rollback restores the complete package without rewriting stored records.
+
+Retired JSON, multipart and retry request entry points still reject calls before reading settings,
+arguments or transports. The retry-named function does not invoke even the JSON helper. Status
+flags do not trigger probing. Historical unreachable code remains preserved; this extraction does
+not make it executable. No external request, retry, worker service or topology is enabled.
+
+The retired worker watcher startup handler remains registered and invoked, but still does nothing
+and starts no thread. Its dormant loop retains one interval read, exception reporting and sleep
+order through explicit callbacks. No scheduling, shutdown, stop event, retry or worker topology is
+introduced. Existing historical worker records stay read-only through the same entry points.
+
+Legacy worker artifact import preserves prior overwrite and partial-file behavior. Invalid first
+eligible payload/checksum returns the existing error without trying later models. Directory
+creation precedes naming; model write precedes optional best.pt copy; metadata precedes the second
+clock. Errors do not roll back or retry those writes. Retired worker execution remains disabled.
+
+Legacy worker bundle submission still attempts streamed upload then one form fallback after
+RuntimeError, including RuntimeError from completion persistence. Retry sleep remains before
+progress stop/join. Other exceptions bypass fallback. Progress construction is outside each
+attempt's finally; resolve/build are outside outer cleanup. Stop failure skips join, and outer
+cleanup can replace earlier outcomes. These existing behaviors are preserved, not expanded.
+
 The worker stream helpers preserve partial counters and their existing error boundaries. Upload
 headers resolve outside request exception handling; download headers resolve inside it. Download
 closes the response before decoding JSON. Progress stops through the caller-owned event; this
@@ -50,31 +77,31 @@ that settle interrupted visible tasks. Hidden/missing queued or running records 
 stopped in the projected state. Settlement write failure stops further hydration/projection without
 retry. Normal state responses retain the original object; stale preview projection shallow-copies
 only after active-task hydration has already updated that object. Ship/restore all four input/state
-modules with matching source manifest v39 as one complete release.
+modules with matching source manifest v44 as one complete release.
 
 Preview submission preserves sequential partial completion: create directory, draw images,
 write plan JSON, update user state, merge accessory changes, then save configuration. It does not
 remove prior files or retry after a later failure. Missing clean object sprites return the existing
 409; text fallback remains allowed. Jobs-root lookup occurs only when the plan is written, and the
 store does not create a missing jobs directory. A false save return still returns the original plan.
-Deploy/rollback the complete workflow package with matching source manifest v39.
+Deploy/rollback the complete workflow package with matching source manifest v44.
 
 Preview rendering retains original output failure semantics: a false return from image writing
 still produces the existing URL response; a write exception prevents URL generation, and a URL
 exception leaves an already-written file. No automatic retries or cleanup compensation are added.
 Occluded labels remain in the preview with the original dropped flag and complete amodal box.
-Deploy or restore the renderer and its ports with matching source manifest v39 together.
+Deploy or restore the renderer and its ports with matching source manifest v44 together.
 
 Preview placement still makes at most 180 candidate attempts and does not retry exceptions.
 Overlap sums include repeated placed rectangles; failed searches keep the earliest minimum.
 Successful metadata reports zero overlap, while failure reports the rounded minimum with its
-original pass flag. Deploy or roll back all three layout modules and source manifest v39 together.
+original pass flag. Deploy or roll back all three layout modules and source manifest v44 together.
 
 Background lookup keeps existing selection and default-seeding behavior; it is not a newly
 pure read. An unreadable image returning None uses the synthetic fallback, while read/fit/augment
 exceptions propagate without selecting another image or retrying. All successful/fallback paths
 augment once and preserve the shared random stream. Deploy or restore both background modules
-with matching source manifest v39 as a complete release.
+with matching source manifest v44 as a complete release.
 
 Resource deletion retains the current file-delete, training-marker, pipeline-marker and response
 query order. Errors stop later stages and do not restore earlier files or records. Sample deletion
@@ -87,7 +114,7 @@ Training resource listing is not a pure read: its existing task-view dependency 
 interrupted local training task stopped. Visibility is checked before this lifecycle refresh,
 and refresh failure aborts later resource aggregation. This extraction does not change that
 write path, permissions, locks or cleanup behavior. Restore the complete release with its matching
-source manifest v39; do not copy individual catalog files into production.
+source manifest v44; do not copy individual catalog files into production.
 
 Archive export keeps the original replacement and cleanup sequence. Once a temporary bundle
 is acquired, cleanup runs after export success or failure; cleanup failure can supersede an
@@ -95,35 +122,35 @@ earlier error. Already replaced export directories and completed writes are not 
 Artifact import verifies the optional checksum before selecting the output directory, then
 writes weights, copies the uploaded ZIP, writes library metadata and writes the response summary.
 Later failures retain earlier files; no retry or compensating deletion is added. Deploy and
-restore the complete package with matching source manifest v39.
+restore the complete package with matching source manifest v44.
 
 RunPod orchestration preserves its existing failure boundaries: exceptions propagate to the
 outer training runner and do not trigger an extra submission, GET retry, cancel or local fallback.
 Completed artifact import and record writes can remain when a later summary/sync/warmup step
 fails. The training polling deadline is checked before sleep; completion returned after that
 wait can still be accepted. This extraction retains that training behavior and does not alter
-label-detection timeout/late-response rules. Restore the complete package with manifest v39.
+label-detection timeout/late-response rules. Restore the complete package with manifest v44.
 
 Dataset generation keeps its existing partial-failure behavior: already written images,
 labels, annotation previews or YAML remain after a later step fails. An incomplete manifest
 write can leave partial content. No retry, cleanup or transaction spanning files/config is
 introduced. Error during asset normalization saves configuration only for HTTPException, and
 save failure still supersedes that exception. Restore the complete release with its matching
-v39 manifest; do not repair a rollout by copying individual generation files.
+v44 manifest; do not repair a rollout by copying individual generation files.
 
 Training runner extraction preserves existing execution and failure handling. A process
 exception is not retried, and errors after a process starts do not introduce a new terminate
 or kill action. A later sync/warmup exception can still enter the existing failure settlement
 after an earlier completed update; this structural batch does not redesign that behavior.
 Submission failures retain prior saved records and thread-map entries according to the
-original step order. Deploy/restore all matching modules and source manifest v39 together.
+original step order. Deploy/restore all matching modules and source manifest v44 together.
 
 Training status propagation still saves account configuration before the pipeline record,
 then updates the candidate state after releasing the pipeline lock. It does not add a
 cross-store transaction: later failure may leave earlier writes and in-memory changes, as
 before. Exceptions stop later steps; a false return value alone does not. Two-account tests
 verify request identity isolation, not prevention of concurrent whole-config lost updates.
-Ship/restore the matching v39 manifest and modules together; historical snapshots are retained.
+Ship/restore the matching v44 manifest and modules together; historical snapshots are retained.
 
 Executor settings and the active RunPod client now have explicit dependencies. They do
 not start workers, retain environment credentials in a service instance, or change training
@@ -153,32 +180,32 @@ file replacement: partial-write failures can leave partial content as before. JS
 reads suppress OSError/JSONDecodeError only; PostgreSQL errors never fall back to JSON.
 Model binding can remain added to the in-memory task after a later failure. Locks are
 released on exceptions, including nested saves. Recover with the whole release; keep
-runtime records and deploy both new modules with source manifest v39.
+runtime records and deploy both new modules with source manifest v44.
 
 Training discovery extraction introduces no schema, connection, cache-policy or
 process-topology change. Artifact discovery can still expose a task whose weight file
 is absent; existing selection/loading performs its later checks. Finder snapshots
 retain the existing partial-failure behavior and must be consumed on their creating
 thread. Deploy and roll back the entire package, including the three new modules and
-source manifest v39. Existing records and historical model snapshots are preserved.
+source manifest v44. Existing records and historical model snapshots are preserved.
 
 Warmup remains the existing best-effort daemon-thread operation. Disabled runs only
 update enabled/status/error; old detail fields remain. Setup errors can leave the
 prior status, and formatter or BaseException failures may leave running status.
 Prediction failures are recorded and remaining models continue. This extraction adds
-no thread coordination or lifecycle idempotence; deploy/restore manifest v39 and all
+no thread coordination or lifecycle idempotence; deploy/restore manifest v44 and all
 components as one complete release.
 
 Local model cache behavior remains process-local and unlocked during first load.
 Same-ID hits still select/validate their specification; new IDs check file existence
 before reusing a live instance at the resolved path. Removing an instance can leave
 a path alias that still influences readiness, as before. This batch does not alter
-warmup threads or restart behavior. Roll back the complete package with manifest v39.
+warmup threads or restart behavior. Roll back the complete package with manifest v44.
 
 Task projection/catalog extraction preserves current filtering and merge behavior,
 including partial in-memory changes before an exception. It introduces no database
 migration, cache policy or runtime topology change. Publish/restore both modules and
-source manifest v39 with the entire immutable release.
+source manifest v44 with the entire immutable release.
 
 Detection task storage extraction preserves cache invalidation and existing partial
 failure behavior. JSON saves retain the fixed `.json.tmp` path and atomic replacement;
@@ -190,7 +217,7 @@ caching and original exception boundaries. A malformed batch result still trigge
 the original per-image fallback; short valid batches are not padded or retried.
 Single-image build errors remain outside its prediction catch. This structural
 batch does not add initialization locking or change concurrency, topology or model
-parameters. Deploy/rollback all OCR modules and manifest v39 as one complete release.
+parameters. Deploy/rollback all OCR modules and manifest v44 as one complete release.
 
 Detection result modules preserve the existing in-process inference topology.
 Filtering still annotates candidate dictionaries, parsers still prefer nonempty
@@ -222,7 +249,7 @@ incoming store together, preserving existing records and audit evidence.
 Comparison extraction preserves attempts, media, uncertain-call evidence and the
 existing review/audit ordering. A failed final save can leave a persisted attempt;
 retry is not a recovery action. Use the usual complete-release restart and rollback
-with matching manifest v39, retaining historical snapshots. This batch does not
+with matching manifest v44, retaining historical snapshots. This batch does not
 activate an independent label worker or modify deployment topology.
 
 Standard-route extraction keeps the current jobs, write locks and complete-release

@@ -1,5 +1,43 @@
 # Testing
 
+`python scripts/smoke_training_worker_retired_flows.py` runs 12 synthetic groups.
+Nine original business groups passed before migration on Windows and Linux;
+10 expanded groups also pass against saved original function bodies. Contracts retain
+retired task settlement fields, one update after the clock, current updater capture and
+read-only public projection identity. Partial projection mutations and errors retain
+original order. Historical unreachable network bodies remain unchanged after their
+early returns; synthetic dependencies prove no remote work or artifacts are requested.
+
+`python scripts/smoke_training_worker_retired_requests.py` runs 7 synthetic groups.
+Six original business groups passed before migration on Windows and Linux;
+6 expanded groups also pass against saved original function bodies. Contracts retain
+immediate retirement rejection, exact error text, Python argument binding and fresh
+status payloads. Poison parameters and transport substitutes prove no configuration,
+parameter, network, retry, sleep or service-probe work occurs in the retired paths.
+
+`python scripts/smoke_training_worker_watcher.py` runs 14 synthetic groups.
+Eleven original business groups passed before migration on Windows and Linux;
+12 expanded groups also pass against saved original function bodies. Contracts retain
+disabled entry points, startup handler identity, interval clamping, original exception
+reporting and per-iteration callback lookup. Fake events and bounded loop substitutes
+verify lifecycle behavior without starting real threads or worker processes.
+
+`python scripts/smoke_training_worker_artifacts.py` runs 17 synthetic groups.
+Twelve original business groups passed before migration on Windows and Linux;
+15 expanded groups also pass against saved original function bodies. Contracts retain
+strict base64/checksum validation, exact metadata, filename fallback and partial file
+writes on failure. Two narrow getters retain owner path and filename callback selection
+before argument effects. Existing metadata and partial model/copy evidence remain on
+errors. Temporary files and synthetic payloads are used; no model is loaded.
+
+`python scripts/smoke_training_worker_bundle.py` runs 25 synthetic groups.
+Seventeen original business groups passed before migration on Windows and Linux;
+23 expanded groups also pass against saved original function bodies. Contracts retain
+exact metadata, byte accounting, shared upload state and the existing one-time streamed
+to form fallback. Three narrow getters retain resolve, form and updater selection before
+argument effects. Tests verify original cleanup and error precedence with temporary
+archives and synthetic transport/progress substitutes; no real uploads or training occur.
+
 `python scripts/smoke_training_worker_transfers.py` runs 29 synthetic groups.
 Seventeen original business groups passed before migration on Windows and Linux;
 26 expanded groups also pass against saved original function bodies. Contracts retain

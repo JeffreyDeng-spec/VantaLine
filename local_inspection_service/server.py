@@ -19683,34 +19683,16 @@ def windows_worker_headers() -> dict[str, str]:
     return _training_executor_settings.windows_worker_headers()
 
 
+from .training.legacy_worker_requests import LegacyWorkerSettings, LegacyWorkerRequests, windows_worker_status as _retired_worker_status
+
+_legacy_worker_requests = LegacyWorkerRequests(
+    LegacyWorkerSettings(lambda: windows_worker_base_url(), lambda: windows_worker_headers(), lambda: windows_worker_timeout_seconds()),
+    lambda *args, **kwargs: requests.request(*args, **kwargs),
+    lambda *args, **kwargs: windows_worker_request(*args, **kwargs), lambda seconds: time.sleep(seconds),
+)
+
 def windows_worker_request(method: str, path: str, *, json_body: dict[str, Any] | None = None, timeout_seconds: float | None = None) -> dict[str, Any]:
-    raise RuntimeError("Windows Worker execution is retired. Production training uses RunPod.")
-    base_url = windows_worker_base_url()
-    if not base_url:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
-    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
-    try:
-        response = requests.request(
-            method,
-            url,
-            json=json_body,
-            headers=windows_worker_headers(),
-            timeout=timeout_seconds or windows_worker_timeout_seconds(),
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {"message": response.text[:500]}
-    if response.status_code >= 400:
-        detail = body.get("detail") if isinstance(body, dict) else body
-        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
-    if not isinstance(body, dict):
-        return {"result": body}
-    return body
-
-
+    return _legacy_worker_requests.windows_worker_request(method, path, json_body=json_body, timeout_seconds=timeout_seconds)
 def windows_worker_form_request(
     method: str,
     path: str,
@@ -19719,43 +19701,9 @@ def windows_worker_form_request(
     files: dict[str, Any] | None = None,
     timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
-    raise RuntimeError("Windows Worker execution is retired. Production training uses RunPod.")
-    base_url = windows_worker_base_url()
-    if not base_url:
-        raise RuntimeError(f"{WINDOWS_WORKER_BASE_URL_ENV} is not configured")
-    url = f"{base_url}{path if path.startswith('/') else f'/{path}'}"
-    try:
-        response = requests.request(
-            method,
-            url,
-            data=data,
-            files=files,
-            headers=windows_worker_headers(),
-            timeout=timeout_seconds or windows_worker_timeout_seconds(),
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Windows worker request failed: {exc}") from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {"message": response.text[:500]}
-    if response.status_code >= 400:
-        detail = body.get("detail") if isinstance(body, dict) else body
-        raise RuntimeError(f"Windows worker returned HTTP {response.status_code}: {detail or 'request failed'}")
-    if not isinstance(body, dict):
-        return {"result": body}
-    return body
-
-
+    return _legacy_worker_requests.windows_worker_form_request(method, path, data=data, files=files, timeout_seconds=timeout_seconds)
 def windows_worker_status(*, force: bool = False, probe: bool = True, include_services: bool = False) -> dict[str, Any]:
-    return {
-        "configured": False,
-        "ok": False,
-        "status": "retired",
-        "message": "Windows Worker execution is retired. Production training uses RunPod.",
-    }
-
-
+    return _retired_worker_status(force=force, probe=probe, include_services=include_services)
 def training_execution_status(*, include_worker_probe: bool = False, include_worker_services: bool = False) -> dict[str, Any]:
     return _training_executor_settings.training_execution_status(include_worker_probe=include_worker_probe, include_worker_services=include_worker_services)
 
@@ -19812,40 +19760,26 @@ def dataset_file_manifest(dataset_dir: Path) -> list[dict[str, Any]]:
     return _training_dataset_archives.dataset_file_manifest(dataset_dir)
 
 
+from .training.worker_bundle_metadata import WorkerBundleMetadata
+from .training.worker_bundle_submission import WorkerBundleFiles, WorkerBundleTransport, WorkerBundleTimeout, WorkerBundleSubmission
+
+_worker_bundle_metadata = WorkerBundleMetadata(lambda path: file_sha256(path), lambda path: dataset_file_manifest(path))
+_worker_bundle_timeout = WorkerBundleTimeout(lambda: remote_training_timeout_seconds())
+_worker_bundle_submission = WorkerBundleSubmission(
+    WorkerBundleFiles(lambda: resolve_service_path, lambda path, job_id: build_worker_training_bundle(path, job_id),
+                      lambda *args: worker_training_bundle_metadata(*args)),
+    WorkerBundleTransport(lambda: worker_training_upload_timeout_seconds(), lambda *args, **kwargs: _start_transfer_progress_thread(*args, **kwargs),
+                          lambda *args, **kwargs: windows_worker_upload_bundle_streamed(*args, **kwargs),
+                          lambda: windows_worker_form_request),
+    lambda: update_training_task, lambda: time.time(), lambda seconds: time.sleep(seconds),
+)
+
 def worker_training_bundle_metadata(job_id: str, task: dict[str, Any], dataset: dict[str, Any], dataset_dir: Path, archive_path: Path) -> dict[str, Any]:
-    return {
-        "bundle_version": 1,
-        "job_id": job_id,
-        "task_id": str(task.get("task_id") or job_id),
-        "task_type": "training",
-        "action": "train_model",
-        "owner_user_id": str(task.get("owner_user_id") or ""),
-        "owner_username": str(task.get("owner_username") or ""),
-        "source_dataset_id": str(task.get("source_dataset_id") or Path(str(dataset.get("dataset_dir") or dataset_dir)).name),
-        "selected_accessory_ids": [str(item) for item in task.get("selected_accessory_ids") or []],
-        "sample_count": max(1, min(20000, int(task.get("sample_count") or 1))),
-        "train_mode": str(task.get("train_mode") or task.get("mode") or task.get("model_variant") or "yolo_ocr"),
-        "epochs": max(1, min(500, int(task.get("epochs") or 1))),
-        "image_size": max(320, min(1280, int(task.get("image_size") or 640))),
-        "dataset_archive": {
-            "filename": archive_path.name,
-            "size": archive_path.stat().st_size,
-            "sha256": file_sha256(archive_path),
-        },
-        "dataset_files": dataset_file_manifest(dataset_dir),
-        "callback": {
-            "import_target": "training_runs",
-            "expected_artifacts": ["model", "logs", "result_manifest"],
-        },
-    }
-
-
+    return _worker_bundle_metadata.worker_training_bundle_metadata(job_id, task, dataset, dataset_dir, archive_path)
 def worker_training_upload_timeout_seconds() -> float:
     # The bundle upload travels over a cross-region Tailscale link; give it a
     # generous ceiling so a slow-but-progressing transfer is not killed.
-    return max(1800.0, remote_training_timeout_seconds())
-
-
+    return _worker_bundle_timeout.worker_training_upload_timeout_seconds()
 from .training.worker_transfers import WorkerTransfers
 from .training.transfer_progress import TransferProgress
 
@@ -19869,81 +19803,7 @@ def windows_worker_upload_bundle_streamed(
 ) -> dict[str, Any]:
     return _worker_transfers.windows_worker_upload_bundle_streamed(path, metadata_json=metadata_json, archive_path=archive_path, state=state, timeout_seconds=timeout_seconds)
 def post_worker_training_bundle(job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> dict[str, Any]:
-    dataset_dir = resolve_service_path(dataset.get("dataset_dir", ""))
-    temp_dir, archive_path = build_worker_training_bundle(dataset_dir, job_id)
-    try:
-        metadata = worker_training_bundle_metadata(job_id, task, dataset, dataset_dir, archive_path)
-        metadata_json = json.dumps(metadata, ensure_ascii=False)
-        archive_bytes = archive_path.stat().st_size
-        bundle_mb = round(archive_bytes / (1024 * 1024), 1)
-        update_training_task(
-            job_id,
-            progress=20,
-            worker_bundle_size_mb=bundle_mb,
-            worker_upload_status="running",
-            worker_upload_started_at=int(time.time()),
-            worker_upload_total_bytes=archive_bytes,
-            worker_upload_sent_bytes=0,
-            note=f"已压缩 HK 样本集（{bundle_mb}MB，仅训练所需图像），正在上传到 Windows Worker。",
-        )
-        timeout_seconds = worker_training_upload_timeout_seconds()
-        last_error: Exception | None = None
-        for attempt in range(1, 3):
-            upload_state: dict[str, int] = {"done": 0, "total": archive_bytes}
-            stop_event, progress_thread = _start_transfer_progress_thread(
-                job_id,
-                upload_state,
-                done_field="worker_upload_sent_bytes",
-                total_field="worker_upload_total_bytes",
-                status_field="worker_upload_status",
-            )
-            try:
-                if attempt == 1:
-                    body = windows_worker_upload_bundle_streamed(
-                        "/training/jobs/import",
-                        metadata_json=metadata_json,
-                        archive_path=archive_path,
-                        state=upload_state,
-                        timeout_seconds=timeout_seconds,
-                    )
-                else:
-                    # Fallback path: proven (non-streaming) form upload for reliability.
-                    with archive_path.open("rb") as handle:
-                        body = windows_worker_form_request(
-                            "POST",
-                            "/training/jobs/import",
-                            data={"metadata": metadata_json},
-                            files={"dataset_archive": (archive_path.name, handle, "application/zip")},
-                            timeout_seconds=timeout_seconds,
-                        )
-                update_training_task(
-                    job_id,
-                    worker_upload_status="completed",
-                    worker_upload_sent_bytes=archive_bytes,
-                    worker_upload_total_bytes=archive_bytes,
-                    worker_upload_completed_at=int(time.time()),
-                )
-                return body
-            except RuntimeError as exc:
-                last_error = exc
-                if attempt >= 2:
-                    update_training_task(job_id, worker_upload_status="failed")
-                    break
-                update_training_task(
-                    job_id,
-                    progress=20,
-                    worker_upload_status="running",
-                    note=f"上传到 Windows Worker 失败（第 {attempt} 次），正在重试：{str(exc)[:160]}",
-                )
-                time.sleep(5)
-            finally:
-                stop_event.set()
-                progress_thread.join(timeout=2.0)
-        raise last_error if last_error else RuntimeError("Windows worker bundle upload failed")
-    finally:
-        temp_dir.cleanup()
-
-
+    return _worker_bundle_submission.post_worker_training_bundle(job_id, task, dataset)
 from .training.remote_training import RemoteTrainingSettings, RemoteTrainingPaths, RemoteTraining
 from .training.worker_compatibility import worker_training_payload, worker_training_terminal_status, WorkerArtifactSummary
 
@@ -20092,137 +19952,38 @@ def run_runpod_training_task(job_id: str, task: dict[str, Any], dataset: dict[st
     return _runpod_flow.run_runpod_training_task(job_id, task, dataset)
 
 
+from .training.legacy_worker_tasks import LegacyWorkerTaskPorts, LegacyWorkerTasks
+from .training.legacy_worker_refresh import LegacyRefreshRecords, LegacyRefreshTransfer, LegacyRefreshArtifacts, LegacyWorkerRefresh
+
+_legacy_worker_tasks = LegacyWorkerTasks(
+    lambda: update_training_task, lambda: time.time(),
+    LegacyWorkerTaskPorts(lambda: windows_worker_base_url(), lambda value: masked_url_for_status(value),
+                          lambda *args, **kwargs: windows_worker_request_with_retry(*args, **kwargs), lambda task: worker_training_payload(task),
+                          lambda *args: post_worker_training_bundle(*args), lambda value: public_path_sanitized(value)),
+)
+_legacy_worker_refresh = LegacyWorkerRefresh(
+    LegacyRefreshRecords(lambda task: public_training_task(task), lambda: update_training_task,
+                         lambda value: public_path_sanitized(value), lambda: IMAGE_JOB_ACTIVE_STATUSES),
+    LegacyRefreshTransfer(lambda *args, **kwargs: windows_worker_request(*args, **kwargs), lambda *args, **kwargs: _start_transfer_progress_thread(*args, **kwargs),
+                          lambda *args, **kwargs: windows_worker_get_json_streamed(*args, **kwargs), lambda: worker_training_upload_timeout_seconds()),
+    LegacyRefreshArtifacts(lambda item: worker_training_artifact_summary(item), lambda task, artifacts: import_worker_training_artifacts(task, artifacts)),
+    lambda: time.time(),
+)
+
 def run_worker_dataset_generation_task(job_id: str, task: dict[str, Any]) -> None:
-    update_training_task(
-        job_id,
-        status="failed",
-        progress=100,
-        completed_at=int(time.time()),
-        training_executor="runpod",
-        error="Windows Worker dataset generation is retired. Production training uses RunPod.",
-        note="Windows Worker 已退役；请使用 RunPod 训练链路。",
-    )
-    return
-    update_training_task(
-        job_id,
-        status="running",
-        progress=12,
-        training_executor="worker",
-        windows_worker_endpoint=masked_url_for_status(windows_worker_base_url()),
-        note="正在提交样本生成任务到 Windows Worker。",
-    )
-    body = windows_worker_request_with_retry("POST", "/training/datasets/generate", json_body=worker_training_payload(task))
-    worker_job_id = str(body.get("job_id") or body.get("task_id") or body.get("id") or "").strip()
-    update_training_task(
-        job_id,
-        status="running",
-        progress=30,
-        remote_training_status=str(body.get("status") or "submitted"),
-        remote_training_job_id=worker_job_id,
-        remote_training_response={key: value for key, value in body.items() if key not in {"api_key", "token", "secret"}},
-        note="样本生成任务已提交到 Windows Worker，等待远端处理。",
-    )
-
-
+    return _legacy_worker_tasks.run_worker_dataset_generation_task(job_id, task)
 def run_worker_training_task(job_id: str, task: dict[str, Any], dataset: dict[str, Any] | None = None) -> None:
-    update_training_task(
-        job_id,
-        status="failed",
-        progress=100,
-        completed_at=int(time.time()),
-        training_executor="runpod",
-        error="Windows Worker training is retired. Production training uses RunPod.",
-        note="Windows Worker 已退役；请使用 RunPod 训练链路。",
-    )
-    return
-    update_training_task(
-        job_id,
-        status="running",
-        progress=12,
-        training_executor="worker",
-        windows_worker_endpoint=masked_url_for_status(windows_worker_base_url()),
-        worker_transfer_required=True,
-        note="正在提交训练任务到 Windows Worker。",
-    )
-    if dataset and dataset.get("dataset_yaml"):
-        update_training_task(
-            job_id,
-            progress=18,
-            note="正在打包 HK 样本集并传输到 Windows Worker。",
-            **dataset,
-        )
-        body = post_worker_training_bundle(job_id, task, dataset)
-    else:
-        body = windows_worker_request_with_retry("POST", "/training/jobs", json_body=worker_training_payload(task))
-    worker_job_id = str(body.get("job_id") or body.get("task_id") or body.get("id") or "").strip()
-    update_training_task(
-        job_id,
-        status="running",
-        progress=30,
-        remote_training_status=str(body.get("status") or "submitted"),
-        remote_training_job_id=worker_job_id,
-        worker_bundle_transfer=public_path_sanitized(body.get("transfer") or body.get("bundle") or {}),
-        remote_training_response={key: value for key, value in body.items() if key not in {"api_key", "token", "secret"}},
-        note="训练任务和样本集已提交到 Windows Worker，等待远端处理。" if dataset else "训练任务已提交到 Windows Worker，等待远端处理。",
-    )
-
-
+    return _legacy_worker_tasks.run_worker_training_task(job_id, task, dataset)
 def worker_training_artifact_summary(item: dict[str, Any]) -> dict[str, Any]:
     return _worker_artifact_summary.worker_training_artifact_summary(item)
+from .training.worker_artifacts import WorkerArtifactImport
+
+_worker_artifact_import = WorkerArtifactImport(
+    lambda: output_write_dir_for_owner, lambda: safe_name, lambda: time.time(),
+)
+
 def import_worker_training_artifacts(task: dict[str, Any], artifacts: dict[str, Any]) -> dict[str, Any]:
-    if task.get("worker_artifacts_imported_at"):
-        return {}
-    job_id = str(task.get("job_id") or task.get("task_id") or "").strip()
-    if not job_id:
-        return {}
-    model_artifact = next(
-        (
-            item
-            for item in artifacts.get("models", [])
-            if isinstance(item, dict) and str(item.get("artifact_b64") or "").strip()
-        ),
-        None,
-    )
-    if not model_artifact:
-        return {}
-    try:
-        payload = base64.b64decode(str(model_artifact["artifact_b64"]), validate=True)
-    except (ValueError, binascii.Error):
-        return {"worker_artifact_import_error": "Worker model artifact payload is not valid base64"}
-    expected_sha = str(model_artifact.get("artifact_sha256") or "").strip().lower()
-    actual_sha = hashlib.sha256(payload).hexdigest()
-    if expected_sha and actual_sha != expected_sha:
-        return {"worker_artifact_import_error": "Worker model artifact checksum mismatch"}
-    run_dir = output_write_dir_for_owner("training_runs", str(task.get("owner_user_id") or "")) / job_id
-    weights_dir = run_dir / "weights"
-    weights_dir.mkdir(parents=True, exist_ok=True)
-    filename = safe_name(str(model_artifact.get("artifact_filename") or "best.pt"))
-    if not filename.endswith(".pt"):
-        filename = "best.pt"
-    model_path = weights_dir / filename
-    model_path.write_bytes(payload)
-    best_path = weights_dir / "best.pt"
-    if model_path.name != "best.pt":
-        shutil.copyfile(model_path, best_path)
-    metadata = {
-        "display_name": task.get("label") or model_artifact.get("label") or job_id,
-        "note": "Imported from Windows Worker transfer result.",
-        "pipeline_task_id": str(task.get("pipeline_task_id") or ""),
-        "pipeline_task_name": str(task.get("pipeline_task_name") or ""),
-        "worker_job_id": task.get("remote_training_job_id"),
-        "worker_artifact_sha256": actual_sha,
-        "updated_at": int(time.time()),
-    }
-    (run_dir / "library_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    return {
-        "worker_artifacts_imported_at": int(time.time()),
-        "worker_artifact_import_error": "",
-        "training_run_dir": str(run_dir),
-        "imported_model_path": str(best_path),
-        "worker_artifact_sha256": actual_sha,
-    }
-
-
+    return _worker_artifact_import.import_worker_training_artifacts(task, artifacts)
 def _start_transfer_progress_thread(
     job_id: str,
     state: dict[str, int],
@@ -20236,131 +19997,7 @@ def _start_transfer_progress_thread(
 def windows_worker_get_json_streamed(path: str, *, state: dict[str, int], timeout_seconds: float) -> dict[str, Any]:
     return _worker_transfers.windows_worker_get_json_streamed(path, state=state, timeout_seconds=timeout_seconds)
 def refresh_worker_training_task(task: dict[str, Any], *, include_artifacts: bool = False) -> dict[str, Any]:
-    public = public_training_task(task)
-    public["executor_retired"] = True
-    public["remote_refresh_retired"] = True
-    public.setdefault("note", "历史 Windows-worker 训练记录仅保留只读展示；生产训练执行已切换为 RunPod。")
-    return public
-    remote_job_id = str(task.get("remote_training_job_id") or "").strip()
-    if not remote_job_id:
-        return public_training_task(task)
-    job_id = str(task.get("job_id") or task.get("task_id") or "")
-    already_imported = bool(task.get("worker_artifacts_imported_at"))
-    updates: dict[str, Any] = {}
-    try:
-        body = windows_worker_request("GET", f"/training/jobs/{quote(remote_job_id, safe='')}", timeout_seconds=20)
-        remote_job = body.get("job") if isinstance(body.get("job"), dict) else body
-        remote_status = str(remote_job.get("status") or body.get("status") or "").strip()
-        remote_progress = remote_job.get("progress") if isinstance(remote_job, dict) else None
-        updates.update(
-            {
-                "remote_training_status": remote_status or task.get("remote_training_status") or "submitted",
-                "remote_training_job": public_path_sanitized(remote_job),
-                "remote_training_poll_error": "",
-            }
-        )
-        if isinstance(remote_progress, (int, float)):
-            updates["remote_training_progress"] = remote_progress
-        if remote_status:
-            status_l = remote_status.lower()
-            if status_l == "completed":
-                updates.update(
-                    {
-                        "status": "completed",
-                        "progress": 100,
-                        "completed_at": int(time.time()),
-                        "note": "Windows Worker 任务已完成。",
-                    }
-                )
-            elif status_l in {"failed", "cancelled", "canceled", "stopped"}:
-                updates.update(
-                    {
-                        "status": "failed",
-                        "progress": 100,
-                        "completed_at": int(time.time()),
-                        "error": str(remote_job.get("error") or remote_job.get("note") or remote_status),
-                        "note": f"Windows Worker 任务结束：{remote_status}。",
-                    }
-                )
-            elif str(task.get("status")) in IMAGE_JOB_ACTIVE_STATUSES:
-                updates.update(
-                    {
-                        "status": "running",
-                        "progress": max(int(task.get("progress") or 0), 30),
-                        "note": f"Windows Worker 任务状态：{remote_status}。",
-                    }
-                )
-        # Only fetch artifacts (a potentially large base64 model payload) once the
-        # remote job has actually completed AND the model has not been imported yet.
-        # Gating on "completed" (not merely include_artifacts) prevents pointless
-        # downloads + a misleading model-return progress bar while training runs.
-        if remote_status.lower() == "completed" and not already_imported:
-            download_state: dict[str, int] = {"done": 0, "total": 0}
-            stop_event, progress_thread = _start_transfer_progress_thread(
-                job_id,
-                download_state,
-                done_field="worker_download_received_bytes",
-                total_field="worker_download_total_bytes",
-                status_field="worker_download_status",
-            )
-            update_training_task(
-                job_id,
-                worker_download_status="running",
-                worker_download_started_at=int(time.time()),
-                worker_download_received_bytes=0,
-                note="Windows Worker 训练完成，正在回传模型到 HK 服务器。",
-            )
-            try:
-                artifacts = windows_worker_get_json_streamed(
-                    f"/training/jobs/{quote(remote_job_id, safe='')}/artifacts",
-                    state=download_state,
-                    timeout_seconds=worker_training_upload_timeout_seconds(),
-                )
-            finally:
-                stop_event.set()
-                progress_thread.join(timeout=2.0)
-            received_total = int(download_state.get("done") or 0)
-            updates["remote_training_artifacts"] = {
-                "models": [
-                    worker_training_artifact_summary(item)
-                    for item in artifacts.get("models", [])
-                    if isinstance(item, dict)
-                ],
-                "datasets": [
-                    worker_training_artifact_summary(item)
-                    for item in artifacts.get("datasets", [])
-                    if isinstance(item, dict)
-                ],
-            }
-            updates.update(
-                {
-                    "worker_download_status": "completed",
-                    "worker_download_completed_at": int(time.time()),
-                    "worker_download_received_bytes": received_total,
-                    "worker_download_total_bytes": int(download_state.get("total") or received_total),
-                }
-            )
-            if remote_status.lower() == "completed":
-                import_result = import_worker_training_artifacts(task, artifacts)
-                if import_result:
-                    updates.update(import_result)
-                elif not task.get("worker_artifacts_imported_at"):
-                    attempts = int(task.get("worker_artifact_import_attempts") or 0) + 1
-                    updates["worker_artifact_import_attempts"] = attempts
-                    if attempts >= 5:
-                        updates["worker_artifacts_imported_at"] = int(time.time())
-                        updates["worker_artifact_import_error"] = (
-                            "Worker reported completed but returned no model artifact after 5 attempts."
-                        )
-    except Exception as exc:
-        updates["remote_training_poll_error"] = str(exc)
-        if not already_imported:
-            updates["worker_download_status"] = "failed"
-    if updates:
-        task = update_training_task(str(task.get("job_id") or task.get("task_id")), **updates)
-    return public_training_task(task)
-
-
+    return _legacy_worker_refresh.refresh_worker_training_task(task, include_artifacts=include_artifacts)
 def windows_worker_request_with_retry(
     method: str,
     path: str,
@@ -20370,50 +20007,31 @@ def windows_worker_request_with_retry(
     attempts: int = 3,
     backoff_seconds: float = 4.0,
 ) -> dict[str, Any]:
-    raise RuntimeError("Windows Worker execution is retired. Production training uses RunPod.")
-    last_exc: Exception | None = None
-    for attempt in range(max(1, attempts)):
-        try:
-            return windows_worker_request(method, path, json_body=json_body, timeout_seconds=timeout_seconds)
-        except RuntimeError as exc:
-            last_exc = exc
-            if attempt + 1 >= attempts:
-                break
-            time.sleep(backoff_seconds * (attempt + 1))
-    raise last_exc if last_exc else RuntimeError("Windows worker request failed")
+    return _legacy_worker_requests.windows_worker_request_with_retry(method, path, json_body=json_body, timeout_seconds=timeout_seconds, attempts=attempts, backoff_seconds=backoff_seconds)
+from .training.worker_watcher import (
+    worker_training_watcher_enabled as _retired_worker_watcher_enabled,
+    _worker_training_watch_once as _retired_worker_watch_once,
+    start_worker_training_watcher as _retired_worker_watcher_start,
+    WorkerWatcherSettings, WorkerWatcherLoop,
+)
 
+_worker_watcher_settings = WorkerWatcherSettings(lambda: os.environ)
+_worker_watcher_loop = WorkerWatcherLoop(
+    lambda: worker_training_watcher_interval_seconds(), lambda: _worker_training_watch_once(),
+    lambda: traceback.print_exc(file=sys.stderr), lambda seconds: time.sleep(seconds),
+)
 
 def worker_training_watcher_enabled() -> bool:
-    return False
-
-
+    return _retired_worker_watcher_enabled()
 def worker_training_watcher_interval_seconds() -> float:
-    try:
-        return max(5.0, min(600.0, float(os.environ.get("INSPECTION_WORKER_WATCHER_INTERVAL_SECONDS", "") or 20.0)))
-    except (TypeError, ValueError):
-        return 20.0
-
-
+    return _worker_watcher_settings.worker_training_watcher_interval_seconds()
 def _worker_training_watch_once() -> int:
-    """Windows-worker execution is retired; historical worker records are read-only."""
-    return 0
-
-
+    return _retired_worker_watch_once()
 def _worker_training_watcher_loop() -> None:
-    interval = worker_training_watcher_interval_seconds()
-    while True:
-        try:
-            _worker_training_watch_once()
-        except Exception:  # noqa: BLE001 - 守护线程必须保持存活
-            traceback.print_exc(file=sys.stderr)
-        time.sleep(interval)
-
-
+    return _worker_watcher_loop._worker_training_watcher_loop()
 @app.on_event("startup")
 def start_worker_training_watcher() -> None:
-    return None
-
-
+    return _retired_worker_watcher_start()
 from .training.runner import TrainingRunner, TrainingRunnerRecords, TrainingRunnerPaths, TrainingDatasetExecution, TrainingLocalExecution
 from .training.submission import (
     TrainingSubmission, TrainingSubmissionPolicy, TrainingSubmissionIdentity, TrainingSubmissionRecords, TrainingSubmissionThreads,
