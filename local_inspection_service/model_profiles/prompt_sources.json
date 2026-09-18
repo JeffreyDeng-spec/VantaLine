@@ -1,7 +1,8 @@
 {
-  "version": 27,
+  "version": 28,
   "sources": [
     "server.py",
+    "training/preview_renderer.py",
     "training/preview_geometry.py",
     "training/preview_masks.py",
     "training/preview_placement.py",
