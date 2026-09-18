@@ -1,5 +1,10 @@
 # Production runbook
 
+Revision/diagnostic extraction retains caller-owned transactions, baseline writes,
+partial-failure evidence and existing log handling. It introduces no schema change,
+worker switch or cleanup. Ship all three modules with the matching entry point and
+restore the previous complete release on rollback, retaining records and snapshots.
+
 Media extraction preserves existing evidence and cache failure behavior. Cached
 asset read/hash failures do not rerender from the parent PDF; a save failure may
 leave the new file and mutated asset, and an atomic replace failure may leave its

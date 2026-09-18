@@ -1,5 +1,14 @@
 # Text inspection v2
 
+Revision publication retains the original baseline-then-new-revision sequence and
+shared snapshot lists. Baseline insert failure rejects publication; the later
+revision insert's false return is still ignored, and an exception may leave the
+baseline persisted and the caller's standard mutated. Structural extraction does
+not add transactions or change this known boundary. Public projection remains a
+deep copy with existing field filtering and URL rules. Diagnostic filtering covers
+bounded structured keys and embedded media; it is not general free-text redaction.
+The server diagnostic event hashes the failure message instead of logging it.
+
 Verified media and lazy PDF page caching now use an explicit media service; image
 normalization/provider copies/annotations live in a separate image module. Cached
 media retains priority and failures do not trigger a silent rerender. PNG/JPEG/WEBP

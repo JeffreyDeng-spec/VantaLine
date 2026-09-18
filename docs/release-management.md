@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
+application identity checks. Ship these modules and their root adapters together.
+Manifest v5 and normal whole-release restart/rollback remain; no new topology or
+model configuration is enabled by this structural batch.
+
 Text-media CI adds real image/PDF and application-composition contracts. Package
 both media/image modules with source manifest v5, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
