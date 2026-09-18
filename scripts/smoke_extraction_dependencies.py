@@ -31,6 +31,7 @@ class ExtractionContracts(unittest.TestCase):
         app=FastAPI();identity=ContextVar(name,default='alice');temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         f=SimpleNamespace(root=Path(temp.name),data={},events=[],reads=[],writes=[],workers=[],clears=0,allowed=True,enabled=False,pg=True,reject=None,fail_save=False,lose_insert=False,calls=[])
         f.image_config={'configured':False,'provider':'fixture','model':name,'timeout_seconds':1}
+        f.save_errors=[]
         f.document_config={'configured':True,'provider':'qwen','model':name,'api_key':'synthetic','base_url':'https://fixture.invalid'}
         output=io.BytesIO();Image.new('RGB',(300,200),'white').save(output,'PNG');f.image=output.getvalue()
         @app.middleware('http')
@@ -55,6 +56,9 @@ class ExtractionContracts(unittest.TestCase):
         def repository():f.events.append(('repository',identity.get()));return repo if f.pg else None
         def save(kind,value,*,insert_only=False):
             f.events.append(('save',kind,value['id'],insert_only))
+            if f.save_errors:
+                failure=f.save_errors.pop(0)
+                if failure is not None:raise failure
             if f.fail_save:raise RuntimeError('synthetic save failure')
             if value['id']==f.reject:return False
             if insert_only and f.lose_insert:
@@ -68,7 +72,7 @@ class ExtractionContracts(unittest.TestCase):
             if kwargs.get('expected_sha256') and digest(data)!=kwargs['expected_sha256']:raise HTTPException(409,'hash mismatch')
             return data
         def digest(data):return hashlib.sha256(data).hexdigest()
-        def clear():f.clears+=1
+        def clear():f.events.append(('clear',));f.clears+=1
         class Provider:
             def generate_image(self,prompt,images,*,model):f.calls.append(('image',model,images));raise TimeoutError('synthetic unknown')
         def provider(settings):f.calls.append(('provider',copy.deepcopy(settings)));return Provider()
@@ -140,6 +144,58 @@ class ExtractionContracts(unittest.TestCase):
         f=self.fixture('denied');f.allowed=False
         with patch.dict('os.environ',{'VANTALINE_LABEL_EXTRACTION_ACCOUNTS':'alice'}):response=self.create(f)
         self.assertEqual(response.status_code,403);self.assertEqual(f.events,[('permission','alice','inspection')]);self.assertEqual(f.writes,[])
+    def queue_worker(self,f,method):
+        f.enabled=True;f.image_config['configured']=True
+        class Upload:
+            async def read(self,limit):return f.image
+        class Thread:
+            def __init__(self,**kwargs):self.kwargs=kwargs
+            def start(self):f.workers.append(self.kwargs)
+        with patch.dict('os.environ',{'VANTALINE_LABEL_EXTRACTION_ACCOUNTS':'alice','VANTALINE_LABEL_BBOX_ACCOUNTS':'alice'}),patch.object(api.threading,'Thread',Thread):
+            value=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','boundary_001',method))
+        self.assertEqual(len(f.workers),1)
+        return value,f.workers[0]
+
+    def test_first_final_save_failure_is_not_retried_in_either_worker(self):
+        for method in ('ai','vlm_bbox'):
+            with self.subTest(method=method):
+                f=self.fixture('save-once-'+method);value,task=self.queue_worker(f,method)
+                durable=copy.deepcopy(f.data)
+                failure=RuntimeError('synthetic unknown final save')
+                f.save_errors=[failure,None];f.events.clear()
+                with self.assertRaises(RuntimeError) as caught:task['target'](*task['args'])
+                self.assertIs(caught.exception,failure)
+                self.assertEqual(f.events,[('save','extractions',value['id'],False),('clear',)])
+                self.assertEqual(f.save_errors,[None]);self.assertEqual(f.clears,1)
+                self.assertEqual(f.data,durable)
+                self.assertEqual(f.data['extractions',value['id']]['status'],'attempting')
+                self.assertEqual([call[0] for call in f.calls],['provider','image'] if method=='ai' else ['bbox'])
+
+    def test_deadline_is_strict_projection_and_late_worker_result_is_retained(self):
+        for method in ('ai','vlm_bbox'):
+            with self.subTest(method=method):
+                f=self.fixture('deadline-'+method);value,task=self.queue_worker(f,method)
+                durable=copy.deepcopy(f.data);deadline=value['deadline_at'];f.events.clear()
+                url=PREFIX+'/'+value['id']
+                for now,status in ((deadline,'attempting'),(deadline+0.001,'uncertain')):
+                    with patch.object(api.time,'time',return_value=now):response=f.client.get(url)
+                    self.assertEqual(response.status_code,200)
+                    self.assertEqual(response.json()['status'],status)
+                    if status=='uncertain':self.assertEqual(response.json()['error_code'],'provider_outcome_unknown')
+                    else:self.assertNotIn('error_code',response.json())
+                    self.assertEqual(f.data,durable)
+                self.assertEqual(f.calls,[]);self.assertEqual(f.clears,0)
+                self.assertFalse(any(event[0] in {'save','clear'} for event in f.events))
+                with patch.object(api.time,'time',return_value=deadline+1),patch('builtins.print'):
+                    task['target'](*task['args'])
+                    settled=copy.deepcopy(f.data)
+                    response=f.client.get(url)
+                self.assertEqual(response.status_code,200)
+                self.assertEqual((response.json()['status'],response.json()['error_code']),('uncertain','TimeoutError'))
+                self.assertEqual(response.json()['finished_at'],deadline+1)
+                self.assertEqual(f.data,settled);self.assertEqual(f.clears,1);self.assertEqual(len(f.workers),1)
+                self.assertEqual([call[0] for call in f.calls],['provider','image'] if method=='ai' else ['bbox'])
+
     def test_expiration_protects_history_and_failed_tombstone_and_non_png(self):
         f=self.fixture('expiry')
         for identifier in ['protected','loser','expired']:
