@@ -21804,22 +21804,28 @@ async def analyze_label_experiment() -> dict[str, Any]:
 
 
 
+from .detection.upload_ports import UploadAccess, UploadPaths, VideoResults
+
+from .detection.image_upload import ImageUpload
+
+from .detection.video_upload import VideoUpload
+
+from .detection.video_results import video_frame_result_payload, VideoSummary
+
+_upload_access = UploadAccess(lambda: ensure_dirs(), lambda model: require_analyze_model_permission(model))
+
+_upload_paths = UploadPaths(lambda: safe_name, lambda: UPLOAD_DIR)
+
+_image_upload = ImageUpload(_upload_access, _upload_paths, lambda: np, lambda: cv2, lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path))
+
+_video_summary = VideoSummary(lambda: string_list)
+
+_video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambda: load_config(), lambda: cv2, lambda image, request_id, model_id=None: analyze_bgr(image, request_id, model_id), VideoResults(lambda result, index, fps: video_frame_result_payload(result, index, fps), lambda frames: video_ai_summary(frames)))
+
+
 @app.post("/api/analyze/image")
-async def analyze_image(
-    file: UploadFile = File(...),
-    model_id: str | None = Form(None),
-) -> dict[str, Any]:
-    ensure_dirs()
-    require_analyze_model_permission(model_id)
-    payload = await file.read()
-    arr = np.frombuffer(payload, np.uint8)
-    image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if image is None:
-        raise HTTPException(status_code=400, detail="Could not decode image")
-    request_id = safe_name(file.filename).rsplit(".", 1)[0]
-    upload_path = UPLOAD_DIR / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
-    upload_path.write_bytes(payload)
-    return analyze_bgr(image, request_id, model_id, image_path=upload_path)
+async def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None)) -> dict[str, Any]:
+    return await _image_upload.analyze_image(file, model_id)
 
 
 @app.post("/api/analyze/camera")
@@ -21879,113 +21885,16 @@ async def analyze_camera_image(
         raise
 
 
-def video_frame_result_payload(result: dict[str, Any], frame_index: int, fps: float) -> dict[str, Any]:
-    rule = result.get("rule") if isinstance(result.get("rule"), dict) else {}
-    detections = result.get("detections") if isinstance(result.get("detections"), list) else []
-    frame_payload: dict[str, Any] = {
-        "frame_index": frame_index,
-        "timestamp_seconds": round(frame_index / fps, 3),
-        "passed": bool(result.get("passed")),
-        "missing": rule.get("missing") if isinstance(rule.get("missing"), list) else [],
-        "detections": len(detections),
-    }
-    model_payload = result.get("model") if isinstance(result.get("model"), dict) else {}
-    ai_payload = result.get("ai") if isinstance(result.get("ai"), dict) else None
-    if ai_payload or model_payload.get("is_ai_detection"):
-        frame_payload.update(
-            {
-                "model": model_payload,
-                "rule": rule,
-                "ai": ai_payload or {},
-                "detection_items": detections,
-                "annotated_url": result.get("annotated_url") or "",
-            }
-        )
-    return frame_payload
 
 
 def video_ai_summary(frames: list[dict[str, Any]]) -> dict[str, Any] | None:
-    ai_frames = [frame for frame in frames if isinstance(frame.get("ai"), dict)]
-    if not ai_frames:
-        return None
-    errors = string_list(
-        [
-            str(frame.get("ai", {}).get("error") or "")
-            for frame in ai_frames
-            if frame.get("ai", {}).get("error")
-        ],
-        max_items=8,
-        max_len=180,
-    )
-    first_error_frame = next(
-        (
-            frame
-            for frame in ai_frames
-            if frame.get("ai", {}).get("error") or frame.get("ai", {}).get("timed_out")
-        ),
-        None,
-    )
-    return {
-        "frame_count": len(ai_frames),
-        "timed_out": any(bool(frame.get("ai", {}).get("timed_out")) for frame in ai_frames),
-        "errors": errors,
-        "first_error": (first_error_frame or {}).get("ai", {}).get("error") if first_error_frame else "",
-        "first_error_frame_index": (first_error_frame or {}).get("frame_index") if first_error_frame else None,
-        "provider_status": next((frame.get("ai", {}).get("provider_status") for frame in ai_frames if frame.get("ai", {}).get("provider_status")), ""),
-        "total_latency_ms": sum(int(frame.get("ai", {}).get("latency_ms") or 0) for frame in ai_frames),
-    }
+    return _video_summary.video_ai_summary(frames)
 
 
 @app.post("/api/analyze/video")
 @pinned_model_profiles(resolve_model_profiles)
-async def analyze_video(file: UploadFile = File(...), model_id: str | None = Form(None)) -> dict[str, Any]:
-    ensure_dirs()
-    require_analyze_model_permission(model_id)
-    upload_name = safe_name(file.filename)
-    video_path = UPLOAD_DIR / upload_name
-    with video_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    config = load_config()
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise HTTPException(status_code=400, detail="Could not open video")
-
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    stride = max(1, int(fps * float(config["video"]["sample_every_seconds"])))
-    max_frames = int(config["video"]["max_frames"])
-    frames = []
-    idx = 0
-    sampled = 0
-    first_preview_url = None
-    while sampled < max_frames:
-        ok, frame = cap.read()
-        if not ok:
-            break
-        if idx % stride == 0:
-            request_id = f"{Path(upload_name).stem}_frame_{idx:06d}"
-            result = analyze_bgr(frame, request_id, model_id)
-            if first_preview_url is None:
-                first_preview_url = result["annotated_url"]
-            frames.append(video_frame_result_payload(result, idx, fps))
-            sampled += 1
-        idx += 1
-    cap.release()
-
-    passed_frames = sum(1 for frame in frames if frame["passed"])
-    overall = len(frames) > 0 and passed_frames == len(frames)
-    ai_summary = video_ai_summary(frames)
-    result = {
-        "request_id": Path(upload_name).stem,
-        "passed": overall,
-        "sampled_frames": len(frames),
-        "passed_frames": passed_frames,
-        "pass_rate": round(passed_frames / len(frames), 4) if frames else 0.0,
-        "preview_url": first_preview_url,
-        "ai": ai_summary,
-        "frames": frames[:200],
-    }
-    return result
+async def analyze_video(file: UploadFile=File(...), model_id: str | None=Form(None)) -> dict[str, Any]:
+    return await _video_upload.analyze_video(file, model_id)
 
 
 @app.post("/api/stream/config")
