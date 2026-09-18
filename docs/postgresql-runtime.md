@@ -1,5 +1,14 @@
 # PostgreSQL runtime operations
 
+Pipeline task/state stores retain five and three actual repository selections,
+respectively. Single task load uses the primary key; bulk save replaces valid rows;
+single save upserts only after freezing and encoding. State partial-key saves encode
+outside the try block, upsert each changed row with commit=False, then commit once.
+Exception failures inside that block call rollback when callable and re-raise;
+BaseException and encoding failures keep their original boundaries. The update guard
+covers load, JSON copy, mutation, normalization, changed-key detection and persistence.
+Raw partial saves do not acquire this guard. SQL and advisory-lock scopes are unchanged.
+
 `TrainingRecordStore` retains three real repository entry points for list, save and
 single read. Nested JSON-list reads and find fallbacks reselect the current repository
 at the original call sites. Save freezes model references and invalidates the read
@@ -25,7 +34,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v16 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v17 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 

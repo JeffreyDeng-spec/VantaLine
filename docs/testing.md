@@ -1,5 +1,18 @@
 # Testing
 
+`python scripts/smoke_pipeline_stores.py --postgres` covers twenty-one groups. Twelve
+behavior groups first passed against the original fourteen functions, including
+real partial-key updates and rollback after the second PostgreSQL write fails.
+Nineteen expanded business groups also pass against the original functions. Two
+interface groups check independent stores, root path overrides and getter failures.
+Fifteen callback traces preserve capture before fetch, clock and snapshot membership.
+First failures and whole-update copy/normalization lock probes supplement the
+existing transaction boundaries. Contracts cover
+JSON raw-list behavior, fixed temporary files, directory creation order, task binding,
+first-replacement/all-deletion rules, nested repository reselection, state normalization,
+commit/rollback exception boundaries and whole-update cross-thread guard probes.
+Direct partial-key saves remain unguarded; update tests acquire no outer test lock.
+
 `python scripts/smoke_training_record_store.py --postgres` adds twenty-one groups.
 Eleven behavior groups passed with the original eight functions, including an
 isolated PostgreSQL replay. Nineteen expanded business groups also pass against the original functions. Two
