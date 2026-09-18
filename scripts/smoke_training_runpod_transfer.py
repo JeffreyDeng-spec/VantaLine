@@ -147,8 +147,14 @@ class TrainingTransferContracts(unittest.TestCase):
     def test_stream_exception_cleans_partial_but_baseexception_keeps_evidence(self):
         for error in [RuntimeError('stream'), asyncio.CancelledError('cancel')]:
             stream = BodyStream([b'ab', error, b'never'])
-            with self.assertRaises(type(error)) as caught: self.upload(stream)
-            self.assertIs(caught.exception, error); self.assertFalse(self.target.exists()); self.assertEqual(stream.calls, 1)
+            async def verify_stream_error():
+                # Assert at the service boundary: Python 3.10 Task.result() can
+                # replace CancelledError after the coroutine has already exited.
+                with self.assertRaises(type(error)) as caught:
+                    await self.api.upload_runpod_training_artifact(' job ', ' raw-token ', stream)
+                self.assertIs(caught.exception, error)
+            asyncio.run(verify_stream_error())
+            self.assertFalse(self.target.exists()); self.assertEqual(stream.calls, 1)
             self.assertEqual(self.temp.exists(), isinstance(error, asyncio.CancelledError))
             if self.temp.exists(): self.assertEqual(self.temp.read_bytes(), b'ab'); self.temp.unlink()
         self.update.assert_not_called()
