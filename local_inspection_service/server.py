@@ -24235,120 +24235,51 @@ def mark_pipeline_model_deleted(run_id: str, user: dict[str, Any]) -> int:
 
 
 
-@app.get("/api/training/plan")
-def training_plan(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    config = scope_config_for_user(load_config(), user, target_user_id)
-    training = filtered_training_state(config, user, target_user_id)
-    return public_path_sanitized({
-        "training": training,
-        "accessories": serialize_accessory_items(config.get("accessories", []), summary=True),
-        "background_sets": list_background_sets(user, target_user_id),
-        "default_background_set_id": selected_background_set_id(training.get("background_set_id"), user, target_user_id),
-        "training_execution": training_execution_status(include_worker_probe=False),
-        "render_policy": {
-            "sample_count_default": 4000,
-            "background": "same-environment background library with per-sample crop/shift/photometric/noise/texture variation; glare ellipse disabled",
-            "background_physical_size": BACKGROUND_SIZE_MM,
-            "physical_size_rule": "object foreground uses clean alpha sprite physical_size; document/text uses saved rectified image directly at paper physical_size",
-            "rotation": "text_full_random; object_upright_random_rotation; object_lying_random_rotation_with_inverse_source_position",
-            "z_order": "randomized_per_sample",
-            "label_shape": "visible_polygon_for_occluded_regions",
-            "true_rule": "exact_count_match_required",
-            "false_rule": "mostly missing_one; 10% of missing_one false bucket becomes extra_one_accessory",
-        },
-    })
+from .training.preview_query import PlanAccess, PlanBackgrounds, PlanConfiguration, TrainingPlanQuery
+from .training.preview_artifacts import PreviewArtifactStore
+from .training.preview_submission import (PreviewConfiguration, PreviewPolicy, PreviewSelection,
+                                          TrainingPreviewSubmission)
+from .training.preview_api import register as register_training_preview_api
 
-
-@app.post("/api/training/preview")
-def training_preview(request: TrainingPreviewRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    full_config = load_config()
-    config = scope_config_for_user(full_config, user)
-    if ensure_training_assets_for_request(full_config, config, user, request.selected_accessory_ids):
-        config = scope_config_for_user(full_config, user)
-    selected = selected_accessories(config, request.selected_accessory_ids)
-    pose_policy = normalize_preview_pose_family_policy(request.preview_pose_family_policy)
-    background_set_id = selected_background_set_id(request.background_set_id, user)
-    sprite_versions = {
-        accessory_uid(item): {
-            "clean_sprite_preprocessed_at": item.get("clean_sprite_preprocessed_at"),
-            "clean_sprite_count": item.get("clean_sprite_count") or len(clean_sprite_assets(item)),
-            "clean_sprite_version": accessory_sprite_version(item),
-        }
-        for item in selected
-        if accessory_material_type(item) == "object"
-    }
-    cache_key = preview_cache_key(selected)
-    preview_id = f"preview_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    job_dir = output_write_dir("training_previews") / preview_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-    previews = []
-    count = max(1, min(12, int(request.preview_count)))
-    pose_sequence = preview_pose_family_sequence(selected, count, pose_policy)
-    pose_sequence_label = preview_pose_family_sequence_label(pose_sequence)
-    seed_base = int(time.time() * 1000)
-    for idx in range(count):
-        output_path = job_dir / f"sample_{idx + 1:02d}.png"
-        preview = draw_training_preview(
-            selected,
-            output_path,
-            seed=seed_base + idx,
-            pose_family_policy=pose_sequence[idx],
-            background_set_id=background_set_id,
-        )
-        if any(label.get("material_type") == "object" and label.get("source_fallback_error") for label in preview.get("labels", [])):
-            raise HTTPException(status_code=409, detail="Clean sprite is unavailable. Regenerate clean sprites before preview.")
-        previews.append(preview)
-    plan = {
-        "id": preview_id,
-        "status": "preview_ready",
-        "sample_count": max(1, min(20000, int(request.sample_count))),
-        "train_mode": request.train_mode,
-        "background_set_id": background_set_id,
-        "selected_accessories": selected,
-        "previews": previews,
-        "preview_cache_key": cache_key,
-        "preview_sprite_versions": sprite_versions,
-        "preview_pose_family_sequence": pose_sequence,
-        "preview_pose_family_policy": pose_policy,
-        "preview_pose_family_label": pose_sequence_label,
-        "pipeline": [
-            "normalize_accessory_assets",
-            "reuse_preprocessed_clean_object_alpha_sprites",
-            "remember_physical_size_metadata",
-            "generate_synthetic_combinations",
-            "crop_object_foreground_only",
-            "paste_saved_rectified_document_directly",
-            "scale_by_physical_size",
-            "place_on_background_using_background_mm_per_px",
-            "apply_pose_aware_rotation_policy",
-            "compute_visible_polygon_labels",
-            "user_preview_approval",
-            "start_yolo_or_yolo_ocr_training",
-        ],
-    }
-    (TRAINING_JOBS_DIR / f"{preview_id}.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
-    preview_training_state = {
-        "status": "preview_ready",
-        "last_preview_id": preview_id,
-        "selected_accessory_ids": [item["id"] for item in selected],
-        "sample_count": plan["sample_count"],
-        "mode": request.train_mode,
-        "background_set_id": background_set_id,
-        "preview_urls": [item["url"] for item in previews],
-        "previews": previews,
-        "preview_cache_key": cache_key,
-        "preview_sprite_versions": sprite_versions,
-        "preview_pose_family_policy": pose_policy,
-        "preview_pose_family_label": pose_sequence_label,
-        "preview_generated_at": int(time.time()),
-    }
-    set_training_state_for_user(full_config, user, preview_training_state)
-    merge_scoped_accessory_updates(full_config, config, user)
-    save_config(full_config)
-    return plan
+_training_plan_query = TrainingPlanQuery(
+    PlanAccess(lambda: current_auth_user(), lambda user: user_is_admin(user), lambda: public_path_sanitized),
+    PlanConfiguration(lambda: load_config(),
+                      lambda: scope_config_for_user,
+                      lambda config, user, target: filtered_training_state(config, user, target)),
+    PlanBackgrounds(lambda user, target: list_background_sets(user, target),
+                    lambda: selected_background_set_id,
+                    lambda: BACKGROUND_SIZE_MM),
+    lambda: serialize_accessory_items,
+    lambda **kwargs: training_execution_status(**kwargs),
+)
+_training_preview_artifacts = PreviewArtifactStore(lambda kind: output_write_dir(kind), lambda: TRAINING_JOBS_DIR)
+_training_preview_submission = TrainingPreviewSubmission(
+    current=lambda: current_auth_user(),
+    config=PreviewConfiguration(
+        load=lambda: load_config(), scope=lambda config, user: scope_config_for_user(config, user),
+        ensure=lambda: ensure_training_assets_for_request,
+        set_state=lambda full, user, state: set_training_state_for_user(full, user, state),
+        merge=lambda full, config, user: merge_scoped_accessory_updates(full, config, user),
+        save=lambda full: save_config(full),
+    ),
+    selection=PreviewSelection(
+        selected=lambda: selected_accessories, uid=lambda item: accessory_uid(item),
+        material=lambda item: accessory_material_type(item), sprites=lambda item: clean_sprite_assets(item),
+        version=lambda item: accessory_sprite_version(item), cache=lambda selected: preview_cache_key(selected),
+    ),
+    policy=PreviewPolicy(
+        normalize=lambda: normalize_preview_pose_family_policy,
+        background=lambda: selected_background_set_id,
+        sequence=lambda selected, count, policy: preview_pose_family_sequence(selected, count, policy),
+        label=lambda sequence: preview_pose_family_sequence_label(sequence),
+    ),
+    artifacts=_training_preview_artifacts,
+    draw=lambda: draw_training_preview,
+    clock=lambda: time.time(), uuid=lambda: uuid.uuid4(),
+)
+_training_preview_routes = register_training_preview_api(app, _training_plan_query, _training_preview_submission)
+training_plan = _training_preview_routes.training_plan
+training_preview = _training_preview_routes.training_preview
 
 
 # ============================================================

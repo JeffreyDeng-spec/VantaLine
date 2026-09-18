@@ -219,6 +219,7 @@ jobs:
           python scripts/smoke_training_backgrounds.py
           python scripts/smoke_training_preview_layout.py
           python scripts/smoke_training_preview_renderer.py
+          python scripts/smoke_training_preview_workflows.py
           python local_inspection_service/scripts/smoke_unique_resource_names.py
           python scripts/smoke_pipeline_stores.py --postgres
           python local_inspection_service/scripts/smoke_training_dataset_delete_missing.py
