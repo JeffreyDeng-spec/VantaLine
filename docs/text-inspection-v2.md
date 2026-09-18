@@ -1,5 +1,11 @@
 # Text inspection v2
 
+Label API, detection-worker and PDF-worker registration now uses typed explicit
+capabilities rather than the server namespace. HTTP ownership, imports, settings,
+historical references, queue claims and paid-call processing are unchanged. Model
+configuration is scoped to the composing application; importing the label package
+no longer imports the Web entry point. This batch still uses the embedded workers.
+
 Request authentication and central route policy now live in `auth.sessions`,
 `auth.middleware` and `auth.route_permissions`. Text-inspection/Beta permissions
 and label endpoint-local guards retain their previous behavior; no provider,

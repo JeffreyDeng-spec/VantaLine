@@ -5,7 +5,9 @@ import io
 import time
 from pathlib import Path
 from PIL import Image
-from fastapi import File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from collections.abc import Callable
+from .dependencies import LabelAccess, RepositoryLifecycle, LabelImports, ModelProvider, Record, require_models
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
 from . import model, pdf_import, manual, manual_history
@@ -94,24 +96,24 @@ def asset(media, owner, data, identity, ordinal, metadata=None):
     return value
 
 
-def register(ns):
-    app = ns["app"]
-    pdf_import.register(ns)
+def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycle,
+             imports: LabelImports, models: ModelProvider, configuration: Callable[[], Record]):
+    pdf_import.register(app, repositories, imports.data_directory)
 
     def context():
-        ns["require_permission"]("inspection")
-        owner = ns["_text_v2_owner"]()[0]
-        raw = ns["runtime_postgres_repository_or_none"]()
+        access.require_permission("inspection")
+        owner = access.owner()[0]
+        raw = repositories.repository()
         if raw is None:
             raise HTTPException(503, "标签检验需要 PostgreSQL 存储")
         return (
             owner,
             LabelRepository(raw),
-            MediaStore(ns["DATA_DIR"] / "label_inspection" / "media"),
+            MediaStore(imports.data_directory() / "label_inspection" / "media"),
         )
 
     def enabled():
-        if not model.settings()["enabled"]:
+        if not configuration()["enabled"]:
             raise HTTPException(503, "标签检测服务尚未启用；历史仍可查看")
 
     def call(fn):
@@ -252,7 +254,7 @@ def register(ns):
     def capabilities():
         context()
         return {
-            "enabled": model.settings()["enabled"],
+            "enabled": configuration()["enabled"],
         }
 
     @app.get(PREFIX + "/tasks")
@@ -427,9 +429,9 @@ def register(ns):
                 )
                 return detail(repo, owner, task)
             if filename.lower().endswith(".docx"):
-                entries, blobs = ns["extract_docx_candidates"](data, raw_only=True)
+                entries, blobs = imports.extract_docx(data, raw_only=True)
             elif filename.lower().endswith(".doc"):
-                entries, blobs = ns["extract_doc_images"](data)
+                entries, blobs = imports.extract_doc(data)
             else:
                 raise ValueError("仅支持 DOC / DOCX 文档")
             if not entries or len(entries) > 500:
@@ -502,7 +504,7 @@ def register(ns):
                     entry = asset(
                         media,
                         owner,
-                        ns["_text_v2_asset_bytes"](old, owner),
+                        imports.asset_bytes(old, owner),
                         old["id"],
                         index + 1,
                     )
@@ -629,9 +631,9 @@ def register(ns):
             selected = (
                 prior.get("profile_snapshot")
                 if prior
-                else ns["model_profile_service"].snapshot().get("label")
+                else require_models(models).snapshot().get("label")
             )
-            resolved = ns["model_profile_service"].resolve("label", selected)
+            resolved = require_models(models).resolve("label", selected)
             if is_pdf and resolved.get("provider") != "doubao":
                 raise HTTPException(503, "PDF 检测需要已配置的豆包连接，请联系管理员")
             return public(
@@ -664,7 +666,7 @@ def register(ns):
 
     @app.get(PREFIX + "/runs/{identity}/diagnostics")
     def diagnostics(identity: str):
-        ns["require_admin_role"]()
+        access.require_admin()
         owner, repo, _ = context()
 
         def work():
@@ -702,7 +704,7 @@ def register(ns):
                 ),
                 {},
             )
-            data = ns["_text_v2_read_verified"](
+            data = imports.read_verified(
                 page.get("media_path", ""),
                 owner,
                 page.get("standard_id") or session.get("standard_id", ""),
@@ -768,4 +770,4 @@ def register(ns):
 
     from .worker import register as register_worker
 
-    register_worker(ns)
+    register_worker(app, repositories, imports.data_directory, models)

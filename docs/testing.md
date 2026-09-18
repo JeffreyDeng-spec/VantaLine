@@ -1,5 +1,15 @@
 # Testing
 
+`python scripts/smoke_label_dependencies.py` adds seven isolated groups for two-app
+configuration and concurrent identity isolation, async-to-thread repository acquisition,
+prior None/empty/old model references, late resolver replacement and missing-provider
+failure before inference. Deterministic thread/event substitutes exercise the actual
+registrars: PDF then two detection threads, independent stops, claim/resolver/process
+ordering, cleanup after repository/claim/model-resolution/process failures, and existing
+one-/two-second idle waits. Cleanup-callback failure behavior is unchanged. Original
+real PostgreSQL/PDF/import/call/concurrency/pagination smoke remains intact; only its
+namespace fixture is replaced with explicit capabilities and a lazy asset reader.
+
 `python scripts/smoke_accessory_routing.py` fixes five original real-HTTP groups:
 401/403 and hidden ownership denial, retired/invalid-route ordering, trimmed but
 case-sensitive values, default apply and non-applied AI routes, first matching ID,

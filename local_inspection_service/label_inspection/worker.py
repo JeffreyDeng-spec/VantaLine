@@ -4,6 +4,10 @@ import copy
 import json
 import os
 import threading
+from collections.abc import Callable
+from pathlib import Path
+from fastapi import FastAPI
+from .dependencies import RepositoryLifecycle, ModelProvider, require_models
 import time
 from . import model, quality, manual
 from ..storage.label_inspection import LabelRepository
@@ -246,7 +250,7 @@ def process(
             pass  # Expiration is authoritative; late completion cannot turn green.
 
 
-def register(ns):
+def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Callable[[], Path], models: ModelProvider):
     stop = threading.Event()
 
     def loop():
@@ -257,33 +261,31 @@ def register(ns):
                     os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower()
                     == "true"
                 ):
-                    raw_repo = ns["runtime_postgres_repository_or_none"]()
+                    raw_repo = repositories.repository()
                     if raw_repo:
                         repo = LabelRepository(raw_repo)
                         run = repo.claim()
                         if run:
-                            reference = run.get("profile_snapshot") or ns[
-                                "model_profile_service"
-                            ].snapshot_for_record(run).get("label")
+                            reference = run.get("profile_snapshot") or require_models(models).snapshot_for_record(run).get("label")
                             resolved = (
-                                ns["model_profile_service"].resolve("label", reference)
+                                require_models(models).resolve("label", reference)
                                 if reference
                                 else None
                             )
                             process(
                                 repo,
                                 MediaStore(
-                                    ns["DATA_DIR"] / "label_inspection" / "media"
+                                    data_directory() / "label_inspection" / "media"
                                 ),
                                 run,
                                 resolved["api_key"] if resolved else "",
                                 resolved=resolved,
-                                record_call=ns["model_profile_service"].record_call,
+                                record_call=require_models(models).record_call,
                             )
             except Exception:
                 pass  # Transient DB/config failures must not replay a claimed run.
             finally:
-                ns["clear_thread_runtime_repository_selection"]()
+                repositories.clear()
             if not run:
                 stop.wait(1)
 
@@ -294,5 +296,5 @@ def register(ns):
                 target=loop, name=f"label-inspection-{index}", daemon=True
             ).start()
 
-    ns["app"].on_event("startup")(start)
-    ns["app"].on_event("shutdown")(stop.set)
+    app.on_event("startup")(start)
+    app.on_event("shutdown")(stop.set)

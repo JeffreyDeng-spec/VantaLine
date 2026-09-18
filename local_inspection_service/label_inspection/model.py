@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from PIL import Image, ImageOps
 from ..codex_compare.contracts import digest
+from .dependencies import ModelProvider, require_models
 
 MODEL = "doubao-seed-evolving"
 URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
@@ -30,9 +31,8 @@ def legacy_settings():
 
 
 
-def settings():
-    from .. import server
-    configured = server.model_profile_service.resolve("label")
+def settings(models: ModelProvider):
+    configured = require_models(models).resolve("label")
     enabled = os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower() == "true"
     return {**configured, "enabled": enabled and configured.get("configured", False), "key": configured.get("api_key", "")}
 
