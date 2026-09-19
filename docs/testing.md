@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_agent_state.py` covers 21 offline groups: 15 original contracts, four
+lookup/evaluation-order checks and two construction/composition checks. Synthetic fixtures
+cover timestamps, nested aliases, call identity, partial state and stage metadata forwarding.
+The existing phase3d source contract follows the sample/training log implementation methods;
+this does not claim complete legacy pipeline or physical-device commissioning.
+
 `python scripts/smoke_agent_pipeline_actions.py` covers 26 offline groups: 17 original
 contracts, seven failure/evaluation-order checks and two construction/composition checks.
 Synthetic callbacks verify pending-advance collection, linked-job cleanup, parameter aliasing,

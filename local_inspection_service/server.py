@@ -21695,8 +21695,20 @@ def normalize_pipeline_accessory_counts(config: dict[str, Any], accessory_ids: l
     return result
 
 
+from .agent.orchestration_state import AgentOrchestrationState as _AgentOrchestrationState
+from .agent.tool_call_records import AgentToolCallRecords as _AgentToolCallRecords
+from .agent.state_ports import AgentStateRuntime as _AgentStateRuntime, AgentStateCalls as _AgentStateCalls, AgentToolCallIdentity as _AgentToolCallIdentity, AgentToolCallState as _AgentToolCallState
+_agent_orchestration_state = _AgentOrchestrationState(
+    _AgentStateRuntime(clock=lambda: time.time, now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_ORCHESTRATION_VERSION, image_config=lambda: agent_mcp_gemini_image_config),
+    _AgentStateCalls(defaults=lambda: agent_mcp_default_stages, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, stage=lambda: set_agent_mcp_stage),
+)
+_agent_tool_call_records = _AgentToolCallRecords(
+    _AgentToolCallIdentity(sanitize=lambda: safe_record_id, identifier=lambda: agent_mcp_tool_call_id, samples=lambda: AGENT_MCP_TOOL_SAMPLES, training=lambda: AGENT_MCP_TOOL_TRAINING),
+    _AgentToolCallState(now=lambda: agent_mcp_now, orchestration=lambda: agent_mcp_orchestration, upsert=lambda: upsert_agent_mcp_tool_call, stage=lambda: set_agent_mcp_stage),
+)
+
 def agent_mcp_now() -> int:
-    return int(time.time())
+    return _agent_orchestration_state.agent_mcp_now()
 
 
 def agent_mcp_gemini_image_config() -> dict[str, Any]:
@@ -21741,50 +21753,15 @@ def agent_mcp_gemini_image_config() -> dict[str, Any]:
 
 
 def agent_mcp_default_stages() -> list[dict[str, Any]]:
-    return [
-        {"key": "agent_pose_planning", "label": "Agent pose planning", "status": "pending", "progress": 0},
-        {"key": "pose_image_generation", "label": "MCP pose image generation", "status": "pending", "progress": 0},
-        {"key": "sample_generation", "label": "MCP sample generation", "status": "pending", "progress": 0},
-        {"key": "model_training", "label": "MCP model training", "status": "pending", "progress": 0},
-    ]
+    return _agent_orchestration_state.agent_mcp_default_stages()
 
 
 def agent_mcp_orchestration(task: dict[str, Any]) -> dict[str, Any]:
-    raw = task.get("agent_mcp") if isinstance(task.get("agent_mcp"), dict) else {}
-    orchestration = {
-        "version": AGENT_MCP_ORCHESTRATION_VERSION,
-        "state": raw.get("state") or "created",
-        "active_stage": raw.get("active_stage") or "created",
-        "stages": raw.get("stages") if isinstance(raw.get("stages"), list) else agent_mcp_default_stages(),
-        "pose_plan": raw.get("pose_plan") if isinstance(raw.get("pose_plan"), dict) else None,
-        "tool_calls": raw.get("tool_calls") if isinstance(raw.get("tool_calls"), list) else [],
-        "feedback": raw.get("feedback") if isinstance(raw.get("feedback"), list) else [],
-        "conversation": raw.get("conversation") if isinstance(raw.get("conversation"), list) else [],
-        "pause": raw.get("pause") if isinstance(raw.get("pause"), dict) else None,
-        "skip_pose_image_generation": bool(raw.get("skip_pose_image_generation")),
-        "training_quality_ack": bool(raw.get("training_quality_ack")),
-        "auto_steps": int(raw.get("auto_steps") or 0),
-        "last_auto_signature": str(raw.get("last_auto_signature") or ""),
-        "last_auto_step_at": int(raw.get("last_auto_step_at") or 0),
-        "created_at": int(raw.get("created_at") or agent_mcp_now()),
-        "updated_at": int(raw.get("updated_at") or agent_mcp_now()),
-        "tool_config": {
-            **(raw.get("tool_config") if isinstance(raw.get("tool_config"), dict) else {}),
-            "pose_image_generation": agent_mcp_gemini_image_config(),
-        },
-    }
-    task["agent_mcp"] = orchestration
-    return orchestration
+    return _agent_orchestration_state.agent_mcp_orchestration(task)
 
 
 def set_agent_mcp_stage(orchestration: dict[str, Any], key: str, status: str, progress: int, **extra: Any) -> None:
-    stages = orchestration.setdefault("stages", agent_mcp_default_stages())
-    stage = next((item for item in stages if item.get("key") == key), None)
-    if not stage:
-        stage = {"key": key, "label": key.replace("_", " "), "status": "pending", "progress": 0}
-        stages.append(stage)
-    stage.update({"status": status, "progress": max(0, min(100, int(progress))), **extra})
-    orchestration["updated_at"] = agent_mcp_now()
+    return _agent_orchestration_state.set_agent_mcp_stage(orchestration, key, status, progress, **extra)
 
 
 def agent_mcp_object_kind(item: dict[str, Any]) -> str:
@@ -22171,22 +22148,11 @@ def build_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any]) -> d
 
 
 def agent_mcp_tool_call_id(task_id: str, tool_name: str, accessory_id: str = "", pose_id: str = "") -> str:
-    return safe_record_id("__".join(part for part in [str(task_id), tool_name, accessory_id, pose_id] if part))
+    return _agent_tool_call_records.agent_mcp_tool_call_id(task_id, tool_name, accessory_id, pose_id)
 
 
 def upsert_agent_mcp_tool_call(orchestration: dict[str, Any], call: dict[str, Any]) -> dict[str, Any]:
-    calls = orchestration.setdefault("tool_calls", [])
-    call_id = str(call.get("call_id") or "")
-    existing = next((item for item in calls if str(item.get("call_id") or "") == call_id), None)
-    now = agent_mcp_now()
-    if existing:
-        existing.update({**call, "updated_at": now})
-        return existing
-    call.setdefault("created_at", now)
-    call.setdefault("updated_at", now)
-    calls.append(call)
-    orchestration["updated_at"] = now
-    return call
+    return _agent_tool_call_records.upsert_agent_mcp_tool_call(orchestration, call)
 
 
 def agent_mcp_pose_reference_content(item: dict[str, Any], *, max_images: int = 3) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -23889,29 +23855,7 @@ def ensure_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any
 
 
 def pause_agent_mcp_task(task: dict[str, Any], orchestration: dict[str, Any], *, stage: str, reason: str, suggested_actions: list[str]) -> None:
-    now = agent_mcp_now()
-    orchestration.update(
-        {
-            "state": "needs_user_action",
-            "active_stage": stage,
-            "pause": {
-                "stage": stage,
-                "reason": reason,
-                "suggested_actions": suggested_actions,
-                "created_at": now,
-            },
-            "updated_at": now,
-        }
-    )
-    task.update(
-        {
-            "status": "needs_user_action",
-            "progress": 20 if stage == "pose_image_generation" else 80,
-            "last_error": reason[:240],
-            "job_note": reason[:240],
-            "updated_at": now,
-        }
-    )
+    return _agent_orchestration_state.pause_agent_mcp_task(task, orchestration, stage=stage, reason=reason, suggested_actions=suggested_actions)
 
 
 def pipeline_background_plate_prompt(item: dict[str, Any]) -> str:
@@ -24427,71 +24371,15 @@ def prepare_agent_mcp_before_sample_generation(task: dict[str, Any], config: dic
 
 
 def log_agent_mcp_sample_tool_call(task: dict[str, Any], job: dict[str, Any]) -> None:
-    orchestration = agent_mcp_orchestration(task)
-    upsert_agent_mcp_tool_call(
-        orchestration,
-        {
-            "call_id": agent_mcp_tool_call_id(str(task.get("id") or ""), AGENT_MCP_TOOL_SAMPLES),
-            "tool": AGENT_MCP_TOOL_SAMPLES,
-            "task_id": task.get("id"),
-            "request": {
-                "accessory_ids": task.get("accessory_ids") or [],
-                "sample_count": (task.get("params") or {}).get("sample_count"),
-                "train_mode": (task.get("params") or {}).get("train_mode"),
-            },
-            "status": "running",
-            "output_path": "",
-            "artifact_refs": [job.get("job_id")],
-            "error": "",
-        },
-    )
-    orchestration["state"] = "sample_generation"
-    orchestration["active_stage"] = "sample_generation"
-    set_agent_mcp_stage(orchestration, "sample_generation", "running", 0, detail=f"Sample generation job {job.get('job_id')} started.")
+    return _agent_tool_call_records.log_agent_mcp_sample_tool_call(task, job)
 
 
 def log_agent_mcp_training_tool_call(task: dict[str, Any], job: dict[str, Any]) -> None:
-    orchestration = agent_mcp_orchestration(task)
-    upsert_agent_mcp_tool_call(
-        orchestration,
-        {
-            "call_id": agent_mcp_tool_call_id(str(task.get("id") or ""), AGENT_MCP_TOOL_TRAINING),
-            "tool": AGENT_MCP_TOOL_TRAINING,
-            "task_id": task.get("id"),
-            "request": {
-                "accessory_ids": task.get("accessory_ids") or [],
-                "dataset_id": task.get("dataset_id"),
-                "epochs": (task.get("params") or {}).get("epochs"),
-                "image_size": (task.get("params") or {}).get("image_size"),
-                "train_mode": (task.get("params") or {}).get("train_mode"),
-            },
-            "status": "running",
-            "output_path": "",
-            "artifact_refs": [job.get("job_id")],
-            "error": "",
-        },
-    )
-    orchestration["state"] = "model_training"
-    orchestration["active_stage"] = "model_training"
-    set_agent_mcp_stage(orchestration, "model_training", "running", 0, detail=f"Training job {job.get('job_id')} started.")
+    return _agent_tool_call_records.log_agent_mcp_training_tool_call(task, job)
 
 
 def agent_mcp_training_quality_gate(task: dict[str, Any]) -> bool:
-    orchestration = agent_mcp_orchestration(task)
-    if orchestration.get("training_quality_ack"):
-        return True
-    if orchestration.get("skip_pose_image_generation"):
-        reason = "Pose images were skipped because the image API is not configured; confirm before model training."
-        pause_agent_mcp_task(
-            task,
-            orchestration,
-            stage="model_training",
-            reason=reason,
-            suggested_actions=["continue_training", "replan", "cancel"],
-        )
-        set_agent_mcp_stage(orchestration, "model_training", "needs_user_action", 0, detail=reason)
-        return False
-    return True
+    return _agent_orchestration_state.agent_mcp_training_quality_gate(task)
 
 
 def upsert_pipeline_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
