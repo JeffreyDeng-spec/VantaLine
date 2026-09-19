@@ -3,7 +3,10 @@ import functools
 import logging
 import time
 
-from .dependencies import ResolverProvider, require_resolver
+from collections.abc import Callable
+from typing import TypeVar
+
+from .dependencies import ModelResolver, ResolverProvider, require_resolver
 
 
 def _record(recorder, settings, start, ok, usage):
@@ -84,5 +87,22 @@ def metered_function(settings_argument=0):
             finally:
                 if recorder is not None and settings.get('profile_id'):
                     _record(recorder, settings, start, ok, usage)
+        return wrapped
+    return decorate
+
+
+ProviderT = TypeVar("ProviderT")
+
+
+def metered_instance(resolver_for_instance: Callable[[ProviderT], ModelResolver]):
+    """Meter a provider through its explicitly supplied per-instance resolver.
+
+    Reuse the existing accounting/error boundary so bound calls fail before
+    transport when their resolver is missing. No instance is stored globally.
+    """
+    def decorate(fn):
+        @functools.wraps(fn)
+        def wrapped(self, *args, **kwargs):
+            return metered(lambda: resolver_for_instance(self))(fn)(self, *args, **kwargs)
         return wrapped
     return decorate

@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_openai_transport.py` runs 32 offline groups, preserving the original
+20 behavior groups and 29 expanded original-body groups. `smoke_provider_metering.py` runs
+16 groups, retaining 12 original accounting contracts and adding instance concurrency, nested
+calls and resolver replacement. Tests use synthetic settings, responses and accounting services;
+network, process and device operations are forbidden. Full method AST comparison preserves the
+original transport algorithm after explicit dependency substitution.
+
 `python scripts/smoke_provider_foundations.py` runs 26 offline groups. The original 18
 business groups and 23 expanded original-body groups passed on Windows/Linux before migration.
 Contracts cover exception inheritance/metadata, old and new serialized import paths, exact HTTP
