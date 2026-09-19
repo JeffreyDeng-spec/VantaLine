@@ -7918,140 +7918,59 @@ def image_generation_provider_label(provider: str) -> str:
     return _provider_configuration_defaults.image_generation_provider_label(provider)
 
 
+from .model_providers.key_identity import KeyIdentity as _KeyIdentity
+from .model_providers.local_secret_store import LocalSecretStore as _LocalSecretStore
+from .model_providers.key_material_ports import KeyIdentityRuntime as _KeyIdentityRuntime, SecretPaths as _SecretPaths, SecretCodec as _SecretCodec, SecretFileOperations as _SecretFileOperations, SecretEnvironment as _SecretEnvironment, SecretPolicy as _SecretPolicy, SecretStoreAccess as _SecretStoreAccess
+_key_identity = _KeyIdentity(
+    _KeyIdentityRuntime(sha256=lambda: hashlib.sha256, time_ns=lambda: time.time_ns, substitute=lambda: re.sub, fullmatch=lambda: re.fullmatch, key_id=lambda: ai_key_id),
+)
+_local_secret_store = _LocalSecretStore(
+    _SecretPaths(directory=lambda: DATA_DIR, file=lambda: LOCAL_SECRET_ENV_PATH),
+    _SecretCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
+    _SecretFileOperations(chmod=lambda: os.chmod, replace=lambda: os.replace),
+    _SecretEnvironment(values=lambda: os.environ),
+    _SecretPolicy(fullmatch=lambda: re.fullmatch, validate=lambda: validate_ai_key_env, default_environment=lambda: default_secret_env_name, identity=lambda: secret_key_item_id, text=lambda: bounded_text),
+    _SecretStoreAccess(load=lambda: load_local_secret_env, save=lambda: save_local_secret_env, set=lambda: set_local_secret_env),
+)
+
 def mask_secret(value: str) -> str:
-    secret = str(value or "").strip()
-    if not secret:
-        return ""
-    if len(secret) <= 8:
-        return f"****{secret[-2:]}"
-    return f"{secret[:4]}...{secret[-4:]}"
+    return _key_identity.mask_secret(value)
 
 
 def ai_key_id(secret: str) -> str:
-    digest = hashlib.sha256(str(secret or "").encode("utf-8")).hexdigest()[:12]
-    return f"key_{digest}"
+    return _key_identity.ai_key_id(secret)
 
 
 def secret_key_item_id(env_name: str, secret: str = "") -> str:
-    return ai_key_id(str(env_name or "").strip() or str(secret or "").strip())
+    return _key_identity.secret_key_item_id(env_name, secret)
 
 
 def default_secret_env_name(prefix: str, secret: str = "", *, provider: str = "") -> str:
-    seed = str(secret or provider or time.time_ns()).encode("utf-8")
-    digest = hashlib.sha256(seed).hexdigest()[:10].upper()
-    clean_prefix = re.sub(r"[^A-Z0-9_]+", "_", str(prefix or "VANTALINE_API_KEY").upper()).strip("_")
-    if not clean_prefix or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", clean_prefix):
-        clean_prefix = "VANTALINE_API_KEY"
-    return f"{clean_prefix}_{digest}"
+    return _key_identity.default_secret_env_name(prefix, secret, provider=provider)
 
 
 def load_local_secret_env() -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not LOCAL_SECRET_ENV_PATH.exists():
-        return values
-    try:
-        lines = LOCAL_SECRET_ENV_PATH.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return values
-    for line in lines:
-        raw = line.strip()
-        if not raw or raw.startswith("#") or "=" not in raw:
-            continue
-        name, encoded = raw.split("=", 1)
-        name = name.strip()
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-            continue
-        try:
-            value = json.loads(encoded.strip())
-        except json.JSONDecodeError:
-            value = encoded.strip().strip("'\"")
-        if isinstance(value, str):
-            values[name] = value
-    return values
+    return _local_secret_store.load_local_secret_env()
 
 
 def save_local_secret_env(values: dict[str, str]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    clean = {
-        name: str(value)
-        for name, value in values.items()
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(name or "")) and str(value)
-    }
-    tmp_path = LOCAL_SECRET_ENV_PATH.with_name(f"{LOCAL_SECRET_ENV_PATH.name}.tmp")
-    body = "\n".join(f"{name}={json.dumps(value)}" for name, value in sorted(clean.items()))
-    tmp_path.write_text(f"{body}\n" if body else "", encoding="utf-8")
-    try:
-        os.chmod(tmp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp_path, LOCAL_SECRET_ENV_PATH)
-    try:
-        os.chmod(LOCAL_SECRET_ENV_PATH, 0o600)
-    except OSError:
-        pass
+    return _local_secret_store.save_local_secret_env(values)
 
 
 def local_secret_env_value(name: str) -> str:
-    env_name = str(name or "").strip()
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env_name):
-        return ""
-    process_value = os.environ.get(env_name, "").strip()
-    if process_value:
-        return process_value
-    file_value = load_local_secret_env().get(env_name, "").strip()
-    if file_value:
-        os.environ[env_name] = file_value
-    return file_value
+    return _local_secret_store.local_secret_env_value(name)
 
 
 def set_local_secret_env(name: str, value: str) -> None:
-    env_name = validate_ai_key_env(name)
-    secret = str(value or "").strip()
-    if not env_name or not secret:
-        return
-    values = load_local_secret_env()
-    values[env_name] = secret
-    save_local_secret_env(values)
-    os.environ[env_name] = secret
+    return _local_secret_store.set_local_secret_env(name, value)
 
 
 def delete_local_secret_env(name: str) -> None:
-    env_name = str(name or "").strip()
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env_name):
-        return
-    values = load_local_secret_env()
-    if env_name in values:
-        values.pop(env_name, None)
-        save_local_secret_env(values)
-    os.environ.pop(env_name, None)
+    return _local_secret_store.delete_local_secret_env(name)
 
 
 def persist_secret_key_items(items: list[dict[str, str]], default_prefix: str) -> list[dict[str, str]]:
-    persisted: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for item in items:
-        secret = str(item.get("key") or "").strip()
-        env_name = validate_ai_key_env(item.get("env") or item.get("env_name") or item.get("api_key_env"))
-        if not env_name and secret:
-            env_name = default_secret_env_name(default_prefix, secret, provider=str(item.get("provider") or ""))
-        if secret and env_name:
-            set_local_secret_env(env_name, secret)
-        if not env_name:
-            continue
-        item_id = str(item.get("id") or secret_key_item_id(env_name, secret)).strip()
-        dedupe_key = f"{item.get('provider') or ''}:{item_id}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        clean_item = {
-            "id": item_id,
-            "label": bounded_text(item.get("label") or f"API Key {len(persisted) + 1}", 80),
-            "env": env_name,
-        }
-        if item.get("provider"):
-            clean_item["provider"] = str(item["provider"])
-        persisted.append(clean_item)
-    return persisted
+    return _local_secret_store.persist_secret_key_items(items, default_prefix)
 
 
 from .model_providers.key_registry import ProviderKeyRegistry as _ProviderKeyRegistry

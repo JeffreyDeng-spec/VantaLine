@@ -1,7 +1,10 @@
 {
-  "version": 63,
+  "version": 64,
   "sources": [
     "server.py",
+    "model_providers/key_material_ports.py",
+    "model_providers/key_identity.py",
+    "model_providers/local_secret_store.py",
     "model_providers/key_registry_ports.py",
     "model_providers/key_registry.py",
     "model_providers/configuration_ports.py",
