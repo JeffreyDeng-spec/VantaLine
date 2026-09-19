@@ -1,7 +1,10 @@
 {
-  "version": 57,
+  "version": 58,
   "sources": [
     "server.py",
+    "model_providers/image_ports.py",
+    "model_providers/agnes_transport.py",
+    "model_providers/qwen_image_transport.py",
     "model_providers/gemini_ports.py",
     "model_providers/gemini_transport.py",
     "model_providers/openai_ports.py",

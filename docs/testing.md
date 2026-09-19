@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_image_provider_transports.py` runs 29 offline groups. The original
+18 groups and 27 expanded original-body groups passed on Windows/Linux before extraction.
+Synthetic transport/download failures, dynamic exception matching, dependency capture, size
+configuration and accounting checks retain original behavior. Independent instances own their
+resolvers and state. No paid model calls, production media or physical devices are used.
+
 `python scripts/smoke_gemini_transport.py` runs 28 offline groups. The original 15
 behavior groups and 25 expanded original-body groups passed on Windows/Linux before extraction.
 Synthetic requests cover JSON, cached-content and image paths, captured cache defaults, model
