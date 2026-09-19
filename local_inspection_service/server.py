@@ -12120,24 +12120,20 @@ def _legacy_ai_detection_settings() -> dict[str, Any]:
     }
 
 
+from local_inspection_service.auth.status_ports import StatusPolicy, StatusSources, StatusProjectionCalls
+from local_inspection_service.auth.status import PublicStatusProjection
+_public_status_projection = PublicStatusProjection(
+    StatusPolicy(lambda: user_is_admin, lambda: user_has_permission, lambda: STATUS_MODEL_PUBLIC_KEYS, lambda: public_path_sanitized),
+    StatusSources(lambda: ai_detection_settings, lambda: image_generation_settings),
+    StatusProjectionCalls(lambda: public_ai_detection_status, lambda: public_image_generation_status, lambda: public_status_model_for_user, lambda: public_ai_detection_status_for_user),
+)
+
 def public_ai_detection_status() -> dict[str, Any]:
-    settings = ai_detection_settings()
-    public = {key: value for key, value in settings.items() if key not in {"api_key", "api_key_candidates", "proxy_url_raw"}}
-    public["image_generation"] = public_image_generation_status()
-    return public
+    return _public_status_projection.public_ai_detection_status()
 
 
 def public_ai_detection_status_for_user(user: dict[str, Any] | None) -> dict[str, Any]:
-    if user_has_permission(user, "ai_config"):
-        return public_ai_detection_status()
-    settings = ai_detection_settings()
-    return {
-        "enabled": bool(settings.get("enabled")),
-        "configured": bool(settings.get("configured")),
-        "status": str(settings.get("status") or ""),
-        "message": str(settings.get("message") or ""),
-        "provider_label": str(settings.get("provider_label") or ""),
-    }
+    return _public_status_projection.public_ai_detection_status_for_user(user)
 
 
 STATUS_MODEL_PUBLIC_KEYS = {
@@ -12170,42 +12166,15 @@ STATUS_MODEL_PUBLIC_KEYS = {
 
 
 def public_status_model_for_user(model: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
-    public = {key: model.get(key) for key in STATUS_MODEL_PUBLIC_KEYS if key in model}
-    if model.get("is_ai_detection") and user_has_permission(user, "ai_config") and "provider_status" in model:
-        public["provider_status"] = model.get("provider_status")
-    return public
+    return _public_status_projection.public_status_model_for_user(model, user)
 
 
 def public_service_status_for_user(user: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
-    if user_is_admin(user):
-        return payload
-    return {
-        "service": payload.get("service"),
-        "model_exists": payload.get("model_exists"),
-        "active_model_id": payload.get("active_model_id"),
-        "available_models": [public_status_model_for_user(item, user) for item in payload.get("available_models") or [] if isinstance(item, dict)],
-        "specialized_models": [public_status_model_for_user(item, user) for item in payload.get("specialized_models") or [] if isinstance(item, dict)],
-        "specialized_model_tasks": payload.get("specialized_model_tasks") or [],
-        "ai_detection_tasks": payload.get("ai_detection_tasks") or [],
-        "ai_detection": public_ai_detection_status_for_user(user),
-        "training_execution": {"status": "restricted", "executor": ""},
-        "cursor_image2": {"status": "restricted", "configured": False},
-        "classes": payload.get("classes") or [],
-        "rule": payload.get("rule") or {},
-        "ocr": {},
-    }
+    return _public_status_projection.public_service_status_for_user(user, payload)
 
 
 def public_config_summary_for_user(user: dict[str, Any] | None, config: dict[str, Any]) -> dict[str, Any]:
-    if user_is_admin(user):
-        return public_path_sanitized(config)
-    return public_path_sanitized(
-        {
-            "confidence_threshold": config.get("confidence_threshold"),
-            "required_classes": config.get("required_classes"),
-            "min_counts": config.get("min_counts"),
-        }
-    )
+    return _public_status_projection.public_config_summary_for_user(user, config)
 
 
 def _legacy_image_generation_settings() -> dict[str, Any]:
@@ -12319,8 +12288,7 @@ def _legacy_image_generation_settings() -> dict[str, Any]:
 
 
 def public_image_generation_status() -> dict[str, Any]:
-    settings = image_generation_settings()
-    return {key: value for key, value in settings.items() if key not in {"api_key", "proxy_url_raw"}}
+    return _public_status_projection.public_image_generation_status()
 
 
 from .model_providers.errors import (
