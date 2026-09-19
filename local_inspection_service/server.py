@@ -8054,174 +8054,42 @@ def persist_secret_key_items(items: list[dict[str, str]], default_prefix: str) -
     return persisted
 
 
+from .model_providers.key_registry import ProviderKeyRegistry as _ProviderKeyRegistry
+from .model_providers.key_registry_ports import KeyMaterial as _KeyMaterial, KeyPresentation as _KeyPresentation, JsonKeyPolicy as _JsonKeyPolicy, ImageKeyPolicy as _ImageKeyPolicy, AgentKeyPolicy as _AgentKeyPolicy
+_provider_key_registry = _ProviderKeyRegistry(
+    _KeyMaterial(environment=lambda: local_secret_env_value, identity=lambda: secret_key_item_id, default_environment=lambda: default_secret_env_name),
+    _KeyPresentation(text=lambda: bounded_text, mask=lambda: mask_secret, json_label=lambda: ai_provider_label, image_label=lambda: image_generation_provider_label, agent_label=lambda: agent_provider_label),
+    _JsonKeyPolicy(default_provider=lambda: AI_DEFAULT_PROVIDER, supported=lambda: AI_SUPPORTED_PROVIDERS),
+    _ImageKeyPolicy(default_provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, supported=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, validate=lambda: validate_image_generation_provider),
+    _AgentKeyPolicy(supported=lambda: AGENT_SUPPORTED_PROVIDERS, normalize=lambda: normalize_agent_provider),
+)
+
 def normalize_ai_key_items(config: dict[str, Any], provider: str | None = None) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    seen: set[str] = set()
-    fallback_provider = str(provider or config.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
-    if fallback_provider not in AI_SUPPORTED_PROVIDERS:
-        fallback_provider = AI_DEFAULT_PROVIDER
-    raw_items = config.get("api_keys") if isinstance(config.get("api_keys"), list) else []
-    for raw in raw_items:
-        if not isinstance(raw, dict):
-            continue
-        env_name = str(raw.get("env") or raw.get("env_name") or raw.get("api_key_env") or "").strip()
-        env_secret = local_secret_env_value(env_name)
-        secret = env_secret or str(raw.get("key") or raw.get("api_key") or "").strip()
-        if not secret and not env_name:
-            continue
-        raw_provider = str(raw.get("provider") or raw.get("ai_provider") or "").strip().lower()
-        item_provider = raw_provider or fallback_provider
-        if item_provider not in AI_SUPPORTED_PROVIDERS:
-            if raw_provider:
-                continue
-            item_provider = fallback_provider
-        item_id = str(raw.get("id") or secret_key_item_id(env_name, secret)).strip()
-        dedupe_key = f"{item_provider}:{item_id}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        label = bounded_text(raw.get("label") or f"{ai_provider_label(item_provider)} API Key {len(items) + 1}", 80)
-        items.append({"id": item_id, "label": label, "key": secret, "env": env_name, "provider": item_provider})
-    legacy_key = str(config.get("api_key") or "").strip()
-    if legacy_key:
-        env_name = default_secret_env_name("VANTALINE_AI_KEY", legacy_key, provider=fallback_provider)
-        item_id = secret_key_item_id(env_name, legacy_key)
-        dedupe_key = f"{fallback_provider}:{item_id}"
-        if dedupe_key not in seen:
-            items.append(
-                {
-                    "id": item_id,
-                    "label": f"{ai_provider_label(fallback_provider)} API Key {len(items) + 1}",
-                    "key": legacy_key,
-                    "env": env_name,
-                    "provider": fallback_provider,
-                }
-            )
-    return items
+    return _provider_key_registry.normalize_ai_key_items(config, provider)
 
 
 def public_ai_key_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
-    return [
-        {
-            "id": item["id"],
-            "label": item.get("label") or f"API Key {idx + 1}",
-            "masked_key": mask_secret(item.get("key", "")),
-            "env_name": item.get("env") or item.get("env_name") or "",
-            "provider": item.get("provider") or "",
-        }
-        for idx, item in enumerate(items)
-    ]
+    return _provider_key_registry.public_ai_key_items(items)
 
 
 def ai_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[dict[str, str]]:
-    clean_provider = str(provider or "").strip().lower()
-    return [item for item in items if str(item.get("provider") or "").strip().lower() == clean_provider]
+    return _provider_key_registry.ai_keys_for_provider(items, provider)
 
 
 def normalize_image_key_items(config: dict[str, Any], provider: str) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    seen: set[str] = set()
-    fallback_provider = validate_image_generation_provider(provider or IMAGE_GENERATION_DEFAULT_PROVIDER)
-    raw_items = config.get("image_api_keys") if isinstance(config.get("image_api_keys"), list) else []
-    for raw in raw_items:
-        if not isinstance(raw, dict):
-            continue
-        env_name = str(raw.get("env") or raw.get("env_name") or raw.get("api_key_env") or "").strip()
-        env_secret = local_secret_env_value(env_name)
-        secret = env_secret or str(raw.get("key") or raw.get("api_key") or "").strip()
-        if not secret and not env_name:
-            continue
-        item_provider = str(raw.get("provider") or raw.get("image_provider") or fallback_provider).strip().lower()
-        if item_provider not in IMAGE_GENERATION_SUPPORTED_PROVIDERS:
-            item_provider = fallback_provider
-        item_id = str(raw.get("id") or secret_key_item_id(env_name, secret)).strip()
-        dedupe_key = f"{item_provider}:{item_id}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        label = bounded_text(raw.get("label") or f"{image_generation_provider_label(item_provider)} API Key {len(items) + 1}", 80)
-        items.append({"id": item_id, "label": label, "key": secret, "provider": item_provider, "env": env_name})
-    legacy_key = str(config.get("image_api_key") or "").strip()
-    if legacy_key:
-        env_name = default_secret_env_name(f"VANTALINE_{fallback_provider.upper()}_IMAGE_KEY", legacy_key)
-        item_id = secret_key_item_id(env_name, legacy_key)
-        dedupe_key = f"{fallback_provider}:{item_id}"
-        if dedupe_key not in seen:
-            items.append(
-                {
-                    "id": item_id,
-                    "label": f"{image_generation_provider_label(fallback_provider)} API Key {len(items) + 1}",
-                    "key": legacy_key,
-                    "provider": fallback_provider,
-                    "env": env_name,
-                }
-            )
-    return items
+    return _provider_key_registry.normalize_image_key_items(config, provider)
 
 
 def normalize_agent_key_items(config: dict[str, Any]) -> list[dict[str, str]]:
-    normalized: list[dict[str, str]] = []
-    seen: set[str] = set()
-    fallback_provider = normalize_agent_provider(config.get("provider"), str(config.get("base_url") or ""))
-    raw_items = config.get("api_keys") if isinstance(config.get("api_keys"), list) else []
-    for raw in raw_items:
-        if not isinstance(raw, dict):
-            continue
-        secret = str(raw.get("key") or raw.get("api_key") or "").strip()
-        env_name = str(raw.get("env") or raw.get("env_name") or raw.get("api_key_env") or "").strip()
-        env_secret = local_secret_env_value(env_name)
-        if env_secret:
-            secret = env_secret
-        if not secret and not env_name:
-            continue
-        item_provider = str(raw.get("provider") or raw.get("agent_provider") or fallback_provider).strip().lower()
-        if item_provider not in AGENT_SUPPORTED_PROVIDERS:
-            item_provider = fallback_provider
-        if secret and (not env_name or env_name.startswith("VANTALINE_AI_KEY_")):
-            env_name = default_secret_env_name("VANTALINE_AGENT_KEY", secret, provider=item_provider)
-        item_id = str(raw.get("id") or secret_key_item_id(env_name, secret)).strip()
-        dedupe_key = f"{item_provider}:{item_id}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        label = bounded_text(raw.get("label") or f"{agent_provider_label(item_provider)} API Key {len(normalized) + 1}", 80)
-        if label.startswith("API Key"):
-            label = f"Agent {label}"
-        normalized.append(
-            {
-                "id": item_id,
-                "label": label,
-                "key": secret,
-                "env": env_name,
-                "provider": item_provider,
-            }
-        )
-    legacy_key = str(config.get("api_key") or "").strip()
-    if legacy_key:
-        env_name = default_secret_env_name("VANTALINE_AGENT_KEY", legacy_key, provider=fallback_provider)
-        item_id = secret_key_item_id(env_name, legacy_key)
-        dedupe_key = f"{fallback_provider}:{item_id}"
-        if dedupe_key not in seen:
-            normalized.append(
-                {
-                    "id": item_id,
-                    "label": f"{agent_provider_label(fallback_provider)} API Key {len(normalized) + 1}",
-                    "key": legacy_key,
-                    "env": env_name,
-                    "provider": fallback_provider,
-                }
-            )
-    return normalized
+    return _provider_key_registry.normalize_agent_key_items(config)
 
 
 def image_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[dict[str, str]]:
-    clean_provider = str(provider or "").strip().lower()
-    return [item for item in items if str(item.get("provider") or "").strip().lower() == clean_provider]
+    return _provider_key_registry.image_keys_for_provider(items, provider)
 
 
 def agent_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[dict[str, str]]:
-    clean_provider = str(provider or "").strip().lower()
-    return [item for item in items if str(item.get("provider") or "").strip().lower() == clean_provider]
+    return _provider_key_registry.agent_keys_for_provider(items, provider)
 
 
 def validate_ai_provider(value: Any) -> str:
