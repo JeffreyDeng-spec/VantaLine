@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_provider_foundations.py` runs 26 offline groups. The original 18
+business groups and 23 expanded original-body groups passed on Windows/Linux before migration.
+Contracts cover exception inheritance/metadata, old and new serialized import paths, exact HTTP
+classification, JSON/data-URL semantics, dependency capture and the original JSONDecodeError catch
+boundary. First-error recovery tests reject retries; independent services avoid root dependencies.
+All input is synthetic and network/process/device operations are prohibited by the test harness.
+
 `python scripts/smoke_detection_media.py` runs 27 offline groups. Twenty original
 business groups and 25 expanded original-body groups passed on Windows/Linux before migration.
 Synthetic arrays/files cover JPEG encoding, alpha/gray tiles, reference ordering, sheet layout,

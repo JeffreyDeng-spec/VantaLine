@@ -12323,114 +12323,54 @@ def public_image_generation_status() -> dict[str, Any]:
     return {key: value for key, value in settings.items() if key not in {"api_key", "proxy_url_raw"}}
 
 
-class AiProviderError(RuntimeError):
-    def __init__(
-        self,
-        message: str = "",
-        *,
-        usage_metadata: dict[str, Any] | None = None,
-        failed_usage_metadata: list[dict[str, Any]] | None = None,
-        attempts: int | None = None,
-        retry_count: int | None = None,
-        previous_errors: list[str] | None = None,
-        http_status: int | None = None,
-        fallback_model: str = "",
-        fallback_reason: str = "",
-    ):
-        super().__init__(message)
-        self.usage_metadata = usage_metadata or {}
-        self.failed_usage_metadata = failed_usage_metadata or []
-        self.attempts = attempts
-        self.retry_count = retry_count
-        self.previous_errors = previous_errors or []
-        self.http_status = http_status
-        self.fallback_model = fallback_model
-        self.fallback_reason = fallback_reason
-
-
-class AiProviderNonRetryableError(AiProviderError):
-    pass
-
-
-class AiProviderConfigError(AiProviderNonRetryableError):
-    pass
-
-
-class AiProviderAuthError(AiProviderNonRetryableError):
-    pass
-
-
-class AiProviderTimeout(AiProviderError):
-    pass
-
-
-class AiProviderOverloaded(AiProviderError):
-    pass
+from .model_providers.errors import (
+    AiProviderError,
+    AiProviderNonRetryableError,
+    AiProviderConfigError,
+    AiProviderAuthError,
+    AiProviderTimeout,
+    AiProviderOverloaded,
+)
+from .model_providers.payloads import (
+    ProviderPayloadParser,
+    normalize_ai_json_root as _normalize_ai_json_root,
+    ai_json_text_candidates as _ai_json_text_candidates,
+)
+from .model_providers.http_errors import (
+    ProviderHttpErrors,
+    ProviderErrorTypes,
+)
+_provider_payloads = ProviderPayloadParser(
+    lambda: ai_json_text_candidates,
+    lambda: normalize_ai_json_root,
+    lambda: AiProviderError,
+)
+_provider_http_errors = ProviderHttpErrors(
+    lambda: bounded_text,
+    ProviderErrorTypes(
+        lambda: AiProviderError,
+        lambda: AiProviderAuthError,
+        lambda: AiProviderOverloaded,
+        lambda: AiProviderConfigError,
+        lambda: AiProviderNonRetryableError,
+    ),
+)
 
 
 def provider_http_error(message_prefix: str, exc: urllib.error.HTTPError) -> AiProviderError:
-    detail = exc.read().decode("utf-8", errors="replace")[:240]
-    error_text = f"{message_prefix}: HTTP {exc.code} {bounded_text(detail, 180)}"
-    if exc.code in {401, 403}:
-        return AiProviderAuthError(error_text, http_status=exc.code)
-    if exc.code in {429, 503}:
-        return AiProviderOverloaded(f"AI provider overloaded: HTTP {exc.code} {bounded_text(detail, 180)}", http_status=exc.code)
-    if exc.code in {400, 404}:
-        return AiProviderConfigError(error_text, http_status=exc.code)
-    if exc.code in {408, 500, 502, 504}:
-        return AiProviderError(error_text, http_status=exc.code)
-    return AiProviderNonRetryableError(error_text, http_status=exc.code)
+    return _provider_http_errors.provider_http_error(message_prefix, exc)
 
 
 def normalize_ai_json_root(parsed: Any) -> dict[str, Any] | None:
-    if isinstance(parsed, dict):
-        return parsed
-    if isinstance(parsed, list):
-        dict_items = [item for item in parsed if isinstance(item, dict)]
-        if dict_items and all("accessory_id" in item for item in dict_items):
-            return {"detections": dict_items, "rule": {"counts": {}}}
-        if len(dict_items) == 1 and len(parsed) == 1:
-            return dict_items[0]
-    return None
+    return _normalize_ai_json_root(parsed)
 
 
 def ai_json_text_candidates(text: str) -> list[str]:
-    raw = str(text or "").strip()
-    if not raw:
-        return []
-    candidates = [raw]
-    for match in re.finditer(r"```(?:json|JSON)?\s*([\s\S]*?)\s*```", raw):
-        fenced = match.group(1).strip()
-        if fenced:
-            candidates.insert(0, fenced)
-    if raw.startswith("```"):
-        stripped = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", raw)
-        stripped = re.sub(r"\s*```$", "", stripped).strip()
-        if stripped and stripped not in candidates:
-            candidates.insert(0, stripped)
-    return candidates
+    return _ai_json_text_candidates(text)
 
 
 def parse_ai_json_object(text: str) -> dict[str, Any]:
-    decoder = json.JSONDecoder()
-    for candidate in ai_json_text_candidates(text):
-        try:
-            normalized = normalize_ai_json_root(json.loads(candidate))
-            if normalized is not None:
-                return normalized
-        except json.JSONDecodeError:
-            pass
-        for index, char in enumerate(candidate):
-            if char not in "{[":
-                continue
-            try:
-                parsed, _ = decoder.raw_decode(candidate[index:])
-            except json.JSONDecodeError:
-                continue
-            normalized = normalize_ai_json_root(parsed)
-            if normalized is not None:
-                return normalized
-    raise AiProviderError("AI provider did not return a parseable JSON object")
+    return _provider_payloads.parse_ai_json_object(text)
 
 
 from .model_profiles.audit import metered as metered_model_call
@@ -12506,11 +12446,7 @@ class OpenAICompatibleAiProvider:
 
 
 def data_url_payload(data_url: str) -> tuple[str, str]:
-    header, _, payload = str(data_url or "").partition(",")
-    if not payload or ";base64" not in header:
-        raise AiProviderError("AI image payload was not a base64 data URL")
-    mime_type = header.removeprefix("data:").split(";", 1)[0] or "image/jpeg"
-    return mime_type, payload
+    return _provider_payloads.data_url_payload(data_url)
 
 
 class GeminiAiProvider:
