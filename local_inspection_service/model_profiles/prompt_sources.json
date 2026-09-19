@@ -1,7 +1,11 @@
 {
-  "version": 54,
+  "version": 55,
   "sources": [
     "server.py",
+    "model_providers/__init__.py",
+    "model_providers/errors.py",
+    "model_providers/payloads.py",
+    "model_providers/http_errors.py",
     "detection/media_ports.py",
     "detection/image_encoding.py",
     "detection/inspection_image_store.py",

@@ -64,7 +64,7 @@
     },
     {
       "name": "Model profile binding and source provenance",
-      "paths": ["local_inspection_service/model_profiles/**", "local_inspection_service/qwen_evidence_jobs.py", "local_inspection_service/qwen_ocr_evidence.py"],
+      "paths": ["local_inspection_service/model_profiles/**", "local_inspection_service/model_providers/**", "scripts/smoke_provider_foundations.py", "local_inspection_service/qwen_evidence_jobs.py", "local_inspection_service/qwen_ocr_evidence.py"],
       "required_docs": ["docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md"]
     },
     {
