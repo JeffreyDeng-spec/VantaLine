@@ -12376,73 +12376,31 @@ def parse_ai_json_object(text: str) -> dict[str, Any]:
 from .model_profiles.audit import metered as metered_model_call
 
 
-class OpenAICompatibleAiProvider:
-    def __init__(self, settings: dict[str, Any]):
-        self.settings = settings
-        self.last_usage_metadata: dict[str, Any] = {}
+from .model_providers.openai_transport import (
+    OpenAICompatibleAiProvider as _OpenAICompatibleAiProvider,
+)
+from .model_providers.openai_ports import OpenAITransportIO, OpenAITransportErrors
 
-    @metered_model_call(resolve_model_profiles)
-    def generate_json(self, system_prompt: str, user_content: list[dict[str, Any]], *, max_tokens: int = 1400) -> tuple[dict[str, Any], int]:
-        if not self.settings.get("configured"):
-            raise AiProviderConfigError(str(self.settings.get("message") or "AI provider is not configured"))
-        self.last_usage_metadata = {}
-        payload = {
-            "model": self.settings["model"],
-            "temperature": 0,
-            "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-        }
-        if self.settings.get("provider") == "doubao":
-            payload["thinking"] = {"type": "disabled"}
-        elif self.settings.get("provider") == "qwen":
-            payload["enable_thinking"] = False
-        request = urllib.request.Request(
-            self.settings["base_url"],
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.settings['api_key']}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+_openai_transport_io = OpenAITransportIO(
+    lambda: ai_urlopen,
+    lambda: parse_ai_json_object,
+    lambda: bounded_text,
+    lambda: sha256_bytes,
+    lambda: provider_http_error,
+)
+_openai_transport_errors = OpenAITransportErrors(
+    lambda: AiProviderConfigError,
+    lambda: AiProviderTimeout,
+    lambda: AiProviderError,
+)
+# Preserve the existing decorator's composition-time resolver selection.
+_openai_profile_resolver = resolve_model_profiles
+
+class OpenAICompatibleAiProvider(_OpenAICompatibleAiProvider):
+    def __init__(self, settings: dict[str, Any]):
+        super().__init__(
+            settings, _openai_transport_io, _openai_transport_errors, _openai_profile_resolver,
         )
-        start = time.monotonic()
-        try:
-            with ai_urlopen(request, self.settings, timeout=float(self.settings["timeout_seconds"])) as response:
-                body = response.read().decode("utf-8", errors="replace")
-        except (TimeoutError, socket.timeout) as exc:
-            raise AiProviderTimeout("AI provider timed out") from exc
-        except urllib.error.HTTPError as exc:
-            raise provider_http_error("AI provider request failed", exc) from exc
-        except urllib.error.URLError as exc:
-            if isinstance(getattr(exc, "reason", None), socket.timeout):
-                raise AiProviderTimeout("AI provider timed out") from exc
-            raise AiProviderError(f"AI provider request failed: {bounded_text(exc, 180)}") from exc
-        latency_ms = int((time.monotonic() - start) * 1000)
-        try:
-            response_json = json.loads(body)
-            self.last_usage_metadata = response_json.get("usage") if isinstance(response_json.get("usage"), dict) else {}
-            choices = response_json["choices"]
-            if self.settings.get("profile_id") and (len(choices) != 1 or choices[0].get("finish_reason") != "stop"):
-                raise AiProviderError("AI provider output is incomplete")
-            content = choices[0]["message"]["content"]
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            provider_error = AiProviderError("AI provider response shape was not recognized")
-            provider_error.response_sha256 = sha256_bytes(body.encode("utf-8", errors="replace"))
-            provider_error.response_preview = body[:8192]
-            raise provider_error from exc
-        if isinstance(content, list):
-            content = "\n".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
-        response_text = str(content or "")
-        try:
-            return parse_ai_json_object(response_text), latency_ms
-        except AiProviderError as exc:
-            exc.response_sha256 = sha256_bytes(response_text.encode("utf-8", errors="replace"))
-            exc.response_preview = response_text[:8192]
-            raise
 
 
 def data_url_payload(data_url: str) -> tuple[str, str]:

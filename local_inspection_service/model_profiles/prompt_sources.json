@@ -1,7 +1,10 @@
 {
-  "version": 55,
+  "version": 56,
   "sources": [
     "server.py",
+    "model_providers/openai_ports.py",
+    "model_providers/openai_transport.py",
+    "model_profiles/audit.py",
     "model_providers/__init__.py",
     "model_providers/errors.py",
     "model_providers/payloads.py",
