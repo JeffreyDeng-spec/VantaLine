@@ -1,7 +1,12 @@
 {
-  "version": 67,
+  "version": 68,
   "sources": [
     "server.py",
+    "agent/pipeline_decision_ports.py",
+    "agent/conversation.py",
+    "agent/decision_context.py",
+    "agent/decision_policy.py",
+    "agent/decision_flow.py",
     "agent/settings_api_ports.py",
     "agent/settings_api.py",
     "agent/invocation_ports.py",

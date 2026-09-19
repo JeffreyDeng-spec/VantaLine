@@ -24933,6 +24933,32 @@ def advance_pipeline_task(task: dict[str, Any], cancel_event: "threading.Event |
     print(f"[pipeline.advance] task={task_id} stage={stage}->{task.get('stage')} done elapsed_ms={int((time.monotonic() - advance_t0) * 1000)}", flush=True)
 
 
+from .agent.conversation import AgentConversation as _AgentConversation
+from .agent.decision_context import AgentDecisionContext as _AgentDecisionContext
+from .agent.decision_policy import AgentDecisionPolicy as _AgentDecisionPolicy
+from .agent.decision_flow import AgentDecisionFlow as _AgentDecisionFlow
+from .agent.pipeline_decision_ports import AgentConversationRuntime as _AgentConversationRuntime, AgentDecisionText as _AgentDecisionText, AgentPipelineEvidence as _AgentPipelineEvidence, AgentDecisionAccessories as _AgentDecisionAccessories, AgentDecisionContextCalls as _AgentDecisionContextCalls, AgentDecisionPolicyValues as _AgentDecisionPolicyValues, AgentDecisionRuleCalls as _AgentDecisionRuleCalls, AgentDecisionInvocationSettings as _AgentDecisionInvocationSettings, AgentDecisionCodec as _AgentDecisionCodec, AgentDecisionFlowCalls as _AgentDecisionFlowCalls
+_agent_conversation = _AgentConversation(
+    _AgentConversationRuntime(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT),
+    _AgentDecisionText(bounded=lambda: bounded_text),
+)
+_agent_decision_context = _AgentDecisionContext(
+    _AgentPipelineEvidence(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, training_job=lambda: linked_training_job, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+    _AgentDecisionAccessories(canonical=lambda: canonical_pipeline_accessory_ids, counts=lambda: normalize_pipeline_accessory_counts, lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type, detection=lambda: normalize_pipeline_detection_method),
+    _AgentDecisionContextCalls(quality=lambda: agent_pipeline_quality_signals, stage_order=lambda: PIPELINE_STAGE_ORDER),
+    _AgentDecisionText(bounded=lambda: bounded_text),
+)
+_agent_decision_policy = _AgentDecisionPolicy(
+    _AgentDecisionPolicyValues(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS),
+    _AgentDecisionRuleCalls(rerun=lambda: _rule_rerun_failed_stage, normalize=lambda: normalize_agent_pipeline_decision),
+    _AgentDecisionText(bounded=lambda: bounded_text),
+)
+_agent_decision_flow = _AgentDecisionFlow(
+    _AgentDecisionInvocationSettings(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT),
+    _AgentDecisionCodec(dumps=lambda: json.dumps, parse=lambda: parse_agent_json),
+    _AgentDecisionFlowCalls(context=lambda: agent_pipeline_context, chat=lambda: agent_chat_completion, normalize=lambda: normalize_agent_pipeline_decision, rule=lambda: agent_pipeline_rule_decision),
+)
+
 def agent_mcp_append_conversation(
     task: dict[str, Any],
     role: str,
@@ -24945,289 +24971,27 @@ def agent_mcp_append_conversation(
     needs_user: bool = False,
     agent_error: str = "",
 ) -> dict[str, Any]:
-    orchestration = agent_mcp_orchestration(task)
-    conversation = orchestration.setdefault("conversation", [])
-    entry: dict[str, Any] = {
-        "id": f"msg_{uuid.uuid4().hex[:10]}",
-        "role": role,
-        "message": bounded_text(message, 800),
-        "created_at": agent_mcp_now(),
-    }
-    if action:
-        entry["action"] = action
-    if reason:
-        entry["reason"] = bounded_text(reason, 400)
-    if target_stage:
-        entry["target_stage"] = target_stage
-    if source:
-        entry["source"] = source
-    if needs_user:
-        entry["needs_user"] = True
-    if agent_error:
-        entry["agent_error"] = bounded_text(agent_error, 200)
-    conversation.append(entry)
-    if len(conversation) > AGENT_MCP_CONVERSATION_LIMIT:
-        del conversation[: len(conversation) - AGENT_MCP_CONVERSATION_LIMIT]
-    orchestration["updated_at"] = agent_mcp_now()
-    return entry
+    return _agent_conversation.agent_mcp_append_conversation(task, role, message, action=action, reason=reason, target_stage=target_stage, source=source, needs_user=needs_user, agent_error=agent_error)
 
 
 def agent_pipeline_quality_signals(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    orchestration = agent_mcp_orchestration(task)
-    params = task.get("params") if isinstance(task.get("params"), dict) else {}
-    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-    counts = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
-    accessory_total = sum(counts.values()) or len(accessory_ids)
-    sample_count = int(params.get("sample_count") or 0)
-    signals: dict[str, Any] = {
-        "accessory_count": len(accessory_ids),
-        "accessory_unit_total": accessory_total,
-        "sample_count": sample_count,
-    }
-    if accessory_total and sample_count:
-        signals["samples_per_accessory_unit"] = round(sample_count / max(1, accessory_total), 1)
-    pose_calls = [call for call in orchestration.get("tool_calls") or [] if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE]
-    signals["pose_images_total"] = len(pose_calls)
-    signals["pose_images_completed"] = len([call for call in pose_calls if call.get("status") == "completed"])
-    signals["pose_images_failed"] = len([call for call in pose_calls if call.get("status") == "failed"])
-    signals["skip_pose_image_generation"] = bool(orchestration.get("skip_pose_image_generation"))
-    gemini = agent_mcp_gemini_image_config()
-    signals["image_generation_configured"] = bool(gemini.get("configured"))
-    try:
-        signals["missing_assets"] = agent_mcp_missing_existing_asset_names(task, config, orchestration)[:6]
-    except Exception:  # noqa: BLE001 - 质量信号收集失败不应阻塞决策
-        signals["missing_assets"] = []
-    try:
-        job = linked_training_job(task)
-    except Exception:  # noqa: BLE001
-        job = None
-    if job:
-        signals["linked_job_status"] = str(job.get("status") or "")
-        signals["linked_job_note"] = bounded_text(job.get("note"), 200)
-        if job.get("current_epoch") is not None:
-            signals["current_epoch"] = job.get("current_epoch")
-            signals["total_epochs"] = job.get("total_epochs") or job.get("epochs") or 0
-        for key in ("map50", "map", "precision", "recall"):
-            if job.get(key) is not None:
-                signals[key] = job.get(key)
-    if task.get("last_error"):
-        signals["last_error"] = bounded_text(task.get("last_error"), 200)
-    return signals
+    return _agent_decision_context.agent_pipeline_quality_signals(task, config)
 
 
 def agent_pipeline_context(task: dict[str, Any], config: dict[str, Any], user_message: str | None, trigger: str) -> dict[str, Any]:
-    orchestration = agent_mcp_orchestration(task)
-    accessories_by_id = accessory_lookup_by_id(config)
-    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-    counts = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
-    accessories = [
-        {
-            "name": str(accessories_by_id[item_id].get("name") or item_id),
-            "material_type": accessory_material_type(accessories_by_id[item_id]),
-            "count": int(counts.get(item_id, 1)),
-        }
-        for item_id in accessory_ids
-        if item_id in accessories_by_id
-    ]
-    pause = orchestration.get("pause") if isinstance(orchestration.get("pause"), dict) else None
-    stages = [
-        {"key": stage.get("key"), "status": stage.get("status"), "progress": stage.get("progress")}
-        for stage in orchestration.get("stages") or []
-    ]
-    recent = [
-        {"role": entry.get("role"), "message": entry.get("message"), "action": entry.get("action")}
-        for entry in (orchestration.get("conversation") or [])[-8:]
-    ]
-    params = task.get("params") if isinstance(task.get("params"), dict) else {}
-    return {
-        "trigger": trigger,
-        "task": {
-            "id": task.get("id"),
-            "name": task.get("name"),
-            "stage": task.get("stage"),
-            "status": task.get("status"),
-            "progress": task.get("progress"),
-            "detection_method": normalize_pipeline_detection_method(str(task.get("detection_method") or params.get("train_mode") or "")),
-            "auto_advance": bool(task.get("auto_advance")),
-            "params": {key: params.get(key) for key in ("sample_count", "epochs", "image_size", "train_mode", "background_set_id")},
-        },
-        "accessories": accessories,
-        "orchestration": {
-            "state": orchestration.get("state"),
-            "active_stage": orchestration.get("active_stage"),
-            "stages": stages,
-            "pause": ({"reason": pause.get("reason"), "suggested_actions": pause.get("suggested_actions")} if pause else None),
-            "training_quality_ack": bool(orchestration.get("training_quality_ack")),
-            "skip_pose_image_generation": bool(orchestration.get("skip_pose_image_generation")),
-        },
-        "quality_signals": agent_pipeline_quality_signals(task, config),
-        "recent_conversation": recent,
-        "user_message": user_message or "",
-        "stage_order": PIPELINE_STAGE_ORDER,
-        "constraints": {
-            "sample_count": [50, 20000],
-            "epochs": [1, 500],
-            "image_size": [320, 1280],
-            "train_mode": ["yolo", "yolo_ocr"],
-        },
-    }
+    return _agent_decision_context.agent_pipeline_context(task, config, user_message, trigger)
 
 
 def normalize_agent_pipeline_decision(parsed: dict[str, Any]) -> dict[str, Any]:
-    action = str(parsed.get("action") or "reply").strip().lower()
-    if action not in AGENT_PIPELINE_ACTIONS:
-        action = "reply"
-    decision: dict[str, Any] = {
-        "action": action,
-        "params": {},
-        "advance_after": bool(parsed.get("advance_after")),
-        "target_stage": "",
-        "needs_user": bool(parsed.get("needs_user")) or action == "pause_and_ask",
-        "message_to_user": bounded_text(parsed.get("message_to_user"), 600),
-        "reason": bounded_text(parsed.get("reason"), 300),
-        "suggested_actions": [bounded_text(item, 40) for item in (parsed.get("suggested_actions") or []) if str(item).strip()][:6],
-        "source": "agent",
-    }
-    raw_params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
-    for key in ("sample_count", "epochs", "image_size"):
-        if key in raw_params:
-            try:
-                decision["params"][key] = int(raw_params[key])
-            except (TypeError, ValueError):
-                pass
-    if str(raw_params.get("train_mode") or "") in {"yolo", "yolo_ocr"}:
-        decision["params"]["train_mode"] = str(raw_params["train_mode"])
-    if "sample_count" in decision["params"]:
-        decision["params"]["sample_count"] = max(50, min(20000, decision["params"]["sample_count"]))
-    if "epochs" in decision["params"]:
-        decision["params"]["epochs"] = max(1, min(500, decision["params"]["epochs"]))
-    if "image_size" in decision["params"]:
-        decision["params"]["image_size"] = max(320, min(1280, decision["params"]["image_size"]))
-    target = str(parsed.get("target_stage") or "").strip().lower()
-    if target in AGENT_PIPELINE_STAGE_TARGETS:
-        decision["target_stage"] = target
-    if not decision["message_to_user"]:
-        decision["message_to_user"] = decision["reason"] or "已处理你的请求。"
-    return decision
+    return _agent_decision_policy.normalize_agent_pipeline_decision(parsed)
 
 
 def _rule_rerun_failed_stage(stage: str) -> tuple[str, str]:
-    """Map a 'rerun the failed stage' intent to a concrete action/target.
-
-    Re-running samples (or a later stage) goes through goto_stage->samples so the
-    stale failed job is cleared and sample generation runs again while reusing
-    the pose images already on disk (the existence guard prevents duplicate AI
-    image generation). A failed draft stage simply advances again.
-    """
-    if stage in {"samples", "training", "library"}:
-        return "goto_stage", "samples"
-    return "advance", ""
+    return _agent_decision_policy._rule_rerun_failed_stage(stage)
 
 
 def agent_pipeline_rule_decision(task: dict[str, Any], user_message: str | None, trigger: str) -> dict[str, Any]:
-    stage = str(task.get("stage") or "")
-    status = str(task.get("status") or "")
-    text = (user_message or "").lower().strip()
-
-    def has(*keywords: str) -> bool:
-        return any(keyword in text for keyword in keywords)
-
-    if user_message:
-        action = "reply"
-        target_stage = ""
-        if has("取消", "cancel", "停止", "stop", "abort"):
-            action = "cancel"
-        elif has(
-            "从头", "重新开始", "重头", "推倒重来", "start over", "start-over",
-            "startover", "restart", "from scratch", "reset",
-        ):
-            action, target_stage = "goto_stage", "draft"
-        elif has("沿用", "现有素材", "继续素材", "reuse", "existing asset", "skip pose", "skip generation"):
-            action = "continue_existing_assets"
-        elif has(
-            "重规划", "重新规划", "replan", "re-plan", "重做姿态", "换姿态",
-            "调整方案", "换个角度", "换个方案",
-        ):
-            action = "replan"
-        elif has("改配件", "重新选", "改参数", "回到草稿", "go back", "回退", "goto", "回到"):
-            action, target_stage = "goto_stage", "draft"
-        elif has("训练", "train") and stage == "samples" and status != "failed":
-            action = "continue_training"
-        elif has(
-            "重试", "retry", "再试", "try again", "again", "重跑", "重新运行", "重新跑",
-            "rerun", "re-run", "run again", "再生成", "重新生成", "重来",
-            "continue", "继续", "推进", "下一步", "advance", "proceed", "resume",
-            "go ahead", "go on", "keep going", "next", "go",
-        ):
-            # Forward / retry intent. On a failed task this means "re-run the
-            # stage that failed"; otherwise advance to the next stage.
-            if status == "failed":
-                action, target_stage = _rule_rerun_failed_stage(stage)
-            elif has("重试", "retry", "再试", "rerun", "re-run", "again", "重跑", "重新生成图"):
-                action = "retry"
-            else:
-                action = "advance"
-        elif status == "failed":
-            # Any other affirmative reply on a failed task -> re-run failed stage.
-            action, target_stage = _rule_rerun_failed_stage(stage)
-        else:
-            action = "reply"
-
-        if action == "goto_stage" and target_stage == "samples":
-            message = "好的，正在重新生成训练样本（复用已生成的实拍抠图素材，不会回退到旧 AI 姿态图）。"
-        elif action == "goto_stage":
-            message = "好的，已回退到草稿阶段，便于你调整配件或参数。"
-        else:
-            message = {
-                "cancel": "好的，已为你取消本次流程。",
-                "retry": "好的，正在重试实拍高亮抠图素材生成。",
-                "continue_training": "好的，确认样本质量后进入训练。",
-                "continue_existing_assets": "好的，将沿用现有素材继续。",
-                "replan": "好的，正在按当前任务重新准备实拍高亮抠图素材。",
-                "advance": "好的，正在推进到下一阶段。",
-                "reply": "已收到你的消息。我可以重试当前阶段、推进到下一步、重新准备实拍抠图素材，或回退到草稿阶段（也可以直接说“取消”）。",
-            }[action]
-
-        return {
-            **normalize_agent_pipeline_decision(
-                {
-                    "action": action,
-                    "target_stage": target_stage,
-                    "message_to_user": message,
-                    "reason": "规则解析（Agent 未连接或解析失败）",
-                }
-            ),
-            "source": "rules",
-        }
-    if status == "completed" and stage in {"samples", "training"}:
-        return {
-            **normalize_agent_pipeline_decision(
-                {
-                    "action": "advance",
-                    "message_to_user": "上一阶段已完成，自动推进到下一阶段。",
-                    "reason": "规则自动推进",
-                }
-            ),
-            "source": "rules",
-        }
-    if status == "failed":
-        return {
-            **normalize_agent_pipeline_decision(
-                {
-                    "action": "pause_and_ask",
-                    "message_to_user": "当前阶段执行失败，请确认是重试、重新准备素材还是取消。",
-                    "reason": "规则自动升级：执行失败",
-                    "suggested_actions": ["retry", "replan", "cancel"],
-                }
-            ),
-            "source": "rules",
-        }
-    return {
-        **normalize_agent_pipeline_decision(
-            {"action": "reply", "message_to_user": "当前没有需要处理的事项。", "reason": "无动作"}
-        ),
-        "source": "rules",
-    }
+    return _agent_decision_policy.agent_pipeline_rule_decision(task, user_message, trigger)
 
 
 AGENT_PIPELINE_SYSTEM_PROMPT = (
@@ -25259,24 +25023,7 @@ def agent_pipeline_decide(
     user_message: str | None = None,
     trigger: str = "chat",
 ) -> dict[str, Any]:
-    agent_config = load_agent_config()
-    if not agent_recommendation_supported(agent_config):
-        return agent_pipeline_rule_decision(task, user_message, trigger)
-    context = agent_pipeline_context(task, config, user_message, trigger)
-    try:
-        content = agent_chat_completion(
-            [
-                {"role": "system", "content": AGENT_PIPELINE_SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
-            ],
-            agent_config,
-        )
-        parsed = parse_agent_json(content)
-        return normalize_agent_pipeline_decision(parsed)
-    except Exception as exc:  # noqa: BLE001 - 任意 Agent 失败都回退规则引擎
-        fallback = agent_pipeline_rule_decision(task, user_message, trigger)
-        fallback["agent_error"] = str(exc)[:200]
-        return fallback
+    return _agent_decision_flow.agent_pipeline_decide(task, config, user_message=user_message, trigger=trigger)
 
 
 def agent_safe_advance(
