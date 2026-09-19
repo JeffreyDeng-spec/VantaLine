@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_public_status.py` runs 18 offline groups. All 12 original groups and
+16 expanded original-body groups passed on Windows/Linux before extraction. Tests preserve
+field filtering, admin identity, permission short-circuiting, sanitizer evaluation order and
+source immutability. Independent compositions use poisoned application callbacks and retain
+no request state. All accounts, settings and media references are synthetic.
+
 `python scripts/smoke_provider_orchestration.py` runs 24 offline groups, retaining all
 16 original behavior groups. The 22 expanded original-body groups passed on Windows/Linux
 before extraction. Tests cover selection, bound/cached fallback guards, existing retry budgets,

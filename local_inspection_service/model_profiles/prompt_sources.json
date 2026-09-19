@@ -1,7 +1,9 @@
 {
-  "version": 59,
+  "version": 60,
   "sources": [
     "server.py",
+    "auth/status_ports.py",
+    "auth/status.py",
     "model_providers/orchestration_ports.py",
     "model_providers/selection.py",
     "model_providers/retry_policy.py",
