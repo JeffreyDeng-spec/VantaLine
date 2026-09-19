@@ -7871,36 +7871,51 @@ def normalize_accessory_ai_profile(raw: dict[str, Any], item: dict[str, Any]) ->
 
 
 
+from local_inspection_service.model_providers.configuration_ports import JsonDefaults, ImageDefaults, ValidationCapabilities, PublicUrlCapabilities
+from local_inspection_service.model_providers.configuration_defaults import ProviderDefaults
+from local_inspection_service.model_providers.configuration_validation import ProviderValidation
+from local_inspection_service.model_providers.public_urls import PublicProviderURLs
+_provider_configuration_defaults = ProviderDefaults(
+    JsonDefaults(lambda: AI_DEFAULT_MODELS, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_BASE_URLS, lambda: AI_DEFAULT_PROVIDER, lambda: AI_PROVIDER_LABELS),
+    ImageDefaults(lambda: IMAGE_GENERATION_DEFAULT_MODELS, lambda: IMAGE_GENERATION_DEFAULT_BASE_URLS, lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_API_KEY_ENVS, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: IMAGE_GENERATION_PROVIDER_KEYS, lambda: IMAGE_GENERATION_PROVIDER_LABELS),
+)
+_provider_configuration_validation = ProviderValidation(
+    ValidationCapabilities(lambda: AI_SUPPORTED_PROVIDERS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, lambda: HTTPException, lambda: re.fullmatch, lambda: urlsplit),
+)
+_provider_public_urls = PublicProviderURLs(
+    PublicUrlCapabilities(lambda: urlsplit, lambda: urlunsplit, lambda: bounded_text),
+)
+
 def default_ai_model(provider: str) -> str:
-    return AI_DEFAULT_MODELS.get(provider, AI_DEFAULT_MODEL)
+    return _provider_configuration_defaults.default_ai_model(provider)
 
 
 def default_ai_base_url(provider: str) -> str:
-    return AI_DEFAULT_BASE_URLS.get(provider, AI_DEFAULT_BASE_URLS[AI_DEFAULT_PROVIDER])
+    return _provider_configuration_defaults.default_ai_base_url(provider)
 
 
 def ai_provider_label(provider: str) -> str:
-    return AI_PROVIDER_LABELS.get(provider, provider or AI_DEFAULT_PROVIDER)
+    return _provider_configuration_defaults.ai_provider_label(provider)
 
 
 def default_image_generation_model(provider: str) -> str:
-    return IMAGE_GENERATION_DEFAULT_MODELS.get(provider, IMAGE_GENERATION_DEFAULT_MODELS[IMAGE_GENERATION_DEFAULT_PROVIDER])
+    return _provider_configuration_defaults.default_image_generation_model(provider)
 
 
 def default_image_generation_base_url(provider: str) -> str:
-    return IMAGE_GENERATION_DEFAULT_BASE_URLS.get(provider, IMAGE_GENERATION_DEFAULT_BASE_URLS[IMAGE_GENERATION_DEFAULT_PROVIDER])
+    return _provider_configuration_defaults.default_image_generation_base_url(provider)
 
 
 def default_image_generation_api_key_env(provider: str) -> str:
-    return IMAGE_GENERATION_DEFAULT_API_KEY_ENVS.get(provider, IMAGE_GENERATION_API_KEY_ENV)
+    return _provider_configuration_defaults.default_image_generation_api_key_env(provider)
 
 
 def image_generation_provider_key(provider: str) -> str:
-    return IMAGE_GENERATION_PROVIDER_KEYS.get(provider, IMAGE_GENERATION_PROVIDER_KEYS[IMAGE_GENERATION_DEFAULT_PROVIDER])
+    return _provider_configuration_defaults.image_generation_provider_key(provider)
 
 
 def image_generation_provider_label(provider: str) -> str:
-    return IMAGE_GENERATION_PROVIDER_LABELS.get(provider, provider or IMAGE_GENERATION_DEFAULT_PROVIDER)
+    return _provider_configuration_defaults.image_generation_provider_label(provider)
 
 
 def mask_secret(value: str) -> str:
@@ -8210,84 +8225,31 @@ def agent_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[
 
 
 def validate_ai_provider(value: Any) -> str:
-    provider = str(value or "").strip().lower()
-    if provider not in AI_SUPPORTED_PROVIDERS:
-        raise HTTPException(status_code=400, detail=f"Unsupported AI provider: {provider or '(empty)'}")
-    return provider
+    return _provider_configuration_validation.validate_ai_provider(value)
 
 
 def validate_image_generation_provider(value: Any) -> str:
-    provider = str(value or "").strip().lower()
-    if provider not in IMAGE_GENERATION_SUPPORTED_PROVIDERS:
-        raise HTTPException(status_code=400, detail=f"Unsupported image generation provider: {provider or '(empty)'}")
-    return provider
+    return _provider_configuration_validation.validate_image_generation_provider(value)
 
 
 def validate_ai_model(value: Any) -> str:
-    model = str(value or "").strip()
-    if not model:
-        raise HTTPException(status_code=400, detail="AI model is required")
-    if len(model) > 160 or not re.fullmatch(r"[A-Za-z0-9._:/@+\-]+", model):
-        raise HTTPException(status_code=400, detail="AI model contains unsupported characters")
-    return model
+    return _provider_configuration_validation.validate_ai_model(value)
 
 
 def validate_ai_base_url(value: Any) -> str:
-    base_url = str(value or "").strip()
-    parsed = urlsplit(base_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="AI base_url must be an http(s) URL")
-    if parsed.username or parsed.password:
-        raise HTTPException(status_code=400, detail="AI base_url must not include credentials")
-    if parsed.query or parsed.fragment:
-        raise HTTPException(status_code=400, detail="AI base_url must not include query strings or fragments")
-    host = parsed.hostname or ""
-    if parsed.scheme == "http" and host not in {"localhost", "127.0.0.1", "::1"}:
-        raise HTTPException(status_code=400, detail="AI base_url must use https unless it targets localhost")
-    return base_url
+    return _provider_configuration_validation.validate_ai_base_url(value)
 
 
 def public_ai_base_url(value: Any) -> str:
-    base_url = str(value or "").strip()
-    parsed = urlsplit(base_url)
-    if not parsed.scheme or not parsed.netloc:
-        return bounded_text(base_url.split("?", 1)[0].split("#", 1)[0], 300)
-    host = parsed.hostname or ""
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    try:
-        port = f":{parsed.port}" if parsed.port else ""
-    except ValueError:
-        port = ""
-    return urlunsplit((parsed.scheme, f"{host}{port}", parsed.path, "", ""))
+    return _provider_public_urls.public_ai_base_url(value)
 
 
 def masked_url_for_status(value: Any) -> str:
-    raw = str(value or "").strip()
-    parsed = urlsplit(raw)
-    if not parsed.scheme or not parsed.netloc:
-        return bounded_text(raw.split("?", 1)[0].split("#", 1)[0], 300)
-    host = parsed.hostname or ""
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    try:
-        port = f":{parsed.port}" if parsed.port else ""
-    except ValueError:
-        port = ""
-    username = "****@" if parsed.username or parsed.password else ""
-    return urlunsplit((parsed.scheme, f"{username}{host}{port}", parsed.path, "", ""))
+    return _provider_public_urls.masked_url_for_status(value)
 
 
 def validate_ai_proxy_url(value: Any) -> str:
-    proxy_url = str(value or "").strip()
-    if not proxy_url:
-        return ""
-    parsed = urlsplit(proxy_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="AI proxy URL must be an http(s) URL")
-    if parsed.query or parsed.fragment:
-        raise HTTPException(status_code=400, detail="AI proxy URL must not include query strings or fragments")
-    return proxy_url
+    return _provider_configuration_validation.validate_ai_proxy_url(value)
 
 
 def ai_proxy_url_from_environment() -> tuple[str, str]:
@@ -8347,30 +8309,15 @@ def ai_urlopen(request: urllib.request.Request, settings: dict[str, Any], *, tim
 
 
 def validate_ai_timeout(value: Any) -> float:
-    try:
-        timeout = float(value)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="AI timeout must be a number") from None
-    if not 0.5 <= timeout <= 30.0:
-        raise HTTPException(status_code=400, detail="AI timeout must be between 0.5 and 30 seconds")
-    return round(timeout, 3)
+    return _provider_configuration_validation.validate_ai_timeout(value)
 
 
 def validate_image_generation_timeout(value: Any) -> float:
-    try:
-        timeout = float(value)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Image generation timeout must be a number") from None
-    if not 10.0 <= timeout <= 300.0:
-        raise HTTPException(status_code=400, detail="Image generation timeout must be between 10 and 300 seconds")
-    return round(timeout, 3)
+    return _provider_configuration_validation.validate_image_generation_timeout(value)
 
 
 def validate_ai_key_env(value: Any) -> str:
-    key_env = str(value or "").strip()
-    if key_env and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key_env):
-        raise HTTPException(status_code=400, detail="AI api_key_env must be a valid environment variable name")
-    return key_env
+    return _provider_configuration_validation.validate_ai_key_env(value)
 
 
 def load_ai_local_config() -> dict[str, Any]:

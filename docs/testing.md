@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_provider_configuration_policy.py` runs 19 offline groups, preserving
+12 original groups and 17 expanded original-body groups verified on Windows/Linux. Tests cover
+eager default lookups, provider/model/URL/timeout errors, public URL redaction, callback capture
+and independent services. Inputs are synthetic and external operations are forbidden.
+
 `python scripts/smoke_legacy_provider_settings.py` runs 23 offline groups, preserving
 12 original groups and 21 expanded original-body groups verified on Windows/Linux. Coverage
 includes distinct JSON/image key precedence, environment refresh, dynamic exception matching,
