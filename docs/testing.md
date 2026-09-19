@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_provider_key_registry.py` runs 19 offline groups: the original 12
+contracts, callback capture and refresh, six ordinary/prior/missing capture traces, zero
+constructor reads and independent compositions. It verifies environment precedence, legacy
+compatibility, deduplication, safe public fields and filter object identity using synthetic keys.
+
 `python scripts/smoke_provider_configuration_policy.py` runs 19 offline groups, preserving
 12 original groups and 17 expanded original-body groups verified on Windows/Linux. Tests cover
 eager default lookups, provider/model/URL/timeout errors, public URL redaction, callback capture

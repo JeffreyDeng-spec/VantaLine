@@ -1,7 +1,9 @@
 {
-  "version": 62,
+  "version": 63,
   "sources": [
     "server.py",
+    "model_providers/key_registry_ports.py",
+    "model_providers/key_registry.py",
     "model_providers/configuration_ports.py",
     "model_providers/configuration_defaults.py",
     "model_providers/configuration_validation.py",
