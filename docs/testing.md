@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_agent_invocation.py` runs 26 offline groups: 12 original behavior
+contracts, 12 capture/failure/accounting checks and two construction/isolation checks. Simulated
+responses exercise the existing bound provider and accounting flow; a ledger failure must not
+repeat a successful request. Request identity is checked across two contexts. No real provider
+request, paid inference, production record or physical PLC is used.
+
 `python scripts/smoke_agent_settings.py` exercises 21 synthetic offline groups: 12 original
 contracts, seven evaluation-order/failure checks and two construction/isolation checks. Two live
 compositions are called first, second, first to detect shared state. Tests use private temporary

@@ -20997,23 +20997,44 @@ def public_agent_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     return _agent_settings_projection.public_agent_config(config)
 
 
+from .agent.protocol_policy import AgentProtocolPolicy as _AgentProtocolPolicy
+from .agent.chat_transport import AgentChatTransport as _AgentChatTransport
+from .agent.connection_discovery import AgentConnectionDiscovery as _AgentConnectionDiscovery
+from .agent.recommendation import AgentRecommendation as _AgentRecommendation
+from .agent.invocation_ports import AgentProtocolRuntime as _AgentProtocolRuntime, AgentInvocationSettings as _AgentInvocationSettings, AgentHttpIO as _AgentHttpIO, AgentInvocationCodec as _AgentInvocationCodec, AgentChatCalls as _AgentChatCalls, AgentModelCalls as _AgentModelCalls, AgentResponseParsing as _AgentResponseParsing, AgentRecommendationInputs as _AgentRecommendationInputs, AgentRecommendationCalls as _AgentRecommendationCalls
+_agent_protocol_policy = _AgentProtocolPolicy(
+    _AgentProtocolRuntime(base64_encode=lambda: base64.b64encode, cursor_base_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL),
+)
+_agent_chat_transport = _AgentChatTransport(
+    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
+    _AgentHttpIO(request=lambda: urllib.request.Request, open=lambda: urllib.request.urlopen, http_error=lambda: urllib.error.HTTPError, url_error=lambda: urllib.error.URLError, error_message=lambda: agent_http_error_message, text=lambda: bounded_text),
+    _AgentInvocationCodec(loads=lambda: json.loads, dumps=lambda: json.dumps),
+    _AgentChatCalls(chat_url=lambda: openai_compatible_chat_url, legacy_chat=lambda: agent_openai_chat_completion, generate=lambda: generate_provider_json_with_fallback),
+)
+_agent_connection_discovery = _AgentConnectionDiscovery(
+    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
+    _AgentHttpIO(request=lambda: urllib.request.Request, open=lambda: urllib.request.urlopen, http_error=lambda: urllib.error.HTTPError, url_error=lambda: urllib.error.URLError, error_message=lambda: agent_http_error_message, text=lambda: bounded_text),
+    _AgentInvocationCodec(loads=lambda: json.loads, dumps=lambda: json.dumps),
+    _AgentModelCalls(models_url=lambda: openai_compatible_models_url, auth_headers=lambda: cursor_auth_headers, cursor_url=lambda: cursor_api_url, options=lambda: agent_model_options_from_items, available=lambda: cursor_model_available, fetch=lambda: fetch_openai_compatible_model_options, cursor_test=lambda: test_cursor_agent_connection, openai_test=lambda: test_openai_agent_connection, legacy_chat=lambda: agent_openai_chat_completion),
+)
+_agent_recommendation = _AgentRecommendation(
+    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
+    _AgentInvocationCodec(loads=lambda: json.loads, dumps=lambda: json.dumps),
+    _AgentResponseParsing(substitute=lambda: re.sub, search=lambda: re.search, dotall=lambda: re.DOTALL),
+    _AgentRecommendationInputs(config=lambda: load_config, selected=lambda: selected_accessories, material=lambda: accessory_material_type, background=lambda: selected_background_set_id, current_user=lambda: _request_user.get, selection_error=lambda: HTTPException),
+    _AgentRecommendationCalls(rule=lambda: rule_recommendation, chat=lambda: agent_chat_completion, parse=lambda: parse_agent_json, clamp=lambda: clamp_recommend_params),
+)
+
 def openai_compatible_chat_url(base_url: str) -> str:
-    normalized = str(base_url or "").strip().rstrip("/")
-    if normalized.endswith("/chat/completions"):
-        return normalized
-    return f"{normalized}/chat/completions"
+    return _agent_protocol_policy.openai_compatible_chat_url(base_url)
 
 
 def openai_compatible_models_url(base_url: str) -> str:
-    normalized = str(base_url or "").strip().rstrip("/")
-    if normalized.endswith("/chat/completions"):
-        normalized = normalized[: -len("/chat/completions")]
-    return f"{normalized}/models"
+    return _agent_protocol_policy.openai_compatible_models_url(base_url)
 
 
 def agent_http_error_message(prefix: str, exc: urllib.error.HTTPError) -> str:
-    detail = exc.read().decode("utf-8", errors="replace").strip()
-    return f"{prefix}: HTTP {exc.code} {bounded_text(detail, 180)}"
+    return _agent_chat_transport.agent_http_error_message(prefix, exc)
 
 
 def agent_openai_chat_completion(
@@ -21022,288 +21043,55 @@ def agent_openai_chat_completion(
     *,
     require_connected: bool = True,
 ) -> str:
-    config = config or load_agent_config()
-    if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) != AGENT_PROVIDER_OPENAI_COMPATIBLE:
-        raise RuntimeError("当前 Agent Base URL 识别为非 OpenAI 兼容接口")
-    if is_cursor_base_url(config.get("base_url", "")):
-        raise RuntimeError("检测到 Cursor Base URL；Cursor API 不是 Chat Completions 接口")
-    if not agent_required_fields_present(config):
-        raise RuntimeError("Agent API is not configured")
-    if require_connected and not agent_connected(config):
-        raise RuntimeError("Agent API 已配置但尚未测试成功")
-    payload = {
-        "model": config["model"],
-        "messages": messages,
-        "temperature": 0.2,
-    }
-    request = urllib.request.Request(
-        openai_compatible_chat_url(config["base_url"]),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config['api_key']}",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=config["timeout_seconds"]) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(agent_http_error_message("Agent API 请求失败", exc)) from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Agent API 请求失败:{bounded_text(exc, 180)}") from exc
-    content = (((body.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
-    if not content:
-        raise RuntimeError("Agent API returned an empty response")
-    return content
+    return _agent_chat_transport.agent_openai_chat_completion(messages, config, require_connected=require_connected)
 
 
 def agent_chat_completion(messages: list[dict[str, str]], config: dict[str, Any] | None = None) -> str:
-    config = config or load_agent_config()
-    if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) == AGENT_PROVIDER_CURSOR:
-        raise RuntimeError(AGENT_CURSOR_RECOMMENDATION_MESSAGE)
-    if config.get("profile_id"):
-        if not agent_connected(config):
-            raise RuntimeError("Training assistant connection is not verified")
-        settings = dict(config)
-        if settings["provider"] == "openai_compatible":
-            settings["base_url"] = openai_compatible_chat_url(settings["base_url"])
-        system = "\n".join(m["content"] for m in messages if m["role"] == "system")
-        content = [{"type":"text", "text":m["content"]} for m in messages if m["role"] != "system"]
-        result, _, _ = generate_provider_json_with_fallback(settings, system, content, max_tokens=1400, max_attempts=1)
-        return json.dumps(result, ensure_ascii=False)
-    return agent_openai_chat_completion(messages, config, require_connected=True)
+    return _agent_chat_transport.agent_chat_completion(messages, config)
 
 
 def cursor_auth_headers(api_key: str) -> dict[str, str]:
-    token = base64.b64encode(f"{api_key}:".encode("utf-8")).decode("ascii")
-    return {"Authorization": f"Basic {token}"}
+    return _agent_protocol_policy.cursor_auth_headers(api_key)
 
 
 def cursor_api_url(base_url: str, path: str) -> str:
-    normalized = str(base_url or AGENT_CURSOR_DEFAULT_BASE_URL).strip().rstrip("/")
-    return f"{normalized}/{path.lstrip('/')}"
+    return _agent_protocol_policy.cursor_api_url(base_url, path)
 
 
 def cursor_model_available(model: str, items: list[dict[str, Any]]) -> bool:
-    selected = str(model or "").strip().lower()
-    if not selected or selected in {"auto", "default"}:
-        return True
-    for item in items:
-        ids = [str(item.get("id") or "").lower()]
-        ids.extend(str(alias or "").lower() for alias in item.get("aliases") or [])
-        if selected in ids:
-            return True
-    return False
+    return _agent_protocol_policy.cursor_model_available(model, items)
 
 
 def fetch_openai_compatible_model_options(config: dict[str, Any]) -> list[dict[str, str]]:
-    request = urllib.request.Request(
-        openai_compatible_models_url(config["base_url"]),
-        headers={"Authorization": f"Bearer {config['api_key']}"},
-        method="GET",
-    )
-    with urllib.request.urlopen(request, timeout=config["timeout_seconds"]) as response:
-        body = json.loads(response.read().decode("utf-8"))
-    items = body.get("data") if isinstance(body, dict) else []
-    return agent_model_options_from_items(items)
+    return _agent_connection_discovery.fetch_openai_compatible_model_options(config)
 
 
 def test_cursor_agent_connection(config: dict[str, Any]) -> dict[str, Any]:
-    request = urllib.request.Request(
-        cursor_api_url(config["base_url"], "/v1/models"),
-        headers=cursor_auth_headers(config["api_key"]),
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=config["timeout_seconds"]) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(agent_http_error_message("Cursor API 请求失败", exc)) from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Cursor API 请求失败:{bounded_text(exc, 180)}") from exc
-    items = body.get("items") if isinstance(body, dict) else []
-    models = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
-    model_options = agent_model_options_from_items(models, prepend=[{"id": "auto", "label": "auto · Cursor 默认模型"}])
-    model = str(config.get("model") or "auto").strip() or "auto"
-    available = cursor_model_available(model, models)
-    if model.lower() in {"auto", "default"}:
-        model_message = "auto 将使用 Cursor 默认模型"
-    elif available:
-        model_message = f"模型 {model} 在 Cursor 模型列表中"
-    else:
-        model_message = f"模型 {model} 未出现在 Cursor 模型列表中，已切换为 auto"
-        model = "auto"
-    return {
-        "message": f"Cursor 连接成功，可用模型 {len(models)} 个；{model_message}。",
-        "last_model_count": len(models),
-        "model": model,
-        "model_options": model_options,
-        "model_available": available,
-    }
+    return _agent_connection_discovery.test_cursor_agent_connection(config)
 
 
 def test_openai_agent_connection(config: dict[str, Any]) -> dict[str, Any]:
-    model_options: list[dict[str, str]] = []
-    models_warning = ""
-    try:
-        model_options = fetch_openai_compatible_model_options(config)
-    except urllib.error.HTTPError as exc:
-        models_warning = agent_http_error_message("模型列表获取失败", exc)
-    except urllib.error.URLError as exc:
-        models_warning = f"模型列表获取失败:{bounded_text(exc, 180)}"
-    selected_model = str(config.get("model") or "").strip()
-    if not selected_model and model_options:
-        selected_model = model_options[0]["id"]
-    if not selected_model:
-        if models_warning:
-            raise RuntimeError(f"{models_warning}；且 Model 为空，无法测试 /chat/completions。")
-        raise RuntimeError("未获取到可用模型，且 Model 为空，无法测试 /chat/completions。")
-    test_config = {**config, "model": selected_model}
-    content = agent_openai_chat_completion(
-        [{"role": "user", "content": "回复 ok"}],
-        test_config,
-        require_connected=False,
-    )
-    suffix = f"；{models_warning}" if models_warning else ""
-    return {
-        "message": f"连接成功，模型 {selected_model} 已响应:{content[:60]}{suffix}",
-        "last_model_count": len(model_options),
-        "model": selected_model,
-        "model_options": model_options,
-    }
+    return _agent_connection_discovery.test_openai_agent_connection(config)
 
 
 def test_agent_connection(config: dict[str, Any]) -> dict[str, Any]:
-    provider = normalize_agent_provider(config.get("provider"), config.get("base_url", ""))
-    if provider == AGENT_PROVIDER_CURSOR:
-        return test_cursor_agent_connection(config)
-    return test_openai_agent_connection(config)
+    return _agent_connection_discovery.test_agent_connection(config)
 
 
 def parse_agent_json(content: str) -> dict[str, Any]:
-    text = content.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if not match:
-        raise RuntimeError("Agent response did not contain JSON")
-    return json.loads(match.group(0))
+    return _agent_recommendation.parse_agent_json(content)
 
 
 def rule_recommendation(stage: str, selected: list[dict[str, Any]], sample_count: int | None = None) -> dict[str, Any]:
-    accessory_count = max(1, len(selected))
-    has_text = any(accessory_material_type(item) == "text" for item in selected)
-    train_mode = "yolo_ocr" if has_text else "yolo"
-    if stage == "samples":
-        recommended_samples = max(200, min(2000, accessory_count * 200))
-        return {
-            "stage": stage,
-            "params": {
-                "sample_count": recommended_samples,
-                "train_mode": train_mode,
-                "background_set_id": selected_background_set_id(None, _request_user.get()),
-            },
-            "reason": f"{accessory_count} 个配件,按每个配件约 200 张合成样本估算,共 {recommended_samples} 张。",
-        }
-    effective_samples = max(1, int(sample_count or accessory_count * 200))
-    if effective_samples < 300:
-        epochs = 25
-    elif effective_samples < 800:
-        epochs = 40
-    else:
-        epochs = 60
-    return {
-        "stage": "training",
-        "params": {
-            "epochs": epochs,
-            "image_size": 640,
-            "train_mode": train_mode,
-        },
-        "reason": f"约 {effective_samples} 张样本,推荐 {epochs} 个 epoch、640px 分辨率{'、附带 OCR' if has_text else ''}。",
-    }
+    return _agent_recommendation.rule_recommendation(stage, selected, sample_count)
 
 
 def clamp_recommend_params(stage: str, params: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
-    result = dict(fallback)
-    if stage == "samples":
-        try:
-            result["sample_count"] = max(50, min(20000, int(params.get("sample_count", result["sample_count"]))))
-        except (TypeError, ValueError):
-            pass
-    else:
-        try:
-            result["epochs"] = max(1, min(500, int(params.get("epochs", result["epochs"]))))
-        except (TypeError, ValueError):
-            pass
-        try:
-            result["image_size"] = max(320, min(1280, int(params.get("image_size", result["image_size"]))))
-        except (TypeError, ValueError):
-            pass
-    if str(params.get("train_mode") or "") in {"yolo", "yolo_ocr"}:
-        result["train_mode"] = str(params["train_mode"])
-    return result
+    return _agent_recommendation.clamp_recommend_params(stage, params, fallback)
 
 
 def agent_recommendation(stage: str, accessory_ids: list[str], sample_count: int | None = None) -> dict[str, Any]:
-    config = load_config()
-    try:
-        selected = selected_accessories(config, accessory_ids)
-    except HTTPException:
-        selected = []
-    rules = rule_recommendation(stage, selected, sample_count)
-    agent_config = load_agent_config()
-    if normalize_agent_provider(agent_config.get("provider"), agent_config.get("base_url", "")) == AGENT_PROVIDER_CURSOR:
-        if agent_connected(agent_config):
-            return {
-                **rules,
-                "source": "rules",
-                "reason": f"{AGENT_CURSOR_RECOMMENDATION_MESSAGE}。{rules['reason']}",
-                "agent_error": AGENT_CURSOR_RECOMMENDATION_MESSAGE,
-            }
-        return {**rules, "source": "rules"}
-    if not agent_recommendation_supported(agent_config):
-        return {**rules, "source": "rules"}
-    summary = [
-        {
-            "name": item.get("name"),
-            "material_type": accessory_material_type(item),
-            "source_image_count": len(item.get("source_files") or []),
-        }
-        for item in selected
-    ]
-    prompt = {
-        "stage": stage,
-        "accessories": summary,
-        "sample_count": sample_count,
-        "defaults": rules["params"],
-        "constraints": {
-            "sample_count": [50, 20000],
-            "epochs": [1, 500],
-            "image_size": [320, 1280],
-            "train_mode": ["yolo", "yolo_ocr"],
-        },
-    }
-    system = (
-        "你是工业视觉质检平台的训练规划 Agent。根据配件信息推荐训练参数。"
-        "只输出一个 JSON 对象,不要输出其他文本。字段:"
-        '{"sample_count": int, "epochs": int, "image_size": int, "train_mode": "yolo"|"yolo_ocr", "reason": "一句话中文理由"}。'
-        "只需要给出与 stage 相关的字段。"
-    )
-    try:
-        content = agent_chat_completion(
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-            ],
-            agent_config,
-        )
-        parsed = parse_agent_json(content)
-        params = clamp_recommend_params(stage, parsed, rules["params"])
-        reason = str(parsed.get("reason") or rules["reason"]).strip()[:200]
-        return {"stage": rules["stage"], "params": params, "reason": reason, "source": "agent"}
-    except Exception as exc:  # noqa: BLE001 - 外部 API 任意失败都应回退规则引擎
-        return {**rules, "source": "rules", "agent_error": str(exc)[:200]}
+    return _agent_recommendation.agent_recommendation(stage, accessory_ids, sample_count)
 
 
 @app.get("/api/agent/config")
