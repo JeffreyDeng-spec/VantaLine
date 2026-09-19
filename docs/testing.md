@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_legacy_provider_settings.py` runs 23 offline groups, preserving
+12 original groups and 21 expanded original-body groups verified on Windows/Linux. Coverage
+includes distinct JSON/image key precedence, environment refresh, dynamic exception matching,
+nested callback capture and independent compositions. All keys and settings are synthetic.
+
 `python scripts/smoke_public_status.py` runs 18 offline groups. All 12 original groups and
 16 expanded original-body groups passed on Windows/Linux before extraction. Tests preserve
 field filtering, admin identity, permission short-circuiting, sanitizer evaluation order and
