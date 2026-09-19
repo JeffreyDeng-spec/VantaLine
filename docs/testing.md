@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_agent_pipeline_decisions.py` exercises 21 offline groups: 13 original
+behavior contracts, six evaluation-order/failure checks and two construction/isolation checks.
+Synthetic snapshot scopes, task dictionaries and model responses cover retained bindings and
+exception boundaries. The phase3d source contract now reads actual implementation methods and
+the current relative workspace route; its existing assertions remain. This source check does
+not claim full pipeline, paid model or physical-device commissioning.
+
 `python scripts/smoke_agent_settings_api.py` covers 17 offline groups: ten original HTTP
 and handler contracts, five callback/failure-order checks and two construction/isolation checks.
 Tests use the actual registered route objects in an isolated FastAPI app, without production

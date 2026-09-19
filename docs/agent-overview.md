@@ -21,7 +21,7 @@ The browser owns camera capture and physical serial I/O. FastAPI authenticates, 
 - `local_inspection_service/server.py`: API composition, authentication/permissions, detection orchestration, PLC station leases/dispatches.
 - `local_inspection_service/frontend/src/`: React UI; `features/plc/webSerialClient.ts` is the physical Web Serial state machine.
 - `local_inspection_service/model_providers/`: OpenAI-compatible, Gemini, Agnes and Qwen image transports, provider selection/retry orchestration, legacy migration settings, configuration policy, key registry, local secret material, explicit capabilities, shared error types and payload/error parsing without importing the Web application.
-- `local_inspection_service/agent/`: explicit Agent settings HTTP handlers, settings policy, invocation, connection discovery and parameter recommendation services.
+- `local_inspection_service/agent/`: explicit Agent settings HTTP, invocation, conversation, pipeline decision and recommendation services.
 - `local_inspection_service/auth/status.py`: permission-aware public status and configuration projections with explicit dependencies.
 - `local_inspection_service/storage/`: persistent runtime repositories and PostgreSQL coordination.
 - `local_inspection_service/plc_web_serial.py` and `release/plc-protocol.json`: logical-address/frame and release protocol contract.

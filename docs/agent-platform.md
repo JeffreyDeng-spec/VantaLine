@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Agent conversation, context and decision helpers now have explicit service boundaries.
+Original intent rules, prompts, model snapshots and fallback scopes are retained. No browser
+capability, task advancement, worker topology or platform acceptance status is changed.
+
 Agent settings HTTP handlers use explicit dependencies while retaining administrator guards,
 retired-endpoint409 responses and recommendation inputs. No Agent command, browser action,
 model binding or platform acceptance status changes.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 import os
 import sys
 import tempfile
@@ -130,7 +131,7 @@ def assert_react_pipeline_route() -> None:
     styles = (REPO_ROOT / "local_inspection_service" / "frontend" / "src" / "styles" / "global.css").read_text(encoding="utf-8")
     server = (REPO_ROOT / "local_inspection_service" / "server.py").read_text(encoding="utf-8")
     expected_shell = {
-        "pipeline route": 'path="/pipeline"',
+        "pipeline route": 'path="pipeline"',
         "pipeline component": "TrainingPipelinePage",
         "pipeline placeholder exclusion": '"pipeline"',
     }
@@ -221,7 +222,23 @@ def assert_react_pipeline_route() -> None:
         "worker watcher startup": "start_worker_training_watcher",
         "worker request retry": "def windows_worker_request_with_retry",
     }
-    missing_server = [label for label, snippet in expected_server.items() if snippet not in server]
+    # Source contracts follow the actual class methods, not application adapters.
+    implementation_methods = {
+        "gemini image provider method": ("model_providers/gemini_transport.py", "GeminiAiProvider", "generate_image"),
+        "decision brain": ("agent/decision_flow.py", "AgentDecisionFlow", "agent_pipeline_decide"),
+        "decision normalizer": ("agent/decision_policy.py", "AgentDecisionPolicy", "normalize_agent_pipeline_decision"),
+        "rule fallback decision": ("agent/decision_policy.py", "AgentDecisionPolicy", "agent_pipeline_rule_decision"),
+        "conversation persistence": ("agent/conversation.py", "AgentConversation", "agent_mcp_append_conversation"),
+    }
+    implementation_sources = {}
+    for label, (relative_path, class_name, method_name) in implementation_methods.items():
+        source = (REPO_ROOT / "local_inspection_service" / relative_path).read_text(encoding="utf-8")
+        classes = [node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name == class_name]
+        assert len(classes) == 1, f"Missing implementation class: {class_name}"
+        methods = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == method_name]
+        assert len(methods) == 1, f"Missing implementation method: {class_name}.{method_name}"
+        implementation_sources[label] = ast.get_source_segment(source, methods[0])
+    missing_server = [label for label, snippet in expected_server.items() if snippet not in implementation_sources.get(label, server)]
     if missing_server:
         raise AssertionError("Backend Agent/MCP preview skeleton missing: " + ", ".join(missing_server))
     forbidden = ["<pre", "JSON.stringify("]
