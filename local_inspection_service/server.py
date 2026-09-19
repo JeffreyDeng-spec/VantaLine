@@ -12489,379 +12489,112 @@ class QwenImageProvider(_QwenImageProvider):
         )
 
 
+from .model_providers.orchestration_ports import (
+    ProviderFactories, ProviderKeys, RetryErrors, ImageDelay, FailureEvidence,
+    JsonProviderSelection, JsonRetryEvidence, JsonRetryTiming, ImageRetryCalls, ImageRetryTiming,
+)
+from .model_providers.selection import ProviderSelection, ProviderKeySelection
+from .model_providers.retry_policy import ProviderRetryPolicy, ProviderFailureEvidence
+from .model_providers.retry_flow import JsonRetryFlow, ImageRetryFlow
+
+_provider_selection = ProviderSelection(ProviderFactories(
+    lambda: GeminiAiProvider, lambda: OpenAICompatibleAiProvider,
+    lambda: AgnesImageProvider, lambda: QwenImageProvider, lambda: AiProviderConfigError,
+    lambda: ai_detection_settings, lambda: ai_provider_from_settings,
+))
+_provider_keys = ProviderKeySelection(ProviderKeys(
+    lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_key_candidates,
+))
+_provider_retry_errors = RetryErrors(
+    lambda: AiProviderError, lambda: AiProviderNonRetryableError,
+    lambda: AiProviderOverloaded, lambda: AiProviderTimeout,
+)
+_provider_retry_policy = ProviderRetryPolicy(_provider_retry_errors, ImageDelay(
+    lambda: AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS, lambda: AUTO_OPTIMIZE_MASK_RETRY_BASE_SECONDS,
+    lambda: AUTO_OPTIMIZE_MASK_RETRY_MAX_SECONDS, lambda: random.uniform,
+))
+_provider_failure_evidence = ProviderFailureEvidence(FailureEvidence(lambda: AiProviderError, lambda: GeminiAiProvider))
+_provider_json_retry = JsonRetryFlow(
+    JsonProviderSelection(lambda: ai_settings_match_runtime, lambda: ai_provider,
+                          lambda: ai_provider_from_settings, lambda: GeminiAiProvider,
+                          lambda: rotate_ai_provider_key),
+    JsonRetryEvidence(lambda: require_ai_json_object, lambda: provider_failure_usage_metadata,
+                      lambda: provider_error_is_retryable, lambda: provider_error_needs_repair_prompt,
+                      lambda: annotate_provider_failure, lambda: bounded_text),
+    _provider_retry_errors,
+    JsonRetryTiming(lambda: AI_PROVIDER_MAX_ATTEMPTS, lambda: AI_PROVIDER_RETRY_BACKOFF_SECONDS,
+                    lambda: random.uniform, lambda: time.sleep),
+)
+_provider_image_retry = ImageRetryFlow(
+    ImageRetryCalls(lambda: image_generation_provider_from_settings,
+                    lambda: _auto_optimize_image_request_semaphore, lambda: image_provider_error_is_retryable,
+                    lambda: bounded_text, lambda: auto_optimize_retry_delay_seconds),
+    _provider_retry_errors,
+    ImageRetryTiming(lambda: AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS, lambda: time.time, lambda: time.sleep),
+)
+
+
 def ai_provider_from_settings(settings: dict[str, Any]) -> OpenAICompatibleAiProvider | GeminiAiProvider:
-    provider = str(settings.get("provider") or "").strip()
-    if provider == "gemini":
-        return GeminiAiProvider(settings)
-    if provider in {"qwen", "doubao", "openai_compatible"}:
-        return OpenAICompatibleAiProvider(settings)
-    raise AiProviderConfigError(str(settings.get("message") or f"Unsupported AI provider: {provider or 'missing'}"))
+    return _provider_selection.ai_provider_from_settings(settings)
 
 
 def ai_provider() -> OpenAICompatibleAiProvider | GeminiAiProvider:
-    return ai_provider_from_settings(ai_detection_settings())
+    return _provider_selection.ai_provider()
 
 
 def image_generation_provider_from_settings(settings: dict[str, Any]) -> GeminiAiProvider | AgnesImageProvider | QwenImageProvider:
-    provider = str(settings.get("provider") or "").strip()
-    if provider == "gemini":
-        return GeminiAiProvider(settings)
-    if provider == "agnes":
-        return AgnesImageProvider(settings)
-    if provider == "qwen_image":
-        return QwenImageProvider(settings)
-    raise AiProviderConfigError(str(settings.get("message") or f"Unsupported image generation provider: {provider or 'missing'}"))
+    return _provider_selection.image_generation_provider_from_settings(settings)
 
 
 def ai_settings_match_runtime(settings: dict[str, Any]) -> bool:
-    if settings.get("profile_id"):
-        return False  # Always use the task's frozen object, never the current selection.
-    runtime = ai_detection_settings()
-    for key in ("provider", "model", "base_url", "api_key", "timeout_seconds", "proxy_url_raw"):
-        if settings.get(key) != runtime.get(key):
-            return False
-    return True
+    return _provider_selection.ai_settings_match_runtime(settings)
 
 
 def ai_provider_key_candidates(settings: dict[str, Any]) -> list[dict[str, str]]:
-    provider = str(settings.get("provider") or "").strip().lower()
-    raw_candidates = settings.get("api_key_candidates") if isinstance(settings.get("api_key_candidates"), list) else []
-    candidates: list[dict[str, str]] = []
-    seen: set[str] = set()
-
-    def add(candidate: dict[str, Any]) -> None:
-        key = str(candidate.get("key") or "").strip()
-        if not key or key in seen:
-            return
-        candidate_provider = str(candidate.get("provider") or provider).strip().lower()
-        if provider and candidate_provider and candidate_provider != provider:
-            return
-        seen.add(key)
-        candidates.append(
-            {
-                "id": str(candidate.get("id") or secret_key_item_id(candidate.get("env") or "", key)),
-                "label": bounded_text(candidate.get("label") or candidate.get("env") or "AI API Key", 80),
-                "env": str(candidate.get("env") or ""),
-                "provider": provider,
-                "key": key,
-            }
-        )
-
-    add(
-        {
-            "id": settings.get("active_key_id") or "",
-            "label": settings.get("key_source_name") or "active",
-            "env": settings.get("key_source_name") or "",
-            "provider": provider,
-            "key": settings.get("api_key") or "",
-        }
-    )
-    for candidate in raw_candidates:
-        if isinstance(candidate, dict):
-            add(candidate)
-    return candidates
+    return _provider_keys.ai_provider_key_candidates(settings)
 
 
 def rotate_ai_provider_key(settings: dict[str, Any], used_key_ids: set[str]) -> dict[str, Any] | None:
-    candidates = ai_provider_key_candidates(settings)
-    for candidate in candidates:
-        candidate_id = str(candidate.get("id") or "")
-        if candidate_id and candidate_id in used_key_ids:
-            continue
-        return {
-            **settings,
-            "api_key": candidate["key"],
-            "active_key_id": candidate_id,
-            "key_source": "env",
-            "key_source_name": candidate.get("env") or candidate.get("label") or "api_key_candidate",
-        }
-    return None
+    return _provider_keys.rotate_ai_provider_key(settings, used_key_ids)
 
 
 def require_ai_json_object(parsed: Any) -> dict[str, Any]:
-    if not isinstance(parsed, dict):
-        raise AiProviderError("AI provider returned non-object JSON")
-    return parsed
+    return _provider_failure_evidence.require_ai_json_object(parsed)
 
 
 def provider_error_is_retryable(exc: AiProviderError) -> bool:
-    if isinstance(exc, AiProviderNonRetryableError):
-        return False
-    status = getattr(exc, "http_status", None)
-    if isinstance(exc, AiProviderOverloaded):
-        return status != 429
-    if isinstance(exc, AiProviderTimeout):
-        return True
-    text = str(exc).lower()
-    non_retryable_markers = (
-        "not configured",
-        "missing ai provider api key",
-        "missing api key",
-        "unsupported ai provider",
-        "invalid provider",
-        "http 400",
-        "http 401",
-        "http 403",
-        "http 404",
-        "http 429",
-    )
-    return not any(marker in text for marker in non_retryable_markers)
+    return _provider_retry_policy.provider_error_is_retryable(exc)
 
 
 def image_provider_error_is_retryable(exc: AiProviderError) -> bool:
-    if isinstance(exc, AiProviderNonRetryableError):
-        return False
-    if isinstance(exc, (AiProviderOverloaded, AiProviderTimeout)):
-        return True
-    status = getattr(exc, "http_status", None)
-    if status in {408, 429, 500, 502, 503, 504}:
-        return True
-    text = str(exc).lower()
-    retryable_markers = ("timed out", "timeout", "temporarily", "overloaded", "connection reset", "remote end closed")
-    non_retryable_markers = ("not configured", "missing api key", "http 400", "http 401", "http 403", "http 404")
-    return any(marker in text for marker in retryable_markers) and not any(marker in text for marker in non_retryable_markers)
+    return _provider_retry_policy.image_provider_error_is_retryable(exc)
 
 
-def auto_optimize_retry_delay_seconds(attempt: int, exc: AiProviderError | None = None) -> float:
-    if AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS <= 1:
-        return 0.0
-    if (
-        isinstance(exc, AiProviderOverloaded)
-        and (getattr(exc, "http_status", None) == 503 or "HTTP 503" in str(exc))
-    ):
-        return 3.0
-    base = AUTO_OPTIMIZE_MASK_RETRY_BASE_SECONDS
-    if base <= 0:
-        return 0.0
-    delay = min(AUTO_OPTIMIZE_MASK_RETRY_MAX_SECONDS, base * (3 ** max(0, attempt - 1)))
-    jitter = random.uniform(0, min(1.0, delay * 0.2))
-    return round(delay + jitter, 3)
+def auto_optimize_retry_delay_seconds(attempt: int, exc: AiProviderError | None=None) -> float:
+    return _provider_retry_policy.auto_optimize_retry_delay_seconds(attempt, exc)
 
 
-def auto_optimize_generate_image_with_retry(
-    settings: dict[str, Any],
-    model: str,
-    prompt: str,
-    user_content: list[dict[str, Any]],
-    *,
-    system_prompt: str = "",
-) -> dict[str, Any]:
-    errors: list[dict[str, Any]] = []
-    last_exc: AiProviderError | None = None
-    for attempt in range(1, AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS + 1):
-        try:
-            provider = image_generation_provider_from_settings(settings)
-            with _auto_optimize_image_request_semaphore:
-                result = provider.generate_image(prompt, user_content, model=model, system_prompt=system_prompt)
-            result["attempts"] = attempt
-            result["retry_count"] = max(0, attempt - 1)
-            result["previous_errors"] = errors[-3:]
-            return result
-        except AiProviderError as exc:
-            last_exc = exc
-            error_item = {
-                "attempt": attempt,
-                "http_status": getattr(exc, "http_status", None),
-                "retryable": image_provider_error_is_retryable(exc),
-                "message": bounded_text(str(exc), 220),
-                "created_at": int(time.time()),
-            }
-            errors.append(error_item)
-            if not error_item["retryable"] or attempt >= AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS:
-                exc.attempts = attempt
-                exc.retry_count = max(0, attempt - 1)
-                exc.previous_errors = [str(item.get("message") or "") for item in errors[-3:]]
-                raise
-            time.sleep(auto_optimize_retry_delay_seconds(attempt, exc))
-    if last_exc:
-        raise last_exc
-    raise AiProviderError("Image provider failed without an explicit error")
+def auto_optimize_generate_image_with_retry(settings: dict[str, Any], model: str, prompt: str, user_content: list[dict[str, Any]], *, system_prompt: str='') -> dict[str, Any]:
+    return _provider_image_retry.auto_optimize_generate_image_with_retry(settings, model, prompt, user_content, system_prompt=system_prompt)
 
 
 def provider_error_needs_repair_prompt(exc: AiProviderError) -> bool:
-    text = str(exc).lower()
-    return "json" in text or "response shape" in text or "non-object" in text
+    return _provider_failure_evidence.provider_error_needs_repair_prompt(exc)
 
 
-def provider_failure_usage_metadata(
-    provider: OpenAICompatibleAiProvider | GeminiAiProvider | None,
-    exc: AiProviderError,
-) -> dict[str, Any]:
-    if isinstance(provider, GeminiAiProvider) and provider.last_usage_metadata:
-        return dict(provider.last_usage_metadata)
-    return dict(getattr(exc, "usage_metadata", {}) or {})
+def provider_failure_usage_metadata(provider: OpenAICompatibleAiProvider | GeminiAiProvider | None, exc: AiProviderError) -> dict[str, Any]:
+    return _provider_failure_evidence.provider_failure_usage_metadata(provider, exc)
 
 
-def annotate_provider_failure(
-    exc: AiProviderError,
-    *,
-    attempt: int,
-    errors: list[str],
-    failed_usage_metadata: list[dict[str, Any]],
-    usage_metadata: dict[str, Any] | None = None,
-    fallback_model: str = "",
-    fallback_reason: str = "",
-) -> AiProviderError:
-    if usage_metadata and not exc.usage_metadata:
-        exc.usage_metadata = usage_metadata
-    if failed_usage_metadata:
-        exc.failed_usage_metadata = failed_usage_metadata
-    exc.attempts = attempt
-    exc.retry_count = max(0, attempt - 1)
-    exc.previous_errors = errors[-2:]
-    if fallback_model:
-        exc.fallback_model = fallback_model
-    if fallback_reason:
-        exc.fallback_reason = fallback_reason
-    return exc
+def annotate_provider_failure(exc: AiProviderError, *, attempt: int, errors: list[str], failed_usage_metadata: list[dict[str, Any]], usage_metadata: dict[str, Any] | None=None, fallback_model: str='', fallback_reason: str='') -> AiProviderError:
+    return _provider_failure_evidence.annotate_provider_failure(exc, attempt=attempt, errors=errors, failed_usage_metadata=failed_usage_metadata, usage_metadata=usage_metadata, fallback_model=fallback_model, fallback_reason=fallback_reason)
 
 
-def generate_provider_json_with_fallback(
-    settings: dict[str, Any],
-    system_prompt: str,
-    user_content: list[dict[str, Any]],
-    *,
-    max_tokens: int,
-    cached_content: str = "",
-    max_attempts: int | None = None,
-    overloaded_retry_delay_seconds: float | None = None,
-    allow_overloaded_model_fallback: bool = True,
-) -> tuple[dict[str, Any], int, dict[str, Any]]:
-    attempts = AI_PROVIDER_MAX_ATTEMPTS
-    if max_attempts is not None:
-        attempts = max(1, min(AI_PROVIDER_MAX_ATTEMPTS, int(max_attempts)))
-    total_latency_ms = 0
-    errors: list[str] = []
-    failed_usage_metadata: list[dict[str, Any]] = []
-    attempt_settings = dict(settings)
-    used_key_ids: set[str] = set()
-    repair_next_attempt = False
-    fallback_model = ""
-    fallback_reason = ""
-    fallback_key_id = ""
-    fallback_key_label = ""
-    retry_delay_seconds: float | None = None
-    for attempt in range(1, attempts + 1):
-        retry_delay_seconds = None
-        current_key_id = str(attempt_settings.get("active_key_id") or "")
-        if current_key_id:
-            used_key_ids.add(current_key_id)
-        attempt_user_content = user_content
-        if repair_next_attempt:
-            attempt_user_content = [
-                *user_content,
-                {
-                    "type": "text",
-                    "text": (
-                        "RETRY_REPAIR: the previous provider response was not a valid JSON object. "
-                        "Return only the compact JSON object matching the schema; no markdown, prose, or code fences."
-                    ),
-                },
-            ]
-        provider: OpenAICompatibleAiProvider | GeminiAiProvider | None = None
-        try:
-            provider = ai_provider() if ai_settings_match_runtime(attempt_settings) else ai_provider_from_settings(attempt_settings)
-            if isinstance(provider, GeminiAiProvider):
-                parsed, latency_ms = provider.generate_json(
-                    system_prompt,
-                    attempt_user_content,
-                    max_tokens=max_tokens,
-                    cached_content=cached_content,
-                )
-                usage_metadata = dict(provider.last_usage_metadata)
-            else:
-                parsed, latency_ms = provider.generate_json(system_prompt, attempt_user_content, max_tokens=max_tokens)
-                usage_metadata = dict(getattr(provider, "last_usage_metadata", {}) or {})
-            parsed = require_ai_json_object(parsed)
-            total_latency_ms += latency_ms
-            retry_meta = {"attempts": attempt, "retry_count": attempt - 1}
-            if current_key_id:
-                retry_meta["provider_key_id"] = current_key_id
-            if fallback_model:
-                retry_meta["fallback_model"] = fallback_model
-            if fallback_reason:
-                retry_meta["fallback_reason"] = fallback_reason
-            if fallback_key_id:
-                retry_meta["fallback_key_id"] = fallback_key_id
-            if fallback_key_label:
-                retry_meta["fallback_key_label"] = fallback_key_label
-            if usage_metadata:
-                retry_meta["usage_metadata"] = usage_metadata
-            if failed_usage_metadata:
-                retry_meta["failed_usage_metadata"] = failed_usage_metadata
-            if errors:
-                retry_meta["previous_errors"] = errors[-2:]
-            return parsed, total_latency_ms, retry_meta
-        except AiProviderError as exc:
-            usage_metadata = provider_failure_usage_metadata(provider, exc)
-            if usage_metadata:
-                failed_usage_metadata.append(usage_metadata)
-            errors.append(bounded_text(str(exc), 180))
-            retryable = provider_error_is_retryable(exc)
-            can_retry = retryable and attempt < attempts
-            repair_next_attempt = provider_error_needs_repair_prompt(exc)
-            if (
-                can_retry
-                and isinstance(exc, AiProviderOverloaded)
-                and (getattr(exc, "http_status", None) == 503 or "HTTP 503" in str(exc))
-                and attempt_settings.get("provider") == "gemini"
-                and attempt_settings.get("model") != "gemini-2.5-flash-lite"
-                and not cached_content
-                and allow_overloaded_model_fallback
-                and not settings.get("profile_id")
-            ):
-                fallback_model = "gemini-2.5-flash-lite"
-                fallback_reason = "provider_overloaded"
-                attempt_settings = {**attempt_settings, "model": fallback_model}
-            elif (
-                can_retry
-                and overloaded_retry_delay_seconds is not None
-                and isinstance(exc, AiProviderOverloaded)
-                and (getattr(exc, "http_status", None) == 503 or "HTTP 503" in str(exc))
-            ):
-                retry_delay_seconds = max(0.0, float(overloaded_retry_delay_seconds))
-            elif can_retry and not repair_next_attempt:
-                rotated_settings = rotate_ai_provider_key({**settings, "model": attempt_settings.get("model") or settings.get("model")}, used_key_ids)
-                if rotated_settings:
-                    next_key_id = str(rotated_settings.get("active_key_id") or "")
-                    attempt_settings = rotated_settings
-                    if next_key_id:
-                        used_key_ids.add(next_key_id)
-                        fallback_key_id = next_key_id
-                    fallback_key_label = str(rotated_settings.get("key_source_name") or "")
-            if not can_retry:
-                annotate_provider_failure(
-                    exc,
-                    attempt=attempt,
-                    errors=errors,
-                    failed_usage_metadata=failed_usage_metadata,
-                    usage_metadata=usage_metadata,
-                    fallback_model=fallback_model,
-                    fallback_reason=fallback_reason,
-                )
-                raise
-        if retry_delay_seconds is not None:
-            time.sleep(retry_delay_seconds)
-        elif AI_PROVIDER_RETRY_BACKOFF_SECONDS > 0:
-            jitter = random.uniform(0, min(0.4, AI_PROVIDER_RETRY_BACKOFF_SECONDS))
-            time.sleep((AI_PROVIDER_RETRY_BACKOFF_SECONDS * attempt) + jitter)
-    raise AiProviderError(
-        errors[-1] if errors else "AI provider failed",
-        failed_usage_metadata=failed_usage_metadata,
-        attempts=attempts,
-        retry_count=max(0, attempts - 1),
-        previous_errors=errors[-2:],
-        fallback_model=fallback_model,
-        fallback_reason=fallback_reason,
-    )
+def generate_provider_json_with_fallback(settings: dict[str, Any], system_prompt: str, user_content: list[dict[str, Any]], *, max_tokens: int, cached_content: str='', max_attempts: int | None=None, overloaded_retry_delay_seconds: float | None=None, allow_overloaded_model_fallback: bool=True) -> tuple[dict[str, Any], int, dict[str, Any]]:
+    return _provider_json_retry.generate_provider_json_with_fallback(settings, system_prompt, user_content, max_tokens=max_tokens, cached_content=cached_content, max_attempts=max_attempts, overloaded_retry_delay_seconds=overloaded_retry_delay_seconds, allow_overloaded_model_fallback=allow_overloaded_model_fallback)
 
 
-def generate_ai_detection_json(
-    settings: dict[str, Any],
-    user_content: list[dict[str, Any]],
-    *,
-    max_tokens: int,
-) -> tuple[dict[str, Any], int, dict[str, Any]]:
+def generate_ai_detection_json(settings: dict[str, Any], user_content: list[dict[str, Any]], *, max_tokens: int) -> tuple[dict[str, Any], int, dict[str, Any]]:
     return generate_provider_json_with_fallback(settings, AI_DETECTION_SYSTEM_PROMPT, user_content, max_tokens=max_tokens)
 
 
