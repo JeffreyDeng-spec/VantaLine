@@ -1,7 +1,12 @@
 {
-  "version": 65,
+  "version": 66,
   "sources": [
     "server.py",
+    "agent/invocation_ports.py",
+    "agent/protocol_policy.py",
+    "agent/chat_transport.py",
+    "agent/connection_discovery.py",
+    "agent/recommendation.py",
     "agent/settings_ports.py",
     "agent/settings_policy.py",
     "agent/settings_projection.py",

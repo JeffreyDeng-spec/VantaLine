@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Training-assistant protocol helpers, chat invocation, connection discovery and parameter
+recommendations now use explicit services. Existing purpose-bound provider accounting, legacy
+HTTP behavior, prompts and request identity remain unchanged. This movement adds no browser
+operation and does not change the platform acceptance status below.
+
 Training-assistant settings policy, public projection and legacy persistence now have explicit
 services under `agent/`. The modern training_assistant model-purpose resolver remains unchanged;
 this extraction adds no browser operation or provider capability and does not alter the platform
