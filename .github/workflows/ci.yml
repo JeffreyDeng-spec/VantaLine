@@ -212,6 +212,7 @@ jobs:
           python scripts/smoke_provider_orchestration.py
           python scripts/smoke_public_status.py
           python scripts/smoke_legacy_provider_settings.py
+          python scripts/smoke_provider_configuration_policy.py
           python scripts/smoke_presence_inspection.py
           python scripts/smoke_detection_analysis.py
           python scripts/smoke_ai_detection_analysis.py

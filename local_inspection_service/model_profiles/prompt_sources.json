@@ -1,7 +1,11 @@
 {
-  "version": 61,
+  "version": 62,
   "sources": [
     "server.py",
+    "model_providers/configuration_ports.py",
+    "model_providers/configuration_defaults.py",
+    "model_providers/configuration_validation.py",
+    "model_providers/public_urls.py",
     "model_providers/legacy_settings_ports.py",
     "model_providers/legacy_json_settings.py",
     "model_providers/legacy_image_settings.py",
