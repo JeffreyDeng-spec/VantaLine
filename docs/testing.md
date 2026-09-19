@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_agent_settings.py` exercises 21 synthetic offline groups: 12 original
+contracts, seven evaluation-order/failure checks and two construction/isolation checks. Two live
+compositions are called first, second, first to detect shared state. Tests use private temporary
+files and model substitutes, without external provider calls or physical PLC access.
+
 `python scripts/smoke_key_material.py` exercises 20 offline groups with synthetic secrets
 and private temporary directories. Twelve original contracts are retained, plus six dependency
 capture/failure cases and two construction/isolation cases. File replacement failure preserves

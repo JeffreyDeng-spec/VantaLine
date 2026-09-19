@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Training-assistant settings policy, public projection and legacy persistence now have explicit
+services under `agent/`. The modern training_assistant model-purpose resolver remains unchanged;
+this extraction adds no browser operation or provider capability and does not alter the platform
+acceptance status described below.
+
 The HTTP boundary is now composed through `agent.api` and explicit account and
 repository providers. Strict request schemas and the public operation projection
 have independent modules and retain compatibility exports. This structural change
