@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_key_material.py` exercises 20 offline groups with synthetic secrets
+and private temporary directories. Twelve original contracts are retained, plus six dependency
+capture/failure cases and two construction/isolation cases. File replacement failure preserves
+the old file and environment; tests do not read real secrets or make external calls.
+
 `python scripts/smoke_provider_key_registry.py` runs 19 offline groups: the original 12
 contracts, callback capture and refresh, six ordinary/prior/missing capture traces, zero
 constructor reads and independent compositions. It verifies environment precedence, legacy
