@@ -21094,136 +21094,35 @@ def agent_recommendation(stage: str, accessory_ids: list[str], sample_count: int
     return _agent_recommendation.agent_recommendation(stage, accessory_ids, sample_count)
 
 
+from .agent.settings_api import AgentSettingsApi as _AgentSettingsApi
+from .agent.settings_api_ports import AgentSettingsHttpAccess as _AgentSettingsHttpAccess, AgentSettingsProjectionCall as _AgentSettingsProjectionCall, AgentRecommendationCall as _AgentRecommendationCall, AgentLegacySettingsPolicy as _AgentLegacySettingsPolicy, AgentLegacyKeyPolicy as _AgentLegacyKeyPolicy, AgentLegacySettingsEffects as _AgentLegacySettingsEffects
+_agent_settings_api = _AgentSettingsApi(
+    _AgentSettingsHttpAccess(admin=lambda: require_admin_role, http_error=lambda: HTTPException),
+    _AgentSettingsProjectionCall(public=lambda: public_agent_config),
+    _AgentRecommendationCall(recommend=lambda: agent_recommendation),
+    _AgentLegacySettingsPolicy(load=lambda: load_agent_config, normalize=lambda: normalize_agent_config, credentials=lambda: agent_credentials_present, provider=lambda: normalize_agent_provider, supported=lambda: AGENT_SUPPORTED_PROVIDERS, cursor=lambda: AGENT_PROVIDER_CURSOR, label=lambda: agent_provider_label, options=lambda: normalize_agent_model_options),
+    _AgentLegacyKeyPolicy(validate=lambda: validate_ai_key_env, name=lambda: default_secret_env_name, normalize=lambda: normalize_agent_key_items, identity=lambda: secret_key_item_id, for_provider=lambda: agent_keys_for_provider),
+    _AgentLegacySettingsEffects(save=lambda: save_agent_config, secret=lambda: set_local_secret_env, test=lambda: test_agent_connection, now=lambda: time.time),
+)
+
 @app.get("/api/agent/config")
 def get_agent_config() -> dict[str, Any]:
-    require_admin_role()
-    return public_agent_config()
+    return _agent_settings_api.get_agent_config()
 
 
 @app.post("/api/agent/config")
 def update_agent_config(request: AgentConfigRequest) -> dict[str, Any]:
-    require_admin_role()
-    raise HTTPException(409, "请使用模型与 API 配置库；旧配置入口已停用")
-    config = load_agent_config()
-    reset_connection = False
-    clear_model_options = False
-    if request.enabled is not None:
-        reset_connection = reset_connection or config["enabled"] != bool(request.enabled)
-        config["enabled"] = bool(request.enabled)
-    if request.provider is not None:
-        provider = str(request.provider or "").strip().lower()
-        if provider not in AGENT_SUPPORTED_PROVIDERS:
-            raise HTTPException(status_code=400, detail="Unsupported Agent provider")
-        clear_model_options = clear_model_options or config["provider"] != provider
-        reset_connection = reset_connection or config["provider"] != provider
-        config["provider"] = provider
-    if request.base_url is not None:
-        base_url = request.base_url.strip().rstrip("/")
-        clear_model_options = clear_model_options or config["base_url"] != base_url
-        reset_connection = reset_connection or config["base_url"] != base_url
-        config["base_url"] = base_url
-    if request.api_key_env is not None:
-        config["api_key_env"] = validate_ai_key_env(request.api_key_env)
-    if request.api_key is not None and request.api_key.strip():
-        api_key = request.api_key.strip()
-        key_provider = normalize_agent_provider(config.get("provider"), str(config.get("base_url") or ""))
-        env_name = validate_ai_key_env(request.api_key_env) or default_secret_env_name("VANTALINE_AGENT_KEY", api_key, provider=key_provider)
-        set_local_secret_env(env_name, api_key)
-        key_items = normalize_agent_key_items(config)
-        item_id = secret_key_item_id(env_name, api_key)
-        existing = next((item for item in key_items if item["id"] == item_id and item.get("provider") == key_provider), None)
-        if existing:
-            existing["key"] = api_key
-            existing["env"] = env_name
-            existing["provider"] = key_provider
-        else:
-            key_items.append(
-                {
-                    "id": item_id,
-                    "label": f"{agent_provider_label(key_provider)} API Key",
-                    "key": api_key,
-                    "env": env_name,
-                    "provider": key_provider,
-                }
-            )
-        config["api_keys"] = key_items
-        config["active_key_id"] = item_id
-        clear_model_options = clear_model_options or config["api_key"] != api_key
-        reset_connection = reset_connection or config["api_key"] != api_key
-        config["api_key"] = api_key
-    if request.active_key_id is not None:
-        active_key_id = request.active_key_id.strip()
-        key_provider = normalize_agent_provider(config.get("provider"), str(config.get("base_url") or ""))
-        current_keys = agent_keys_for_provider(normalize_agent_key_items(config), key_provider)
-        if active_key_id and not any(item["id"] == active_key_id for item in current_keys):
-            raise HTTPException(status_code=400, detail="Agent active_key_id was not found")
-        config["active_key_id"] = active_key_id
-        selected = next((item for item in current_keys if item["id"] == active_key_id), None)
-        if selected and selected.get("key") and config.get("api_key") != selected["key"]:
-            clear_model_options = True
-            reset_connection = True
-            config["api_key"] = selected["key"]
-    if request.model is not None:
-        model = request.model.strip()
-        reset_connection = reset_connection or config["model"] != model
-        config["model"] = model
-    if request.timeout_seconds is not None:
-        timeout_seconds = max(5.0, min(300.0, float(request.timeout_seconds)))
-        reset_connection = reset_connection or config["timeout_seconds"] != timeout_seconds
-        config["timeout_seconds"] = timeout_seconds
-    if request.auto_advance_default is not None:
-        config["auto_advance_default"] = bool(request.auto_advance_default)
-    if request.provider is None:
-        config.pop("provider", None)
-    config = normalize_agent_config(config)
-    if reset_connection:
-        config["connection_status"] = "untested"
-        config["connection_message"] = "已保存，尚未测试。"
-        config["last_tested_at"] = 0
-        config["last_model_count"] = 0
-        if clear_model_options:
-            config["model_options"] = []
-    save_agent_config(config)
-    return public_agent_config(config)
+    return _agent_settings_api.update_agent_config(request)
 
 
 @app.post("/api/agent/config/test")
 def test_agent_config() -> dict[str, Any]:
-    require_admin_role()
-    raise HTTPException(409, "请使用模型与 API 配置库；旧配置入口已停用")
-    config = load_agent_config()
-    if not agent_credentials_present(config):
-        provider_label = "Cursor" if normalize_agent_provider(config.get("provider"), config.get("base_url", "")) == AGENT_PROVIDER_CURSOR else "OpenAI 兼容"
-        message = f"Agent API 未配置完整。当前识别为 {provider_label}；测试连接需要 Base URL / API Key。"
-        config["connection_status"] = "failed"
-        config["connection_message"] = message
-        config["last_tested_at"] = int(time.time())
-        save_agent_config(config)
-        return {**public_agent_config(config), "ok": False, "message": message}
-    try:
-        result = test_agent_connection(config)
-        if result.get("model"):
-            config["model"] = str(result["model"]).strip()
-        config["model_options"] = normalize_agent_model_options(result.get("model_options") or [])
-        config["connection_status"] = "connected"
-        config["connection_message"] = str(result.get("message") or "连接成功。")[:300]
-        config["last_tested_at"] = int(time.time())
-        config["last_model_count"] = int(result.get("last_model_count") or len(config["model_options"]) or 0)
-        save_agent_config(config)
-        return {**public_agent_config(config), "ok": True, "message": config["connection_message"]}
-    except Exception as exc:  # noqa: BLE001
-        message = f"连接失败:{str(exc)[:200]}"
-        config["connection_status"] = "failed"
-        config["connection_message"] = message
-        config["last_tested_at"] = int(time.time())
-        save_agent_config(config)
-        return {**public_agent_config(config), "ok": False, "message": message}
+    return _agent_settings_api.test_agent_config()
 
 
 @app.post("/api/agent/recommend")
 def agent_recommend(request: AgentRecommendRequest) -> dict[str, Any]:
-    stage = request.stage if request.stage in {"samples", "training"} else "samples"
-    return agent_recommendation(stage, request.accessory_ids, request.sample_count)
+    return _agent_settings_api.agent_recommend(request)
 
 
 from .pipeline.state_policy import normalize_pipeline_state

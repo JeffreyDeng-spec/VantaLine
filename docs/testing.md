@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_agent_settings_api.py` covers 17 offline groups: ten original HTTP
+and handler contracts, five callback/failure-order checks and two construction/isolation checks.
+Tests use the actual registered route objects in an isolated FastAPI app, without production
+middleware or lifespan; this is handler-level HTTP coverage, supplemented by existing auth and
+backend contracts. All original source bodies, including disabled legacy code, are retained.
+
 `python scripts/smoke_agent_invocation.py` runs 26 offline groups: 12 original behavior
 contracts, 12 capture/failure/accounting checks and two construction/isolation checks. Simulated
 responses exercise the existing bound provider and accounting flow; a ledger failure must not

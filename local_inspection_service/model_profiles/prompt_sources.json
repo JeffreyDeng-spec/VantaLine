@@ -1,7 +1,9 @@
 {
-  "version": 66,
+  "version": 67,
   "sources": [
     "server.py",
+    "agent/settings_api_ports.py",
+    "agent/settings_api.py",
     "agent/invocation_ports.py",
     "agent/protocol_policy.py",
     "agent/chat_transport.py",

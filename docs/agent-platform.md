@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Agent settings HTTP handlers use explicit dependencies while retaining administrator guards,
+retired-endpoint409 responses and recommendation inputs. No Agent command, browser action,
+model binding or platform acceptance status changes.
+
 Training-assistant protocol helpers, chat invocation, connection discovery and parameter
 recommendations now use explicit services. Existing purpose-bound provider accounting, legacy
 HTTP behavior, prompts and request identity remain unchanged. This movement adds no browser
