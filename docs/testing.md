@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_detection_media.py` runs 27 offline groups. Twenty original
+business groups and 25 expanded original-body groups passed on Windows/Linux before migration.
+Synthetic arrays/files cover JPEG encoding, alpha/gray tiles, reference ordering, sheet layout,
+cache/path isolation and original failure/partial-file boundaries. First-error recovery matrices
+cover injected capabilities, filesystem calls and input/cache mappings; capture and refresh checks
+retain callable selection and both locked cache accesses. No production media, real model
+or paid provider is used. The MCP registry retains the actual reference-collection adapter.
+
 `python scripts/smoke_detection_upload.py` runs 24 offline groups. The 17 original
 business groups and 21 expanded original-body groups passed on Windows/Linux before migration.
 Contracts retain uploaded-file evidence, image decode errors, video sampling/limits, per-frame

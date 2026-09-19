@@ -1,7 +1,12 @@
 {
-  "version": 53,
+  "version": 54,
   "sources": [
     "server.py",
+    "detection/media_ports.py",
+    "detection/image_encoding.py",
+    "detection/inspection_image_store.py",
+    "detection/reference_images.py",
+    "detection/reference_sheet.py",
     "detection/upload_ports.py",
     "detection/image_upload.py",
     "detection/video_results.py",
