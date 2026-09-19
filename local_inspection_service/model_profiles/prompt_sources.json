@@ -1,7 +1,11 @@
 {
-  "version": 64,
+  "version": 65,
   "sources": [
     "server.py",
+    "agent/settings_ports.py",
+    "agent/settings_policy.py",
+    "agent/settings_projection.py",
+    "agent/legacy_settings_store.py",
     "model_providers/key_material_ports.py",
     "model_providers/key_identity.py",
     "model_providers/local_secret_store.py",

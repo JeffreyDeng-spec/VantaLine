@@ -20908,222 +20908,93 @@ class PipelineAdvanceCancelled(Exception):
     """Raised inside advance_pipeline_task when the task's cancel event fires."""
 
 
+from .agent.settings_policy import AgentSettingsPolicy as _AgentSettingsPolicy
+from .agent.settings_projection import AgentSettingsProjection as _AgentSettingsProjection
+from .agent.legacy_settings_store import LegacyAgentSettingsStore as _LegacyAgentSettingsStore
+from .agent.settings_ports import AgentSettingsDefaults as _AgentSettingsDefaults, AgentProviderPolicy as _AgentProviderPolicy, AgentSettingsKeys as _AgentSettingsKeys, AgentSettingsAccess as _AgentSettingsAccess, AgentSettingsAuthorization as _AgentSettingsAuthorization, AgentSettingsPresentation as _AgentSettingsPresentation, AgentSettingsPaths as _AgentSettingsPaths, AgentSettingsCodec as _AgentSettingsCodec, AgentSettingsFiles as _AgentSettingsFiles, AgentSettingsPersistence as _AgentSettingsPersistence
+_agent_settings_policy = _AgentSettingsPolicy(
+    _AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
+    _AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
+    _AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
+)
+_agent_settings_projection = _AgentSettingsProjection(
+    _AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
+    _AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
+    _AgentSettingsAccess(required=lambda: agent_required_fields_present, credentials=lambda: agent_credentials_present, connected=lambda: agent_connected, recommendation=lambda: agent_recommendation_supported, load=lambda: load_agent_config),
+    _AgentSettingsAuthorization(is_admin=lambda: user_is_admin, current_user=lambda: current_auth_user),
+    _AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
+    _AgentSettingsPresentation(provider_label=lambda: agent_provider_label, public_keys=lambda: public_ai_key_items, mask=lambda: mask_secret),
+)
+_legacy_agent_settings_store = _LegacyAgentSettingsStore(
+    _AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
+    _AgentSettingsPaths(file=lambda: AGENT_LOCAL_CONFIG_PATH, directory=lambda: DATA_DIR),
+    _AgentSettingsCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
+    _AgentSettingsFiles(replace=lambda: os.replace, chmod=lambda: os.chmod),
+    _AgentSettingsPersistence(normalize=lambda: normalize_agent_config, keys=lambda: normalize_agent_key_items, persist=lambda: persist_secret_key_items),
+)
+
 def agent_base_url_host(base_url: str) -> str:
-    try:
-        return (urlsplit(str(base_url or "").strip()).hostname or "").lower()
-    except ValueError:
-        return ""
+    return _agent_settings_policy.agent_base_url_host(base_url)
 
 
 def is_cursor_base_url(base_url: str) -> bool:
-    return agent_base_url_host(base_url) == "api.cursor.com"
+    return _agent_settings_policy.is_cursor_base_url(base_url)
 
 
 def detect_agent_provider_from_base_url(base_url: str) -> str:
-    return AGENT_PROVIDER_CURSOR if is_cursor_base_url(base_url) else AGENT_PROVIDER_OPENAI_COMPATIBLE
+    return _agent_settings_policy.detect_agent_provider_from_base_url(base_url)
 
 
 def normalize_agent_provider(provider: str | None, base_url: str = "") -> str:
-    if str(base_url or "").strip():
-        return detect_agent_provider_from_base_url(base_url)
-    value = str(provider or "").strip().lower()
-    if value == AGENT_PROVIDER_CURSOR:
-        return value
-    return AGENT_PROVIDER_OPENAI_COMPATIBLE
+    return _agent_settings_policy.normalize_agent_provider(provider, base_url)
 
 
 def agent_provider_label(provider: str) -> str:
-    return "Cursor" if str(provider or "").strip().lower() == AGENT_PROVIDER_CURSOR else "OpenAI 兼容"
+    return _agent_settings_policy.agent_provider_label(provider)
 
 
 def normalize_agent_model_options(value: Any) -> list[dict[str, str]]:
-    options: list[dict[str, str]] = []
-    seen: set[str] = set()
-    raw_items = value if isinstance(value, list) else []
-    for item in raw_items:
-        if isinstance(item, str):
-            model_id = item.strip()
-            label = model_id
-        elif isinstance(item, dict):
-            model_id = str(item.get("id") or item.get("value") or "").strip()
-            label = str(item.get("label") or item.get("name") or item.get("display_name") or model_id).strip()
-        else:
-            continue
-        if not model_id or model_id in seen:
-            continue
-        seen.add(model_id)
-        options.append({"id": model_id, "label": label or model_id})
-        if len(options) >= 250:
-            break
-    return options
+    return _agent_settings_policy.normalize_agent_model_options(value)
 
 
 def agent_model_options_from_items(items: Any, *, prepend: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
-    options: list[dict[str, str]] = []
-    if prepend:
-        options.extend(prepend)
-    if isinstance(items, list):
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            model_id = str(item.get("id") or "").strip()
-            if not model_id:
-                continue
-            label_parts = [model_id]
-            display_name = str(item.get("display_name") or item.get("name") or "").strip()
-            if display_name and display_name != model_id:
-                label_parts.append(display_name)
-            aliases = [str(alias).strip() for alias in item.get("aliases") or [] if str(alias).strip()]
-            if aliases:
-                label_parts.append(f"alias: {', '.join(aliases[:3])}")
-            options.append({"id": model_id, "label": " · ".join(label_parts)})
-    return normalize_agent_model_options(options)
+    return _agent_settings_policy.agent_model_options_from_items(items, prepend=prepend)
 
 
 def normalize_agent_config(config: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(DEFAULT_AGENT_CONFIG)
-    provider_value = config.get("provider") if "provider" in config else None
-    merged.update({key: config[key] for key in DEFAULT_AGENT_CONFIG if key in config})
-    merged["base_url"] = str(merged.get("base_url") or "").strip().rstrip("/")
-    merged["api_key"] = str(merged.get("api_key") or "").strip()
-    merged["provider"] = normalize_agent_provider(provider_value, merged["base_url"])
-    merged["api_key_env"] = validate_ai_key_env(merged.get("api_key_env"))
-    merged["api_keys"] = normalize_agent_key_items(merged)
-    active_key_id = str(merged.get("active_key_id") or "").strip()
-    current_key_items = agent_keys_for_provider(merged["api_keys"], merged["provider"])
-    if active_key_id and not any(item["id"] == active_key_id for item in current_key_items):
-        active_key_id = ""
-    merged["active_key_id"] = active_key_id or (current_key_items[0]["id"] if current_key_items else "")
-    active_item = next((item for item in current_key_items if item["id"] == merged["active_key_id"]), None)
-    active_key = str(active_item.get("key") if active_item else "").strip()
-    fallback_env_key = local_secret_env_value(merged["api_key_env"]) if merged["api_key_env"] else ""
-    if active_key:
-        merged["api_key"] = active_key
-    elif fallback_env_key:
-        merged["api_key"] = fallback_env_key
-    merged["model"] = str(merged.get("model") or "").strip()
-    merged["model_options"] = normalize_agent_model_options(merged.get("model_options"))
-    if merged["provider"] == AGENT_PROVIDER_CURSOR:
-        if not merged["base_url"]:
-            merged["base_url"] = AGENT_CURSOR_DEFAULT_BASE_URL
-        if not merged["model"]:
-            merged["model"] = "auto"
-    try:
-        merged["timeout_seconds"] = max(5.0, min(300.0, float(merged.get("timeout_seconds") or 45.0)))
-    except (TypeError, ValueError):
-        merged["timeout_seconds"] = 45.0
-    merged["enabled"] = bool(merged.get("enabled", True))
-    merged["auto_advance_default"] = bool(merged.get("auto_advance_default", False))
-    if str(merged.get("connection_status") or "") not in AGENT_CONNECTION_STATUSES:
-        merged["connection_status"] = "untested"
-    merged["connection_message"] = str(merged.get("connection_message") or "").strip()[:300]
-    try:
-        merged["last_tested_at"] = int(float(merged.get("last_tested_at") or 0))
-    except (TypeError, ValueError):
-        merged["last_tested_at"] = 0
-    try:
-        merged["last_model_count"] = max(0, int(merged.get("last_model_count") or 0))
-    except (TypeError, ValueError):
-        merged["last_model_count"] = 0
-    return merged
+    return _agent_settings_policy.normalize_agent_config(config)
 
 
 def agent_required_fields_present(config: dict[str, Any]) -> bool:
-    if not bool(config.get("enabled", True)):
-        return False
-    provider = normalize_agent_provider(config.get("provider"), str(config.get("base_url") or ""))
-    if provider == AGENT_PROVIDER_CURSOR:
-        return bool(config.get("base_url") and config.get("api_key"))
-    return bool(config.get("base_url") and config.get("api_key") and config.get("model"))
+    return _agent_settings_projection.agent_required_fields_present(config)
 
 
 def agent_credentials_present(config: dict[str, Any]) -> bool:
-    if not bool(config.get("enabled", True)):
-        return False
-    return bool(config.get("base_url") and config.get("api_key"))
+    return _agent_settings_projection.agent_credentials_present(config)
 
 
 def agent_connected(config: dict[str, Any]) -> bool:
-    return agent_required_fields_present(config) and str(config.get("connection_status") or "") == "connected"
+    return _agent_settings_projection.agent_connected(config)
 
 
 def agent_recommendation_supported(config: dict[str, Any]) -> bool:
-    return normalize_agent_provider(config.get("provider"), str(config.get("base_url") or "")) == AGENT_PROVIDER_OPENAI_COMPATIBLE and agent_connected(config)
+    return _agent_settings_projection.agent_recommendation_supported(config)
 
 
 def _legacy_load_agent_config() -> dict[str, Any]:
-    merged = dict(DEFAULT_AGENT_CONFIG)
-    provider_present = False
-    if AGENT_LOCAL_CONFIG_PATH.exists():
-        try:
-            raw = json.loads(AGENT_LOCAL_CONFIG_PATH.read_text(encoding="utf-8"))
-            if isinstance(raw, dict):
-                provider_present = "provider" in raw
-                merged.update({key: raw[key] for key in DEFAULT_AGENT_CONFIG if key in raw})
-        except (OSError, json.JSONDecodeError):
-            pass
-    if not provider_present:
-        merged.pop("provider", None)
-    return normalize_agent_config(merged)
+    return _legacy_agent_settings_store._legacy_load_agent_config()
 
 
 def save_agent_config(config: dict[str, Any]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    config = normalize_agent_config(config)
-    config["api_keys"] = persist_secret_key_items(normalize_agent_key_items(config), "VANTALINE_AGENT_KEY")
-    config["api_key"] = ""
-    payload = {key: config.get(key, DEFAULT_AGENT_CONFIG[key]) for key in DEFAULT_AGENT_CONFIG}
-    payload["api_key"] = ""
-    tmp_path = AGENT_LOCAL_CONFIG_PATH.with_name(f"{AGENT_LOCAL_CONFIG_PATH.name}.tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(tmp_path, AGENT_LOCAL_CONFIG_PATH)
-    try:
-        os.chmod(AGENT_LOCAL_CONFIG_PATH, 0o600)
-    except OSError:
-        pass
+    return _legacy_agent_settings_store.save_agent_config(config)
 
 
 def agent_configured(config: dict[str, Any] | None = None) -> bool:
-    config = config or load_agent_config()
-    return agent_required_fields_present(config)
+    return _agent_settings_projection.agent_configured(config)
 
 
 def public_agent_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    config = config or load_agent_config()
-    configured = agent_credentials_present(config)
-    recommendation_supported = agent_recommendation_supported(config)
-    if not user_is_admin(current_auth_user()):
-        return {"enabled":bool(config.get("enabled")), "configured":configured,
-                "connection_status":config.get("connection_status","untested") if configured else "untested",
-                "recommendation_supported":recommendation_supported,
-                "auto_advance_default":bool(config.get("auto_advance_default")),
-                "mode":"agent" if recommendation_supported else "rules"}
-    key_items = normalize_agent_key_items(config)
-    current_key_items = agent_keys_for_provider(key_items, config["provider"])
-    active_key_id = str(config.get("active_key_id") or "").strip()
-    active_item = next((item for item in current_key_items if item["id"] == active_key_id), None) or (current_key_items[0] if current_key_items else None)
-    return {
-        "enabled": config["enabled"],
-        "provider": config["provider"],
-        "provider_label": agent_provider_label(config["provider"]),
-        "base_url": config["base_url"],
-        "model": config["model"],
-        "model_options": config["model_options"],
-        "timeout_seconds": config["timeout_seconds"],
-        "auto_advance_default": config["auto_advance_default"],
-        "api_key_env": config.get("api_key_env") or "VANTALINE_AGENT_API_KEY",
-        "api_keys": public_ai_key_items(key_items),
-        "active_key_id": active_item["id"] if active_item else "",
-        "api_key_masked": mask_secret(config["api_key"]),
-        "has_api_key": bool(config["api_key"]),
-        "configured": configured,
-        "connection_status": config["connection_status"] if configured else "untested",
-        "connection_message": config["connection_message"] if configured else "",
-        "last_tested_at": config["last_tested_at"] if configured else 0,
-        "last_model_count": config["last_model_count"] if configured else 0,
-        "recommendation_supported": recommendation_supported,
-        "mode": "agent" if recommendation_supported else "rules",
-    }
+    return _agent_settings_projection.public_agent_config(config)
 
 
 def openai_compatible_chat_url(base_url: str) -> str:
