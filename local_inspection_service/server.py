@@ -25026,68 +25026,29 @@ def agent_pipeline_decide(
     return _agent_decision_flow.agent_pipeline_decide(task, config, user_message=user_message, trigger=trigger)
 
 
+from .agent.pipeline_actions import AgentPipelineActions as _AgentPipelineActions
+from .agent.pipeline_turns import AgentPipelineTurns as _AgentPipelineTurns
+from .agent.pipeline_action_ports import AgentActionState as _AgentActionState, AgentActionAdvance as _AgentActionAdvance, AgentActionJobs as _AgentActionJobs, AgentActionPolicy as _AgentActionPolicy, AgentActionPose as _AgentActionPose, AgentActionCalls as _AgentActionCalls, AgentTurnCalls as _AgentTurnCalls
+_agent_pipeline_actions = _AgentPipelineActions(
+    _AgentActionState(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException),
+    _AgentActionAdvance(mark=lambda: mark_pipeline_task_advancing, sync=lambda: sync_pipeline_task, advance=lambda: advance_pipeline_task),
+    _AgentActionJobs(delete=lambda: delete_training_task_record),
+    _AgentActionPolicy(normalize=lambda: normalize_pipeline_detection_method, uses_training=lambda: pipeline_method_uses_training),
+    _AgentActionPose(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls),
+    _AgentActionCalls(safe_advance=lambda: agent_safe_advance, reset=lambda: reset_pipeline_task_to_stage),
+)
+_agent_pipeline_turns = _AgentPipelineTurns(
+    _AgentTurnCalls(append=lambda: agent_mcp_append_conversation, apply=lambda: apply_agent_pipeline_decision),
+)
+
 def agent_safe_advance(
     task: dict[str, Any], config: dict[str, Any], pending_advances: list[str] | None = None
 ) -> None:
-    """Request an advance for a task driven by an Agent decision. The actual work
-    is handed to the async per-task runner so it never runs under
-    _pipeline_tasks_lock; the caller schedules `pending_advances` after the lock
-    is released. (A None collector keeps the old inline behavior as a fallback.)"""
-    if pending_advances is not None:
-        mark_pipeline_task_advancing(task)
-        task_id = str(task.get("id") or "")
-        if task_id and task_id not in pending_advances:
-            pending_advances.append(task_id)
-        return
-    try:
-        sync_pipeline_task(task)
-        advance_pipeline_task(task)
-    except HTTPException as exc:
-        orchestration = agent_mcp_orchestration(task)
-        pause_agent_mcp_task(
-            task,
-            orchestration,
-            stage=str(orchestration.get("active_stage") or task.get("stage") or "pose_image_generation"),
-            reason=bounded_text(exc.detail, 240),
-            suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
-        )
+    return _agent_pipeline_actions.agent_safe_advance(task, config, pending_advances)
 
 
 def reset_pipeline_task_to_stage(task: dict[str, Any], target: str, user: dict[str, Any] | None) -> None:
-    linked_job_ids = [
-        str(item_id)
-        for item_id in (task.get("samples_task_id"), task.get("training_task_id"))
-        if str(item_id or "").strip()
-    ]
-    if user:
-        for job_id in linked_job_ids:
-            try:
-                delete_training_task_record(job_id, user, missing_ok=True)
-            except Exception:  # noqa: BLE001 - 清理失败不应阻塞回退
-                pass
-    task.update(
-        {
-            "stage": "draft",
-            "status": "ready",
-            "progress": 0,
-            "last_error": "",
-            "job_note": "",
-            "updated_at": agent_mcp_now(),
-        }
-    )
-    for key in ("samples_task_id", "training_task_id", "dataset_id"):
-        task.pop(key, None)
-    orchestration = agent_mcp_orchestration(task)
-    orchestration.update(
-        {
-            "pause": None,
-            "state": "created",
-            "active_stage": "created",
-            "training_quality_ack": False,
-            "last_auto_signature": "",
-            "updated_at": agent_mcp_now(),
-        }
-    )
+    return _agent_pipeline_actions.reset_pipeline_task_to_stage(task, target, user)
 
 
 def apply_agent_pipeline_decision(
@@ -25099,111 +25060,7 @@ def apply_agent_pipeline_decision(
     trigger: str = "chat",
     pending_advances: list[str] | None = None,
 ) -> None:
-    action = str(decision.get("action") or "reply")
-    detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
-    if not pipeline_method_uses_training(detection_method) or action == "reply":
-        return
-    orchestration = agent_mcp_orchestration(task)
-    now = agent_mcp_now()
-    if action == "cancel":
-        orchestration.update({"state": "cancelled", "active_stage": "cancelled", "pause": None, "updated_at": now})
-        task.update({"status": "stopped", "progress": 100, "last_error": "", "job_note": "Agent 取消了本次流程。", "updated_at": now})
-        return
-    if action == "pause_and_ask":
-        pause_agent_mcp_task(
-            task,
-            orchestration,
-            stage=str(orchestration.get("active_stage") or task.get("stage") or "pose_image_generation"),
-            reason=decision.get("message_to_user") or decision.get("reason") or "需要你确认后再继续。",
-            suggested_actions=decision.get("suggested_actions") or ["continue_existing_assets", "replan", "cancel"],
-        )
-        return
-    if action == "set_params":
-        params = dict(task.get("params") or {})
-        params.update(decision.get("params") or {})
-        task["params"] = params
-        task["updated_at"] = now
-        if decision.get("advance_after"):
-            agent_safe_advance(task, config, pending_advances)
-        return
-    if action == "goto_stage":
-        target = decision.get("target_stage") or "draft"
-        reset_pipeline_task_to_stage(task, target, user)
-        if decision.get("params"):
-            params = dict(task.get("params") or {})
-            params.update(decision.get("params") or {})
-            task["params"] = params
-        if target == "samples":
-            agent_safe_advance(task, config, pending_advances)
-        return
-    if action == "replan":
-        if pipeline_uses_photo_highlight_sprite_flow(task, config):
-            orchestration = mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-            orchestration["pause"] = None
-            task["agent_mcp"] = orchestration
-            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
-            agent_safe_advance(task, config, pending_advances)
-            return
-        orchestration = ensure_agent_mcp_pose_plan(task, config, force=True)
-        task["agent_mcp"] = orchestration
-        ensure_agent_mcp_pose_tool_calls(task, config)
-        tool_config = agent_mcp_gemini_image_config()
-        if tool_config.get("configured") and execute_agent_mcp_pose_tool_calls(task, config):
-            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
-        else:
-            pause_agent_mcp_task(
-                task,
-                orchestration,
-                stage="pose_image_generation",
-                reason="姿态方案已重规划；" + str(tool_config.get("message") or "图片生成未配置。"),
-                suggested_actions=["configure_image_generation", "continue_existing_assets", "replan", "cancel"],
-            )
-        return
-    if action == "retry":
-        if pipeline_uses_photo_highlight_sprite_flow(task, config):
-            orchestration = mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-            orchestration["pause"] = None
-            task["agent_mcp"] = orchestration
-            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
-            agent_safe_advance(task, config, pending_advances)
-            return
-        orchestration["skip_pose_image_generation"] = False
-        orchestration["pause"] = None
-        if execute_agent_mcp_pose_tool_calls(task, config):
-            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
-        elif not orchestration.get("pause"):
-            tool_config = agent_mcp_gemini_image_config()
-            pause_agent_mcp_task(
-                task,
-                orchestration,
-                stage="pose_image_generation",
-                reason=str(tool_config.get("message") or "图片生成未配置。"),
-                suggested_actions=["configure_image_generation", "continue_existing_assets", "replan", "cancel"],
-            )
-        return
-    if action == "continue_existing_assets":
-        orchestration["skip_pose_image_generation"] = True
-        orchestration["pause"] = None
-        orchestration["updated_at"] = now
-        if task.get("stage") == "samples" or orchestration.get("active_stage") == "model_training":
-            orchestration["training_quality_ack"] = True
-            if task.get("stage") == "samples":
-                task["status"] = "completed"
-            agent_safe_advance(task, config, pending_advances)
-        else:
-            task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": now})
-            agent_safe_advance(task, config, pending_advances)
-        return
-    if action == "continue_training":
-        orchestration["training_quality_ack"] = True
-        orchestration["pause"] = None
-        if task.get("stage") == "samples":
-            task["status"] = "completed"
-            agent_safe_advance(task, config, pending_advances)
-        return
-    if action == "advance":
-        agent_safe_advance(task, config, pending_advances)
-        return
+    return _agent_pipeline_actions.apply_agent_pipeline_decision(task, config, decision, user, trigger=trigger, pending_advances=pending_advances)
 
 
 def commit_pipeline_agent_turn(
@@ -25215,28 +25072,7 @@ def commit_pipeline_agent_turn(
     trigger: str,
     pending_advances: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Apply a pre-computed Agent decision under the pipeline tasks lock.
-
-    The LLM call (`agent_pipeline_decide`) must run *before* this, outside the
-    lock, so a slow provider request never blocks pipeline polling. Any advance
-    the decision triggers is collected into `pending_advances` and scheduled by
-    the caller after the lock is released (heavy work runs in the async runner).
-    """
-    if user_message:
-        agent_mcp_append_conversation(task, "user", user_message)
-    apply_agent_pipeline_decision(task, config, decision, user, trigger=trigger, pending_advances=pending_advances)
-    agent_mcp_append_conversation(
-        task,
-        "agent",
-        decision.get("message_to_user") or decision.get("reason") or "已处理。",
-        action=str(decision.get("action") or ""),
-        reason=str(decision.get("reason") or ""),
-        target_stage=str(decision.get("target_stage") or ""),
-        source=str(decision.get("source") or ""),
-        needs_user=bool(decision.get("needs_user")),
-        agent_error=str(decision.get("agent_error") or ""),
-    )
-    return decision
+    return _agent_pipeline_turns.commit_pipeline_agent_turn(task, config, user, user_message, decision, trigger, pending_advances)
 
 
 def pipeline_task_decision_signature(task: dict[str, Any]) -> str:
