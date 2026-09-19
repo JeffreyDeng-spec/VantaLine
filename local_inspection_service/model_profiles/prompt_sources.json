@@ -1,7 +1,10 @@
 {
-  "version": 60,
+  "version": 61,
   "sources": [
     "server.py",
+    "model_providers/legacy_settings_ports.py",
+    "model_providers/legacy_json_settings.py",
+    "model_providers/legacy_image_settings.py",
     "auth/status_ports.py",
     "auth/status.py",
     "model_providers/orchestration_ports.py",

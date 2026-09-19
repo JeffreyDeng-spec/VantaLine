@@ -11991,133 +11991,25 @@ def load_agent_config() -> dict[str, Any]:
     return {**DEFAULT_AGENT_CONFIG, **value, "enabled": value.get("configured", False)}
 
 
+from local_inspection_service.model_providers.legacy_settings_ports import LegacySettingsIO, LegacyPresentation, LegacyJsonPolicy, LegacyJsonCallbacks, LegacyImagePolicy, LegacyImageEnvironment, LegacyImageCallbacks
+from local_inspection_service.model_providers.legacy_json_settings import LegacyJsonSettings
+from local_inspection_service.model_providers.legacy_image_settings import LegacyImageSettings
+_legacy_json_settings_service = LegacyJsonSettings(
+    LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
+    LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
+    LegacyJsonPolicy(lambda: AI_DEFAULT_PROVIDER, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_TIMEOUT_SECONDS, lambda: AI_MODEL_OPTIONS, lambda: AI_SUPPORTED_PROVIDERS, lambda: AI_AUTO_LOCAL_PROXY_ENV),
+    LegacyJsonCallbacks(lambda: default_ai_base_url, lambda: validate_ai_timeout, lambda: normalize_ai_key_items, lambda: ai_keys_for_provider, lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_label, lambda: env_flag_enabled),
+)
+_legacy_image_settings_service = LegacyImageSettings(
+    LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
+    LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
+    LegacyImagePolicy(lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, lambda: IMAGE_GENERATION_MODEL_OPTIONS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS),
+    LegacyImageEnvironment(lambda: IMAGE_GENERATION_PROVIDER_ENV, lambda: IMAGE_GENERATION_MODEL_ENV, lambda: IMAGE_GENERATION_BASE_URL_ENV, lambda: IMAGE_GENERATION_TIMEOUT_ENV, lambda: IMAGE_GENERATION_NAMED_API_KEY_ENV, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
+    LegacyImageCallbacks(lambda: default_image_generation_model, lambda: default_image_generation_base_url, lambda: default_image_generation_api_key_env, lambda: validate_image_generation_timeout, lambda: normalize_image_key_items, lambda: image_keys_for_provider, lambda: image_generation_provider_label, lambda: image_generation_provider_key),
+)
+
 def _legacy_ai_detection_settings() -> dict[str, Any]:
-    local = load_ai_local_config()
-    provider = os.environ.get("INSPECTION_AI_PROVIDER", "").strip().lower() or str(local.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
-    model = os.environ.get("INSPECTION_AI_MODEL", "").strip() or str(local.get("model") or AI_DEFAULT_MODEL).strip() or AI_DEFAULT_MODEL
-    base_url = os.environ.get("INSPECTION_AI_BASE_URL", "").strip() or str(local.get("base_url") or default_ai_base_url(provider)).strip() or default_ai_base_url(provider)
-    proxy_url, proxy_source_name, proxy_auto_local = ai_proxy_url_from_config(local, provider)
-    timeout_raw = os.environ.get("INSPECTION_AI_TIMEOUT_SECONDS", "").strip() or local.get("timeout_seconds", AI_DEFAULT_TIMEOUT_SECONDS)
-    try:
-        timeout = validate_ai_timeout(timeout_raw)
-    except HTTPException:
-        timeout = AI_DEFAULT_TIMEOUT_SECONDS
-    key_env = os.environ.get("INSPECTION_AI_API_KEY_ENV", "").strip() or str(local.get("api_key_env") or "").strip()
-    if not key_env and provider == "gemini":
-        key_env = "GEMINI_API_KEY"
-    elif not key_env and provider == "qwen":
-        key_env = "DASHSCOPE_API_KEY"
-
-    direct_env_key = os.environ.get("INSPECTION_AI_API_KEY", "").strip()
-    named_env_key = os.environ.get(key_env, "").strip() if key_env else ""
-    all_local_keys = normalize_ai_key_items(local, provider)
-    local_keys = ai_keys_for_provider(all_local_keys, provider)
-    active_key_id = str(local.get("active_key_id") or "").strip()
-    active_item = next((item for item in local_keys if item["id"] == active_key_id), None) or (local_keys[0] if local_keys else None)
-    local_key = str(active_item.get("key") if active_item else "").strip()
-    api_key = ""
-    key_source = "missing"
-    key_source_name = ""
-    if direct_env_key:
-        api_key = direct_env_key
-        key_source = "env"
-        key_source_name = "INSPECTION_AI_API_KEY"
-    elif named_env_key:
-        api_key = named_env_key
-        key_source = "env"
-        key_source_name = key_env
-    elif local_key:
-        api_key = local_key
-        key_source = "env"
-        key_source_name = str(active_item.get("env") or "local_secret_env") if active_item else "local_secret_env"
-    key_candidates: list[dict[str, str]] = []
-    seen_candidate_keys: set[str] = set()
-
-    def add_key_candidate(candidate: dict[str, Any]) -> None:
-        key_value = str(candidate.get("key") or "").strip()
-        if not key_value or key_value in seen_candidate_keys:
-            return
-        seen_candidate_keys.add(key_value)
-        key_candidates.append(
-            {
-                "id": str(candidate.get("id") or secret_key_item_id(candidate.get("env") or "", key_value)),
-                "label": bounded_text(candidate.get("label") or "AI API Key", 80),
-                "env": str(candidate.get("env") or ""),
-                "provider": provider,
-                "key": key_value,
-            }
-        )
-
-    for item in local_keys:
-        add_key_candidate(item)
-    if direct_env_key:
-        add_key_candidate(
-            {
-                "id": secret_key_item_id("INSPECTION_AI_API_KEY", direct_env_key),
-                "label": "INSPECTION_AI_API_KEY",
-                "env": "INSPECTION_AI_API_KEY",
-                "key": direct_env_key,
-            }
-        )
-    if named_env_key and key_env:
-        add_key_candidate(
-            {
-                "id": secret_key_item_id(key_env, named_env_key),
-                "label": key_env,
-                "env": key_env,
-                "key": named_env_key,
-            }
-        )
-    key_candidates.sort(key=lambda item: 0 if item["key"] == api_key else 1)
-
-    supported = provider in AI_SUPPORTED_PROVIDERS
-    try:
-        validate_ai_base_url(base_url)
-        base_url_valid = True
-    except HTTPException:
-        base_url_valid = False
-    configured = bool(supported and base_url_valid and api_key)
-    if not supported:
-        status = "unsupported_provider"
-        message = f"Unsupported INSPECTION_AI_PROVIDER: {provider}"
-    elif not base_url_valid:
-        status = "invalid_base_url"
-        message = "AI provider base_url is invalid."
-    elif not api_key:
-        status = "missing_api_key"
-        message = f"Missing AI provider API key ({key_env or 'INSPECTION_AI_API_KEY'})."
-    else:
-        status = "ready"
-        message = "AI provider is configured."
-    return {
-        "enabled": configured,
-        "configured": configured,
-        "provider": provider,
-        "provider_label": ai_provider_label(provider),
-        "model": model,
-        "model_options": AI_MODEL_OPTIONS,
-        "timeout_seconds": timeout,
-        "api_key_env": key_env or "INSPECTION_AI_API_KEY",
-        "api_key_present": bool(api_key),
-        "key_present": bool(api_key),
-        "local_key_present": bool(local_key),
-        "api_keys": public_ai_key_items(all_local_keys),
-        "active_key_id": active_item["id"] if active_item else "",
-        "api_key_candidates": key_candidates,
-        "key_source": key_source,
-        "key_source_name": key_source_name,
-        "masked_key": mask_secret(api_key),
-        "api_key": api_key,
-        "base_url": public_ai_base_url(base_url),
-        "proxy_configured": bool(proxy_url),
-        "proxy_url": masked_url_for_status(proxy_url),
-        "proxy_source_name": proxy_source_name,
-        "proxy_auto_local": bool(proxy_auto_local),
-        "auto_local_proxy_enabled": bool(local.get("auto_local_proxy", True)) and env_flag_enabled(AI_AUTO_LOCAL_PROXY_ENV, True),
-        "proxy_url_raw": proxy_url,
-        "status": status,
-        "message": message,
-    }
+    return _legacy_json_settings_service._legacy_ai_detection_settings()
 
 
 from local_inspection_service.auth.status_ports import StatusPolicy, StatusSources, StatusProjectionCalls
@@ -12178,113 +12070,7 @@ def public_config_summary_for_user(user: dict[str, Any] | None, config: dict[str
 
 
 def _legacy_image_generation_settings() -> dict[str, Any]:
-    local = load_ai_local_config()
-    provider = (
-        os.environ.get(IMAGE_GENERATION_PROVIDER_ENV, "").strip().lower()
-        or str(local.get("image_provider") or IMAGE_GENERATION_DEFAULT_PROVIDER).strip().lower()
-    )
-    if provider not in IMAGE_GENERATION_SUPPORTED_PROVIDERS:
-        provider = IMAGE_GENERATION_DEFAULT_PROVIDER
-    legacy_gemini_model = os.environ.get(AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, "").strip()
-    model = (
-        os.environ.get(IMAGE_GENERATION_MODEL_ENV, "").strip()
-        or (legacy_gemini_model if provider == "gemini" else "")
-        or str(local.get("image_model") or "").strip()
-        or default_image_generation_model(provider)
-    )
-    base_url = (
-        os.environ.get(IMAGE_GENERATION_BASE_URL_ENV, "").strip()
-        or str(local.get("image_base_url") or "").strip()
-        or default_image_generation_base_url(provider)
-    )
-    proxy_url, proxy_source_name, proxy_auto_local = ai_proxy_url_from_config(local, provider)
-    legacy_gemini_timeout = os.environ.get(AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV, "").strip()
-    timeout_raw = (
-        os.environ.get(IMAGE_GENERATION_TIMEOUT_ENV, "").strip()
-        or (legacy_gemini_timeout if provider == "gemini" else "")
-        or local.get("image_timeout_seconds", IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS)
-    )
-    try:
-        timeout = validate_image_generation_timeout(timeout_raw)
-    except HTTPException:
-        timeout = IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS
-    timeout = max(10.0, min(300.0, float(timeout)))
-    key_env = os.environ.get(IMAGE_GENERATION_NAMED_API_KEY_ENV, "").strip()
-    if not key_env:
-        key_env = default_image_generation_api_key_env(provider)
-
-    direct_env_key = os.environ.get(IMAGE_GENERATION_API_KEY_ENV, "").strip()
-    named_env_key = os.environ.get(key_env, "").strip() if key_env else ""
-    all_image_keys = normalize_image_key_items(local, provider)
-    image_keys = image_keys_for_provider(all_image_keys, provider)
-    active_key_id = str(local.get("image_active_key_id") or "").strip()
-    active_item = next((item for item in image_keys if item["id"] == active_key_id), None) or (image_keys[0] if image_keys else None)
-    local_key = str(active_item.get("key") if active_item else "").strip()
-    api_key = ""
-    key_source = "missing"
-    key_source_name = ""
-    if local_key:
-        api_key = local_key
-        key_source = "env"
-        key_source_name = str(active_item.get("env") or "local_secret_env") if active_item else "local_secret_env"
-    elif direct_env_key:
-        api_key = direct_env_key
-        key_source = "env"
-        key_source_name = IMAGE_GENERATION_API_KEY_ENV
-    elif named_env_key:
-        api_key = named_env_key
-        key_source = "env"
-        key_source_name = key_env
-
-    try:
-        validate_ai_base_url(base_url)
-        base_url_valid = True
-    except HTTPException:
-        base_url_valid = False
-    configured = bool(provider in IMAGE_GENERATION_SUPPORTED_PROVIDERS and base_url_valid and api_key and model)
-    if provider not in IMAGE_GENERATION_SUPPORTED_PROVIDERS:
-        status = "unsupported_provider"
-        message = f"Unsupported image generation provider: {provider}"
-    elif not base_url_valid:
-        status = "invalid_base_url"
-        message = "Image generation provider base_url is invalid."
-    elif not model:
-        status = "missing_model"
-        message = "Image generation model is required."
-    elif not api_key:
-        status = "missing_api_key"
-        message = f"Missing image generation API key ({key_env or IMAGE_GENERATION_API_KEY_ENV})."
-    else:
-        status = "ready"
-        message = f"{image_generation_provider_label(provider)} image generation is configured."
-    return {
-        "provider": provider,
-        "provider_key": image_generation_provider_key(provider),
-        "provider_label": image_generation_provider_label(provider),
-        "configured": configured,
-        "enabled": configured,
-        "model": model,
-        "model_options": IMAGE_GENERATION_MODEL_OPTIONS,
-        "base_url": public_ai_base_url(base_url),
-        "timeout_seconds": timeout,
-        "api_key_env": key_env or IMAGE_GENERATION_API_KEY_ENV,
-        "api_key_present": bool(api_key),
-        "key_present": bool(api_key),
-        "local_key_present": bool(local_key),
-        "api_keys": public_ai_key_items(all_image_keys),
-        "active_key_id": active_item["id"] if active_item else "",
-        "key_source": key_source,
-        "key_source_name": key_source_name,
-        "masked_key": mask_secret(api_key),
-        "api_key": api_key,
-        "proxy_configured": bool(proxy_url),
-        "proxy_url": masked_url_for_status(proxy_url),
-        "proxy_source_name": proxy_source_name,
-        "proxy_auto_local": bool(proxy_auto_local),
-        "proxy_url_raw": proxy_url,
-        "status": status,
-        "message": message,
-    }
+    return _legacy_image_settings_service._legacy_image_generation_settings()
 
 
 def public_image_generation_status() -> dict[str, Any]:
