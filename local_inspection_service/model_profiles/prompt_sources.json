@@ -1,7 +1,9 @@
 {
-  "version": 56,
+  "version": 57,
   "sources": [
     "server.py",
+    "model_providers/gemini_ports.py",
+    "model_providers/gemini_transport.py",
     "model_providers/openai_ports.py",
     "model_providers/openai_transport.py",
     "model_profiles/audit.py",

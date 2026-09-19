@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_gemini_transport.py` runs 28 offline groups. The original 15
+behavior groups and 25 expanded original-body groups passed on Windows/Linux before extraction.
+Synthetic requests cover JSON, cached-content and image paths, captured cache defaults, model
+resolvers, usage/raw-text state, proxy diagnostics, resource errors and first-failure boundaries.
+No live provider, production media, model inference or physical device is accessed.
+
 `python scripts/smoke_openai_transport.py` runs 32 offline groups, preserving the original
 20 behavior groups and 29 expanded original-body groups. `smoke_provider_metering.py` runs
 16 groups, retaining 12 original accounting contracts and adding instance concurrency, nested
