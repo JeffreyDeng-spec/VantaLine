@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Agent pipeline action and turn services retain the existing action semantics, user/agent
+conversation order and caller-owned mutation boundaries. Scheduling, browser capabilities,
+worker topology and platform acceptance status are unchanged.
+
 Agent conversation, context and decision helpers now have explicit service boundaries.
 Original intent rules, prompts, model snapshots and fallback scopes are retained. No browser
 capability, task advancement, worker topology or platform acceptance status is changed.

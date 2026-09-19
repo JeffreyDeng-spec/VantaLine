@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_agent_pipeline_actions.py` covers 26 offline groups: 17 original
+contracts, seven failure/evaluation-order checks and two construction/composition checks.
+Synthetic callbacks verify pending-advance collection, linked-job cleanup, parameter aliasing,
+partial updates, exception matcher lookup and turn ordering without paid execution. The
+existing phase3d source guard follows the actual turn method; full legacy phase3d execution
+is not claimed by this source check.
+
 `python scripts/smoke_agent_pipeline_decisions.py` exercises 21 offline groups: 13 original
 behavior contracts, six evaluation-order/failure checks and two construction/isolation checks.
 Synthetic snapshot scopes, task dictionaries and model responses cover retained bindings and
