@@ -209,6 +209,7 @@ jobs:
           python scripts/smoke_provider_metering.py
           python scripts/smoke_gemini_transport.py
           python scripts/smoke_image_provider_transports.py
+          python scripts/smoke_provider_orchestration.py
           python scripts/smoke_presence_inspection.py
           python scripts/smoke_detection_analysis.py
           python scripts/smoke_ai_detection_analysis.py

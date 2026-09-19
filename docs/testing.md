@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_provider_orchestration.py` runs 24 offline groups, retaining all
+16 original behavior groups. The 22 expanded original-body groups passed on Windows/Linux
+before extraction. Tests cover selection, bound/cached fallback guards, existing retry budgets,
+key rotation, failure usage, dependency timing and independent compositions. Model substitutes
+and fake timing avoid paid requests, production data and physical devices.
+
 `python scripts/smoke_image_provider_transports.py` runs 29 offline groups. The original
 18 groups and 27 expanded original-body groups passed on Windows/Linux before extraction.
 Synthetic transport/download failures, dynamic exception matching, dependency capture, size
