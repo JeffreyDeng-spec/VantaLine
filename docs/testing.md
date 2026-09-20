@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_sprite_geometry.py` retains 15 original synthetic geometry groups,
+three callback-timing cases and two composition cases. Independent instances exercise
+upright, visible-size and resize operations; PCA/affine behavior uses original fixtures.
+Tiny masks and injected callbacks do not establish production vision or device acceptance.
+
 `python scripts/smoke_object_preprocessing.py` covers 27 synthetic groups: original
 fallback/partial-state/exception contracts, four lookup-timing cases and two independent
 composition cases. Synthetic arrays and collaborators do not establish real model or

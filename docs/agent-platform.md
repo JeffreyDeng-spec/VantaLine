@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Agent rendering retains existing sprite geometry entry points. Bounds, padding, orientation
+and resize helpers belong to accessories; inter-helper lookups stay at original call sites.
+Shared numerical imports are scoped to these twelve helpers; detection substitution
+contracts and source guards remain unchanged.
+
 Object preprocessing keeps pose-cell, legacy-alpha, source-cutout and full-image fallback
 order. Domain-local capabilities avoid an accessories-to-agent ports dependency. Cleanup
 coordinate offsets, diagnostic maxima and stage-specific partial state remain unchanged.
