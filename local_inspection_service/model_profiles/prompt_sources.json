@@ -1,7 +1,10 @@
 {
-  "version": 80,
+  "version": 81,
   "sources": [
     "server.py",
+    "accessories/sprite_geometry_ports.py",
+    "accessories/mask_geometry.py",
+    "accessories/sprite_geometry.py",
     "accessories/object_preprocessing_ports.py",
     "accessories/object_preprocessing.py",
     "accessories/crop_component_ports.py",

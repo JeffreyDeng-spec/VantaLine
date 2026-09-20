@@ -13504,24 +13504,29 @@ def material_aware_object_alpha(
     return adjusted, stats
 
 
+from .accessories.mask_geometry import normalize_angle_180 as _normalize_angle_180_impl
+from .accessories.mask_geometry import alpha_bbox as _alpha_bbox_impl
+from .accessories.mask_geometry import alpha_edge_max as _alpha_edge_max_impl
+from .accessories.mask_geometry import alpha_edge_stats as _alpha_edge_stats_impl
+from .accessories.mask_geometry import alpha_component_count as _alpha_component_count_impl
+from .accessories.mask_geometry import add_sprite_safety_margin as _add_sprite_safety_margin_impl
+from .accessories.mask_geometry import trim_masked_asset as _trim_masked_asset_impl
+from .accessories.sprite_geometry import SpriteGeometry as _SpriteGeometry
+from .accessories.sprite_geometry_ports import SpriteTransformOperations as _SpriteTransformOperations, SpriteFootprintOperations as _SpriteFootprintOperations
+_sprite_geometry = _SpriteGeometry(
+
+    _SpriteTransformOperations(normalize=lambda: normalize_angle_180, axis=lambda: masked_major_axis_angle, rotate=lambda: rotate_masked_asset, trim=lambda: trim_masked_asset, margin=lambda: add_sprite_safety_margin),
+
+    _SpriteFootprintOperations(bounds=lambda: alpha_bbox, visible=lambda: visible_mask_size_px),
+
+)
+
 def normalize_angle_180(angle: float) -> float:
-    normalized = (float(angle) + 90.0) % 180.0 - 90.0
-    return 90.0 if normalized <= -89.999 else normalized
+    return _normalize_angle_180_impl(angle)
 
 
 def masked_major_axis_angle(mask: np.ndarray) -> tuple[float, float]:
-    ys, xs = np.where(mask > 8)
-    if len(xs) < 24:
-        return 0.0, 1.0
-    points = np.column_stack([xs.astype(np.float32), ys.astype(np.float32)])
-    centered = points - points.mean(axis=0)
-    cov = np.cov(centered, rowvar=False)
-    values, vectors = np.linalg.eigh(cov)
-    order = np.argsort(values)[::-1]
-    major = vectors[:, order[0]]
-    angle = normalize_angle_180(math.degrees(math.atan2(float(major[1]), float(major[0]))))
-    ratio = float(values[order[0]] / max(values[order[1]], 1e-6)) if len(values) >= 2 else 1.0
-    return angle, ratio
+    return _sprite_geometry.masked_major_axis_angle(mask)
 
 
 def rotate_masked_asset(
@@ -13529,35 +13534,7 @@ def rotate_masked_asset(
     mask: np.ndarray,
     angle: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    h, w = asset.shape[:2]
-    safety_pad = max(10, int(round(max(w, h) * 0.08)))
-    asset, mask = add_sprite_safety_margin(asset, mask, safety_pad)
-    h, w = asset.shape[:2]
-    if abs(angle) < 0.05:
-        return trim_masked_asset(asset, mask, pad=safety_pad)
-    radians = math.radians(abs(angle))
-    new_w = max(1, int(math.ceil(w * math.cos(radians) + h * math.sin(radians)))) + safety_pad * 2
-    new_h = max(1, int(math.ceil(w * math.sin(radians) + h * math.cos(radians)))) + safety_pad * 2
-    matrix = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    matrix[0, 2] += (new_w - w) / 2
-    matrix[1, 2] += (new_h - h) / 2
-    rotated_asset = cv2.warpAffine(
-        asset,
-        matrix,
-        (new_w, new_h),
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(0, 0, 0),
-    )
-    rotated_mask = cv2.warpAffine(
-        mask,
-        matrix,
-        (new_w, new_h),
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0,
-    )
-    return trim_masked_asset(rotated_asset, rotated_mask, pad=safety_pad)
+    return _sprite_geometry.rotate_masked_asset(asset, mask, angle)
 
 
 def restore_object_sprite_source_orientation_for_render(
@@ -13582,76 +13559,27 @@ def restore_object_sprite_source_orientation_for_render(
 
 
 def alpha_bbox(mask: np.ndarray, threshold: int = 8) -> list[int]:
-    ys, xs = np.where(mask > threshold)
-    if len(xs) == 0 or len(ys) == 0:
-        return [0, 0, 0, 0]
-    return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+    return _alpha_bbox_impl(mask, threshold)
 
 
 def alpha_edge_max(mask: np.ndarray) -> int:
-    if mask.size == 0:
-        return 0
-    edge = np.concatenate([mask[0, :], mask[-1, :], mask[:, 0], mask[:, -1]])
-    return int(edge.max()) if edge.size else 0
+    return _alpha_edge_max_impl(mask)
 
 
 def alpha_edge_stats(mask: np.ndarray) -> dict[str, Any]:
-    if mask.size == 0:
-        return {"max": 0, "nonzero_px": 0, "mean": 0.0}
-    edge = np.concatenate([mask[0, :], mask[-1, :], mask[:, 0], mask[:, -1]])
-    if edge.size == 0:
-        return {"max": 0, "nonzero_px": 0, "mean": 0.0}
-    return {
-        "max": int(edge.max()),
-        "nonzero_px": int((edge > 0).sum()),
-        "mean": round(float(edge.mean()), 4),
-    }
+    return _alpha_edge_stats_impl(mask)
 
 
 def alpha_component_count(mask: np.ndarray) -> int:
-    if mask.size == 0:
-        return 0
-    num, _, stats, _ = cv2.connectedComponentsWithStats((mask > 12).astype(np.uint8), connectivity=8)
-    if num <= 1:
-        return 0
-    image_area = mask.shape[0] * mask.shape[1]
-    return sum(1 for idx in range(1, num) if stats[idx, cv2.CC_STAT_AREA] >= max(24, image_area * 0.00008))
+    return _alpha_component_count_impl(mask)
 
 
 def add_sprite_safety_margin(asset: np.ndarray, mask: np.ndarray, margin: int = 10) -> tuple[np.ndarray, np.ndarray]:
-    if asset.size == 0 or mask.size == 0:
-        return asset, mask
-    return (
-        cv2.copyMakeBorder(asset, margin, margin, margin, margin, cv2.BORDER_CONSTANT, value=(0, 0, 0)),
-        cv2.copyMakeBorder(mask, margin, margin, margin, margin, cv2.BORDER_CONSTANT, value=0),
-    )
+    return _add_sprite_safety_margin_impl(asset, mask, margin)
 
 
 def normalize_sprite_upright(asset: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    trimmed_asset, trimmed_mask = trim_masked_asset(asset, mask, pad=8)
-    original_h, original_w = trimmed_asset.shape[:2]
-    orientation_angle, axis_ratio = masked_major_axis_angle(trimmed_mask)
-    target_axis = 90.0
-    correction = normalize_angle_180(orientation_angle - target_axis)
-    if axis_ratio < 1.18:
-        correction = 0.0
-    pre_rotation_margin = max(18, int(round(max(original_w, original_h) * 0.14)))
-    padded_asset, padded_mask = add_sprite_safety_margin(trimmed_asset, trimmed_mask, pre_rotation_margin)
-    upright_asset, upright_mask = rotate_masked_asset(padded_asset, padded_mask, correction)
-    return upright_asset, upright_mask, {
-        "original_angle_degrees": round(float(orientation_angle), 3),
-        "rotation_degrees": round(float(correction), 3),
-        "original_orientation_angle": round(float(orientation_angle), 3),
-        "original_orientation_angle_degrees": round(float(orientation_angle), 3),
-        "rotation_degrees_applied": round(float(correction), 3),
-        "rotation_degrees_applied_to_upright": round(float(correction), 3),
-        "source_restore_rotation_degrees": round(float(-correction), 3),
-        "normalized_axis_target_degrees": round(float(target_axis), 3),
-        "orientation_axis_ratio": round(float(axis_ratio), 4),
-        "pre_normalized_asset_size_px": [int(original_w), int(original_h)],
-        "pre_rotation_safety_margin_px": int(pre_rotation_margin),
-        "upright_normalized": True,
-    }
+    return _sprite_geometry.normalize_sprite_upright(asset, mask)
 
 
 def write_clean_sprite(path: Path, asset: np.ndarray, mask: np.ndarray, metadata: dict[str, Any] | None = None) -> dict[str, Any] | None:
@@ -14290,12 +14218,7 @@ def load_object_preview_sprite(
 
 
 def trim_masked_asset(asset: np.ndarray, mask: np.ndarray, pad: int = 4) -> tuple[np.ndarray, np.ndarray]:
-    ys, xs = np.where(mask > 8)
-    if len(xs) == 0 or len(ys) == 0:
-        return asset, mask
-    x1, x2 = max(0, int(xs.min()) - pad), min(mask.shape[1], int(xs.max()) + pad + 1)
-    y1, y2 = max(0, int(ys.min()) - pad), min(mask.shape[0], int(ys.max()) + pad + 1)
-    return asset[y1:y2, x1:x2].copy(), mask[y1:y2, x1:x2].copy()
+    return _trim_masked_asset_impl(asset, mask, pad)
 
 
 def physical_mask_for_rect_asset(asset: np.ndarray) -> np.ndarray:
@@ -14375,8 +14298,7 @@ def paste_masked_asset(
 
 
 def visible_mask_size_px(mask: np.ndarray) -> list[int]:
-    bbox = alpha_bbox(mask)
-    return [max(0, int(bbox[2] - bbox[0])), max(0, int(bbox[3] - bbox[1]))]
+    return _sprite_geometry.visible_mask_size_px(mask)
 
 
 def resize_masked_asset_to_visible_footprint(
@@ -14385,49 +14307,7 @@ def resize_masked_asset_to_visible_footprint(
     target_size: tuple[int, int],
     preserve_aspect_ratio: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    target_w, target_h = max(1, int(target_size[0])), max(1, int(target_size[1]))
-    source_visible = visible_mask_size_px(mask)
-    if asset.size == 0 or mask.size == 0:
-        return asset, mask, {
-            "render_box_px": [target_w, target_h],
-            "render_visible_footprint_px": [0, 0],
-            "render_resize_policy": (
-                "alpha_visible_bbox_fit_physical_footprint_preserve_aspect"
-                if preserve_aspect_ratio
-                else "alpha_visible_bbox_exact_physical_footprint"
-            ),
-            "source_visible_footprint_px": source_visible,
-            "non_uniform_scaling_applied": False,
-            "render_scale_x": None,
-            "render_scale_y": None,
-        }
-    source_w = max(1, int(asset.shape[1]))
-    source_h = max(1, int(asset.shape[0]))
-    visible_w, visible_h = max(1, int(source_visible[0])), max(1, int(source_visible[1]))
-    if preserve_aspect_ratio:
-        scale = min(target_w / visible_w, target_h / visible_h)
-        resized_w = max(1, int(round(source_w * scale)))
-        resized_h = max(1, int(round(source_h * scale)))
-        render_policy = "alpha_visible_bbox_fit_physical_footprint_preserve_aspect"
-        scale_x = scale
-        scale_y = scale
-    else:
-        scale_x = target_w / visible_w
-        scale_y = target_h / visible_h
-        resized_w = max(1, int(round(source_w * scale_x)))
-        resized_h = max(1, int(round(source_h * scale_y)))
-        render_policy = "alpha_visible_bbox_exact_physical_footprint"
-    resized = cv2.resize(asset, (resized_w, resized_h), interpolation=cv2.INTER_AREA if max(asset.shape[:2]) > max(resized_h, resized_w) else cv2.INTER_CUBIC)
-    resized_mask = cv2.resize(mask, (resized_w, resized_h), interpolation=cv2.INTER_LINEAR)
-    return resized, resized_mask, {
-        "render_box_px": [target_w, target_h],
-        "render_visible_footprint_px": visible_mask_size_px(resized_mask),
-        "render_resize_policy": render_policy,
-        "source_visible_footprint_px": source_visible,
-        "non_uniform_scaling_applied": bool(abs(scale_x - scale_y) > 0.0005),
-        "render_scale_x": round(float(scale_x), 6),
-        "render_scale_y": round(float(scale_y), 6),
-    }
+    return _sprite_geometry.resize_masked_asset_to_visible_footprint(asset, mask, target_size, preserve_aspect_ratio)
 
 
 def long_axis_unified_render_box(
