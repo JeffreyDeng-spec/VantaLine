@@ -563,9 +563,17 @@ def assert_agent_pipeline_decision_helpers() -> None:
     unknown = server.normalize_agent_pipeline_decision({"action": "drop_database"})
     if unknown["action"] != "reply":
         raise AssertionError(f"unknown actions must fall back to reply: {unknown}")
-    changed, auto_ids = server.sync_and_auto_advance_pipeline([])
-    if changed or auto_ids:
-        raise AssertionError(f"empty pipeline sync should be a no-op: {changed}, {auto_ids}")
+    from unittest.mock import patch
+
+    # The empty-input contract does not depend on model configuration or storage.
+    with (
+        patch.object(server, "load_agent_config", return_value={}),
+        patch.object(server, "agent_recommendation_supported", return_value=False),
+        patch.object(server, "training_task_finder", return_value=lambda path: None),
+    ):
+        changed, auto_ids, advance_ids = server.sync_and_auto_advance_pipeline([])
+    if changed or auto_ids or advance_ids:
+        raise AssertionError(f"empty pipeline sync should be a no-op: {changed}, {auto_ids}, {advance_ids}")
     if server.pipeline_task_needs_auto_agent({"auto_advance": True, "detection_method": "ai", "stage": "draft", "status": "completed"}):
         raise AssertionError("AI tasks must not trigger the training auto agent")
     if not server.pipeline_task_needs_auto_agent(

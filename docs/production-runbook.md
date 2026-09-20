@@ -1,5 +1,10 @@
 # Production runbook
 
+The offline pipeline decision check uses synthetic configuration/storage collaborators and
+verifies both deferred scheduling outputs are empty for empty input. It changes no service,
+worker, database or rollback behavior. Full legacy phase3d tests still contain retired-worker
+expectations and are not production health checks.
+
 Pose planning services preserve reference-collection fallback, provider exception boundaries
 and partial plan/status updates. There is no new process, paid-call retry, task claim or
 persistence policy. Rollback restores the previous complete release and retains evidence.

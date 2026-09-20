@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Pipeline decision regression checks",
+      "paths": ["scripts/smoke_pipeline_decision_contract.py", "local_inspection_service/scripts/smoke_phase3d_pipeline.py"],
+      "required_docs": ["docs/testing.md"]
+    },
+    {
       "name": "Training executor transport",
       "paths": ["local_inspection_service/training/runpod_transfer.py", "local_inspection_service/training/runpod_upload_store.py", "local_inspection_service/training/runpod_transfer_api.py", "scripts/smoke_training_runpod_transfer.py", "local_inspection_service/training/executor_settings.py", "local_inspection_service/training/runpod_client.py", "local_inspection_service/training/runner.py", "local_inspection_service/training/submission.py", "scripts/smoke_training_runner.py", "local_inspection_service/training/dataset_generation.py", "scripts/smoke_training_dataset.py", "scripts/smoke_training_runpod_flow.py", "local_inspection_service/training/runpod_submission.py", "local_inspection_service/training/runpod_outputs.py", "local_inspection_service/training/runpod_flow.py", "scripts/smoke_training_artifacts.py", "local_inspection_service/training/dataset_archives.py", "local_inspection_service/training/runpod_exports.py", "local_inspection_service/training/runpod_artifacts.py", "scripts/smoke_training_executor_client.py"],
       "required_docs": ["local_inspection_service/docs/runpod-yolo-train-worker.md"]
