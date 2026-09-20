@@ -7122,79 +7122,25 @@ def build_object_view_plan(name: str) -> list[dict[str, Any]]:
     return _preparation_view_plan(name)
 
 
+from .accessories.preview_assets import select_document_image_candidate as _select_document_image_candidate_impl
+from .accessories.preview_assets import PreviewAssetLoader as _PreviewAssetLoader
+from .accessories.preview_asset_ports import PreviewAssetPolicy as _PreviewAssetPolicy, PreviewAssetPaths as _PreviewAssetPaths, PreviewAssetOperations as _PreviewAssetOperations
+_preview_asset_loader = _PreviewAssetLoader(
+    _PreviewAssetPolicy(root=lambda: ROOT, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
+    _PreviewAssetPaths(resolve=lambda: resolve_service_path),
+    _PreviewAssetOperations(default=lambda: default_asset_for_accessory, candidate=lambda: load_document_image_candidate, select=lambda: select_document_image_candidate, preview=lambda: load_preview_asset_with_metadata),
+)
+
 def default_asset_for_accessory(item: dict[str, Any]) -> Path | None:
-    name = str(item.get("name", "")).lower()
-    if "warranty" in name:
-        return ROOT / "standardized_manuals" / "manual_from_2_warranty_service_precise_1240x1754.png"
-    if "battery" in name:
-        return ROOT / "standardized_manuals" / "manual_from_3_battery_instruction_precise_1240x1754.png"
-    if "download" in name:
-        return ROOT / "standardized_manuals" / "manual_from_4_download_service_precise_1240x1754.png"
-    if "qr" in name or "service" in name:
-        return ROOT / "standardized_manuals" / "manual_from_6_service_qr_precise_1240x1754.png"
-    if "bottle" in name:
-        return ROOT / "generated_bottle_pose_collection" / "overhead_bottle_pose_collection_image2.png"
-    return None
+    return _preview_asset_loader.default_asset_for_accessory(item)
 
 
 def load_preview_asset_with_metadata(item: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
-    for asset in item.get("normalized_assets", []):
-        path = resolve_service_path(asset.get("path"))
-        if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
-            asset["path"] = str(path)
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-            if image is not None:
-                return image, {
-                    "asset_path": str(path),
-                    "asset_kind": asset.get("kind"),
-                    "asset_method": asset.get("method"),
-                    "asset_source": "normalized_assets",
-                    "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-                    "canonical_asset_dimensions_px": [int(asset.get("width") or image.shape[1]), int(asset.get("height") or image.shape[0])],
-                }
-    for path_str in item.get("source_files", []):
-        path = resolve_service_path(path_str)
-        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"} and path.exists():
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-            if image is not None:
-                return image, {
-                    "asset_path": str(path),
-                    "asset_kind": "source_image",
-                    "asset_method": "source_file_direct",
-                    "asset_source": "source_files",
-                    "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-                    "canonical_asset_dimensions_px": [int(image.shape[1]), int(image.shape[0])],
-                }
-    default_path = default_asset_for_accessory(item)
-    if default_path and default_path.exists():
-        image = cv2.imread(str(default_path), cv2.IMREAD_COLOR)
-        if image is not None:
-            return image, {
-                "asset_path": str(default_path),
-                "asset_kind": "default_image",
-                "asset_method": "default_asset_direct",
-                "asset_source": "default_asset",
-                "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-                "canonical_asset_dimensions_px": [int(image.shape[1]), int(image.shape[0])],
-            }
-    return None
+    return _preview_asset_loader.load_preview_asset_with_metadata(item)
 
 
 def load_document_image_candidate(path_value: Any, metadata: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
-    path = resolve_service_path(path_value)
-    if not path or not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-        return None
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    if image is None:
-        return None
-    asset_width = int(metadata.get("width") or image.shape[1])
-    asset_height = int(metadata.get("height") or image.shape[0])
-    return image, {
-        **metadata,
-        "asset_path": str(path),
-        "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-        "canonical_asset_dimensions_px": [asset_width, asset_height],
-    }
+    return _preview_asset_loader.load_document_image_candidate(path_value, metadata)
 
 
 def select_document_image_candidate(
@@ -7204,114 +7150,14 @@ def select_document_image_candidate(
     multi_policy: str,
     single_policy: str,
 ) -> tuple[np.ndarray, dict[str, Any]] | None:
-    if not candidates:
-        return None
-    count = len(candidates)
-    selected_index = int(rng.integers(0, count)) if rng is not None and count > 1 else 0
-    image, metadata = candidates[selected_index]
-    policy = multi_policy if count > 1 else single_policy
-    return image, {
-        **metadata,
-        "document_asset_index": selected_index,
-        "document_asset_count": count,
-        "document_asset_selection_policy": policy,
-    }
+    return _select_document_image_candidate_impl(candidates, rng, multi_policy=multi_policy, single_policy=single_policy)
 
 
 def load_rectified_document_asset_with_metadata(
     item: dict[str, Any],
     rng: np.random.Generator | None = None,
 ) -> tuple[np.ndarray, dict[str, Any]] | None:
-    normalized_candidates: list[tuple[np.ndarray, dict[str, Any]]] = []
-    for normalized_index, asset in enumerate(item.get("normalized_assets", [])):
-        if asset.get("kind") != "canonical_text_image":
-            continue
-        loaded = load_document_image_candidate(
-            asset.get("path"),
-            {
-                "asset_kind": asset.get("kind"),
-                "asset_method": asset.get("method"),
-                "asset_source": "normalized_assets",
-                "document_asset_source_index": normalized_index,
-                "width": asset.get("width"),
-                "height": asset.get("height"),
-            },
-        )
-        if loaded is not None:
-            normalized_candidates.append(loaded)
-    selected = select_document_image_candidate(
-        normalized_candidates,
-        rng,
-        multi_policy="seeded_uniform_canonical_text_image",
-        single_policy="single_canonical_text_image",
-    )
-    if selected is not None:
-        return selected
-
-    normalized_fallback_candidates: list[tuple[np.ndarray, dict[str, Any]]] = []
-    for normalized_index, asset in enumerate(item.get("normalized_assets", [])):
-        loaded = load_document_image_candidate(
-            asset.get("path"),
-            {
-                "asset_kind": asset.get("kind"),
-                "asset_method": asset.get("method"),
-                "asset_source": "normalized_assets",
-                "document_asset_source_index": normalized_index,
-                "width": asset.get("width"),
-                "height": asset.get("height"),
-            },
-        )
-        if loaded is not None:
-            normalized_fallback_candidates.append(loaded)
-    selected = select_document_image_candidate(
-        normalized_fallback_candidates,
-        rng,
-        multi_policy="seeded_uniform_normalized_document_image_fallback",
-        single_policy="single_normalized_document_image_fallback",
-    )
-    if selected is not None:
-        return selected
-
-    rectified_source_candidates: list[tuple[np.ndarray, dict[str, Any]]] = []
-    for path_str in item.get("source_files", []):
-        path = resolve_service_path(path_str)
-        if not path.stem.endswith("_rectified"):
-            continue
-        loaded = load_document_image_candidate(
-            path,
-            {
-                "asset_kind": "rectified_source_image",
-                "asset_method": "manual_rectified_source_direct",
-                "asset_source": "source_files_rectified",
-            },
-        )
-        if loaded is not None:
-            rectified_source_candidates.append(loaded)
-    selected = select_document_image_candidate(
-        rectified_source_candidates,
-        rng,
-        multi_policy="seeded_uniform_rectified_source_image",
-        single_policy="single_rectified_source_image",
-    )
-    if selected is not None:
-        return selected
-
-    default_path = default_asset_for_accessory(item)
-    if default_path and default_path.exists() and default_path.parent.name == "standardized_manuals":
-        image = cv2.imread(str(default_path), cv2.IMREAD_COLOR)
-        if image is not None:
-            return image, {
-                "asset_path": str(default_path),
-                "asset_kind": "standardized_document_default",
-                "asset_method": "standardized_rectified_default_direct",
-                "asset_source": "standardized_default_asset",
-                "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-                "canonical_asset_dimensions_px": [int(image.shape[1]), int(image.shape[0])],
-                "document_asset_index": 0,
-                "document_asset_count": 1,
-                "document_asset_selection_policy": "standardized_document_default",
-            }
-    return None
+    return _preview_asset_loader.load_rectified_document_asset_with_metadata(item, rng)
 
 
 
@@ -7353,8 +7199,7 @@ def load_rectified_document_asset_with_metadata(
 
 
 def load_preview_asset(item: dict[str, Any]) -> np.ndarray | None:
-    loaded = load_preview_asset_with_metadata(item)
-    return loaded[0] if loaded else None
+    return _preview_asset_loader.load_preview_asset(item)
 
 
 from .accessories.image_job_metadata import (

@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Preview asset loading preserves dependency evaluation points: suffix policy is read
+after path existence, candidate callable selection precedes asset.get argument effects,
+and failed preview decoding may refresh the later default lookup. Metadata is
+shallow-copied and existing normalized path mutation order remains.
+
 Compositing capabilities preserve original callback lookup timing and argument effects:
 rectangular trim can refresh later callbacks, and rotated paste selects its paste
 callable before producing the physical-mask argument. Physical object metadata aliases,

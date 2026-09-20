@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_preview_assets.py` preserves 18 original groups and adds one
+same-loader two-instance composition check. The 19 groups contain 86 test-method
+assertion sites plus two bootstrap guards. Synthetic files and injected
+decoders/candidates/selectors cover representative loading and fallback behavior, not
+exhaustive I/O failures or independent standalone selection.
+
 `python scripts/smoke_compositing.py` retains all 19 original groups and adds one
 same-class two-instance composition check. The 20 groups contain 102 test-method
 assertion sites plus two bootstrap guards. Synthetic fixtures cover representative

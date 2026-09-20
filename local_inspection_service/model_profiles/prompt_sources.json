@@ -1,7 +1,9 @@
 {
-  "version": 91,
+  "version": 92,
   "sources": [
     "server.py",
+    "accessories/preview_assets.py",
+    "accessories/preview_asset_ports.py",
     "accessories/compositing.py",
     "accessories/compositing_ports.py",
     "accessories/preview_sprites.py",
