@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_compositing.py` retains all 19 original groups and adds one
+same-class two-instance composition check. The 20 groups contain 102 test-method
+assertion sites plus two bootstrap guards. Synthetic fixtures cover representative
+zero-angle paste, crop, interpolation, alpha and callback ordering; they do not
+establish exhaustive rotated-pixel or partial-failure behavior.
+
 `python scripts/smoke_preview_sprites.py` preserves 23 original test groups and adds one
 independent two-instance renderer composition check. The 24 groups contain 95
 test-method assertion sites plus two bootstrap guards. Representative non-AI
