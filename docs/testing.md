@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_agent_pose_planning.py` covers 21 offline groups: 15 original contracts,
+four dependency/error-order checks and two constructor/composition checks. Synthetic model
+tools verify cache identity, unchanged provider arguments, exception boundaries and partial
+updates. The phase3d source guard follows the actual task-plan assembly method; full legacy
+pipeline or device commissioning is not claimed.
+
 `python scripts/smoke_agent_pose_assets.py` covers 21 offline groups: 15 original contracts,
 four dependency-order checks and two constructor/composition checks. Synthetic paths and
 objects verify asset aliases, readiness/rebuild gates and unchanged template requests.
