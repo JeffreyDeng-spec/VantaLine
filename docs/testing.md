@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_crop_components.py` covers 19 synthetic groups: 14 original image
+contracts, three dependency-order cases and two composition checks. Tiny masks verify
+strict thresholds, cap/order, copy/identity, focus padding, anchored support and diagnostics.
+Every poisoned root callback is checked unused in independent instances. These fixtures
+do not establish production vision accuracy or device/model commissioning.
+
 `python scripts/smoke_photo_highlight_builder.py` exercises 27 synthetic groups: 21 original
 workflow contracts, four dependency-refresh cases and two composition checks. Tests cover
 provider and file failures, rejection, partial sources, metadata and final policy reads.
