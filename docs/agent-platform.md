@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Pose cutout and preprocessing flows keep the root crop-helper entry points. Numerical
+component work is owned by accessory modules; alpha bounds and trimming callbacks stay
+late-bound at their original evaluation points. Other detection substitution contracts
+are unchanged; ordinary numerical imports are scoped to these five helpers.
+
 The photo-highlight sprite coordinator uses injected source/readiness, mask computation,
 publication, media and metadata capabilities. Constructors read no capability. OpenCV
 uses an ordinary shared import in this coordinator; attribute patches remain visible,

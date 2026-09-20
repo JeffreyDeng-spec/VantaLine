@@ -1,7 +1,10 @@
 {
-  "version": 78,
+  "version": 79,
   "sources": [
     "server.py",
+    "accessories/crop_component_ports.py",
+    "accessories/crop_analysis.py",
+    "accessories/crop_selection.py",
     "agent/photo_highlight_builder_ports.py",
     "agent/photo_highlight_builder.py",
     "agent/photo_highlight_image_ports.py",
