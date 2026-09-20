@@ -1,7 +1,11 @@
 {
-  "version": 85,
+  "version": 86,
   "sources": [
     "server.py",
+    "accessories/cutout_masks.py",
+    "accessories/cutout_selection.py",
+    "accessories/chroma_cutouts.py",
+    "accessories/cutout_geometry_ports.py",
     "accessories/cutout_runtime.py",
     "accessories/cutout_ports.py",
     "accessories/background_cutouts.py",

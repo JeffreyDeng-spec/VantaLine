@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose materialization and preprocessing retain late public cutout dependencies. The
+green-screen fallback still reports a crop-local bounding box; array aliases and copies
+remain unchanged. Chroma spill selection still precedes crop argument evaluation.
+
 Pose materialization and object preprocessing retain public cutout adapters. The
 accessory runtime and consumers do not import Agent or the Web entry; session and
 lock selection remain at their original operation points. Precise cutout retains

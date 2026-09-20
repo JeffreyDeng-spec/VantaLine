@@ -13355,60 +13355,31 @@ def ensure_object_clean_sprites_ready(item: dict[str, Any], *, force: bool = Fal
     return preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=force or bool(sprites))
 
 
+from .accessories.cutout_masks import foreground_mask as _foreground_mask_impl
+from .accessories.cutout_masks import suppress_green_spill as _suppress_green_spill_impl
+from .accessories.cutout_masks import bright_green_conveyor_mask as _bright_green_conveyor_mask_impl
+from .accessories.cutout_selection import ObjectCutoutSelection as _ObjectCutoutSelection
+from .accessories.chroma_cutouts import ChromaCutoutProcessor as _ChromaCutoutProcessor
+from .accessories.cutout_geometry_ports import SelectionOperations as _SelectionOperations, ChromaPolicyOperations as _ChromaPolicyOperations, ChromaMatteOperations as _ChromaMatteOperations
+_cutout_selection = _ObjectCutoutSelection(
+
+    _SelectionOperations(foreground=lambda: foreground_mask, object_fallback=lambda: object_cutout_from_image, bounded_ai=lambda: ai_background_cutout_with_bbox, bounded_green=lambda: green_screen_object_cutout_with_bbox),
+
+)
+_chroma_cutouts = _ChromaCutoutProcessor(
+
+    _ChromaPolicyOperations(normalize=lambda: normalize_chroma_screen, saturated=lambda: saturated_chroma_mask, green_spill=lambda: suppress_green_spill),
+
+    _ChromaMatteOperations(background=lambda: chroma_background_mask, distance=lambda: chroma_distance_alpha, spill=lambda: suppress_chroma_spill),
+
+)
+
 def foreground_mask(image: np.ndarray) -> np.ndarray:
-    h, w = image.shape[:2]
-    border = np.concatenate(
-        [
-            image[: max(3, h // 20), :, :].reshape(-1, 3),
-            image[-max(3, h // 20) :, :, :].reshape(-1, 3),
-            image[:, : max(3, w // 20), :].reshape(-1, 3),
-            image[:, -max(3, w // 20) :, :].reshape(-1, 3),
-        ],
-        axis=0,
-    )
-    bg = np.median(border, axis=0).astype(np.float32)
-    diff = np.linalg.norm(image.astype(np.float32) - bg, axis=2)
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    hue = hsv[:, :, 0]
-    sat = hsv[:, :, 1]
-    val = hsv[:, :, 2]
-    green_bg = (hue > 30) & (hue < 100) & (sat > 24) & (val > 35)
-    red = ((hue < 14) | (hue > 165)) & (sat > 70)
-    dark = val < 78
-    bright_glass = (sat < 62) & (val > 128) & (diff > 10)
-    mask = ((~green_bg & (diff > 18)) | red | dark | bright_glass).astype(np.uint8) * 255
-    edges = cv2.Canny(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 45, 140)
-    mask = cv2.bitwise_or(mask, cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((17, 17), np.uint8), iterations=2)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    return mask
+    return _foreground_mask_impl(image)
 
 
 def object_cutout_from_image(image: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray] | None:
-    mask = foreground_mask(image)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    components = []
-    image_area = image.shape[0] * image.shape[1]
-    for idx in range(1, num):
-        x, y, w, h, area = stats[idx]
-        if area < max(500, image_area * 0.001) or area > image_area * 0.55:
-            continue
-        if w < 8 or h < 8:
-            continue
-        components.append((x, y, w, h, area))
-    if not components:
-        return None
-    components = sorted(components, key=lambda item: item[4], reverse=True)[:8]
-    weights = np.array([item[4] for item in components], dtype=float)
-    weights = weights / weights.sum()
-    x, y, w, h, _ = components[int(rng.choice(len(components), p=weights))]
-    pad = max(8, int(max(w, h) * 0.18))
-    x1, y1 = max(0, x - pad), max(0, y - pad)
-    x2, y2 = min(image.shape[1], x + w + pad), min(image.shape[0], y + h + pad)
-    crop = image[y1:y2, x1:x2].copy()
-    crop_mask = mask[y1:y2, x1:x2].copy()
-    crop_mask = cv2.GaussianBlur(crop_mask, (5, 5), 0)
-    return crop, crop_mask
+    return _cutout_selection.object_cutout_from_image(image, rng)
 
 
 from .accessories.background_cutouts import BackgroundCutoutProcessor as _BackgroundCutoutProcessor
@@ -13427,85 +13398,15 @@ def ai_background_cutout_with_bbox(image: np.ndarray) -> tuple[np.ndarray, np.nd
 
 
 def ai_background_cutout(image: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
-    result = ai_background_cutout_with_bbox(image)
-    if not result:
-        return None
-    return result[0], result[1]
+    return _cutout_selection.ai_background_cutout(image)
 
 
 def green_screen_object_cutout_with_bbox(image: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    hue = hsv[:, :, 0]
-    sat = hsv[:, :, 1]
-    val = hsv[:, :, 2]
-    red = (((hue < 14) | (hue > 165)) & (sat > 70)).astype(np.uint8) * 255
-    dark = ((val < 92) & (sat > 25)).astype(np.uint8) * 255
-    glass_highlight = ((sat < 80) & (val > 125)).astype(np.uint8) * 255
-    edges = cv2.Canny(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 45, 135)
-    seed = cv2.bitwise_or(cv2.bitwise_or(red, dark), cv2.bitwise_or(glass_highlight, edges))
-    seed = cv2.morphologyEx(seed, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    joined = cv2.dilate(seed, np.ones((29, 29), np.uint8), iterations=1)
-    joined = cv2.morphologyEx(joined, cv2.MORPH_CLOSE, np.ones((41, 41), np.uint8), iterations=1)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(joined, connectivity=8)
-    components = []
-    image_area = image.shape[0] * image.shape[1]
-    for idx in range(1, num):
-        x, y, w, h, area = stats[idx]
-        if area < max(650, image_area * 0.002) or area > image_area * 0.45:
-            continue
-        if w < 18 or h < 18:
-            continue
-        anchor = int(red[y : y + h, x : x + w].sum() // 255) + int(dark[y : y + h, x : x + w].sum() // 255)
-        highlight = int(glass_highlight[y : y + h, x : x + w].sum() // 255)
-        components.append((x, y, w, h, area, anchor, highlight))
-    if not components:
-        fallback = object_cutout_from_image(image, rng)
-        if not fallback:
-            return None
-        return fallback[0], fallback[1], (0, 0, fallback[0].shape[1], fallback[0].shape[0])
-    anchored = [item for item in components if item[5] > 25]
-    components = sorted(anchored or components, key=lambda item: item[5] * 12 + item[6] * 0.2 + item[4] * 0.02, reverse=True)[:5]
-    x, y, w, h, *_ = components[0]
-    pad = max(10, int(max(w, h) * 0.08))
-    x1, y1 = max(0, x - pad), max(0, y - pad)
-    x2, y2 = min(image.shape[1], x + w + pad), min(image.shape[0], y + h + pad)
-    crop = image[y1:y2, x1:x2].copy()
-    crop_hsv = hsv[y1:y2, x1:x2]
-    crop_seed = seed[y1:y2, x1:x2]
-    crop_joined = joined[y1:y2, x1:x2]
-    ch, cs, cv = crop_hsv[:, :, 0], crop_hsv[:, :, 1], crop_hsv[:, :, 2]
-    crop_red = (((ch < 14) | (ch > 165)) & (cs > 70))
-    crop_dark = (cv < 92) & (cs > 25)
-    crop_highlight = (cs < 80) & (cv > 125)
-    alpha = np.zeros(crop.shape[:2], dtype=np.uint8)
-    alpha[crop_highlight | (crop_seed > 0)] = 178
-    alpha[crop_red | crop_dark] = 255
-    alpha = cv2.dilate(alpha, np.ones((3, 3), np.uint8), iterations=1)
-    alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
-    keep = np.zeros_like(alpha)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats((alpha > 28).astype(np.uint8), connectivity=8)
-    alpha_area = alpha.shape[0] * alpha.shape[1]
-    components = []
-    for idx in range(1, num):
-        x, y, w, h, area = stats[idx]
-        if area < max(35, alpha_area * 0.002):
-            continue
-        components.append((idx, area))
-    for idx, _ in sorted(components, key=lambda item: item[1], reverse=True)[:2]:
-        keep[labels == idx] = 255
-    if components:
-        alpha = cv2.bitwise_and(alpha, keep)
-    # Treat green spill in glass as transparency, not white material.
-    green_tint = (ch > 30) & (ch < 100) & (cs > 22)
-    alpha[green_tint & (alpha > 0) & ~(crop_red | crop_dark)] = np.minimum(alpha[green_tint & (alpha > 0) & ~(crop_red | crop_dark)], 82)
-    return crop, alpha, (int(x1), int(y1), int(x2), int(y2))
+    return _cutout_selection.green_screen_object_cutout_with_bbox(image, rng)
 
 
 def green_screen_object_cutout(image: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray] | None:
-    result = green_screen_object_cutout_with_bbox(image, rng)
-    if not result:
-        return None
-    return result[0], result[1]
+    return _cutout_selection.green_screen_object_cutout(image, rng)
 
 
 POSE_COLLECTION_GRID_POSITIONS = [
@@ -20752,90 +20653,19 @@ def suppress_green_spill(image_bgr: np.ndarray) -> np.ndarray:
     This neutralises the green fringe around a dark object cut from a green plate
     without removing or shrinking the silhouette. Neutral/grey/silver/black object
     pixels (green ~= red ~= blue) are untouched."""
-    if image_bgr is None or image_bgr.ndim != 3:
-        return image_bgr
-    blue, green, red = cv2.split(image_bgr)
-    limit = np.maximum(red, blue)
-    spill = green > limit
-    green = green.copy()
-    green[spill] = limit[spill]
-    return cv2.merge([blue, green, red])
+    return _suppress_green_spill_impl(image_bgr)
 
 
 def suppress_chroma_spill(image_bgr: np.ndarray, screen: dict[str, Any] | None = None) -> np.ndarray:
-    if image_bgr is None or image_bgr.ndim != 3:
-        return image_bgr
-    name = str(normalize_chroma_screen(screen).get("name") or "green")
-    if name == "green":
-        return suppress_green_spill(image_bgr)
-    blue, green, red = cv2.split(image_bgr)
-    if name == "blue":
-        limit = np.maximum(red, green)
-        spill = blue > limit
-        blue = blue.copy()
-        blue[spill] = limit[spill]
-        return cv2.merge([blue, green, red])
-    if name == "red":
-        limit = np.maximum(blue, green)
-        spill = red > limit
-        red = red.copy()
-        red[spill] = limit[spill]
-        return cv2.merge([blue, green, red])
-    return image_bgr
+    return _chroma_cutouts.suppress_chroma_spill(image_bgr, screen)
 
 
 def chroma_background_mask(image_bgr: np.ndarray, screen: dict[str, Any] | None = None) -> np.ndarray:
-    screen = normalize_chroma_screen(screen)
-    name = str(screen.get("name") or "green")
-    target_bgr = np.array([screen["rgb"][2], screen["rgb"][1], screen["rgb"][0]], dtype=np.int16)
-    image_i16 = image_bgr.astype(np.int16)
-    diff = np.abs(image_i16 - target_bgr.reshape(1, 1, 3))
-    near_exact = (np.max(diff, axis=2) <= 42) | ((np.max(diff, axis=2) <= 70) & (np.sum(diff, axis=2) <= 120))
-    blue, green, red = cv2.split(image_i16)
-    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
-    hue, sat, val = cv2.split(hsv)
-    if name == "blue":
-        chroma_shadow = (
-            (hue >= 96)
-            & (hue <= 135)
-            & (sat >= 28)
-            & (val >= 28)
-            & (blue >= 90)
-            & ((blue - np.maximum(red, green)) >= 28)
-            & (red <= 150)
-            & (green <= 150)
-        )
-    elif name == "red":
-        chroma_shadow = (
-            ((hue <= 12) | (hue >= 168))
-            & (sat >= 28)
-            & (val >= 28)
-            & (red >= 90)
-            & ((red - np.maximum(blue, green)) >= 28)
-            & (blue <= 150)
-            & (green <= 150)
-        )
-    else:
-        chroma_shadow = (
-            (hue >= 35)
-            & (hue <= 95)
-            & (sat >= 28)
-            & (val >= 28)
-            & (green >= 90)
-            & ((green - np.maximum(red, blue)) >= 28)
-            & (red <= 150)
-            & (blue <= 150)
-        )
-    return near_exact | saturated_chroma_mask(image_bgr, screen) | chroma_shadow
+    return _chroma_cutouts.chroma_background_mask(image_bgr, screen)
 
 
 def chroma_distance_alpha(image_bgr: np.ndarray, screen: dict[str, Any] | None = None) -> np.ndarray:
-    screen = normalize_chroma_screen(screen)
-    target_bgr = np.array([screen["rgb"][2], screen["rgb"][1], screen["rgb"][0]], dtype=np.float32)
-    diff = image_bgr.astype(np.float32) - target_bgr.reshape(1, 1, 3)
-    distance = np.linalg.norm(diff, axis=2)
-    alpha = np.clip((distance - 24.0) * (255.0 / 96.0), 0, 255)
-    return alpha.astype(np.uint8)
+    return _chroma_cutouts.chroma_distance_alpha(image_bgr, screen)
 
 
 def chroma_screen_object_cutout(
@@ -20843,43 +20673,7 @@ def chroma_screen_object_cutout(
     screen: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
     """Remove a fixed solid chroma tabletop/background and keep the largest object."""
-    if image_bgr is None or image_bgr.ndim != 3:
-        return None
-    height, width = image_bgr.shape[:2]
-    background = chroma_background_mask(image_bgr, screen)
-    if float(background.mean()) < 0.20:
-        return None
-    foreground = (~background).astype(np.uint8) * 255
-    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=2)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(foreground, connectivity=8)
-    if num <= 1:
-        return None
-    idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
-    if int(stats[idx, cv2.CC_STAT_AREA]) < max(400, int(height * width * 0.0015)):
-        return None
-    mask = (labels == idx).astype(np.uint8) * 255
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None
-    filled = np.zeros_like(mask)
-    cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
-    inside_distance = cv2.distanceTransform((filled > 0).astype(np.uint8), cv2.DIST_L2, 3)
-    core = inside_distance >= 3.0
-    edge_band = (filled > 0) & ~core
-    shape_alpha = np.clip(inside_distance * (255.0 / 3.0), 0, 255).astype(np.uint8)
-    color_alpha = chroma_distance_alpha(image_bgr, screen)
-    alpha = np.zeros_like(filled, dtype=np.uint8)
-    alpha[core] = 255
-    alpha[edge_band] = np.minimum(shape_alpha[edge_band], np.maximum(color_alpha[edge_band], 48))
-    alpha = cv2.GaussianBlur(alpha, (3, 3), 0)
-    ys, xs = np.where(alpha > 8)
-    if len(xs) < 240:
-        return None
-    x1, x2 = int(xs.min()), int(xs.max()) + 1
-    y1, y2 = int(ys.min()), int(ys.max()) + 1
-    crop_bgr = suppress_chroma_spill(image_bgr[y1:y2, x1:x2].copy(), screen)
-    return crop_bgr, alpha[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
+    return _chroma_cutouts.chroma_screen_object_cutout(image_bgr, screen)
 
 
 def bright_green_conveyor_mask(image_bgr: np.ndarray) -> np.ndarray:
@@ -20887,16 +20681,7 @@ def bright_green_conveyor_mask(image_bgr: np.ndarray) -> np.ndarray:
     saturated, well-lit green plate while sparing dark/olive object pixels (e.g.
     carbon-fibre) and dark anti-aliased object edges, so it can trim a green halo
     without biting into the object."""
-    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
-    hue, sat, val = cv2.split(hsv)
-    blue, green, red = cv2.split(image_bgr.astype(np.int16))
-    return (
-        (hue >= 35)
-        & (hue <= 95)
-        & (sat >= 70)
-        & (val >= 80)
-        & ((green - np.maximum(red, blue)) > 25)
-    )
+    return _bright_green_conveyor_mask_impl(image_bgr)
 
 
 def precise_green_plate_cutout(
@@ -20918,42 +20703,7 @@ def green_conveyor_object_cutout(
     non-green blob, fills interior holes. Used as the fallback when the AI matte
     is unavailable; tuned to avoid biting into dark object edges or thin features
     (no aggressive open/erode that would shave a thin part's silhouette)."""
-    if image_bgr is None or image_bgr.ndim != 3:
-        return None
-    height, width = image_bgr.shape[:2]
-    blue, green, red = cv2.split(image_bgr.astype(np.int16))
-    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
-    hue, sat, val = cv2.split(hsv)
-    # Only treat reasonably bright, saturated green as background so dark, low-value
-    # object-edge pixels (which read slightly green from background bleed) survive.
-    green_hue = (hue >= 35) & (hue <= 95) & (sat >= 45) & (val >= 60)
-    green_dominant = ((green - np.maximum(red, blue)) > 22) & (sat >= 35) & (val >= 60)
-    background = green_hue | green_dominant
-    foreground = (~background).astype(np.uint8) * 255
-    # Gentle cleanup only: a small open removes specks; close bridges the matte.
-    foreground = cv2.morphologyEx(foreground, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    foreground = cv2.morphologyEx(foreground, cv2.MORPH_CLOSE, np.ones((13, 13), np.uint8), iterations=2)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(foreground, connectivity=8)
-    if num <= 1:
-        return None
-    idx = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
-    if int(stats[idx, cv2.CC_STAT_AREA]) < max(400, int(height * width * 0.0015)):
-        return None
-    mask = (labels == idx).astype(np.uint8) * 255
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None
-    filled = np.zeros_like(mask)
-    cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
-    # No erosion (keep the full silhouette); a tiny blur anti-aliases the contour.
-    filled = cv2.GaussianBlur(filled, (3, 3), 0)
-    ys, xs = np.where(filled > 8)
-    if len(xs) < 240:
-        return None
-    x1, x2 = int(xs.min()), int(xs.max()) + 1
-    y1, y2 = int(ys.min()), int(ys.max()) + 1
-    crop_bgr = suppress_green_spill(image_bgr[y1:y2, x1:x2].copy())
-    return crop_bgr, filled[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
+    return _chroma_cutouts.green_conveyor_object_cutout(image_bgr)
 
 
 def segment_agent_mcp_pose_object(
