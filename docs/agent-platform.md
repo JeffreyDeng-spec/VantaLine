@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Render-input sprite selection keeps callback evaluation at the original lookup sites:
+the decoder is selected before path resolution, and the canonicalization callback before
+nested family lookup. Metadata is copied before the final inventory read, preserving
+path/index/version ordering and original aliases.
+
 Agent sprite readiness consumes the same materialized asset dictionaries and existing
 pose metadata corrections. Upright correction precedes laying correction, callbacks
 remain selected at original lookup sites, and text asset paths remain unrewritten.

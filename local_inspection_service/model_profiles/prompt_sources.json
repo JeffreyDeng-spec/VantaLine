@@ -1,7 +1,9 @@
 {
-  "version": 89,
+  "version": 90,
   "sources": [
     "server.py",
+    "accessories/preview_sprites.py",
+    "accessories/preview_sprite_ports.py",
     "accessories/materialized_assets.py",
     "accessories/materialized_asset_ports.py",
     "accessories/pose_policy.py",

@@ -12922,17 +12922,18 @@ def preview_pose_family_sequence_label(sequence: list[str | None]) -> str | None
     return _preview_pose_policy.preview_pose_family_sequence_label(sequence)
 
 
+from .accessories.preview_sprites import load_clean_sprite as _load_clean_sprite_impl
+from .accessories.preview_sprites import PreviewSpriteRenderer as _PreviewSpriteRenderer
+from .accessories.preview_sprite_ports import PreviewSpriteInventory as _PreviewSpriteInventory, PreviewSpritePoses as _PreviewSpritePoses, PreviewSpriteMedia as _PreviewSpriteMedia, PreviewSpriteGeometry as _PreviewSpriteGeometry
+_preview_sprite_renderer = _PreviewSpriteRenderer(
+    _PreviewSpriteInventory(assets=lambda: clean_sprite_assets, preprocess=lambda: preprocess_object_clean_sprites, version=lambda: accessory_sprite_version),
+    _PreviewSpritePoses(canonical=lambda: canonical_pose_family_name, family=lambda: sprite_pose_family, top_view=lambda: pose_family_is_top_view, complete=lambda: filter_complete_pose_candidates, upright_positions=lambda: UPRIGHT_TOP_VIEW_SOURCE_POSITIONS),
+    _PreviewSpriteMedia(resolve=lambda: resolve_service_path, decode=lambda: load_clean_sprite),
+    _PreviewSpriteGeometry(rotate=lambda: rotate_masked_asset),
+)
+
 def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-    image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if image is None:
-        return None
-    if image.ndim != 3 or image.shape[2] < 4:
-        return None
-    alpha = image[:, :, 3]
-    if int((alpha > 8).sum()) < 240:
-        return None
-    bgr = image[:, :, :3]
-    return bgr.copy(), alpha.copy()
+    return _load_clean_sprite_impl(path)
 
 
 def object_physical_size_mm(size: dict[str, Any] | None) -> tuple[float, float, float]:
@@ -13060,18 +13061,7 @@ def restore_object_sprite_source_orientation_for_render(
     *,
     top_view_pose: bool,
 ) -> tuple[np.ndarray, np.ndarray, float, float]:
-    try:
-        requested = float(sprite_meta.get("source_restore_rotation_degrees") or 0.0)
-    except (TypeError, ValueError):
-        requested = 0.0
-    if top_view_pose or abs(requested) < 0.05:
-        sprite_meta["source_orientation_restored_for_render"] = False
-        sprite_meta["source_restore_rotation_degrees_requested"] = round(float(requested), 2)
-        return asset, mask, 0.0, requested if abs(requested) >= 0.05 else 0.0
-    restored_asset, restored_mask = rotate_masked_asset(asset, mask, requested)
-    sprite_meta["source_orientation_restored_for_render"] = True
-    sprite_meta["source_restore_rotation_degrees_requested"] = round(float(requested), 2)
-    return restored_asset, restored_mask, requested, 0.0
+    return _preview_sprite_renderer.restore_object_sprite_source_orientation_for_render(asset, mask, sprite_meta, top_view_pose=top_view_pose)
 
 
 def alpha_bbox(mask: np.ndarray, threshold: int = 8) -> list[int]:
@@ -13367,79 +13357,7 @@ def load_object_preview_sprite(
     pose_family: str | None = None,
     source_position: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]] | None:
-    sprites = clean_sprite_assets(item)
-    if not sprites:
-        preprocess_object_clean_sprites(item, allow_ai_cutout=False)
-        sprites = clean_sprite_assets(item)
-    if sprites:
-        candidates = sprites
-        if pose_family:
-            requested_canonical = canonical_pose_family_name(pose_family)
-            family_candidates = [
-                asset
-                for asset in candidates
-                if (
-                    sprite_pose_family(asset) == pose_family
-                    or (
-                        requested_canonical in {"lying", "upright"}
-                        and canonical_pose_family_name(sprite_pose_family(asset)) == requested_canonical
-                    )
-                )
-            ]
-            if family_candidates:
-                candidates = family_candidates
-        if pose_family_is_top_view(pose_family or ""):
-            upright_candidates = [
-                asset
-                for asset in candidates
-                if (asset.get("source_position") or asset.get("pose_position")) in UPRIGHT_TOP_VIEW_SOURCE_POSITIONS
-            ]
-            if not upright_candidates:
-                return None
-            candidates = upright_candidates
-        candidates = filter_complete_pose_candidates(candidates, pose_family)
-        wanted_position = source_position or target_position
-        if wanted_position:
-            position_candidates = [
-                asset
-                for asset in candidates
-                if (asset.get("source_position") or asset.get("pose_position")) == wanted_position
-            ]
-            if (
-                source_position
-                and not position_candidates
-                and not any(
-                    asset.get("source_pose_collection_job_id") in {"legacy_clean_sprite", "real_photo_direct_source"}
-                    for asset in candidates
-                )
-            ):
-                return None
-            if position_candidates:
-                candidates = position_candidates
-        elif target_position:
-            position_candidates = [asset for asset in candidates if asset.get("pose_position") == target_position]
-            if position_candidates:
-                candidates = position_candidates
-        if not candidates:
-            candidates = sprites
-        asset = candidates[int(rng.integers(0, len(candidates)))]
-        sprite = load_clean_sprite(resolve_service_path(asset.get("path")))
-        if sprite:
-            meta = dict(asset)
-            all_sprites = clean_sprite_assets(item)
-            meta["sprite_index"] = next(
-                (
-                    idx + 1
-                    for idx, candidate in enumerate(all_sprites)
-                    if str(candidate.get("path", "")) == str(asset.get("path", ""))
-                ),
-                None,
-            )
-            meta["sprite_path"] = str(asset.get("path", ""))
-            meta["clean_sprite_preprocessed_at"] = item.get("clean_sprite_preprocessed_at")
-            meta["clean_sprite_version"] = accessory_sprite_version(item)
-            return sprite[0], sprite[1], meta
-    return None
+    return _preview_sprite_renderer.load_object_preview_sprite(item, rng, target_position, pose_family, source_position)
 
 
 def trim_masked_asset(asset: np.ndarray, mask: np.ndarray, pad: int = 4) -> tuple[np.ndarray, np.ndarray]:
