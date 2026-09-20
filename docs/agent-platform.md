@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Compositing capabilities preserve original callback lookup timing and argument effects:
+rectangular trim can refresh later callbacks, and rotated paste selects its paste
+callable before producing the physical-mask argument. Physical object metadata aliases,
+pre/final footprints and disabled second resize remain unchanged.
+
 Render-input sprite selection keeps callback evaluation at the original lookup sites:
 the decoder is selected before path resolution, and the canonicalization callback before
 nested family lookup. Metadata is copied before the final inventory read, preserving
