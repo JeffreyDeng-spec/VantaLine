@@ -1,7 +1,12 @@
 {
-  "version": 81,
+  "version": 82,
   "sources": [
     "server.py",
+    "accessories/sprite_metadata_ports.py",
+    "accessories/sprite_metadata_values.py",
+    "accessories/sprite_footprint.py",
+    "accessories/sprite_scale.py",
+    "accessories/sprite_render_metadata.py",
     "accessories/sprite_geometry_ports.py",
     "accessories/mask_geometry.py",
     "accessories/sprite_geometry.py",

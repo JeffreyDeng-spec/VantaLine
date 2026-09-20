@@ -232,6 +232,7 @@ jobs:
           python scripts/smoke_crop_components.py
           python scripts/smoke_object_preprocessing.py
           python scripts/smoke_sprite_geometry.py
+          python scripts/smoke_sprite_metadata.py
           python scripts/smoke_pipeline_decision_contract.py
           python -c "from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_react_pipeline_route; assert_react_pipeline_route()"
           python scripts/smoke_presence_inspection.py

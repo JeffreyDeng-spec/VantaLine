@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_sprite_metadata.py` preserves 22 original synthetic metadata groups,
+four lookup-order cases and two composition checks. Tests cover zero image access on
+metadata hits, bypasses, alias identity and partial updates. Independent services exercise
+footprint/scale calculations and visible/render-size flows, not every update branch.
+Synthetic fixtures do not establish physical accuracy, real model or device acceptance.
+
 `python scripts/smoke_sprite_geometry.py` retains 15 original synthetic geometry groups,
 three callback-timing cases and two composition cases. Independent instances exercise
 upright, visible-size and resize operations; PCA/affine behavior uses original fixtures.
