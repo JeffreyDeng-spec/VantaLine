@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_photo_highlight_image.py` covers 19 synthetic helper groups: original
+14 image/prompt contracts, three lookup-order checks and two independent composition
+checks. Tiny arrays cover scaling, component decoding, available ROI and comparison
+boundaries. Numerical libraries are explicitly imported shared modules; attribute patches
+remain supported. Tests do not claim production vision accuracy or paid-model acceptance.
+
 `python scripts/smoke_photo_highlight_workflow.py` exercises 26 synthetic contracts: original
 20 behavior checks, four dependency-order checks and two independent-service checks.
 Source limits retain definition-time defaults; tests cover readiness, selected object identity,
