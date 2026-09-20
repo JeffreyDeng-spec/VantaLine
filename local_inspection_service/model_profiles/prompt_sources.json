@@ -1,7 +1,9 @@
 {
-  "version": 95,
+  "version": 96,
   "sources": [
     "server.py",
+    "accessories/physical_dimensions.py",
+    "accessories/physical_dimension_ports.py",
     "accessories/profile_projection.py",
     "accessories/profile_projection_ports.py",
     "accessories/display_labels.py",
