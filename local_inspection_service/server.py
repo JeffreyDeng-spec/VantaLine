@@ -7471,119 +7471,21 @@ def choose_agent_mcp_chroma_screen(item: dict[str, Any]) -> dict[str, Any]:
     return _pose_chroma_policy.choose_agent_mcp_chroma_screen(item)
 
 
+from .accessories.profile_projection import AccessoryProfileProjection as _AccessoryProfileProjection
+from .accessories.profile_projection_ports import ProfileIdentity as _ProfileIdentity, ProfileText as _ProfileText, ProfileDimensions as _ProfileDimensions, ProfileReferences as _ProfileReferences
+_accessory_profile_projection = _AccessoryProfileProjection(
+    _ProfileIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, alpha=lambda: object_alpha_material_policy),
+    _ProfileText(bounded=lambda: bounded_text, strings=lambda: string_list, preferred=lambda: preferred_english_accessory_name, compact=lambda: compact_english_accessory_name, size=lambda: profile_size_text),
+    _ProfileDimensions(physical=lambda: ai_profile_dimensions_from_physical_size, normalize=lambda: normalize_ai_profile_dimensions, ratio=lambda: ai_profile_top_view_aspect_ratio, number=lambda: optional_float),
+    _ProfileReferences(contexts=lambda: accessory_reference_image_contexts, fallback=lambda: fallback_accessory_ai_profile, limit=lambda: AI_PROFILE_REFERENCE_IMAGES),
+)
+
 def fallback_accessory_ai_profile(item: dict[str, Any], reference_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    accessory_id = accessory_uid(item)
-    name = bounded_text(item.get("name") or item.get("label") or accessory_id, 120)
-    english_name = preferred_english_accessory_name(item)
-    material_type = accessory_material_type(item)
-    source_names = sorted(
-        {
-            bounded_text(Path(str(path)).stem.replace("_", " "), 60)
-            for path in [*(item.get("source_files") or []), *(item.get("original_source_files") or [])]
-            if str(path).strip()
-        }
-    )
-    tags = [material_type, str(item.get("training_role") or "detect_and_classify")]
-    physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
-    if physical_size.get("kind"):
-        tags.append(str(physical_size["kind"]))
-    if material_type == "object":
-        tags.append(object_alpha_material_policy(item))
-    tags.extend(source_names[:4])
-    tags = string_list(tags, max_items=12)
-    if reference_images is None:
-        reference_images = accessory_reference_image_contexts(item)
-    image_count = len(reference_images)
-    signature_parts = [
-        f"name={name}",
-        f"material={material_type}",
-        profile_size_text(physical_size),
-        f"visual_evidence_images={image_count}",
-    ]
-    if material_type == "object":
-        signature_parts.append(f"alpha_policy={object_alpha_material_policy(item)}")
-    distinguishing_text = string_list([name, *source_names], max_items=8)
-    negative_cues = [
-        "Do not count a different accessory with only similar size.",
-        "Do not infer presence from previous images or configured task state.",
-    ]
-    if material_type == "text":
-        negative_cues.append("If visible printed text does not match this profile, mark missing.")
-    else:
-        negative_cues.append("If the object shape/material does not match this profile, mark missing.")
-    dimensions_mm = ai_profile_dimensions_from_physical_size(physical_size)
-    top_view_aspect_ratio = ai_profile_top_view_aspect_ratio(dimensions_mm)
-    return {
-        "accessory_id": accessory_id,
-        "name": name,
-        "english_name": english_name,
-        "material_type": material_type,
-        "description": bounded_text(item.get("description") or f"{name} required accessory.", 240),
-        "tags": tags,
-        "visual_signature": "; ".join(signature_parts),
-        "distinguishing_text": distinguishing_text,
-        "negative_cues": negative_cues,
-        "dimensions_mm": dimensions_mm,
-        "top_view_aspect_ratio": top_view_aspect_ratio,
-        "reference_images": reference_images,
-        "provider_cache": {},
-        "expected_count": max(1, int(item.get("expected_count") or 1)),
-    }
+    return _accessory_profile_projection.fallback_accessory_ai_profile(item, reference_images)
 
 
 def normalize_accessory_ai_profile(raw: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
-    raw_dict = raw if isinstance(raw, dict) else {}
-    raw_reference_images = raw_dict.get("reference_images") if isinstance(raw_dict.get("reference_images"), list) else None
-    fallback = fallback_accessory_ai_profile(item, reference_images=raw_reference_images)
-    expected_count = raw.get("expected_count", fallback["expected_count"]) if isinstance(raw, dict) else fallback["expected_count"]
-    try:
-        expected_count_int = max(1, int(expected_count))
-    except (TypeError, ValueError):
-        expected_count_int = fallback["expected_count"]
-    reference_images = raw.get("reference_images") if isinstance(raw, dict) else None
-    if not isinstance(reference_images, list):
-        reference_images = fallback.get("reference_images", [])
-    safe_reference_images = [
-        {
-            "accessory_id": bounded_text(ref.get("accessory_id") or accessory_uid(item), 120),
-            "source_path": str(ref.get("source_path") or ""),
-            "sha256": bounded_text(ref.get("sha256") or "", 80),
-            "mime_type": bounded_text(ref.get("mime_type") or "image/jpeg", 40),
-            "width": int(ref.get("width") or 0) if isinstance(ref, dict) else 0,
-            "height": int(ref.get("height") or 0) if isinstance(ref, dict) else 0,
-            "ordinal": int(ref.get("ordinal") or idx + 1) if isinstance(ref, dict) else idx + 1,
-        }
-        for idx, ref in enumerate(reference_images)
-        if isinstance(ref, dict) and str(ref.get("source_path") or "").strip()
-    ][:AI_PROFILE_REFERENCE_IMAGES]
-    provider_cache = raw.get("provider_cache") if isinstance(raw, dict) and isinstance(raw.get("provider_cache"), dict) else {}
-    dimensions_mm = normalize_ai_profile_dimensions(
-        raw.get("dimensions_mm") if isinstance(raw, dict) else None,
-        fallback.get("dimensions_mm") if isinstance(fallback.get("dimensions_mm"), dict) else {},
-    )
-    top_view_aspect_ratio = (
-        optional_float(raw.get("top_view_aspect_ratio")) if isinstance(raw, dict) else None
-    ) or ai_profile_top_view_aspect_ratio(dimensions_mm)
-    return {
-        "accessory_id": accessory_uid(item),
-        "name": bounded_text(raw.get("name") if isinstance(raw, dict) else fallback["name"], 120) or fallback["name"],
-        "english_name": compact_english_accessory_name(raw.get("english_name") if isinstance(raw, dict) else "") or fallback["english_name"],
-        "material_type": accessory_material_type(item),
-        "description": bounded_text(raw.get("description") if isinstance(raw, dict) else fallback["description"], 240) or fallback["description"],
-        "tags": string_list(raw.get("tags") if isinstance(raw, dict) else None, fallback["tags"], max_items=12),
-        "visual_signature": bounded_text(raw.get("visual_signature") if isinstance(raw, dict) else fallback["visual_signature"], 420) or fallback["visual_signature"],
-        "distinguishing_text": string_list(
-            raw.get("distinguishing_text") if isinstance(raw, dict) else None,
-            fallback["distinguishing_text"],
-            max_items=12,
-        ),
-        "negative_cues": string_list(raw.get("negative_cues") if isinstance(raw, dict) else None, fallback["negative_cues"], max_items=12),
-        "dimensions_mm": dimensions_mm,
-        "top_view_aspect_ratio": round(float(top_view_aspect_ratio), 3),
-        "reference_images": safe_reference_images,
-        "provider_cache": provider_cache,
-        "expected_count": expected_count_int,
-    }
+    return _accessory_profile_projection.normalize_accessory_ai_profile(raw, item)
 
 
 

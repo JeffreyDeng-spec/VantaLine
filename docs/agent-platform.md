@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Profile identity, text, dimension and reference callbacks resolve at their original
+points. Alpha policy can refresh between the two fallback reads. Numeric callable
+selection occurs before reading its raw argument, and the reference cap is read after
+full conversion.
+
 Accessory naming reads policy and callbacks at their original points. A policy refresh
 between item and profile is observed, compact callable selection still precedes field
 lookup, and profile lookup follows the preferred-name callback. Shared bounded_text and
