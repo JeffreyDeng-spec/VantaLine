@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_cutout_geometry.py` retains 24 original synthetic groups and
+adds two independent composition checks. It covers representative color conversion,
+component selection, crop aliases, fallback coordinates and callback timing. Independent
+services cover successful paths; selection fallback remains in original fixtures.
+Synthetic arrays do not establish all numerical branches or real image quality.
+
 `python scripts/smoke_cutout_runtime.py` retains 12 original synthetic groups through
 explicit fixture state access and adds three independent runtime/composition cases.
 Tests cover lazy caching, held/reentrant locks, a coordinated cold-start schedule,
