@@ -1,5 +1,10 @@
 # Architecture
 
+Agent pose call registration, execution and sample preparation live in
+`agent/pose_call_registration.py`, `pose_call_execution.py` and `pose_sample_preparation.py`.
+Seven narrow capability groups keep state, model access, call records, rendering and
+preparation dependencies explicit. Constructors retain dependencies, never tasks or users.
+
 Agent pose rendering separates configuration projection, prompt/reference content and artifact
 writing into `agent/pose_render_configuration.py`, `pose_render_content.py` and
 `pose_artifact_store.py`. Six narrow capability groups preserve per-use dependency lookup.
@@ -482,7 +487,7 @@ store instance; test replacements belong at its ports. Root background resolver 
 prefix remain late-bound for compatibility.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v73 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v74 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
@@ -507,7 +512,7 @@ rules and overlays now live in `detection.geometry`, `postprocessing`, `results`
 service receive narrow label providers; the parser resolves the root postprocessor
 at use time. These modules own no model, worker, identity or database state. Internal
 pure helper substitutions belong in their actual modules, not unrelated root aliases.
-Manifest v73 includes these five modules so relocation retains source provenance.
+Manifest v74 includes these five modules so relocation retains source provenance.
 Provider and postprocessor exceptions propagate without an automatic retry.
 
 Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
@@ -588,7 +593,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v73 includes both
+policy or callback caching is introduced. Source manifest v74 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -670,7 +675,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v73 for new tasks.
+`accessories/preparation.py`, included in source manifest v74 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

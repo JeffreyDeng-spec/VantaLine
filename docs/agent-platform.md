@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose task registration, execution and preparation use explicit services with caller-owned
+state. Existing real-photo gates, cached assets, pending/running/completed call handling,
+provider-error pause behavior and sample preparation order remain unchanged.
+
 Pose rendering uses explicit configuration, reference/prompt and artifact services. Existing
 provider fields, prompt text, reference ordering, output ownership and metadata aliases remain
 unchanged. Existing callers retain model bindings and platform/worker lifecycle ownership.
