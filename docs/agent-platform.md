@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Photo-highlight prompt/input, pure mask computation and mask comparison now have explicit
+module boundaries. Accessory identity, the input-side limit and geometry callbacks remain
+late-bound business capabilities; numerical libraries use normal imports. Existing task
+workflows continue to own model calls, retries and persistence.
+
 Real-photo highlight workflows separate source selection/readiness, training-object
 selection and task transitions. Original model callbacks, legacy pose skipping, state
 identity and pause/failure behavior remain unchanged; image algorithms stay with the

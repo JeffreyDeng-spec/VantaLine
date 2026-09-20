@@ -22111,101 +22111,32 @@ def mark_legacy_pose_flow_skipped_for_photo_highlight(
     return _photo_highlight_workflow.mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
 
 
+from .agent.photo_highlight_image_input import PhotoHighlightImageInput as _PhotoHighlightImageInput
+from .agent.photo_highlight_masks import decode_photo_highlight_mask as _decode_photo_highlight_mask_impl
+from .agent.photo_highlight_masks import photo_highlight_auto_roi_mask as _photo_highlight_auto_roi_mask_impl
+from .agent.photo_highlight_comparison import PhotoHighlightComparison as _PhotoHighlightComparison
+from .agent.photo_highlight_image_ports import PhotoHighlightImagePolicy as _PhotoHighlightImagePolicy, PhotoMaskGeometry as _PhotoMaskGeometry
+_photo_highlight_image_input = _PhotoHighlightImageInput(
+
+    _PhotoHighlightImagePolicy(identifier=lambda: accessory_uid, max_side=lambda: PHOTO_HIGHLIGHT_MASK_MAX_SIDE),
+
+)
+_photo_highlight_comparison = _PhotoHighlightComparison(
+
+    _PhotoMaskGeometry(alpha=lambda: alpha_bbox, iou=lambda: bbox_iou_xyxy),
+
+)
+
 def photo_highlight_mask_prompt(item: dict[str, Any]) -> str:
-    name = str(item.get("name") or item.get("label") or accessory_uid(item) or "the accessory")
-    return "\n".join(
-        [
-            "Create a strict binary segmentation highlight map for the attached real product photo.",
-            "This is not a creative product image and not a normal photo.",
-            "Preserve the input camera framing and aspect ratio.",
-            f"Accessory: {name}.",
-            "Output a single RGB image where:",
-            "- pixels belonging to the main rigid product body are filled with exact pure green RGB(0,255,0) / #00FF00;",
-            "- every other pixel is exact black RGB(0,0,0);",
-            "- the green mask must be tight to the physical outer contour of the rigid product body;",
-            "- never include contact shadows, cast shadows, paper, tabletop, background, reflections on the background, or empty margin;",
-            "- do not highlight movable or detachable parts: straps, lanyards, strings, cords, cables, loose tags, packaging ties, or detachable accessories;",
-            "- do not generate a new product, do not alter viewpoint, do not add labels/text/shadows/background;",
-            "- if uncertain, prefer excluding ambiguous edge pixels instead of including background;",
-            "- output only pure green and pure black, with no gradients, feathering, gray edges, labels, annotations, or bounding boxes.",
-            "The output should be a mask-like color map.",
-        ]
-    )
+    return _photo_highlight_image_input.photo_highlight_mask_prompt(item)
 
 
 def photo_highlight_input_data_url(image_bgr: np.ndarray) -> tuple[np.ndarray, str, float, float] | None:
-    if image_bgr is None or image_bgr.ndim != 3:
-        return None
-    height, width = image_bgr.shape[:2]
-    scale = min(1.0, PHOTO_HIGHLIGHT_MASK_MAX_SIDE / float(max(height, width, 1)))
-    if scale < 1.0:
-        ai_bgr = cv2.resize(
-            image_bgr,
-            (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
-            interpolation=cv2.INTER_AREA,
-        )
-    else:
-        ai_bgr = image_bgr.copy()
-    ok, encoded = cv2.imencode(".jpg", ai_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    if not ok:
-        return None
-    data_url = "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
-    scale_x = ai_bgr.shape[1] / float(max(1, width))
-    scale_y = ai_bgr.shape[0] / float(max(1, height))
-    return ai_bgr, data_url, scale_x, scale_y
+    return _photo_highlight_image_input.photo_highlight_input_data_url(image_bgr)
 
 
 def decode_photo_highlight_mask(mask_bgr: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
-    if mask_bgr is None or mask_bgr.ndim != 3:
-        return np.zeros((0, 0), dtype=np.uint8), {"ok": False, "reason": "mask_unreadable"}
-    height, width = mask_bgr.shape[:2]
-    blue, green, red = cv2.split(mask_bgr.astype(np.int16))
-    hsv = cv2.cvtColor(mask_bgr, cv2.COLOR_BGR2HSV)
-    _hue, sat, val = cv2.split(hsv)
-    highlight = (
-        (green >= 145)
-        & (red <= 145)
-        & (blue <= 145)
-        & ((green - np.maximum(red, blue)) >= 35)
-        & (sat >= 45)
-        & (val >= 70)
-    )
-    mask = highlight.astype(np.uint8) * 255
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
-    num, labels, stats, _ = cv2.connectedComponentsWithStats((mask > 0).astype(np.uint8), connectivity=8)
-    components: list[tuple[int, int, int, int, int, int, float]] = []
-    for idx in range(1, num):
-        x, y, comp_w, comp_h, area = [int(value) for value in stats[idx]]
-        if area < max(80, int(width * height * 0.0005)):
-            continue
-        aspect = max(comp_w, comp_h) / float(max(1, min(comp_w, comp_h)))
-        components.append((area, idx, x, y, comp_w, comp_h, aspect))
-    if not components:
-        return np.zeros((height, width), dtype=np.uint8), {"ok": False, "reason": "no_highlight_component", "component_count": 0}
-    components.sort(reverse=True)
-    main_area, main_idx, x, y, comp_w, comp_h, aspect = components[0]
-    kept = (labels == main_idx).astype(np.uint8) * 255
-    contours, _ = cv2.findContours(kept, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    filled = np.zeros_like(kept)
-    if contours:
-        cv2.drawContours(filled, contours, -1, 255, cv2.FILLED)
-    mask_fraction = float((filled > 0).mean()) if filled.size else 0.0
-    if mask_fraction < 0.002 or mask_fraction > 0.75:
-        return filled, {
-            "ok": False,
-            "reason": "mask_area_out_of_range",
-            "mask_area_fraction": round(mask_fraction, 6),
-            "component_count": len(components),
-        }
-    return filled, {
-        "ok": True,
-        "bbox_xyxy_ai": [int(x), int(y), int(x + comp_w), int(y + comp_h)],
-        "mask_area_fraction": round(mask_fraction, 6),
-        "component_count": len(components),
-        "main_component_area": int(main_area),
-        "main_component_aspect": round(float(aspect), 4),
-    }
+    return _decode_photo_highlight_mask_impl(mask_bgr)
 
 
 def bbox_iou_xyxy(a: list[int], b: list[int]) -> float:
@@ -22223,152 +22154,11 @@ def bbox_iou_xyxy(a: list[int], b: list[int]) -> float:
 
 
 def photo_highlight_auto_roi_mask(roi_bgr: np.ndarray, ai_roi_mask: np.ndarray) -> tuple[np.ndarray | None, dict[str, Any]]:
-    if roi_bgr is None or roi_bgr.ndim != 3 or ai_roi_mask is None or ai_roi_mask.size == 0:
-        return None, {"status": "unavailable", "reason": "empty_roi"}
-    roi_h, roi_w = roi_bgr.shape[:2]
-    if roi_h < 12 or roi_w < 12:
-        return None, {"status": "unavailable", "reason": "roi_too_small"}
-    ai_binary = ai_roi_mask > 8
-    border = np.zeros((roi_h, roi_w), dtype=bool)
-    border_size = max(3, min(roi_h, roi_w) // 20)
-    border[:border_size, :] = True
-    border[-border_size:, :] = True
-    border[:, :border_size] = True
-    border[:, -border_size:] = True
-    bg_pixels = roi_bgr[~ai_binary]
-    if bg_pixels.shape[0] < 64:
-        bg_pixels = roi_bgr[border]
-    if bg_pixels.shape[0] < 64:
-        return None, {"status": "unavailable", "reason": "insufficient_background_pixels"}
-    bg = np.median(bg_pixels.reshape(-1, 3), axis=0).astype(np.float32)
-    diff = np.linalg.norm(roi_bgr.astype(np.float32) - bg, axis=2)
-    hsv = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2HSV)
-    _hue, sat, val = cv2.split(hsv)
-    gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
-    edges = cv2.dilate(cv2.Canny(gray, 45, 135), np.ones((3, 3), np.uint8), iterations=1) > 0
-    seed = (
-        (diff > 22)
-        | ((val < 122) & (diff > 10))
-        | ((sat > 72) & (diff > 12))
-        | (edges & (diff > 10))
-    ).astype(np.uint8) * 255
-    seed = cv2.morphologyEx(seed, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
-    seed = cv2.morphologyEx(seed, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
-    num, labels, stats, centroids = cv2.connectedComponentsWithStats((seed > 0).astype(np.uint8), connectivity=8)
-    roi_area = roi_h * roi_w
-    components: list[dict[str, Any]] = []
-    for idx in range(1, num):
-        x, y, comp_w, comp_h, area = [int(value) for value in stats[idx]]
-        if area < max(80, int(roi_area * 0.002)) or comp_w < 4 or comp_h < 4:
-            continue
-        component = labels == idx
-        overlap = int((component & ai_binary).sum())
-        aspect = max(comp_w, comp_h) / float(max(1, min(comp_w, comp_h)))
-        # Thin, low-overlap branches are usually straps, cords, or loose tags.
-        if aspect > 7.0 and area < roi_area * 0.16 and overlap < area * 0.72:
-            continue
-        cx, cy = centroids[idx]
-        center_distance = math.hypot(float(cx - roi_w / 2.0), float(cy - roi_h / 2.0)) / max(1.0, math.hypot(roi_w, roi_h))
-        score = overlap * 2.0 + area * 0.45 - center_distance * roi_area * 0.08
-        components.append(
-            {
-                "idx": int(idx),
-                "area": int(area),
-                "overlap": int(overlap),
-                "aspect": round(float(aspect), 4),
-                "bbox": [int(x), int(y), int(x + comp_w), int(y + comp_h)],
-                "score": float(score),
-            }
-        )
-    if not components:
-        return None, {"status": "unavailable", "reason": "no_auto_foreground_component"}
-    components.sort(key=lambda item: item["score"], reverse=True)
-    keep = np.zeros((roi_h, roi_w), dtype=np.uint8)
-    kept: list[dict[str, Any]] = []
-    for component in components[:4]:
-        if kept and component["overlap"] < max(64, component["area"] * 0.12):
-            continue
-        keep[labels == component["idx"]] = 255
-        kept.append(component)
-    if int((keep > 0).sum()) < max(120, int(roi_area * 0.003)):
-        return None, {"status": "unavailable", "reason": "auto_foreground_too_small"}
-    keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=1)
-    keep = cv2.GaussianBlur(keep, (3, 3), 0)
-    return keep, {
-        "status": "available",
-        "kept_component_count": len(kept),
-        "candidate_component_count": len(components),
-        "kept_components": [
-            {
-                "bbox": component["bbox"],
-                "area": component["area"],
-                "overlap": component["overlap"],
-                "aspect": component["aspect"],
-            }
-            for component in kept[:4]
-        ],
-    }
+    return _photo_highlight_auto_roi_mask_impl(roi_bgr, ai_roi_mask)
 
 
 def photo_highlight_auto_compare(ai_roi_mask: np.ndarray, auto_roi_mask: np.ndarray | None) -> dict[str, Any]:
-    if auto_roi_mask is None or auto_roi_mask.size == 0 or ai_roi_mask is None or ai_roi_mask.size == 0:
-        return {"ok": True, "status": "skipped", "reason": "auto_mask_unavailable", "score": 0.0}
-    ai_binary = ai_roi_mask > 8
-    auto_binary = auto_roi_mask > 28
-    ai_area = int(ai_binary.sum())
-    auto_area = int(auto_binary.sum())
-    if ai_area < 240 or auto_area < 240:
-        return {
-            "ok": True,
-            "status": "skipped",
-            "reason": "insufficient_mask_area",
-            "ai_area_px": ai_area,
-            "auto_area_px": auto_area,
-            "score": 0.0,
-        }
-    intersection = int((ai_binary & auto_binary).sum())
-    union = int((ai_binary | auto_binary).sum())
-    mask_iou = float(intersection) / float(max(1, union))
-    ai_bbox = alpha_bbox(ai_roi_mask, threshold=8)
-    auto_bbox = alpha_bbox(auto_roi_mask, threshold=28)
-    bbox_iou = bbox_iou_xyxy(ai_bbox, auto_bbox)
-    area_ratio = float(ai_area) / float(max(1, auto_area))
-    ai_cx = (ai_bbox[0] + ai_bbox[2]) / 2.0
-    ai_cy = (ai_bbox[1] + ai_bbox[3]) / 2.0
-    auto_cx = (auto_bbox[0] + auto_bbox[2]) / 2.0
-    auto_cy = (auto_bbox[1] + auto_bbox[3]) / 2.0
-    center_distance = math.hypot(ai_cx - auto_cx, ai_cy - auto_cy) / max(1.0, math.hypot(ai_roi_mask.shape[1], ai_roi_mask.shape[0]))
-    ai_extra_fraction = float((ai_binary & ~auto_binary).sum()) / float(max(1, ai_area))
-    auto_extra_fraction = float((auto_binary & ~ai_binary).sum()) / float(max(1, auto_area))
-    ok = (
-        0.55 <= area_ratio <= 1.65
-        and bbox_iou >= 0.58
-        and center_distance <= 0.18
-        and not (mask_iou < 0.72 and ai_extra_fraction > 0.18)
-        and not (mask_iou < 0.62 and auto_extra_fraction > 0.30)
-    )
-    score = (
-        mask_iou * 0.45
-        + bbox_iou * 0.30
-        + max(0.0, 1.0 - abs(math.log(max(area_ratio, 1e-6)))) * 0.15
-        + max(0.0, 1.0 - center_distance / 0.18) * 0.10
-    )
-    return {
-        "ok": bool(ok),
-        "status": "passed" if ok else "failed",
-        "reason": "" if ok else "ai_mask_auto_crop_mismatch",
-        "score": round(float(score), 6),
-        "mask_iou": round(float(mask_iou), 6),
-        "bbox_iou": round(float(bbox_iou), 6),
-        "area_ratio_ai_to_auto": round(float(area_ratio), 6),
-        "center_distance_ratio": round(float(center_distance), 6),
-        "ai_extra_fraction": round(float(ai_extra_fraction), 6),
-        "auto_extra_fraction": round(float(auto_extra_fraction), 6),
-        "ai_bbox_xyxy_roi": ai_bbox,
-        "auto_bbox_xyxy_roi": auto_bbox,
-        "ai_area_px": ai_area,
-        "auto_area_px": auto_area,
-    }
+    return _photo_highlight_comparison.photo_highlight_auto_compare(ai_roi_mask, auto_roi_mask)
 
 
 def build_clean_sprites_from_photo_highlight_masks(
