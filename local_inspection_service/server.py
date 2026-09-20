@@ -7393,85 +7393,32 @@ GENERIC_ENGLISH_NAME_TOKENS = {
 }
 
 
+from .accessories.display_labels import profile_size_text as _profile_size_text_impl
+from .accessories.display_labels import AccessoryLabels as _AccessoryLabels
+from .accessories.display_label_ports import DisplayLabelPolicy as _DisplayLabelPolicy, DisplayLabelText as _DisplayLabelText
+_accessory_labels = _AccessoryLabels(
+    _DisplayLabelPolicy(generic_tokens=lambda: GENERIC_ENGLISH_NAME_TOKENS, fields=lambda: ACCESSORY_ENGLISH_NAME_FIELDS, fallbacks=lambda: ACCESSORY_ENGLISH_NAME_FALLBACKS, phrases=lambda: ACCESSORY_ENGLISH_PHRASES),
+    _DisplayLabelText(bounded=lambda: bounded_text, strings=lambda: string_list, compact=lambda: compact_english_accessory_name, preferred=lambda: preferred_english_accessory_name),
+)
+
 def compact_english_accessory_name(value: Any, *, max_words: int = 6) -> str:
-    text = bounded_text(value, 120)
-    if not text or "?" in text or "unknown" in text.lower():
-        return ""
-    tokens = re.findall(r"[A-Za-z][A-Za-z0-9-]*", text)
-    tokens = [token for token in tokens if token.lower() not in GENERIC_ENGLISH_NAME_TOKENS]
-    if not tokens:
-        return ""
-    tokens = tokens[: max(1, min(6, int(max_words or 2)))]
-    return " ".join(token[:1].upper() + token[1:].lower() for token in tokens)
+    return _accessory_labels.compact_english_accessory_name(value, max_words=max_words)
 
 
 def preferred_english_accessory_name(item: dict[str, Any]) -> str:
-    profiles = [
-        item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {},
-    ]
-    for source in [item, *profiles]:
-        for key in ACCESSORY_ENGLISH_NAME_FIELDS:
-            name = compact_english_accessory_name(source.get(key) if isinstance(source, dict) else "", max_words=6)
-            if name:
-                return name
-    for source in [item, *profiles]:
-        if not isinstance(source, dict):
-            continue
-        for key in ("name", "label"):
-            name = compact_english_accessory_name(source.get(key), max_words=2)
-            if name:
-                return name
-    native_name = str(item.get("name") or item.get("label") or "").strip()
-    for marker, english_name in ACCESSORY_ENGLISH_NAME_FALLBACKS.items():
-        if marker and marker in native_name:
-            return english_name
-    search_parts: list[str] = []
-    for source in [item, *profiles]:
-        if not isinstance(source, dict):
-            continue
-        for key in ("description", "visual_signature", "positive_visual_prompt"):
-            text = str(source.get(key) or "").strip()
-            if text:
-                search_parts.append(text)
-        search_parts.extend(string_list(source.get("tags"), max_items=8))
-        search_parts.extend(string_list(source.get("distinguishing_text"), max_items=8))
-    search_text = " ".join(search_parts).lower()
-    for phrase, english_name in ACCESSORY_ENGLISH_PHRASES:
-        if phrase in search_text:
-            return english_name
-    for text in search_parts:
-        name = compact_english_accessory_name(text, max_words=2)
-        if name:
-            return name
-    return "Accessory"
+    return _accessory_labels.preferred_english_accessory_name(item)
 
 
 def ensure_accessory_english_name(item: dict[str, Any]) -> bool:
-    english_name = preferred_english_accessory_name(item)
-    changed = False
-    if item.get("english_name") != english_name:
-        item["english_name"] = english_name
-        changed = True
-    for key in ("ai_profile",):
-        profile = item.get(key) if isinstance(item.get(key), dict) else None
-        if profile is not None and profile.get("english_name") != english_name:
-            profile["english_name"] = english_name
-            changed = True
-    return changed
+    return _accessory_labels.ensure_accessory_english_name(item)
 
 
 def accessory_display_label(item: dict[str, Any]) -> str:
-    return preferred_english_accessory_name(item)
+    return _accessory_labels.accessory_display_label(item)
 
 
 def profile_size_text(size: dict[str, Any] | None) -> str:
-    if not isinstance(size, dict):
-        return "size=unknown"
-    if size.get("kind") == "paper":
-        return f"paper {size.get('preset') or 'custom'} {size.get('width_mm', '?')}x{size.get('height_mm', '?')}mm"
-    if size.get("kind") == "object":
-        return f"object {size.get('length_mm', '?')}x{size.get('width_mm', '?')}x{size.get('height_mm', '?')}mm"
-    return "size=unknown"
+    return _profile_size_text_impl(size)
 
 
 def image_reference_context(path: Path, accessory_id: str, ordinal: int) -> dict[str, Any] | None:
