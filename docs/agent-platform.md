@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Object preprocessing and sprite publication retain material alpha through root adapters.
+Stateless accessory mask helpers and the local policy dispatcher do not import Agent
+or the Web entry; shared library attribute patches retain their observed scope.
+
 Pose materialization and object preprocessing retain sprite publication callbacks through
 root adapters. Accessory writer and canvas services use local geometry/metadata/image
 capabilities without importing Agent or the Web entry; existing failure states remain.

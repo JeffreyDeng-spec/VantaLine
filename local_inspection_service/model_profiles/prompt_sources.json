@@ -1,7 +1,10 @@
 {
-  "version": 83,
+  "version": 84,
   "sources": [
     "server.py",
+    "accessories/material_alpha_ports.py",
+    "accessories/alpha_masks.py",
+    "accessories/material_alpha.py",
     "accessories/sprite_publication_ports.py",
     "accessories/sprite_artifact_writer.py",
     "accessories/sprite_canvas_normalization.py",

@@ -13142,69 +13142,22 @@ def canonical_sprite_canvas_size_px(asset: dict[str, Any]) -> tuple[int, int] | 
     return _canonical_sprite_canvas_size_px_impl(asset)
 
 
+from .accessories.alpha_masks import transparent_object_alpha as _transparent_object_alpha_impl
+from .accessories.alpha_masks import solid_object_alpha as _solid_object_alpha_impl
+from .accessories.material_alpha import MaterialAlphaProcessor as _MaterialAlphaProcessor
+from .accessories.material_alpha_ports import MaterialAlphaOperations as _MaterialAlphaOperations
+_material_alpha = _MaterialAlphaProcessor(
+
+    _MaterialAlphaOperations(policy=lambda: object_alpha_material_policy, transparent=lambda: transparent_object_alpha, solid=lambda: solid_object_alpha),
+
+)
+
 def transparent_object_alpha(asset: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
-    stats = {
-        "transparent_alpha_policy": "preserve_glass_body_weak_alpha",
-        "glass_fraction": 0.0,
-        "opaque_anchor_fraction": 0.0,
-        "edge_fraction": 0.0,
-        "transparent_alpha_applied": False,
-    }
-    if asset.size == 0 or mask.size == 0:
-        return mask, stats
-    hsv = cv2.cvtColor(asset, cv2.COLOR_BGR2HSV)
-    gray = cv2.cvtColor(asset, cv2.COLOR_BGR2GRAY)
-    sat = hsv[:, :, 1]
-    val = hsv[:, :, 2]
-    edges = cv2.dilate(cv2.Canny(gray, 36, 116), np.ones((3, 3), np.uint8), iterations=1) > 0
-    dark_or_colored = ((val < 118) & (sat > 24)) | (sat > 92)
-    glass_body = (mask > 20) & (sat < 72) & (val > 108) & ~edges & ~dark_or_colored
-    masked_pixels = max(1, int((mask > 20).sum()))
-    opaque_anchor_fraction = float((dark_or_colored & (mask > 20)).sum()) / masked_pixels
-    edge_fraction = float((edges & (mask > 20)).sum()) / masked_pixels
-    glass_fraction = float(glass_body.sum()) / masked_pixels
-    stats.update(
-        {
-            "glass_fraction": round(float(glass_fraction), 5),
-            "opaque_anchor_fraction": round(float(opaque_anchor_fraction), 5),
-            "edge_fraction": round(float(edge_fraction), 5),
-        }
-    )
-    has_transparency_evidence = (
-        glass_fraction > 0.12
-        and opaque_anchor_fraction < 0.55
-        and (opaque_anchor_fraction > 0.006 or edge_fraction > 0.025)
-    )
-    adjusted = mask.copy()
-    if has_transparency_evidence and int(glass_body.sum()) > 80:
-        adjusted[glass_body] = np.minimum(adjusted[glass_body], 92)
-        highlight = (mask > 20) & (sat < 62) & (val > 185)
-        adjusted[highlight] = np.maximum(adjusted[highlight], 126)
-        adjusted[edges | dark_or_colored] = np.maximum(adjusted[edges | dark_or_colored], mask[edges | dark_or_colored])
-        stats["transparent_alpha_applied"] = True
-    return cv2.GaussianBlur(adjusted, (3, 3), 0), stats
+    return _transparent_object_alpha_impl(asset, mask)
 
 
 def solid_object_alpha(mask: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
-    stats = {
-        "transparent_alpha_policy": "solid_foreground_opaque_mask",
-        "glass_fraction": 0.0,
-        "opaque_anchor_fraction": 1.0,
-        "edge_fraction": 0.0,
-        "transparent_alpha_applied": False,
-        "solid_alpha_applied": True,
-    }
-    if mask.size == 0:
-        return mask, stats
-    binary = (mask > 20).astype(np.uint8) * 255
-    if int((binary > 0).sum()) == 0:
-        return mask, stats
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=1)
-    softened = cv2.GaussianBlur(binary, (3, 3), 0)
-    softened[binary == 255] = 255
-    return softened, stats
+    return _solid_object_alpha_impl(mask)
 
 
 def material_aware_object_alpha(
@@ -13212,14 +13165,7 @@ def material_aware_object_alpha(
     mask: np.ndarray,
     metadata: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, dict[str, Any]]:
-    policy = object_alpha_material_policy(None, metadata)
-    if policy == "transparent":
-        adjusted, stats = transparent_object_alpha(asset, mask)
-        stats["object_alpha_material_policy"] = "transparent"
-        return adjusted, stats
-    adjusted, stats = solid_object_alpha(mask)
-    stats["object_alpha_material_policy"] = "opaque"
-    return adjusted, stats
+    return _material_alpha.material_aware_object_alpha(asset, mask, metadata)
 
 
 from .accessories.mask_geometry import normalize_angle_180 as _normalize_angle_180_impl
