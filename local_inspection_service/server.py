@@ -22070,53 +22070,35 @@ def segment_agent_mcp_pose_object(
     return _pose_cutout_pipeline.segment_agent_mcp_pose_object(image_bgr, rng, chroma_screen)
 
 
+from .agent.photo_highlight_sources import PhotoHighlightSources as _PhotoHighlightSources
+from .agent.photo_highlight_selection import PhotoHighlightSelection as _PhotoHighlightSelection
+from .agent.photo_highlight_workflow import PhotoHighlightWorkflow as _PhotoHighlightWorkflow
+from .agent.photo_highlight_ports import PhotoSourceMedia as _PhotoSourceMedia, PhotoSpriteLimits as _PhotoSpriteLimits, PhotoSpriteReadiness as _PhotoSpriteReadiness, PhotoObjectSelection as _PhotoObjectSelection, PhotoWorkflowObjects as _PhotoWorkflowObjects, PhotoWorkflowState as _PhotoWorkflowState, PhotoWorkflowModels as _PhotoWorkflowModels
+_photo_highlight_sources = _PhotoHighlightSources(
+    _PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
+    _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
+    _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete),
+)
+_photo_highlight_selection = _PhotoHighlightSelection(
+    _PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type),
+)
+_photo_highlight_workflow = _PhotoHighlightWorkflow(
+    _PhotoWorkflowObjects(items=lambda: pipeline_photo_highlight_object_items, identifier=lambda: accessory_uid, sources=lambda: object_photo_highlight_source_paths, signature=lambda: accessory_sprite_version),
+    _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
+    _PhotoWorkflowState(now=lambda: agent_mcp_now, tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, stage=lambda: set_agent_mcp_stage, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, build_plan=lambda: build_agent_mcp_pose_plan),
+    _PhotoWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, settings=lambda: image_generation_settings, provider=lambda: image_generation_provider_from_settings, build_sprites=lambda: build_clean_sprites_from_photo_highlight_masks),
+)
+
 def object_photo_highlight_source_paths(item: dict[str, Any], *, limit: int = PHOTO_HIGHLIGHT_MAX_REFERENCE_IMAGES) -> list[Path]:
-    paths: list[Path] = []
-    seen: set[Path] = set()
-    for raw_path in item.get("source_files") or []:
-        path = resolve_service_path(raw_path)
-        if path in seen or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-            continue
-        if path.stem.endswith("_rectified"):
-            continue
-        if not path.exists():
-            continue
-        paths.append(path)
-        seen.add(path)
-        if len(paths) >= limit:
-            break
-    return paths
+    return _photo_highlight_sources.object_photo_highlight_source_paths(item, limit=limit)
 
 
 def photo_highlight_clean_sprites_ready(item: dict[str, Any], source_paths: list[Path]) -> bool:
-    required_sources = {str(path) for path in source_paths[:PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES]}
-    if len(required_sources) < PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES:
-        return False
-    sprites = [
-        asset
-        for asset in clean_sprite_assets(item)
-        if asset.get("method") == "real_photo_highlight_mask_sprite"
-        and int(asset.get("photo_highlight_sprite_build") or 0) >= PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION
-    ]
-    if len(sprites) < PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES:
-        return False
-    sprite_sources = {str(resolve_service_path(asset.get("source_photo_path") or asset.get("source_path"))) for asset in sprites}
-    return required_sources.issubset(sprite_sources) and clean_sprites_policy_complete(item, sprites)
+    return _photo_highlight_sources.photo_highlight_clean_sprites_ready(item, source_paths)
 
 
 def pipeline_photo_highlight_object_items(task: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
-    detection_method = normalize_pipeline_detection_method(
-        str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or "")
-    )
-    if not pipeline_method_uses_training(detection_method):
-        return []
-    accessories_by_id = accessory_lookup_by_id(config)
-    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-    return [
-        accessories_by_id[item_id]
-        for item_id in accessory_ids
-        if item_id in accessories_by_id and accessory_material_type(accessories_by_id[item_id]) != "text"
-    ]
+    return _photo_highlight_selection.pipeline_photo_highlight_object_items(task, config)
 
 
 def pipeline_uses_photo_highlight_sprite_flow(task: dict[str, Any], config: dict[str, Any]) -> bool:
@@ -22126,47 +22108,7 @@ def pipeline_uses_photo_highlight_sprite_flow(task: dict[str, Any], config: dict
 def mark_legacy_pose_flow_skipped_for_photo_highlight(
     task: dict[str, Any], config: dict[str, Any], orchestration: dict[str, Any]
 ) -> dict[str, Any]:
-    object_items = pipeline_photo_highlight_object_items(task, config)
-    if not object_items:
-        return orchestration
-    orchestration["pose_plan"] = {
-        "agent": "real_photo_highlight_sprite_flow",
-        "task_id": task.get("id"),
-        "accessories": [
-            {
-                "accessory_id": accessory_uid(item),
-                "name": item.get("name") or accessory_uid(item),
-                "source_image_count": len(object_photo_highlight_source_paths(item)),
-                "method": "real_photo_highlight_mask_sprite",
-            }
-            for item in object_items
-        ],
-        "pose_count": 0,
-        "policy": "skip_legacy_ai_pose_images_for_training",
-        "created_at": agent_mcp_now(),
-    }
-    orchestration["skip_pose_image_generation"] = True
-    orchestration.setdefault(
-        "photo_highlight_sprite_policy",
-        {
-            "method": "real_photo_highlight_mask_sprite",
-            "min_reference_images": PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES,
-            "training_label_policy": "bbox_from_photo_highlight_mask",
-            "legacy_pose_generation": "disabled",
-            "updated_at": agent_mcp_now(),
-        },
-    )
-    for call in orchestration.get("tool_calls") or []:
-        if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE and call.get("status") not in {"completed", "skipped"}:
-            call.update({"status": "skipped", "error": "", "updated_at": agent_mcp_now()})
-    set_agent_mcp_stage(
-        orchestration,
-        "agent_pose_planning",
-        "skipped",
-        100,
-        detail="Real-photo photo-highlight flow does not use legacy pose planning.",
-    )
-    return orchestration
+    return _photo_highlight_workflow.mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
 
 
 def photo_highlight_mask_prompt(item: dict[str, Any]) -> str:
@@ -22897,51 +22839,7 @@ def build_clean_sprites_from_photo_highlight_masks(
 
 
 def prepare_photo_highlight_sprites_for_task(task: dict[str, Any], config: dict[str, Any], orchestration: dict[str, Any]) -> tuple[bool, bool]:
-    object_items = pipeline_photo_highlight_object_items(task, config)
-    if not object_items:
-        return True, False
-    mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-    tool_config = agent_mcp_gemini_image_config()
-    if not tool_config.get("configured"):
-        reason = tool_config.get("message") or "Image generation is not configured; cannot build photo-highlight sprites."
-        pause_agent_mcp_task(task, orchestration, stage="pose_image_generation", reason=reason, suggested_actions=["configure_image_generation", "cancel"])
-        set_agent_mcp_stage(orchestration, "pose_image_generation", "needs_user_action", 0, detail=reason)
-        return False, False
-    settings = image_generation_settings()
-    settings["model"] = tool_config["model"]
-    settings["timeout_seconds"] = tool_config["timeout_seconds"]
-    provider = image_generation_provider_from_settings(settings)
-    changed = False
-    total = len(object_items)
-    set_agent_mcp_stage(orchestration, "pose_image_generation", "running", 5, detail=f"Preparing photo-highlight sprites for {total} object accessories.")
-    for index, item in enumerate(object_items, start=1):
-        sources = object_photo_highlight_source_paths(item)
-        if len(sources) < PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES:
-            reason = f"配件 {item.get('name') or accessory_uid(item)} 至少需要 {PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES} 张不同角度实拍图。"
-            pause_agent_mcp_task(task, orchestration, stage="pose_image_generation", reason=reason, suggested_actions=["upload_more_reference_photos", "cancel"])
-            set_agent_mcp_stage(orchestration, "pose_image_generation", "needs_user_action", 0, detail=reason)
-            return False, changed
-        before_signature = accessory_sprite_version(item)
-        ok, error = build_clean_sprites_from_photo_highlight_masks(task, item, provider, str(tool_config["model"] or ""))
-        after_signature = accessory_sprite_version(item)
-        changed = changed or before_signature != after_signature
-        if not ok:
-            reason = error or f"配件 {item.get('name') or accessory_uid(item)} 的实拍高亮抠图失败。"
-            pause_agent_mcp_task(task, orchestration, stage="pose_image_generation", reason=reason[:240], suggested_actions=["retry_pose_image_generation", "upload_more_reference_photos", "cancel"])
-            set_agent_mcp_stage(orchestration, "pose_image_generation", "needs_user_action", int(index * 100 / max(total, 1)), detail=reason[:240])
-            return False, changed
-        set_agent_mcp_stage(orchestration, "pose_image_generation", "running", min(99, int(index * 100 / max(total, 1))), detail=f"{index}/{total} photo-highlight sprite sets ready.")
-    orchestration["state"] = "photo_highlight_sprites_completed"
-    orchestration["active_stage"] = "sample_generation"
-    orchestration["pause"] = None
-    orchestration["photo_highlight_sprite_policy"] = {
-        "method": "real_photo_highlight_mask_sprite",
-        "min_reference_images": PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES,
-        "training_label_policy": "bbox_from_photo_highlight_mask",
-        "updated_at": agent_mcp_now(),
-    }
-    set_agent_mcp_stage(orchestration, "pose_image_generation", "completed", 100, detail="Photo-highlight sprites generated from real photos; legacy AI pose images skipped.")
-    return True, changed
+    return _photo_highlight_workflow.prepare_photo_highlight_sprites_for_task(task, config, orchestration)
 
 
 def build_clean_sprites_from_agent_mcp_poses(item: dict[str, Any], *, force: bool = False) -> bool:
@@ -22988,15 +22886,7 @@ def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, An
 
 
 def ensure_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
-    orchestration = agent_mcp_orchestration(task)
-    if pipeline_uses_photo_highlight_sprite_flow(task, config):
-        return mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-    if force or not isinstance(orchestration.get("pose_plan"), dict):
-        orchestration["pose_plan"] = build_agent_mcp_pose_plan(task, config)
-        orchestration["state"] = "agent_pose_planning"
-        orchestration["active_stage"] = "agent_pose_planning"
-        set_agent_mcp_stage(orchestration, "agent_pose_planning", "completed", 100, detail="Structured pose plan persisted.")
-    return orchestration
+    return _photo_highlight_workflow.ensure_agent_mcp_pose_plan(task, config, force=force)
 
 
 def ensure_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:

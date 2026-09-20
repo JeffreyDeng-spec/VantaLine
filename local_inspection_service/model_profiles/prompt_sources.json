@@ -1,7 +1,11 @@
 {
-  "version": 75,
+  "version": 76,
   "sources": [
     "server.py",
+    "agent/photo_highlight_ports.py",
+    "agent/photo_highlight_sources.py",
+    "agent/photo_highlight_selection.py",
+    "agent/photo_highlight_workflow.py",
     "agent/pose_materialization_ports.py",
     "agent/pose_chroma_policy.py",
     "agent/pose_cutout_pipeline.py",

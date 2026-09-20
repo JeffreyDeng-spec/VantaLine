@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Real-photo highlight workflows separate source selection/readiness, training-object
+selection and task transitions. Original model callbacks, legacy pose skipping, state
+identity and pause/failure behavior remain unchanged; image algorithms stay with the
+existing mask and sprite production implementation.
+
 Pose materialization services retain original chroma selection, segmentation fallback order,
 AI sprite provenance, per-pose deduplication and path-based asset registration. Algorithms
 and provider calls remain existing dependencies; lifecycle and task coordination are unchanged.
