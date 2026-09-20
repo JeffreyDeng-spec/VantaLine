@@ -7734,22 +7734,34 @@ def accessory_reference_chroma_fraction(item: dict[str, Any], screen_name: str, 
     return best
 
 
+from .agent.pose_chroma_policy import PoseChromaPolicy as _PoseChromaPolicy
+from .agent.pose_cutout_pipeline import PoseCutoutPipeline as _PoseCutoutPipeline
+from .agent.pose_sprite_builder import PoseSpriteBuilder as _PoseSpriteBuilder
+from .agent.pose_asset_materialization import PoseAssetMaterialization as _PoseAssetMaterialization
+from .agent.pose_materialization_ports import PoseChromaSources as _PoseChromaSources, PoseCutoutSources as _PoseCutoutSources, PoseSpritePolicy as _PoseSpritePolicy, PoseSpriteRuntime as _PoseSpriteRuntime, PoseSpriteImages as _PoseSpriteImages, PoseSpriteMetadata as _PoseSpriteMetadata, PoseAssetMedia as _PoseAssetMedia, PoseMaterializationState as _PoseMaterializationState, PoseMaterializationSprites as _PoseMaterializationSprites
+_pose_chroma_policy = _PoseChromaPolicy(
+    _PoseChromaSources(threshold=lambda: CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD, fraction=lambda: accessory_reference_chroma_fraction, screen=lambda: normalize_chroma_screen),
+)
+_pose_cutout_pipeline = _PoseCutoutPipeline(
+    _PoseCutoutSources(background=lambda: ai_background_cutout_with_bbox, chroma=lambda: chroma_screen_object_cutout, green=lambda: green_conveyor_object_cutout, final_green=lambda: green_screen_object_cutout_with_bbox, generic=lambda: object_cutout_from_image, precise=lambda: precise_green_plate_cutout, usable=lambda: usable_object_cutout),
+)
+_pose_sprite_builder = _PoseSpriteBuilder(
+    _PoseChromaSources(threshold=lambda: CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD, fraction=lambda: accessory_reference_chroma_fraction, screen=lambda: normalize_chroma_screen),
+    _PoseSpritePolicy(material=lambda: accessory_material_type, references=lambda: agent_mcp_pose_reference_assets, existing=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete, deduplicate=lambda: dedup_agent_mcp_pose_references, alpha=lambda: object_alpha_material_policy),
+    _PoseSpriteRuntime(version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, root=lambda: NORMALIZED_DIR, identifier=lambda: accessory_uid, rng=lambda: np.random.default_rng, safe_id=lambda: safe_record_id, now=lambda: time.time),
+    _PoseSpriteImages(read_mode=lambda: cv2.IMREAD_COLOR, read=lambda: cv2.imread, segment=lambda: segment_agent_mcp_pose_object, write=lambda: write_clean_sprite),
+    _PoseSpriteMetadata(laying=lambda: apply_laying_standard_render_size_hints, scale=lambda: apply_upright_scale_correction_metadata, normalize=lambda: normalize_sprite_family_canvases, footprint=lambda: pose_render_footprint_metadata),
+    _PoseAssetMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, digest=lambda: file_sha256, public_url=lambda: public_output_url),
+)
+_pose_asset_materialization = _PoseAssetMaterialization(
+    _PoseChromaSources(threshold=lambda: CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD, fraction=lambda: accessory_reference_chroma_fraction, screen=lambda: normalize_chroma_screen),
+    _PoseMaterializationState(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, now=lambda: agent_mcp_now, current=lambda: agent_mcp_orchestration),
+    _PoseAssetMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, digest=lambda: file_sha256, public_url=lambda: public_output_url),
+    _PoseMaterializationSprites(build=lambda: build_clean_sprites_from_agent_mcp_poses, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready),
+)
+
 def choose_agent_mcp_chroma_screen(item: dict[str, Any]) -> dict[str, Any]:
-    green_fraction = accessory_reference_chroma_fraction(item, "green")
-    if green_fraction <= CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD:
-        screen = normalize_chroma_screen("green")
-        screen["reference_chroma_fraction"] = round(float(green_fraction), 6)
-        return screen
-    blue_fraction = accessory_reference_chroma_fraction(item, "blue")
-    red_fraction = accessory_reference_chroma_fraction(item, "red")
-    chosen = "blue" if blue_fraction <= CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD else "red"
-    if chosen == "red" and red_fraction > CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD:
-        chosen = "blue"
-    screen = normalize_chroma_screen(chosen)
-    screen["reference_green_fraction"] = round(float(green_fraction), 6)
-    screen["reference_blue_fraction"] = round(float(blue_fraction), 6)
-    screen["reference_red_fraction"] = round(float(red_fraction), 6)
-    return screen
+    return _pose_chroma_policy.choose_agent_mcp_chroma_screen(item)
 
 
 def fallback_accessory_ai_profile(item: dict[str, Any], reference_images: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -12793,27 +12805,7 @@ def agent_mcp_accessory_pose_images_exist(item: dict[str, Any]) -> bool:
 
 
 def dedup_agent_mcp_pose_references(item: dict[str, Any]) -> bool:
-    """Keep a single AI pose image per pose_id on an accessory, removing the
-    duplicates that earlier tasks accumulated. Returns True when anything was
-    dropped so callers can rebuild the clean sprites from the deduplicated set."""
-    assets = item.get("normalized_assets")
-    if not isinstance(assets, list):
-        return False
-    seen: set[str] = set()
-    kept: list[Any] = []
-    removed = False
-    for asset in assets:
-        if isinstance(asset, dict) and asset.get("kind") == "agent_mcp_pose_reference":
-            pose_id = str(asset.get("pose_id") or "")
-            key = pose_id or str(asset.get("path") or "")
-            if key in seen:
-                removed = True
-                continue
-            seen.add(key)
-        kept.append(asset)
-    if removed:
-        item["normalized_assets"] = kept
-    return removed
+    return _pose_sprite_builder.dedup_agent_mcp_pose_references(item)
 
 
 def agent_mcp_accessory_standard_images_ready(item: dict[str, Any]) -> bool:
@@ -22075,51 +22067,7 @@ def segment_agent_mcp_pose_object(
     rng: np.random.Generator,
     chroma_screen: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]] | None:
-    """Cut the single foreground accessory out of an AI-generated top-down pose
-    image (object resting on a solid chroma tabletop). The fixed chroma-key path
-    runs first, then legacy green/rembg fallbacks handle older generated plates."""
-    if image_bgr is None or image_bgr.ndim != 3:
-        return None
-    source_shape = image_bgr.shape
-    # 0) Fixed chroma key for the new solid tabletop contract.
-    keyed_chroma = chroma_screen_object_cutout(image_bgr, chroma_screen)
-    if keyed_chroma:
-        usable = usable_object_cutout((keyed_chroma[0], keyed_chroma[1]), source_shape)
-        if usable:
-            return usable[0], usable[1], keyed_chroma[2]
-    # 1) Precise AI matte (rembg/u2net) + bright-green halo trim — keeps the FULL
-    #    silhouette including thin ends and corrugations (no erosion). Best edges.
-    precise = precise_green_plate_cutout(image_bgr)
-    if precise:
-        usable = usable_object_cutout((precise[0], precise[1]), source_shape)
-        if usable:
-            return usable[0], usable[1], precise[2]
-    # 2) Green chroma-key tuned for old AI green-conveyor plates.
-    keyed = green_conveyor_object_cutout(image_bgr)
-    if keyed:
-        usable = usable_object_cutout((keyed[0], keyed[1]), source_shape)
-        if usable:
-            return usable[0], usable[1], keyed[2]
-    # 3) generic rembg path (padded bbox) when available.
-    rembg_result = ai_background_cutout_with_bbox(image_bgr)
-    if rembg_result:
-        usable = usable_object_cutout((rembg_result[0], rembg_result[1]), source_shape)
-        if usable:
-            return usable[0], usable[1], rembg_result[2]
-    # 4) Green-aware foreground heuristic — removes the green conveyor and keeps
-    #    the largest non-green component (works for arbitrary object colors).
-    fallback = object_cutout_from_image(image_bgr, rng)
-    if fallback:
-        usable = usable_object_cutout(fallback, source_shape)
-        if usable:
-            return usable[0], usable[1], (0, 0, int(source_shape[1]), int(source_shape[0]))
-    # 5) Green-screen key (anchor-oriented) as last resort.
-    green_result = green_screen_object_cutout_with_bbox(image_bgr, rng)
-    if green_result:
-        usable = usable_object_cutout((green_result[0], green_result[1]), source_shape)
-        if usable:
-            return usable[0], usable[1], green_result[2]
-    return None
+    return _pose_cutout_pipeline.segment_agent_mcp_pose_object(image_bgr, rng, chroma_screen)
 
 
 def object_photo_highlight_source_paths(item: dict[str, Any], *, limit: int = PHOTO_HIGHLIGHT_MAX_REFERENCE_IMAGES) -> list[Path]:
@@ -22997,171 +22945,11 @@ def prepare_photo_highlight_sprites_for_task(task: dict[str, Any], config: dict[
 
 
 def build_clean_sprites_from_agent_mcp_poses(item: dict[str, Any], *, force: bool = False) -> bool:
-    """Segment every cached AI-generated standard pose image into a clean,
-    background-free object sprite. These sprites are what the sample compositor
-    pastes (with rotation/scale/position variety) onto the task background."""
-    if accessory_material_type(item) == "text":
-        return False
-    if dedup_agent_mcp_pose_references(item):
-        force = True
-    references = agent_mcp_pose_reference_assets(item)
-    if not references:
-        return False
-    existing = clean_sprite_assets(item)
-    # Only reuse existing sprites when they were actually cut from the AI pose
-    # images. Raw-photo fallback sprites (no agent_mcp provenance) must be
-    # replaced once the AI standard images exist, otherwise the training set
-    # would keep using the fallback cut-outs instead of the planned poses.
-    existing_from_ai_poses = bool(existing) and all(
-        bool(asset.get("agent_mcp_pose_reference_path") or asset.get("agent_mcp_pose_call_id"))
-        for asset in existing
-    )
-    if existing and not force and existing_from_ai_poses and clean_sprites_policy_complete(item, existing):
-        return False
-    item["material_alpha_policy"] = object_alpha_material_policy(item)
-    physical_size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
-    alpha_policy = object_alpha_material_policy(item)
-    uid = accessory_uid(item)
-    sprite_dir = NORMALIZED_DIR / uid / "clean_sprites"
-    rng = np.random.default_rng(int(item.get("created_at") or time.time()))
-    generated: list[dict[str, Any]] = []
-    for ref in references:
-        path = resolve_service_path(ref.get("path"))
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-        if image is None:
-            continue
-        chroma_screen = normalize_chroma_screen(ref.get("chroma_screen"))
-        seg = segment_agent_mcp_pose_object(image, rng, chroma_screen)
-        if not seg:
-            continue
-        cut_bgr, cut_mask, source_bbox = seg
-        bbox = [int(source_bbox[0]), int(source_bbox[1]), int(source_bbox[2]), int(source_bbox[3])]
-        source_size_px = [max(1, bbox[2] - bbox[0]), max(1, bbox[3] - bbox[1])]
-        pose_id = str(ref.get("pose_id") or "")
-        # AI standard pose images are a single object shot strictly straight
-        # top-down on a green surface. Every one is a top-view sprite, so the
-        # compositor must place it at any location with free planar rotation
-        # (no grid/parallax remap). canonical_pose_family_name returns the raw
-        # pose id for these names, which would break top-view detection, so we
-        # pin the family explicitly.
-        pose_family = "upright"
-        # The unique token only drives the on-disk sprite filename. The grid
-        # position id is forced to the non-grid "legacy_clean_sprite" sentinel so
-        # load_object_preview_sprite never rejects the sprite for a missing grid
-        # cell — that rejection is exactly what produced the black placeholder
-        # boxes the compositor draws when no sprite is selectable.
-        unique_token = str(ref.get("call_id") or pose_id or f"agent_mcp_{safe_record_id(str(path))}")
-        metadata = {
-            "task_id": str(ref.get("task_id") or "agent_mcp_pose_reference"),
-            "source_pose_collection_job_id": "legacy_clean_sprite",
-            "agent_mcp_pose_call_id": unique_token,
-            "agent_mcp_sprite_build": AGENT_MCP_SPRITE_BUILD_VERSION,
-            "source_pose_collection": str(path),
-            "source_path": str(path),
-            "pose_family": pose_family,
-            "source_pose_family": pose_family,
-            "pose_id": pose_id,
-            "pose_position": "center",
-            "source_position": "center",
-            "source_image_size_px": [int(image.shape[1]), int(image.shape[0])],
-            "source_image_width": int(image.shape[1]),
-            "source_image_height": int(image.shape[0]),
-            "source_region_bbox_xyxy": [0, 0, int(image.shape[1]), int(image.shape[0])],
-            "source_object_bbox_xyxy": bbox,
-            "source_object_center_xy": [int(round((bbox[0] + bbox[2]) / 2)), int(round((bbox[1] + bbox[3]) / 2))],
-            "source_object_size_px": source_size_px,
-            "physical_size_mm": physical_size,
-            "material_alpha_policy": alpha_policy,
-            "agent_mcp_pose_reference_path": str(path),
-            "chroma_screen": chroma_screen,
-        }
-        metadata.update(pose_render_footprint_metadata(pose_family, source_size_px, physical_size))
-        out_path = sprite_dir / f"agent_mcp_{safe_record_id(unique_token)}.png"
-        sprite_asset = write_clean_sprite(out_path, cut_bgr, cut_mask, metadata)
-        if sprite_asset:
-            sprite_asset["method"] = "agent_mcp_pose_segmented_sprite"
-            generated.append(sprite_asset)
-    if not generated:
-        return False
-    generated = generated[:18]
-    normalize_sprite_family_canvases(generated)
-    apply_upright_scale_correction_metadata(generated, physical_size)
-    apply_laying_standard_render_size_hints(generated)
-    retained = [
-        asset
-        for asset in item.get("normalized_assets", [])
-        if asset.get("kind") != "clean_object_sprite"
-    ]
-    item["normalized_assets"] = retained + generated
-    item["clean_sprite_status"] = "ready" if clean_sprites_policy_complete(item, generated) else "partial"
-    item["clean_sprite_count"] = len(generated)
-    item["clean_sprite_expected_count"] = len(references)
-    item["clean_sprite_failed_cells"] = []
-    item["clean_sprite_preprocessed_at"] = int(time.time())
-    item["preprocess"] = "系统已从 AI 生成的标准姿态图中分割出无背景单体素材；训练样本直接复用。"
-    return True
+    return _pose_sprite_builder.build_clean_sprites_from_agent_mcp_poses(item, force=force)
 
 
 def materialize_agent_mcp_pose_assets(task: dict[str, Any], config: dict[str, Any]) -> bool:
-    orchestration = agent_mcp_orchestration(task)
-    if isinstance(orchestration.get("photo_highlight_sprite_policy"), dict):
-        return False
-    completed_calls = [
-        call
-        for call in orchestration.get("tool_calls") or []
-        if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE and call.get("status") == "completed"
-    ]
-    if not completed_calls:
-        return False
-    accessories_by_id = accessory_lookup_by_id(config)
-    changed = False
-    touched_items: dict[str, dict[str, Any]] = {}
-    now = agent_mcp_now()
-    for call in completed_calls:
-        accessory_id = str(call.get("accessory_id") or "")
-        item = accessories_by_id.get(accessory_id)
-        if not item:
-            continue
-        output_path = resolve_service_path(call.get("output_path"))
-        if not output_path.exists() or output_path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-            continue
-        normalized_assets = item.setdefault("normalized_assets", [])
-        if not any(
-            isinstance(asset, dict)
-            and asset.get("kind") == "agent_mcp_pose_reference"
-            and resolve_service_path(asset.get("path")) == output_path
-            for asset in normalized_assets
-        ):
-            normalized_assets.append(
-                {
-                    "kind": "agent_mcp_pose_reference",
-                    "path": str(output_path),
-                    "url": public_output_url(output_path),
-                    "method": "provider_pose_image",
-                    "task_id": task.get("id"),
-                    "call_id": call.get("call_id"),
-                    "pose_id": call.get("pose_id"),
-                    "chroma_screen": normalize_chroma_screen(call.get("chroma_screen")),
-                    "provider": call.get("provider") or "gemini_native_image_generation",
-                    "model": call.get("model") or "",
-                    "sha256": call.get("sha256") or file_sha256(output_path),
-                    "metadata_path": call.get("metadata_path") or "",
-                    "created_at": now,
-                }
-            )
-            changed = True
-        touched_items[accessory_id] = item
-    # Segment the freshly stored standard pose images into clean object sprites
-    # (idempotent: rebuilds only when sprites are missing or incomplete).
-    for item in touched_items.values():
-        if photo_highlight_clean_sprites_ready(item, object_photo_highlight_source_paths(item)):
-            continue
-        if build_clean_sprites_from_agent_mcp_poses(item, force=False):
-            changed = True
-    if changed:
-        orchestration["materialized_pose_assets_at"] = now
-        orchestration["updated_at"] = now
-    return changed
+    return _pose_asset_materialization.materialize_agent_mcp_pose_assets(task, config)
 
 
 def agent_mcp_accessory_has_existing_or_pose_asset(item: dict[str, Any], orchestration: dict[str, Any]) -> bool:

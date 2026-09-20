@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_agent_pose_materialization.py` covers 25 offline groups: 19 original
+contracts, four dependency/hash-order checks and two constructor/composition checks. Tiny
+synthetic arrays, private files and substituted cutout/codec callbacks exercise fallback order,
+reference aliases, metadata, partial state and the post-write sprite cap. Source guards follow
+the actual materialization method. Prior pose and isolated phase3d decision contracts remain;
+no real inference, device or complete legacy retired-worker workflow acceptance is claimed.
+
 `python scripts/smoke_agent_pose_execution.py` covers 23 offline groups: 17 original contracts,
 four dependency-order checks and two constructor/composition checks. Synthetic providers
 verify cache/no-op paths, exact call arguments, reference aliases, failure boundaries and
@@ -10,7 +17,8 @@ retired-worker workflow and physical-device acceptance are not claimed.
 `python scripts/smoke_agent_pose_render.py` covers 21 offline groups: 15 original contracts,
 four evaluation/error-order checks and two constructor/composition checks. Synthetic fixtures
 verify exact prompt text, reference aliases, callback lookup and partial artifact writes.
-Injected digest failures test collaborator failure; the real hash helper may return None.
+Injected digest failures test collaborator failure. A None-returning substitute checks result
+propagation; the production root resolves the strict training hash helper, whose read errors escape.
 The phase3d SynthID source guard follows the actual writer. Its active decision helper
 remains separately tested; full legacy retired-worker or device acceptance is not claimed.
 
