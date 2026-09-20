@@ -21674,45 +21674,26 @@ def agent_mcp_now() -> int:
     return _agent_orchestration_state.agent_mcp_now()
 
 
+from .agent.pose_render_configuration import PoseRenderConfiguration as _PoseRenderConfiguration
+from .agent.pose_render_content import PoseRenderContent as _PoseRenderContent
+from .agent.pose_artifact_store import PoseArtifactStore as _PoseArtifactStore
+from .agent.pose_render_ports import PoseRenderConfigurationSources as _PoseRenderConfigurationSources, PoseRenderConfigurationDefaults as _PoseRenderConfigurationDefaults, PoseRenderReferences as _PoseRenderReferences, PoseRenderPresentation as _PoseRenderPresentation, PoseRenderPaths as _PoseRenderPaths, PoseRenderArtifacts as _PoseRenderArtifacts
+_pose_render_configuration = _PoseRenderConfiguration(
+    _PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: image_generation_provider_key, provider_label=lambda: image_generation_provider_label, model=lambda: default_image_generation_model, base_url=lambda: default_image_generation_base_url, key_environment=lambda: default_image_generation_api_key_env),
+    _PoseRenderConfigurationDefaults(provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, timeout=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, key_environment=lambda: IMAGE_GENERATION_API_KEY_ENV, model_environment=lambda: IMAGE_GENERATION_MODEL_ENV, timeout_environment=lambda: IMAGE_GENERATION_TIMEOUT_ENV, high_fidelity_model=lambda: AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL, legacy_model_environment=lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, legacy_timeout_environment=lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
+)
+_pose_render_content = _PoseRenderContent(
+    _PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256),
+    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+)
+_pose_artifact_store = _PoseArtifactStore(
+    _PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id),
+    _PoseRenderArtifacts(output=lambda: agent_mcp_pose_output_path, digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, now=lambda: agent_mcp_now, dumps=lambda: json.dumps),
+    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+)
+
 def agent_mcp_gemini_image_config() -> dict[str, Any]:
-    settings = image_generation_settings()
-    provider = str(settings.get("provider") or IMAGE_GENERATION_DEFAULT_PROVIDER).strip().lower()
-    provider_key = image_generation_provider_key(provider)
-    provider_label = image_generation_provider_label(provider)
-    model = str(settings.get("model") or default_image_generation_model(provider)).strip()
-    timeout_seconds = max(10.0, min(300.0, float(settings.get("timeout_seconds") or IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS)))
-    configured = bool(settings.get("configured"))
-    missing: list[str] = []
-    if not settings.get("api_key_present"):
-        missing.append(str(settings.get("api_key_env") or IMAGE_GENERATION_API_KEY_ENV))
-    if not model:
-        missing.append(IMAGE_GENERATION_MODEL_ENV)
-    return {
-        "provider": provider_key,
-        "provider_name": provider,
-        "provider_label": provider_label,
-        "configured": configured and bool(model),
-        "model": model,
-        "default_model": default_image_generation_model(provider),
-        "high_fidelity_model": AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL,
-        "model_env": IMAGE_GENERATION_MODEL_ENV,
-        "legacy_model_env": AGENT_MCP_GEMINI_IMAGE_MODEL_ENV,
-        "timeout_env": IMAGE_GENERATION_TIMEOUT_ENV,
-        "legacy_timeout_env": AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV,
-        "timeout_seconds": timeout_seconds,
-        "base_url": settings.get("base_url") or default_image_generation_base_url(provider),
-        "api_key_env": settings.get("api_key_env") or default_image_generation_api_key_env(provider),
-        "api_key_present": bool(settings.get("api_key_present")),
-        "proxy_configured": bool(settings.get("proxy_configured")),
-        "proxy_source_name": settings.get("proxy_source_name") or "",
-        "missing": missing,
-        "status": "ready" if configured and model else "missing_configuration",
-        "message": (
-            f"{provider_label} image generation is configured."
-            if configured and model
-            else f"Image generation requires provider settings: {', '.join(missing) or settings.get('message') or 'missing configuration'}."
-        ),
-    }
+    return _pose_render_configuration.agent_mcp_gemini_image_config()
 
 
 def agent_mcp_default_stages() -> list[dict[str, Any]]:
@@ -21802,84 +21783,15 @@ def upsert_agent_mcp_tool_call(orchestration: dict[str, Any], call: dict[str, An
 
 
 def agent_mcp_pose_reference_content(item: dict[str, Any], *, max_images: int = 3) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    content: list[dict[str, Any]] = []
-    refs: list[dict[str, Any]] = []
-    for ref in accessory_reference_image_contexts(item, max_images=max_images):
-        if not isinstance(ref, dict):
-            continue
-        path = resolve_service_path(ref.get("source_path"))
-        if not path.exists():
-            continue
-        mime_type = str(ref.get("mime_type") or mimetypes.guess_type(path.name)[0] or "image/png")
-        data_url = f"data:{mime_type};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
-        content.append({"type": "image_url", "image_url": {"url": data_url}})
-        refs.append(
-            {
-                "source_path": str(path),
-                "source_url": public_output_url_for_existing(path),
-                "sha256": ref.get("sha256") or file_sha256(path),
-                "mime_type": mime_type,
-                "width": ref.get("width"),
-                "height": ref.get("height"),
-                "ordinal": ref.get("ordinal"),
-            }
-        )
-    return content, refs
+    return _pose_render_content.agent_mcp_pose_reference_content(item, max_images=max_images)
 
 
 def agent_mcp_pose_prompt(task: dict[str, Any], plan: dict[str, Any], pose: dict[str, Any], chroma_screen: dict[str, Any] | None = None) -> str:
-    request = pose.get("request") if isinstance(pose.get("request"), dict) else {}
-    screen = normalize_chroma_screen(chroma_screen)
-    screen_rgb = screen["rgb"]
-    screen_hex = str(screen["hex"])
-    screen_label = str(screen.get("label") or screen.get("name") or "pure green")
-    generation_prompt = str(pose.get("generation_prompt") or "").strip()
-    negative_prompt = str(pose.get("negative_prompt") or "").strip()
-    parts = [
-        "Generate one realistic product-training image for VantaLine visual inspection.",
-        f"Accessory: {plan.get('accessory_name') or plan.get('accessory_id')}.",
-        f"Object kind: {plan.get('object_kind') or 'generic_object'}.",
-        f"Pose id: {pose.get('pose_id')}; label: {pose.get('label')}.",
-        f"Stable contact: {pose.get('stable_contact')}.",
-    ]
-    if generation_prompt:
-        # The pose-planner agent already decided the contact surface, visible face
-        # and orientation for this pose; render exactly that.
-        parts.append(f"Pose plan (decided by the pose-planner agent): {generation_prompt}")
-    else:
-        parts.append(f"Gravity basis: {pose.get('gravity_basis')}.")
-        parts.append(f"Top-down view: {pose.get('conveyor_view')}.")
-    parts.append(f"Task: {task.get('name') or task.get('id')}.")
-    parts.extend(
-        [
-            "Scene: place the single accessory on a flat solid chroma-key tabletop with the same solid chroma color filling the entire background.",
-            f"Chroma color: exact {screen_label} RGB{tuple(screen_rgb)} / {screen_hex}. The tabletop and all visible background pixels must use this same flat color.",
-            "Camera: STRICTLY vertical top-down (bird's-eye), lens pointing straight down at 90 degrees, optical axis perpendicular to the tabletop. No tilt, no perspective, no oblique angle.",
-            "The accessory must lie flat on the tabletop obeying gravity in the requested stable rest pose; show only the face that is naturally visible from directly above.",
-            "Even, diffuse lighting on the object only. Do not add cast shadows, contact shadows, reflections, gradients, texture, seams, belts, rollers, props, or environment details on the chroma tabletop/background.",
-            f"Show exactly one accessory instance, centered, fully inside the frame, on the solid {screen_hex} chroma background.",
-            # Keep scale comparable across every pose so the cut-out sprites stay a
-            # consistent size for the same accessory.
-            "Frame the object so its longest dimension spans roughly 65-75% of the image width; keep this scale consistent across all poses of this accessory.",
-            "Do not create a grid, collage, calibration target, target paper, labels, captions, rulers, perspective view, side view, or multiple accessories.",
-            "Exclude all movable or detachable secondary components: straps, cords, strings, lanyards, loose cables, tags, labels, packaging ties, and detachable accessories. Render only the main rigid product body.",
-        ]
-    )
-    if negative_prompt:
-        parts.append(f"Avoid (negative constraints): {negative_prompt}")
-    if request.get("background"):
-        parts.append(f"Background style: {request['background']}.")
-    if request.get("output_contract"):
-        parts.append(f"Output contract: {request['output_contract']}.")
-    return "\n".join(str(part) for part in parts if str(part or "").strip())
+    return _pose_render_content.agent_mcp_pose_prompt(task, plan, pose, chroma_screen)
 
 
 def agent_mcp_pose_output_path(task: dict[str, Any], accessory_id: str, pose_id: str, mime_type: str) -> Path:
-    extension = ".jpg" if "jpeg" in str(mime_type or "").lower() else ".png"
-    owner_id = str(task.get("owner_user_id") or "")
-    output_dir = output_write_dir_for_owner("agent_mcp_pose_images", owner_id) / safe_record_id(str(task.get("id") or "task"))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir / f"{safe_record_id(accessory_id)}__{safe_record_id(pose_id)}{extension}"
+    return _pose_artifact_store.agent_mcp_pose_output_path(task, accessory_id, pose_id, mime_type)
 
 
 def write_agent_mcp_pose_artifact(
@@ -21890,45 +21802,7 @@ def write_agent_mcp_pose_artifact(
     prompt: str,
     reference_assets: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    mime_type = str(result.get("mime_type") or "image/png")
-    output_path = agent_mcp_pose_output_path(task, str(call.get("accessory_id") or ""), str(call.get("pose_id") or ""), mime_type)
-    output_path.write_bytes(result["bytes"])
-    digest = file_sha256(output_path)
-    provider_key = str(call.get("provider") or result.get("provider") or "gemini_native_image_generation")
-    native_provider = "agnes" if provider_key == "agnes_image_generation" else "gemini"
-    metadata = {
-        "provider": provider_key,
-        "model": result.get("model") or "",
-        "prompt": prompt,
-        "task_id": task.get("id"),
-        "call_id": call.get("call_id"),
-        "accessory_id": call.get("accessory_id"),
-        "pose_id": call.get("pose_id"),
-        "source_reference_assets": reference_assets,
-        "chroma_screen": normalize_chroma_screen(call.get("chroma_screen")),
-        "output_path": str(output_path),
-        "output_url": public_output_url(output_path),
-        "mime_type": mime_type,
-        "sha256": digest,
-        "latency_ms": int(result.get("latency_ms") or 0),
-        "usage_metadata": result.get("usage_metadata") if isinstance(result.get("usage_metadata"), dict) else {},
-        "proxy": {
-            "used": bool(result.get("proxy_used")),
-            "source_name": str(result.get("proxy_source_name") or ""),
-            "url": str(result.get("proxy_url") or ""),
-            "auto_local": bool(result.get("proxy_auto_local")),
-        },
-        "generated_source_metadata": {
-            "native_provider": native_provider,
-            "generated_by": "Agnes Image" if native_provider == "agnes" else "Nano Banana",
-            "synthid_watermark_expected": native_provider == "gemini",
-        },
-        "provider_text": bounded_text(result.get("text") or "", 600),
-        "created_at": agent_mcp_now(),
-    }
-    metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
-    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {**metadata, "metadata_path": str(metadata_path), "metadata_url": public_output_url(metadata_path)}
+    return _pose_artifact_store.write_agent_mcp_pose_artifact(task, call, result, prompt=prompt, reference_assets=reference_assets)
 
 
 def suppress_green_spill(image_bgr: np.ndarray) -> np.ndarray:

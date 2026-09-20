@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose rendering uses explicit configuration, reference/prompt and artifact services. Existing
+provider fields, prompt text, reference ordering, output ownership and metadata aliases remain
+unchanged. Existing callers retain model bindings and platform/worker lifecycle ownership.
+
 Pose planning policy, generation/cache and task-plan assembly use explicit services while
 retaining the original model call path, prompt and template policy, fallback states and
 request aliases. Platform rollout and worker topology remain unchanged.
