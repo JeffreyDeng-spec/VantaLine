@@ -1,7 +1,10 @@
 {
-  "version": 84,
+  "version": 85,
   "sources": [
     "server.py",
+    "accessories/cutout_runtime.py",
+    "accessories/cutout_ports.py",
+    "accessories/background_cutouts.py",
     "accessories/material_alpha_ports.py",
     "accessories/alpha_masks.py",
     "accessories/material_alpha.py",

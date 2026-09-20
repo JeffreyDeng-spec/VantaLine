@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_cutout_runtime.py` retains 12 original synthetic groups through
+explicit fixture state access and adds three independent runtime/composition cases.
+Tests cover lazy caching, held/reentrant locks, a coordinated cold-start schedule,
+exception boundaries and successful consumer isolation. They do not prove all thread
+schedules, pixel branches or real-model/device acceptance.
+
 `python scripts/smoke_material_alpha.py` retains 17 original synthetic groups and two
 independent composition checks. It covers opacity thresholds, morphology order, edge
 evidence, dispatch timing and the actual legacy alpha helper under isolated fixtures.
