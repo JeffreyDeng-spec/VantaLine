@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_agent_pose_assets.py` covers 21 offline groups: 15 original contracts,
+four dependency-order checks and two constructor/composition checks. Synthetic paths and
+objects verify asset aliases, readiness/rebuild gates and unchanged template requests.
+The phase3d source guard follows the actual missing-asset validation method; full legacy
+pipeline or device commissioning is not claimed.
+
 `python scripts/smoke_agent_state.py` covers 21 offline groups: 15 original contracts, four
 lookup/evaluation-order checks and two construction/composition checks. Synthetic fixtures
 cover timestamps, nested aliases, call identity, partial state and stage metadata forwarding.

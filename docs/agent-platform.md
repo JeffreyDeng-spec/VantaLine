@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose asset reuse and default pose templates retain their existing policy in explicit services.
+Material selection, historical sprite compatibility, request fields and template order are
+unchanged. Platform rollout and worker topology are unchanged.
+
 Agent state and tool-call record services retain the existing orchestration defaults,
 quality gate, pause state and metadata. Browser capabilities, scheduling, worker topology
 and platform acceptance status are unchanged.

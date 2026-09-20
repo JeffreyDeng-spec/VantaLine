@@ -221,6 +221,7 @@ jobs:
           python scripts/smoke_agent_pipeline_decisions.py
           python scripts/smoke_agent_pipeline_actions.py
           python scripts/smoke_agent_state.py
+          python scripts/smoke_agent_pose_assets.py
           python -c "from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_react_pipeline_route; assert_react_pipeline_route()"
           python scripts/smoke_presence_inspection.py
           python scripts/smoke_detection_analysis.py
