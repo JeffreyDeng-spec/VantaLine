@@ -224,6 +224,7 @@ def assert_react_pipeline_route() -> None:
     }
     # Source contracts follow the actual class methods, not application adapters.
     implementation_methods = {
+        "skip validation": ("agent/pose_assets.py", "AgentPoseAssets", "agent_mcp_missing_existing_asset_names"),
         "sample tool call": ("agent/tool_call_records.py", "AgentToolCallRecords", "log_agent_mcp_sample_tool_call"),
         "training tool call": ("agent/tool_call_records.py", "AgentToolCallRecords", "log_agent_mcp_training_tool_call"),
         "agent turn committer": ("agent/pipeline_turns.py", "AgentPipelineTurns", "commit_pipeline_agent_turn"),

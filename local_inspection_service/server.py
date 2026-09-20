@@ -12769,32 +12769,27 @@ def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
     return assets
 
 
+from .agent.pose_assets import AgentPoseAssets as _AgentPoseAssets
+from .agent.pose_templates import AgentPoseTemplates as _AgentPoseTemplates
+from .agent.pose_asset_ports import PoseAssetPaths as _PoseAssetPaths, PoseAssetMaterial as _PoseAssetMaterial, PoseAssetSprites as _PoseAssetSprites, PoseAssetCalls as _PoseAssetCalls, PoseAssetCatalog as _PoseAssetCatalog, PoseTemplateIdentity as _PoseTemplateIdentity, PoseTemplateCalls as _PoseTemplateCalls
+_agent_pose_assets = _AgentPoseAssets(
+    _PoseAssetPaths(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
+    _PoseAssetMaterial(kind=lambda: accessory_material_type, text_assets=lambda: canonical_text_assets, text_complete=lambda: canonical_text_assets_complete),
+    _PoseAssetSprites(source_paths=lambda: object_photo_highlight_source_paths, highlight_ready=lambda: photo_highlight_clean_sprites_ready, assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete, family=lambda: canonical_pose_family_name, version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION),
+    _PoseAssetCalls(references=lambda: agent_mcp_pose_reference_assets, rebuild=lambda: agent_mcp_clean_sprites_need_rebuild),
+    _PoseAssetCatalog(uid=lambda: accessory_uid, lookup=lambda: accessory_lookup_by_id, canonical_ids=lambda: canonical_pipeline_accessory_ids, has_asset=lambda: agent_mcp_accessory_has_existing_or_pose_asset, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+)
+_agent_pose_templates = _AgentPoseTemplates(
+    _PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search),
+    _PoseTemplateCalls(request=lambda: agent_mcp_pose_request),
+)
+
 def agent_mcp_pose_reference_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
-    assets = []
-    for asset in item.get("normalized_assets", []):
-        if asset.get("kind") != "agent_mcp_pose_reference":
-            continue
-        path = resolve_service_path(asset.get("path"))
-        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-            continue
-        asset["path"] = str(path)
-        assets.append(asset)
-    return assets
+    return _agent_pose_assets.agent_mcp_pose_reference_assets(item)
 
 
 def agent_mcp_accessory_pose_images_exist(item: dict[str, Any]) -> bool:
-    """True once an accessory already carries its AI standard pose images (or, for
-    text parts, its canonical text assets). Used to skip a SECOND round of image
-    generation: per the one-set policy, the pipeline generates an accessory's pose
-    images on the first task and reuses them forever after."""
-    if not isinstance(item, dict):
-        return False
-    if accessory_material_type(item) == "text":
-        return bool(canonical_text_assets(item))
-    source_paths = object_photo_highlight_source_paths(item)
-    if photo_highlight_clean_sprites_ready(item, source_paths):
-        return True
-    return bool(agent_mcp_pose_reference_assets(item))
+    return _agent_pose_assets.agent_mcp_accessory_pose_images_exist(item)
 
 
 def dedup_agent_mcp_pose_references(item: dict[str, Any]) -> bool:
@@ -12822,43 +12817,11 @@ def dedup_agent_mcp_pose_references(item: dict[str, Any]) -> bool:
 
 
 def agent_mcp_accessory_standard_images_ready(item: dict[str, Any]) -> bool:
-    """A "YOLO/OCR-ready" accessory already carries its standard images and the
-    clean sprites cut from them. When true, a later task reuses these cached
-    assets instead of regenerating standard images for this accessory."""
-    if not isinstance(item, dict):
-        return False
-    if accessory_material_type(item) == "text":
-        text_assets = canonical_text_assets(item)
-        return bool(text_assets) and canonical_text_assets_complete(item, text_assets)
-    source_paths = object_photo_highlight_source_paths(item)
-    if photo_highlight_clean_sprites_ready(item, source_paths):
-        return True
-    if not agent_mcp_pose_reference_assets(item):
-        return False
-    sprites = clean_sprite_assets(item)
-    return bool(sprites) and clean_sprites_policy_complete(item, sprites) and not agent_mcp_clean_sprites_need_rebuild(item)
+    return _agent_pose_assets.agent_mcp_accessory_standard_images_ready(item)
 
 
 def agent_mcp_clean_sprites_need_rebuild(item: dict[str, Any]) -> bool:
-    """True when an accessory's cached clean sprites were cut from AI pose images
-    but still carry the legacy grid metadata (a real grid job id and/or a raw
-    pose-id family). Such sprites are NOT selectable by the top-view compositor
-    and render as black placeholder boxes, so they must be rebuilt with the
-    non-grid sentinel + top-view family."""
-    if accessory_material_type(item) == "text":
-        return False
-    if not agent_mcp_pose_reference_assets(item):
-        return False
-    for asset in clean_sprite_assets(item):
-        if not (asset.get("agent_mcp_pose_reference_path") or asset.get("agent_mcp_pose_call_id")):
-            continue
-        if int(asset.get("agent_mcp_sprite_build") or 0) < AGENT_MCP_SPRITE_BUILD_VERSION:
-            return True
-        if str(asset.get("source_pose_collection_job_id") or "") != "legacy_clean_sprite":
-            return True
-        if canonical_pose_family_name(asset.get("source_pose_family") or asset.get("pose_family")) not in {"upright", "lying"}:
-            return True
-    return False
+    return _agent_pose_assets.agent_mcp_clean_sprites_need_rebuild(item)
 
 
 def clean_sprite_metadata_complete(asset: dict[str, Any]) -> bool:
@@ -21765,60 +21728,15 @@ def set_agent_mcp_stage(orchestration: dict[str, Any], key: str, status: str, pr
 
 
 def agent_mcp_object_kind(item: dict[str, Any]) -> str:
-    text = f"{item.get('name') or ''} {item.get('label') or ''} {accessory_uid(item)}".lower()
-    if re.search(r"bottle|vial|jar|flask|瓶|罐", text):
-        return "bottle"
-    if re.search(r"cube|block|dice|方块|立方|积木", text):
-        return "cube"
-    if accessory_material_type(item) == "text" or re.search(r"thin|card|label|sheet|manual|tag|片|纸|标签|说明书|卡", text):
-        return "thin_object"
-    return "generic_object"
+    return _agent_pose_templates.agent_mcp_object_kind(item)
 
 
 def agent_mcp_pose_request() -> dict[str, Any]:
-    return {
-        "subject_count": 1,
-        "target_paper": False,
-        "grid_layout": False,
-        "background": "solid_chroma_key_tabletop_top_down",
-        "camera": "strict_vertical_top_down_90deg",
-        "output_contract": "one_accessory_per_image",
-    }
+    return _agent_pose_templates.agent_mcp_pose_request()
 
 
 def agent_mcp_pose_templates(base_id: str, object_kind: str) -> list[dict[str, Any]]:
-    templates: dict[str, list[tuple[str, str, str, str, str]]] = {
-        "cube": [
-            ("face_a_down", "one square face flat on tabletop", "cube rests stably on any face", "top face visible with slight side edge", "face_a_down"),
-            ("face_b_down", "adjacent square face flat on tabletop", "rotated cube exposes a different face", "alternate face visible", "face_b_down"),
-            ("face_c_down", "third square face flat on tabletop", "third axis face can contact tabletop", "third face visible", "face_c_down"),
-        ],
-        "bottle": [
-            ("upright", "base on tabletop", "flat base can stand vertically", "cap/top footprint visible", "upright_base_down"),
-            ("horizontal_side", "curved side contacts tabletop", "bottle can lie on side after falling", "long body silhouette visible", "horizontal_side_down"),
-        ],
-        "thin_object": [
-            ("face_up", "back face on tabletop", "thin object settles flat", "front face visible", "face_up"),
-            ("face_down", "front face on tabletop", "thin object may flip but remains flat", "back face visible", "face_down"),
-        ],
-        "generic_object": [
-            ("primary_rest", "largest stable surface on tabletop", "object settles on broadest support area", "primary silhouette visible", "primary_resting_pose"),
-            ("side_rest", "secondary side surface on tabletop", "secondary plausible rest pose", "side silhouette visible", "side_resting_pose"),
-        ],
-    }
-    result = []
-    for suffix, stable_contact, gravity_basis, conveyor_view, label in templates.get(object_kind, templates["generic_object"]):
-        result.append(
-            {
-                "pose_id": f"{base_id}_{suffix}",
-                "label": label,
-                "stable_contact": stable_contact,
-                "gravity_basis": gravity_basis,
-                "conveyor_view": conveyor_view,
-                "request": agent_mcp_pose_request(),
-            }
-        )
-    return result
+    return _agent_pose_templates.agent_mcp_pose_templates(base_id, object_kind)
 
 
 def accessory_pose_plan_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
@@ -23645,32 +23563,11 @@ def materialize_agent_mcp_pose_assets(task: dict[str, Any], config: dict[str, An
 
 
 def agent_mcp_accessory_has_existing_or_pose_asset(item: dict[str, Any], orchestration: dict[str, Any]) -> bool:
-    if accessory_material_type(item) == "text":
-        return canonical_text_assets_complete(item)
-    if clean_sprite_assets(item):
-        return True
-    accessory_id = accessory_uid(item)
-    for call in orchestration.get("tool_calls") or []:
-        if call.get("tool") != AGENT_MCP_TOOL_POSE_IMAGE or call.get("status") != "completed":
-            continue
-        if str(call.get("accessory_id") or "") != accessory_id:
-            continue
-        output_path = resolve_service_path(call.get("output_path"))
-        if output_path.exists() and output_path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
-            return True
-    return False
+    return _agent_pose_assets.agent_mcp_accessory_has_existing_or_pose_asset(item, orchestration)
 
 
 def agent_mcp_missing_existing_asset_names(task: dict[str, Any], config: dict[str, Any], orchestration: dict[str, Any]) -> list[str]:
-    accessories_by_id = accessory_lookup_by_id(config)
-    missing: list[str] = []
-    for item_id in canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []]):
-        item = accessories_by_id.get(item_id)
-        if not item:
-            continue
-        if not agent_mcp_accessory_has_existing_or_pose_asset(item, orchestration):
-            missing.append(str(item.get("name") or item_id))
-    return missing
+    return _agent_pose_assets.agent_mcp_missing_existing_asset_names(task, config, orchestration)
 
 
 def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> bool:

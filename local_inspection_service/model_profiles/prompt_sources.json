@@ -1,7 +1,10 @@
 {
-  "version": 70,
+  "version": 71,
   "sources": [
     "server.py",
+    "agent/pose_asset_ports.py",
+    "agent/pose_assets.py",
+    "agent/pose_templates.py",
     "agent/state_ports.py",
     "agent/orchestration_state.py",
     "agent/tool_call_records.py",
