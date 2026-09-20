@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Agent sprite readiness consumes the same materialized asset dictionaries and existing
+pose metadata corrections. Upright correction precedes laying correction, callbacks
+remain selected at original lookup sites, and text asset paths remain unrewritten.
+
 Preview family selection intersects raw object families before canonicalization and
 visits all object entries even when the intersection is empty. Automatic sequences
 keep original alternation; unknown policies and labels retain their existing fallbacks.

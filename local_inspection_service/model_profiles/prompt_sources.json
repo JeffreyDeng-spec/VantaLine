@@ -1,7 +1,9 @@
 {
-  "version": 88,
+  "version": 89,
   "sources": [
     "server.py",
+    "accessories/materialized_assets.py",
+    "accessories/materialized_asset_ports.py",
     "accessories/pose_policy.py",
     "accessories/pose_policy_ports.py",
     "accessories/cutout_masks.py",

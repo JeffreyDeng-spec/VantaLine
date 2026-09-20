@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_materialized_assets.py` retains 21 original synthetic groups and
+adds one independent two-service composition check. It covers nullable decode, metadata
+precedence and aliases, explicit-empty bypass, short circuits and callback timing.
+Independent instances produce distinct metadata and use separately counted readiness
+callbacks; both readiness examples pass, so they do not establish all failure paths.
+
 `python scripts/smoke_preview_pose_policy.py` retains 21 original synthetic groups and
 adds one independent composition check. It covers alias order, raw intersections, nullable
 results, sequence/label rules and callback selection before conversion or formatting.
