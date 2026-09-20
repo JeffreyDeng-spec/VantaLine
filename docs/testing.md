@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_object_preprocessing.py` covers 27 synthetic groups: original
+fallback/partial-state/exception contracts, four lookup-timing cases and two independent
+composition cases. Synthetic arrays and collaborators do not establish real model or
+vision accuracy. Every poisoned root business callback is asserted unused.
+
 `python scripts/smoke_crop_components.py` covers 19 synthetic groups: 14 original image
 contracts, three dependency-order cases and two composition checks. Tiny masks verify
 strict thresholds, cap/order, copy/identity, focus padding, anchored support and diagnostics.

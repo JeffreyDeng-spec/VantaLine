@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Object preprocessing keeps pose-cell, legacy-alpha, source-cutout and full-image fallback
+order. Domain-local capabilities avoid an accessories-to-agent ports dependency. Cleanup
+coordinate offsets, diagnostic maxima and stage-specific partial state remain unchanged.
+
 Pose cutout and preprocessing flows keep the root crop-helper entry points. Numerical
 component work is owned by accessory modules; alpha bounds and trimming callbacks stay
 late-bound at their original evaluation points. Other detection substitution contracts

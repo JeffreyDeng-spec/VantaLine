@@ -1,7 +1,9 @@
 {
-  "version": 79,
+  "version": 80,
   "sources": [
     "server.py",
+    "accessories/object_preprocessing_ports.py",
+    "accessories/object_preprocessing.py",
     "accessories/crop_component_ports.py",
     "accessories/crop_analysis.py",
     "accessories/crop_selection.py",
