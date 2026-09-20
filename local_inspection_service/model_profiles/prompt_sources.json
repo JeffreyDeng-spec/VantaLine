@@ -1,7 +1,9 @@
 {
-  "version": 86,
+  "version": 87,
   "sources": [
     "server.py",
+    "accessories/pose_policy.py",
+    "accessories/pose_policy_ports.py",
     "accessories/cutout_masks.py",
     "accessories/cutout_selection.py",
     "accessories/chroma_cutouts.py",

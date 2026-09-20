@@ -1,5 +1,10 @@
 # Testing
 
+`python scripts/smoke_pose_policy.py` retains 22 original synthetic groups and adds two
+independent compositions. It covers representative grid rotation, definition-time defaults,
+callback lookup timing, filtering thresholds and exception propagation. Distinct service
+instances exercise successful paths; this does not establish every input, failure or real I/O.
+
 `python scripts/smoke_cutout_geometry.py` retains 24 original synthetic groups and
 adds two independent composition checks. It covers representative color conversion,
 component selection, crop aliases, fallback coordinates and callback timing. Independent
