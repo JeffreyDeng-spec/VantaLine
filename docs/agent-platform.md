@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose rendering keeps original RNG order, raw angles, inverse grid mapping and upright
+container selection before RNG effects. Candidate filtering retains median thresholds,
+unknown-length handling, returned aliases and repeated family callback evaluation.
+
 Pose materialization and preprocessing retain late public cutout dependencies. The
 green-screen fallback still reports a crop-local bounding box; array aliases and copies
 remain unchanged. Chroma spill selection still precedes crop argument evaluation.
