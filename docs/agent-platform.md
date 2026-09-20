@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Pose materialization and object preprocessing retain public cutout adapters. The
+accessory runtime and consumers do not import Agent or the Web entry; session and
+lock selection remain at their original operation points. Precise cutout retains
+original image colors and uses model output only for its alpha mask.
+
 Object preprocessing and sprite publication retain material alpha through root adapters.
 Stateless accessory mask helpers and the local policy dispatcher do not import Agent
 or the Web entry; shared library attribute patches retain their observed scope.
