@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_photo_highlight_builder.py` exercises 27 synthetic groups: 21 original
+workflow contracts, four dependency-refresh cases and two composition checks. Tests cover
+provider and file failures, rejection, partial sources, metadata and final policy reads.
+Independent instances execute synthetic successful flows with every root callback poison
+verified unused, including audit exceptions that the original workflow intentionally catches.
+This is not real inference, vision-accuracy or device commissioning.
+
 `python scripts/smoke_photo_highlight_image.py` covers 19 synthetic helper groups: original
 14 image/prompt contracts, three lookup-order checks and two independent composition
 checks. Tiny arrays cover scaling, component decoding, available ROI and comparison
