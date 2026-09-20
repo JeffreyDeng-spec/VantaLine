@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_agent_pose_render.py` covers 21 offline groups: 15 original contracts,
+four evaluation/error-order checks and two constructor/composition checks. Synthetic fixtures
+verify exact prompt text, reference aliases, callback lookup and partial artifact writes.
+Injected digest failures test collaborator failure; the real hash helper may return None.
+The phase3d SynthID source guard follows the actual writer. Its active decision helper
+remains separately tested; full legacy retired-worker or device acceptance is not claimed.
+
 `python scripts/smoke_pipeline_decision_contract.py` runs the actual phase3d decision
 helper offline, preserving its eight assertions for rules, parameter bounds, unknown actions,
 empty synchronization and AI/YOLO eligibility. Empty synchronization verifies all three
