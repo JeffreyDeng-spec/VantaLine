@@ -1,7 +1,12 @@
 {
-  "version": 74,
+  "version": 75,
   "sources": [
     "server.py",
+    "agent/pose_materialization_ports.py",
+    "agent/pose_chroma_policy.py",
+    "agent/pose_cutout_pipeline.py",
+    "agent/pose_sprite_builder.py",
+    "agent/pose_asset_materialization.py",
     "agent/pose_execution_ports.py",
     "agent/pose_call_registration.py",
     "agent/pose_call_execution.py",

@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose materialization services retain original chroma selection, segmentation fallback order,
+AI sprite provenance, per-pose deduplication and path-based asset registration. Algorithms
+and provider calls remain existing dependencies; lifecycle and task coordination are unchanged.
+
 Pose task registration, execution and preparation use explicit services with caller-owned
 state. Existing real-photo gates, cached assets, pending/running/completed call handling,
 provider-error pause behavior and sample preparation order remain unchanged.
