@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_material_alpha.py` retains 17 original synthetic groups and two
+independent composition checks. It covers opacity thresholds, morphology order, edge
+evidence, dispatch timing and the actual legacy alpha helper under isolated fixtures.
+Independent services cover simple successful transparent/opaque paths, not every pixel
+or failure branch. The customer-media-dependent full legacy script is not acceptance.
+
 `python scripts/smoke_sprite_publication.py` retains 23 original synthetic groups and two
 independent constructor/composition cases. Tests cover encoded alpha, write failures,
 partial metadata state, resize limits and callback selection. Independent services exercise
