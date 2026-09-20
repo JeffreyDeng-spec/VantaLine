@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_preview_pose_policy.py` retains 21 original synthetic groups and
+adds one independent composition check. It covers alias order, raw intersections, nullable
+results, sequence/label rules and callback selection before conversion or formatting.
+Two distinct service instances exercise all six methods and both error factories with
+root callbacks poisoned and checked unused; this is not exhaustive input or real I/O coverage.
+
 `python scripts/smoke_pose_policy.py` retains 22 original synthetic groups and adds two
 independent compositions. It covers representative grid rotation, definition-time defaults,
 callback lookup timing, filtering thresholds and exception propagation. Distinct service

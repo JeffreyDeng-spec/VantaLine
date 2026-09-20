@@ -1,8 +1,9 @@
 # Architecture
 
-Accessory pose layout and selection live in one domain module with three pure helpers
-and two focused policy services. Five narrow typed groups retain point-of-read dependencies;
-no policy module imports the Web application.
+Accessory pose layout, selection and preview policies share one domain module with four
+pure helpers and three focused services. Eight narrow typed groups retain dependencies
+at their original lookup sites; no policy module imports the Web application. Preview
+errors use a typed exception factory supplied by the composition root.
 
 Accessory cutout geometry separates stateless foreground masks and green spill from
 object selection and chroma processing. Two small services use three typed dependency
@@ -544,7 +545,7 @@ store instance; test replacements belong at its ports. Root background resolver 
 prefix remain late-bound for compatibility.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v87 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v88 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
@@ -569,7 +570,7 @@ rules and overlays now live in `detection.geometry`, `postprocessing`, `results`
 service receive narrow label providers; the parser resolves the root postprocessor
 at use time. These modules own no model, worker, identity or database state. Internal
 pure helper substitutions belong in their actual modules, not unrelated root aliases.
-Manifest v87 includes these five modules so relocation retains source provenance.
+Manifest v88 includes these five modules so relocation retains source provenance.
 Provider and postprocessor exceptions propagate without an automatic retry.
 
 Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
@@ -650,7 +651,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v87 includes both
+policy or callback caching is introduced. Source manifest v88 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -732,7 +733,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v87 for new tasks.
+`accessories/preparation.py`, included in source manifest v88 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

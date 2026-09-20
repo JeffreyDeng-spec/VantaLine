@@ -1,5 +1,5 @@
 {
-  "version": 87,
+  "version": 88,
   "sources": [
     "server.py",
     "accessories/pose_policy.py",

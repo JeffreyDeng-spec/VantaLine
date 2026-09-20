@@ -12954,9 +12954,21 @@ def training_preview_metadata_missing(training: dict[str, Any], selected: list[d
     return _training_preview_cache.training_preview_metadata_missing(training, selected)
 
 
+from .accessories.pose_policy import sprite_pose_family as _sprite_pose_family_impl
+from .accessories.pose_policy import PreviewPosePolicy as _PreviewPosePolicy
+from .accessories.pose_policy_ports import PreviewPoseAssetOperations as _PreviewPoseAssetOperations, PreviewPoseSelectionOperations as _PreviewPoseSelectionOperations, PreviewPoseErrors as _PreviewPoseErrors
+_preview_pose_policy = _PreviewPosePolicy(
+
+    _PreviewPoseAssetOperations(assets=lambda: clean_sprite_assets, material=lambda: accessory_material_type, sprite=lambda: sprite_pose_family),
+
+    _PreviewPoseSelectionOperations(available=lambda: available_object_pose_families, normalize=lambda: normalize_preview_pose_family_policy, many=lambda: preview_pose_families_for_policy, canonical=lambda: canonical_pose_family_name),
+
+    _PreviewPoseErrors(make=lambda: HTTPException),
+
+)
+
 def available_object_pose_families(item: dict[str, Any]) -> list[str]:
-    families = sorted({sprite_pose_family(asset) for asset in clean_sprite_assets(item) if sprite_pose_family(asset)})
-    return families
+    return _preview_pose_policy.available_object_pose_families(item)
 
 
 from .accessories.sprite_metadata_values import canonical_pose_family_name as _canonical_pose_family_name_impl
@@ -12994,80 +13006,23 @@ def canonical_pose_family_name(pose_family: str | None) -> str | None:
 
 
 def normalize_preview_pose_family_policy(value: str | None) -> str:
-    policy = str(value or "auto").strip().lower()
-    aliases = {
-        "": "auto",
-        "controlled": "auto",
-        "default": "auto",
-        "lying_only": "lying",
-        "flat": "lying",
-        "side": "lying",
-        "side-facing": "lying",
-        "upright_only": "upright",
-        "top": "upright",
-        "top-view": "upright",
-        "top_view": "upright",
-    }
-    policy = aliases.get(policy, policy)
-    if policy not in {"auto", "lying", "upright"}:
-        raise HTTPException(status_code=400, detail=f"Unknown preview_pose_family_policy: {value}")
-    return policy
+    return _preview_pose_policy.normalize_preview_pose_family_policy(value)
 
 
 def preview_pose_family_for_policy(accessories: list[dict[str, Any]], policy: str) -> str | None:
-    families = preview_pose_families_for_policy(accessories, policy)
-    return families[0] if families else None
+    return _preview_pose_policy.preview_pose_family_for_policy(accessories, policy)
 
 
 def preview_pose_families_for_policy(accessories: list[dict[str, Any]], policy: str) -> list[str]:
-    object_families = [
-        available_object_pose_families(item)
-        for item in accessories
-        if accessory_material_type(item) == "object"
-    ]
-    common = set(object_families[0]) if object_families else set()
-    for families in object_families[1:]:
-        common &= set(families)
-    if not common:
-        return None
-    if policy == "lying":
-        ordered = [family for family in ("lying", "flat", "side", "side-facing") if family in common]
-    elif policy == "upright":
-        ordered = [family for family in ("upright", "top", "top-view") if family in common]
-    else:
-        ordered = [family for family in ("lying", "flat", "side", "side-facing", "upright", "top", "top-view") if family in common]
-        ordered.extend(sorted(common - set(ordered)))
-    if not ordered:
-        raise HTTPException(status_code=400, detail=f"No clean sprites available for preview pose policy: {policy}")
-    if policy == "auto":
-        canonical_seen: set[str] = set()
-        mixed: list[str] = []
-        for family in ordered:
-            canonical = canonical_pose_family_name(family)
-            if canonical in {"lying", "upright"} and canonical not in canonical_seen:
-                mixed.append(family)
-                canonical_seen.add(canonical)
-        if len(mixed) >= 2:
-            return mixed
-    return [ordered[0]]
+    return _preview_pose_policy.preview_pose_families_for_policy(accessories, policy)
 
 
 def preview_pose_family_sequence(accessories: list[dict[str, Any]], count: int, policy: str = "auto") -> list[str | None]:
-    normalized_policy = normalize_preview_pose_family_policy(policy)
-    selected_families = preview_pose_families_for_policy(accessories, normalized_policy)
-    if not selected_families:
-        return [None] * count
-    if normalized_policy == "auto" and len(selected_families) > 1:
-        return [selected_families[idx % len(selected_families)] for idx in range(count)]
-    return [selected_families[0]] * count
+    return _preview_pose_policy.preview_pose_family_sequence(accessories, count, policy)
 
 
 def preview_pose_family_sequence_label(sequence: list[str | None]) -> str | None:
-    families = [canonical_pose_family_name(family) for family in sequence if family]
-    unique = [family for family in ("lying", "upright") if family in families]
-    if len(unique) > 1:
-        return "mixed"
-    return unique[0] if unique else (str(sequence[0]) if sequence else None)
+    return _preview_pose_policy.preview_pose_family_sequence_label(sequence)
 
 
 def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
@@ -13501,7 +13456,7 @@ def filter_complete_pose_candidates(candidates: list[dict[str, Any]], pose_famil
 
 
 def sprite_pose_family(asset: dict[str, Any]) -> str:
-    return str(asset.get("source_pose_family") or asset.get("pose_family") or "")
+    return _sprite_pose_family_impl(asset)
 
 
 def choose_object_pose_family(sprites: list[dict[str, Any]], rng: np.random.Generator) -> str | None:

@@ -29,3 +29,26 @@ class PoseAssetOperations:
 class PoseCandidateOperations:
     major_axis: Callable[[], Callable[[dict[str, Any]], int | None]]
     family: Callable[[], Callable[[dict[str, Any]], str]]
+
+
+from typing import Protocol
+
+class PreviewPoseErrorFactory(Protocol):
+    def __call__(self, *, status_code: int, detail: str) -> Exception: ...
+
+@dataclass(frozen=True)
+class PreviewPoseAssetOperations:
+    assets: Callable[[], Callable[[dict[str, Any]], list[dict[str, Any]]]]
+    material: Callable[[], Callable[[dict[str, Any]], str]]
+    sprite: Callable[[], Callable[[dict[str, Any]], str]]
+
+@dataclass(frozen=True)
+class PreviewPoseSelectionOperations:
+    available: Callable[[], Callable[[dict[str, Any]], list[str]]]
+    normalize: Callable[[], Callable[[str | None], str]]
+    many: Callable[[], Callable[[list[dict[str, Any]], str], list[str] | None]]
+    canonical: Callable[[], Callable[[str | None], str | None]]
+
+@dataclass(frozen=True)
+class PreviewPoseErrors:
+    make: Callable[[], PreviewPoseErrorFactory]
