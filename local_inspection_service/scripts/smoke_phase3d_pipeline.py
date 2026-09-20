@@ -224,6 +224,8 @@ def assert_react_pipeline_route() -> None:
     }
     # Source contracts follow the actual class methods, not application adapters.
     implementation_methods = {
+        "pose tool calls": ("agent/pose_call_registration.py", "PoseCallRegistration", "ensure_agent_mcp_pose_tool_calls"),
+        "missing tool state": ("agent/pose_call_registration.py", "PoseCallRegistration", "ensure_agent_mcp_pose_tool_calls"),
         "synthid metadata": ("agent/pose_artifact_store.py", "PoseArtifactStore", "write_agent_mcp_pose_artifact"),
         "pose planner persistence": ("agent/pose_plan_assembly.py", "PosePlanAssembly", "build_agent_mcp_pose_plan"),
         "skip validation": ("agent/pose_assets.py", "AgentPoseAssets", "agent_mcp_missing_existing_asset_names"),

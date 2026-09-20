@@ -23172,104 +23172,31 @@ def agent_mcp_missing_existing_asset_names(task: dict[str, Any], config: dict[st
     return _agent_pose_assets.agent_mcp_missing_existing_asset_names(task, config, orchestration)
 
 
+from .agent.pose_call_registration import PoseCallRegistration as _PoseCallRegistration
+from .agent.pose_call_execution import PoseCallExecution as _PoseCallExecution
+from .agent.pose_sample_preparation import PoseSamplePreparation as _PoseSamplePreparation
+from .agent.pose_execution_ports import PoseWorkflowState as _PoseWorkflowState, PoseWorkflowModels as _PoseWorkflowModels, PoseCallRegistry as _PoseCallRegistry, PoseCallContent as _PoseCallContent, PoseCallPresentation as _PoseCallPresentation, PoseSampleSteps as _PoseSampleSteps, PoseWorkflowDiagnostics as _PoseWorkflowDiagnostics
+_pose_call_registration = _PoseCallRegistration(
+    _PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration),
+    _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
+    _PoseCallRegistry(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist, identifier=lambda: agent_mcp_tool_call_id, upsert=lambda: upsert_agent_mcp_tool_call),
+)
+_pose_call_execution = _PoseCallExecution(
+    _PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration),
+    _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
+    _PoseCallRegistry(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist, identifier=lambda: agent_mcp_tool_call_id, upsert=lambda: upsert_agent_mcp_tool_call),
+    _PoseCallContent(prompt=lambda: agent_mcp_pose_prompt, references=lambda: agent_mcp_pose_reference_content, chroma=lambda: choose_agent_mcp_chroma_screen, artifact=lambda: write_agent_mcp_pose_artifact),
+    _PoseCallPresentation(now=lambda: agent_mcp_now, bounded=lambda: bounded_text),
+)
+_pose_sample_preparation = _PoseSamplePreparation(
+    _PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration),
+    _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
+    _PoseSampleSteps(missing=lambda: agent_mcp_missing_existing_asset_names, register=lambda: ensure_agent_mcp_pose_tool_calls, background=lambda: ensure_pipeline_background_plate, execute=lambda: execute_agent_mcp_pose_tool_calls, materialize=lambda: materialize_agent_mcp_pose_assets, photos=lambda: prepare_photo_highlight_sprites_for_task, save=lambda: save_config),
+    _PoseWorkflowDiagnostics(stderr=lambda: sys.stderr, print_exception=lambda: traceback.print_exc),
+)
+
 def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> bool:
-    orchestration = ensure_agent_mcp_pose_plan(task, config)
-    if pipeline_uses_photo_highlight_sprite_flow(task, config):
-        mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-        set_agent_mcp_stage(
-            orchestration,
-            "pose_image_generation",
-            "skipped",
-            100,
-            detail="Legacy AI pose-image generation disabled for real-photo training flow.",
-        )
-        return True
-    tool_config = agent_mcp_gemini_image_config()
-    orchestration.setdefault("tool_config", {})["pose_image_generation"] = tool_config
-    if not tool_config.get("configured"):
-        return False
-    settings = image_generation_settings()
-    settings["model"] = tool_config["model"]
-    settings["timeout_seconds"] = tool_config["timeout_seconds"]
-    provider = image_generation_provider_from_settings(settings)
-    accessories_by_id = accessory_lookup_by_id(config)
-    calls = [
-        call
-        for call in orchestration.get("tool_calls") or []
-        if call.get("tool") == AGENT_MCP_TOOL_POSE_IMAGE and call.get("status") not in {"completed", "skipped"}
-    ]
-    if not calls:
-        return True
-    completed = 0
-    total = len(calls)
-    provider_label = str(tool_config.get("provider_label") or "image provider")
-    provider_key = str(tool_config.get("provider") or "image_generation")
-    set_agent_mcp_stage(orchestration, "pose_image_generation", "running", 5, detail=f"Generating {total} pose images with {provider_label}.")
-    for call in calls:
-        accessory_id = str(call.get("accessory_id") or "")
-        item = accessories_by_id.get(accessory_id)
-        plan = next(
-            (plan for plan in (orchestration.get("pose_plan") or {}).get("accessories") or [] if str(plan.get("accessory_id") or "") == accessory_id),
-            {},
-        )
-        pose = next((pose for pose in plan.get("poses") or [] if str(pose.get("pose_id") or "") == str(call.get("pose_id") or "")), {})
-        reference_content, reference_assets = agent_mcp_pose_reference_content(item or {}, max_images=3)
-        chroma_screen = choose_agent_mcp_chroma_screen(item or {})
-        prompt = agent_mcp_pose_prompt(task, plan, pose, chroma_screen)
-        call.update(
-            {
-                "status": "running",
-                "provider": provider_key,
-                "model": tool_config["model"],
-                "prompt": prompt,
-                "chroma_screen": chroma_screen,
-                "source_reference_assets": reference_assets,
-                "updated_at": agent_mcp_now(),
-                "error": "",
-            }
-        )
-        try:
-            result = provider.generate_image(prompt, reference_content, model=tool_config["model"])
-            artifact = write_agent_mcp_pose_artifact(task, call, result, prompt=prompt, reference_assets=reference_assets)
-        except AiProviderError as exc:
-            call.update({"status": "failed", "error": bounded_text(str(exc), 240), "updated_at": agent_mcp_now()})
-            pause_agent_mcp_task(
-                task,
-                orchestration,
-                stage="pose_image_generation",
-                reason=f"{provider_label} image generation failed: {bounded_text(exc, 200)}",
-                suggested_actions=["retry_pose_image_generation", "continue_existing_assets", "replan", "cancel"],
-            )
-            set_agent_mcp_stage(orchestration, "pose_image_generation", "failed", max(5, int(completed * 100 / max(total, 1))), detail=str(exc)[:220])
-            return False
-        call.update(
-            {
-                "status": "completed",
-                "output_path": artifact["output_path"],
-                "output_url": artifact["output_url"],
-                "metadata_path": artifact["metadata_path"],
-                "metadata_url": artifact["metadata_url"],
-                "artifact_refs": [artifact["output_url"], artifact["metadata_url"]],
-                "sha256": artifact["sha256"],
-                "latency_ms": artifact["latency_ms"],
-                "usage_metadata": artifact["usage_metadata"],
-                "chroma_screen": artifact.get("chroma_screen") or chroma_screen,
-                "proxy_used": bool((artifact.get("proxy") or {}).get("used")),
-                "proxy_source_name": (artifact.get("proxy") or {}).get("source_name") or "",
-                "proxy_url": (artifact.get("proxy") or {}).get("url") or "",
-                "proxy_auto_local": bool((artifact.get("proxy") or {}).get("auto_local")),
-                "generated_source_metadata": artifact["generated_source_metadata"],
-                "updated_at": agent_mcp_now(),
-                "error": "",
-            }
-        )
-        completed += 1
-        set_agent_mcp_stage(orchestration, "pose_image_generation", "running", min(99, int(completed * 100 / max(total, 1))), detail=f"{completed}/{total} pose images generated.")
-    orchestration["state"] = "pose_image_generation_completed"
-    orchestration["active_stage"] = "sample_generation"
-    orchestration["pause"] = None
-    set_agent_mcp_stage(orchestration, "pose_image_generation", "completed", 100, detail=f"{completed} pose images generated with {provider_label}.")
-    return True
+    return _pose_call_execution.execute_agent_mcp_pose_tool_calls(task, config)
 
 
 def ensure_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
@@ -23285,72 +23212,7 @@ def ensure_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any], *, 
 
 
 def ensure_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    orchestration = ensure_agent_mcp_pose_plan(task, config)
-    if pipeline_uses_photo_highlight_sprite_flow(task, config):
-        set_agent_mcp_stage(
-            orchestration,
-            "pose_image_generation",
-            "skipped",
-            100,
-            detail="Legacy AI pose-image generation skipped; using real-photo photo-highlight sprites.",
-        )
-        return orchestration
-    tool_config = agent_mcp_gemini_image_config()
-    status = "pending" if tool_config["configured"] else "missing_configuration"
-    accessories_by_id = accessory_lookup_by_id(config)
-    for plan in (orchestration.get("pose_plan") or {}).get("accessories") or []:
-        accessory_id = str(plan.get("accessory_id") or "")
-        # One-set policy: if an accessory already has its AI pose images (from any
-        # earlier task) we never generate them again — even when the local clean
-        # sprites still need a (cheap, offline) rebuild. This is what stops the
-        # same accessory from re-generating AI images on every task.
-        cached_item = accessories_by_id.get(accessory_id)
-        if cached_item is not None and agent_mcp_accessory_pose_images_exist(cached_item):
-            continue
-        for pose in plan.get("poses") or []:
-            pose_id = str(pose.get("pose_id") or "")
-            call_id = agent_mcp_tool_call_id(str(task.get("id") or ""), AGENT_MCP_TOOL_POSE_IMAGE, accessory_id, pose_id)
-            existing = next(
-                (
-                    item
-                    for item in orchestration.get("tool_calls") or []
-                    if str(item.get("call_id") or "") == call_id and item.get("status") in {"completed", "running"}
-                ),
-                None,
-            )
-            if existing:
-                continue
-            upsert_agent_mcp_tool_call(
-                orchestration,
-                {
-                    "call_id": call_id,
-                    "tool": AGENT_MCP_TOOL_POSE_IMAGE,
-                    "task_id": task.get("id"),
-                    "accessory_id": accessory_id,
-                    "pose_id": pose_id,
-                    "request": pose.get("request") or {},
-                    "status": status,
-                    "provider": tool_config["provider"],
-                    "model": tool_config.get("model") or "",
-                    "prompt": "",
-                    "source_reference_assets": [],
-                    "output_path": "",
-                    "output_url": "",
-                    "metadata_path": "",
-                    "metadata_url": "",
-                    "artifact_refs": [],
-                    "error": "" if tool_config["configured"] else tool_config["message"],
-                },
-            )
-    pose_count = int((orchestration.get("pose_plan") or {}).get("pose_count") or 0)
-    set_agent_mcp_stage(
-        orchestration,
-        "pose_image_generation",
-        "pending" if tool_config["configured"] else "needs_user_action" if not orchestration.get("skip_pose_image_generation") else "skipped",
-        0 if not orchestration.get("skip_pose_image_generation") else 100,
-        detail=f"{pose_count} pose-image calls logged as {status}.",
-    )
-    return orchestration
+    return _pose_call_registration.ensure_agent_mcp_pose_tool_calls(task, config)
 
 
 def pause_agent_mcp_task(task: dict[str, Any], orchestration: dict[str, Any], *, stage: str, reason: str, suggested_actions: list[str]) -> None:
@@ -23790,83 +23652,7 @@ def ensure_pipeline_background_plate(task: dict[str, Any], config: dict[str, Any
 
 
 def prepare_agent_mcp_before_sample_generation(task: dict[str, Any], config: dict[str, Any]) -> bool:
-    orchestration = agent_mcp_orchestration(task)
-    # Select or generate a fixed top-down background plate from the first
-    # accessory's environment and reuse it for sample backgrounds.
-    try:
-        ensure_pipeline_background_plate(task, config)
-    except Exception:
-        traceback.print_exc(file=sys.stderr)
-    photo_ready, photo_changed = prepare_photo_highlight_sprites_for_task(task, config, orchestration)
-    if photo_ready:
-        if photo_changed:
-            save_config(config)
-        return True
-    if (orchestration.get("pause") or {}).get("stage") == "pose_image_generation":
-        if photo_changed:
-            save_config(config)
-        return False
-    if pipeline_uses_photo_highlight_sprite_flow(task, config):
-        reason = "实拍高亮抠图素材尚未准备完成；任务流水线不会回退到旧 AI 姿态生成。"
-        pause_agent_mcp_task(
-            task,
-            orchestration,
-            stage="pose_image_generation",
-            reason=reason,
-            suggested_actions=["retry_pose_image_generation", "upload_more_reference_photos", "cancel"],
-        )
-        set_agent_mcp_stage(orchestration, "pose_image_generation", "needs_user_action", 0, detail=reason)
-        if photo_changed:
-            save_config(config)
-        return False
-    orchestration = ensure_agent_mcp_pose_tool_calls(task, config)
-    if orchestration.get("skip_pose_image_generation"):
-        materialize_agent_mcp_pose_assets(task, config)
-        missing_assets = agent_mcp_missing_existing_asset_names(task, config, orchestration)
-        if missing_assets:
-            orchestration["skip_pose_image_generation"] = False
-            if execute_agent_mcp_pose_tool_calls(task, config):
-                materialize_agent_mcp_pose_assets(task, config)
-                missing_assets = agent_mcp_missing_existing_asset_names(task, config, orchestration)
-                if not missing_assets:
-                    orchestration["state"] = "sample_generation"
-                    orchestration["active_stage"] = "sample_generation"
-                    orchestration["pause"] = None
-                    return True
-            if not (orchestration.get("pause") or {}).get("stage") == "pose_image_generation":
-                reason = "继续沿用素材失败：缺少可用于样本生成的规范化/参考素材：" + "、".join(missing_assets[:4])
-                pause_agent_mcp_task(
-                    task,
-                    orchestration,
-                    stage="pose_image_generation",
-                    reason=reason,
-                    suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
-                )
-                set_agent_mcp_stage(orchestration, "pose_image_generation", "needs_user_action", 0, detail=reason)
-            return False
-        orchestration["state"] = "sample_generation"
-        orchestration["active_stage"] = "sample_generation"
-        orchestration["pause"] = None
-        set_agent_mcp_stage(orchestration, "pose_image_generation", "skipped", 100, detail="User chose to continue with existing assets.")
-        return True
-    if execute_agent_mcp_pose_tool_calls(task, config):
-        materialize_agent_mcp_pose_assets(task, config)
-        orchestration["state"] = "sample_generation"
-        orchestration["active_stage"] = "sample_generation"
-        orchestration["pause"] = None
-        return True
-    if (orchestration.get("pause") or {}).get("stage") == "pose_image_generation":
-        return False
-    tool_config = agent_mcp_gemini_image_config()
-    reason = tool_config.get("message") or "Image generation is not configured; pose-image tool calls are logged but not executed."
-    pause_agent_mcp_task(
-        task,
-        orchestration,
-        stage="pose_image_generation",
-        reason=reason,
-        suggested_actions=["configure_image_generation", "continue_existing_assets", "replan", "cancel"],
-    )
-    return False
+    return _pose_sample_preparation.prepare_agent_mcp_before_sample_generation(task, config)
 
 
 def log_agent_mcp_sample_tool_call(task: dict[str, Any], job: dict[str, Any]) -> None:

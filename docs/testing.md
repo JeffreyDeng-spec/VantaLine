@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_agent_pose_execution.py` covers 23 offline groups: 17 original contracts,
+four dependency-order checks and two constructor/composition checks. Synthetic providers
+verify cache/no-op paths, exact call arguments, reference aliases, failure boundaries and
+partial state without paid inference. Source guards follow the actual registration method.
+The active phase3d decision helper and pose-render contracts remain; the complete legacy
+retired-worker workflow and physical-device acceptance are not claimed.
+
 `python scripts/smoke_agent_pose_render.py` covers 21 offline groups: 15 original contracts,
 four evaluation/error-order checks and two constructor/composition checks. Synthetic fixtures
 verify exact prompt text, reference aliases, callback lookup and partial artifact writes.
