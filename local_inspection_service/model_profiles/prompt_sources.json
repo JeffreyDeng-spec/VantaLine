@@ -1,7 +1,9 @@
 {
-  "version": 94,
+  "version": 95,
   "sources": [
     "server.py",
+    "accessories/profile_projection.py",
+    "accessories/profile_projection_ports.py",
     "accessories/display_labels.py",
     "accessories/display_label_ports.py",
     "accessories/reference_evidence.py",

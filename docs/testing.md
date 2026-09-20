@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_accessory_profile.py` preserves 20 original groups and adds one
+same-class two-instance check. The 21 groups contain 73 test-method assertion sites plus
+two bootstrap guards. Original coverage distinguishes real optional_float from a
+permissive substitute, retains partial evaluation order and checks reference aliases and
+conversion errors. The independent fixture exercises both methods and all 15 getters
+with substituted collaborators; it does not prove complete internal chains or every
+failure path.
+
 `python scripts/smoke_accessory_labels.py` retains 20 original groups and adds one
 same-class two-instance composition check. The 21 groups contain 71 test-method
 assertion sites plus two bootstrap guards. Original fixtures preserve ordering,
