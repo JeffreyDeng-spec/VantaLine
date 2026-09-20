@@ -1,5 +1,9 @@
 # VantaLine release management
 
+Backend CI runs the active phase3d decision helper through an isolated offline entry, alongside
+the existing source-location contract. This restores three-result empty-sync coverage; it does
+not assert full legacy workflow or physical-device acceptance.
+
 Pose planning policy, generation/cache and task assembly ship with explicit ports and root
 adapters in one release. Source manifest v72 records actual prompt sources; rollback restores
 the previous complete release without rewriting historical tasks or model versions.

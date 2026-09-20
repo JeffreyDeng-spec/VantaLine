@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_pipeline_decision_contract.py` runs the actual phase3d decision
+helper offline, preserving its eight assertions for rules, parameter bounds, unknown actions,
+empty synchronization and AI/YOLO eligibility. Empty synchronization verifies all three
+outputs with scoped configuration/storage substitutes. The runner isolates temporary files
+and blocks external operations before imports, regardless of inherited PostgreSQL settings.
+The source-only phase3d check remains separate. Full legacy phase3d execution is not claimed:
+its retired-worker enabled-by-default expectation remains stale.
+
 `python scripts/smoke_agent_pose_planning.py` covers 21 offline groups: 15 original contracts,
 four dependency/error-order checks and two constructor/composition checks. Synthetic model
 tools verify cache identity, unchanged provider arguments, exception boundaries and partial
