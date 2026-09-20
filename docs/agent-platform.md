@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Agent state and tool-call record services retain the existing orchestration defaults,
+quality gate, pause state and metadata. Browser capabilities, scheduling, worker topology
+and platform acceptance status are unchanged.
+
 Agent pipeline action and turn services retain the existing action semantics, user/agent
 conversation order and caller-owned mutation boundaries. Scheduling, browser capabilities,
 worker topology and platform acceptance status are unchanged.

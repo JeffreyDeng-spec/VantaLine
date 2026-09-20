@@ -224,6 +224,8 @@ def assert_react_pipeline_route() -> None:
     }
     # Source contracts follow the actual class methods, not application adapters.
     implementation_methods = {
+        "sample tool call": ("agent/tool_call_records.py", "AgentToolCallRecords", "log_agent_mcp_sample_tool_call"),
+        "training tool call": ("agent/tool_call_records.py", "AgentToolCallRecords", "log_agent_mcp_training_tool_call"),
         "agent turn committer": ("agent/pipeline_turns.py", "AgentPipelineTurns", "commit_pipeline_agent_turn"),
         "gemini image provider method": ("model_providers/gemini_transport.py", "GeminiAiProvider", "generate_image"),
         "decision brain": ("agent/decision_flow.py", "AgentDecisionFlow", "agent_pipeline_decide"),
