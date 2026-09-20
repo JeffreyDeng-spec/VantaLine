@@ -1,7 +1,9 @@
 {
-  "version": 77,
+  "version": 78,
   "sources": [
     "server.py",
+    "agent/photo_highlight_builder_ports.py",
+    "agent/photo_highlight_builder.py",
     "agent/photo_highlight_image_ports.py",
     "agent/photo_highlight_image_input.py",
     "agent/photo_highlight_masks.py",

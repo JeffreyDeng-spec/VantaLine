@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+The photo-highlight sprite coordinator uses injected source/readiness, mask computation,
+publication, media and metadata capabilities. Constructors read no capability. OpenCV
+uses an ordinary shared import in this coordinator; attribute patches remain visible,
+while other domains retain their established whole-root library substitution contracts.
+
 Photo-highlight prompt/input, pure mask computation and mask comparison now have explicit
 module boundaries. Accessory identity, the input-side limit and geometry callbacks remain
 late-bound business capabilities; numerical libraries use normal imports. Existing task
