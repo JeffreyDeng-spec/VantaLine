@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_sprite_publication.py` retains 23 original synthetic groups and two
+independent constructor/composition cases. Tests cover encoded alpha, write failures,
+partial metadata state, resize limits and callback selection. Independent services exercise
+successful single/batch paths; these tests do not establish production storage atomicity
+or physical/model/device acceptance.
+
 `python scripts/smoke_sprite_metadata.py` preserves 22 original synthetic metadata groups,
 four lookup-order cases and two composition checks. Tests cover zero image access on
 metadata hits, bypasses, alias identity and partial updates. Independent services exercise
