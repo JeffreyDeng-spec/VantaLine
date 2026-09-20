@@ -152,3 +152,91 @@ class PoseCandidatePolicy:
         if not families:
             return None
         return families[int(rng.integers(0, len(families)))]
+
+
+from .pose_policy_ports import PreviewPoseAssetOperations, PreviewPoseSelectionOperations, PreviewPoseErrors
+
+def sprite_pose_family(asset: dict[str, Any]) -> str:
+    return str(asset.get("source_pose_family") or asset.get("pose_family") or "")
+
+class PreviewPosePolicy:
+    def __init__(self, assets: PreviewPoseAssetOperations, selection: PreviewPoseSelectionOperations, errors: PreviewPoseErrors) -> None:
+        self._assets = assets
+        self._selection = selection
+        self._errors = errors
+
+    def available_object_pose_families(self, item: dict[str, Any]) -> list[str]:
+        families = sorted({self._assets.sprite()(asset) for asset in self._assets.assets()(item) if self._assets.sprite()(asset)})
+        return families
+
+    def normalize_preview_pose_family_policy(self, value: str | None) -> str:
+        policy = str(value or "auto").strip().lower()
+        aliases = {
+            "": "auto",
+            "controlled": "auto",
+            "default": "auto",
+            "lying_only": "lying",
+            "flat": "lying",
+            "side": "lying",
+            "side-facing": "lying",
+            "upright_only": "upright",
+            "top": "upright",
+            "top-view": "upright",
+            "top_view": "upright",
+        }
+        policy = aliases.get(policy, policy)
+        if policy not in {"auto", "lying", "upright"}:
+            raise self._errors.make()(status_code=400, detail=f"Unknown preview_pose_family_policy: {value}")
+        return policy
+
+    def preview_pose_family_for_policy(self, accessories: list[dict[str, Any]], policy: str) -> str | None:
+        families = self._selection.many()(accessories, policy)
+        return families[0] if families else None
+
+    def preview_pose_families_for_policy(self, accessories: list[dict[str, Any]], policy: str) -> list[str]:
+        object_families = [
+            self._selection.available()(item)
+            for item in accessories
+            if self._assets.material()(item) == "object"
+        ]
+        common = set(object_families[0]) if object_families else set()
+        for families in object_families[1:]:
+            common &= set(families)
+        if not common:
+            return None
+        if policy == "lying":
+            ordered = [family for family in ("lying", "flat", "side", "side-facing") if family in common]
+        elif policy == "upright":
+            ordered = [family for family in ("upright", "top", "top-view") if family in common]
+        else:
+            ordered = [family for family in ("lying", "flat", "side", "side-facing", "upright", "top", "top-view") if family in common]
+            ordered.extend(sorted(common - set(ordered)))
+        if not ordered:
+            raise self._errors.make()(status_code=400, detail=f"No clean sprites available for preview pose policy: {policy}")
+        if policy == "auto":
+            canonical_seen: set[str] = set()
+            mixed: list[str] = []
+            for family in ordered:
+                canonical = self._selection.canonical()(family)
+                if canonical in {"lying", "upright"} and canonical not in canonical_seen:
+                    mixed.append(family)
+                    canonical_seen.add(canonical)
+            if len(mixed) >= 2:
+                return mixed
+        return [ordered[0]]
+
+    def preview_pose_family_sequence(self, accessories: list[dict[str, Any]], count: int, policy: str = "auto") -> list[str | None]:
+        normalized_policy = self._selection.normalize()(policy)
+        selected_families = self._selection.many()(accessories, normalized_policy)
+        if not selected_families:
+            return [None] * count
+        if normalized_policy == "auto" and len(selected_families) > 1:
+            return [selected_families[idx % len(selected_families)] for idx in range(count)]
+        return [selected_families[0]] * count
+
+    def preview_pose_family_sequence_label(self, sequence: list[str | None]) -> str | None:
+        families = [self._selection.canonical()(family) for family in sequence if family]
+        unique = [family for family in ("lying", "upright") if family in families]
+        if len(unique) > 1:
+            return "mixed"
+        return unique[0] if unique else (str(sequence[0]) if sequence else None)

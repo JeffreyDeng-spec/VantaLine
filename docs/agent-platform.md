@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Preview family selection intersects raw object families before canonicalization and
+visits all object entries even when the intersection is empty. Automatic sequences
+keep original alternation; unknown policies and labels retain their existing fallbacks.
+
 Pose rendering keeps original RNG order, raw angles, inverse grid mapping and upright
 container selection before RNG effects. Candidate filtering retains median thresholds,
 unknown-length handling, returned aliases and repeated family callback evaluation.
