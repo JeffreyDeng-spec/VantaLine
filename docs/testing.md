@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_reference_evidence.py` preserves 23 original groups and adds one
+same-class two-instance composition group. The 24 groups contain 101 test-method
+assertion sites plus two bootstrap guards. Synthetic files and substituted decoders,
+context and mask callbacks verify representative behavior and instance isolation, not
+complete internal caller chains or every I/O failure. The independent fixture leaves
+first-source and inventory fallback callbacks unused.
+
 `python scripts/smoke_preview_assets.py` preserves 18 original groups and adds one
 same-loader two-instance composition check. The 19 groups contain 86 test-method
 assertion sites plus two bootstrap guards. Synthetic files and injected

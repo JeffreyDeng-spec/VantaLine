@@ -1,7 +1,9 @@
 {
-  "version": 92,
+  "version": 93,
   "sources": [
     "server.py",
+    "accessories/reference_evidence.py",
+    "accessories/reference_evidence_ports.py",
     "accessories/preview_assets.py",
     "accessories/preview_asset_ports.py",
     "accessories/compositing.py",

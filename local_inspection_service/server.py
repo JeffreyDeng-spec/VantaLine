@@ -7275,51 +7275,22 @@ def store_candidate_image_job(candidate: dict[str, Any], updated_job: dict[str, 
     return _image_job_metadata.store_candidate_image_job(candidate, updated_job)
 
 
+from .accessories.reference_evidence import saturated_chroma_mask as _saturated_chroma_mask_impl
+from .accessories.reference_evidence import ReferenceEvidence as _ReferenceEvidence
+from .accessories.reference_evidence_ports import ReferencePolicy as _ReferencePolicy, ReferencePaths as _ReferencePaths, ReferenceContexts as _ReferenceContexts, ReferenceChroma as _ReferenceChroma
+_reference_evidence = _ReferenceEvidence(
+    _ReferencePolicy(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, screens=lambda: CHROMA_SCREEN_OPTIONS),
+    _ReferencePaths(resolve=lambda: resolve_service_path, jobs=lambda: candidate_image_jobs, default=lambda: default_asset_for_accessory, preferred=lambda: ai_profile_reference_paths, first_source=lambda: first_source_ai_reference_path, inventory=lambda: accessory_image_paths),
+    _ReferenceContexts(uid=lambda: accessory_uid, bounded=lambda: bounded_text, context=lambda: image_reference_context, references=lambda: accessory_reference_image_contexts),
+    _ReferenceChroma(normalize=lambda: normalize_chroma_screen, mask=lambda: saturated_chroma_mask),
+)
+
 def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
-    paths: list[Path] = []
-    for job in candidate_image_jobs(item):
-        if job.get("intermediate"):
-            continue
-        output_path = resolve_service_path(job.get("output_path"))
-        if output_path.exists():
-            job["output_path"] = str(output_path)
-            paths.append(output_path)
-    for asset in item.get("normalized_assets", []):
-        path = resolve_service_path(asset.get("path"))
-        if path.exists():
-            asset["path"] = str(path)
-            paths.append(path)
-    for path_str in item.get("source_files", []):
-        path = resolve_service_path(path_str)
-        if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
-            paths.append(path)
-    default_path = default_asset_for_accessory(item)
-    if default_path and default_path.exists():
-        paths.append(default_path)
-    unique = []
-    seen = set()
-    for path in paths:
-        key = str(path)
-        if key not in seen:
-            unique.append(path)
-            seen.add(key)
-    return unique
+    return _reference_evidence.accessory_image_paths(item)
 
 
 def ai_profile_reference_paths(item: dict[str, Any]) -> list[Path]:
-    paths: list[Path] = []
-    for path_str in item.get("ai_profile_reference_files", []) or []:
-        path = resolve_service_path(path_str)
-        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
-            paths.append(path)
-    unique = []
-    seen = set()
-    for path in paths:
-        key = str(path)
-        if key not in seen:
-            unique.append(path)
-            seen.add(key)
-    return unique
+    return _reference_evidence.ai_profile_reference_paths(item)
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -7504,79 +7475,23 @@ def profile_size_text(size: dict[str, Any] | None) -> str:
 
 
 def image_reference_context(path: Path, accessory_id: str, ordinal: int) -> dict[str, Any] | None:
-    try:
-        if not path.exists() or path.suffix.lower() not in IMAGE_REFERENCE_SUFFIXES:
-            return None
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-        height = int(image.shape[0]) if image is not None else 0
-        width = int(image.shape[1]) if image is not None else 0
-    except OSError:
-        return None
-    mime_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
-    return {
-        "accessory_id": bounded_text(accessory_id, 120),
-        "source_path": str(path),
-        "sha256": digest,
-        "mime_type": mime_type,
-        "width": width,
-        "height": height,
-        "ordinal": ordinal,
-    }
+    return _reference_evidence.image_reference_context(path, accessory_id, ordinal)
 
 
 def accessory_reference_image_contexts(item: dict[str, Any], *, max_images: int = AI_PROFILE_REFERENCE_IMAGES) -> list[dict[str, Any]]:
-    contexts: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    accessory_id = accessory_uid(item)
-    preferred_paths = ai_profile_reference_paths(item)
-    default_source_path = first_source_ai_reference_path(item) if not preferred_paths else None
-    source_paths = preferred_paths if preferred_paths else ([default_source_path] if default_source_path else accessory_image_paths(item))
-    for path in source_paths:
-        path_key = str(path)
-        if path_key in seen:
-            continue
-        seen.add(path_key)
-        context = image_reference_context(path, accessory_id, len(contexts) + 1)
-        if context:
-            contexts.append(context)
-        if len(contexts) >= max_images:
-            break
-    return contexts
+    return _reference_evidence.accessory_reference_image_contexts(item, max_images=max_images)
 
 
 def normalize_chroma_screen(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        name = str(value.get("name") or "").strip().lower()
-    else:
-        name = str(value or "").strip().lower()
-    return dict(CHROMA_SCREEN_OPTIONS.get(name) or CHROMA_SCREEN_OPTIONS["green"])
+    return _reference_evidence.normalize_chroma_screen(value)
 
 
 def saturated_chroma_mask(image_bgr: np.ndarray, screen: dict[str, Any]) -> np.ndarray:
-    if image_bgr is None or image_bgr.ndim != 3:
-        return np.zeros((0, 0), dtype=bool)
-    name = str(screen.get("name") or "green")
-    blue, green, red = cv2.split(image_bgr.astype(np.int16))
-    if name == "blue":
-        return (blue >= 160) & (red <= 110) & (green <= 140) & ((blue - np.maximum(red, green)) >= 50)
-    if name == "red":
-        return (red >= 160) & (blue <= 120) & (green <= 120) & ((red - np.maximum(blue, green)) >= 50)
-    return (green >= 160) & (red <= 110) & (blue <= 110) & ((green - np.maximum(red, blue)) >= 50)
+    return _saturated_chroma_mask_impl(image_bgr, screen)
 
 
 def accessory_reference_chroma_fraction(item: dict[str, Any], screen_name: str, *, max_images: int = 3) -> float:
-    screen = normalize_chroma_screen(screen_name)
-    best = 0.0
-    for ref in accessory_reference_image_contexts(item, max_images=max_images):
-        path = resolve_service_path(ref.get("source_path"))
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
-        if image is None or image.size == 0:
-            continue
-        mask = saturated_chroma_mask(image, screen)
-        if mask.size:
-            best = max(best, float(mask.mean()))
-    return best
+    return _reference_evidence.accessory_reference_chroma_fraction(item, screen_name, max_images=max_images)
 
 
 from .agent.pose_chroma_policy import PoseChromaPolicy as _PoseChromaPolicy
