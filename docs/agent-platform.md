@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Accessory naming reads policy and callbacks at their original points. A policy refresh
+between item and profile is observed, compact callable selection still precedes field
+lookup, and profile lookup follows the preferred-name callback. Shared bounded_text and
+string_list capabilities remain separate from naming ownership.
+
 Reference evidence preserves job/normalized/source/default order, stable deduplication,
 preferred-reference fallback suppression and successful-context ordinals. Failed or
 empty contexts remain seen. Direct hashlib over file bytes stays separate from the final

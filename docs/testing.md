@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_accessory_labels.py` retains 20 original groups and adds one
+same-class two-instance composition check. The 21 groups contain 71 test-method
+assertion sites plus two bootstrap guards. Original fixtures preserve ordering,
+capitalization, partial-state errors and policy refresh. The independent fixture
+substitutes compact/preferred/string callbacks; it does not prove complete internal call
+chains, every failure case or independent standalone size projection.
+
 `python scripts/smoke_reference_evidence.py` preserves 23 original groups and adds one
 same-class two-instance composition group. The 24 groups contain 101 test-method
 assertion sites plus two bootstrap guards. Synthetic files and substituted decoders,

@@ -1,7 +1,9 @@
 {
-  "version": 93,
+  "version": 94,
   "sources": [
     "server.py",
+    "accessories/display_labels.py",
+    "accessories/display_label_ports.py",
     "accessories/reference_evidence.py",
     "accessories/reference_evidence_ports.py",
     "accessories/preview_assets.py",
