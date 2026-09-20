@@ -1,5 +1,11 @@
 # Testing
 
+`python scripts/smoke_photo_highlight_workflow.py` exercises 26 synthetic contracts: original
+20 behavior checks, four dependency-order checks and two independent-service checks.
+Source limits retain definition-time defaults; tests cover readiness, selected object identity,
+legacy state, configuration pauses and partial failures. Actual mask inference and the full
+retired-worker legacy workflow are outside these tests.
+
 `python scripts/smoke_agent_pose_materialization.py` covers 25 offline groups: 19 original
 contracts, four dependency/hash-order checks and two constructor/composition checks. Tiny
 synthetic arrays, private files and substituted cutout/codec callbacks exercise fallback order,
