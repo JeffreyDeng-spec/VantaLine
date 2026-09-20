@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Pose and object preprocessing keep their existing sprite metadata callbacks through root
+adapters. Accessory metadata services own footprint, scale and rendering dimensions with
+local types; image path/decoder/mode reads are explicit capabilities. Cross-asset updates
+and exception partial state preserve the original behavior.
+
 Agent rendering retains existing sprite geometry entry points. Bounds, padding, orientation
 and resize helpers belong to accessories; inter-helper lookups stay at original call sites.
 Shared numerical imports are scoped to these twelve helpers; detection substitution

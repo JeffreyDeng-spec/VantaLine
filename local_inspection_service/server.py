@@ -12959,13 +12959,38 @@ def available_object_pose_families(item: dict[str, Any]) -> list[str]:
     return families
 
 
+from .accessories.sprite_metadata_values import canonical_pose_family_name as _canonical_pose_family_name_impl
+from .accessories.sprite_metadata_values import source_object_long_short_metadata as _source_object_long_short_metadata_impl
+from .accessories.sprite_metadata_values import source_long_short_oriented_px as _source_long_short_oriented_px_impl
+from .accessories.sprite_metadata_values import canonical_sprite_canvas_size_px as _canonical_sprite_canvas_size_px_impl
+from .accessories.sprite_footprint import SpriteFootprintMetadata as _SpriteFootprintMetadata
+from .accessories.sprite_scale import SpriteScaleMetadata as _SpriteScaleMetadata
+from .accessories.sprite_render_metadata import SpriteRenderMetadata as _SpriteRenderMetadata
+from .accessories.sprite_metadata_ports import SpritePhysicalPolicy as _SpritePhysicalPolicy, SpriteFootprintMetadataOperations as _SpriteFootprintMetadataOperations, SpriteScalePolicy as _SpriteScalePolicy, SpriteScaleOperations as _SpriteScaleOperations, SpriteRenderOperations as _SpriteRenderOperations, SpriteImageReads as _SpriteImageReads
+_sprite_footprint = _SpriteFootprintMetadata(
+
+    _SpritePhysicalPolicy(defaults=lambda: DEFAULT_OBJECT_SIZE_MM, elongated_min=lambda: SOURCE_ASPECT_ELONGATED_MIN_RATIO, pixels_per_mm=lambda: MM_TO_PREVIEW_PX),
+
+    _SpriteFootprintMetadataOperations(family=lambda: canonical_pose_family_name, physical=lambda: object_physical_size_mm, source=lambda: source_object_long_short_metadata, orient=lambda: oriented_long_short_pair_for_source, top_view=lambda: pose_family_is_top_view),
+
+)
+_sprite_scale = _SpriteScaleMetadata(
+
+    _SpriteScalePolicy(minimum=lambda: UPRIGHT_SCALE_CORRECTION_MIN_RATIO, maximum=lambda: UPRIGHT_SCALE_CORRECTION_MAX_RATIO, visual=lambda: UPRIGHT_SCALE_VISUAL_ADJUSTMENT),
+
+    _SpriteScaleOperations(family=lambda: canonical_pose_family_name, median=lambda: median_source_major_axis_px, physical=lambda: object_physical_size_mm, correction=lambda: upright_scale_correction_for_assets),
+
+)
+_sprite_render_metadata = _SpriteRenderMetadata(
+
+    _SpriteRenderOperations(bounds=lambda: alpha_bbox, family=lambda: canonical_pose_family_name, visible=lambda: asset_visible_shape_px, orient=lambda: source_long_short_oriented_px, footprint=lambda: pose_render_footprint_metadata, physical=lambda: physical_render_size_px),
+
+    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
+
+)
+
 def canonical_pose_family_name(pose_family: str | None) -> str | None:
-    family = str(pose_family or "").strip().lower()
-    if family in {"lying", "flat", "side", "side-facing"}:
-        return "lying"
-    if family in {"upright", "standing", "top", "top-view", "top_view", "cap", "endface", "end-face", "top-facing"}:
-        return "upright"
-    return family or None
+    return _canonical_pose_family_name_impl(pose_family)
 
 
 def normalize_preview_pose_family_policy(value: str | None) -> str:
@@ -13059,59 +13084,23 @@ def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
 
 
 def object_physical_size_mm(size: dict[str, Any] | None) -> tuple[float, float, float]:
-    size = size or {}
-    return (
-        float(size.get("length_mm") or DEFAULT_OBJECT_SIZE_MM["length_mm"]),
-        float(size.get("width_mm") or DEFAULT_OBJECT_SIZE_MM["width_mm"]),
-        float(size.get("height_mm") or DEFAULT_OBJECT_SIZE_MM["height_mm"]),
-    )
+    return _sprite_footprint.object_physical_size_mm(size)
 
 
 def pose_family_is_top_view(pose_family: str, source_size_px: list[int] | tuple[int, int] | None = None) -> bool:
-    family = canonical_pose_family_name(pose_family)
-    if family == "upright":
-        return True
-    if family == "lying":
-        return False
-    if source_size_px and len(source_size_px) >= 2:
-        w, h = max(1, int(source_size_px[0])), max(1, int(source_size_px[1]))
-        return max(w, h) / max(1, min(w, h)) < 1.35
-    return False
+    return _sprite_footprint.pose_family_is_top_view(pose_family, source_size_px)
 
 
 def source_object_long_short_metadata(source_size_px: list[int] | tuple[int, int] | None) -> dict[str, Any]:
-    try:
-        source_w = max(1, int(source_size_px[0] if source_size_px and len(source_size_px) >= 1 else 1))
-        source_h = max(1, int(source_size_px[1] if source_size_px and len(source_size_px) >= 2 else 1))
-    except (TypeError, ValueError):
-        source_w, source_h = 1, 1
-    long_axis = "width" if source_w >= source_h else "height"
-    short_axis = "height" if long_axis == "width" else "width"
-    long_side = max(source_w, source_h)
-    short_side = max(1, min(source_w, source_h))
-    return {
-        "source_visible_width_px": source_w,
-        "source_visible_height_px": source_h,
-        "source_long_side_px": int(long_side),
-        "source_short_side_px": int(short_side),
-        "source_long_edge_axis": long_axis,
-        "source_short_edge_axis": short_axis,
-        "source_long_short_ratio": round(float(long_side) / float(short_side), 6),
-        "source_length_width_rule": "source_visible_long_side_is_length_short_side_is_width",
-    }
+    return _source_object_long_short_metadata_impl(source_size_px)
 
 
 def oriented_long_short_pair_for_source(source_size_px: list[int] | tuple[int, int] | None, long_value: float, short_value: float) -> list[float]:
-    metadata = source_object_long_short_metadata(source_size_px)
-    if metadata["source_long_edge_axis"] == "width":
-        return [long_value, short_value]
-    return [short_value, long_value]
+    return _sprite_footprint.oriented_long_short_pair_for_source(source_size_px, long_value, short_value)
 
 
 def source_long_short_oriented_px(long_side: int, short_side: int, long_axis: Any) -> list[int]:
-    if str(long_axis or "").strip().lower() == "height":
-        return [int(short_side), int(long_side)]
-    return [int(long_side), int(short_side)]
+    return _source_long_short_oriented_px_impl(long_side, short_side, long_axis)
 
 
 def pose_render_footprint_metadata(
@@ -13119,309 +13108,38 @@ def pose_render_footprint_metadata(
     source_size_px: list[int] | tuple[int, int],
     physical_size: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    source_long_short = source_object_long_short_metadata(source_size_px)
-    source_w = int(source_long_short["source_visible_width_px"])
-    source_h = int(source_long_short["source_visible_height_px"])
-    length_mm, width_mm, height_mm = object_physical_size_mm(physical_size)
-    length_to_cross_section = length_mm / max(width_mm, height_mm, 1.0)
-    source_ratio = float(source_long_short["source_long_short_ratio"])
-    source_is_elongated = source_ratio >= SOURCE_ASPECT_ELONGATED_MIN_RATIO
-    if source_is_elongated:
-        footprint_long_mm = max(length_mm, width_mm, height_mm)
-        footprint_short_mm = max(1.0, footprint_long_mm / source_ratio)
-        footprint_mm = oriented_long_short_pair_for_source([source_w, source_h], footprint_long_mm, footprint_short_mm)
-        footprint_px = [
-            max(16, int(round(footprint_mm[0] * MM_TO_PREVIEW_PX))),
-            max(16, int(round(footprint_mm[1] * MM_TO_PREVIEW_PX))),
-        ]
-        basis = "source_visible_long_short_aspect"
-        return {
-            **source_long_short,
-            "render_scale_basis": basis,
-            "render_footprint_mm": [round(float(footprint_mm[0]), 2), round(float(footprint_mm[1]), 2)],
-            "render_footprint_px": footprint_px,
-            "render_size_hint_px": footprint_px,
-            "canonical_width_px": footprint_px[0],
-            "canonical_height_px": footprint_px[1],
-            "physical_footprint_basis": basis,
-            "render_footprint_mm_unoriented_long_short": [round(float(footprint_long_mm), 2), round(float(footprint_short_mm), 2)],
-            "render_footprint_px_unoriented_long_short": [max(16, int(round(footprint_long_mm * MM_TO_PREVIEW_PX))), max(16, int(round(footprint_short_mm * MM_TO_PREVIEW_PX)))],
-            "render_source_aspect_preserved": True,
-        }
-    if length_to_cross_section <= 2.0:
-        footprint_w_mm = length_mm
-        footprint_h_mm = max(width_mm, height_mm)
-        basis = "shared_length_width_physical_footprint"
-    elif pose_family_is_top_view(pose_family, [source_w, source_h]):
-            diameter_mm = max(width_mm, height_mm)
-            footprint_w_mm = diameter_mm
-            footprint_h_mm = diameter_mm
-            basis = "cap_outer_edge_diameter_mm"
-    else:
-        visible_side_mm = max(width_mm, height_mm * 0.72)
-        footprint_w_mm = visible_side_mm
-        footprint_h_mm = length_mm
-        basis = "side_major_axis_length_mm"
-    footprint_px = [
-        max(16, int(round(footprint_w_mm * MM_TO_PREVIEW_PX))),
-        max(16, int(round(footprint_h_mm * MM_TO_PREVIEW_PX))),
-    ]
-    return {
-        **source_long_short,
-        "render_scale_basis": basis,
-        "render_footprint_mm": [round(float(footprint_w_mm), 2), round(float(footprint_h_mm), 2)],
-        "render_footprint_px": footprint_px,
-        "render_size_hint_px": footprint_px,
-        "canonical_width_px": footprint_px[0],
-        "canonical_height_px": footprint_px[1],
-        "physical_footprint_basis": basis,
-        "render_source_aspect_preserved": False,
-    }
+    return _sprite_footprint.pose_render_footprint_metadata(pose_family, source_size_px, physical_size)
 
 
 def median_source_major_axis_px(assets: list[dict[str, Any]], canonical_family: str) -> float | None:
-    values: list[int] = []
-    for asset in assets:
-        if canonical_pose_family_name(asset.get("source_pose_family") or asset.get("pose_family")) != canonical_family:
-            continue
-        size = asset.get("source_object_size_px")
-        if not isinstance(size, list) or len(size) < 2:
-            continue
-        try:
-            values.append(max(1, max(int(size[0]), int(size[1]))))
-        except (TypeError, ValueError):
-            continue
-    if not values:
-        return None
-    return float(np.median(values))
+    return _sprite_scale.median_source_major_axis_px(assets, canonical_family)
 
 
 def upright_scale_correction_for_assets(
     assets: list[dict[str, Any]],
     physical_size: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    lying_major = median_source_major_axis_px(assets, "lying")
-    upright_major = median_source_major_axis_px(assets, "upright")
-    length_mm, width_mm, height_mm = object_physical_size_mm(physical_size)
-    physical_ratio = length_mm / max(width_mm, height_mm, 1.0)
-    if lying_major and upright_major:
-        raw_ratio = lying_major / max(upright_major, 1.0)
-        physical_min = max(UPRIGHT_SCALE_CORRECTION_MIN_RATIO, physical_ratio * 0.75)
-        physical_max = min(UPRIGHT_SCALE_CORRECTION_MAX_RATIO, physical_ratio * 1.25)
-        if physical_min > physical_max:
-            physical_min, physical_max = UPRIGHT_SCALE_CORRECTION_MIN_RATIO, UPRIGHT_SCALE_CORRECTION_MAX_RATIO
-        base_ratio = min(max(raw_ratio, physical_min), physical_max)
-        ratio = min(
-            max(base_ratio * UPRIGHT_SCALE_VISUAL_ADJUSTMENT, UPRIGHT_SCALE_CORRECTION_MIN_RATIO),
-            UPRIGHT_SCALE_CORRECTION_MAX_RATIO,
-        )
-        basis = "pose_collection_source_major_axis_ratio_clamped_to_physical_ratio"
-        source_dimensions = {
-            "lying_source_major_axis_px_median": round(float(lying_major), 3),
-            "upright_source_major_axis_px_median": round(float(upright_major), 3),
-            "physical_ratio_min": round(float(physical_min), 3),
-            "physical_ratio_max": round(float(physical_max), 3),
-        }
-    else:
-        raw_ratio = physical_ratio
-        base_ratio = min(max(raw_ratio, 1.0), UPRIGHT_SCALE_CORRECTION_MAX_RATIO)
-        ratio = min(
-            max(base_ratio * UPRIGHT_SCALE_VISUAL_ADJUSTMENT, UPRIGHT_SCALE_CORRECTION_MIN_RATIO),
-            UPRIGHT_SCALE_CORRECTION_MAX_RATIO,
-        )
-        basis = "canonical_physical_length_to_diameter_ratio"
-        source_dimensions = {
-            "length_mm": round(float(length_mm), 3),
-            "diameter_mm": round(float(max(width_mm, height_mm)), 3),
-        }
-    return {
-        "upright_scale_correction": round(float(ratio), 6),
-        "upright_scale_correction_raw": round(float(raw_ratio), 6),
-        "upright_scale_correction_before_visual_adjustment": round(float(base_ratio), 6),
-        "upright_scale_visual_adjustment": round(float(UPRIGHT_SCALE_VISUAL_ADJUSTMENT), 6),
-        "upright_scale_adjustment_percent": round(float((UPRIGHT_SCALE_VISUAL_ADJUSTMENT - 1.0) * 100.0), 2),
-        "upright_scale_adjustment_reason": "owner_followup_reduce_upright_top_view_10_to_20_percent",
-        "upright_scale_visually_adjusted": bool(abs(float(UPRIGHT_SCALE_VISUAL_ADJUSTMENT) - 1.0) > 0.0005),
-        "upright_scale_correction_basis": basis,
-        "upright_scale_correction_source_dimensions": source_dimensions,
-        "upright_scale_correction_physical_ratio": round(float(physical_ratio), 6),
-        "upright_scale_correction_clamped": bool(abs(float(raw_ratio) - float(base_ratio)) > 0.0005),
-    }
+    return _sprite_scale.upright_scale_correction_for_assets(assets, physical_size)
 
 
 def apply_upright_scale_correction_metadata(assets: list[dict[str, Any]], physical_size: dict[str, Any] | None) -> None:
-    correction = upright_scale_correction_for_assets(assets, physical_size)
-    ratio = float(correction["upright_scale_correction"])
-    for asset in assets:
-        if canonical_pose_family_name(asset.get("source_pose_family") or asset.get("pose_family")) != "upright":
-            asset.setdefault("upright_scale_correction", 1.0)
-            continue
-        before = asset.get("render_footprint_px")
-        if not (isinstance(before, list) and len(before) >= 2):
-            continue
-        try:
-            before_px = [max(1, int(before[0])), max(1, int(before[1]))]
-        except (TypeError, ValueError):
-            continue
-        basis_before = str(asset.get("render_scale_basis") or "cap_outer_edge_diameter_mm")
-        if basis_before in {"top_view_length_width_physical_footprint", "shared_length_width_physical_footprint", "source_visible_long_short_aspect"}:
-            asset.update(
-                {
-                    "render_footprint_px_before_correction": before_px,
-                    "render_footprint_px_after_correction": before_px,
-                    "render_size_hint_px_before_correction": before_px,
-                    "render_size_hint_px": before_px,
-                    "render_footprint_px": before_px,
-                    "canonical_width_px": before_px[0],
-                    "canonical_height_px": before_px[1],
-                    "render_scale_basis_before_correction": basis_before,
-                    "render_scale_basis": basis_before,
-                    "upright_scale_correction": 1.0,
-                    "upright_scale_correction_raw": correction["upright_scale_correction_raw"],
-                    "upright_scale_correction_before_visual_adjustment": 1.0,
-                    "upright_scale_visual_adjustment": 1.0,
-                    "upright_scale_adjustment_percent": 0.0,
-                    "upright_scale_adjustment_reason": "source_visible_long_short_aspect_uses_no_visual_adjustment",
-                    "upright_scale_visually_adjusted": False,
-                    "upright_scale_correction_basis": "source_visible_long_short_aspect",
-                    "upright_scale_correction_source_dimensions": correction["upright_scale_correction_source_dimensions"],
-                    "upright_scale_correction_physical_ratio": correction["upright_scale_correction_physical_ratio"],
-                    "upright_scale_correction_clamped": False,
-                }
-            )
-            continue
-        after_px = [max(16, int(round(before_px[0] * ratio))), max(16, int(round(before_px[1] * ratio)))]
-        asset.update(correction)
-        asset.update(
-            {
-                "render_footprint_px_before_correction": before_px,
-                "render_footprint_px_after_correction": after_px,
-                "render_size_hint_px_before_correction": before_px,
-                "render_size_hint_px": after_px,
-                "render_footprint_px": after_px,
-                "canonical_width_px": after_px[0],
-                "canonical_height_px": after_px[1],
-                "render_scale_basis_before_correction": basis_before,
-                "render_scale_basis": f"{basis_before}_scaled_by_{correction['upright_scale_correction_basis']}",
-            }
-        )
+    return _sprite_scale.apply_upright_scale_correction_metadata(assets, physical_size)
 
 
 def asset_visible_shape_px(asset: dict[str, Any]) -> tuple[int, int] | None:
-    for width_key, height_key in (
-        ("visible_width_px", "visible_height_px"),
-        ("canonical_visible_width_px", "canonical_visible_height_px"),
-    ):
-        try:
-            width = int(asset.get(width_key) or 0)
-            height = int(asset.get(height_key) or 0)
-        except (TypeError, ValueError):
-            width, height = 0, 0
-        if width > 0 and height > 0:
-            return width, height
-    bbox = asset.get("normalized_bbox_xyxy")
-    if isinstance(bbox, list) and len(bbox) >= 4:
-        try:
-            width = int(bbox[2]) - int(bbox[0])
-            height = int(bbox[3]) - int(bbox[1])
-            if width > 0 and height > 0:
-                return width, height
-        except (TypeError, ValueError):
-            pass
-    path = Path(str(asset.get("path") or ""))
-    if path.exists():
-        image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-        if image is not None and image.ndim == 3 and image.shape[2] >= 4:
-            bbox = alpha_bbox(image[:, :, 3])
-            width = int(bbox[2] - bbox[0])
-            height = int(bbox[3] - bbox[1])
-            if width > 0 and height > 0:
-                return width, height
-    size = asset.get("source_object_size_px")
-    if isinstance(size, list) and len(size) >= 2:
-        try:
-            width = int(size[0])
-            height = int(size[1])
-            if width > 0 and height > 0:
-                return width, height
-        except (TypeError, ValueError):
-            pass
-    return None
+    return _sprite_render_metadata.asset_visible_shape_px(asset)
 
 
 def apply_laying_standard_render_size_hints(assets: list[dict[str, Any]]) -> None:
-    lying_shapes = [
-        shape
-        for asset in assets
-        if canonical_pose_family_name(asset.get("source_pose_family") or asset.get("pose_family")) == "lying"
-        for shape in [asset_visible_shape_px(asset)]
-        if shape is not None
-    ]
-    reference_shapes = lying_shapes or [shape for asset in assets for shape in [asset_visible_shape_px(asset)] if shape is not None]
-    if not reference_shapes:
-        return
-    median_w = float(np.median([shape[0] for shape in reference_shapes]))
-    median_h = float(np.median([shape[1] for shape in reference_shapes]))
-    long_axis = "height" if median_h >= median_w else "width"
-    for asset in assets:
-        footprint = asset.get("render_footprint_px") or asset.get("render_size_hint_px")
-        if not (isinstance(footprint, list) and len(footprint) >= 2):
-            continue
-        try:
-            first = max(1, int(footprint[0]))
-            second = max(1, int(footprint[1]))
-        except (TypeError, ValueError):
-            continue
-        long_side = max(first, second)
-        short_side = min(first, second)
-        is_source_aspect = str(asset.get("render_scale_basis") or "") == "source_visible_long_short_aspect"
-        if is_source_aspect:
-            asset_long_axis = str(asset.get("source_long_edge_axis") or "").strip().lower()
-            oriented = source_long_short_oriented_px(long_side, short_side, asset_long_axis)
-            orientation_basis = "source_visible_long_short_aspect_preserve_source_axis"
-            render_long_edge_axis = asset_long_axis or ("height" if oriented[1] >= oriented[0] else "width")
-        else:
-            oriented = [long_side, short_side] if long_axis == "width" else [short_side, long_side]
-            orientation_basis = "lying_pose_collection_visible_bbox"
-            render_long_edge_axis = long_axis
-        asset.update(
-            {
-                "render_footprint_px_unoriented_long_short": [int(long_side), int(short_side)],
-                "render_footprint_px_before_laying_standard_orientation": [int(first), int(second)],
-                "render_footprint_px": oriented,
-                "render_size_hint_px": oriented,
-                "canonical_width_px": oriented[0],
-                "canonical_height_px": oriented[1],
-                "render_long_short_orientation_basis": orientation_basis,
-                "render_long_edge_axis": render_long_edge_axis,
-                "render_laying_standard_reference_visible_size_px": [round(median_w, 3), round(median_h, 3)],
-            }
-        )
+    return _sprite_render_metadata.apply_laying_standard_render_size_hints(assets)
 
 
 def sprite_render_size_px(item: dict[str, Any], sprite_meta: dict[str, Any] | None, material_type: str) -> tuple[int, int]:
-    if material_type == "text":
-        return physical_render_size_px(item, material_type)
-    meta = sprite_meta or {}
-    hint = meta.get("render_size_hint_px") or meta.get("render_footprint_px")
-    if isinstance(hint, list) and len(hint) >= 2:
-        try:
-            return max(16, int(hint[0])), max(16, int(hint[1]))
-        except (TypeError, ValueError):
-            pass
-    source_size = meta.get("source_object_size_px") or [int(meta.get("width") or 1), int(meta.get("height") or 1)]
-    footprint = pose_render_footprint_metadata(str(meta.get("source_pose_family") or meta.get("pose_family") or ""), source_size, item.get("physical_size"))
-    return int(footprint["render_footprint_px"][0]), int(footprint["render_footprint_px"][1])
+    return _sprite_render_metadata.sprite_render_size_px(item, sprite_meta, material_type)
 
 
 def canonical_sprite_canvas_size_px(asset: dict[str, Any]) -> tuple[int, int] | None:
-    value = asset.get("canonical_asset_dimensions_px") or asset.get("canonical_canvas_size_px")
-    if isinstance(value, list) and len(value) >= 2:
-        try:
-            return max(1, int(value[0])), max(1, int(value[1]))
-        except (TypeError, ValueError):
-            return None
-    return None
+    return _canonical_sprite_canvas_size_px_impl(asset)
 
 
 def transparent_object_alpha(asset: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
