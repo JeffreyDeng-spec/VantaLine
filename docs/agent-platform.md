@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose materialization and object preprocessing retain sprite publication callbacks through
+root adapters. Accessory writer and canvas services use local geometry/metadata/image
+capabilities without importing Agent or the Web entry; existing failure states remain.
+
 Pose and object preprocessing keep their existing sprite metadata callbacks through root
 adapters. Accessory metadata services own footprint, scale and rendering dimensions with
 local types; image path/decoder/mode reads are explicit capabilities. Cross-asset updates

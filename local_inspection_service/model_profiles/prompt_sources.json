@@ -1,7 +1,10 @@
 {
-  "version": 82,
+  "version": 83,
   "sources": [
     "server.py",
+    "accessories/sprite_publication_ports.py",
+    "accessories/sprite_artifact_writer.py",
+    "accessories/sprite_canvas_normalization.py",
     "accessories/sprite_metadata_ports.py",
     "accessories/sprite_metadata_values.py",
     "accessories/sprite_footprint.py",

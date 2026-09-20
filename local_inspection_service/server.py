@@ -13300,123 +13300,36 @@ def normalize_sprite_upright(asset: np.ndarray, mask: np.ndarray) -> tuple[np.nd
     return _sprite_geometry.normalize_sprite_upright(asset, mask)
 
 
+from .accessories.sprite_artifact_writer import SpriteArtifactWriter as _SpriteArtifactWriter
+from .accessories.sprite_canvas_normalization import SpriteCanvasNormalizer as _SpriteCanvasNormalizer
+from .accessories.sprite_publication_ports import SpriteArtifactGeometry as _SpriteArtifactGeometry, SpriteArtifactMetadata as _SpriteArtifactMetadata, SpriteImageEncoder as _SpriteImageEncoder, SpriteCanvasGeometry as _SpriteCanvasGeometry, SpriteCanvasImageReads as _SpriteCanvasImageReads, SpriteResampling as _SpriteResampling
+_sprite_artifact_writer = _SpriteArtifactWriter(
+
+    _SpriteArtifactGeometry(normalize=lambda: normalize_sprite_upright, margin=lambda: add_sprite_safety_margin, bounds=lambda: alpha_bbox, edge_max=lambda: alpha_edge_max, edge_stats=lambda: alpha_edge_stats),
+
+    _SpriteArtifactMetadata(alpha=lambda: material_aware_object_alpha, footprint=lambda: pose_render_footprint_metadata),
+
+    _SpriteImageEncoder(convert=lambda: cv2.cvtColor, bgra_mode=lambda: cv2.COLOR_BGR2BGRA, write=lambda: cv2.imwrite),
+
+)
+_sprite_canvas_normalizer = _SpriteCanvasNormalizer(
+
+    _SpriteCanvasGeometry(trim=lambda: trim_masked_asset, margin=lambda: add_sprite_safety_margin, bounds=lambda: alpha_bbox, edge_max=lambda: alpha_edge_max, edge_stats=lambda: alpha_edge_stats),
+
+    _SpriteCanvasImageReads(resolve=lambda: resolve_service_path, decode=lambda: cv2.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
+
+    _SpriteResampling(resize=lambda: cv2.resize, cubic=lambda: cv2.INTER_CUBIC, area=lambda: cv2.INTER_AREA, linear=lambda: cv2.INTER_LINEAR),
+
+    _SpriteImageEncoder(convert=lambda: cv2.cvtColor, bgra_mode=lambda: cv2.COLOR_BGR2BGRA, write=lambda: cv2.imwrite),
+
+)
+
 def write_clean_sprite(path: Path, asset: np.ndarray, mask: np.ndarray, metadata: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    asset, mask, orientation_metadata = normalize_sprite_upright(asset, mask)
-    if asset.size == 0 or mask.size == 0 or int((mask > 8).sum()) < 240:
-        return None
-    mask, alpha_policy_stats = material_aware_object_alpha(asset, mask, metadata)
-    post_rotation_margin = max(18, int(round(max(asset.shape[:2]) * 0.08)))
-    asset, mask = add_sprite_safety_margin(asset, mask, post_rotation_margin)
-    bbox = alpha_bbox(mask)
-    edge_max = alpha_edge_max(mask)
-    edge_stats = alpha_edge_stats(mask)
-    if edge_max > 12:
-        return None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rgba = cv2.cvtColor(asset, cv2.COLOR_BGR2BGRA)
-    rgba[:, :, 3] = mask
-    if not cv2.imwrite(str(path), rgba):
-        return None
-    payload = {
-        "kind": "clean_object_sprite",
-        "path": str(path),
-        "method": "preprocessed_alpha_sprite",
-        "width": int(asset.shape[1]),
-        "height": int(asset.shape[0]),
-        "normalized_asset_size_px": [int(asset.shape[1]), int(asset.shape[0])],
-        "normalized_asset_dimensions_px": [int(asset.shape[1]), int(asset.shape[0])],
-        "normalized_bbox_xyxy": bbox,
-        "post_rotation_safety_margin_px": int(post_rotation_margin),
-        "edge_alpha_max": edge_max,
-        "edge_alpha_pass": True,
-        "alpha_edge_stats": edge_stats,
-        "mask_strategy": "provided_alpha_mask",
-        "foreground_component_bbox_xyxy": bbox,
-        "removed_stray_component_count": 0,
-        "removed_stray_component_area_px": 0,
-    }
-    if metadata:
-        payload.update(metadata)
-    payload.update(alpha_policy_stats)
-    payload.update(orientation_metadata)
-    if (
-        metadata
-        and isinstance(metadata.get("physical_size_mm"), dict)
-        and (not payload.get("render_footprint_px") or not payload.get("render_footprint_mm") or not payload.get("render_scale_basis"))
-    ):
-        pose_family = str(metadata.get("source_pose_family") or metadata.get("pose_family") or "")
-        source_size = metadata.get("source_object_size_px") or payload["normalized_asset_size_px"]
-        payload.update(pose_render_footprint_metadata(pose_family, source_size, metadata.get("physical_size_mm")))
-    return payload
+    return _sprite_artifact_writer.write_clean_sprite(path, asset, mask, metadata)
 
 
 def normalize_sprite_family_canvases(generated: list[dict[str, Any]]) -> None:
-    groups: dict[str, list[dict[str, Any]]] = {"all_pose_families": generated}
-    for family_assets in groups.values():
-        loaded: list[tuple[dict[str, Any], np.ndarray, np.ndarray]] = []
-        visible_major_axes = []
-        for asset in family_assets:
-            path = resolve_service_path(asset.get("path"))
-            image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-            if image is None or image.ndim != 3 or image.shape[2] < 4:
-                continue
-            asset["path"] = str(path)
-            alpha = image[:, :, 3]
-            bbox = alpha_bbox(alpha)
-            visible_w = int(bbox[2] - bbox[0])
-            visible_h = int(bbox[3] - bbox[1])
-            visible_major = max(visible_w, visible_h)
-            if visible_major <= 0:
-                continue
-            visible_major_axes.append(visible_major)
-            loaded.append((asset, image[:, :, :3], alpha))
-        if not loaded:
-            continue
-        canonical_visible_major_axis = max(visible_major_axes)
-        for asset, bgr, alpha in loaded:
-            asset_bgr, asset_alpha = trim_masked_asset(bgr, alpha, pad=8)
-            for _ in range(3):
-                bbox = alpha_bbox(asset_alpha)
-                visible_w = max(1, int(bbox[2] - bbox[0]))
-                visible_h = max(1, int(bbox[3] - bbox[1]))
-                visible_major = max(visible_w, visible_h)
-                scale = canonical_visible_major_axis / visible_major
-                if abs(scale - 1.0) <= 0.006:
-                    break
-                resized_size = (
-                    max(1, int(round(asset_bgr.shape[1] * scale))),
-                    max(1, int(round(asset_bgr.shape[0] * scale))),
-                )
-                asset_bgr = cv2.resize(asset_bgr, resized_size, interpolation=cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA)
-                asset_alpha = cv2.resize(asset_alpha, resized_size, interpolation=cv2.INTER_LINEAR)
-            margin = max(18, int(round(max(asset_bgr.shape[:2]) * 0.08)))
-            asset_bgr, asset_alpha = add_sprite_safety_margin(asset_bgr, asset_alpha, margin)
-            bbox = alpha_bbox(asset_alpha)
-            rgba = cv2.cvtColor(asset_bgr, cv2.COLOR_BGR2BGRA)
-            rgba[:, :, 3] = asset_alpha
-            cv2.imwrite(str(resolve_service_path(asset.get("path"))), rgba)
-            edge_max = alpha_edge_max(asset_alpha)
-            asset.update(
-                {
-                    "width": int(asset_bgr.shape[1]),
-                    "height": int(asset_bgr.shape[0]),
-                    "normalized_asset_size_px": [int(asset_bgr.shape[1]), int(asset_bgr.shape[0])],
-                    "normalized_asset_dimensions_px": [int(asset_bgr.shape[1]), int(asset_bgr.shape[0])],
-                    "canonical_asset_dimensions_px": [int(asset_bgr.shape[1]), int(asset_bgr.shape[0])],
-                    "canonical_canvas_size_px": [int(asset_bgr.shape[1]), int(asset_bgr.shape[0])],
-                    "normalized_bbox_xyxy": bbox,
-                    "canonical_visible_width_px": int(bbox[2] - bbox[0]),
-                    "canonical_visible_major_axis_px": int(canonical_visible_major_axis),
-                    "visible_width_px": int(bbox[2] - bbox[0]),
-                    "visible_height_px": int(bbox[3] - bbox[1]),
-                    "canonical_family_width_normalized": True,
-                    "canonical_all_pose_family_size_normalized": True,
-                    "post_rotation_safety_margin_px": int(margin),
-                    "edge_alpha_max": edge_max,
-                    "edge_alpha_pass": edge_max <= 12,
-                    "alpha_edge_stats": alpha_edge_stats(asset_alpha),
-                }
-            )
+    return _sprite_canvas_normalizer.normalize_sprite_family_canvases(generated)
 
 
 from .accessories.crop_analysis import alpha_component_cutouts as _alpha_component_cutouts_impl
