@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_preview_sprites.py` preserves 23 original test groups and adds one
+independent two-instance renderer composition check. The 24 groups contain 95
+test-method assertion sites plus two bootstrap guards. Representative non-AI
+preprocessing, top-view selection and injected rotation prove separation of the two
+instances; standalone decoder behavior has original synthetic coverage, not exhaustive
+I/O/failure commissioning.
+
 `python scripts/smoke_materialized_assets.py` retains 21 original synthetic groups and
 adds one independent two-service composition check. It covers nullable decode, metadata
 precedence and aliases, explicit-empty bypass, short circuits and callback timing.
