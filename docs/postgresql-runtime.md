@@ -119,7 +119,7 @@ Factory/query errors propagate without JSON fallback. Existing locks, SQL and sc
 are unchanged; read-lock optimization belongs to a later batch.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v91 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v92 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
