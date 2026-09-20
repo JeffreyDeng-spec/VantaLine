@@ -1,7 +1,11 @@
 {
-  "version": 71,
+  "version": 72,
   "sources": [
     "server.py",
+    "agent/pose_plan_ports.py",
+    "agent/pose_plan_policy.py",
+    "agent/pose_plan_generation.py",
+    "agent/pose_plan_assembly.py",
     "agent/pose_asset_ports.py",
     "agent/pose_assets.py",
     "agent/pose_templates.py",

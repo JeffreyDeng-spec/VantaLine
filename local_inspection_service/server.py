@@ -21739,330 +21739,58 @@ def agent_mcp_pose_templates(base_id: str, object_kind: str) -> list[dict[str, A
     return _agent_pose_templates.agent_mcp_pose_templates(base_id, object_kind)
 
 
+from .agent.pose_plan_policy import PosePlanPolicy as _PosePlanPolicy
+from .agent.pose_plan_generation import PosePlanGeneration as _PosePlanGeneration
+from .agent.pose_plan_assembly import PosePlanAssembly as _PosePlanAssembly
+from .agent.pose_plan_ports import PosePlanIdentity as _PosePlanIdentity, PosePlanContent as _PosePlanContent, PosePlanRuntime as _PosePlanRuntime, PosePlanTemplates as _PosePlanTemplates, PosePlanProvider as _PosePlanProvider, PosePlanMedia as _PosePlanMedia, PosePlanCalls as _PosePlanCalls, PosePlanCatalog as _PosePlanCatalog
+_pose_plan_policy = _PosePlanPolicy(
+    _PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id),
+    _PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile),
+    _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
+    _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan),
+)
+_pose_plan_generation = _PosePlanGeneration(
+    _PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id),
+    _PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile),
+    _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
+    _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan),
+    _PosePlanProvider(settings=lambda: ai_detection_settings, call=lambda: call_ai_mcp_tool, dumps=lambda: json.dumps),
+    _PosePlanMedia(path=lambda: Path, encode=lambda: image_path_data_url, max_side=lambda: AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=lambda: AI_PROFILE_REFERENCE_IMAGE_QUALITY),
+    _PosePlanCalls(payload=lambda: accessory_pose_plan_prompt_payload, prompt=lambda: pose_plan_system_prompt, normalize=lambda: normalize_accessory_pose_plan, generate=lambda: generate_accessory_pose_plan),
+)
+_pose_plan_assembly = _PosePlanAssembly(
+    _PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id),
+    _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
+    _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan),
+    _PosePlanCatalog(lookup=lambda: accessory_lookup_by_id, counts=lambda: normalize_pipeline_accessory_counts, canonical_ids=lambda: canonical_pipeline_accessory_ids, ensure=lambda: ensure_accessory_pose_plan),
+)
+
 def accessory_pose_plan_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
-    profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
-    size = item.get("physical_size") if isinstance(item.get("physical_size"), dict) else {}
-    length_mm, width_mm, height_mm = object_physical_size_mm(size)
-    sprites = clean_sprite_assets(item)
-    return {
-        "accessory_id": accessory_uid(item),
-        "object_name": str(item.get("name") or accessory_uid(item)),
-        "english_name": str(profile.get("english_name") or item.get("english_name") or ""),
-        "material_type": accessory_material_type(item),
-        "ai_material_hint": str(profile.get("material_type") or ""),
-        "description": bounded_text(item.get("description") or profile.get("description") or "", 240),
-        "physical_dimensions_mm": {
-            "length_mm": round(float(length_mm), 1),
-            "width_mm": round(float(width_mm), 1),
-            "height_mm": round(float(height_mm), 1),
-        },
-        "top_view_aspect_ratio": profile.get("top_view_aspect_ratio"),
-        "has_transparent_cutout": bool(sprites),
-        "conveyor_constraints": (
-            "The object rests on a flat horizontal solid chroma-key tabletop. "
-            "Gravity points straight down: it cannot float, cannot be propped up by "
-            "external supports, and cannot interpenetrate the tabletop."
-        ),
-        "camera_constraints": (
-            "A fixed inspection camera is mounted about 700mm directly above the tabletop "
-            "and looks straight down (strict vertical top-down, 90 degrees). Every pose "
-            "must be renderable as that same top-down shot at a consistent scale."
-        ),
-        "single_image_inference_allowed": True,
-        "max_poses": AGENT_MCP_POSE_PLAN_MAX_POSES,
-    }
+    return _pose_plan_policy.accessory_pose_plan_prompt_payload(item)
 
 
 def pose_plan_system_prompt() -> str:
-    return (
-        "You are a Pose Planner Agent for an industrial visual-inspection training "
-        "pipeline. Given one accessory (name, physical dimensions, material, and "
-        "reference images), decide the realistic set of STABLE resting poses the part "
-        "can take on a flat top-down tabletop, and write an explicit image-"
-        "generation instruction for each pose.\n"
-        "Think in these steps before answering:\n"
-        "1. Identify the object geometry type (e.g. rectangular_case, thin_sheet, "
-        "cylinder, bottle, irregular_part).\n"
-        "2. List the faces/edges that can naturally and stably contact the tabletop.\n"
-        "3. Merge poses that look almost identical from a strict top-down camera into "
-        "one.\n"
-        "4. Exclude unstable or impossible poses (balancing on a corner/tip, standing "
-        "on a knife edge, anything needing external support or that would topple).\n"
-        "5. For each remaining pose, write a concrete top-down render instruction: "
-        "which contact surface is down, which face is visible from above, orientation "
-        "of the long axis, scale, and what to avoid.\n"
-        "Rules: prefer 1 to 6 poses for a rigid part; only output poses you believe "
-        "are physically stable; set a calibrated confidence (0-1) per pose; when a "
-        "single image hides the back/side, you may make a reasonable inference but "
-        "lower the confidence and set needs_human_review.\n"
-        "Return ONLY a JSON object with this schema (no prose, no markdown):\n"
-        "{\n"
-        '  "accessory_id": string,\n'
-        '  "object_name": string,\n'
-        '  "pose_decision_source": "vision_agent",\n'
-        '  "estimated_geometry": {"kind": string, "symmetry": [string], '
-        '"visible_evidence": string, "uncertainty": "low"|"medium"|"high"},\n'
-        '  "pose_count": integer,\n'
-        '  "poses": [{"pose_id": string (unique, snake_case), "label": string, '
-        '"stable_contact_surface": string, "camera_view": "strict_vertical_top_down", '
-        '"generation_prompt": string, "negative_prompt": string, "confidence": number}],\n'
-        '  "needs_human_review": boolean,\n'
-        '  "review_reason": string\n'
-        "}"
-    )
+    return _pose_plan_policy.pose_plan_system_prompt()
 
 
 def fallback_accessory_pose_plan(item: dict[str, Any]) -> dict[str, Any]:
-    base_id = safe_record_id(accessory_uid(item))
-    object_kind = agent_mcp_object_kind(item)
-    poses: list[dict[str, Any]] = []
-    for tmpl in agent_mcp_pose_templates(base_id, object_kind):
-        poses.append(
-            {
-                "pose_id": str(tmpl.get("pose_id")),
-                "label": str(tmpl.get("label")),
-                "stable_contact_surface": str(tmpl.get("stable_contact")),
-                "stable_contact": str(tmpl.get("stable_contact")),
-                "camera_view": "strict_vertical_top_down",
-                "generation_prompt": "",
-                "negative_prompt": "",
-                "confidence": 0.5,
-                "request": agent_mcp_pose_request(),
-            }
-        )
-    return {
-        "schema_version": AGENT_MCP_POSE_PLAN_VERSION,
-        "accessory_id": accessory_uid(item),
-        "object_name": str(item.get("name") or accessory_uid(item)),
-        "pose_decision_source": "rules_fallback",
-        "estimated_geometry": {"kind": object_kind, "symmetry": [], "visible_evidence": "", "uncertainty": "unknown"},
-        "pose_count": len(poses),
-        "poses": poses,
-        "needs_human_review": False,
-        "review_reason": "",
-        "generated_at": agent_mcp_now(),
-    }
+    return _pose_plan_policy.fallback_accessory_pose_plan(item)
 
 
 def normalize_accessory_pose_plan(raw: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
-    """Guardrail/validation for the Pose Planner Agent output: enforce the JSON
-    schema, unique pose ids, pose-count bounds, a light physical-stability check
-    and a confidence floor. Falls back to rule templates if nothing usable
-    survives. (Agent decides; rules accept.)"""
-    fallback = fallback_accessory_pose_plan(item)
-    if not isinstance(raw, dict):
-        return fallback
-    poses_raw = raw.get("poses")
-    if not isinstance(poses_raw, list) or not poses_raw:
-        return fallback
-    base_id = safe_record_id(accessory_uid(item))
-    unstable = re.compile(r"corner|tip|point|edge[_\s-]?point|balanc|knife|尖|角立|竖立")
-    seen: set[str] = set()
-    poses: list[dict[str, Any]] = []
-    for idx, raw_pose in enumerate(poses_raw):
-        if not isinstance(raw_pose, dict):
-            continue
-        gen = bounded_text(raw_pose.get("generation_prompt") or "", 700)
-        if not gen.strip():
-            continue
-        contact = bounded_text(
-            raw_pose.get("stable_contact_surface") or raw_pose.get("stable_contact") or "largest stable surface",
-            160,
-        )
-        if unstable.search(contact.lower()):
-            continue
-        confidence = optional_float(raw_pose.get("confidence"))
-        confidence = 0.5 if confidence is None else max(0.0, min(1.0, confidence))
-        if confidence < AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE:
-            continue
-        pose_id = safe_record_id(str(raw_pose.get("pose_id") or "")) or f"pose_{idx + 1}"
-        if not pose_id.startswith(base_id):
-            pose_id = f"{base_id}_{pose_id}"
-        if pose_id in seen:
-            continue
-        seen.add(pose_id)
-        poses.append(
-            {
-                "pose_id": pose_id,
-                "label": bounded_text(raw_pose.get("label") or pose_id, 80),
-                "stable_contact_surface": contact,
-                "stable_contact": contact,
-                "camera_view": bounded_text(raw_pose.get("camera_view") or "strict_vertical_top_down", 60),
-                "generation_prompt": gen,
-                "negative_prompt": bounded_text(raw_pose.get("negative_prompt") or "", 500),
-                "confidence": round(confidence, 3),
-                "request": agent_mcp_pose_request(),
-            }
-        )
-        if len(poses) >= AGENT_MCP_POSE_PLAN_MAX_POSES:
-            break
-    if not poses:
-        return fallback
-    geometry = raw.get("estimated_geometry") if isinstance(raw.get("estimated_geometry"), dict) else {}
-    needs_review = bool(raw.get("needs_human_review")) or any(pose["confidence"] < 0.5 for pose in poses)
-    return {
-        "schema_version": AGENT_MCP_POSE_PLAN_VERSION,
-        "accessory_id": accessory_uid(item),
-        "object_name": bounded_text(raw.get("object_name") or item.get("name") or accessory_uid(item), 120),
-        "pose_decision_source": "vision_agent",
-        "estimated_geometry": {
-            "kind": bounded_text(geometry.get("kind") or agent_mcp_object_kind(item), 60),
-            "symmetry": string_list(geometry.get("symmetry"), max_items=6),
-            "visible_evidence": bounded_text(geometry.get("visible_evidence") or "", 200),
-            "uncertainty": bounded_text(geometry.get("uncertainty") or "", 40),
-        },
-        "pose_count": len(poses),
-        "poses": poses,
-        "needs_human_review": needs_review,
-        "review_reason": bounded_text(raw.get("review_reason") or "", 240),
-        "generated_at": agent_mcp_now(),
-    }
+    return _pose_plan_policy.normalize_accessory_pose_plan(raw, item)
 
 
 def generate_accessory_pose_plan(item: dict[str, Any], *, allow_provider: bool = True, force: bool = False) -> dict[str, Any] | None:
-    """Run (and cache once per accessory) the Pose Planner Agent. Returns None for
-    text accessories. The cached plan is reused across tasks so the downstream AI
-    pose images are generated a single time and never re-accumulated."""
-    if accessory_material_type(item) == "text":
-        return None
-    existing = item.get("agent_mcp_pose_plan")
-    if (
-        not force
-        and isinstance(existing, dict)
-        and existing.get("accessory_id") == accessory_uid(item)
-        and existing.get("poses")
-    ):
-        return existing
-    settings = ai_detection_settings("training_vision")
-    if not allow_provider or not settings.get("configured"):
-        plan = fallback_accessory_pose_plan(item)
-        item["agent_mcp_pose_plan"] = plan
-        item["agent_mcp_pose_plan_status"] = {
-            "source": "rules_fallback",
-            "status": "fallback",
-            "message": "AI provider not configured; used rule templates.",
-            "updated_at": int(time.time()),
-        }
-        return plan
-    try:
-        references = call_ai_mcp_tool(
-            "accessory.reference.collect",
-            {"accessory": item, "max_images": 4},
-        )["references"]
-    except Exception:
-        references = []
-    user_content: list[dict[str, Any]] = [
-        {"type": "text", "text": json.dumps(accessory_pose_plan_prompt_payload(item), ensure_ascii=False)},
-    ]
-    for ref in references:
-        user_content.append(
-            {
-                "type": "text",
-                "text": f"REFERENCE_IMAGE (raw photo) for accessory_id={ref['accessory_id']}.",
-            }
-        )
-        user_content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
-    for sprite in clean_sprite_assets(item)[:1]:
-        data_url = image_path_data_url(Path(sprite["path"]), max_side=AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=AI_PROFILE_REFERENCE_IMAGE_QUALITY)
-        if data_url:
-            user_content.append({"type": "text", "text": "TRANSPARENT_CUTOUT of the same part (background already removed)."})
-            user_content.append({"type": "image_url", "image_url": {"url": data_url, "detail": "low"}})
-    result = call_ai_mcp_tool(
-        "provider.gemini.generate_json",
-        {
-            "provider_config": settings,
-            "system_prompt": pose_plan_system_prompt(),
-            "user_content": user_content,
-            "max_tokens": 1400,
-        },
-    )
-    if result.get("ok"):
-        plan = normalize_accessory_pose_plan(result.get("parsed") or {}, item)
-        item["agent_mcp_pose_plan"] = plan
-        item["agent_mcp_pose_plan_status"] = {
-            "source": plan.get("pose_decision_source"),
-            "status": "generated",
-            "latency_ms": result.get("latency_ms", 0),
-            "needs_human_review": plan.get("needs_human_review"),
-            "updated_at": int(time.time()),
-        }
-        return plan
-    plan = fallback_accessory_pose_plan(item)
-    item["agent_mcp_pose_plan"] = plan
-    item["agent_mcp_pose_plan_status"] = {
-        "source": "rules_fallback",
-        "status": "timeout" if result.get("timed_out") else "provider_error",
-        "message": bounded_text(result.get("error") or "Pose planner agent failed.", 240),
-        "updated_at": int(time.time()),
-    }
-    return plan
+    return _pose_plan_generation.generate_accessory_pose_plan(item, allow_provider=allow_provider, force=force)
 
 
 def ensure_accessory_pose_plan(item: dict[str, Any], *, force: bool = False) -> dict[str, Any] | None:
-    if accessory_material_type(item) == "text":
-        return None
-    return generate_accessory_pose_plan(item, force=force)
+    return _pose_plan_generation.ensure_accessory_pose_plan(item, force=force)
 
 
 def build_agent_mcp_pose_plan(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    accessories_by_id = accessory_lookup_by_id(config)
-    counts = normalize_pipeline_accessory_counts(config, [str(item_id) for item_id in task.get("accessory_ids") or []], task.get("accessory_counts"))
-    plans = []
-    for item_id in canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []]):
-        item = accessories_by_id.get(item_id)
-        if not item:
-            continue
-        # Documents never go through pose-image generation: their canonical pages
-        # are produced (crop + deskew + paper-size normalize) when the accessory is
-        # created, so they are excluded from the pose plan entirely.
-        if accessory_material_type(item) == "text":
-            continue
-        object_kind = agent_mcp_object_kind(item)
-        base_id = safe_record_id(item_id)
-        pose_plan = ensure_accessory_pose_plan(item)
-        if isinstance(pose_plan, dict) and pose_plan.get("poses"):
-            poses = [
-                {
-                    "pose_id": str(pose.get("pose_id")),
-                    "label": pose.get("label"),
-                    "stable_contact": pose.get("stable_contact_surface") or pose.get("stable_contact"),
-                    "gravity_basis": "object rests under gravity on its stable contact surface",
-                    "conveyor_view": pose.get("camera_view") or "strict_vertical_top_down",
-                    "generation_prompt": pose.get("generation_prompt") or "",
-                    "negative_prompt": pose.get("negative_prompt") or "",
-                    "confidence": pose.get("confidence"),
-                    "request": pose.get("request") or agent_mcp_pose_request(),
-                }
-                for pose in pose_plan.get("poses") or []
-            ]
-            plan_source = pose_plan.get("pose_decision_source") or "vision_agent"
-            object_kind = (pose_plan.get("estimated_geometry") or {}).get("kind") or object_kind
-            needs_review = bool(pose_plan.get("needs_human_review"))
-        else:
-            poses = agent_mcp_pose_templates(base_id, object_kind)
-            plan_source = "preview_agent_rules"
-            needs_review = False
-        plans.append(
-            {
-                "accessory_id": item_id,
-                "accessory_name": str(item.get("name") or item_id),
-                "count": int(counts.get(item_id, 1)),
-                "object_kind": object_kind,
-                "plan_source": plan_source,
-                "pose_decision_source": plan_source,
-                "needs_human_review": needs_review,
-                "image_contract": "one_accessory_per_image",
-                "poses": poses,
-            }
-        )
-    pose_count = sum(len(plan.get("poses") or []) for plan in plans)
-    return {
-        "task_id": task.get("id"),
-        "generated_at": agent_mcp_now(),
-        "agent": "pose_planner_agent",
-        "accessories": plans,
-        "pose_count": pose_count,
-    }
+    return _pose_plan_assembly.build_agent_mcp_pose_plan(task, config)
 
 
 def agent_mcp_tool_call_id(task_id: str, tool_name: str, accessory_id: str = "", pose_id: str = "") -> str:

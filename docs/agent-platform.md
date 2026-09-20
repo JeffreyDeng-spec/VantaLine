@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Pose planning policy, generation/cache and task-plan assembly use explicit services while
+retaining the original model call path, prompt and template policy, fallback states and
+request aliases. Platform rollout and worker topology remain unchanged.
+
 Pose asset reuse and default pose templates retain their existing policy in explicit services.
 Material selection, historical sprite compatibility, request fields and template order are
 unchanged. Platform rollout and worker topology are unchanged.
