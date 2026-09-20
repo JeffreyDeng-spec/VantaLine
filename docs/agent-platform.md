@@ -1,5 +1,11 @@
 # Agent platform implementation status
 
+Reference evidence preserves job/normalized/source/default order, stable deduplication,
+preferred-reference fallback suppression and successful-context ordinals. Failed or
+empty contexts remain seen. Direct hashlib over file bytes stays separate from the final
+strict training hash helper. Screen metadata is shallow-copied; suffix policy and
+dependency callbacks are read at their original points.
+
 Preview asset loading preserves dependency evaluation points: suffix policy is read
 after path existence, candidate callable selection precedes asset.get argument effects,
 and failed preview decoding may refresh the later default lookup. Metadata is
