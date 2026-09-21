@@ -11726,36 +11726,16 @@ def image_path_data_url(path: Path, max_side: int=1024, quality: int=78) -> str 
     return _image_encoding.image_path_data_url(path, max_side=max_side, quality=quality)
 
 
+from .accessories.profile_payloads import AccessoryProfilePayloads as _AccessoryProfilePayloads
+from .accessories.profile_payload_ports import PayloadIdentity as _PayloadIdentity, PayloadProfiles as _PayloadProfiles, PayloadCatalog as _PayloadCatalog
+_accessory_profile_payloads = _AccessoryProfilePayloads(
+    _PayloadIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type),
+    _PayloadProfiles(fallback=lambda: fallback_accessory_ai_profile, normalize=lambda: normalize_accessory_ai_profile, required=lambda: required_accessory_profile_payload, reference=lambda: size_reference_payload),
+    _PayloadCatalog(config=lambda: load_config, text=lambda: bounded_text),
+)
+
 def accessory_profile_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "instruction": "Return only deterministic JSON for an accessory profile with the required keys.",
-        "required_keys": list(fallback_accessory_ai_profile(item).keys()),
-        "accessory": {
-            "accessory_id": accessory_uid(item),
-            "name": item.get("name"),
-            "material_type": accessory_material_type(item),
-            "training_role": item.get("training_role"),
-            "physical_size": item.get("physical_size"),
-            "source_file_names": [Path(str(path)).name for path in item.get("source_files", [])],
-            "normalized_asset_kinds": [asset.get("kind") for asset in item.get("normalized_assets", []) if isinstance(asset, dict)],
-            "expected_count": int(item.get("expected_count") or 1),
-        },
-    }
-    reference = size_reference_payload(item.get("size_reference")) if accessory_material_type(item) == "object" else None
-    if reference:
-        payload["size_reference"] = {
-            "id": reference.get("id"),
-            "label": reference.get("label"),
-            "kind": reference.get("kind"),
-            "long_mm": reference.get("long_mm"),
-            "short_mm": reference.get("short_mm"),
-            "note": reference.get("note"),
-            "usage": (
-                "至少有一张参考图里把该配件和这个参照物放在一起拍摄。"
-                "请用参照物的已知真实尺寸作为比例尺，测量并推断配件的真实 length_mm/width_mm/height_mm。"
-            ),
-        }
-    return payload
+    return _accessory_profile_payloads.accessory_profile_prompt_payload(item)
 
 
 def ai_tool_provider_meta(settings: dict[str, Any]) -> dict[str, Any]:
@@ -11778,59 +11758,11 @@ def profile_generation_status(settings: dict[str, Any], *, source: str = "fallba
 
 
 def required_accessory_profile_payload(item: dict[str, Any], expected_count: int, profile: dict[str, Any] | None = None) -> dict[str, Any]:
-    profile = normalize_accessory_ai_profile(profile or item.get("ai_profile") or {}, item)
-    try:
-        expected_count = max(1, int(expected_count or profile.get("expected_count") or 1))
-    except (TypeError, ValueError):
-        try:
-            expected_count = max(1, int(profile.get("expected_count") or 1))
-        except (TypeError, ValueError):
-            expected_count = 1
-    profile = {**profile, "expected_count": expected_count}
-    return {
-        "accessory_id": profile["accessory_id"],
-        "name": profile["name"],
-        "label": profile["name"],
-        "material_type": profile["material_type"],
-        "expected_count": expected_count,
-        "profile": {
-            "description": profile["description"],
-            "tags": profile["tags"],
-            "visual_signature": profile["visual_signature"],
-            "distinguishing_text": profile["distinguishing_text"],
-            "negative_cues": profile["negative_cues"],
-            "reference_images": profile.get("reference_images") or [],
-            "provider_cache": profile.get("provider_cache") or {},
-        },
-    }
+    return _accessory_profile_payloads.required_accessory_profile_payload(item, expected_count, profile)
 
 
 def resolve_required_accessory_refs(required_refs: list[Any]) -> list[dict[str, Any]]:
-    config = load_config()
-    by_id = {accessory_uid(item): item for item in config.get("accessories", []) if isinstance(item, dict)}
-    resolved: list[dict[str, Any]] = []
-    for raw in required_refs:
-        if not isinstance(raw, dict):
-            continue
-        item_id = str(raw.get("accessory_id") or raw.get("id") or "").strip()
-        if not item_id:
-            continue
-        try:
-            expected_count = max(1, int(raw.get("expected_count") or 1))
-        except (TypeError, ValueError):
-            expected_count = 1
-        item = by_id.get(item_id)
-        if not item:
-            item = {
-                "id": item_id,
-                "name": bounded_text(raw.get("name") or item_id, 120),
-                "material_type": raw.get("material_type") or "object",
-                "source_files": [],
-                "normalized_assets": [],
-            }
-        profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else fallback_accessory_ai_profile(item)
-        resolved.append(required_accessory_profile_payload(item, expected_count, profile))
-    return resolved
+    return _accessory_profile_payloads.resolve_required_accessory_refs(required_refs)
 
 
 def provider_generate_json_error_payload(

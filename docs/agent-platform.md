@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Profile payload callbacks are selected at the original read points. Material helpers
+refresh between two prompt reads; reference callees are selected before effectful
+argument access. Resolver profile reads remain separate and required-profile callbacks
+are selected after fallback construction.
+
 Dimension value and update dependencies resolve at their original evaluation points. The
 payload callback is selected after all three numeric callbacks. Normalization fallback
 reads preserve length, width and height order and propagate conversion exceptions.

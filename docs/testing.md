@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_accessory_profile_payloads.py` retains 18 original groups and adds
+one same-class two-instance check. The 19 groups contain 79 test-method assertion sites
+and two bootstrap guards. Original coverage preserves prompt strings, aliases, counts,
+repeated reads, callback selection and partial failure behavior. The independent fixture
+exercises three methods and eight getters through substitute identity/profile/catalog
+collaborators; it does not establish all default helper chains or failures.
+
 `python scripts/smoke_accessory_dimensions.py` retains 18 original groups and adds a
 same-class two-instance check. The 19 groups have 64 test-method assertion sites and two
 bootstrap guards. Original coverage includes eager default mapping evaluation, lazy
