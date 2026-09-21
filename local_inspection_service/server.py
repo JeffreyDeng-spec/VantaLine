@@ -11930,93 +11930,17 @@ def ensure_required_profile_cache(required_accessories: list[dict[str, Any]], se
     return _profile_cache_flow.ensure_required_profile_cache(required_accessories, settings)
 
 
-def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
-    item = dict(payload.get("accessory") if isinstance(payload.get("accessory"), dict) else {})
-    if "expected_count" in payload:
-        item["expected_count"] = payload.get("expected_count")
-    fallback = fallback_accessory_ai_profile(item)
-    settings = dict(payload.get("provider_config") or ai_detection_settings("accessory"))
-    status = profile_generation_status(settings)
-    allow_provider = bool(payload.get("allow_provider", True))
-    if not allow_provider or not settings.get("configured"):
-        return {"tool": "accessory.profile.generate", "profile": fallback, "status": status, "ok": False}
+from .accessories.profile_generation import AccessoryProfileGeneration as _AccessoryProfileGeneration
+from .accessories.profile_generation_ports import GenerationProfiles as _GenerationProfiles, GenerationCalls as _GenerationCalls, GenerationReferences as _GenerationReferences, GenerationUpdates as _GenerationUpdates
+_accessory_profile_generation = _AccessoryProfileGeneration(
+    _GenerationProfiles(fallback=lambda: fallback_accessory_ai_profile, normalize=lambda: normalize_accessory_ai_profile, prompt=lambda: accessory_profile_prompt_payload, generate=lambda: generate_accessory_ai_profile),
+    _GenerationCalls(settings=lambda: ai_detection_settings, status=lambda: profile_generation_status, invoke=lambda: call_ai_mcp_tool),
+    _GenerationReferences(contexts=lambda: accessory_reference_image_contexts, limit=lambda: AI_PROFILE_REFERENCE_IMAGES, max_side=lambda: AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=lambda: AI_PROFILE_REFERENCE_IMAGE_QUALITY),
+    _GenerationUpdates(uid=lambda: accessory_uid, rename=lambda: ensure_accessory_english_name, dimensions=lambda: apply_ai_profile_dimensions_to_physical_size),
+)
 
-    references = call_ai_mcp_tool(
-        "accessory.reference.collect",
-        {
-            "accessory": item,
-            "reference_image_paths": payload.get("reference_image_paths"),
-            "max_images": payload.get("max_reference_images", AI_PROFILE_REFERENCE_IMAGES),
-            "max_side": payload.get("reference_max_side", AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE),
-            "quality": payload.get("reference_quality", AI_PROFILE_REFERENCE_IMAGE_QUALITY),
-        },
-    )["references"]
-    user_content: list[dict[str, Any]] = [
-        {"type": "text", "text": json.dumps(accessory_profile_prompt_payload(item), ensure_ascii=False)},
-    ]
-    for ref in references:
-        user_content.append(
-            {
-                "type": "text",
-                "text": f"REFERENCE_IMAGE for accessory_id={ref['accessory_id']}. Use this only as profile appearance evidence.",
-            }
-        )
-        user_content.append({"type": "image_url", "image_url": {"url": ref["data_url"], "detail": ref.get("detail", "low")}})
-    provider_result = call_ai_mcp_tool(
-        "provider.gemini.generate_json",
-        {
-            "provider_config": settings,
-            "system_prompt": (
-                "Create a structured accessory profile for visual inspection. "
-                "Use image evidence when available. Estimate the part's real-world physical "
-                "size by reasoning about the object type and any scale cues in the images: "
-                "return dimensions_mm as an object with numeric length_mm (longest side), "
-                "width_mm (second side), and height_mm (thickness), in millimeters, plus "
-                "top_view_aspect_ratio (length_mm divided by width_mm, >= 1.0). "
-                "SCALE CALIBRATION: if the payload contains a 'size_reference' object, then one "
-                "of the supplied images shows this part photographed next to that reference "
-                "object whose REAL dimensions are given (e.g. an A4 sheet is 297mm x 210mm, a "
-                "ruler shows centimeter graduations). Find the reference in the image, use its "
-                "known size as the measuring stick, and derive the part's true millimeter "
-                "dimensions by visual proportion against it. Prefer this calibrated measurement "
-                "over any generic guess. If the reference is not visible in any image, fall back "
-                "to reasoning from the object type. Keep the estimate physically plausible and "
-                "internally consistent. Return only JSON with keys: accessory_id, name, "
-                "material_type, description, tags, visual_signature, distinguishing_text, "
-                "negative_cues, dimensions_mm, top_view_aspect_ratio, expected_count."
-            ),
-            "user_content": user_content,
-            "max_tokens": 900,
-            "schema_hint": {"required_keys": list(fallback.keys())},
-        },
-    )
-    if provider_result.get("ok"):
-        profile = normalize_accessory_ai_profile(provider_result.get("parsed") or {}, item)
-        profile["reference_images"] = accessory_reference_image_contexts(item)
-        return {
-            "tool": "accessory.profile.generate",
-            "profile": profile,
-            "status": {
-                **status,
-                "source": "provider",
-                "status": "generated",
-                "message": "AI profile generated by provider.",
-                "latency_ms": provider_result.get("latency_ms", 0),
-                "reference_images": len(references),
-            },
-            "ok": True,
-        }
-    status.update(
-        {
-            "status": "timeout" if provider_result.get("timed_out") else "provider_error",
-            "message": provider_result.get("error") or "AI provider failed to generate accessory profile.",
-            "timed_out": bool(provider_result.get("timed_out")),
-            "latency_ms": provider_result.get("latency_ms", 0),
-            "reference_images": len(references),
-        }
-    )
-    fallback["reference_images"] = accessory_reference_image_contexts(item)
-    return {"tool": "accessory.profile.generate", "profile": fallback, "status": status, "ok": False}
+def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
+    return _accessory_profile_generation.tool_accessory_profile_generate(payload)
 
 
 from .detection.presence_inspection import PresenceInspection
@@ -12196,24 +12120,11 @@ def start_ai_mcp_warmup() -> None:
 
 
 def generate_accessory_ai_profile(item: dict[str, Any], *, allow_provider: bool = True) -> dict[str, Any]:
-    result = call_ai_mcp_tool(
-        "accessory.profile.generate",
-        {"accessory": item, "allow_provider": allow_provider, "provider_config": ai_detection_settings("accessory")},
-    )
-    item["ai_profile"] = result["profile"]
-    ensure_accessory_english_name(item)
-    item["ai_profile_status"] = result["status"]
-    if isinstance(result.get("profile"), dict):
-        apply_ai_profile_dimensions_to_physical_size(item, result["profile"].get("dimensions_mm"))
-    return result["profile"]
+    return _accessory_profile_generation.generate_accessory_ai_profile(item, allow_provider=allow_provider)
 
 
 def ensure_accessory_ai_profile(item: dict[str, Any], *, force: bool = False, allow_provider: bool = True) -> bool:
-    current = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else None
-    if not force and current and current.get("accessory_id") == accessory_uid(item):
-        return ensure_accessory_english_name(item)
-    generate_accessory_ai_profile(item, allow_provider=allow_provider)
-    return True
+    return _accessory_profile_generation.ensure_accessory_ai_profile(item, force=force, allow_provider=allow_provider)
 
 
 

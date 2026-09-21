@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_accessory_profile_generation.py` retains 18 original groups and
+adds one same-class two-instance check: 109 test-method assertion sites plus two
+bootstrap guards. Contracts preserve prompt SHA, eager defaults, callback timing,
+aliases and partial failures. Independent instances use substituted collaborators across
+all three methods and 14 getters; callable poison non-invocation is combined with getter
+logs and static free-name checks. This is not full default-chain, model or device
+commissioning.
+
 `python scripts/smoke_accessory_profile_payloads.py` retains 18 original groups and adds
 one same-class two-instance check. The 19 groups contain 79 test-method assertion sites
 and two bootstrap guards. Original coverage preserves prompt strings, aliases, counts,

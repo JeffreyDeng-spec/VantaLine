@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Profile generation selects the MCP callee before evaluating configuration arguments and
+refreshes it across collection and provider stages. The JSON serializer is selected
+before prompt construction. Repeated current-profile reads and late identity lookup
+remain distinct; no helper shortcut is introduced.
+
 Profile payload callbacks are selected at the original read points. Material helpers
 refresh between two prompt reads; reference callees are selected before effectful
 argument access. Resolver profile reads remain separate and required-profile callbacks
