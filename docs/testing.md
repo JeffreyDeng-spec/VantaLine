@@ -1,5 +1,13 @@
 # Testing
 
+`python scripts/smoke_accessory_dimensions.py` retains 18 original groups and adds a
+same-class two-instance check. The 19 groups have 64 test-method assertion sites and two
+bootstrap guards. Original coverage includes eager default mapping evaluation, lazy
+normalization fallback and late payload selection with failure-state preservation. The
+independent fixture calls all five methods and capabilities using substituted numeric,
+material and payload callbacks; it does not establish every default chain or failure
+path.
+
 `python scripts/smoke_accessory_profile.py` preserves 20 original groups and adds one
 same-class two-instance check. The 21 groups contain 73 test-method assertion sites plus
 two bootstrap guards. Original coverage distinguishes real optional_float from a

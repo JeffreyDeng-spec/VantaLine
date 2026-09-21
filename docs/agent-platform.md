@@ -1,5 +1,9 @@
 # Agent platform implementation status
 
+Dimension value and update dependencies resolve at their original evaluation points. The
+payload callback is selected after all three numeric callbacks. Normalization fallback
+reads preserve length, width and height order and propagate conversion exceptions.
+
 Profile identity, text, dimension and reference callbacks resolve at their original
 points. Alpha policy can refresh between the two fallback reads. Numeric callable
 selection occurs before reading its raw argument, and the reference cap is read after

@@ -2029,6 +2029,13 @@ def optional_float(value: Any) -> float | None:
         return None
 
 
+from .accessories.physical_dimensions import AccessoryDimensions as _AccessoryDimensions
+from .accessories.physical_dimension_ports import DimensionValues as _DimensionValues, DimensionUpdates as _DimensionUpdates
+_accessory_dimensions = _AccessoryDimensions(
+    _DimensionValues(number=lambda: optional_float, papers=lambda: STANDARD_PAPER_SIZES_MM, objects=lambda: DEFAULT_OBJECT_SIZE_MM),
+    _DimensionUpdates(material=lambda: accessory_material_type, payload=lambda: physical_size_payload),
+)
+
 def physical_size_payload(
     material_type: str,
     paper_preset: str = "A4",
@@ -2038,81 +2045,26 @@ def physical_size_payload(
     object_width_mm: Any = None,
     object_height_mm: Any = None,
 ) -> dict[str, Any]:
-    if material_type == "text":
-        preset = paper_preset if paper_preset in STANDARD_PAPER_SIZES_MM else "custom"
-        default_w, default_h = STANDARD_PAPER_SIZES_MM.get(preset, STANDARD_PAPER_SIZES_MM["A4"])
-        if preset in STANDARD_PAPER_SIZES_MM:
-            width_mm, height_mm = default_w, default_h
-        else:
-            width_mm = optional_float(paper_width_mm) or default_w
-            height_mm = optional_float(paper_height_mm) or default_h
-        return {
-            "kind": "paper",
-            "preset": preset,
-            "width_mm": width_mm,
-            "height_mm": height_mm,
-        }
-    return {
-        "kind": "object",
-        "length_mm": optional_float(object_length_mm) or DEFAULT_OBJECT_SIZE_MM["length_mm"],
-        "width_mm": optional_float(object_width_mm) or DEFAULT_OBJECT_SIZE_MM["width_mm"],
-        "height_mm": optional_float(object_height_mm) or DEFAULT_OBJECT_SIZE_MM["height_mm"],
-    }
+    return _accessory_dimensions.physical_size_payload(material_type, paper_preset, paper_width_mm, paper_height_mm, object_length_mm, object_width_mm, object_height_mm)
 
 
 def ai_profile_dimensions_from_physical_size(physical_size: dict[str, Any] | None) -> dict[str, Any]:
-    size = physical_size if isinstance(physical_size, dict) else {}
-    if size.get("kind") == "paper":
-        width = optional_float(size.get("width_mm")) or 210.0
-        height = optional_float(size.get("height_mm")) or 297.0
-        return {"length_mm": round(max(width, height), 2), "width_mm": round(min(width, height), 2), "height_mm": 0.3}
-    length = optional_float(size.get("length_mm")) or DEFAULT_OBJECT_SIZE_MM["length_mm"]
-    width = optional_float(size.get("width_mm")) or DEFAULT_OBJECT_SIZE_MM["width_mm"]
-    height = optional_float(size.get("height_mm")) or DEFAULT_OBJECT_SIZE_MM["height_mm"]
-    return {"length_mm": round(length, 2), "width_mm": round(width, 2), "height_mm": round(height, 2)}
+    return _accessory_dimensions.ai_profile_dimensions_from_physical_size(physical_size)
 
 
 def ai_profile_top_view_aspect_ratio(dimensions: dict[str, Any] | None) -> float:
-    dims = dimensions if isinstance(dimensions, dict) else {}
-    length = optional_float(dims.get("length_mm")) or 0.0
-    width = optional_float(dims.get("width_mm")) or 0.0
-    if length <= 0 or width <= 0:
-        return 1.0
-    return round(max(length, width) / max(1e-6, min(length, width)), 3)
+    return _accessory_dimensions.ai_profile_top_view_aspect_ratio(dimensions)
 
 
 def normalize_ai_profile_dimensions(raw: Any, fallback: dict[str, Any]) -> dict[str, Any]:
-    raw_dict = raw if isinstance(raw, dict) else {}
-    fallback_dict = fallback if isinstance(fallback, dict) else {}
-    result: dict[str, Any] = {}
-    for key in ("length_mm", "width_mm", "height_mm"):
-        value = optional_float(raw_dict.get(key))
-        result[key] = round(value, 2) if value else float(fallback_dict.get(key) or 0.0)
-    return result
+    return _accessory_dimensions.normalize_ai_profile_dimensions(raw, fallback)
 
 
 def apply_ai_profile_dimensions_to_physical_size(item: dict[str, Any], dimensions: dict[str, Any] | None) -> bool:
     """When the AI Profile judges real-world dimensions, feed them into the
     accessory physical_size so the compositor renders a consistent footprint for
     this accessory across every training set."""
-    if accessory_material_type(item) != "object":
-        return False
-    dims = dimensions if isinstance(dimensions, dict) else {}
-    length = optional_float(dims.get("length_mm"))
-    width = optional_float(dims.get("width_mm"))
-    height = optional_float(dims.get("height_mm"))
-    if not (length and width and height):
-        return False
-    new_size = physical_size_payload(
-        "object",
-        object_length_mm=length,
-        object_width_mm=width,
-        object_height_mm=height,
-    )
-    if isinstance(item.get("physical_size"), dict) and item.get("physical_size") == new_size:
-        return False
-    item["physical_size"] = new_size
-    return True
+    return _accessory_dimensions.apply_ai_profile_dimensions_to_physical_size(item, dimensions)
 
 
 def ensure_dirs() -> None:
