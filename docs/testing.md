@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_background_evidence.py` preserves 18 original groups and adds one
+two-instance A/B/A group for both services: 90 method assertion sites plus two bootstrap
+guards. Synthetic fixtures cover numerical representatives, source order, time boundary,
+strip ties, capped dimensions, seeded fill, write failures, late reads, patch caps and
+dictionary aliases. Inpaint coverage includes deadline equality, radius cap and fraction
+gates at 0 and 1, not exact mask-fraction equality. Independent paths use substitutes
+and getter logs for all 14 fields; they do not prove every image branch, default chain
+or real-image quality.
+
 `python scripts/smoke_accessory_profile_generation.py` retains 18 original groups and
 adds one same-class two-instance check: 109 test-method assertion sites plus two
 bootstrap guards. Contracts preserve prompt SHA, eager defaults, callback timing,
