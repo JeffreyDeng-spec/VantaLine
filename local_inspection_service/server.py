@@ -19922,70 +19922,30 @@ def background_reference_signatures_from_accessory(item: dict[str, Any]) -> list
     return _background_reference_signatures.background_reference_signatures_from_accessory(item)
 
 
+from .accessories.background_library_selection import BackgroundCandidateCatalog as _BackgroundCandidateCatalog
+from .accessories.background_library_selection import BackgroundLibraryMatcher as _BackgroundLibraryMatcher
+from .accessories.background_library_selection_ports import BackgroundOwnership as _BackgroundOwnership, BackgroundCatalogSources as _BackgroundCatalogSources, BackgroundCatalogPolicy as _BackgroundCatalogPolicy, BackgroundMatchSources as _BackgroundMatchSources, BackgroundMatchFeatures as _BackgroundMatchFeatures
+_background_candidate_catalog = _BackgroundCandidateCatalog(
+    _BackgroundOwnership(system=lambda: SYSTEM_OWNER_ID, legacy=lambda: LEGACY_OWNER_ID),
+    _BackgroundCatalogSources(manifest=lambda: load_background_sets_manifest, directories=lambda: background_set_dirs, sanitize=lambda: safe_background_set_id, visible=lambda: background_set_visible_for_owner, images=lambda: image_file_list, resolve=lambda: resolve_service_path),
+    _BackgroundCatalogPolicy(directory=lambda: BACKGROUND_SETS_DIR, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, limit=lambda: PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES),
+)
+_background_library_matcher = _BackgroundLibraryMatcher(
+    _BackgroundMatchSources(references=lambda: background_reference_signatures_from_accessory, candidates=lambda: background_library_image_candidates),
+    _BackgroundMatchFeatures(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature, distance=lambda: background_signature_distance),
+    lambda: PIPELINE_BG_MATCH_DISTANCE_THRESHOLD,
+)
+
 def background_set_visible_for_owner(meta: dict[str, Any], owner_id: str) -> bool:
-    meta_owner = str(meta.get("owner_user_id") or "")
-    shared = meta.get("shared_with_user_ids") if isinstance(meta.get("shared_with_user_ids"), list) else []
-    return not meta_owner or meta_owner in {owner_id, SYSTEM_OWNER_ID, LEGACY_OWNER_ID} or "*" in shared or owner_id in shared
+    return _background_candidate_catalog.background_set_visible_for_owner(meta, owner_id)
 
 
 def background_library_image_candidates(owner_id: str) -> list[tuple[str, Path, dict[str, Any]]]:
-    manifest = load_background_sets_manifest()
-    meta_sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-    candidates: list[tuple[str, Path, dict[str, Any]]] = []
-    ids = {path.name for path in background_set_dirs()} | {safe_background_set_id(item) for item in meta_sets.keys()}
-    for set_id in sorted(ids):
-        clean_id = safe_background_set_id(set_id)
-        if clean_id.startswith("task_plate_"):
-            continue
-        meta = meta_sets.get(clean_id) or meta_sets.get(set_id) or {}
-        if not background_set_visible_for_owner(meta, owner_id):
-            continue
-        images = image_file_list(BACKGROUND_SETS_DIR / clean_id)
-        source = resolve_service_path(meta.get("source"))
-        if source.exists() and source.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
-            images = [source] + [path for path in images if path.resolve() != source.resolve()]
-        for image_path in images[:8]:
-            candidates.append((clean_id, image_path, meta))
-            if len(candidates) >= PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES:
-                return candidates
-    return candidates
+    return _background_candidate_catalog.background_library_image_candidates(owner_id)
 
 
 def match_background_library_plate(item: dict[str, Any], owner_id: str) -> dict[str, Any] | None:
-    source_signatures = background_reference_signatures_from_accessory(item)
-    if not source_signatures:
-        return None
-    best: dict[str, Any] | None = None
-    for set_id, image_path, meta in background_library_image_candidates(owner_id):
-        image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-        if image is None:
-            continue
-        height, width = image.shape[:2]
-        library_signatures: list[dict[str, Any]] = []
-        for box in background_patch_boxes(width, height):
-            x1, y1, x2, y2 = box
-            signature = background_patch_signature(image[y1:y2, x1:x2])
-            if signature:
-                library_signatures.append(signature)
-        whole = background_patch_signature(image)
-        if whole:
-            library_signatures.append(whole)
-        for source_sig in source_signatures:
-            for lib_sig in library_signatures:
-                distance = background_signature_distance(source_sig, lib_sig)
-                if best is None or distance < float(best.get("distance") or 999.0):
-                    best = {
-                        "background_set_id": set_id,
-                        "image_path": str(image_path),
-                        "distance": round(float(distance), 6),
-                        "threshold": PIPELINE_BG_MATCH_DISTANCE_THRESHOLD,
-                        "source_path": source_sig.get("source_path"),
-                        "source_box_xyxy": source_sig.get("box_xyxy"),
-                        "generation_method": meta.get("generation_method") or "",
-                    }
-    if best and float(best.get("distance") or 999.0) <= PIPELINE_BG_MATCH_DISTANCE_THRESHOLD:
-        return best
-    return None
+    return _background_library_matcher.match_background_library_plate(item, owner_id)
 
 
 def ensure_pipeline_background_plate(task: dict[str, Any], config: dict[str, Any]) -> str | None:

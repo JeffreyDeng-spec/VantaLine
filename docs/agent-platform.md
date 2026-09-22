@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Background candidate and matching adapters retain public signatures and late helper
+selection. Matching keeps patch-before-whole projection, source-before-library
+comparison order, rounded-best comparison and fresh final threshold reads. A stored
+threshold can differ from the final threshold used for acceptance.
+
 Background plate and reference evidence retain late helper and policy resolution,
 dictionary aliases and existing mutation points. Root functions retain public
 signatures, defaults and registration order. Shared numerical module attributes remain
