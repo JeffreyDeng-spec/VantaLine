@@ -1,5 +1,10 @@
 # VantaLine release management
 
+Package profile generation, its typed ports, public adapters and source manifest
+together. Restore the previous complete release on failure and retain tasks, media,
+model-secret versions and call evidence. Do not copy individual source files or reverse
+existing database state.
+
 Package accessory profile payload services, typed ports, compatibility adapters and the
 source manifest together. Restore complete prior releases for rollback while retaining
 tasks, media, model-secret versions and call evidence; no individual source copying.
@@ -22,84 +27,84 @@ Whole-release rollback preserves tasks, media, model-secret versions and paid-ca
 evidence; no reverse migration or individual file copying.
 
 Ship preview asset loader, selector, ports and public adapters together with manifest
-v97. Whole-release rollback preserves task/call evidence, media and model-secret
+v98. Whole-release rollback preserves task/call evidence, media and model-secret
 versions; no reverse migration or individual source copying.
 
 Ship compositing helpers, AssetCompositor, capability ports and adapters together with
-manifest v97. Roll back the complete previous release while preserving task evidence,
+manifest v98. Roll back the complete previous release while preserving task evidence,
 media and model-secret versions; no reverse migration or individual source copying.
 
 Ship preview sprite decoding, renderer, capability ports and adapters together with
-manifest v97. Whole-release rollback preserves existing media, task/call evidence and
+manifest v98. Whole-release rollback preserves existing media, task/call evidence and
 model-secret versions; no reverse migration or individual source copying is needed.
 
-Ship the materialized asset services, typed ports, root adapters and manifest v97 in one
+Ship the materialized asset services, typed ports, root adapters and manifest v98 in one
 complete release. Whole-release rollback preserves media, tasks and secret versions;
 no reverse migration or individual source copying is required.
 
 Release preview pose policy with its existing domain module, typed ports, root adapters
-and manifest v97 as a complete package. Roll back the whole release while preserving
+and manifest v98 as a complete package. Roll back the whole release while preserving
 tasks, media and secret versions; no reverse migration is needed.
 
-Deploy the pose policy module and ports with their public adapters and manifest v97 in
+Deploy the pose policy module and ports with their public adapters and manifest v98 in
 one complete release. Roll back the complete package while retaining tasks, media and
 model-secret versions; no reverse migration or individual file copying is required.
 
-Deploy the four cutout geometry modules and their adapters with manifest v97 as one
+Deploy the four cutout geometry modules and their adapters with manifest v98 as one
 complete release. Restore the previous complete package on failure, preserving tasks,
 media and model-secret versions. No schema or physical-device change is included.
 
 Ship the cutout runtime owner, both consumer workflows, local ports and root adapters
-with manifest v97. Roll back the complete release, preserving tasks, media and call
+with manifest v98. Roll back the complete release, preserving tasks, media and call
 evidence. The old private root cache/lock bindings are replaced, not mirrored; public
 helper signatures remain compatible.
 
 Ship accessory alpha masks, material dispatcher, local ports and root adapters together
-with manifest v97. Restore the previous complete release for rollback; retain task,
+with manifest v98. Restore the previous complete release for rollback; retain task,
 media, configuration and call evidence without inverse migration.
 
 Ship the sprite artifact writer, canvas normalizer, local ports and root adapters together
-with manifest v97. Use whole-release rollback and retain task, media and model evidence;
+with manifest v98. Use whole-release rollback and retain task, media and model evidence;
 no migration or installer topology change is introduced.
 
-Ship all five sprite metadata sources and their adapters with manifest v97. Existing
+Ship all five sprite metadata sources and their adapters with manifest v98. Existing
 installer and service topology remain unchanged; roll back the previous complete release
 without copying individual source files or rewriting historical snapshots.
 
-Ship sprite geometry modules, local typed operations and root adapters with manifest v97.
+Ship sprite geometry modules, local typed operations and root adapters with manifest v98.
 Installer and service topology remain unchanged. Restore the previous complete release if
 validation fails; do not copy individual production source files.
 
-Ship object preprocessing and its local typed capabilities with source manifest v97 and
+Ship object preprocessing and its local typed capabilities with source manifest v98 and
 root adapter. Existing installer and rollback procedures remain; restore the previous
 complete release rather than copying individual source files.
 
 Ship crop analysis, selection and typed geometry ports with their root adapters and
-source manifest v97. Existing installer, service topology and rollback procedure remain.
+source manifest v98. Existing installer, service topology and rollback procedure remain.
 Restore the previous complete release if validation fails.
 
 Photo-highlight sprite coordination and its typed ports ship with the root adapter and
-source manifest v97. Existing lifecycle, worker topology and installer are unchanged.
+source manifest v98. Existing lifecycle, worker topology and installer are unchanged.
 Rollback restores the previous complete release without an inverse data migration.
 
 Photo-highlight input/comparison services, pure mask functions and their ports ship in
-the same release as the root adapters. Source manifest v97 records their actual modules.
+the same release as the root adapters. Source manifest v98 records their actual modules.
 Rollback restores the previous complete release without rewriting historical evidence.
 
 Photo-highlight workflow services and their source adapter ship together in the release.
-Manifest v97 includes their actual source files. Rollback restores the previous complete
+Manifest v98 includes their actual source files. Rollback restores the previous complete
 release and preserves task, media and model-call evidence.
 
 Pose chroma, cutout, sprite-build and materialization services ship with their typed ports and
-root adapters in the same release. Manifest v97 includes the actual source modules. Rollback
+root adapters in the same release. Manifest v98 includes the actual source modules. Rollback
 restores the previous complete release without rewriting historical snapshots or evidence.
 
 Pose call registration, execution and sample preparation ship with explicit capabilities and
-root adapters in one release, covered by source manifest v97. Restore the previous complete
+root adapters in one release, covered by source manifest v98. Restore the previous complete
 release on rollback without changing historical task snapshots or model versions.
 
 Pose render configuration, content and artifact services ship together with their narrow ports
-and root adapters. Source manifest v97 records the actual source files. Rollback restores
+and root adapters. Source manifest v98 records the actual source files. Rollback restores
 the previous complete release without rewriting historical task or model snapshots.
 
 Backend CI runs the active phase3d decision helper through an isolated offline entry, alongside
@@ -107,207 +112,207 @@ the existing source-location contract. This restores three-result empty-sync cov
 not assert full legacy workflow or physical-device acceptance.
 
 Pose planning policy, generation/cache and task assembly ship with explicit ports and root
-adapters in one release. Source manifest v97 records actual prompt sources; rollback restores
+adapters in one release. Source manifest v98 records actual prompt sources; rollback restores
 the previous complete release without rewriting historical tasks or model versions.
 
 Pose asset and template services ship with their narrow ports and application adapters in
-one release. Source manifest v97 includes all implementations. Restore the previous complete
+one release. Source manifest v98 includes all implementations. Restore the previous complete
 release without rewriting historical evidence.
 
 Agent orchestration state and call-record services ship with their typed ports and application
-adapters in one release. Source manifest v97 fingerprints the implementation. Restore the
+adapters in one release. Source manifest v98 fingerprints the implementation. Restore the
 previous complete release on rollback without rewriting task or model history.
 
 Agent pipeline actions and turn commits ship with their explicit ports and root adapters in
-one release, fingerprinted by source manifest v97. Rollback restores the complete previous
+one release, fingerprinted by source manifest v98. Rollback restores the complete previous
 frontend/backend package and keeps task, model and call evidence.
 
 Agent conversation and pipeline decision services ship together with their root adapters and
-source manifest v97. The single task snapshot binding remains on the application entry. Existing
+source manifest v98. The single task snapshot binding remains on the application entry. Existing
 module-location smoke checks follow the moved implementations; rollback uses the whole prior
 release without rewriting historical records.
 
-Agent settings HTTP handlers, application adapters and source manifest v97 ship together.
+Agent settings HTTP handlers, application adapters and source manifest v98 ship together.
 Route registration, authorization and terminal409 behavior remain compatible. Rollback uses
 the previous complete release; do not replace individual files or rewrite historical snapshots.
 
-Agent protocol, invocation, discovery and recommendation services and source manifest v97
+Agent protocol, invocation, discovery and recommendation services and source manifest v98
 deploy in one package. Offline contracts retain the original accounting boundary and fallback
 scopes. Restore the previous complete release for rollback; do not replace individual modules
 or rewrite model snapshots and usage evidence.
 
 Agent settings policy, public projections, legacy persistence, typed capabilities and manifest
-v97 ship together. Synthetic contracts cover permissions, callback ordering, failure evidence and
+v98 ship together. Synthetic contracts cover permissions, callback ordering, failure evidence and
 independent instances. Rollback restores the previous complete package and retains runtime state.
 
-Key identity, local secret-file services, typed capabilities and source manifest v97 deploy
+Key identity, local secret-file services, typed capabilities and source manifest v98 deploy
 as one package. Required offline tests cover persistence ordering, error evidence, safe references
 and independent service instances. Rollback selects the prior complete release without reverting
 or rewriting runtime secret material.
 
-Provider key registry adapters, business module, capabilities and source manifest v97 ship
+Provider key registry adapters, business module, capabilities and source manifest v98 ship
 together. Required CI verifies provider-specific normalization and public-key redaction without
 using live credentials. Rollback uses the prior complete release.
 
-Provider configuration defaults, validation, public URL formatting and manifest v97 ship
+Provider configuration defaults, validation, public URL formatting and manifest v98 ship
 together. CI preserves error contracts, eager fallback evaluation and dependency timing with
 synthetic values. Rollback uses the previous complete immutable release.
 
-Legacy JSON/image settings, root callbacks and manifest v97 deploy together. Required CI
+Legacy JSON/image settings, root callbacks and manifest v98 deploy together. Required CI
 checks existing precedence, exception handling, callback timing and independent compositions
 without paid requests. Rollback selects a complete prior immutable release.
 
-Status projection services, root adapters and manifest v97 deploy as one immutable release.
+Status projection services, root adapters and manifest v98 deploy as one immutable release.
 Offline CI covers restricted/admin views, unchanged field exclusions, callback timing and
 independent compositions. Installation and rollback use complete release packages.
 
-Provider orchestration, root adapters, explicit capabilities and manifest v97 deploy together.
+Provider orchestration, root adapters, explicit capabilities and manifest v98 deploy together.
 CI preserves model-selection guards, existing retry budgets, backoff, compatibility behavior and
 failure evidence with synthetic providers. Installation and rollback select a complete immutable
 release; no individual source file or historical snapshot is replaced separately.
 
-Agnes/Qwen image transports and manifest v97 deploy together with their root adapters.
+Agnes/Qwen image transports and manifest v98 deploy together with their root adapters.
 CI checks request and download failures, the existing one-time Agnes compatibility fallback,
 model accounting and dependency isolation using synthetic responses. The existing whole-release
 installation and rollback procedure remains unchanged.
 
 Gemini transport, explicit ports, root constructor/cache-default adapters and source manifest
-v97 ship together. Offline checks preserve request, resource, dependency-capture and accounting
+v98 ship together. Offline checks preserve request, resource, dependency-capture and accounting
 boundaries. Deployment and rollback continue to select a complete immutable release.
 
 The OpenAI-compatible transport and its additive instance-accounting adapter ship together
-with source manifest v97. Offline contracts check original requests, usage, failure evidence,
+with source manifest v98. Offline contracts check original requests, usage, failure evidence,
 dependency capture and resource lifecycle. Existing provider families and release topology stay
 unchanged; deployment and rollback always select the complete immutable release.
 
-Provider-foundation modules, their root aliases/adapters and source manifest v97 ship in one
+Provider-foundation modules, their root aliases/adapters and source manifest v98 ship in one
 immutable release. CI validates classification, payload parsing, dependency failures and exception
 serialization with synthetic input. The existing deployment and worker topology remains unchanged.
 
 Detection image encoding, inspection-image storage, reference collection/rendering and
-source manifest v97 ship together. CI runs synthetic media contracts with existing detection and
+source manifest v98 ship together. CI runs synthetic media contracts with existing detection and
 model checks. No publisher or service topology changes are introduced in this extraction.
 
-Image/video upload services, video projections and manifest v97 ship as one immutable package.
+Image/video upload services, video projections and manifest v98 ship as one immutable package.
 CI follows the actual moved upload implementations in the PLC no-dispatch guard and runs synthetic
 upload contracts. Root HTTP route order and video snapshot binding remain part of acceptance.
 
-Profile-cache policy, store, flow and manifest v97 ship as a single immutable package. CI runs
+Profile-cache policy, store, flow and manifest v98 ship as a single immutable package. CI runs
 the isolated cache suite plus existing accessory/detection callers. There is no file-format,
 cache-key version, provider or runtime-topology migration. Rollback restores the previous complete
 release while retaining existing cache, task, model and call evidence.
 
-Presence inspection, its narrow ports and manifest v97 are one immutable release unit. CI runs
+Presence inspection, its narrow ports and manifest v98 are one immutable release unit. CI runs
 the offline service contract alongside existing detection and model contracts. This extraction adds
 no worker, schema, installer or provider change; rollback restores the prior complete release.
 
-Detection orchestration, its ports and source manifest v97 ship in one immutable package.
+Detection orchestration, its ports and source manifest v98 ship in one immutable package.
 CI runs both offline suites and follows the moved implementations in the PLC contract. Model scope
 remains on the root entry; there is no runtime topology, installer or schema change. Rollback restores
 the previous complete release and retains task, model and call evidence.
 
-The annotation module and source manifest v97 are packaged with the existing web service.
+The annotation module and source manifest v98 are packaged with the existing web service.
 CI includes synthetic geometry/rendering/output contracts. No service, migration or installer
 change is needed; rollback restores the previous complete release and keeps stored task evidence.
 
-The presence result module and manifest v97 ship in the same immutable release. CI runs the
+The presence result module and manifest v98 ship in the same immutable release. CI runs the
 offline normalization contracts. This extraction needs no service, schema or installer change;
 rollback restores the previous complete package while retaining task and model snapshots.
 
-Failure projection/result modules ship with source manifest v97 as part of the immutable package.
+Failure projection/result modules ship with source manifest v98 as part of the immutable package.
 CI runs their offline contracts. There is no service, schema or installation change; rollback restores
 the previous complete release and retains existing task records and model snapshots.
 
-Presence payload/validation modules and source manifest v97 are packaged together. CI adds their
+Presence payload/validation modules and source manifest v98 are packaged together. CI adds their
 offline contracts. No install command, worker service, schema or runtime switch changes; rollback
 restores the previous complete package without rewriting stored task snapshots.
 
-Accessory lookup and detection requirements ship with source manifest v97 in the same immutable
+Accessory lookup and detection requirements ship with source manifest v98 in the same immutable
 package. CI runs their offline behavior contracts. There is no schema, service topology or install
 command change; rollback restores the previous complete release and retains stored snapshots.
 
-Retired task/refresh modules and source manifest v97 ship together in the immutable release.
+Retired task/refresh modules and source manifest v98 ship together in the immutable release.
 There is no schema, worker service, deployment switch or release-command change. Original failed
 settlement and read-only historical views remain; rollback restores the previous whole package.
 
-The retired request/status module ships with source manifest v97 in the complete immutable
+The retired request/status module ships with source manifest v98 in the complete immutable
 release. It changes no endpoint, environment switch, deployment command or enabled capability.
 Historical snapshots remain unchanged and rollback restores the previous whole package.
 
-The watcher module and source manifest v97 ship with the full immutable package. Startup hook
+The watcher module and source manifest v98 ship with the full immutable package. Startup hook
 registration remains at its original position; invocation is still a no-op. This change enables no
 service and adds no migration or deployment command. Rollback restores the previous whole release.
 
-Worker artifact import and source manifest v97 ship with the complete immutable release. There
+Worker artifact import and source manifest v98 ship with the complete immutable release. There
 is no schema, worker service, model algorithm or release-command change. Existing runtime files
 and historical snapshots are retained; rollback restores the previous complete release.
 
-Worker bundle metadata/submission and source manifest v97 ship as one immutable package.
+Worker bundle metadata/submission and source manifest v98 ship as one immutable package.
 Historical snapshots, worker topology and release commands remain. This extraction neither enables
 retired worker execution nor changes fallback policy; rollback restores the previous whole release.
 
-Streamed worker transport and progress modules ship with source manifest v97 as one immutable
+Streamed worker transport and progress modules ship with source manifest v98 as one immutable
 package. Existing worker topology and release commands remain. This is a structural extraction;
 no worker is enabled, schema added or partial-file deployment introduced.
 
-Remote training and worker compatibility modules ship with source manifest v97 as one immutable
+Remote training and worker compatibility modules ship with source manifest v98 as one immutable
 package. Historical model snapshots remain unchanged. No worker topology, schema, dependency,
 release command or retired-feature behavior changes; rollback restores the previous whole package.
 
 Background query, validation, upload services and HTTP adapters ship together with source manifest
-v97. The three relocated business source files are included for new task fingerprints; stored model
+v98. The three relocated business source files are included for new task fingerprints; stored model
 snapshots remain intact. No route, migration, worker topology or release command changes.
 
-Background Codex transport, task runner and submission ship together with source manifest v97.
+Background Codex transport, task runner and submission ship together with source manifest v98.
 The manifest records the actual relocated sources without rewriting historical model bindings.
 This batch does not enable a separate label worker or alter deployment/rollback commands.
 
-The three background write modules ship together with source manifest v97, which records their
+The three background write modules ship together with source manifest v98, which records their
 actual sources for new task fingerprints. Historical task bindings and fingerprints remain
 unchanged. There is no topology, schema, model-provider or deployment-command change.
 
 Background manifest, seeding, catalog and selection modules ship as one immutable-package change.
-Source manifest v97 includes their actual sources for new task fingerprints and leaves historical
+Source manifest v98 includes their actual sources for new task fingerprints and leaves historical
 bindings untouched. There is no schema or worker-mode change; rollback uses the previous whole
 release while preserving background assets and manifests.
 
 Jobs query, task mutation and HTTP adapter modules ship with the complete immutable package.
-Source manifest v97 tracks the moved query/mutation and image-control adapter sources for new fingerprints without rewriting
+Source manifest v98 tracks the moved query/mutation and image-control adapter sources for new fingerprints without rewriting
 historical snapshots. This batch adds no schema, migration or worker topology; whole-release
 rollback preserves task records and existing control-operation evidence.
 
-RunPod transfer service/store/API move together in the immutable release. Source manifest v97
+RunPod transfer service/store/API move together in the immutable release. Source manifest v98
 tracks the moved business and file-persistence sources for new task fingerprints; historical
 snapshots remain unchanged. No migration or worker-topology change accompanies this batch, and
 rollback uses the previous complete release while retaining transfer evidence and queued tasks.
 
 The training launch/status module extraction is an immutable-package-only change. Source manifest
-v97 includes the moved launch and status business files; historical task fingerprints remain intact.
+v98 includes the moved launch and status business files; historical task fingerprints remain intact.
 No schema, migration, worker topology or training/model policy changes. Rollback restores the whole
 prior release while retaining queued tasks and their model bindings.
 
-CI includes training input/state and immutable preview-fingerprint contracts. Source manifest v97
+CI includes training input/state and immutable preview-fingerprint contracts. Source manifest v98
 and all four cache/approval/dataset/status modules must travel together. This extraction changes no
 route, schema, migration, model/prompt policy or worker topology. Whole-package rollback preserves
 stored task snapshots, preview approvals and runtime task settlement records.
 
 CI includes preview workflow and artifact contracts. Publish the four preview workflow modules
-with source manifest v97 in one immutable release. No route/schema, migration, model policy or
+with source manifest v98 in one immutable release. No route/schema, migration, model policy or
 worker topology change. Restore the previous complete package on failure; preserve preview files,
 plan JSON, user state and historical task snapshots according to existing write semantics.
 
 CI includes full preview renderer contracts and the original pixel/metadata/call fingerprints.
-Ship renderer, its typed ports and source manifest v97 in one immutable package. No API, model,
+Ship renderer, its typed ports and source manifest v98 in one immutable package. No API, model,
 prompt policy, dependency, migration or process topology changes. Whole-package rollback preserves
 existing task snapshots and generated images/datasets; individual source files must not be copied.
 
-CI includes preview layout contracts. Publish geometry, masks, placement and source manifest v97
+CI includes preview layout contracts. Publish geometry, masks, placement and source manifest v98
 in the same complete release. This batch changes no routes, dependency versions, migrations,
 worker topology or rendering algorithm. Rollback restores the prior package and source manifest;
 stored task snapshots and generated datasets remain intact.
 
 CI includes deterministic background pixel and orchestration contracts. Ship both background
-modules and source manifest v97 in the same immutable release. No dependency, migration, route,
+modules and source manifest v98 in the same immutable release. No dependency, migration, route,
 worker topology or rendering algorithm changes. Rollback restores the complete prior package and
 its matching source list, preserving historical snapshots and existing generated datasets.
 
@@ -317,32 +322,32 @@ worker topology or source-manifest version change is introduced. Roll back the w
 package while retaining resource records, files and historical model references.
 
 CI adds resource-catalog contracts. Ship the dataset catalog, resource query and HTTP adapters
-with source manifest v97 in the complete immutable release. Routes, storage schema and process
+with source manifest v98 in the complete immutable release. Routes, storage schema and process
 topology retain their existing contracts. Rollback restores the entire previous package while
 retaining task records and historical model snapshots.
 
 CI includes the archive/artifact contract. Package all three new file-handling modules and
-source manifest v97 with the whole release. No database migration, endpoint, deployment service,
+source manifest v98 with the whole release. No database migration, endpoint, deployment service,
 worker contract or dependency is added. Restore the previous complete release and retain task
 records, archives, imported artifacts and historical model references.
 
 CI includes the offline RunPod flow contract. Ship submission, output-parser and flow modules
-with source manifest v97. This batch changes no request/worker contract, dependency, service,
+with source manifest v98. This batch changes no request/worker contract, dependency, service,
 migration or deployment topology. Rollback restores the complete prior release while retaining
 remote job identifiers, task evidence and stored model snapshots.
 
 CI includes the training dataset contract. Ship all four sample-generation modules and source
-manifest v97 as part of the same immutable release. There is no database migration, worker
+manifest v98 as part of the same immutable release. There is no database migration, worker
 switch, new dependency or training process change. Whole-release rollback retains task/model
 snapshots and existing sample files; this extraction performs no media cleanup.
 
 CI includes the offline training runner/submission contract. Package the three extracted
-training modules together with source manifest v97. Training still runs through the existing
+training modules together with source manifest v98. Training still runs through the existing
 process/thread topology; no new service, dependency, environment key or migration is added.
 Rollback restores the previous complete release while retaining frozen model references.
 
 CI runs the training-state service contracts. Deploy all four completion/state modules
-with source manifest v97 in the same immutable package. No migration, environment setting,
+with source manifest v98 in the same immutable package. No migration, environment setting,
 worker topology or release restart change accompanies this batch; rollback uses the prior
 whole package and retains task/call records and frozen model references.
 
@@ -353,25 +358,25 @@ It requires no new environment variable or migration and rolls back as a complet
 Training lifecycle CI adds synthetic process/permission contracts and an isolated
 PostgreSQL deletion/late-update scenario. Ship the lifecycle, views and runtime owner
 modules together. Existing startup callbacks and process topology remain; the model
-source manifest advances to v97 to cover all three moved files. Rollback remains
+source manifest advances to v98 to cover all three moved files. Rollback remains
 a complete immutable release.
 
 Pipeline store CI adds synthetic and isolated PostgreSQL contracts. The repository
 source gate inspects all eight real task/state selections and thirteen root forwards,
 without counting composition callbacks twice or lowering its original threshold.
-Ship the two stores, pure state policy and source manifest v97 in the whole release.
+Ship the two stores, pure state policy and source manifest v98 in the whole release.
 Worker launch, migrations and rollback topology are unchanged.
 
 Training storage CI now exercises its disposable PostgreSQL schema and eight moved
 helpers. The database source gate counts the three actual extracted entries, excludes
 the composition callback from totals and retains the original minimum threshold.
 Ship both training modules as part of the immutable release; launch and rollback
-commands and topology remain unchanged. Source manifest v97 now includes both
+commands and topology remain unchanged. Source manifest v98 now includes both
 training identity and storage so relocated selection/binding inputs remain covered.
 
 Backend CI now includes training discovery contracts with a disposable PostgreSQL
 schema, and dependency checks admit the training/pipeline packages. Publish all three
-new modules and source manifest v97 with the complete immutable release. This batch
+new modules and source manifest v98 with the complete immutable release. This batch
 does not change worker startup, release commands or rollback topology.
 
 Warmup method, path resolver, model loader and error formatter use narrow callback
@@ -381,18 +386,18 @@ before them. No retry, lock or thread admission policy is added.
 
 Warmup CI adds synthetic policy, prediction and runtime contracts while retaining
 the startup callback in the assembled application baseline. Ship the three relocated
-warmup modules and manifest v97 together. Worker topology and release commands remain.
+warmup modules and manifest v98 together. Worker topology and release commands remain.
 
 Local model factory lookup uses a narrow getter after path resolution and before
 string conversion, preserving callback replacement and missing-callable argument
 effects. Existing cache publication order and exception boundaries remain unchanged.
 
 The local-model runtime batch adds synthetic selection/cache coverage and ships both
-new modules with manifest v97. It retains the current warmup entry points, in-process
+new modules with manifest v98. It retains the current warmup entry points, in-process
 inference and immutable whole-release deployment/rollback.
 
 Task projection/catalog CI adds the focused synthetic smoke and keeps the original
-resource and detection endpoint checks. Manifest v97 records the new model-input
+resource and detection endpoint checks. Manifest v98 records the new model-input
 assembly sources. Whole-release rollout/rollback and worker startup are unchanged.
 
 The detection task-store batch adds its synthetic and disposable-PostgreSQL smoke
@@ -400,12 +405,12 @@ to backend CI and updates the repository source gate to inspect the extracted st
 Deployment/rollback remains the complete immutable release with the current topology.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v97 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v98 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
 The detection OCR batch adds its synthetic smoke and ships `runtime.paddle` plus
-five OCR modules with source manifest v97. Local factories never load real models in
+five OCR modules with source manifest v98. Local factories never load real models in
 these contracts. Keep the complete application and incoming/OCR regression checks;
 release startup, worker topology and whole-package rollback remain unchanged.
 Attachment crop, score and match getters capture the current callable at each
@@ -417,18 +422,18 @@ retry or model-initialization lock is introduced.
 
 The detection-result extraction adds synthetic backend smoke and admits the new
 `detection` package to dependency-direction checks. It preserves the HTTP contract,
-model parameters, worker topology and release commands. Ship source manifest v97
+model parameters, worker topology and release commands. Ship source manifest v98
 with all five detection modules to retain their source coverage for new tasks.
 Historical snapshots remain untouched; whole-release rollback is the recovery unit.
 
 The legacy incoming workflow batch adds its focused smoke to backend CI, retains
 both original incoming endpoint and repository checks, and compares the complete
 assembled HTTP baseline. It does not change worker topology or launch commands.
-Source manifest v97 records the relocated OCR input orchestrator for new snapshots.
+Source manifest v98 records the relocated OCR input orchestrator for new snapshots.
 Rollback remains the previous immutable release with existing persistent state.
 
 OCR/Beta CI adds ten offline initialization, image, cache and composition groups.
-Ship the analysis, comparison-cache and HTTP modules with manifest v97 and the root
+Ship the analysis, comparison-cache and HTTP modules with manifest v98 and the root
 state aliases. Model names, flags, business prompt versions and deployment topology
 are unchanged. Full-runtime CI must retain the existing incoming/Beta endpoint and
 model-snapshot checks before any sequential production rollout.
@@ -439,7 +444,7 @@ remain required. Ship both the runtime file adapter and legacy store with the ro
 aliases in the immutable artifact; database schema and worker topology are unchanged.
 
 Comparison/review CI adds eight offline boundary groups and six route-identity
-checks. Ship the submission, review, API and port modules plus manifest v97 together;
+checks. Ship the submission, review, API and port modules plus manifest v98 together;
 the source list now includes the actual comparison input and strict-prompt files.
 Business prompt text/version stays unchanged. Retain old task evidence on a normal
 whole-release rollback; no new worker mode is enabled by this package.
@@ -451,11 +456,11 @@ the immutable artifact. Runtime topology and complete-release rollback stay unch
 
 Revision/projection/diagnostic CI adds six isolated behavior contracts and assembled
 application identity checks. Ship these modules and their root adapters together.
-Manifest v97 and normal whole-release restart/rollback apply; no new topology or
+Manifest v98 and normal whole-release restart/rollback apply; no new topology or
 model configuration is enabled by this structural batch.
 
 Text-media CI adds real image/PDF and application-composition contracts. Package
-both media/image modules with source manifest v97, which covers their migrated
+both media/image modules with source manifest v98, which covers their migrated
 model-input producers. Stored snapshot fingerprints are not rewritten. No runtime
 dependency upgrade is needed; ordinary complete-release restart/rollback applies.
 Media fault injection preserves first-error evidence without retries. Callback and
@@ -515,7 +520,7 @@ Route-selection CI adds synthetic HTTP failure-order contracts. Package the new
 service and route module together. No schema, source-manifest, process-topology or
 PLC change is part of this extraction; preserve existing complete-release gates.
 
-Preparation CI adds synthetic workflow contracts and source manifest v97 includes
+Preparation CI adds synthetic workflow contracts and source manifest v98 includes
 the migrated prompt producer. Ship services and manifest together in the complete
 immutable release. Existing snapshots are not rewritten during deployment or rollback.
 

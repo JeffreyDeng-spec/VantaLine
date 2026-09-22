@@ -1,7 +1,9 @@
 {
-  "version": 97,
+  "version": 98,
   "sources": [
     "server.py",
+    "accessories/profile_generation.py",
+    "accessories/profile_generation_ports.py",
     "accessories/profile_payloads.py",
     "accessories/profile_payload_ports.py",
     "accessories/physical_dimensions.py",
