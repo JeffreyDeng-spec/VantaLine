@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Background plate and reference evidence retain late helper and policy resolution,
+dictionary aliases and existing mutation points. Root functions retain public
+signatures, defaults and registration order. Shared numerical module attributes remain
+shared; this does not promise arbitrary whole-root module replacement compatibility.
+
 Profile generation selects the MCP callee before evaluating configuration arguments and
 refreshes it across collection and provider stages. The JSON serializer is selected
 before prompt construction. Repeated current-profile reads and late identity lookup
