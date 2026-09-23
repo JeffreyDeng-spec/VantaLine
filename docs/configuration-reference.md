@@ -1,5 +1,7 @@
 # Configuration reference
 
+Pipeline reconciliation keeps the five-second list throttle, Agent selection and training-task lookup settings unchanged. Source manifest v114 contains 310 entries including the two moved reconciliation modules; new task fingerprints use their actual source, while existing snapshots and secret references remain unchanged.
+
 Pipeline accessory membership retains existing account-scoped configuration, canonical/alias resolution and public payload behavior. Source manifest v113 (308 entries) includes the three moved route modules for new task fingerprints; old snapshots, model bindings and secret references remain untouched.
 
 Pipeline Agent feedback preserves current action aliases, pose image provider configuration, model/tool-call selection and clock usage. Source manifest v112 (305 entries) records the three actual moved feedback modules for new fingerprints; historical snapshots, model versions and secret references are unchanged.

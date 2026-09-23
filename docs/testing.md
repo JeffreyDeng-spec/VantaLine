@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_reconciliation.py` replays the accepted-main four-function contract when `VANTALINE_RECONCILIATION_BASELINE_SOURCE` points to its `server.py`; otherwise it exercises the extracted service. Synthetic scenarios cover eligibility, zombie timeout boundaries, ordering, finder identity, duplicate IDs, partial effects and late callback rebinding without external services.
+
 `python scripts/smoke_pipeline_accessory_routes.py` replays accepted-main add/remove routes when `VANTALINE_ACCESSORY_ROUTES_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the candidate. Synthetic Windows/Linux cases cover canonical resolution, alias iteration order, repeated aliases, partial failures, payload overrides and callback rebinding. Candidate-only constructor, HTTP and A/B/A checks use no real PLC, paid inference or customer data.
 
 `python scripts/smoke_pipeline_agent_feedback.py` replays accepted-main feedback when `VANTALINE_FEEDBACK_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the extracted candidate. Synthetic Windows/Linux action and exception cases cover feedback-before-validation, sprite/legacy pose branches, lock placement, saves and unlocked scheduling. No paid image calls, physical PLC or customer records are used.

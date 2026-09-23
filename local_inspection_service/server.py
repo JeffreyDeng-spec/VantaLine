@@ -20490,25 +20490,42 @@ def commit_pipeline_agent_turn(
     return _agent_pipeline_turns.commit_pipeline_agent_turn(task, config, user, user_message, decision, trigger, pending_advances)
 
 
+from .pipeline.reconciliation import PipelineReconciliation as _PipelineReconciliation
+from .pipeline.reconciliation_ports import (
+    ReconciliationPolicy as _ReconciliationPolicy,
+    ReconciliationRegistry as _ReconciliationRegistry,
+    ReconciliationCalls as _ReconciliationCalls,
+)
+_pipeline_reconciliation = _PipelineReconciliation(
+    _ReconciliationPolicy(
+        normalize=lambda: normalize_pipeline_detection_method,
+        uses_training=lambda: pipeline_method_uses_training,
+    ),
+    _ReconciliationRegistry(
+        lock=lambda: _pipeline_advance_registry_lock,
+        inflight=lambda: _pipeline_advance_inflight,
+        timeout=lambda: PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S,
+        now=lambda: time.time,
+    ),
+    _ReconciliationCalls(
+        load_agent_config=lambda: load_agent_config,
+        supported=lambda: agent_recommendation_supported,
+        training_finder=lambda: training_task_finder,
+        reap=lambda: reap_pipeline_advance_zombie,
+        sync=lambda: sync_pipeline_task,
+        needs_auto_agent=lambda: pipeline_task_needs_auto_agent,
+        orchestration=lambda: agent_mcp_orchestration,
+        signature=lambda: pipeline_task_decision_signature,
+    ),
+)
+
+
 def pipeline_task_decision_signature(task: dict[str, Any]) -> str:
-    return f"{task.get('stage')}|{task.get('status')}|{int(task.get('progress') or 0)}"
+    return _pipeline_reconciliation.pipeline_task_decision_signature(task)
 
 
 def pipeline_task_needs_auto_agent(task: dict[str, Any]) -> bool:
-    if str(task.get("task_kind") or "") == "incoming_material_text":
-        return False
-    if not task.get("auto_advance"):
-        return False
-    detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
-    if not pipeline_method_uses_training(detection_method):
-        return False
-    stage = str(task.get("stage") or "")
-    status = str(task.get("status") or "")
-    if status == "completed" and stage in {"samples", "training"}:
-        return True
-    if status == "failed" and stage in {"draft", "samples", "training"}:
-        return True
-    return False
+    return _pipeline_reconciliation.pipeline_task_needs_auto_agent(task)
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
@@ -20797,49 +20814,11 @@ def reap_pipeline_advance_zombie(task: dict[str, Any]) -> bool:
     """Reset a task left in the advancing state with no live worker thread (e.g.
     the process restarted mid-advance) so the UI can distinguish working from
     timed-out and the user can retry. Returns True if the task was modified."""
-    if not task.get("advancing"):
-        return False
-    task_id = str(task.get("id") or "")
-    with _pipeline_advance_registry_lock:
-        if task_id in _pipeline_advance_inflight:
-            return False
-    started = int(task.get("advance_started_at") or 0)
-    if started and (int(time.time()) - started) < PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S:
-        return False
-    task.pop("advancing", None)
-    task.pop("advance_started_at", None)
-    task["last_error"] = "推进任务超时或中断，已自动终止，请重试。"
-    task["job_note"] = "推进已中断，请重试。"
-    task["updated_at"] = int(time.time())
-    return True
+    return _pipeline_reconciliation.reap_pipeline_advance_zombie(task)
 
 
 def sync_and_auto_advance_pipeline(tasks: list[dict[str, Any]]) -> tuple[bool, list[str], list[str]]:
-    agent_config = load_agent_config()
-    llm_driven = agent_recommendation_supported(agent_config)
-    changed = False
-    auto_agent_ids: list[str] = []
-    advance_ids: list[str] = []
-    # One shared finder so syncing N active tasks does one training_tasks fetch
-    # instead of a full-table scan per task.
-    find_training_task_for_path = training_task_finder()
-    for task in tasks:
-        if reap_pipeline_advance_zombie(task):
-            changed = True
-        if sync_pipeline_task(task, find_training_task_for_path):
-            changed = True
-        if not pipeline_task_needs_auto_agent(task):
-            continue
-        if llm_driven:
-            orchestration = agent_mcp_orchestration(task)
-            if orchestration.get("last_auto_signature") != pipeline_task_decision_signature(task):
-                auto_agent_ids.append(str(task.get("id")))
-            continue
-        if task.get("status") == "completed" and task.get("stage") in {"samples", "training"}:
-            # Route auto-advance through the async runner: no heavy work (incl. the
-            # worker upload) runs in the polling path or under _pipeline_tasks_lock.
-            advance_ids.append(str(task.get("id")))
-    return changed, auto_agent_ids, advance_ids
+    return _pipeline_reconciliation.sync_and_auto_advance_pipeline(tasks)
 
 
 # Reconciliation on the pipeline list GET is throttled so frequent polling (and

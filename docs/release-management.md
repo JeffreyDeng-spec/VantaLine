@@ -1,5 +1,7 @@
 # VantaLine release management
 
+Pipeline reconciliation extraction is a Web-only compatible release. The existing list route, background threads and rollback package remain in place; source manifest v114 records the two moved modules for new evidence only.
+
 Pipeline accessory add/remove route extraction is a single route-compatible Web release without data or topology migration. Source manifest v113 adds the actual moved modules; historical task evidence remains intact.
 
 Agent feedback extraction is one route-compatible Web release without a database or topology migration. Source manifest v112 adds the actual feedback modules; historical task evidence and rollback release packages remain intact.
