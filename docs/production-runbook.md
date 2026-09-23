@@ -1,5 +1,7 @@
 # Production runbook
 
+Pipeline reconciliation extraction preserves task and registry lock ownership, the five-second list throttle and current background scheduling behavior. No database migration, worker topology or operator setting changes; source manifest v114 affects only new task fingerprints.
+
 Pipeline accessory route extraction keeps the existing membership store, authorization and ordered alias removal semantics. No schema migration, worker topology, PLC behavior or operator setting changes; source manifest v113 affects new task fingerprints only.
 
 Agent feedback extraction preserves the single locked mutation/tool-call path and unlocked advance scheduling. This release does not alter worker topology, database schema, provider settings or the meaning of cancel. Source manifest v112 updates new task fingerprints only.

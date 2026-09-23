@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline status reconciliation now lives in `pipeline/reconciliation.py`. It preserves the original per-task reap, sync and auto-agent decision order through late-resolved capabilities; server retains the shared registry/locks, background runners, schedulers and public wrappers. No training job scan is added per task.
+
 Pipeline accessory add/remove routes now register in their original order through `pipeline/accessory_routes_api.py`. `pipeline/accessory_routes.py` owns request authentication, canonical ID resolution and ordered alias deletion using narrow late-resolved catalog capabilities. The underlying accessory store and alias policy retain ownership of persistence and locking; partial deletion and payload override behavior stay unchanged.
 
 Pipeline Agent feedback registers through `pipeline/agent_feedback_api.py`; `pipeline/agent_feedback.py` owns the unchanged action priority and mutations. Access, policy and runtime capabilities preserve the single task lock, legacy pose-tool execution inside it, feedback appended before branch validation, save/public under lock and scheduling afterward. The cancel action still updates task state only; worker cancellation remains with its current owner.
