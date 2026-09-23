@@ -20724,52 +20724,41 @@ def cancel_pipeline_advance(task_id: str) -> bool:
     return inflight
 
 
+from .pipeline.recommendations import PipelineRecommendations as _PipelineRecommendations
+from .pipeline.recommendation_ports import (
+    PipelineRecommendationLinks as _PipelineRecommendationLinks,
+    PipelineRecommendationMethodPolicy as _PipelineRecommendationMethodPolicy,
+)
+
+_pipeline_recommendations = _PipelineRecommendations(
+    _PipelineRecommendationMethodPolicy(
+        normalize=lambda: normalize_pipeline_detection_method,
+        uses_training=lambda: pipeline_method_uses_training,
+    ),
+    _PipelineRecommendationLinks(
+        signature=lambda: pipeline_recommendation_signature,
+        next_stage=lambda: pipeline_next_recommendation_stage,
+        ready=lambda: pipeline_recommendation_ready,
+    ),
+)
+
+
 def pipeline_recommendation_signature(task: dict[str, Any], stage: str) -> str:
-    accessory_ids = ",".join(str(item) for item in task.get("accessory_ids") or [])
-    params = task.get("params") if isinstance(task.get("params"), dict) else {}
-    sample_count = int(params.get("sample_count") or 0) if stage == "training" else 0
-    return f"{stage}|{accessory_ids}|{sample_count}"
+    return _pipeline_recommendations.pipeline_recommendation_signature(task, stage)
 
 
 def pipeline_next_recommendation_stage(task: dict[str, Any]) -> str:
     """Which stage's params should be pre-computed so the next step is ready."""
-    detection_method = normalize_pipeline_detection_method(
-        str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or "")
-    )
-    if not pipeline_method_uses_training(detection_method):
-        return ""
-    params = task.get("params") if isinstance(task.get("params"), dict) else {}
-    stage = str(task.get("stage") or "")
-    status = str(task.get("status") or "")
-    if stage == "draft" and "sample_count" not in params:
-        return "samples"
-    if stage == "samples" and status == "completed" and "epochs" not in params:
-        return "training"
-    return ""
+    return _pipeline_recommendations.pipeline_next_recommendation_stage(task)
 
 
 def pipeline_recommendation_ready(task: dict[str, Any], stage: str) -> bool:
-    rec = task.get("recommended_params")
-    return (
-        isinstance(rec, dict)
-        and rec.get("stage") == stage
-        and rec.get("signature") == pipeline_recommendation_signature(task, stage)
-        and isinstance(rec.get("params"), dict)
-    )
+    return _pipeline_recommendations.pipeline_recommendation_ready(task, stage)
 
 
 def consume_pipeline_recommendation(task: dict[str, Any], stage: str) -> dict[str, Any] | None:
     """Return (and clear) the pre-generated params for a stage if present."""
-    rec = task.get("recommended_params")
-    if isinstance(rec, dict) and rec.get("stage") == stage and isinstance(rec.get("params"), dict):
-        if rec.get("reason"):
-            task["agent_reason"] = rec.get("reason")
-        if rec.get("source"):
-            task["agent_source"] = rec.get("source")
-        params = dict(rec["params"])
-        task.pop("recommended_params", None)
-        return params
-    return None
+    return _pipeline_recommendations.consume_pipeline_recommendation(task, stage)
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
@@ -20828,13 +20817,7 @@ def schedule_pipeline_recommendation_pregen(items: list[tuple[str, str]], user: 
 
 
 def collect_pipeline_recommendation_pregen(tasks: list[dict[str, Any]]) -> list[tuple[str, str]]:
-    items: list[tuple[str, str]] = []
-    for task in tasks:
-        stage = pipeline_next_recommendation_stage(task)
-        if not stage or pipeline_recommendation_ready(task, stage):
-            continue
-        items.append((str(task.get("id")), stage))
-    return items
+    return _pipeline_recommendations.collect_pipeline_recommendation_pregen(tasks)
 
 
 def reap_pipeline_advance_zombie(task: dict[str, Any]) -> bool:
