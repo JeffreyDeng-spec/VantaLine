@@ -1,5 +1,7 @@
 # Production runbook
 
+Pipeline task-create extraction requires no database migration or worker-topology operation. Install and rollback switch the complete Web release under the existing health gate; saved task records remain in the current database.
+
 Pipeline task-update extraction changes the application route composition only. Deploy and rollback continue to switch the complete Web release; no database migration, worker-topology change, PLC action, or additional production command is required.
 
 

@@ -1,5 +1,7 @@
 # VantaLine release management
 
+The pipeline task-create route extraction keeps the existing Web release topology and rollback process. CI runs its offline creation regression; rollback restores the previous complete release while retaining current database records.
+
 The pipeline task-update route extraction ships with the existing single Web release topology. CI runs its offline task-update regression; rollback restores the prior complete release while retaining the current database state.
 
 Ship pipeline dataset/model availability projection, its three reader capabilities and root adapters with the matching source manifest. CI runs offline contracts; rollback restores the previous complete release without rewriting tasks or copying individual files.

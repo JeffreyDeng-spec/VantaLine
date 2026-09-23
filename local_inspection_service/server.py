@@ -20912,87 +20912,50 @@ def get_pipeline_tasks(user_id: str | None = None) -> dict[str, Any]:
     })
 
 
-@app.post("/api/pipeline/tasks")
-def create_pipeline_task(request: PipelineTaskCreateRequest, user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    task_kind = str(request.task_kind or "product_inspection").strip().lower()
-    if task_kind == "incoming_material_text":
-        require_permission("incoming_material_config", detail="没有包材文字标准配置权限")
-        require_permission("inspection", detail="当前账号没有日常检验权限，不能创建仅供本人使用的包材文字任务")
-        if request.inspection_user_ids:
-            raise HTTPException(status_code=400, detail="包材文字任务自动归当前账号使用，不支持分配给其他账号")
-    else:
-        require_permission("training_pipeline", detail="没有任务流水线权限")
-    if task_kind not in {"product_inspection", "incoming_material_text"}:
-        raise HTTPException(status_code=400, detail="不支持的任务类型")
-    target_user_id = None if task_kind == "incoming_material_text" else (user_id if user_is_admin(user) else None)
-    owner_fields = owner_fields_for_new_record(user, target_user_id)
-    owner_user_id = str(owner_fields.get("owner_user_id") or resource_owner_id_for_new_record(user))
-    config = scope_config_for_user(load_config(), user, target_user_id)
-    accessories_by_id = accessory_lookup_by_id(config)
-    accessory_ids = canonical_pipeline_accessory_ids(config, request.accessory_ids)
-    names = [str(accessories_by_id[item_id].get("name") or item_id) for item_id in accessory_ids]
-    labels = {item_id: names[index] for index, item_id in enumerate(accessory_ids)}
-    agent_config = load_agent_config()
-    if task_kind == "incoming_material_text":
-        if request.detection_method not in {None, "", "label_text_compare"}:
-            raise HTTPException(status_code=400, detail="包材文字任务只能使用 label_text_compare")
-        if request.accessory_ids or request.accessory_counts or request.expected_production_count not in {None, 0} or request.auto_advance:
-            raise HTTPException(status_code=400, detail="包材文字任务不接受配件、预计产量或自动训练参数")
-        detection_method = "label_text_compare"
-    else:
-        detection_method = normalize_pipeline_detection_method(request.detection_method)
-    expected_production_count = normalize_expected_production_count(request.expected_production_count)
-    if detection_method == "ai" and expected_production_count <= 0:
-        raise HTTPException(status_code=400, detail="创建 AI 任务需要填写预计产量")
-    material_code = str(request.material_code or "").strip()
-    material_name = str(request.material_name or "").strip()
-    if task_kind == "incoming_material_text" and not material_code:
-        raise HTTPException(status_code=400, detail="创建包材文字任务需要填写物料编码")
-    task_name = (request.name or "").strip() or (material_name if task_kind == "incoming_material_text" else (" + ".join(names) if names else "新流水线任务"))
-    inspection_user_ids: list[str] = []
-    params = {"train_mode": detection_method} if pipeline_method_uses_training(detection_method) else {"route": detection_method}
-    if expected_production_count:
-        params["expected_production_count"] = expected_production_count
-    task = {
-        "id": f"pipe_{uuid.uuid4().hex[:10]}",
-        "name": task_name,
-        "accessory_ids": accessory_ids,
-        "accessory_counts": normalize_pipeline_accessory_counts(config, accessory_ids, request.accessory_counts),
-        "accessory_names": names,
-        "accessory_labels": labels,
-        "detection_method": detection_method,
-        "task_kind": task_kind,
-        "material_code": material_code,
-        "material_name": material_name,
-        "stage": "library" if task_kind == "incoming_material_text" else "draft",
-        "status": "setup_required" if task_kind == "incoming_material_text" else "ready",
-        "progress": 0,
-        "params": params,
-        "expected_production_count": expected_production_count,
-        "auto_advance": False if task_kind == "incoming_material_text" else bool(request.auto_advance if request.auto_advance is not None else agent_config.get("auto_advance_default", True)),
-        "created_at": int(time.time()),
-        "updated_at": int(time.time()),
-        **owner_fields,
-        "shared_with_user_ids": inspection_user_ids,
-    }
-    with _pipeline_tasks_lock:
-        assert_unique_task_name(task_name, owner_user_id)
-        if detection_method == "ai" and accessory_ids:
-            activate_pipeline_ai_detection_task(task, config)
-        save_pipeline_task(task)
-    if detection_method == "ai" and task.get("ai_task_id"):
-        initialize_auto_optimize_for_pipeline_task(task, config)
-        with _pipeline_tasks_lock:
-            existing = load_pipeline_task(str(task.get("id") or ""))
-            if existing:
-                task = {**existing, **task, "updated_at": int(time.time())}
-                save_pipeline_task(task)
-    pregen_stage = pipeline_next_recommendation_stage(task)
-    if pregen_stage:
-        schedule_pipeline_recommendation_pregen([(str(task.get("id")), pregen_stage)], _request_user.get())
-    return pipeline_task_public(task, config)
+from .pipeline.task_create import PipelineTaskCreator as _PipelineTaskCreator
+from .pipeline.task_create_api import register_pipeline_task_create_api
+from .pipeline.task_create_ports import (
+    TaskCreateAccess as _TaskCreateAccess,
+    TaskCreatePolicy as _TaskCreatePolicy,
+    TaskCreateRuntime as _TaskCreateRuntime,
+)
 
+_pipeline_task_creator = _PipelineTaskCreator(
+    _TaskCreateAccess(
+        current_user=lambda: current_auth_user,
+        require_permission=lambda: require_permission,
+        http_error=lambda: HTTPException,
+        is_admin=lambda: user_is_admin,
+        owner_fields=lambda: owner_fields_for_new_record,
+        fallback_owner=lambda: resource_owner_id_for_new_record,
+        scope_config=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        accessory_lookup=lambda: accessory_lookup_by_id,
+        load_agent_config=lambda: load_agent_config,
+    ),
+    _TaskCreatePolicy(
+        canonical_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        normalize_detection_method=lambda: normalize_pipeline_detection_method,
+        normalize_expected_count=lambda: normalize_expected_production_count,
+        method_uses_training=lambda: pipeline_method_uses_training,
+        normalize_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+        assert_unique_name=lambda: assert_unique_task_name,
+        next_recommendation_stage=lambda: pipeline_next_recommendation_stage,
+    ),
+    _TaskCreateRuntime(
+        uuid4=lambda: uuid.uuid4,
+        now=lambda: time.time,
+        lock=lambda: _pipeline_tasks_lock,
+        activate_ai_task=lambda: activate_pipeline_ai_detection_task,
+        save_task=lambda: save_pipeline_task,
+        initialize_auto_optimize=lambda: initialize_auto_optimize_for_pipeline_task,
+        load_task=lambda: load_pipeline_task,
+        schedule_pregen=lambda: schedule_pipeline_recommendation_pregen,
+        request_user=lambda: _request_user,
+        public_task=lambda: pipeline_task_public,
+    ),
+)
+create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)
 
 from .pipeline.task_update import PipelineTaskUpdater as _PipelineTaskUpdater
 from .pipeline.task_update_api import register_pipeline_task_update_api
