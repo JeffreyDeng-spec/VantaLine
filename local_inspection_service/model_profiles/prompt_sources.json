@@ -1,7 +1,9 @@
 {
-  "version": 100,
+  "version": 101,
   "sources": [
     "server.py",
+    "agent/pipeline_background_publication.py",
+    "agent/pipeline_background_publication_ports.py",
     "accessories/background_library_selection.py",
     "accessories/background_library_selection_ports.py",
     "accessories/background_evidence.py",

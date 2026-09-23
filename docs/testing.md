@@ -1,5 +1,12 @@
 # Testing
 
+`python scripts/smoke_pipeline_background_publication.py` retains 24 original groups
+and adds one independent two-instance A/B/A group: 150 method assertion sites plus two
+bootstrap guards. Synthetic contracts preserve prompt text, selection and provider
+ordering, settings mutation, manifest/task partial effects and strict final hashing.
+They use local temporary images and provider substitutes; real paid calls and PLC I/O
+are outside this test.
+
 `python scripts/smoke_background_library_selection.py` retains 18 original groups and
 adds one independent A/B/A group for both services: 83 method assertion sites plus two
 bootstrap guards. Synthetic contracts cover sharing, sorting, aliases, source
