@@ -128,8 +128,10 @@ def main() -> None:
     assert "uq_incoming_text_reference_active" in ddl
 
     server_text = (APP_DIR / "server.py").read_text(encoding="utf-8")
-    assert 'task_kind = str(request.task_kind or "product_inspection")' in server_text
-    assert 'detection_method = "label_text_compare"' in server_text
+    task_create_text = (APP_DIR / "pipeline" / "task_create.py").read_text(encoding="utf-8")
+    assert 'task_kind = str(request.task_kind or "product_inspection")' in task_create_text
+    assert 'detection_method = "label_text_compare"' in task_create_text
+    assert 'create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)' in server_text
     assert "def _duplicate_incoming_capture" in server_text
     assert "review_incoming_text_inspection" in server_text
     analysis_text = (APP_DIR / "text_inspection" / "incoming_analysis.py").read_text(encoding="utf-8")
