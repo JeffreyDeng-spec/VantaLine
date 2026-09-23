@@ -1,10 +1,12 @@
 # Production runbook
 
+Pipeline resource-status projection ships with its root adapters and both source-manifest entries as one complete package. Worker topology, database schema and deployment commands remain unchanged; restore the previous complete release if required.
+
 Pipeline task label and accessory-name projection ships with its root adapters and both new source-manifest entries in one complete package. It changes no worker topology, database schema or deployment commands; restore the previous complete release if needed.
 
 Pipeline recommendation helper extraction changes no worker topology, database schema or release commands. Publish and restore its Web adapters, helper module and ports as one complete package with the bundled source manifest.
 
-The current source manifest is v104 (282 entries). Per-domain notes describe which sources belong in the complete release; they do not identify when each module first appeared. Deploy and roll back only a complete release with its matching bundled manifest.
+The current source manifest is v105 (284 entries). Per-domain notes describe which sources belong in the complete release; they do not identify when each module first appeared. Deploy and roll back only a complete release with its matching bundled manifest.
 
 Pipeline AI task-card synchronization remains in the Web process. The bundled source manifest includes its new module and ports; deployment and whole-release rollback use the existing procedure.
 

@@ -1,6 +1,8 @@
 # Configuration reference
 
-The current source manifest is v104 (282 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
+The current source manifest is v105 (284 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
+
+Dataset/model resource-status projection retains the current input, loader and file-existence semantics. Source manifest v105 includes its service and ports for new task fingerprints; historical snapshots remain unchanged.
 
 Pipeline task label and accessory-name projection uses the current linked AI task labels and retains the existing name fallbacks. Source manifest v104 includes the two moved files for new task fingerprints; historical snapshots and model bindings remain unchanged.
 

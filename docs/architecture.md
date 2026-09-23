@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline dataset and model resource availability projections live in `pipeline/resource_status.py`. Three late-resolved readers preserve the existing dataset finder, AI task loader and trained-spec loader at their original call sites. File existence and caller-provided preloaded sets/lists retain their current semantics; this extraction adds no caching or batch reads.
+
 Pipeline task labels and accessory display names now live in `pipeline/task_snapshots.py`. Three late-resolved capabilities preserve the current AI-task label load, accessory lookup and public root label adapter at their original call sites. The Web entry still owns linked-task storage and the configuration-writing recovery path; this projection adds no cache or model-snapshot rewrite.
 
 Pipeline recommendation signature, next-stage choice, readiness, cached-parameter consumption and pre-generation selection live in `pipeline/recommendations.py`. Two narrow capability groups preserve per-call method and root-helper lookup. The Web entry still owns the pinned-model background runner, scheduler, locks, thread lifecycle and persistence; recommendations retain caller-owned task mutation.
