@@ -1,12 +1,14 @@
 # Configuration reference
 
+Manual pipeline advance and cancel keep their existing request identity, permission checks, double task load on cancellation, repeated-request behavior, state text and exact lock boundaries. Source manifest v109 (296 entries) records the three moved control files for new task fingerprints; prior snapshots and bindings stay unchanged.
+
 Pipeline deletion keeps the existing request identity and record-access order, linked ID filtering and duplicate rules, error responses, and partial cleanup after the locked row delete. Source manifest v108 (293 entries) includes the three moved task-delete files for new fingerprints; historical snapshots and bindings are unchanged.
 
 Pipeline creation keeps existing permission and owner selection order, request defaults, incoming-material constraints, AI task binding and two distinct save phases. Source manifest v107 (290 entries) includes the three moved task-create files for new fingerprints; historical snapshots and bindings are unchanged.
 
 Pipeline task update retains the existing role and record checks, incoming-material restrictions, current request-model defaults and coercion, partial in-memory mutation on later failure and the previous save/projection order. Source manifest v106 (287 entries) includes the three moved task-update files for new fingerprints; historical task snapshots and model bindings are unchanged.
 
-The current source manifest is v108 (293 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
+The current source manifest is v109 (296 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
 
 Dataset/model resource-status projection retains the current input, loader and file-existence semantics. Source manifest v105 includes its service and ports for new task fingerprints; historical snapshots remain unchanged.
 
