@@ -1,5 +1,7 @@
 # VantaLine release management
 
+The pipeline task-delete route extraction preserves the existing single-Web release topology and database schema. CI runs its offline deletion contract. Rollback restores the prior complete code release; it does not resurrect tasks or linked resources already deleted under the current release.
+
 The pipeline task-create route extraction keeps the existing Web release topology and rollback process. CI runs its offline creation regression; rollback restores the previous complete release while retaining current database records.
 
 The pipeline task-update route extraction ships with the existing single Web release topology. CI runs its offline task-update regression; rollback restores the prior complete release while retaining the current database state.
@@ -10,7 +12,7 @@ Ship pipeline task label/name projection, three late-resolved ports and root ada
 
 Pipeline recommendation helpers and their typed ports ship with the existing Web adapters in one complete package. CI runs the focused synthetic helper contracts. The pinned background runner, scheduler and existing rollback procedure remain unchanged.
 
-The current source manifest is v105 (284 entries). Per-domain notes describe which sources belong in the complete release; they do not identify when each module first appeared. Deploy and roll back only a complete release with its matching bundled manifest.
+The current source manifest is v108 (293 entries). Per-domain notes describe which sources belong in the complete release; they do not identify when each module first appeared. Deploy and roll back only a complete release with its matching bundled manifest.
 
 The pipeline AI task synchronization extraction adds a focused offline CI contract and two source-manifest entries in v102. It retains the existing single-Web release topology and does not change deployment or rollback commands.
 
