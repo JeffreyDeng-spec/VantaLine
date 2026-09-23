@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_ai_task_sync.py` covers 17 root-compatible synthetic behavior groups (13 before extraction, 17 against accepted-main AST) and one independent composition group after extraction. It checks visibility, duplicate IDs, reverse insertion, existing object identity, paused state, default loading, partial errors and late root bindings. Independent A/B/A service instances exercise all 14 capability getter names on representative success paths without root business callbacks. This does not use real models, PLC, customer records or a production database.
+
 `python scripts/smoke_pipeline_background_publication.py` retains 24 original groups
 and adds one independent two-instance A/B/A group: 150 method assertion sites plus two
 bootstrap guards. Synthetic contracts preserve prompt text, selection and provider

@@ -1,5 +1,9 @@
 # Configuration reference
 
+The current source manifest is v102 (278 entries). Later v101 references describe the previous complete manifest snapshot, not the first version that introduced each module; operational deployment and rollback always use the manifest bundled with the selected release.
+
+AI task pipeline synchronization retains existing accessory route selection, account visibility, task identity and saved-card state. Source manifest v102 adds the two actual pipeline sync sources (278 total); new task fingerprints follow the moved code, while historical snapshots and model bindings remain unchanged.
+
 Pipeline background publication preserves the original prompt and image model settings,
 library-first selection, reference cap and existing fallback behavior. Source manifest
 v101 adds the actual coordinator and ports (276 entries) for new task fingerprints;

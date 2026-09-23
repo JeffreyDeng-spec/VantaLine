@@ -1,7 +1,9 @@
 {
-  "version": 101,
+  "version": 102,
   "sources": [
     "server.py",
+    "pipeline/ai_task_sync.py",
+    "pipeline/ai_task_sync_ports.py",
     "agent/pipeline_background_publication.py",
     "agent/pipeline_background_publication_ports.py",
     "accessories/background_library_selection.py",

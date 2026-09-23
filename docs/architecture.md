@@ -1,5 +1,7 @@
 # Architecture
 
+AI detection task-to-pipeline card synchronization lives in `pipeline/ai_task_sync.py`. Four narrow capability groups keep identity, accessory, visibility and projection dependencies late-bound. The Web entry retains its three public adapters; the list endpoint still owns locking, loading and persistence. Existing cards are updated in place, and the coordinator does not retain a user, connection or task list.
+
 Pipeline background plate prompt and publication now live in `agent/pipeline_background_publication.py`.
 One coordinator retains library matching, provider fallback, variant creation and manifest/task
 publication order. Six narrow capability groups resolve dependencies at their original read
@@ -617,7 +619,7 @@ store instance; test replacements belong at its ports. Root background resolver 
 prefix remain late-bound for compatibility.
 Row decoding and background callback getters resolve at the original expressions:
 after preceding work and before fetch/string/mapping argument effects. Missing
-callbacks preserve argument evaluation and TypeError. Source manifest v101 covers
+callbacks preserve argument evaluation and TypeError. Source manifest v102 covers
 the three task modules; no retry, cache policy or transaction change is introduced.
 
 
@@ -642,7 +644,7 @@ rules and overlays now live in `detection.geometry`, `postprocessing`, `results`
 service receive narrow label providers; the parser resolves the root postprocessor
 at use time. These modules own no model, worker, identity or database state. Internal
 pure helper substitutions belong in their actual modules, not unrelated root aliases.
-Manifest v101 includes these five modules so relocation retains source provenance.
+Manifest v102 includes these five modules so relocation retains source provenance.
 Provider and postprocessor exceptions propagate without an automatic retry.
 
 Nine legacy incoming-text routes now live in `text_inspection.incoming_api`,
@@ -723,7 +725,7 @@ annotation, data-URL and similarity functions. The entry point keeps compatible
 exports/forwards and provides narrow getters for resize constants at their original
 comparison, thumbnail and encoding expressions. The owned-record callback is
 resolved after preceding asset checks and before its identifier argument. No eager
-policy or callback caching is introduced. Source manifest v101 includes both
+policy or callback caching is introduced. Source manifest v102 includes both
 migrated media producers so new task provenance covers their actual shipped code.
 
 `text_inspection.record_store.TextRecordStore` now owns text-record JSON/SQL
@@ -805,7 +807,7 @@ for normalization/reference expansion, `AccessoryRefresh` for post-edit preparat
 and `CandidateFactory` for candidate creation. Narrow media, profile and persistence
 ports retain existing call ordering and partial file effects. Crop/video/image
 algorithms remain existing providers. The actual object-plan prompt is now in
-`accessories/preparation.py`, included in source manifest v101 for new tasks.
+`accessories/preparation.py`, included in source manifest v102 for new tasks.
 
 `accessories.image_job_metadata` owns deterministic job identity, candidate job
 aliases, anchor/guide provenance and update binding. Its service receives an

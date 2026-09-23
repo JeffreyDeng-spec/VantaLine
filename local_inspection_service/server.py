@@ -20049,20 +20049,46 @@ def sync_ready_pipeline_ai_detection_tasks(
     return False
 
 
+from .pipeline.ai_task_sync import PipelineAiTaskSync as _PipelineAiTaskSync
+from .pipeline.ai_task_sync_ports import (
+    PipelineAiAccess as _PipelineAiAccess,
+    PipelineAiAccessories as _PipelineAiAccessories,
+    PipelineAiIdentity as _PipelineAiIdentity,
+    PipelineAiProjection as _PipelineAiProjection,
+)
+
+_pipeline_ai_task_sync = _PipelineAiTaskSync(
+    _PipelineAiIdentity(
+        safe_record_id=lambda: safe_record_id,
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        ai_detection_task_model_id=lambda: ai_detection_task_model_id,
+    ),
+    _PipelineAiAccessories(
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        accessory_material_type=lambda: accessory_material_type,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+    ),
+    _PipelineAiAccess(
+        source=lambda: PIPELINE_DASHBOARD_AI_TASK_SOURCE,
+        record_visible_to_user=lambda: record_visible_to_user,
+        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
+    ),
+    _PipelineAiProjection(
+        clean_ai_detection_task_name=lambda: clean_ai_detection_task_name,
+        training_route=lambda: pipeline_ai_task_training_route,
+        task_id=lambda: pipeline_ai_task_id,
+        now=lambda: time.time,
+    ),
+)
+
+
 def pipeline_ai_task_id(ai_task_id: str) -> str:
-    return f"pipe_ai_{safe_record_id(sanitize_ai_detection_task_id(ai_task_id))}"
+    return _pipeline_ai_task_sync.pipeline_ai_task_id(ai_task_id)
 
 
 def pipeline_ai_task_training_route(ai_task: dict[str, Any], config: dict[str, Any]) -> str:
-    accessories_by_id = accessory_lookup_by_id(config)
-    selected_ids = canonical_pipeline_accessory_ids(
-        config, [str(item_id) for item_id in ai_task.get("selected_accessory_ids") or []]
-    )
-    for item_id in selected_ids:
-        item = accessories_by_id.get(item_id) or {}
-        if accessory_material_type(item) == "text" or str(item.get("training_role") or "") == "detect_then_ocr":
-            return "yolo_ocr"
-    return "yolo"
+    return _pipeline_ai_task_sync.pipeline_ai_task_training_route(ai_task, config)
 
 
 def sync_pipeline_ai_detection_tasks(
@@ -20079,73 +20105,9 @@ def sync_pipeline_ai_detection_tasks(
     model exists. They do not remove the original AI task; they keep a stable
     pipeline card linked to it so optimization/training state has one task home.
     """
-    changed = False
-    by_ai_task_id = {str(item.get("ai_task_id") or ""): item for item in tasks if item.get("ai_task_id")}
-    by_id = {str(item.get("id") or ""): item for item in tasks}
-    now = int(time.time())
-    for ai_task in (ai_tasks if ai_tasks is not None else load_ai_detection_tasks()):
-        if str(ai_task.get("source") or "") == PIPELINE_DASHBOARD_AI_TASK_SOURCE:
-            continue
-        if not record_visible_to_user(ai_task, user, target_user_id):
-            continue
-        ai_task_id = str(ai_task.get("id") or "")
-        if not ai_task_id:
-            continue
-        accessory_ids = canonical_pipeline_accessory_ids(
-            config, [str(item_id) for item_id in ai_task.get("selected_accessory_ids") or []]
-        )
-        if not accessory_ids:
-            continue
-        route = pipeline_ai_task_training_route(ai_task, config)
-        pipeline_id = pipeline_ai_task_id(ai_task_id)
-        existing = by_ai_task_id.get(ai_task_id) or by_id.get(pipeline_id)
-        payload = {
-            "id": pipeline_id,
-            "name": clean_ai_detection_task_name(ai_task.get("name"), "AI 检测任务"),
-            "task_kind": "ai_optimization",
-            "accessory_ids": accessory_ids,
-            "accessory_counts": normalize_pipeline_accessory_counts(config, accessory_ids, ai_task.get("required_accessory_counts")),
-            "detection_method": "ai",
-            "optimization_route": route,
-            "stage": "library",
-            "status": "completed",
-            "progress": 100,
-            "params": {"route": "ai", "recommended_train_mode": route},
-            "auto_advance": True,
-            "ai_task_id": ai_task_id,
-            "ai_model_id": ai_detection_task_model_id(ai_task_id),
-            "linked_view": "aiInspect",
-            "job_note": "AI 检测任务已纳入任务流水线，可持续采集数据并自动优化 YOLO。",
-            "last_error": "",
-            "created_at": int(float(ai_task.get("created_at") or now)),
-            "updated_at": int(float(ai_task.get("updated_at") or now)),
-            "owner_user_id": str(ai_task.get("owner_user_id") or ""),
-            "owner_username": str(ai_task.get("owner_username") or ""),
-            "shared_with_user_ids": ai_task.get("shared_with_user_ids") if isinstance(ai_task.get("shared_with_user_ids"), list) else [],
-        }
-        if existing:
-            existing_paused = bool(existing.get("pause_requested")) or str(existing.get("status") or "") == "stopped"
-            keep = {
-                "stage": existing.get("stage") or payload["stage"],
-                "status": existing.get("status") or payload["status"],
-                "progress": existing.get("progress", payload["progress"]),
-                "auto_advance": False if existing_paused else True,
-                "pause_requested": existing.get("pause_requested", False),
-                "agent_mcp": existing.get("agent_mcp"),
-                "datasets": existing.get("datasets"),
-                "candidate_models": existing.get("candidate_models"),
-            }
-            next_task = {**existing, **payload, **{k: v for k, v in keep.items() if v is not None}}
-            if next_task != existing:
-                existing.clear()
-                existing.update(next_task)
-                changed = True
-        else:
-            tasks.insert(0, payload)
-            by_ai_task_id[ai_task_id] = payload
-            by_id[pipeline_id] = payload
-            changed = True
-    return changed
+    return _pipeline_ai_task_sync.sync_pipeline_ai_detection_tasks(
+        tasks, config, user, target_user_id, ai_tasks=ai_tasks
+    )
 
 
 def normalize_pipeline_task_auto_advance_defaults(tasks: list[dict[str, Any]]) -> bool:
