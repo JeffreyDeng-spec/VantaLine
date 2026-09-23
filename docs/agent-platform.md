@@ -1,5 +1,10 @@
 # Agent platform implementation status
 
+Pipeline background publication retains its prompt, library-first selection, eager
+configuration/reference reads, provider-error fallback and existing partial effects.
+The coordinator uses six typed capability groups; the root functions keep their public
+signatures and late dependency lookup. This extraction adds no retry or worker process.
+
 Background candidate and matching adapters retain public signatures and late helper
 selection. Matching keeps patch-before-whole projection, source-before-library
 comparison order, rounded-best comparison and fresh final threshold reads. A stored
