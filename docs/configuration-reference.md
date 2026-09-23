@@ -1,6 +1,8 @@
 # Configuration reference
 
-The current source manifest is v105 (284 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
+Pipeline task update retains the existing role and record checks, incoming-material restrictions, current request-model defaults and coercion, partial in-memory mutation on later failure and the previous save/projection order. Source manifest v106 (287 entries) includes the three moved task-update files for new fingerprints; historical task snapshots and model bindings are unchanged.
+
+The current source manifest is v106 (287 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
 
 Dataset/model resource-status projection retains the current input, loader and file-existence semantics. Source manifest v105 includes its service and ports for new task fingerprints; historical snapshots remain unchanged.
 
