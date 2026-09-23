@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_task_create.py` runs synthetic creation scenarios against the current candidate; setting `VANTALINE_CREATE_BASELINE_SOURCE` to an accepted-main `server.py` replays the original function. Both modes were run on Windows/Linux locally, covering permissions, owner fallback, field construction order, two-phase AI saves, callback rebinding and partial effects after failures. Candidate-only constructor and A/B/A instance checks verify explicit capabilities. No paid model, physical PLC or customer records are used.
+
 `python scripts/smoke_pipeline_task_update.py` uses synthetic tasks to verify PATCH endpoint identity, late callback selection, partial mutation before 409, incoming-material and ordinary projection lock positions, save/projection failures, non-draft parameter updates and OverflowError propagation. The backend contract also checks route order, schema and operationId; no paid provider or PLC is accessed.
 
 `python scripts/smoke_pipeline_resource_status.py` covers 21 original behavior groups on accepted main and one independent three-reader A/B/A group after extraction, on Windows and Linux. It checks deleted/none/available/pending/missing precedence, supplied empty collections, first matching spec, filesystem checks, callback rebinding and exception identity. Synthetic tests perform no real PLC or paid inference.
