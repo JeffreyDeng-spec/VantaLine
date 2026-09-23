@@ -1,6 +1,6 @@
 # RunPod YOLO Training Worker
 
-The current source manifest is v102; worker artifacts and Web code are deployed as one matching release.
+Worker artifacts and Web code are deployed as one matching release with its bundled source manifest.
 
 Platform transfer routes now use explicit transfer and upload-store services. Worker URLs, token
 checks, expiry, ZIP streaming limits and result metadata remain unchanged; no worker rollout or
@@ -11,18 +11,18 @@ Web-side training ZIPs, tokenized export metadata and artifact import now use
 The worker format stays unchanged: conversion skips only configured top-level directories,
 uploaded artifacts select the first matching original member name in sorted order, and only
 the selected weight bytes are written to the fixed import target. Existing checksum/path checks,
-metadata ordering, cleanup and failure residue are retained. Source manifest v102 includes these producers.
+metadata ordering, cleanup and failure residue are retained. The bundled source manifest includes these producers.
 
 Web-side RunPod payload construction, single submission, polling and strict output parsing
 now use `training.runpod_submission`, `training.runpod_flow` and `training.runpod_outputs`.
 The existing upload/export/import endpoints and worker package remain unchanged. Polling
 still starts even for an already-completed submission response, uses the original pre-sleep
 deadline comparison, and preserves the import/update/sync/warmup sequence. No automatic
-retry or cancel is added. Source manifest v102 and historical task binding rules apply.
+retry or cancel is added. The bundled source manifest and historical task binding rules apply.
 
 The Web-side sample plan, labels/YAML, annotation previews and dataset manifest now come
 from explicit `training` modules. Sample contents, seed behavior and archive/RunPod input
-contracts are unchanged. Source manifest v102 covers those relocated producers. No worker
+contracts are unchanged. The bundled source manifest covers those relocated producers. No worker
 service, submission retry, archive format or GPU execution policy changes in this extraction.
 
 Training dispatch now enters `training.runner.TrainingRunner`; task construction lives in
@@ -30,7 +30,7 @@ Training dispatch now enters `training.runner.TrainingRunner`; task construction
 and worker package stay unchanged. Samples-only tasks still complete before executor dispatch.
 The runner binds saved model references once before its separate task load and delegates to
 the original RunPod flow; ordinary training threads gain no new identity propagation. New
-source fingerprints use manifest v102, while historical task references remain untouched.
+source fingerprints use the bundled manifest, while historical task references remain untouched.
 
 The Web-side executor settings now live in `training/executor_settings.py`, and the active
 HTTP adapter/response summary in `training/runpod_client.py`. Dataset/archive input assembly,
