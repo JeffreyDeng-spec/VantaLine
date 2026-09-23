@@ -1,10 +1,13 @@
 {
-  "version": 107,
+  "version": 108,
   "sources": [
     "server.py",
     "pipeline/task_create.py",
     "pipeline/task_create_api.py",
     "pipeline/task_create_ports.py",
+    "pipeline/task_delete.py",
+    "pipeline/task_delete_api.py",
+    "pipeline/task_delete_ports.py",
     "pipeline/task_update.py",
     "pipeline/task_update_api.py",
     "pipeline/task_update_ports.py",

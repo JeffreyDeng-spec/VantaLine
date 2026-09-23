@@ -21020,75 +21020,33 @@ def remove_pipeline_accessory(accessory_id: str) -> dict[str, Any]:
     return {"status": "removed", "accessory_id": canonical_id, **pipeline_accessories_payload(config, user)}
 
 
-@app.delete("/api/pipeline/tasks/{task_id}")
-def delete_pipeline_task(task_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    linked_job_ids: list[str] = []
-    linked_dataset_ids: list[str] = []
-    linked_model_run_ids: list[str] = []
-    linked_ai_task_ids: list[str] = []
-    # Stop any in-flight advance worker first so it self-cleans and doesn't keep
-    # burning CPU or re-create a ghost record after we delete it.
-    cancel_pipeline_advance(task_id)
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if task:
-            require_record_access(task, user, write=True)
-            linked_job_ids = [
-                str(item_id)
-                for item_id in (task.get("samples_task_id"), task.get("training_task_id"))
-                if str(item_id or "").strip()
-            ]
-            linked_dataset_ids = list(
-                dict.fromkeys(
-                    str(item_id)
-                    for item_id in (task.get("dataset_id"), task.get("samples_task_id"))
-                    if str(item_id or "").strip()
-                )
-            )
-            linked_model_run_ids = list(
-                dict.fromkeys(
-                    str(item_id)
-                    for item_id in (task.get("model_run_id"), task.get("training_task_id"))
-                    if str(item_id or "").strip()
-                )
-            )
-            linked_ai_task_ids = [
-                str(item_id)
-                for item_id in (task.get("ai_task_id"),)
-                if str(item_id or "").strip()
-            ]
-        if not delete_pipeline_task_row(task_id):
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-    deleted_datasets = []
-    for dataset_id in linked_dataset_ids:
-        deleted = delete_training_dataset_resource(dataset_id, user, missing_ok=True)
-        if deleted:
-            deleted_datasets.append(dataset_id)
-    deleted_models = []
-    for run_id in linked_model_run_ids:
-        deleted = delete_training_model_resource(run_id, user, missing_ok=True)
-        if deleted:
-            deleted_models.append(run_id)
-    deleted_training_jobs = []
-    for job_id in linked_job_ids:
-        deleted = delete_training_task_record(job_id, user, missing_ok=True)
-        if deleted:
-            deleted_training_jobs.append(job_id)
-    deleted_ai_tasks = []
-    for ai_task_id in linked_ai_task_ids:
-        deleted = delete_ai_detection_task_record(ai_task_id, user, missing_ok=True)
-        if deleted:
-            deleted_ai_tasks.append(ai_task_id)
-    return {
-        "status": "deleted",
-        "deleted_task_id": task_id,
-        "deleted_datasets": deleted_datasets,
-        "deleted_models": deleted_models,
-        "deleted_ai_tasks": deleted_ai_tasks,
-        "deleted_training_jobs": deleted_training_jobs,
-    }
-
+from .pipeline.task_delete import PipelineTaskDeleter as _PipelineTaskDeleter
+from .pipeline.task_delete_api import register_pipeline_task_delete_api
+from .pipeline.task_delete_ports import (
+    TaskDeleteAccess as _TaskDeleteAccess,
+    TaskDeleteRuntime as _TaskDeleteRuntime,
+    TaskDeleteCleanup as _TaskDeleteCleanup,
+)
+_pipeline_task_deleter = _PipelineTaskDeleter(
+    _TaskDeleteAccess(
+        current_user=lambda: current_auth_user,
+        load_task=lambda: load_pipeline_task,
+        require_record_access=lambda: require_record_access,
+        http_error=lambda: HTTPException,
+    ),
+    _TaskDeleteRuntime(
+        cancel_advance=lambda: cancel_pipeline_advance,
+        lock=lambda: _pipeline_tasks_lock,
+        delete_task_row=lambda: delete_pipeline_task_row,
+    ),
+    _TaskDeleteCleanup(
+        delete_dataset=lambda: delete_training_dataset_resource,
+        delete_model=lambda: delete_training_model_resource,
+        delete_training_job=lambda: delete_training_task_record,
+        delete_ai_task=lambda: delete_ai_detection_task_record,
+    ),
+)
+delete_pipeline_task = register_pipeline_task_delete_api(app, _pipeline_task_deleter)
 
 @app.post("/api/pipeline/tasks/{task_id}/agent-feedback")
 def pipeline_agent_feedback(task_id: str, request: PipelineAgentFeedbackRequest) -> dict[str, Any]:
