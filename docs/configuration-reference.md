@@ -1,5 +1,7 @@
 # Configuration reference
 
+Pipeline Agent chat retains current model selection, config scope, task snapshot and one-decision behavior. Source manifest v110 (299 entries) includes the three actual Agent chat modules for new task fingerprints; historical snapshots, model bindings and secret references remain unchanged.
+
 Manual pipeline advance and cancel keep their existing request identity, permission checks, double task load on cancellation, repeated-request behavior, state text and exact lock boundaries. Source manifest v109 (296 entries) records the three moved control files for new task fingerprints; prior snapshots and bindings stay unchanged.
 
 Pipeline deletion keeps the existing request identity and record-access order, linked ID filtering and duplicate rules, error responses, and partial cleanup after the locked row delete. Source manifest v108 (293 entries) includes the three moved task-delete files for new fingerprints; historical snapshots and bindings are unchanged.

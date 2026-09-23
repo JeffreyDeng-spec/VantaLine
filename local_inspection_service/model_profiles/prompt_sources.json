@@ -1,7 +1,10 @@
 {
-  "version": 109,
+  "version": 110,
   "sources": [
     "server.py",
+    "pipeline/agent_chat.py",
+    "pipeline/agent_chat_api.py",
+    "pipeline/agent_chat_ports.py",
     "pipeline/advance_control.py",
     "pipeline/advance_control_api.py",
     "pipeline/advance_control_ports.py",
