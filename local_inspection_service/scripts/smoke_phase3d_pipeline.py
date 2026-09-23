@@ -197,7 +197,7 @@ def assert_react_pipeline_route() -> None:
         "feedback request model": "PipelineAgentFeedbackRequest",
         "feedback endpoint": "/api/pipeline/tasks/{task_id}/agent-feedback",
         "chat request model": "PipelineAgentChatRequest",
-        "chat endpoint": "/api/pipeline/tasks/{task_id}/chat",
+
         "decision brain": "def agent_pipeline_decide",
         "decision normalizer": "def normalize_agent_pipeline_decision",
         "rule fallback decision": "def agent_pipeline_rule_decision",
@@ -247,6 +247,8 @@ def assert_react_pipeline_route() -> None:
         methods = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == method_name]
         assert len(methods) == 1, f"Missing implementation method: {class_name}.{method_name}"
         implementation_sources[label] = ast.get_source_segment(source, methods[0])
+    chat_api = (REPO_ROOT / "local_inspection_service" / "pipeline" / "agent_chat_api.py").read_text(encoding="utf-8")
+    assert "/api/pipeline/tasks/{task_id}/chat" in chat_api and "register_pipeline_agent_chat_api" in server
     missing_server = [label for label, snippet in expected_server.items() if snippet not in implementation_sources.get(label, server)]
     if missing_server:
         raise AssertionError("Backend Agent/MCP preview skeleton missing: " + ", ".join(missing_server))

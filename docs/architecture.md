@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline Agent chat registers through `pipeline/agent_chat_api.py` at its historical route position. `pipeline/agent_chat.py` owns the two locked task reads and a single out-of-lock Agent decision; narrow late-resolved access/runtime capabilities preserve authorization, deep snapshot, partial commit/save effects and scheduling order. Decision policy, paid call evidence and task runner remain with their existing owners.
+
 Manual pipeline advance and cancel requests now register in their original order through `pipeline/advance_control_api.py`; `pipeline/advance_control.py` owns validation, marking and pause-state updates. Two focused late-resolved capability groups preserve the nested task/registry lock, out-of-lock scheduling, cancellation signal between two locked task reads, and current partial effects. The runner, scheduler, inflight registry and cancellation mapping remain with their original owners.
 
 Pipeline task POST now registers at its historical route position through `pipeline/task_create_api.py`; `pipeline/task_create.py` owns the complete creation use case. Focused late-resolved capabilities preserve permissions, owner resolution, two-stage AI persistence, recommendation scheduling and partial effects. The Web entry still owns storage, the shared lock and the actual AI activation/optimization/scheduler implementations; create extraction does not finish pipeline domain migration.

@@ -21166,37 +21166,33 @@ def pipeline_agent_feedback(task_id: str, request: PipelineAgentFeedbackRequest)
     return result
 
 
-@app.post("/api/pipeline/tasks/{task_id}/chat")
-def pipeline_agent_chat(task_id: str, request: PipelineAgentChatRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    message = bounded_text(request.message, 1000)
-    if not message:
-        raise HTTPException(status_code=400, detail="消息内容不能为空")
-    # Validate access/method and snapshot the task without holding the lock during the Agent call.
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-        require_record_access(task, user, write=True)
-        detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
-        if not pipeline_method_uses_training(detection_method):
-            raise HTTPException(status_code=409, detail="该任务使用 AI 检测，建档完成即可直接使用，无需 Agent 训练编排。")
-        snapshot = copy.deepcopy(task)
-    decision = agent_pipeline_decide(snapshot, config, user_message=message, trigger="chat")
-    pending_advances: list[str] = []
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-        require_record_access(task, user, write=True)
-        commit_pipeline_agent_turn(task, config, user, message, decision, "chat", pending_advances=pending_advances)
-        save_pipeline_task(task)
-        result = pipeline_task_public(task, config)
-    for advance_id in pending_advances:
-        schedule_pipeline_advance(advance_id, user)
-    return result
+from .pipeline.agent_chat import PipelineAgentChat as _PipelineAgentChat
+from .pipeline.agent_chat_api import register_pipeline_agent_chat_api
+from .pipeline.agent_chat_ports import AgentChatAccess as _AgentChatAccess, AgentChatRuntime as _AgentChatRuntime
 
+_pipeline_agent_chat = _PipelineAgentChat(
+    _AgentChatAccess(
+        current_user=lambda: current_auth_user,
+        load_config=lambda: load_config,
+        scope_config=lambda: scope_config_for_user,
+        bounded_text=lambda: bounded_text,
+        load_task=lambda: load_pipeline_task,
+        require_record_access=lambda: require_record_access,
+        http_error=lambda: HTTPException,
+    ),
+    _AgentChatRuntime(
+        task_lock=lambda: _pipeline_tasks_lock,
+        normalize_method=lambda: normalize_pipeline_detection_method,
+        uses_training=lambda: pipeline_method_uses_training,
+        deepcopy=lambda: copy.deepcopy,
+        decide=lambda: agent_pipeline_decide,
+        commit_turn=lambda: commit_pipeline_agent_turn,
+        save_task=lambda: save_pipeline_task,
+        public_task=lambda: pipeline_task_public,
+        schedule_advance=lambda: schedule_pipeline_advance,
+    ),
+)
+pipeline_agent_chat = register_pipeline_agent_chat_api(app, _pipeline_agent_chat)
 
 from .pipeline.advance_control import PipelineAdvanceController as _PipelineAdvanceController
 from .pipeline.advance_control_api import register_pipeline_advance_control_api

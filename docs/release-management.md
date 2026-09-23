@@ -1,5 +1,7 @@
 # VantaLine release management
 
+The Agent chat extraction ships as one route-compatible release with no deployment topology change or data migration. Its three actual modules are recorded in source manifest v110 for new task evidence; historical task snapshots remain intact.
+
 Manual pipeline advance/cancel route extraction ships in the existing complete Web release with matching source manifest. CI runs its focused offline contract. Rollback restores prior code and topology but does not undo tasks already marked advancing or paused.
 
 The pipeline task-delete route extraction preserves the existing single-Web release topology and database schema. CI runs its offline deletion contract. Rollback restores the prior complete code release; it does not resurrect tasks or linked resources already deleted under the current release.
