@@ -1,7 +1,10 @@
 {
-  "version": 112,
+  "version": 113,
   "sources": [
     "server.py",
+    "pipeline/accessory_routes.py",
+    "pipeline/accessory_routes_api.py",
+    "pipeline/accessory_routes_ports.py",
     "pipeline/agent_feedback.py",
     "pipeline/agent_feedback_api.py",
     "pipeline/agent_feedback_ports.py",
