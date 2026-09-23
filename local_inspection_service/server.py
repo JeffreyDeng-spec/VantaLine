@@ -20850,67 +20850,59 @@ PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS = 5.0
 _pipeline_tasks_sync_last_at = 0.0
 
 
-@app.get("/api/pipeline/tasks")
-def get_pipeline_tasks(user_id: str | None = None) -> dict[str, Any]:
+def _set_pipeline_tasks_sync_last_at(value: float) -> None:
     global _pipeline_tasks_sync_last_at
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    full_config = load_config()
-    config = scope_config_for_user(full_config, user, target_user_id)
-    ai_detection_tasks = load_ai_detection_tasks()
-    auto_agent_ids: list[str] = []
-    advance_ids: list[str] = []
-    with _pipeline_tasks_lock:
-        tasks = load_pipeline_tasks()
-        now = time.monotonic()
-        if now - _pipeline_tasks_sync_last_at >= PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS:
-            _pipeline_tasks_sync_last_at = now
-            if ensure_pipeline_task_accessory_objects(full_config, tasks):
-                save_config(full_config)
-                config = scope_config_for_user(full_config, user, target_user_id)
-            ai_tasks_changed = sync_pipeline_ai_detection_tasks(tasks, config, user, target_user_id, ai_tasks=ai_detection_tasks)
-            ready_ai_tasks_changed = sync_ready_pipeline_ai_detection_tasks(tasks, config, user, target_user_id)
-            auto_defaults_changed = normalize_pipeline_task_auto_advance_defaults(tasks)
-            changed, auto_agent_ids, advance_ids = sync_and_auto_advance_pipeline(tasks)
-            if changed or ai_tasks_changed or ready_ai_tasks_changed or auto_defaults_changed:
-                save_pipeline_tasks(tasks)
-        visible_tasks = [task for task in tasks if record_visible_to_user(task, user, target_user_id)]
-        visible_tasks = [
-            task
-            for task in visible_tasks
-            if str(task.get("task_kind") or "") != "incoming_material_text"
-            or incoming_text_task_access_allowed(task, user)
-        ]
-        if not user_has_permission(user, "training_pipeline"):
-            visible_tasks = [task for task in visible_tasks if str(task.get("task_kind") or "") == "incoming_material_text"]
-        recommendation_pregen = collect_pipeline_recommendation_pregen(visible_tasks)
-    if auto_agent_ids:
-        schedule_pipeline_auto_agent(auto_agent_ids, user)
-    for advance_id in advance_ids:
-        schedule_pipeline_advance(advance_id, user)
-    if recommendation_pregen:
-        schedule_pipeline_recommendation_pregen(recommendation_pregen, user)
-    ai_task_ids = {str(item.get("id") or "") for item in ai_detection_tasks if str(item.get("id") or "")}
-    trained_model_specs = list_trained_model_specs(config)
-    auto_optimize_states = list_auto_optimize_states()
-    auto_optimize_states_by_id = auto_optimize_states_by_task_id(auto_optimize_states)
-    return public_path_sanitized({
-        "items": [
-            pipeline_task_public(
-                task,
-                config,
-                ai_task_ids=ai_task_ids,
-                trained_model_specs=trained_model_specs,
-                auto_optimize_states=auto_optimize_states,
-                auto_optimize_states_by_id=auto_optimize_states_by_id,
-                sanitize=False,
-            )
-            for task in visible_tasks
-        ],
-        "agent": public_agent_config(),
-        **pipeline_accessories_payload(config, user, target_user_id),
-    })
+    _pipeline_tasks_sync_last_at = value
 
+
+from .pipeline.task_list import PipelineTaskList as _PipelineTaskList
+from .pipeline.task_list_api import register_pipeline_task_list_api
+from .pipeline.task_list_ports import (
+    TaskListAccess as _TaskListAccess,
+    TaskListReconciliation as _TaskListReconciliation,
+    TaskListPresentation as _TaskListPresentation,
+)
+_pipeline_task_list = _PipelineTaskList(
+    _TaskListAccess(
+        current_user=lambda: current_auth_user,
+        is_admin=lambda: user_is_admin,
+        load_config=lambda: load_config,
+        scope_config=lambda: scope_config_for_user,
+        load_ai_tasks=lambda: load_ai_detection_tasks,
+        visible=lambda: record_visible_to_user,
+        incoming_allowed=lambda: incoming_text_task_access_allowed,
+        has_permission=lambda: user_has_permission,
+    ),
+    _TaskListReconciliation(
+        task_lock=lambda: _pipeline_tasks_lock,
+        load_tasks=lambda: load_pipeline_tasks,
+        monotonic=lambda: time.monotonic,
+        last_sync_at=lambda: _pipeline_tasks_sync_last_at,
+        set_last_sync_at=lambda value: _set_pipeline_tasks_sync_last_at(value),
+        min_interval=lambda: PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS,
+        ensure_accessories=lambda: ensure_pipeline_task_accessory_objects,
+        save_config=lambda: save_config,
+        sync_ai_tasks=lambda: sync_pipeline_ai_detection_tasks,
+        sync_ready_ai_tasks=lambda: sync_ready_pipeline_ai_detection_tasks,
+        normalize_auto_defaults=lambda: normalize_pipeline_task_auto_advance_defaults,
+        sync_and_advance=lambda: sync_and_auto_advance_pipeline,
+        save_tasks=lambda: save_pipeline_tasks,
+        collect_pregen=lambda: collect_pipeline_recommendation_pregen,
+    ),
+    _TaskListPresentation(
+        schedule_agent=lambda: schedule_pipeline_auto_agent,
+        schedule_advance=lambda: schedule_pipeline_advance,
+        schedule_pregen=lambda: schedule_pipeline_recommendation_pregen,
+        trained_specs=lambda: list_trained_model_specs,
+        optimize_states=lambda: list_auto_optimize_states,
+        optimize_by_id=lambda: auto_optimize_states_by_task_id,
+        public_task=lambda: pipeline_task_public,
+        public_agent_config=lambda: public_agent_config,
+        accessories_payload=lambda: pipeline_accessories_payload,
+        sanitize=lambda: public_path_sanitized,
+    ),
+)
+get_pipeline_tasks = register_pipeline_task_list_api(app, _pipeline_task_list)
 
 from .pipeline.task_create import PipelineTaskCreator as _PipelineTaskCreator
 from .pipeline.task_create_api import register_pipeline_task_create_api

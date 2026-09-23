@@ -1,5 +1,7 @@
 # Architecture
 
+The pipeline task-list GET now registers through `pipeline/task_list_api.py`; `pipeline/task_list.py` owns the existing process-shared five-second reconciliation gate, all-task synchronization, visibility filtering and unlocked scheduling/projection order. Narrow access, reconciliation and presentation capabilities replace root namespace dependencies. This remains a write-capable GET; SQL pagination and read-lock optimization are separate later work.
+
 Pipeline Agent chat registers through `pipeline/agent_chat_api.py` at its historical route position. `pipeline/agent_chat.py` owns the two locked task reads and a single out-of-lock Agent decision; narrow late-resolved access/runtime capabilities preserve authorization, deep snapshot, partial commit/save effects and scheduling order. Decision policy, paid call evidence and task runner remain with their existing owners.
 
 Manual pipeline advance and cancel requests now register in their original order through `pipeline/advance_control_api.py`; `pipeline/advance_control.py` owns validation, marking and pause-state updates. Two focused late-resolved capability groups preserve the nested task/registry lock, out-of-lock scheduling, cancellation signal between two locked task reads, and current partial effects. The runner, scheduler, inflight registry and cancellation mapping remain with their original owners.

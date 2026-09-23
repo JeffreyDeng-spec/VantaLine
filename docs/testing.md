@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_task_list.py` replays the accepted-main GET when `VANTALINE_LIST_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the candidate. Synthetic Windows/Linux scenarios cover the shared throttle, exception timing, config/save distinctions, all-task filtering, duplicate scheduling, late callbacks and projection order. Candidate-only constructor, A/B/A and HTTP adapter checks use no paid inference, PLC or customer records.
+
 `python scripts/smoke_pipeline_agent_chat.py` replays accepted-main Agent chat when `VANTALINE_CHAT_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic Windows/Linux cases cover permission and method gates, deep snapshot, one decision between two locks, late callbacks, partial failures and duplicate scheduling. Candidate-only constructor, A/B/A instance and focused HTTP checks use no paid model, real PLC or customer data.
 
 `python scripts/smoke_pipeline_advance_control.py` replays the accepted-main advance/cancel endpoints when `VANTALINE_ADVANCE_CONTROL_BASELINE_SOURCE` points to its `server.py`; without that setting it runs the candidate. Windows/Linux synthetic cases cover task and registry locks, repeated requests, double cancellation load, partial failure effects, callback timing, second-clock failure, registry membership under lock and state transitions. Candidate-only zero-read constructor, A/B/A and focused HTTP adapter checks use no real PLC, paid model or customer data.

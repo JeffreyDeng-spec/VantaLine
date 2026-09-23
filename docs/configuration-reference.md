@@ -1,5 +1,7 @@
 # Configuration reference
 
+Pipeline task listing retains the shared five-second synchronization window, admin scope, all-task normalization and model projection settings. Source manifest v111 (302 entries) adds the three actual list modules for new task fingerprints; old snapshots, model versions and secrets are unchanged.
+
 Pipeline Agent chat retains current model selection, config scope, task snapshot and one-decision behavior. Source manifest v110 (299 entries) includes the three actual Agent chat modules for new task fingerprints; historical snapshots, model bindings and secret references remain unchanged.
 
 Manual pipeline advance and cancel keep their existing request identity, permission checks, double task load on cancellation, repeated-request behavior, state text and exact lock boundaries. Source manifest v109 (296 entries) records the three moved control files for new task fingerprints; prior snapshots and bindings stay unchanged.
