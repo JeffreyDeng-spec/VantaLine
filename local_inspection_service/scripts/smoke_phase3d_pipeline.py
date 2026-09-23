@@ -195,7 +195,6 @@ def assert_react_pipeline_route() -> None:
         "gemini image provider method": "def generate_image",
         "synthid metadata": "synthid_watermark_expected",
         "feedback request model": "PipelineAgentFeedbackRequest",
-        "feedback endpoint": "/api/pipeline/tasks/{task_id}/agent-feedback",
         "chat request model": "PipelineAgentChatRequest",
 
         "decision brain": "def agent_pipeline_decide",
@@ -247,6 +246,8 @@ def assert_react_pipeline_route() -> None:
         methods = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == method_name]
         assert len(methods) == 1, f"Missing implementation method: {class_name}.{method_name}"
         implementation_sources[label] = ast.get_source_segment(source, methods[0])
+    feedback_api = (REPO_ROOT / "local_inspection_service" / "pipeline" / "agent_feedback_api.py").read_text(encoding="utf-8")
+    assert "/api/pipeline/tasks/{task_id}/agent-feedback" in feedback_api and "register_pipeline_agent_feedback_api" in server
     chat_api = (REPO_ROOT / "local_inspection_service" / "pipeline" / "agent_chat_api.py").read_text(encoding="utf-8")
     assert "/api/pipeline/tasks/{task_id}/chat" in chat_api and "register_pipeline_agent_chat_api" in server
     missing_server = [label for label, snippet in expected_server.items() if snippet not in implementation_sources.get(label, server)]

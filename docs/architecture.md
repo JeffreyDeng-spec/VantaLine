@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline Agent feedback registers through `pipeline/agent_feedback_api.py`; `pipeline/agent_feedback.py` owns the unchanged action priority and mutations. Access, policy and runtime capabilities preserve the single task lock, legacy pose-tool execution inside it, feedback appended before branch validation, save/public under lock and scheduling afterward. The cancel action still updates task state only; worker cancellation remains with its current owner.
+
 The pipeline task-list GET now registers through `pipeline/task_list_api.py`; `pipeline/task_list.py` owns the existing process-shared five-second reconciliation gate, all-task synchronization, visibility filtering and unlocked scheduling/projection order. Narrow access, reconciliation and presentation capabilities replace root namespace dependencies. This remains a write-capable GET; SQL pagination and read-lock optimization are separate later work.
 
 Pipeline Agent chat registers through `pipeline/agent_chat_api.py` at its historical route position. `pipeline/agent_chat.py` owns the two locked task reads and a single out-of-lock Agent decision; narrow late-resolved access/runtime capabilities preserve authorization, deep snapshot, partial commit/save effects and scheduling order. Decision policy, paid call evidence and task runner remain with their existing owners.

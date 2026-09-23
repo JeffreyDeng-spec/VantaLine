@@ -1,5 +1,7 @@
 # Production runbook
 
+Agent feedback extraction preserves the single locked mutation/tool-call path and unlocked advance scheduling. This release does not alter worker topology, database schema, provider settings or the meaning of cancel. Source manifest v112 updates new task fingerprints only.
+
 Pipeline list extraction preserves the current write-capable GET, process-shared reconciliation interval and lock boundaries. Release topology, database schema and operator settings are unchanged; source manifest v111 records the moved list modules for new task evidence.
 
 Pipeline Agent chat extraction is route-compatible and keeps the existing two-lock request flow, one Agent decision, stored-call evidence and scheduling behavior. The source manifest moves to v110 for new task fingerprints; no database migration, worker topology switch or operational setting is introduced by this PR.

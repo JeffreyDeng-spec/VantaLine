@@ -1,5 +1,7 @@
 # Configuration reference
 
+Pipeline Agent feedback preserves current action aliases, pose image provider configuration, model/tool-call selection and clock usage. Source manifest v112 (305 entries) records the three actual moved feedback modules for new fingerprints; historical snapshots, model versions and secret references are unchanged.
+
 Pipeline task listing retains the shared five-second synchronization window, admin scope, all-task normalization and model projection settings. Source manifest v111 (302 entries) adds the three actual list modules for new task fingerprints; old snapshots, model versions and secrets are unchanged.
 
 Pipeline Agent chat retains current model selection, config scope, task snapshot and one-decision behavior. Source manifest v110 (299 entries) includes the three actual Agent chat modules for new task fingerprints; historical snapshots, model bindings and secret references remain unchanged.
