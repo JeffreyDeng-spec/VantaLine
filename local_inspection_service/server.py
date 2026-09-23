@@ -19178,35 +19178,24 @@ def pipeline_accessories_payload(
     }
 
 
+from .pipeline.task_snapshots import PipelineTaskSnapshots as _PipelineTaskSnapshots
+from .pipeline.task_snapshot_ports import PipelineTaskSnapshotLinks as _PipelineTaskSnapshotLinks
+
+_pipeline_task_snapshots = _PipelineTaskSnapshots(
+    _PipelineTaskSnapshotLinks(
+        load_ai_tasks=lambda: load_ai_detection_tasks,
+        accessory_lookup=lambda: accessory_lookup_by_id,
+        label_snapshot=lambda: pipeline_task_label_snapshot,
+    )
+)
+
+
 def pipeline_task_label_snapshot(task: dict[str, Any]) -> dict[str, str]:
-    labels = {
-        str(k): str(v)
-        for k, v in (task.get("accessory_labels") or {}).items()
-        if str(k).strip() and str(v).strip()
-    }
-    ai_task_id = str(task.get("ai_task_id") or "").strip()
-    if ai_task_id:
-        linked_ai_task = next((item for item in load_ai_detection_tasks() if item.get("id") == ai_task_id), None)
-        if linked_ai_task:
-            labels.update(
-                {
-                    str(k): str(v)
-                    for k, v in (linked_ai_task.get("accessory_labels") or {}).items()
-                    if str(k).strip() and str(v).strip()
-                }
-            )
-    return labels
+    return _pipeline_task_snapshots.pipeline_task_label_snapshot(task)
 
 
 def pipeline_task_accessory_snapshot(config: dict[str, Any], task: dict[str, Any], accessory_ids: list[str]) -> tuple[dict[str, str], list[str]]:
-    accessories_by_id = accessory_lookup_by_id(config)
-    labels = pipeline_task_label_snapshot(task)
-    raw_names = [str(item) for item in task.get("accessory_names") or [] if str(item).strip()]
-    names: list[str] = []
-    for index, item_id in enumerate(accessory_ids):
-        item = accessories_by_id.get(item_id)
-        names.append(str((item or {}).get("name") or (item or {}).get("label") or labels.get(item_id) or (raw_names[index] if index < len(raw_names) else "") or item_id))
-    return labels, names
+    return _pipeline_task_snapshots.pipeline_task_accessory_snapshot(config, task, accessory_ids)
 
 
 def ensure_pipeline_task_accessory_objects(config: dict[str, Any], tasks: list[dict[str, Any]]) -> bool:

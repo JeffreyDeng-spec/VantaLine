@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline task labels and accessory display names now live in `pipeline/task_snapshots.py`. Three late-resolved capabilities preserve the current AI-task label load, accessory lookup and public root label adapter at their original call sites. The Web entry still owns linked-task storage and the configuration-writing recovery path; this projection adds no cache or model-snapshot rewrite.
+
 Pipeline recommendation signature, next-stage choice, readiness, cached-parameter consumption and pre-generation selection live in `pipeline/recommendations.py`. Two narrow capability groups preserve per-call method and root-helper lookup. The Web entry still owns the pinned-model background runner, scheduler, locks, thread lifecycle and persistence; recommendations retain caller-owned task mutation.
 
 AI detection task-to-pipeline card synchronization lives in `pipeline/ai_task_sync.py`. Four narrow capability groups keep identity, accessory, visibility and projection dependencies late-bound. The Web entry retains its three public adapters; the list endpoint still owns locking, loading and persistence. Existing cards are updated in place, and the coordinator does not retain a user, connection or task list.

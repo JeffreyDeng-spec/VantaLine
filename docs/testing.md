@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_task_snapshots.py` covers 16 original Windows/Linux label and accessory-name projection cases on accepted main plus one independent two-instance A/B/A group after extraction. It checks first-match linked AI labels, original fallback order, callback timing, alias/order retention and exception propagation. It uses synthetic records and no real model, PLC or customer media.
+
 `python scripts/smoke_pipeline_recommendations.py` covers 21 original synthetic helper groups on the accepted main plus one independent two-instance A/B/A group after extraction. Both platforms verify signature formatting and failure propagation, stage/ready gates, stale-cache consumption, shallow aliasing, partial mutation and late callback rebinding. The independent fixture exercises all five capability getter names on representative successful paths. The pinned background worker, paid recommendations and production database are outside this focused suite.
 
 `python scripts/smoke_pipeline_ai_task_sync.py` covers 17 root-compatible synthetic behavior groups (13 before extraction, 17 against accepted-main AST) and one independent composition group after extraction. It checks visibility, duplicate IDs, reverse insertion, existing object identity, paused state, default loading, partial errors and late root bindings. Independent A/B/A service instances exercise all 14 capability getter names on representative success paths without root business callbacks. This does not use real models, PLC, customer records or a production database.
