@@ -1,5 +1,7 @@
 # Production runbook
 
+Manual pipeline advance/cancel extraction changes only route composition. Deploy and rollback continue switching the complete Web release under the existing health gate; no database migration, new worker service, PLC command or release procedure is added. Persisted task state is retained on rollback; process-local threads, registry entries and cancellation events restart under the existing recovery path.
+
 Pipeline task-delete extraction changes application route composition only. Install and rollback switch the complete Web release with its matching source manifest; it adds no database migration, worker-topology step, PLC action or production command. Restoring the previous code release does not undo a completed task or resource deletion.
 
 Pipeline task-create extraction requires no database migration or worker-topology operation. Install and rollback switch the complete Web release under the existing health gate; saved task records remain in the current database.
@@ -13,7 +15,7 @@ Pipeline task label and accessory-name projection ships with its root adapters a
 
 Pipeline recommendation helper extraction changes no worker topology, database schema or release commands. Publish and restore its Web adapters, helper module and ports as one complete package with the bundled source manifest.
 
-The current source manifest is v108 (293 entries). Per-domain notes describe which sources belong in the complete release; they do not identify when each module first appeared. Deploy and roll back only a complete release with its matching bundled manifest.
+The current source manifest is v109 (296 entries). Per-domain notes describe which sources belong in the complete release; they do not identify when each module first appeared. Deploy and roll back only a complete release with its matching bundled manifest.
 
 Pipeline AI task-card synchronization remains in the Web process. The bundled source manifest includes its new module and ports; deployment and whole-release rollback use the existing procedure.
 

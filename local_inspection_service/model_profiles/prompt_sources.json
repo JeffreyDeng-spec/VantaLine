@@ -1,7 +1,10 @@
 {
-  "version": 108,
+  "version": 109,
   "sources": [
     "server.py",
+    "pipeline/advance_control.py",
+    "pipeline/advance_control_api.py",
+    "pipeline/advance_control_ports.py",
     "pipeline/task_create.py",
     "pipeline/task_create_api.py",
     "pipeline/task_create_ports.py",

@@ -21198,66 +21198,36 @@ def pipeline_agent_chat(task_id: str, request: PipelineAgentChatRequest) -> dict
     return result
 
 
-@app.post("/api/pipeline/tasks/{task_id}/advance")
-def advance_pipeline_task_endpoint(task_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    # Validate + mark the task as advancing, then hand the heavy/bounded work to
-    # the async per-task runner so this request returns immediately (no global
-    # lock, no 504). The runner persists sub-step progress; the UI polls for it.
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-        require_record_access(task, user, write=True)
-        sync_pipeline_task(task)
-        already = False
-        with _pipeline_advance_registry_lock:
-            already = task_id in _pipeline_advance_inflight
-        if not already:
-            task["advancing"] = True
-            task["advance_started_at"] = int(time.time())
-            task["job_note"] = "正在推进…"
-            task["last_error"] = ""
-            task["updated_at"] = int(time.time())
-            save_pipeline_task(task)
-        result = pipeline_task_public(task, config)
-    if not already:
-        schedule_pipeline_advance(task_id, user)
-    return result
-
-
-@app.post("/api/pipeline/tasks/{task_id}/cancel-advance")
-def cancel_pipeline_advance_endpoint(task_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-        require_record_access(task, user, write=True)
-    inflight = cancel_pipeline_advance(task_id)
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-        task["auto_advance"] = False
-        task["last_error"] = ""
-        if inflight:
-            task["pause_requested"] = True
-            task["job_note"] = "暂停请求已记录；如果当前步骤不可中断，会在当前步骤完成后的检查点停止。"
-        else:
-            task.pop("advancing", None)
-            task.pop("advance_started_at", None)
-            task.pop("pause_requested", None)
-            if task.get("stage") == "draft" and task.get("status") in {"ready", "running"}:
-                task["status"] = "stopped"
-            task["job_note"] = "已暂停，自动推进已关闭。"
-        task["updated_at"] = int(time.time())
-        save_pipeline_task(task)
-        result = pipeline_task_public(task, config)
-    return result
-
+from .pipeline.advance_control import PipelineAdvanceController as _PipelineAdvanceController
+from .pipeline.advance_control_api import register_pipeline_advance_control_api
+from .pipeline.advance_control_ports import (
+    AdvanceControlAccess as _AdvanceControlAccess,
+    AdvanceControlRuntime as _AdvanceControlRuntime,
+)
+_pipeline_advance_controller = _PipelineAdvanceController(
+    _AdvanceControlAccess(
+        current_user=lambda: current_auth_user,
+        load_config=lambda: load_config,
+        scope_config=lambda: scope_config_for_user,
+        load_task=lambda: load_pipeline_task,
+        require_record_access=lambda: require_record_access,
+        http_error=lambda: HTTPException,
+    ),
+    _AdvanceControlRuntime(
+        task_lock=lambda: _pipeline_tasks_lock,
+        registry_lock=lambda: _pipeline_advance_registry_lock,
+        inflight=lambda: _pipeline_advance_inflight,
+        sync_task=lambda: sync_pipeline_task,
+        now=lambda: time.time,
+        save_task=lambda: save_pipeline_task,
+        public_task=lambda: pipeline_task_public,
+        schedule_advance=lambda: schedule_pipeline_advance,
+        cancel_advance=lambda: cancel_pipeline_advance,
+    ),
+)
+advance_pipeline_task_endpoint, cancel_pipeline_advance_endpoint = register_pipeline_advance_control_api(
+    app, _pipeline_advance_controller,
+)
 
 # ---------------------------------------------------------------------------
 # Account-scoped text inspection v2 (independent from the legacy task flow).
