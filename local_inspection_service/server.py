@@ -21040,123 +21040,43 @@ _pipeline_task_deleter = _PipelineTaskDeleter(
 )
 delete_pipeline_task = register_pipeline_task_delete_api(app, _pipeline_task_deleter)
 
-@app.post("/api/pipeline/tasks/{task_id}/agent-feedback")
-def pipeline_agent_feedback(task_id: str, request: PipelineAgentFeedbackRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    action = str(request.action or "").strip().lower()
-    decision = str(request.decision or action).strip().lower()
-    pending_advances: list[str] = []
-    with _pipeline_tasks_lock:
-        task = load_pipeline_task(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="流水线任务不存在")
-        require_record_access(task, user, write=True)
-        detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or ""))
-        if not pipeline_method_uses_training(detection_method):
-            raise HTTPException(status_code=409, detail="Only YOLO/YOLO+OCR tasks use Agent/MCP orchestration")
-        orchestration = ensure_agent_mcp_pose_plan(task, config)
-        feedback_entry = {
-            "action": action,
-            "decision": decision,
-            "message": str(request.message or "").strip()[:500],
-            "created_at": agent_mcp_now(),
-        }
-        orchestration.setdefault("feedback", []).append(feedback_entry)
-        if action in {"cancel", "cancelled"} or decision in {"cancel", "cancelled"}:
-            orchestration.update({"state": "cancelled", "active_stage": "cancelled", "pause": None, "updated_at": agent_mcp_now()})
-            task.update({"status": "stopped", "progress": 100, "last_error": "", "job_note": "Agent/MCP preview flow cancelled.", "updated_at": agent_mcp_now()})
-        elif action == "replan" or decision == "replan":
-            if pipeline_uses_photo_highlight_sprite_flow(task, config):
-                orchestration = mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-                orchestration["pause"] = None
-                task["agent_mcp"] = orchestration
-                task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
-                mark_pipeline_task_advancing(task)
-                pending_advances.append(task_id)
-            else:
-                orchestration = ensure_agent_mcp_pose_plan(task, config, force=True)
-                task["agent_mcp"] = orchestration
-                orchestration = ensure_agent_mcp_pose_tool_calls(task, config)
-                tool_config = agent_mcp_gemini_image_config()
-                if tool_config.get("configured") and execute_agent_mcp_pose_tool_calls(task, config):
-                    task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
-                else:
-                    pause_agent_mcp_task(
-                        task,
-                        orchestration,
-                        stage="pose_image_generation",
-                        reason="Pose plan regenerated; " + str(tool_config.get("message") or "Image generation is not configured."),
-                        suggested_actions=["configure_image_generation", "continue_existing_assets", "replan", "cancel"],
-                    )
-        elif action in {"update_plan", "update"}:
-            if pipeline_uses_photo_highlight_sprite_flow(task, config):
-                raise HTTPException(status_code=409, detail="当前训练流程使用实拍高亮抠图，不再支持旧姿态计划编辑")
-            if not isinstance(request.updated_plan, dict):
-                raise HTTPException(status_code=400, detail="updated_plan is required")
-            orchestration["pose_plan"] = request.updated_plan
-            orchestration["state"] = "needs_user_action"
-            orchestration["active_stage"] = "pose_image_generation"
-            orchestration["updated_at"] = agent_mcp_now()
-            pause_agent_mcp_task(
-                task,
-                orchestration,
-                stage="pose_image_generation",
-                reason="Pose plan updated by user; confirm how to proceed.",
-                suggested_actions=["continue_existing_assets", "replan", "cancel"],
-            )
-        elif action in {"retry_pose_image_generation", "retry"} or decision == "retry_pose_image_generation":
-            if pipeline_uses_photo_highlight_sprite_flow(task, config):
-                orchestration = mark_legacy_pose_flow_skipped_for_photo_highlight(task, config, orchestration)
-                orchestration["pause"] = None
-                task["agent_mcp"] = orchestration
-                task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
-                mark_pipeline_task_advancing(task)
-                pending_advances.append(task_id)
-            else:
-                orchestration["skip_pose_image_generation"] = False
-                orchestration["pause"] = None
-                if execute_agent_mcp_pose_tool_calls(task, config):
-                    task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
-                elif not orchestration.get("pause"):
-                    tool_config = agent_mcp_gemini_image_config()
-                    pause_agent_mcp_task(
-                        task,
-                        orchestration,
-                        stage="pose_image_generation",
-                        reason=str(tool_config.get("message") or "Image generation is not configured."),
-                        suggested_actions=["configure_image_generation", "continue_existing_assets", "replan", "cancel"],
-                    )
-        elif action in {"resume", "continue", "continue_existing_assets"} or decision in {"continue_existing_assets", "use_existing_assets"}:
-            orchestration["skip_pose_image_generation"] = True
-            orchestration["pause"] = None
-            orchestration["updated_at"] = agent_mcp_now()
-            if task.get("stage") == "samples" or orchestration.get("active_stage") == "model_training" or decision == "continue_training":
-                orchestration["training_quality_ack"] = True
-                if task.get("stage") == "samples":
-                    task["status"] = "completed"
-                mark_pipeline_task_advancing(task)
-                pending_advances.append(task_id)
-            else:
-                task.update({"status": "ready", "progress": 0, "last_error": "", "job_note": "", "updated_at": agent_mcp_now()})
-                mark_pipeline_task_advancing(task)
-                pending_advances.append(task_id)
-        elif action in {"continue_training", "resume_training"} or decision == "continue_training":
-            orchestration["training_quality_ack"] = True
-            orchestration["pause"] = None
-            if task.get("stage") != "samples":
-                raise HTTPException(status_code=409, detail="Task is not waiting at model training gate")
-            task["status"] = "completed"
-            mark_pipeline_task_advancing(task)
-            pending_advances.append(task_id)
-        else:
-            raise HTTPException(status_code=400, detail="Unknown Agent/MCP feedback action")
-        save_pipeline_task(task)
-        result = pipeline_task_public(task, config)
-    for advance_id in pending_advances:
-        schedule_pipeline_advance(advance_id, user)
-    return result
-
+from .pipeline.agent_feedback import PipelineAgentFeedback as _PipelineAgentFeedback
+from .pipeline.agent_feedback_api import register_pipeline_agent_feedback_api
+from .pipeline.agent_feedback_ports import (
+    AgentFeedbackAccess as _AgentFeedbackAccess,
+    AgentFeedbackPolicy as _AgentFeedbackPolicy,
+    AgentFeedbackRuntime as _AgentFeedbackRuntime,
+)
+_pipeline_agent_feedback = _PipelineAgentFeedback(
+    _AgentFeedbackAccess(
+        current_user=lambda: current_auth_user,
+        load_config=lambda: load_config,
+        scope_config=lambda: scope_config_for_user,
+        load_task=lambda: load_pipeline_task,
+        require_record_access=lambda: require_record_access,
+        http_error=lambda: HTTPException,
+    ),
+    _AgentFeedbackPolicy(
+        normalize_method=lambda: normalize_pipeline_detection_method,
+        uses_training=lambda: pipeline_method_uses_training,
+        sprite_flow=lambda: pipeline_uses_photo_highlight_sprite_flow,
+    ),
+    _AgentFeedbackRuntime(
+        task_lock=lambda: _pipeline_tasks_lock,
+        ensure_plan=lambda: ensure_agent_mcp_pose_plan,
+        now=lambda: agent_mcp_now,
+        skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight,
+        mark_advancing=lambda: mark_pipeline_task_advancing,
+        pose_calls=lambda: ensure_agent_mcp_pose_tool_calls,
+        image_config=lambda: agent_mcp_gemini_image_config,
+        execute_calls=lambda: execute_agent_mcp_pose_tool_calls,
+        pause_task=lambda: pause_agent_mcp_task,
+        save_task=lambda: save_pipeline_task,
+        public_task=lambda: pipeline_task_public,
+        schedule_advance=lambda: schedule_pipeline_advance,
+    ),
+)
+pipeline_agent_feedback = register_pipeline_agent_feedback_api(app, _pipeline_agent_feedback)
 
 from .pipeline.agent_chat import PipelineAgentChat as _PipelineAgentChat
 from .pipeline.agent_chat_api import register_pipeline_agent_chat_api

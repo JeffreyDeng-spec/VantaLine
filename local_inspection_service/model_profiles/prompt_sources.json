@@ -1,7 +1,10 @@
 {
-  "version": 111,
+  "version": 112,
   "sources": [
     "server.py",
+    "pipeline/agent_feedback.py",
+    "pipeline/agent_feedback_api.py",
+    "pipeline/agent_feedback_ports.py",
     "pipeline/task_list.py",
     "pipeline/task_list_api.py",
     "pipeline/task_list_ports.py",

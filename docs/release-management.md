@@ -1,5 +1,7 @@
 # VantaLine release management
 
+Agent feedback extraction is one route-compatible Web release without a database or topology migration. Source manifest v112 adds the actual feedback modules; historical task evidence and rollback release packages remain intact.
+
 The pipeline list route extraction ships as a route-compatible complete Web release with no database or topology migration. Source manifest v111 includes the moved list modules; historical task fingerprints and snapshots are retained.
 
 The Agent chat extraction ships as one route-compatible release with no deployment topology change or data migration. Its three actual modules are recorded in source manifest v110 for new task evidence; historical task snapshots remain intact.
