@@ -1,5 +1,14 @@
 # Testing
 
+`python scripts/smoke_background_library_selection.py` retains 18 original groups and
+adds one independent A/B/A group for both services: 83 method assertion sites plus two
+bootstrap guards. Synthetic contracts cover sharing, sorting, aliases, source
+precedence, caps, callback selection, signature refresh, rounded comparisons and
+threshold boundaries. Cap representatives include zero and positive values. Independent
+fixtures cover all 17 getter names cumulatively per instance with injected matcher
+candidates; they do not establish exact per-invocation read counts, every image failure
+or the full catalog-to-matcher chain.
+
 `python scripts/smoke_background_evidence.py` preserves 18 original groups and adds one
 two-instance A/B/A group for both services: 90 method assertion sites plus two bootstrap
 guards. Synthetic fixtures cover numerical representatives, source order, time boundary,

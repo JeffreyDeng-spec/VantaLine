@@ -1,7 +1,9 @@
 {
-  "version": 99,
+  "version": 100,
   "sources": [
     "server.py",
+    "accessories/background_library_selection.py",
+    "accessories/background_library_selection_ports.py",
     "accessories/background_evidence.py",
     "accessories/background_evidence_ports.py",
     "accessories/profile_generation.py",
