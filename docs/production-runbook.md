@@ -1,5 +1,7 @@
 # Production runbook
 
+Pipeline list extraction preserves the current write-capable GET, process-shared reconciliation interval and lock boundaries. Release topology, database schema and operator settings are unchanged; source manifest v111 records the moved list modules for new task evidence.
+
 Pipeline Agent chat extraction is route-compatible and keeps the existing two-lock request flow, one Agent decision, stored-call evidence and scheduling behavior. The source manifest moves to v110 for new task fingerprints; no database migration, worker topology switch or operational setting is introduced by this PR.
 
 Manual pipeline advance/cancel extraction changes only route composition. Deploy and rollback continue switching the complete Web release under the existing health gate; no database migration, new worker service, PLC command or release procedure is added. Persisted task state is retained on rollback; process-local threads, registry entries and cancellation events restart under the existing recovery path.

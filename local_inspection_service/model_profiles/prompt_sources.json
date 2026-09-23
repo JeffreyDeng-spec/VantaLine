@@ -1,7 +1,10 @@
 {
-  "version": 110,
+  "version": 111,
   "sources": [
     "server.py",
+    "pipeline/task_list.py",
+    "pipeline/task_list_api.py",
+    "pipeline/task_list_ports.py",
     "pipeline/agent_chat.py",
     "pipeline/agent_chat_api.py",
     "pipeline/agent_chat_ports.py",
