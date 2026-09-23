@@ -20987,30 +20987,30 @@ _pipeline_task_updater = _PipelineTaskUpdater(
 )
 update_pipeline_task = register_pipeline_task_update_api(app, _pipeline_task_updater)
 
-@app.post("/api/pipeline/accessories/{accessory_id}")
-def add_pipeline_accessory(accessory_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    resolved = resolve_accessory_id(config, accessory_id)
-    if not resolved:
-        raise HTTPException(status_code=404, detail="配件不存在")
-    canonical_id, _ = resolved
-    add_pipeline_accessory_id(canonical_id)
-    return {"status": "added", "accessory_id": canonical_id, **pipeline_accessories_payload(config, user)}
-
-
-@app.delete("/api/pipeline/accessories/{accessory_id}")
-def remove_pipeline_accessory(accessory_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    resolved = resolve_accessory_id(config, accessory_id)
-    if not resolved:
-        raise HTTPException(status_code=404, detail="配件不存在")
-    canonical_id, item = resolved
-    for item_id in accessory_id_aliases(item):
-        remove_pipeline_accessory_id(item_id)
-    return {"status": "removed", "accessory_id": canonical_id, **pipeline_accessories_payload(config, user)}
-
+from .pipeline.accessory_routes import PipelineAccessoryRoutes as _PipelineAccessoryRoutes
+from .pipeline.accessory_routes_api import register_pipeline_accessory_routes_api
+from .pipeline.accessory_routes_ports import (
+    PipelineAccessoryAccess as _PipelineAccessoryAccess,
+    PipelineAccessoryCatalog as _PipelineAccessoryCatalog,
+)
+_pipeline_accessory_routes = _PipelineAccessoryRoutes(
+    _PipelineAccessoryAccess(
+        current_user=lambda: current_auth_user,
+        load_config=lambda: load_config,
+        scope_config=lambda: scope_config_for_user,
+        http_error=lambda: HTTPException,
+    ),
+    _PipelineAccessoryCatalog(
+        resolve=lambda: resolve_accessory_id,
+        add_id=lambda: add_pipeline_accessory_id,
+        aliases=lambda: accessory_id_aliases,
+        remove_id=lambda: remove_pipeline_accessory_id,
+        public_payload=lambda: pipeline_accessories_payload,
+    ),
+)
+add_pipeline_accessory, remove_pipeline_accessory = register_pipeline_accessory_routes_api(
+    app, _pipeline_accessory_routes,
+)
 
 from .pipeline.task_delete import PipelineTaskDeleter as _PipelineTaskDeleter
 from .pipeline.task_delete_api import register_pipeline_task_delete_api

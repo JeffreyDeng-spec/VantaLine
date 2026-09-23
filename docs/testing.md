@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_accessory_routes.py` replays accepted-main add/remove routes when `VANTALINE_ACCESSORY_ROUTES_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the candidate. Synthetic Windows/Linux cases cover canonical resolution, alias iteration order, repeated aliases, partial failures, payload overrides and callback rebinding. Candidate-only constructor, HTTP and A/B/A checks use no real PLC, paid inference or customer data.
+
 `python scripts/smoke_pipeline_agent_feedback.py` replays accepted-main feedback when `VANTALINE_FEEDBACK_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the extracted candidate. Synthetic Windows/Linux action and exception cases cover feedback-before-validation, sprite/legacy pose branches, lock placement, saves and unlocked scheduling. No paid image calls, physical PLC or customer records are used.
 
 `python scripts/smoke_pipeline_task_list.py` replays the accepted-main GET when `VANTALINE_LIST_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the candidate. Synthetic Windows/Linux scenarios cover the shared throttle, exception timing, config/save distinctions, all-task filtering, duplicate scheduling, late callbacks and projection order. Candidate-only constructor, A/B/A and HTTP adapter checks use no paid inference, PLC or customer records.

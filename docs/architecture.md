@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline accessory add/remove routes now register in their original order through `pipeline/accessory_routes_api.py`. `pipeline/accessory_routes.py` owns request authentication, canonical ID resolution and ordered alias deletion using narrow late-resolved catalog capabilities. The underlying accessory store and alias policy retain ownership of persistence and locking; partial deletion and payload override behavior stay unchanged.
+
 Pipeline Agent feedback registers through `pipeline/agent_feedback_api.py`; `pipeline/agent_feedback.py` owns the unchanged action priority and mutations. Access, policy and runtime capabilities preserve the single task lock, legacy pose-tool execution inside it, feedback appended before branch validation, save/public under lock and scheduling afterward. The cancel action still updates task state only; worker cancellation remains with its current owner.
 
 The pipeline task-list GET now registers through `pipeline/task_list_api.py`; `pipeline/task_list.py` owns the existing process-shared five-second reconciliation gate, all-task synchronization, visibility filtering and unlocked scheduling/projection order. Narrow access, reconciliation and presentation capabilities replace root namespace dependencies. This remains a write-capable GET; SQL pagination and read-lock optimization are separate later work.
