@@ -1,7 +1,9 @@
 {
-  "version": 103,
+  "version": 104,
   "sources": [
     "server.py",
+    "pipeline/task_snapshots.py",
+    "pipeline/task_snapshot_ports.py",
     "pipeline/recommendations.py",
     "pipeline/recommendation_ports.py",
     "pipeline/ai_task_sync.py",

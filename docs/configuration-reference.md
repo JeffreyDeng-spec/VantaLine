@@ -1,6 +1,8 @@
 # Configuration reference
 
-The current source manifest is v103 (280 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
+The current source manifest is v104 (282 entries). Version references below describe earlier complete manifest snapshots, not when each module first appeared; operational deployment and rollback use the manifest bundled with the selected release.
+
+Pipeline task label and accessory-name projection uses the current linked AI task labels and retains the existing name fallbacks. Source manifest v104 includes the two moved files for new task fingerprints; historical snapshots and model bindings remain unchanged.
 
 Pipeline recommendation helpers retain training-mode normalization, signature inputs and cached-parameter consumption. Source manifest v103 includes the two actual moved sources for new task fingerprints; historical model bindings and snapshots remain unchanged.
 
