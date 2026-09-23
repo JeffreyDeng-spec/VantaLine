@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_task_update.py` uses synthetic tasks to verify PATCH endpoint identity, late callback selection, partial mutation before 409, incoming-material and ordinary projection lock positions, save/projection failures, non-draft parameter updates and OverflowError propagation. The backend contract also checks route order, schema and operationId; no paid provider or PLC is accessed.
+
 `python scripts/smoke_pipeline_resource_status.py` covers 21 original behavior groups on accepted main and one independent three-reader A/B/A group after extraction, on Windows and Linux. It checks deleted/none/available/pending/missing precedence, supplied empty collections, first matching spec, filesystem checks, callback rebinding and exception identity. Synthetic tests perform no real PLC or paid inference.
 
 `python scripts/smoke_pipeline_task_snapshots.py` covers 16 original Windows/Linux label and accessory-name projection cases on accepted main plus one independent two-instance A/B/A group after extraction. It checks first-match linked AI labels, original fallback order, callback timing, alias/order retention and exception propagation. It uses synthetic records and no real model, PLC or customer media.

@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline task PATCH now registers at its original route position through `pipeline/task_update_api.py`; `pipeline/task_update.py` owns the complete update use case. Three focused, late-resolved capability groups preserve authorization, policy, persistence and the original lock boundaries. The Web entry still owns task storage and the shared lock; create, delete, advance and scheduler flows remain there. This is one domain boundary, not completion of the pipeline migration.
+
 Pipeline dataset and model resource availability projections live in `pipeline/resource_status.py`. Three late-resolved readers preserve the existing dataset finder, AI task loader and trained-spec loader at their original call sites. File existence and caller-provided preloaded sets/lists retain their current semantics; this extraction adds no caching or batch reads.
 
 Pipeline task labels and accessory display names now live in `pipeline/task_snapshots.py`. Three late-resolved capabilities preserve the current AI-task label load, accessory lookup and public root label adapter at their original call sites. The Web entry still owns linked-task storage and the configuration-writing recovery path; this projection adds no cache or model-snapshot rewrite.

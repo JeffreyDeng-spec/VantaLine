@@ -1,5 +1,8 @@
 # Production runbook
 
+Pipeline task-update extraction changes the application route composition only. Deploy and rollback continue to switch the complete Web release; no database migration, worker-topology change, PLC action, or additional production command is required.
+
+
 Pipeline resource-status projection ships with its root adapters and both source-manifest entries as one complete package. Worker topology, database schema and deployment commands remain unchanged; restore the previous complete release if required.
 
 Pipeline task label and accessory-name projection ships with its root adapters and both new source-manifest entries in one complete package. It changes no worker topology, database schema or deployment commands; restore the previous complete release if needed.
