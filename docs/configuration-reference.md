@@ -1,5 +1,7 @@
 # Configuration reference
 
+Pipeline trained-model linking keeps existing catalog visibility, fallback model-ID construction and model-path truthiness unchanged. Source manifest v116 retains the same 312 entries because `pipeline/training_links.py` was already listed; new task fingerprints reflect its changed source, while historical snapshots, model bindings and secrets are untouched.
+
 Pipeline training status extraction keeps training job lookup, local interruption settlement and Agent stage configuration unchanged. Source manifest v115 contains 312 entries including the two moved modules for new task fingerprints; existing snapshots, model bindings and secret references remain unchanged.
 
 Pipeline reconciliation keeps the five-second list throttle, Agent selection and training-task lookup settings unchanged. Source manifest v114 contains 310 entries including the two moved reconciliation modules; new task fingerprints use their actual source, while existing snapshots and secret references remain unchanged.

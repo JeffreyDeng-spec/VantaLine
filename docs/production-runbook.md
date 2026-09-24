@@ -1,5 +1,7 @@
 # Production runbook
 
+Pipeline trained-model linking extraction keeps catalog lookup and caller-owned task locks/saves. No database migration, worker topology or operator setting changes; source manifest v116 changes new source fingerprints but retains 312 entries.
+
 Pipeline training-status extraction keeps the existing local interrupted-task settlement path and its possible training-state write, without adding pipeline locks or retries. No database migration, worker topology or operator setting changes; source manifest v115 affects new task fingerprints only.
 
 Pipeline reconciliation extraction preserves task and registry lock ownership, the five-second list throttle and current background scheduling behavior. No database migration, worker topology or operator setting changes; source manifest v114 affects only new task fingerprints.

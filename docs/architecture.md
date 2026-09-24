@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline trained-model linking now lives beside the reverse run lookup in `pipeline/training_links.py`, as a separate class with a late-resolved catalog capability. It selects the first visible matching run and mutates the caller-owned task in place. The caller still owns locks, saves and any following Agent or training actions.
+
 Pipeline training-job lookup and status projection now live in `pipeline/training_status.py`, separate from terminal training-to-pipeline synchronization. Late-resolved capabilities preserve the selected loader, root-linked callback and Agent stage updates; the caller retains locks and storage. Local interrupted-job projection may still write training state, so this is not a read-only boundary.
 
 Pipeline status reconciliation now lives in `pipeline/reconciliation.py`. It preserves the original per-task reap, sync and auto-agent decision order through late-resolved capabilities; server retains the shared registry/locks, background runners, schedulers and public wrappers. No training job scan is added per task.

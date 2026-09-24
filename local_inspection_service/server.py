@@ -20131,35 +20131,14 @@ def sync_pipeline_task(
     return _pipeline_training_status.sync_pipeline_task(task, load_task)
 
 
+from .pipeline.training_links import PipelineTrainedModelLink as _PipelineTrainedModelLink
+_pipeline_trained_model_link = _PipelineTrainedModelLink(catalog=lambda: list_trained_model_specs)
+
+
 def link_pipeline_trained_model(task: dict[str, Any]) -> dict[str, Any] | None:
     """Link the freshly trained model to the pipeline task so the model library and
     detection workbench can use it immediately (transfer-back deployment path)."""
-    run_id = str(task.get("training_task_id") or "").strip()
-    if not run_id:
-        return None
-    spec = next((item for item in list_trained_model_specs() if str(item.get("run_id")) == run_id), None)
-    if not spec:
-        # The model artifact may still be importing (e.g. Windows worker transfer);
-        # fall back to the conventional spec id so the UI shows the linkage.
-        variant = str((task.get("params") or {}).get("train_mode") or task.get("detection_method") or "yolo")
-        task.update(
-            {
-                "model_run_id": run_id,
-                "ai_model_id": f"trained_{run_id}__{variant}",
-                "linked_view": "inspect",
-            }
-        )
-        return None
-    task.update(
-        {
-            "model_run_id": run_id,
-            "ai_model_id": str(spec.get("id") or ""),
-            "model_label": str(spec.get("label") or ""),
-            "model_exists": bool(spec.get("path")),
-            "linked_view": "inspect",
-        }
-    )
-    return spec
+    return _pipeline_trained_model_link.link_pipeline_trained_model(task)
 
 
 def advance_pipeline_task(task: dict[str, Any], cancel_event: "threading.Event | None" = None) -> None:
