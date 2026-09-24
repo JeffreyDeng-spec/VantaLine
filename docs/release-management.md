@@ -1,5 +1,7 @@
 # VantaLine release management
 
+Pipeline trained-model linking extraction is a Web-only compatible release. It keeps the original callable adapter and uses the existing `pipeline/training_links.py` manifest entry; rollback uses the previous complete release.
+
 Pipeline training-status extraction is a compatible Web release that leaves terminal training synchronization and rollback packages unchanged. Source manifest v115 records the two moved modules; existing task evidence remains intact.
 
 Pipeline reconciliation extraction is a Web-only compatible release. The existing list route, background threads and rollback package remain in place; source manifest v114 records the two moved modules for new evidence only.

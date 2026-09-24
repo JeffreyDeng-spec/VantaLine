@@ -1,5 +1,7 @@
 # Testing
 
+`python scripts/smoke_pipeline_trained_model_link.py` replays the v516 root linker when `VANTALINE_MODEL_LINK_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic cases cover first-match identity, fallback fields, catalog rebinding, expression order and error partial effects without real models, PLC or paid calls.
+
 `python scripts/smoke_pipeline_training_status.py` replays the accepted-main lookup and synchronization functions when `VANTALINE_TRAINING_STATUS_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the extracted candidate. Synthetic cases cover loader selection, late projection, state mapping, epoch reads and exception partial effects. No real PLC or paid model is used.
 
 `python scripts/smoke_pipeline_reconciliation.py` replays the accepted-main four-function contract when `VANTALINE_RECONCILIATION_BASELINE_SOURCE` points to its `server.py`; otherwise it exercises the extracted service. Synthetic scenarios cover eligibility, zombie timeout boundaries, ordering, finder identity, duplicate IDs, partial effects and late callback rebinding without external services.
