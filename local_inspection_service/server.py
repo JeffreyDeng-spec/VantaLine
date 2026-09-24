@@ -20141,175 +20141,54 @@ def link_pipeline_trained_model(task: dict[str, Any]) -> dict[str, Any] | None:
     return _pipeline_trained_model_link.link_pipeline_trained_model(task)
 
 
+from .pipeline.stage_advance import PipelineStageAdvancer as _PipelineStageAdvancer
+from .pipeline.stage_advance_ports import (
+    StageAdvanceAssets as _StageAdvanceAssets,
+    StageAdvanceJobs as _StageAdvanceJobs,
+    StageAdvancePolicy as _StageAdvancePolicy,
+    StageAdvanceRuntime as _StageAdvanceRuntime,
+)
+
+_pipeline_stage_advancer = _PipelineStageAdvancer(
+    _StageAdvancePolicy(
+        detection_method=lambda: normalize_pipeline_detection_method,
+        consume_recommendation=lambda: consume_pipeline_recommendation,
+        recommend=lambda: agent_recommendation,
+        canonical_accessories=lambda: canonical_pipeline_accessory_ids,
+        orchestration=lambda: agent_mcp_orchestration,
+        pause=lambda: pause_agent_mcp_task,
+        training_quality=lambda: agent_mcp_training_quality_gate,
+        link_model=lambda: link_pipeline_trained_model,
+        http_error=lambda: HTTPException,
+        cancelled_error=lambda: PipelineAdvanceCancelled,
+    ),
+    _StageAdvanceAssets(
+        load_config=lambda: load_config,
+        save_config=lambda: save_config,
+        activate_ai=lambda: activate_pipeline_ai_detection_task,
+        prepare=lambda: prepare_agent_mcp_before_sample_generation,
+        materialize=lambda: materialize_agent_mcp_pose_assets,
+        normalize=lambda: ensure_training_normalized_assets_for_selection,
+    ),
+    _StageAdvanceJobs(
+        request_type=lambda: TrainingStartRequest,
+        sample_generation=lambda: request_sample_generation,
+        training=lambda: request_training,
+        task_name=lambda: task_record_name,
+        log_samples=lambda: log_agent_mcp_sample_tool_call,
+        log_training=lambda: log_agent_mcp_training_tool_call,
+    ),
+    _StageAdvanceRuntime(
+        persist_progress=lambda: persist_pipeline_task_progress,
+        monotonic=lambda: time.monotonic,
+        clock=lambda: time.time,
+        print=lambda: print,
+    ),
+)
+
+
 def advance_pipeline_task(task: dict[str, Any], cancel_event: "threading.Event | None" = None) -> None:
-    task_id = str(task.get("id") or "")
-
-    def _check_cancel() -> None:
-        if cancel_event is not None and cancel_event.is_set():
-            raise PipelineAdvanceCancelled()
-
-    def _step(note: str, pct: int) -> None:
-        """Record a sub-step on the snapshot and mirror it to the stored record so
-        the UI shows live advance progress; also a cancellation checkpoint."""
-        _check_cancel()
-        task["job_note"] = note
-        task["progress"] = int(pct)
-        persist_pipeline_task_progress(task_id, job_note=note, progress=int(pct), status="running")
-
-    stage = str(task.get("stage") or "draft")
-    accessory_ids = list(task.get("accessory_ids") or [])
-    params = dict(task.get("params") or {})
-    advance_t0 = time.monotonic()
-    print(f"[pipeline.advance] task={task_id} stage={stage} begin", flush=True)
-    _check_cancel()
-    if stage == "draft":
-        if not accessory_ids:
-            raise HTTPException(status_code=400, detail="流水线任务还没有选择配件")
-        detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or params.get("train_mode") or ""))
-        task["detection_method"] = detection_method
-        if detection_method == "ai":
-            config = load_config()
-            activate_pipeline_ai_detection_task(task, config)
-            return
-        if detection_method == "locate":
-            params["route"] = "locate"
-            params.pop("train_mode", None)
-            task.update(
-                {
-                    "stage": "library",
-                    "status": "completed",
-                    "progress": 100,
-                    "params": params,
-                    "linked_view": "locateAnything",
-                    "last_error": "",
-                }
-            )
-            task["updated_at"] = int(time.time())
-            return
-        if "sample_count" not in params:
-            pregenerated = consume_pipeline_recommendation(task, "samples")
-            if pregenerated is not None:
-                params.update(pregenerated)
-            else:
-                recommendation = agent_recommendation("samples", accessory_ids)
-                params.update(recommendation["params"])
-                task["agent_reason"] = recommendation["reason"]
-                task["agent_source"] = recommendation["source"]
-        params["train_mode"] = detection_method
-        config = load_config()
-        accessory_ids = canonical_pipeline_accessory_ids(config, accessory_ids)
-        task["accessory_ids"] = accessory_ids
-        _step("准备实拍高亮抠图与背景底板…", 10)
-        if not prepare_agent_mcp_before_sample_generation(task, config):
-            task["params"] = params
-            orchestration = agent_mcp_orchestration(task)
-            if task.get("status") == "needs_user_action" and not isinstance(orchestration.get("pause"), dict):
-                reason = str(task.get("last_error") or task.get("job_note") or "Agent/MCP requires user action before sample generation.")
-                pause_agent_mcp_task(
-                    task,
-                    orchestration,
-                    stage=str(orchestration.get("active_stage") or "pose_image_generation"),
-                    reason=reason,
-                    suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
-                )
-                task["params"] = params
-            return
-        _step("写入实拍抠图素材…", 35)
-        pose_assets_changed = materialize_agent_mcp_pose_assets(task, config)
-        _step("规范化训练素材…", 55)
-        try:
-            assets_changed = ensure_training_normalized_assets_for_selection(config, accessory_ids)
-        except HTTPException as exc:
-            save_config(config)
-            if exc.status_code == 409:
-                detail = str(exc.detail)[:240]
-                task.update(
-                    {
-                        "stage": "draft",
-                        "status": "pending",
-                        "progress": 0,
-                        "params": params,
-                        "last_error": detail,
-                        "job_note": "规范化/参考图生成中，完成后再次生成样本。",
-                        "updated_at": int(time.time()),
-                    }
-                )
-                return
-            raise
-        if assets_changed or pose_assets_changed:
-            save_config(config)
-        _step("创建样本生成任务…", 80)
-        job = request_sample_generation(
-            TrainingStartRequest(
-                selected_accessory_ids=accessory_ids,
-                sample_count=int(params.get("sample_count") or 200),
-                train_mode=str(params.get("train_mode") or "yolo_ocr"),
-                background_set_id=params.get("background_set_id") or task.get("background_set_id"),
-                pipeline_task_id=task_id,
-                pipeline_task_name=task_record_name(task),
-            )
-        )
-        task.update(
-            {
-                "stage": "samples",
-                "status": "running",
-                "progress": 0,
-                "params": params,
-                "samples_task_id": job["job_id"],
-                "dataset_id": job["job_id"],
-                "last_error": "",
-                "job_note": "",
-            }
-        )
-        log_agent_mcp_sample_tool_call(task, job)
-        print(f"[pipeline.advance] task={task_id} draft->samples ok elapsed_ms={int((time.monotonic() - advance_t0) * 1000)}", flush=True)
-    elif stage == "samples":
-        if task.get("status") != "completed":
-            raise HTTPException(status_code=409, detail="样本还没有生成完成,暂时不能进入训练")
-        if not agent_mcp_training_quality_gate(task):
-            return
-        if "epochs" not in params:
-            pregenerated = consume_pipeline_recommendation(task, "training")
-            if pregenerated is not None:
-                params.update(pregenerated)
-            else:
-                recommendation = agent_recommendation("training", accessory_ids, int(params.get("sample_count") or 0) or None)
-                params.update(recommendation["params"])
-                task["agent_reason"] = recommendation["reason"]
-                task["agent_source"] = recommendation["source"]
-        _step("启动模型训练任务…", 80)
-        job = request_training(
-            TrainingStartRequest(
-                selected_accessory_ids=accessory_ids,
-                dataset_id=str(task.get("dataset_id") or ""),
-                epochs=int(params.get("epochs") or 40),
-                image_size=int(params.get("image_size") or 640),
-                train_mode=str(params.get("train_mode") or "yolo_ocr"),
-                pipeline_task_id=task_id,
-                pipeline_task_name=task_record_name(task),
-            )
-        )
-        task.update(
-            {
-                "stage": "training",
-                "status": "running",
-                "progress": 0,
-                "params": params,
-                "training_task_id": job["job_id"],
-                "last_error": "",
-            }
-        )
-        log_agent_mcp_training_tool_call(task, job)
-    elif stage == "training":
-        if task.get("status") != "completed":
-            raise HTTPException(status_code=409, detail="模型还没有训练完成,暂时不能进入模型库")
-        _step("登记训练模型…", 90)
-        task.update({"stage": "library", "status": "completed", "last_error": "", "job_note": ""})
-        link_pipeline_trained_model(task)
-    else:
-        raise HTTPException(status_code=409, detail="任务已经在模型库阶段")
-    task["updated_at"] = int(time.time())
-    print(f"[pipeline.advance] task={task_id} stage={stage}->{task.get('stage')} done elapsed_ms={int((time.monotonic() - advance_t0) * 1000)}", flush=True)
+    return _pipeline_stage_advancer.advance(task, cancel_event)
 
 
 from .agent.conversation import AgentConversation as _AgentConversation

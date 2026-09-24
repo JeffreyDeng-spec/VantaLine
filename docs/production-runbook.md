@@ -1,3 +1,5 @@
+Pipeline stage-transition extraction retains the embedded Web runner and existing task-lock ownership. No database migration, operator setting, worker topology or PLC change. Source manifest v120 affects only new task fingerprints; deploy or restore the complete release with persisted tasks and call evidence intact.
+
 Pipeline advance lifecycle extraction keeps the embedded Web thread and existing process-local inflight/cancellation registry. No database migration, operator setting or worker topology change. Source manifest v119 changes new source fingerprints only; rollback restores the previous complete release, while persisted task state and call evidence remain.
 
 Pipeline auto-Agent runtime extraction keeps the embedded Web thread, shared inflight registry and existing exception/cleanup behavior. No database migration, new operator setting or worker topology change. Source manifest v118 affects new task fingerprints only; rollback restores the previous complete release while retaining persisted task state and call evidence.
