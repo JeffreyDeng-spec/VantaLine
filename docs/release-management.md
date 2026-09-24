@@ -1,5 +1,7 @@
 # VantaLine release management
 
+Pipeline training-status extraction is a compatible Web release that leaves terminal training synchronization and rollback packages unchanged. Source manifest v115 records the two moved modules; existing task evidence remains intact.
+
 Pipeline reconciliation extraction is a Web-only compatible release. The existing list route, background threads and rollback package remain in place; source manifest v114 records the two moved modules for new evidence only.
 
 Pipeline accessory add/remove route extraction is a single route-compatible Web release without data or topology migration. Source manifest v113 adds the actual moved modules; historical task evidence remains intact.

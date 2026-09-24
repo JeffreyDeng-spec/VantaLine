@@ -1,5 +1,7 @@
 # Architecture
 
+Pipeline training-job lookup and status projection now live in `pipeline/training_status.py`, separate from terminal training-to-pipeline synchronization. Late-resolved capabilities preserve the selected loader, root-linked callback and Agent stage updates; the caller retains locks and storage. Local interrupted-job projection may still write training state, so this is not a read-only boundary.
+
 Pipeline status reconciliation now lives in `pipeline/reconciliation.py`. It preserves the original per-task reap, sync and auto-agent decision order through late-resolved capabilities; server retains the shared registry/locks, background runners, schedulers and public wrappers. No training job scan is added per task.
 
 Pipeline accessory add/remove routes now register in their original order through `pipeline/accessory_routes_api.py`. `pipeline/accessory_routes.py` owns request authentication, canonical ID resolution and ordered alias deletion using narrow late-resolved catalog capabilities. The underlying accessory store and alias policy retain ownership of persistence and locking; partial deletion and payload override behavior stay unchanged.

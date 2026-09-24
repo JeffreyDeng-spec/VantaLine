@@ -20098,52 +20098,37 @@ def normalize_pipeline_task_auto_advance_defaults(tasks: list[dict[str, Any]]) -
     return changed
 
 
+from .pipeline.training_status import PipelineTrainingStatus as _PipelineTrainingStatus
+from .pipeline.training_status_ports import (
+    TrainingJobLookup as _TrainingJobLookup,
+    TrainingStatusEffects as _TrainingStatusEffects,
+)
+_pipeline_training_status = _PipelineTrainingStatus(
+    _TrainingJobLookup(
+        load=lambda: load_training_task,
+        path=lambda: training_task_path,
+        public=lambda: public_refreshed_training_task,
+        linked=lambda: linked_training_job,
+    ),
+    _TrainingStatusEffects(
+        orchestration=lambda: agent_mcp_orchestration,
+        set_stage=lambda: set_agent_mcp_stage,
+    ),
+)
+
+
 def linked_training_job(
     task: dict[str, Any],
     load_task: Callable[[Path], dict[str, Any] | None] | None = None,
 ) -> dict[str, Any] | None:
-    job_id = task.get("training_task_id") if task.get("stage") == "training" else task.get("samples_task_id")
-    if not job_id:
-        return None
-    job = (load_task or load_training_task)(training_task_path(str(job_id)))
-    # Cached read only: the worker watcher refreshes remote jobs in the background.
-    return public_refreshed_training_task(job) if job else None
+    return _pipeline_training_status.linked_training_job(task, load_task)
 
 
 def sync_pipeline_task(
     task: dict[str, Any],
     load_task: Callable[[Path], dict[str, Any] | None] | None = None,
 ) -> bool:
-    if task.get("stage") not in {"samples", "training"}:
-        return False
-    if task.get("status") in {"completed", "failed", "stopped"}:
-        return False
-    job = linked_training_job(task, load_task)
-    if not job:
-        return False
-    changed = False
-    status = str(job.get("status") or "")
-    mapped = "completed" if status == "completed" else "failed" if status == "failed" else "stopped" if status == "stopped" else "running"
-    progress = int(job.get("progress") or 0)
-    if task.get("status") != mapped or task.get("progress") != progress:
-        task["status"] = mapped
-        task["progress"] = progress
-        task["job_note"] = str(job.get("note") or "")[:200]
-        if job.get("current_epoch") is not None:
-            task["current_epoch"] = job.get("current_epoch")
-            task["total_epochs"] = job.get("total_epochs") or job.get("epochs") or 0
-        if task.get("agent_mcp"):
-            orchestration = agent_mcp_orchestration(task)
-            if task.get("stage") == "samples":
-                set_agent_mcp_stage(orchestration, "sample_generation", mapped, 100 if mapped in {"completed", "failed", "stopped"} else progress)
-                if mapped == "completed":
-                    orchestration["state"] = "sample_generation_completed"
-            elif task.get("stage") == "training":
-                set_agent_mcp_stage(orchestration, "model_training", mapped, 100 if mapped in {"completed", "failed", "stopped"} else progress)
-                if mapped == "completed":
-                    orchestration["state"] = "completed"
-        changed = True
-    return changed
+    return _pipeline_training_status.sync_pipeline_task(task, load_task)
 
 
 def link_pipeline_trained_model(task: dict[str, Any]) -> dict[str, Any] | None:
