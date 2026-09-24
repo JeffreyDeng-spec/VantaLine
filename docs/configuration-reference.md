@@ -1,3 +1,5 @@
+Pipeline advance runtime extraction keeps account-scoped configuration, pinned model binding, task defaults and cancellation semantics unchanged. Source manifest v119 includes its two moved modules (318 entries) in new task fingerprints; historical snapshots, model versions and secret references remain intact.
+
 Pipeline auto-Agent runtime extraction keeps the model binding, account scope, Agent step limit and decision configuration unchanged. Source manifest v118 records the two moved modules (316 entries) for new task fingerprints; old snapshots, model versions and secrets remain intact.
 
 Pipeline recommendation pre-generation keeps the same model binding, request identity, provider selection and task settings. Source manifest v117 includes the two moved runtime modules (314 entries) in new task fingerprints; historical snapshots, model bindings and secrets are not rewritten.
