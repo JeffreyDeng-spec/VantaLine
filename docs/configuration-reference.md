@@ -1,3 +1,5 @@
+PLC workstation-management HTTP extraction changes no PLC profile, default, protocol, permission or commissioning setting. Source manifest v121 adds four actual PLC module files (324 entries) for new task fingerprints; existing workstation records, model snapshots and historical fingerprints remain untouched.
+
 Pipeline stage-transition extraction changes no model settings, defaults, worker mode or secret references. Source manifest v120 includes its two actual modules (320 entries) for new task fingerprints; existing model snapshots and historical fingerprints remain unchanged.
 
 Pipeline advance runtime extraction keeps account-scoped configuration, pinned model binding, task defaults and cancellation semantics unchanged. Source manifest v119 includes its two moved modules (318 entries) in new task fingerprints; historical snapshots, model versions and secret references remain intact.

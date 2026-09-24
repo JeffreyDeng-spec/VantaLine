@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Extracted backend dependency direction",
+      "paths": ["scripts/verify_backend_boundaries.py"],
+      "required_docs": ["docs/architecture.md", "docs/testing.md"]
+    },
+    {
       "name": "Pipeline decision regression checks",
       "paths": ["scripts/smoke_pipeline_decision_contract.py", "local_inspection_service/scripts/smoke_phase3d_pipeline.py"],
       "required_docs": ["docs/testing.md"]
@@ -74,7 +79,7 @@
     },
     {
       "name": "PLC and camera dispatch",
-      "paths": ["release/plc-protocol.json", "local_inspection_service/plc_web_serial.py", "local_inspection_service/frontend/src/features/plc/**", "local_inspection_service/frontend/src/features/detection/**"],
+      "paths": ["release/plc-protocol.json", "local_inspection_service/plc_web_serial.py", "local_inspection_service/plc/**", "scripts/smoke_plc_workstation_management.py", "local_inspection_service/frontend/src/features/plc/**", "local_inspection_service/frontend/src/features/detection/**"],
       "server_diff_regex": "(?i)plc|web_serial|workstation|camera_dispatch|camera.*lease",
       "required_docs": ["docs/plc-web-serial-v4.md", "docs/architecture.md"]
     },

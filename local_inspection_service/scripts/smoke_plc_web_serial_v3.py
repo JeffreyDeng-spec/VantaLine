@@ -206,6 +206,9 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     )
     assert_status(created, 200, "create inspector")
     assert_status(client.post("/api/plc/config", json={"enabled": True}), 410, "legacy POST is read-only")
+    assert_status(client.post("/api/plc/workstations/pair",
+                              json={"name": "一号流水线电脑", "unknown": 1}),
+                  422, "pair extra field remains forbidden")
     paired = client.post("/api/plc/workstations/pair", json={"name": "一号流水线电脑"})
     assert_status(paired, 200, "pair")
     assert paired.json()["config"]["enabled"] is False
@@ -213,6 +216,10 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert station_cookie
 
     enabled = {**DEFAULT_WEB_SERIAL_CONFIG, "enabled": True, "output_control_point": ""}
+    assert_status(client.post("/api/plc/workstation/config", json={**enabled, "enabled": "true"}),
+                  422, "config enabled remains strict boolean")
+    assert_status(client.post("/api/plc/workstation/profile-verification", json={"verified": 1}),
+                  422, "profile verification remains strict boolean")
     saved = client.post("/api/plc/workstation/config", json=enabled)
     assert_status(saved, 200, "save workstation config")
     assert saved.json()["config"]["output_control_point"] == ""
