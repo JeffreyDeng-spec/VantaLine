@@ -1,3 +1,5 @@
+Pipeline stage-transition extraction ships as one compatible Web release with its existing public adapter and source manifest v120. The original behavior was replayed locally; CI runs the extracted candidate against the same offline contract. The previous complete release is the rollback unit; historical task/model snapshots are not rewritten.
+
 Pipeline advance lifecycle extraction ships as one compatible Web release with the existing pinned root callable, Event registry and task storage. CI runs offline cancellation/runner contracts; source manifest v119 records the two moved modules. Rollback uses the previous complete release.
 
 Pipeline auto-Agent runner/scheduler extraction ships as one compatible Web release, retaining its pinned root callable and current registry. CI runs the offline runner contract; source manifest v118 includes both moved modules. Rollback uses the previous complete release.

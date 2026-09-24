@@ -1,7 +1,9 @@
 {
-  "version": 119,
+  "version": 120,
   "sources": [
     "server.py",
+    "pipeline/stage_advance.py",
+    "pipeline/stage_advance_ports.py",
     "pipeline/advance_runtime.py",
     "pipeline/advance_runtime_ports.py",
     "pipeline/auto_agent_runtime.py",
