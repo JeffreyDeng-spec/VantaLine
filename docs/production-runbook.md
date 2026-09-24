@@ -1,3 +1,5 @@
+Pipeline auto-Agent runtime extraction keeps the embedded Web thread, shared inflight registry and existing exception/cleanup behavior. No database migration, new operator setting or worker topology change. Source manifest v118 affects new task fingerprints only; rollback restores the previous complete release while retaining persisted task state and call evidence.
+
 Pipeline recommendation runtime extraction retains the embedded Web thread, shared inflight registry and existing cleanup behavior. No database migration, worker topology or operator setting changes; source manifest v117 affects only new task fingerprints. Rollback restores the previous complete release and retains persisted tasks and paid-call evidence.
 
 # Production runbook
