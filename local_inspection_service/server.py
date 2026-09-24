@@ -20543,117 +20543,74 @@ def schedule_pipeline_auto_agent(task_ids: list[str], user: dict[str, Any] | Non
     _pipeline_auto_agent_runtime.schedule(task_ids, user)
 
 
+from .pipeline.advance_runtime import PipelineAdvanceRuntime as _PipelineAdvanceRuntime
+from .pipeline.advance_runtime_ports import (
+    AdvanceExecution as _AdvanceExecution,
+    AdvancePolicy as _AdvancePolicy,
+    AdvanceScheduling as _AdvanceScheduling,
+    AdvanceTasks as _AdvanceTasks,
+)
+_pipeline_advance_runtime = _PipelineAdvanceRuntime(
+    _AdvanceTasks(
+        lock=lambda: _pipeline_tasks_lock,
+        load=lambda: load_pipeline_task,
+        sync=lambda: sync_pipeline_task,
+        save=lambda: save_pipeline_task,
+        deepcopy=lambda: copy.deepcopy,
+    ),
+    _AdvancePolicy(
+        advance=lambda: advance_pipeline_task,
+        guarded=lambda: advance_pipeline_task_guarded,
+        cancelled_error=lambda: PipelineAdvanceCancelled,
+        http_error=lambda: HTTPException,
+        orchestration=lambda: agent_mcp_orchestration,
+        pause=lambda: pause_agent_mcp_task,
+        bounded_text=lambda: bounded_text,
+    ),
+    _AdvanceExecution(
+        identity=lambda: _request_user,
+        scope_config=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        clock=lambda: time.time,
+        traceback=lambda: traceback.print_exc,
+        stderr=lambda: sys.stderr,
+        print=lambda: print,
+    ),
+    _AdvanceScheduling(
+        registry_lock=lambda: _pipeline_advance_registry_lock,
+        inflight=lambda: _pipeline_advance_inflight,
+        cancel_events=lambda: _pipeline_advance_cancel,
+        event=lambda: threading.Event,
+        thread=lambda: threading.Thread,
+        runner=lambda: _run_pipeline_advance,
+    ),
+)
+
+
 def advance_pipeline_task_guarded(
     task: dict[str, Any], config: dict[str, Any], cancel_event: "threading.Event | None" = None
 ) -> None:
     """Advance one stage, converting precondition/runtime failures into a paused
     state with a clear reason (mirrors the previous agent_safe_advance UX) so the
     async runner never crashes and the user always sees why a task stopped."""
-    try:
-        sync_pipeline_task(task)
-        advance_pipeline_task(task, cancel_event=cancel_event)
-    except PipelineAdvanceCancelled:
-        raise
-    except HTTPException as exc:
-        orchestration = agent_mcp_orchestration(task)
-        pause_agent_mcp_task(
-            task,
-            orchestration,
-            stage=str(orchestration.get("active_stage") or task.get("stage") or "pose_image_generation"),
-            reason=bounded_text(exc.detail, 240),
-            suggested_actions=["retry_pose_image_generation", "replan", "cancel"],
-        )
+    _pipeline_advance_runtime.guarded(task, config, cancel_event)
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
 def _run_pipeline_advance(task_id: str, user: dict[str, Any] | None) -> None:
-    token = _request_user.set(user) if user else None
-    try:
-        with _pipeline_advance_registry_lock:
-            cancel_event = _pipeline_advance_cancel.get(task_id) or threading.Event()
-        # Snapshot under the lock; all heavy/bounded compute runs WITHOUT the lock.
-        with _pipeline_tasks_lock:
-            task = load_pipeline_task(task_id)
-            if not task:
-                return
-            sync_pipeline_task(task)
-            task["advancing"] = True
-            if not task.get("advance_started_at"):
-                task["advance_started_at"] = int(time.time())
-            snapshot = copy.deepcopy(task)
-            save_pipeline_task(task)
-        config = scope_config_for_user(load_config(), user)
-        try:
-            advance_pipeline_task_guarded(snapshot, config, cancel_event)
-        except PipelineAdvanceCancelled:
-            print(f"[pipeline.advance] task={task_id} cancelled mid-advance", flush=True)
-            with _pipeline_tasks_lock:
-                stored = load_pipeline_task(task_id)
-                if stored:
-                    stored.pop("advancing", None)
-                    stored.pop("advance_started_at", None)
-                    stored.pop("pause_requested", None)
-                    stored["auto_advance"] = False
-                    stored["status"] = "stopped" if stored.get("stage") == "draft" else stored.get("status", "stopped")
-                    stored["job_note"] = "已暂停，自动推进已关闭。"
-                    stored["last_error"] = ""
-                    stored["updated_at"] = int(time.time())
-                    save_pipeline_task(stored)
-            return
-        except Exception:  # noqa: BLE001 - 推进失败仅记录,任务保留可重试
-            traceback.print_exc(file=sys.stderr)
-            snapshot["last_error"] = "推进任务时发生内部错误，请稍后重试。"
-            snapshot["updated_at"] = int(time.time())
-        snapshot.pop("advancing", None)
-        snapshot.pop("advance_started_at", None)
-        if cancel_event.is_set():
-            snapshot.pop("pause_requested", None)
-            snapshot["auto_advance"] = False
-            snapshot["job_note"] = "已在当前步骤完成后暂停，自动推进已关闭。"
-            snapshot["last_error"] = ""
-        # Write back only if the task still exists (deleted -> drop, no ghost).
-        with _pipeline_tasks_lock:
-            stored = load_pipeline_task(task_id)
-            if not stored:
-                return
-            stored.clear()
-            stored.update(snapshot)
-            save_pipeline_task(stored)
-    except Exception:  # noqa: BLE001 - 后台推进失败仅记录,不影响主流程
-        traceback.print_exc(file=sys.stderr)
-    finally:
-        if token is not None:
-            _request_user.reset(token)
-        with _pipeline_advance_registry_lock:
-            _pipeline_advance_inflight.discard(task_id)
-            _pipeline_advance_cancel.pop(task_id, None)
+    _pipeline_advance_runtime.run(task_id, user)
 
 
 def schedule_pipeline_advance(task_id: str, user: dict[str, Any] | None) -> bool:
     """Enqueue an async advance for a task. Idempotent: if a thread is already
     advancing this task, returns False without stacking a second one."""
-    if not task_id:
-        return False
-    with _pipeline_advance_registry_lock:
-        if task_id in _pipeline_advance_inflight:
-            return False
-        _pipeline_advance_inflight.add(task_id)
-        _pipeline_advance_cancel[task_id] = threading.Event()
-    threading.Thread(target=_run_pipeline_advance, args=(task_id, user), daemon=True).start()
-    return True
+    return _pipeline_advance_runtime.schedule(task_id, user)
 
 
 def cancel_pipeline_advance(task_id: str) -> bool:
     """Signal a running advance worker to stop at the next checkpoint. Returns True
     if a worker was inflight."""
-    if not task_id:
-        return False
-    with _pipeline_advance_registry_lock:
-        event = _pipeline_advance_cancel.get(task_id)
-        inflight = task_id in _pipeline_advance_inflight
-        if event is not None:
-            event.set()
-    return inflight
+    return _pipeline_advance_runtime.cancel(task_id)
 
 
 from .pipeline.recommendations import PipelineRecommendations as _PipelineRecommendations
