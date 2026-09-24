@@ -1,3 +1,5 @@
+Pipeline recommendation pre-generation extraction is one compatible Web release. The original pinned root callable and registry remain, CI runs the offline runtime contract, and source manifest v117 records the moved implementation. Rollback uses the previous complete release.
+
 # VantaLine release management
 
 Pipeline trained-model linking extraction is a Web-only compatible release. It keeps the original callable adapter and uses the existing `pipeline/training_links.py` manifest entry; rollback uses the previous complete release.

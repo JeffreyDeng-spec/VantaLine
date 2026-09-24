@@ -20715,59 +20715,44 @@ def consume_pipeline_recommendation(task: dict[str, Any], stage: str) -> dict[st
     return _pipeline_recommendations.consume_pipeline_recommendation(task, stage)
 
 
+from .pipeline.recommendation_runtime import PipelineRecommendationRuntime as _PipelineRecommendationRuntime
+from .pipeline.recommendation_runtime_ports import (
+    RecommendationExecution as _RecommendationExecution,
+    RecommendationScheduling as _RecommendationScheduling,
+    RecommendationTasks as _RecommendationTasks,
+)
+_pipeline_recommendation_runtime = _PipelineRecommendationRuntime(
+    _RecommendationTasks(
+        lock=lambda: _pipeline_tasks_lock,
+        load=lambda: load_pipeline_task,
+        next_stage=lambda: pipeline_next_recommendation_stage,
+        ready=lambda: pipeline_recommendation_ready,
+        signature=lambda: pipeline_recommendation_signature,
+        save=lambda: save_pipeline_task,
+    ),
+    _RecommendationExecution(
+        identity=lambda: _request_user,
+        recommend=lambda: agent_recommendation,
+        clock=lambda: time.time,
+        traceback=lambda: traceback.print_exc,
+        stderr=lambda: sys.stderr,
+    ),
+    _RecommendationScheduling(
+        lock=lambda: _pipeline_recommendation_lock,
+        inflight=lambda: _pipeline_recommendation_inflight,
+        thread=lambda: threading.Thread,
+        runner=lambda: _run_pipeline_recommendation_pregen,
+    ),
+)
+
+
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
 def _run_pipeline_recommendation_pregen(task_id: str, stage: str, user: dict[str, Any] | None) -> None:
-    token = _request_user.set(user) if user else None
-    try:
-        with _pipeline_tasks_lock:
-            task = load_pipeline_task(task_id)
-            if not task or pipeline_next_recommendation_stage(task) != stage:
-                return
-            if pipeline_recommendation_ready(task, stage):
-                return
-            accessory_ids = [str(item) for item in task.get("accessory_ids") or []]
-            params = task.get("params") if isinstance(task.get("params"), dict) else {}
-            sample_count = int(params.get("sample_count") or 0) or None
-            signature = pipeline_recommendation_signature(task, stage)
-        # The recommendation may call a (slow) LLM; keep it off the lock.
-        recommendation = agent_recommendation(stage, accessory_ids, sample_count)
-        with _pipeline_tasks_lock:
-            task = load_pipeline_task(task_id)
-            if not task or pipeline_next_recommendation_stage(task) != stage:
-                return
-            if pipeline_recommendation_signature(task, stage) != signature:
-                return
-            task["recommended_params"] = {
-                "stage": stage,
-                "params": recommendation.get("params") or {},
-                "reason": recommendation.get("reason") or "",
-                "source": recommendation.get("source") or "rules",
-                "signature": signature,
-                "created_at": int(time.time()),
-            }
-            task["updated_at"] = int(time.time())
-            save_pipeline_task(task)
-    except Exception:  # noqa: BLE001 - 后台预生成失败仅记录，不影响主流程
-        traceback.print_exc(file=sys.stderr)
-    finally:
-        if token is not None:
-            _request_user.reset(token)
-        with _pipeline_recommendation_lock:
-            _pipeline_recommendation_inflight.discard(f"{task_id}|{stage}")
+    _pipeline_recommendation_runtime.run(task_id, stage, user)
 
 
 def schedule_pipeline_recommendation_pregen(items: list[tuple[str, str]], user: dict[str, Any] | None) -> None:
-    for task_id, stage in items:
-        if not task_id or not stage:
-            continue
-        key = f"{task_id}|{stage}"
-        with _pipeline_recommendation_lock:
-            if key in _pipeline_recommendation_inflight:
-                continue
-            _pipeline_recommendation_inflight.add(key)
-        threading.Thread(
-            target=_run_pipeline_recommendation_pregen, args=(task_id, stage, user), daemon=True
-        ).start()
+    _pipeline_recommendation_runtime.schedule(items, user)
 
 
 def collect_pipeline_recommendation_pregen(tasks: list[dict[str, Any]]) -> list[tuple[str, str]]:

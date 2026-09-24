@@ -1,3 +1,5 @@
+Pipeline recommendation runtime extraction retains the embedded Web thread, shared inflight registry and existing cleanup behavior. No database migration, worker topology or operator setting changes; source manifest v117 affects only new task fingerprints. Rollback restores the previous complete release and retains persisted tasks and paid-call evidence.
+
 # Production runbook
 
 Pipeline trained-model linking extraction keeps catalog lookup and caller-owned task locks/saves. No database migration, worker topology or operator setting changes; source manifest v116 changes new source fingerprints but retains 312 entries.

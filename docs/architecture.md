@@ -1,3 +1,5 @@
+Pipeline recommendation pre-generation now runs and schedules through `pipeline/recommendation_runtime.py`. The root keeps the pinned-model decorator and the process-shared inflight set/lock; narrow late-resolved ports preserve the task lock around two reads/writes, the unlocked provider call, and the existing failure and cleanup order. This does not change worker topology or recommendation policy.
+
 # Architecture
 
 Pipeline trained-model linking now lives beside the reverse run lookup in `pipeline/training_links.py`, as a separate class with a late-resolved catalog capability. It selects the first visible matching run and mutates the caller-owned task in place. The caller still owns locks, saves and any following Agent or training actions.
