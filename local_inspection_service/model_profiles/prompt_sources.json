@@ -1,7 +1,11 @@
 {
-  "version": 120,
+  "version": 121,
   "sources": [
     "server.py",
+    "plc/__init__.py",
+    "plc/workstation_management.py",
+    "plc/workstation_management_api.py",
+    "plc/workstation_management_ports.py",
     "pipeline/stage_advance.py",
     "pipeline/stage_advance_ports.py",
     "pipeline/advance_runtime.py",

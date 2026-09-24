@@ -17068,55 +17068,76 @@ def get_release_version() -> dict[str, Any]:
     return current_release_version()
 
 
-@app.get("/api/plc/workstation")
+from .plc.workstation_management import WorkstationManagement as _WorkstationManagement
+from .plc.workstation_management_api import register_workstation_management_routes as _register_workstation_management_routes
+from .plc.workstation_management_ports import (
+    WorkstationAccess as _WorkstationAccess,
+    WorkstationErrors as _WorkstationErrors,
+    WorkstationMutation as _WorkstationMutation,
+    WorkstationProjection as _WorkstationProjection,
+)
+
+_plc_workstation_management = _WorkstationManagement(
+    _WorkstationAccess(
+        require_permission=lambda: require_permission,
+        station_from_request=lambda: plc_web_serial_station_from_request,
+        require_station=lambda: require_plc_web_serial_station,
+    ),
+    _WorkstationProjection(
+        station_payload=lambda: plc_web_serial_station_payload,
+        unpaired_payload=lambda: plc_web_serial_unpaired_payload,
+        list_workstations=lambda: plc_web_serial_list_workstations,
+    ),
+    _WorkstationMutation(
+        pair=lambda: plc_web_serial_pair,
+        update_config=lambda: plc_web_serial_update_config,
+        set_verified=lambda: plc_web_serial_set_verified,
+    ),
+    _WorkstationErrors(
+        config_error=lambda: PlcConfigError,
+        http_error=lambda: HTTPException,
+    ),
+)
+
+
 def get_plc_web_serial_workstation(request: Request) -> dict[str, Any]:
-    station = plc_web_serial_station_from_request(request)
-    return plc_web_serial_station_payload(station) if station else plc_web_serial_unpaired_payload()
+    return _plc_workstation_management.get(request)
 
 
-@app.get("/api/plc/workstations")
 def list_plc_web_serial_workstations() -> dict[str, Any]:
-    require_permission("system_settings")
-    return {"items": plc_web_serial_list_workstations()}
+    return _plc_workstation_management.list()
 
 
-@app.post("/api/plc/workstations/pair")
 def pair_plc_web_serial_workstation(
     request: Request,
     response: Response,
     payload: PlcWorkstationPairRequest,
 ) -> dict[str, Any]:
-    require_permission("system_settings")
-    try:
-        return plc_web_serial_pair(request, response, payload.name, payload.station_id)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _plc_workstation_management.pair(request, response, payload)
 
 
-@app.post("/api/plc/workstation/config")
 def update_plc_web_serial_workstation_config(
     request: Request,
     payload: PlcWebSerialConfigRequest,
 ) -> dict[str, Any]:
-    require_permission("system_settings")
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_update_config(str(station["id"]), payload.model_dump())
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _plc_workstation_management.update_config(request, payload)
 
 
-@app.post("/api/plc/workstation/profile-verification")
 def verify_plc_web_serial_workstation_profile(
     request: Request,
     payload: PlcWorkstationVerifyRequest,
 ) -> dict[str, Any]:
-    require_permission("system_settings")
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_set_verified(str(station["id"]), payload.verified)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _plc_workstation_management.verify_profile(request, payload)
+
+
+_register_workstation_management_routes(
+    app,
+    get_workstation=get_plc_web_serial_workstation,
+    list_workstations=list_plc_web_serial_workstations,
+    pair_workstation=pair_plc_web_serial_workstation,
+    update_config=update_plc_web_serial_workstation_config,
+    verify_profile=verify_plc_web_serial_workstation_profile,
+)
 
 
 @app.post("/api/plc/workstation/connect")

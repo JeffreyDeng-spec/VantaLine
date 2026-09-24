@@ -1,3 +1,5 @@
+PLC workstation-management route/service extraction ships as one compatible Web release with the original five root endpoint signatures, route order, request models and source manifest v121. The accepted-original replay is local; CI runs the candidate synthetic and existing HTTP/PLC contracts. Rollback restores the previous complete release and keeps persisted workstation and dispatch evidence.
+
 Pipeline stage-transition extraction ships as one compatible Web release with its existing public adapter and source manifest v120. The original behavior was replayed locally; CI runs the extracted candidate against the same offline contract. The previous complete release is the rollback unit; historical task/model snapshots are not rewritten.
 
 Pipeline advance lifecycle extraction ships as one compatible Web release with the existing pinned root callable, Event registry and task storage. CI runs offline cancellation/runner contracts; source manifest v119 records the two moved modules. Rollback uses the previous complete release.

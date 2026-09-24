@@ -1,3 +1,5 @@
+The first workstation-management HTTP boundary now registers five existing get/list/pair/config/verification routes through `plc/workstation_management_api.py` and delegates their unchanged authorization and error handling to `plc/workstation_management.py`. Root request models, state mutators, PostgreSQL/local storage, leases, dispatches and browser serial operation remain in place. The get/list projections may migrate stored configuration, revoke leases or settle expired dispatches as uncertain; they are not pure reads or cached.
+
 # PLC Web Serial v4
 
 Accessory catalog policy, projection and persistence now live in `accessories`.

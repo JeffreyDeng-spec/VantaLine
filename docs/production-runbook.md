@@ -1,3 +1,5 @@
+PLC workstation-management HTTP extraction keeps the existing Web process, shared database and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or roll back the whole release with source manifest v121; do not copy isolated route or state files.
+
 Pipeline stage-transition extraction retains the embedded Web runner and existing task-lock ownership. No database migration, operator setting, worker topology or PLC change. Source manifest v120 affects only new task fingerprints; deploy or restore the complete release with persisted tasks and call evidence intact.
 
 Pipeline advance lifecycle extraction keeps the embedded Web thread and existing process-local inflight/cancellation registry. No database migration, operator setting or worker topology change. Source manifest v119 changes new source fingerprints only; rollback restores the previous complete release, while persisted task state and call evidence remain.
