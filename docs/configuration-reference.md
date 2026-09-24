@@ -1,3 +1,5 @@
+Pipeline recommendation pre-generation keeps the same model binding, request identity, provider selection and task settings. Source manifest v117 includes the two moved runtime modules (314 entries) in new task fingerprints; historical snapshots, model bindings and secrets are not rewritten.
+
 # Configuration reference
 
 Pipeline trained-model linking keeps existing catalog visibility, fallback model-ID construction and model-path truthiness unchanged. Source manifest v116 retains the same 312 entries because `pipeline/training_links.py` was already listed; new task fingerprints reflect its changed source, while historical snapshots, model bindings and secrets are untouched.

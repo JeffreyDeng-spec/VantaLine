@@ -1,3 +1,5 @@
+`python scripts/smoke_pipeline_recommendation_runtime.py` replays the v518 original runner and scheduler when `VANTALINE_RECOMMENDATION_RUNTIME_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. The original AST runs eleven shared cases with three candidate-only skips because its decorator is removed for isolated replay; the candidate runs all fourteen, including two real decorated-root binding cases. Synthetic cases cover lock order, skipped/stale tasks, saved parameters, errors, model binding before request identity, duplicate scheduling, failed thread start, reset failure and independent A/B/A instances. It uses no paid model, physical PLC or customer data.
+
 # Testing
 
 `python scripts/smoke_pipeline_trained_model_link.py` replays the v516 root linker when `VANTALINE_MODEL_LINK_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic cases cover first-match identity, fallback fields, catalog rebinding, expression order and error partial effects without real models, PLC or paid calls.
