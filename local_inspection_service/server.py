@@ -17211,69 +17211,77 @@ _register_connection_lease_routes(
 )
 
 
-@app.post("/api/plc/workstation/dispatches/{dispatch_id}/attempt")
+from .plc.dispatch_diagnostic import DispatchDiagnostic as _DispatchDiagnostic
+from .plc.dispatch_diagnostic_api import register_dispatch_diagnostic_routes as _register_dispatch_diagnostic_routes
+from .plc.dispatch_diagnostic_ports import (
+    DispatchAccess as _DispatchAccess, DispatchErrors as _DispatchErrors,
+    DispatchMutation as _DispatchMutation,
+)
+
+_plc_dispatch_diagnostic = _DispatchDiagnostic(
+    _DispatchAccess(
+        require_permission=lambda: require_permission,
+        require_station=lambda: require_plc_web_serial_station,
+    ),
+    _DispatchMutation(
+        declare_attempt=lambda: plc_web_serial_declare_attempt,
+        diagnostic_plan=lambda: plc_web_serial_diagnostic_plan,
+        diagnostic_receipt=lambda: plc_web_serial_finish_diagnostic,
+        diagnostic_confirm=lambda: plc_web_serial_confirm_diagnostic,
+        record_receipt=lambda: plc_web_serial_record_receipt,
+    ),
+    _DispatchErrors(
+        config_error=lambda: PlcConfigError,
+        http_error=lambda: HTTPException,
+    ),
+)
+
+
 def declare_plc_web_serial_attempt(
     dispatch_id: str,
     request: Request,
     payload: PlcWebSerialAttemptRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_declare_attempt(str(station["id"]), dispatch_id, payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_dispatch_diagnostic.declare_attempt(dispatch_id, request, payload)
 
 
-@app.post("/api/plc/workstation/diagnostic-plan")
 def create_plc_web_serial_diagnostic_plan(
     request: Request,
     payload: PlcWebSerialAttemptRequest,
 ) -> dict[str, Any]:
-    require_permission("system_settings")
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_diagnostic_plan(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_dispatch_diagnostic.diagnostic_plan(request, payload)
 
 
-@app.post("/api/plc/workstation/diagnostic-receipt")
 def finish_plc_web_serial_diagnostic(
     request: Request,
     payload: PlcWebSerialDiagnosticReceiptRequest,
 ) -> dict[str, Any]:
-    require_permission("system_settings")
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_finish_diagnostic(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_dispatch_diagnostic.diagnostic_receipt(request, payload)
 
 
-@app.post("/api/plc/workstation/diagnostic-confirm")
 def confirm_plc_web_serial_diagnostic(
     request: Request,
     payload: PlcWebSerialDiagnosticConfirmRequest,
 ) -> dict[str, Any]:
-    require_permission("system_settings")
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_confirm_diagnostic(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_dispatch_diagnostic.diagnostic_confirm(request, payload)
 
 
-@app.post("/api/plc/workstation/dispatches/{dispatch_id}/receipt")
 def record_plc_web_serial_receipt_endpoint(
     dispatch_id: str,
     request: Request,
     payload: PlcWebSerialReceiptRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_record_receipt(str(station["id"]), dispatch_id, payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_dispatch_diagnostic.record_receipt(dispatch_id, request, payload)
+
+
+_register_dispatch_diagnostic_routes(
+    app,
+    declare_attempt=declare_plc_web_serial_attempt,
+    diagnostic_plan=create_plc_web_serial_diagnostic_plan,
+    diagnostic_receipt=finish_plc_web_serial_diagnostic,
+    diagnostic_confirm=confirm_plc_web_serial_diagnostic,
+    record_receipt=record_plc_web_serial_receipt_endpoint,
+)
 
 
 @app.post("/api/plc/capture-sessions/claim")
