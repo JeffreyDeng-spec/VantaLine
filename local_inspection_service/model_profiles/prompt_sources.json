@@ -1,11 +1,14 @@
 {
-  "version": 122,
+  "version": 123,
   "sources": [
     "server.py",
     "plc/__init__.py",
     "plc/connection_lease.py",
     "plc/connection_lease_api.py",
     "plc/connection_lease_ports.py",
+    "plc/dispatch_diagnostic.py",
+    "plc/dispatch_diagnostic_api.py",
+    "plc/dispatch_diagnostic_ports.py",
     "plc/workstation_management.py",
     "plc/workstation_management_api.py",
     "plc/workstation_management_ports.py",

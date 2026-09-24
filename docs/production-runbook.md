@@ -1,3 +1,5 @@
+PLC dispatch/diagnostic HTTP extraction keeps the Web process, shared database and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or restore the full release with source manifest v123; do not copy individual PLC files.
+
 PLC connection-lease HTTP extraction keeps the existing Web process, database, lease clock and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or roll back the full release with source manifest v122; do not copy an individual PLC file.
 
 PLC workstation-management HTTP extraction keeps the existing Web process, shared database and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or roll back the whole release with source manifest v121; do not copy isolated route or state files.
