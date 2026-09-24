@@ -1,3 +1,5 @@
+Pipeline auto-Agent runner/scheduler extraction ships as one compatible Web release, retaining its pinned root callable and current registry. CI runs the offline runner contract; source manifest v118 includes both moved modules. Rollback uses the previous complete release.
+
 Pipeline recommendation pre-generation extraction is one compatible Web release. The original pinned root callable and registry remain, CI runs the offline runtime contract, and source manifest v117 records the moved implementation. Rollback uses the previous complete release.
 
 # VantaLine release management

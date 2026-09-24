@@ -20492,77 +20492,55 @@ def pipeline_task_needs_auto_agent(task: dict[str, Any]) -> bool:
     return _pipeline_reconciliation.pipeline_task_needs_auto_agent(task)
 
 
+from .pipeline.auto_agent_runtime import PipelineAutoAgentRuntime as _PipelineAutoAgentRuntime
+from .pipeline.auto_agent_runtime_ports import (
+    AutoAgentDecision as _AutoAgentDecision,
+    AutoAgentExecution as _AutoAgentExecution,
+    AutoAgentScheduling as _AutoAgentScheduling,
+    AutoAgentTasks as _AutoAgentTasks,
+)
+_pipeline_auto_agent_runtime = _PipelineAutoAgentRuntime(
+    _AutoAgentTasks(
+        lock=lambda: _pipeline_tasks_lock,
+        load=lambda: load_pipeline_task,
+        needs_agent=lambda: pipeline_task_needs_auto_agent,
+        orchestration=lambda: agent_mcp_orchestration,
+        signature=lambda: pipeline_task_decision_signature,
+        max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS,
+        pause=lambda: pause_agent_mcp_task,
+        append_conversation=lambda: agent_mcp_append_conversation,
+        save=lambda: save_pipeline_task,
+        deepcopy=lambda: copy.deepcopy,
+    ),
+    _AutoAgentDecision(
+        scope_config=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        decide=lambda: agent_pipeline_decide,
+        commit=lambda: commit_pipeline_agent_turn,
+        now=lambda: agent_mcp_now,
+        schedule_advance=lambda: schedule_pipeline_advance,
+    ),
+    _AutoAgentExecution(
+        identity=lambda: _request_user,
+        traceback=lambda: traceback.print_exc,
+        stderr=lambda: sys.stderr,
+    ),
+    _AutoAgentScheduling(
+        lock=lambda: _pipeline_auto_agent_lock,
+        inflight=lambda: _pipeline_auto_agent_inflight,
+        thread=lambda: threading.Thread,
+        runner=lambda: _run_pipeline_auto_agent_step,
+    ),
+)
+
+
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
 def _run_pipeline_auto_agent_step(task_id: str, user: dict[str, Any] | None) -> None:
-    token = _request_user.set(user) if user else None
-    try:
-        # Phase 1: snapshot the task under the lock and enforce guardrails.
-        with _pipeline_tasks_lock:
-            task = load_pipeline_task(task_id)
-            if not task or not pipeline_task_needs_auto_agent(task):
-                return
-            orchestration = agent_mcp_orchestration(task)
-            signature = pipeline_task_decision_signature(task)
-            if orchestration.get("last_auto_signature") == signature:
-                return
-            if int(orchestration.get("auto_steps") or 0) >= AGENT_MCP_AUTO_MAX_STEPS:
-                pause_agent_mcp_task(
-                    task,
-                    orchestration,
-                    stage=str(task.get("stage") or "model_training"),
-                    reason="自动编排已达到步数上限，请人工确认后再继续。",
-                    suggested_actions=["continue_training", "replan", "cancel"],
-                )
-                orchestration["last_auto_signature"] = signature
-                agent_mcp_append_conversation(
-                    task,
-                    "agent",
-                    "自动编排步数已达上限，已暂停等待人工确认。",
-                    action="pause_and_ask",
-                    source="rules",
-                    needs_user=True,
-                )
-                save_pipeline_task(task)
-                return
-            snapshot = copy.deepcopy(task)
-        # Phase 2: run the (potentially slow) decision without holding the lock.
-        config = scope_config_for_user(load_config(), user)
-        decision = agent_pipeline_decide(snapshot, config, user_message=None, trigger="auto")
-        # Phase 3: re-acquire the lock and apply the decision to the live task.
-        pending_advances: list[str] = []
-        with _pipeline_tasks_lock:
-            task = load_pipeline_task(task_id)
-            if not task or not pipeline_task_needs_auto_agent(task):
-                return
-            orchestration = agent_mcp_orchestration(task)
-            if orchestration.get("last_auto_signature") == signature:
-                return
-            commit_pipeline_agent_turn(task, config, user, None, decision, "auto", pending_advances=pending_advances)
-            orchestration = agent_mcp_orchestration(task)
-            orchestration["last_auto_signature"] = signature
-            orchestration["auto_steps"] = int(orchestration.get("auto_steps") or 0) + 1
-            orchestration["last_auto_step_at"] = agent_mcp_now()
-            save_pipeline_task(task)
-        for advance_id in pending_advances:
-            schedule_pipeline_advance(advance_id, user)
-    except Exception:  # noqa: BLE001 - 后台自动编排失败仅记录，不影响主流程
-        traceback.print_exc(file=sys.stderr)
-    finally:
-        if token is not None:
-            _request_user.reset(token)
-        with _pipeline_auto_agent_lock:
-            _pipeline_auto_agent_inflight.discard(task_id)
+    _pipeline_auto_agent_runtime.run(task_id, user)
 
 
 def schedule_pipeline_auto_agent(task_ids: list[str], user: dict[str, Any] | None) -> None:
-    for task_id in task_ids:
-        if not task_id:
-            continue
-        with _pipeline_auto_agent_lock:
-            if task_id in _pipeline_auto_agent_inflight:
-                continue
-            _pipeline_auto_agent_inflight.add(task_id)
-        threading.Thread(target=_run_pipeline_auto_agent_step, args=(task_id, user), daemon=True).start()
+    _pipeline_auto_agent_runtime.schedule(task_ids, user)
 
 
 def advance_pipeline_task_guarded(

@@ -1,3 +1,5 @@
+Pipeline auto-Agent background steps now run and schedule through `pipeline/auto_agent_runtime.py`. The root retains pinned-model binding, shared inflight registry and thin adapters. Explicit task, decision, execution and scheduler capabilities preserve the first locked eligibility/step-limit check, unlocked decision, second locked commit and unlocked advance scheduling. No Agent decision policy or worker topology changes.
+
 Pipeline recommendation pre-generation now runs and schedules through `pipeline/recommendation_runtime.py`. The root keeps the pinned-model decorator and the process-shared inflight set/lock; narrow late-resolved ports preserve the task lock around two reads/writes, the unlocked provider call, and the existing failure and cleanup order. This does not change worker topology or recommendation policy.
 
 # Architecture

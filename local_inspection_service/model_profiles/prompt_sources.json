@@ -1,7 +1,9 @@
 {
-  "version": 117,
+  "version": 118,
   "sources": [
     "server.py",
+    "pipeline/auto_agent_runtime.py",
+    "pipeline/auto_agent_runtime_ports.py",
     "pipeline/recommendation_runtime.py",
     "pipeline/recommendation_runtime_ports.py",
     "pipeline/training_status.py",
