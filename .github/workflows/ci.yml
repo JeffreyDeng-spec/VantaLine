@@ -158,6 +158,7 @@ jobs:
       - run: python local_inspection_service/scripts/smoke_plc_web_serial_v3.py
       - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
       - run: python scripts/smoke_plc_workstation_management.py
+      - run: python scripts/smoke_plc_connection_lease_api.py
       - run: python local_inspection_service/scripts/smoke_release_version.py
       - run: python local_inspection_service/scripts/smoke_navigation_endpoints.py
       - run: python local_inspection_service/scripts/smoke_postgres_runtime_repository.py

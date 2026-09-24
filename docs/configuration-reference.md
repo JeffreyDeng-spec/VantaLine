@@ -1,3 +1,5 @@
+PLC connection-lease HTTP extraction changes no PLC profile, model permission, default, protocol or secret. Source manifest v122 adds the three actual lease boundary files (327 entries) for new task fingerprints; existing model snapshots and historical fingerprints remain unchanged.
+
 PLC workstation-management HTTP extraction changes no PLC profile, default, protocol, permission or commissioning setting. Source manifest v121 adds four actual PLC module files (324 entries) for new task fingerprints; existing workstation records, model snapshots and historical fingerprints remain untouched.
 
 Pipeline stage-transition extraction changes no model settings, defaults, worker mode or secret references. Source manifest v120 includes its two actual modules (320 entries) for new task fingerprints; existing model snapshots and historical fingerprints remain unchanged.

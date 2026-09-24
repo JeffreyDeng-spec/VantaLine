@@ -17140,65 +17140,75 @@ _register_workstation_management_routes(
 )
 
 
-@app.post("/api/plc/workstation/connect")
+from .plc.connection_lease import ConnectionLease as _ConnectionLease
+from .plc.connection_lease_api import register_connection_lease_routes as _register_connection_lease_routes
+from .plc.connection_lease_ports import (
+    LeaseAccess as _LeaseAccess, LeaseErrors as _LeaseErrors,
+    LeaseMutation as _LeaseMutation,
+)
+
+_plc_connection_lease = _ConnectionLease(
+    _LeaseAccess(
+        require_station=lambda: require_plc_web_serial_station,
+        require_model_permission=lambda: require_analyze_model_permission,
+    ),
+    _LeaseMutation(
+        claim=lambda: plc_web_serial_claim_connecting_lease,
+        activate=lambda: plc_web_serial_activate_lease,
+        heartbeat=lambda: plc_web_serial_heartbeat,
+        rebind_model=lambda: plc_web_serial_rebind_model,
+        disconnect=lambda: plc_web_serial_release_lease,
+    ),
+    _LeaseErrors(
+        config_error=lambda: PlcConfigError,
+        http_error=lambda: HTTPException,
+    ),
+)
+
+
 def claim_plc_web_serial_connection(
     request: Request,
     payload: PlcWorkstationLeaseRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_claim_connecting_lease(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_connection_lease.claim(request, payload)
 
 
-@app.post("/api/plc/workstation/connect/activate")
 def activate_plc_web_serial_connection(
     request: Request,
     payload: PlcWorkstationLeaseActivateRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_activate_lease(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_connection_lease.activate(request, payload)
 
 
-@app.post("/api/plc/workstation/lease/heartbeat")
 def heartbeat_plc_web_serial_connection(
     request: Request,
     payload: PlcWorkstationLeaseHeartbeatRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_heartbeat(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_connection_lease.heartbeat(request, payload)
 
 
-@app.post("/api/plc/workstation/lease/rebind-model")
 def rebind_plc_web_serial_connection_model(
     request: Request,
     payload: PlcWorkstationLeaseRebindRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    require_analyze_model_permission(payload.model_id)
-    try:
-        return plc_web_serial_rebind_model(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_connection_lease.rebind_model(request, payload)
 
 
-@app.post("/api/plc/workstation/lease/disconnect")
 def disconnect_plc_web_serial_connection(
     request: Request,
     payload: PlcWorkstationLeaseHeartbeatRequest,
 ) -> dict[str, Any]:
-    station = require_plc_web_serial_station(request)
-    try:
-        return plc_web_serial_release_lease(str(station["id"]), payload)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _plc_connection_lease.disconnect(request, payload)
+
+
+_register_connection_lease_routes(
+    app,
+    claim=claim_plc_web_serial_connection,
+    activate=activate_plc_web_serial_connection,
+    heartbeat=heartbeat_plc_web_serial_connection,
+    rebind_model=rebind_plc_web_serial_connection_model,
+    disconnect=disconnect_plc_web_serial_connection,
+)
 
 
 @app.post("/api/plc/workstation/dispatches/{dispatch_id}/attempt")

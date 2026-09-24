@@ -1,3 +1,5 @@
+PLC connection-lease HTTP extraction keeps the existing Web process, database, lease clock and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or roll back the full release with source manifest v122; do not copy an individual PLC file.
+
 PLC workstation-management HTTP extraction keeps the existing Web process, shared database and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or roll back the whole release with source manifest v121; do not copy isolated route or state files.
 
 Pipeline stage-transition extraction retains the embedded Web runner and existing task-lock ownership. No database migration, operator setting, worker topology or PLC change. Source manifest v120 affects only new task fingerprints; deploy or restore the complete release with persisted tasks and call evidence intact.
