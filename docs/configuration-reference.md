@@ -1,5 +1,7 @@
 # Configuration reference
 
+Pipeline training status extraction keeps training job lookup, local interruption settlement and Agent stage configuration unchanged. Source manifest v115 contains 312 entries including the two moved modules for new task fingerprints; existing snapshots, model bindings and secret references remain unchanged.
+
 Pipeline reconciliation keeps the five-second list throttle, Agent selection and training-task lookup settings unchanged. Source manifest v114 contains 310 entries including the two moved reconciliation modules; new task fingerprints use their actual source, while existing snapshots and secret references remain unchanged.
 
 Pipeline accessory membership retains existing account-scoped configuration, canonical/alias resolution and public payload behavior. Source manifest v113 (308 entries) includes the three moved route modules for new task fingerprints; old snapshots, model bindings and secret references remain untouched.

@@ -1,7 +1,9 @@
 {
-  "version": 114,
+  "version": 115,
   "sources": [
     "server.py",
+    "pipeline/training_status.py",
+    "pipeline/training_status_ports.py",
     "pipeline/reconciliation.py",
     "pipeline/reconciliation_ports.py",
     "pipeline/accessory_routes.py",

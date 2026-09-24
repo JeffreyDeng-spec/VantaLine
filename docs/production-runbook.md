@@ -1,5 +1,7 @@
 # Production runbook
 
+Pipeline training-status extraction keeps the existing local interrupted-task settlement path and its possible training-state write, without adding pipeline locks or retries. No database migration, worker topology or operator setting changes; source manifest v115 affects new task fingerprints only.
+
 Pipeline reconciliation extraction preserves task and registry lock ownership, the five-second list throttle and current background scheduling behavior. No database migration, worker topology or operator setting changes; source manifest v114 affects only new task fingerprints.
 
 Pipeline accessory route extraction keeps the existing membership store, authorization and ordered alias removal semantics. No schema migration, worker topology, PLC behavior or operator setting changes; source manifest v113 affects new task fingerprints only.
