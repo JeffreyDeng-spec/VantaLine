@@ -975,3 +975,7 @@ For a fixed-reference model read-path release, verify both the existing model-pr
 ## Model registry initialization fast path
 
 For a model initialization fast-path release, require the isolated PostgreSQL warm/cold race and failure-retry regression in backend CI. Existing installations should take the short committed-state read; a new or missing state still migrates under the original advisory lock. On failure, restore the previous complete immutable release and retain profile rows, secret versions and task snapshots; do not attempt a reverse migration.
+
+## Model task snapshot read transactions
+
+Task model snapshots may now return the last committed binding while an administrator has an uncommitted update. Newly submitted tasks continue to persist their selected snapshot; pre-migration tasks retain their historical migration snapshot. No operator action or new configuration is required.

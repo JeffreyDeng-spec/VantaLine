@@ -1883,3 +1883,7 @@ The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_
 ## Model registry initialization fast path
 
 `scripts/smoke_model_profile_initialize_fast_path.py` runs in backend CI against disposable PostgreSQL schemas. It proves warm initialization completes while a writer holds the global lock; simultaneous cold initializers serialize and create one state/profile/audit; a migration failure rolls back DB state and can be retried; falsey state takes the old cold path; injected state-read failures preserve exception identity and leave an IDLE reusable connection with a closed cursor. Existing model-profile and fixed-reference PostgreSQL regressions still run.
+
+## Model task snapshot read transactions
+
+`scripts/smoke_model_profile_snapshot_reads.py` runs against an isolated PostgreSQL schema in backend CI. It verifies committed snapshots during an uncommitted writer, old task replay after version changes, binding/head coherence across a concurrent commit, independent write progress during a paused read, separate fallback transaction timing, scope behavior, strict timestamp cases, and rollback/IDLE/cursor closure after injected state or profile decode failures. The full model-profile registry smoke remains in CI; no provider or PLC is contacted.

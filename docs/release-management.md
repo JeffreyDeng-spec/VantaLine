@@ -798,3 +798,7 @@ The fixed-reference model read change is compatible with the current single-serv
 ## Model registry initialization fast path
 
 The model registry initialization fast path is a read-path-only change for already initialized installations. Cold migration and whole-release rollback use the existing topology and storage. Backend CI adds an isolated PostgreSQL cold-race/failure regression alongside the registry and fixed-reference tests; no worker or schema change ships with this PR.
+
+## Model task snapshot read transactions
+
+The snapshot read change has no schema, release topology, migration, or configuration change. The isolated PostgreSQL regression joins the backend CI gate; continue the normal immutable Web release and rollback procedure.

@@ -1077,3 +1077,7 @@ Fixed-reference model resolution and the admin usage-call list use short Postgre
 ## Model registry initialization fast path
 
 The model registry warm-start check now reads committed state without taking the global advisory lock. A missing or falsey state still uses the original locked migration with an in-lock recheck. No setting, default, stored binding, snapshot, secret reference or prompt-source fingerprint changes. External secret writes made before a failed database migration retain their existing non-transactional behavior.
+
+## Model task snapshot read transactions
+
+No configuration value changes. The task snapshot and historical-record state reads use short PostgreSQL read transactions after registry initialization. The original append-only profile versions, binding configuration, prompt-source fingerprint, secret references and admin write validation are unchanged.

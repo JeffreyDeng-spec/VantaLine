@@ -181,14 +181,14 @@ class Service:
     def snapshot(self):
         self.initialize()
         repo = self.repository()
-        with repo.transaction() as c:
+        with repo.read_tx() as c:
             state = repo.state(c)
             return {p: profile_reference(repo.get(c, f"{identity}:{state['heads'][identity]}")) if identity else None for p,identity in state['bindings'].items()}
 
     def snapshot_for_record(self, record):
         self.initialize()
         repo = self.repository()
-        with repo.transaction() as c:
+        with repo.read_tx() as c:
             state = repo.state(c)
             created = record.get('created_at')
             if created and float(created) < state['migrated_at']:
