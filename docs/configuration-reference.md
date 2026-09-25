@@ -1,3 +1,5 @@
+Legacy label-list indexing adds no setting, provider, model or permission change. Source manifest v133 retains 341 actual sources and fingerprints the changed `label_inspection/api.py` for new tasks; historical task snapshots and secret references are not rewritten.
+
 Label pure-list read transactions add no setting or provider change. Source manifest v132 retains the 341 actual entries from v131 and fingerprints the updated `storage/label_inspection.py` for new tasks; existing task model snapshots, secret references and historical fingerprints are untouched.
 
 Label task-list batching adds no operator setting, default, model permission or provider selection. Source manifest v131 appends the actual `label_inspection/api.py` and `storage/label_inspection.py` sources (341 entries) for new task fingerprints; historical task snapshots, prompt bindings and secret references are not rewritten.

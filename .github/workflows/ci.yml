@@ -142,6 +142,8 @@ jobs:
       VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -335,6 +337,12 @@ jobs:
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py
           python local_inspection_service/scripts/smoke_endpoint_runtime_store_probe.py
           python scripts/smoke_label_run_batch.py
+          git show 'HEAD^:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_legacy_parent_api.py"
+          VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_parent_api.py" python scripts/smoke_label_legacy_index.py
+          git fetch --no-tags --depth=1 origin cf9c61577c0ccb1f32404e88b46ec07cb9e482e5
+          test "$(git rev-parse 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py')" = '36e55d6a78ff5e0b146e856a89c1f2a50ff301a4'
+          git show 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_legacy_v550_api.py"
+          VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_v550_api.py" python scripts/benchmark_label_legacy_index.py
           python scripts/smoke_label_read_transactions.py
           python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py

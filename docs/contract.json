@@ -136,6 +136,8 @@
         "scripts/smoke_label_dependencies.py",
         "scripts/smoke_label_run_batch.py",
         "scripts/smoke_label_read_transactions.py",
+        "scripts/smoke_label_legacy_index.py",
+        "scripts/benchmark_label_legacy_index.py",
         "scripts/benchmark_label_run_batch.py"
       ],
       "required_docs": [

@@ -157,12 +157,13 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
         ]
         return standards, records
 
-    def legacy_task(repo, owner, identity):
+    def legacy_task(repo, owner, identity, indexed=None):
         sid = identity.removeprefix("legacy:")
-        standards, records = legacy_data(repo, owner)
-        selected = [
-            x for x in records if (x.get("standard_id") or "orphan-" + x["id"]) == sid
-        ]
+        standards, records = legacy_data(repo, owner) if indexed is None else indexed[:2]
+        selected = (
+            [x for x in records if (x.get("standard_id") or "orphan-" + x["id"]) == sid]
+            if indexed is None else indexed[2].get(sid, [])
+        )
         standard = standards.get(sid)
         if not standard and not selected:
             raise KeyError(identity)
@@ -218,7 +219,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             return extension or legacy_task(repo, owner, identity)
         return require(repo, owner, identity)
 
-    def histories(repo, owner, task, native_runs=None):
+    def histories(repo, owner, task, native_runs=None, legacy_records=None):
         if task.get("read_only"):
             return []
         source = (
@@ -228,7 +229,8 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
         ) if task["revision"] else []
         runs = [public(x) for x in source]
         if task.get("legacy_id"):
-            _, records = legacy_data(repo, owner)
+            records = (legacy_data(repo, owner)[1] if legacy_records is None
+                       else legacy_records.get(task["legacy_id"], []))
             for record in records:
                 if (record.get("standard_id") or "orphan-" + record["id"]) != task[
                     "legacy_id"
@@ -281,8 +283,13 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             ids = set(standards) | {
                 x.get("standard_id") or "orphan-" + x["id"] for x in records
             }
+            legacy_records = {}
+            for record in records:
+                sid = record.get("standard_id") or "orphan-" + record["id"]
+                legacy_records.setdefault(sid, []).append(record)
+            indexed = standards, records, legacy_records
             current += [
-                legacy_task(repo, owner, "legacy:" + sid) for sid in ids - extended
+                legacy_task(repo, owner, "legacy:" + sid, indexed) for sid in ids - extended
             ]
             rows = []
             for offset in range(0, len(current), RUN_BATCH_SIZE):
@@ -296,6 +303,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                     runs = histories(
                         repo, owner, task,
                         native_runs.get(task["id"], []) if task.get("id") else None,
+                        legacy_records,
                     )
                     latest = runs[0] if runs else {}
                     rows.append(
