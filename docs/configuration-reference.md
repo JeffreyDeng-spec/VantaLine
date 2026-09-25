@@ -1081,3 +1081,7 @@ The model registry warm-start check now reads committed state without taking the
 ## Model task snapshot read transactions
 
 No configuration value changes. The task snapshot and historical-record state reads use short PostgreSQL read transactions after registry initialization. The original append-only profile versions, binding configuration, prompt-source fingerprint, secret references and admin write validation are unchanged.
+
+## Model admin public read transaction
+
+No model setting, default, binding, permission, secret reference or prompt-source fingerprint changes. The administrator model-library GET projection uses a short PostgreSQL read transaction; writes and connection-test registration still use the existing serialized write transaction.

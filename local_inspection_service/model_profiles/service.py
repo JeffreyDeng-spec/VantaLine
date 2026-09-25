@@ -230,7 +230,7 @@ class Service:
     def public(self):
         self.initialize()
         repo = self.repository()
-        with repo.transaction() as c:
+        with repo.read_tx() as c:
             state = repo.state(c)
             profiles = []
             for p in repo.versions(c,state):
