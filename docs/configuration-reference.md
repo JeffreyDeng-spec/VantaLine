@@ -1,3 +1,5 @@
+PLC model-rebind extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v127 fingerprints the changed lease-maintenance source (337 entries) for new tasks; historical model snapshots, fingerprints and secret references remain unchanged.
+
 The lease acquisition extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v126 adds its two actual modules (337 entries) to new task fingerprints; historical model snapshots and secret references are unchanged.
 
 PLC lease maintenance changes no operator setting, default, protocol or secret. Source manifest v125 adds the two lease state modules (335 entries) for new task fingerprints; historical task snapshots and secret references are unchanged.

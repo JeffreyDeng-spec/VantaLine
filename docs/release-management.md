@@ -1,3 +1,5 @@
+The PLC model-rebind extraction ships as one Web-compatible complete release with unchanged API, lease transaction and browser serial topology. Source manifest v127 (337 entries) covers the changed maintenance source. Local checks replay accepted-original behavior; CI runs candidate offline/isolated PostgreSQL contracts and existing PLC/HTTP gates; rollback restores only the previous complete release.
+
 The PLC lease acquisition extraction is a complete Web-compatible release with unchanged route signatures and runtime topology. Source manifest v126 tracks the new business modules; deploy and roll back only the complete immutable package.
 
 The PLC lease-maintenance extraction is a Web-compatible module move with unchanged route signatures and topology. Source manifest v125 adds the two actual modules (335 entries); new tasks use its new fingerprint, while historical snapshots remain unchanged. Publish and rollback only complete immutable releases.

@@ -1,3 +1,5 @@
+PLC browser lease model rebinding now lives in `plc/lease_maintenance.py` through an eighth late-bound capability for the shared active-lease guard. The root function remains a compatibility wrapper. Model ID validation, fencing, in-flight rejection, lease write order, PostgreSQL transaction, browser serial ownership and ACK evidence are unchanged.
+
 PLC workstation claim and activation transitions now live in `plc/lease_acquisition.py` with explicit late-bound capabilities. The application entry retains compatibility wrappers, while the same PostgreSQL row-mutation transaction, permission gate, browser serial ownership, and ACK evidence rules remain in force.
 
 PLC browser lease heartbeat and release transitions now live in `plc/lease_maintenance.py` behind seven narrow late-bound capabilities. The root entry point keeps compatibility wrappers and the existing PostgreSQL mutation transaction, so browser ownership, fencing, and dispatch evidence stay in their previous order.

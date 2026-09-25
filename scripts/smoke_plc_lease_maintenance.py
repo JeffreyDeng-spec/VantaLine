@@ -251,6 +251,7 @@ class LeaseStateContract(unittest.TestCase):
                 lease_row=get("row", self.lease_row), current_user=get("user", lambda: {"id": "owner"}),
                 clock=get("clock", lambda: 200), active_ttl=get("ttl", 30),
                 config_error=get("error", ConfigError),
+                require_active_lease=get("active_lease", lambda *_: None),
             )
             return LeaseMaintenance(ports)
         for method in ("heartbeat", "release"):
