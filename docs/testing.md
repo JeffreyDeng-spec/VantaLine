@@ -1868,3 +1868,8 @@ The real PostgreSQL smoke_label_inspection suite calls smoke_pdf_manual: synthet
 
 
 PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.
+
+
+## Agent policy read transaction
+
+The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_agent_operations_postgres.py` and `scripts/smoke_agent_policy_read_transactions.py` with `AGENT_TEST_DATABASE_URL` set to the disposable CI database. The latter creates its own random schema and checks committed reads during an uncommitted policy update, read/write lock independence, exception rollback and connection reuse, and advisory serialization for policy revisions and operation admission. It performs no model or PLC I/O.

@@ -1449,3 +1449,8 @@ The unified label-inspection service now owns PDF manual tasks. A globally lease
 
 
 PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.
+
+
+## Agent policy read transaction
+
+The Agent policy display path in `storage/agent_operations.py` uses a short owner-scoped read transaction. Agent writes and admission still use the per-account advisory transaction lock, so a display read cannot reserve budget or make an admission decision. This is a read-path boundary only; operation state ownership and worker topology remain unchanged.

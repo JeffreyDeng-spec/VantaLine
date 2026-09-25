@@ -200,6 +200,8 @@ jobs:
           python scripts/smoke_history_dependencies.py
           python scripts/smoke_document_job_dependencies.py
           python scripts/smoke_agent_dependencies.py
+          AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python local_inspection_service/scripts/smoke_agent_operations_postgres.py
+          AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_agent_policy_read_transactions.py
           python scripts/smoke_extraction_dependencies.py
           python scripts/smoke_preparation_dependencies.py
           python scripts/smoke_comparison_dependencies.py
