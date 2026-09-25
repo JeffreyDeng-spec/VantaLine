@@ -1,3 +1,5 @@
+Diagnostic receipt now runs through the diagnostic state service with the original station mutation transaction. Source manifest v130 changes no runtime topology, schema or operator setting. Deploy and restore complete releases; retain the original lease and browser evidence, and never retry an uncertain physical PLC write.
+
 Diagnostic confirmation now runs through the diagnostic state module but retains the original transaction and active-lease fence. It does not clear in-flight evidence or imply successful physical I/O. Deploy and roll back complete releases with source manifest v129; continue using browser ACK/receipt evidence for physical outcomes and do not retry unknown writes.
 
 PLC diagnostic reservation now uses a separate state module but retains the same browser serial ownership and PostgreSQL lease transaction. Deploy and restore the full release with source manifest v128. Do not retry unknown physical writes or copy individual PLC files during rollback; existing token-hash and ACK evidence remains intact.

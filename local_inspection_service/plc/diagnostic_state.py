@@ -66,3 +66,31 @@ class DiagnosticState:
 
         self.ports.mutate()(station_id, None, validate)
         return {"confirmed": True, "diagnostic_id": request.diagnostic_id}
+
+    def finish(self, station_id: str, request: Any) -> dict[str, Any]:
+        def mutate(state: dict[str, dict[str, Any] | None]) -> None:
+            lease = self.ports.record()(state.get('lease'))
+            user_id = str((self.ports.current_user()() or {}).get('id') or '')
+            if not lease or not (
+                lease.get('session_id') == request.session_id
+                and int(lease.get('lease_epoch') or -1) == int(request.lease_epoch)
+                and lease.get('owner_user_id') == user_id
+                and lease.get('state') in {'active', 'draining'}
+            ):
+                raise self.ports.config_error()('plc_workstation_lease_fenced')
+            if lease.get('in_flight_dispatch_id') != request.diagnostic_id:
+                raise self.ports.config_error()('plc_diagnostic_not_in_flight')
+            expected_hash = str(lease.get('diagnostic_token_hash') or '')
+            if not expected_hash or not self.ports.compare_digest()(
+                expected_hash, self.ports.token_hash()(request.attempt_token)
+            ):
+                raise self.ports.config_error()('plc_diagnostic_token_invalid')
+            if request.outcome not in {'success', 'failed', 'uncertain'}:
+                raise self.ports.config_error()('plc_diagnostic_outcome_invalid')
+            lease.pop('in_flight_dispatch_id', None)
+            lease.pop('in_flight_deadline_at', None)
+            lease.pop('diagnostic_token_hash', None)
+            state['lease'] = self.ports.lease_row()(lease)
+
+        self.ports.mutate()(station_id, None, mutate)
+        return {'released': True, 'diagnostic_id': request.diagnostic_id}

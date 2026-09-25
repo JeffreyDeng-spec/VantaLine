@@ -19,3 +19,5 @@ class DiagnosticStatePorts:
     frames: Getter
     mutate: Getter
     compare_digest: Getter
+    record: Getter
+    current_user: Getter

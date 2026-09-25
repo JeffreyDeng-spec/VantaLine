@@ -2680,6 +2680,8 @@ _plc_diagnostic_state = _PlcDiagnosticState(
         frames=lambda: build_web_serial_diagnostic_plan,
         mutate=lambda: _plc_web_serial_mutate,
         compare_digest=lambda: hmac.compare_digest,
+        record=lambda: _plc_web_serial_record,
+        current_user=lambda: current_auth_user,
     )
 )
 
@@ -2701,32 +2703,7 @@ def plc_web_serial_finish_diagnostic(
     station_id: str,
     request: PlcWebSerialDiagnosticReceiptRequest,
 ) -> dict[str, Any]:
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        lease = _plc_web_serial_record(state.get("lease"))
-        user_id = str((current_auth_user() or {}).get("id") or "")
-        if not lease or not (
-            lease.get("session_id") == request.session_id
-            and int(lease.get("lease_epoch") or -1) == int(request.lease_epoch)
-            and lease.get("owner_user_id") == user_id
-            and lease.get("state") in {"active", "draining"}
-        ):
-            raise PlcConfigError("plc_workstation_lease_fenced")
-        if lease.get("in_flight_dispatch_id") != request.diagnostic_id:
-            raise PlcConfigError("plc_diagnostic_not_in_flight")
-        expected_hash = str(lease.get("diagnostic_token_hash") or "")
-        if not expected_hash or not hmac.compare_digest(
-            expected_hash, _plc_web_serial_token_hash(request.attempt_token)
-        ):
-            raise PlcConfigError("plc_diagnostic_token_invalid")
-        if request.outcome not in {"success", "failed", "uncertain"}:
-            raise PlcConfigError("plc_diagnostic_outcome_invalid")
-        lease.pop("in_flight_dispatch_id", None)
-        lease.pop("in_flight_deadline_at", None)
-        lease.pop("diagnostic_token_hash", None)
-        state["lease"] = _plc_workstation_lease_row(lease)
-
-    _plc_web_serial_mutate(station_id, None, mutate)
-    return {"released": True, "diagnostic_id": request.diagnostic_id}
+    return _plc_diagnostic_state.finish(station_id, request)
 
 
 def plc_web_serial_begin_camera_detection(

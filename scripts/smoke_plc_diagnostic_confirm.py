@@ -308,6 +308,8 @@ class ConfirmContract(unittest.TestCase):
                 frames=get("frames", lambda: []),
                 mutate=get("mutate", mutate),
                 compare_digest=get("compare", lambda a, b: a == b),
+                record=get('record', lambda row: row),
+                current_user=get('user', lambda: {'id': 'owner'}),
             )
             return DiagnosticState(ports)
         a, b = build("a"), build("b")

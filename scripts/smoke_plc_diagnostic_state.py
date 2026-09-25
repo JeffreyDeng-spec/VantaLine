@@ -347,6 +347,8 @@ class DiagnosticStateContract(unittest.TestCase):
                 frames=get("frames", lambda: self.frames),
                 mutate=get("mutate", mutate),
                 compare_digest=get("compare", lambda left, right: left == right),
+                record=get('record', lambda row: row),
+                current_user=get('user', lambda: {'id': 'owner'}),
             )
             return DiagnosticState(ports)
         a, b = build("a"), build("b")
