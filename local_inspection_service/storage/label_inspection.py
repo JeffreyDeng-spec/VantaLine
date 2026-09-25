@@ -34,6 +34,19 @@ class LabelRepository:
         finally:
             c.close()
 
+    @contextmanager
+    def read_tx(self):
+        """Short PostgreSQL read transaction without the global write fence."""
+        c = self.repository._cursor()
+        try:
+            yield c
+            self.repository.connection.commit()
+        except Exception:
+            self.repository.connection.rollback()
+            raise
+        finally:
+            c.close()
+
     def rows(self, c):
         rows = []
         for row in c.fetchall():
@@ -319,7 +332,7 @@ class LabelRepository:
             return task
 
     def list(self, owner, kind, task=None):
-        with self.tx() as c:
+        with self.read_tx() as c:
             c.execute(
                 f"SELECT raw_json FROM {self.table} WHERE owner_user_id=%s AND kind=%s"
                 + (" AND task_id=%s" if task else "")
@@ -334,7 +347,7 @@ class LabelRepository:
             return {}
         if len(task_ids) > RUN_BATCH_SIZE:
             raise ValueError("run batch exceeds limit")
-        with self.tx() as c:
+        with self.read_tx() as c:
             c.execute(
                 f"SELECT task_id,raw_json FROM {self.table} "
                 "WHERE owner_user_id=%s AND kind='run' AND task_id=ANY(%s::text[]) "
@@ -359,7 +372,7 @@ class LabelRepository:
             "pages": "text_inspection_manual_pages",
         }
         table = self.repository._qualified_table(tables[kind])
-        with self.tx() as c:
+        with self.read_tx() as c:
             c.execute(f"SELECT raw_json FROM {table} WHERE owner_user_id=%s", (owner,))
             values = self.rows(c)
             self._legacy_cache[(owner, kind)] = values
