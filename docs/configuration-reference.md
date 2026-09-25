@@ -1,3 +1,5 @@
+PLC diagnostic confirmation extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v129 retains 339 entries and fingerprints the changed diagnostic state source for new tasks; historical model snapshots, fingerprints and secret references remain unchanged.
+
 PLC diagnostic reservation extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v128 adds the two actual diagnostic state modules (339 entries) for new task fingerprints; historical model snapshots, fingerprints and secret references remain unchanged.
 
 PLC model-rebind extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v127 fingerprints the changed lease-maintenance source (337 entries) for new tasks; historical model snapshots, fingerprints and secret references remain unchanged.

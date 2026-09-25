@@ -79,7 +79,7 @@
     },
     {
       "name": "PLC and camera dispatch",
-      "paths": ["release/plc-protocol.json", "local_inspection_service/plc_web_serial.py", "local_inspection_service/plc/**", "scripts/smoke_plc_workstation_management.py", "scripts/smoke_plc_connection_lease_api.py", "scripts/smoke_plc_lease_maintenance.py", "scripts/smoke_plc_lease_acquisition.py", "scripts/smoke_plc_lease_rebind.py", "scripts/smoke_plc_diagnostic_state.py", "scripts/smoke_plc_dispatch_diagnostic_api.py", "scripts/smoke_plc_config_diagnostics.py", "local_inspection_service/frontend/src/features/plc/**", "local_inspection_service/frontend/src/features/detection/**"],
+      "paths": ["release/plc-protocol.json", "local_inspection_service/plc_web_serial.py", "local_inspection_service/plc/**", "scripts/smoke_plc_workstation_management.py", "scripts/smoke_plc_connection_lease_api.py", "scripts/smoke_plc_lease_maintenance.py", "scripts/smoke_plc_lease_acquisition.py", "scripts/smoke_plc_lease_rebind.py", "scripts/smoke_plc_diagnostic_state.py", "scripts/smoke_plc_diagnostic_confirm.py", "scripts/smoke_plc_dispatch_diagnostic_api.py", "scripts/smoke_plc_config_diagnostics.py", "local_inspection_service/frontend/src/features/plc/**", "local_inspection_service/frontend/src/features/detection/**"],
       "server_diff_regex": "(?i)plc|web_serial|workstation|camera_dispatch|camera.*lease",
       "required_docs": ["docs/plc-web-serial-v4.md", "docs/architecture.md"]
     },

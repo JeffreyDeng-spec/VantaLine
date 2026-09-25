@@ -18,3 +18,4 @@ class DiagnosticStatePorts:
     protocol_version: Callable[[], str]
     frames: Getter
     mutate: Getter
+    compare_digest: Getter

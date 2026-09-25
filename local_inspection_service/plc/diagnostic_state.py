@@ -47,3 +47,22 @@ class DiagnosticState:
 
         self.ports.mutate()(station_id, None, validate)
         return plan
+
+
+    def confirm(self, station_id: str, request: Any) -> dict[str, Any]:
+        def validate(state: dict[str, dict[str, Any] | None]) -> None:
+            _, lease, now = self.ports.active_lease()(
+                state, request.session_id, request.lease_epoch
+            )
+            if lease.get("in_flight_dispatch_id") != request.diagnostic_id:
+                raise self.ports.config_error()("plc_diagnostic_not_in_flight")
+            if int(lease.get("in_flight_deadline_at") or 0) <= now:
+                raise self.ports.config_error()("plc_diagnostic_deadline_expired")
+            expected_hash = str(lease.get("diagnostic_token_hash") or "")
+            if not expected_hash or not self.ports.compare_digest()(
+                expected_hash, self.ports.token_hash()(request.attempt_token)
+            ):
+                raise self.ports.config_error()("plc_diagnostic_token_invalid")
+
+        self.ports.mutate()(station_id, None, validate)
+        return {"confirmed": True, "diagnostic_id": request.diagnostic_id}

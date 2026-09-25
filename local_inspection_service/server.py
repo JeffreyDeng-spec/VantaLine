@@ -2679,6 +2679,7 @@ _plc_diagnostic_state = _PlcDiagnosticState(
         protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION,
         frames=lambda: build_web_serial_diagnostic_plan,
         mutate=lambda: _plc_web_serial_mutate,
+        compare_digest=lambda: hmac.compare_digest,
     )
 )
 
@@ -2693,22 +2694,7 @@ def plc_web_serial_confirm_diagnostic(
     station_id: str,
     request: PlcWebSerialDiagnosticConfirmRequest,
 ) -> dict[str, Any]:
-    def validate(state: dict[str, dict[str, Any] | None]) -> None:
-        _, lease, now = _plc_web_serial_require_active_lease(
-            state, request.session_id, request.lease_epoch
-        )
-        if lease.get("in_flight_dispatch_id") != request.diagnostic_id:
-            raise PlcConfigError("plc_diagnostic_not_in_flight")
-        if int(lease.get("in_flight_deadline_at") or 0) <= now:
-            raise PlcConfigError("plc_diagnostic_deadline_expired")
-        expected_hash = str(lease.get("diagnostic_token_hash") or "")
-        if not expected_hash or not hmac.compare_digest(
-            expected_hash, _plc_web_serial_token_hash(request.attempt_token)
-        ):
-            raise PlcConfigError("plc_diagnostic_token_invalid")
-
-    _plc_web_serial_mutate(station_id, None, validate)
-    return {"confirmed": True, "diagnostic_id": request.diagnostic_id}
+    return _plc_diagnostic_state.confirm(station_id, request)
 
 
 def plc_web_serial_finish_diagnostic(

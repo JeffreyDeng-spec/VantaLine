@@ -346,6 +346,7 @@ class DiagnosticStateContract(unittest.TestCase):
                 protocol_version=get("version", "v4"),
                 frames=get("frames", lambda: self.frames),
                 mutate=get("mutate", mutate),
+                compare_digest=get("compare", lambda left, right: left == right),
             )
             return DiagnosticState(ports)
         a, b = build("a"), build("b")
