@@ -1,3 +1,5 @@
+The first label task-list read optimization keeps the Web process, embedded label worker, schema, advisory-lock key and operator configuration unchanged. CI compares 1,000/10,000 synthetic PostgreSQL tasks and runs the established label concurrency/pagination smoke. Deploy or restore only a complete immutable release with source manifest v131; retain page snapshots, run/call evidence and historical records on rollback.
+
 Diagnostic receipt now runs through the diagnostic state service with the original station mutation transaction. Source manifest v130 changes no runtime topology, schema or operator setting. Deploy and restore complete releases; retain the original lease and browser evidence, and never retry an uncertain physical PLC write.
 
 Diagnostic confirmation now runs through the diagnostic state module but retains the original transaction and active-lease fence. It does not clear in-flight evidence or imply successful physical I/O. Deploy and roll back complete releases with source manifest v129; continue using browser ACK/receipt evidence for physical outcomes and do not retry unknown writes.

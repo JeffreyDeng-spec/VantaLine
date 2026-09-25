@@ -1,3 +1,5 @@
+The label task list now uses owner-scoped, parameterized `task_id = ANY(text[])` reads for at most 64 native tasks at a time. These reads still use the existing `label-inspection-v1` advisory-lock transaction and PostgreSQL connection lifecycle; global claim and write fencing are unchanged. Empty batches open no transaction. The old 15-minute page snapshot is still created/cleaned in its write transaction, and existing cursor pages read frozen items without reaggregation. Native run visibility during first-page assembly is now sampled once per batch instead of once per task; concurrent writes can therefore appear across batch boundaries just as they previously could across task boundaries. A first-page assembly across native batches and legacy/manual/Beta sources is not a database-wide consistent snapshot; only the persisted 15-minute page result is frozen. This first pass still loads full run JSON and leaves legacy/manual/Beta reads and global read-lock removal for later batches.
+
 # PostgreSQL runtime operations
 
 Profile-cache extraction retains its existing JSON cache store and adds no database connection,

@@ -334,6 +334,8 @@ jobs:
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py
           python local_inspection_service/scripts/smoke_endpoint_runtime_store_probe.py
+          python scripts/smoke_label_run_batch.py
+          python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py
           python local_inspection_service/scripts/smoke_model_profile_routing.py
