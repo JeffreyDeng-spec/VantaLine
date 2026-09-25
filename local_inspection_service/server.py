@@ -2663,49 +2663,31 @@ def _plc_web_serial_require_active_lease(
     return station, lease, now
 
 
+from .plc.diagnostic_state import DiagnosticState as _PlcDiagnosticState
+from .plc.diagnostic_state_ports import DiagnosticStatePorts as _PlcDiagnosticStatePorts
+
+_plc_diagnostic_state = _PlcDiagnosticState(
+    _PlcDiagnosticStatePorts(
+        token_hex=lambda: secrets.token_hex,
+        token_urlsafe=lambda: secrets.token_urlsafe,
+        active_lease=lambda: _plc_web_serial_require_active_lease,
+        config_error=lambda: PlcConfigError,
+        clock=lambda: time.time,
+        ceil=lambda: math.ceil,
+        token_hash=lambda: _plc_web_serial_token_hash,
+        lease_row=lambda: _plc_workstation_lease_row,
+        protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        frames=lambda: build_web_serial_diagnostic_plan,
+        mutate=lambda: _plc_web_serial_mutate,
+    )
+)
+
+
 def plc_web_serial_diagnostic_plan(
     station_id: str,
     request: PlcWebSerialAttemptRequest,
 ) -> dict[str, Any]:
-    plan: dict[str, Any] = {}
-    diagnostic_id = "plcdiag_" + secrets.token_hex(16)
-    attempt_token = secrets.token_urlsafe(32)
-
-    def validate(state: dict[str, dict[str, Any] | None]) -> None:
-        nonlocal plan
-        station, lease, now = _plc_web_serial_require_active_lease(
-            state, request.session_id, request.lease_epoch
-        )
-        if int(station.get("config_generation") or 0) != int(request.config_generation):
-            raise PlcConfigError("plc_workstation_generation_changed")
-        in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
-        in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-        if in_flight_id and in_flight_deadline > now:
-            raise PlcConfigError("plc_workstation_dispatch_in_flight")
-        issued_at_ms = int(time.time() * 1000)
-        deadline_at_ms = issued_at_ms + 2000
-        deadline_at = int(math.ceil(deadline_at_ms / 1000))
-        lease["in_flight_dispatch_id"] = diagnostic_id
-        lease["in_flight_deadline_at"] = deadline_at
-        lease["diagnostic_token_hash"] = _plc_web_serial_token_hash(attempt_token)
-        state["lease"] = _plc_workstation_lease_row(lease)
-        plan = {
-            "diagnostic_id": diagnostic_id,
-            "attempt_token": attempt_token,
-            "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
-            "register": "D206",
-            "write_value": 6,
-            "issued_at": now,
-            "deadline_at_ms": deadline_at_ms,
-            "execution_window_ms": 2000,
-            "ack_timeout_ms": 500,
-            "read_timeout_ms": 500,
-            "frames": build_web_serial_diagnostic_plan(),
-        }
-
-    _plc_web_serial_mutate(station_id, None, validate)
-    return plan
-
+    return _plc_diagnostic_state.plan(station_id, request)
 
 def plc_web_serial_confirm_diagnostic(
     station_id: str,

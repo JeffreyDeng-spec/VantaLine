@@ -1,8 +1,10 @@
 {
-  "version": 127,
+  "version": 128,
   "sources": [
     "server.py",
     "plc/__init__.py",
+    "plc/diagnostic_state.py",
+    "plc/diagnostic_state_ports.py",
     "plc/connection_lease.py",
     "plc/connection_lease_api.py",
     "plc/connection_lease_ports.py",

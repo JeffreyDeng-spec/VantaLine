@@ -1,3 +1,5 @@
+PLC diagnostic reservation now lives in `plc/diagnostic_state.py` with explicit late-bound token, clock, lease, frame and mutation capabilities. The root application keeps its public adapter, while confirm/finish, shared active-lease validation, PostgreSQL mutation and browser serial I/O remain in their existing paths. A reservation still persists only a token hash and does not extend the lease expiry.
+
 PLC browser lease model rebinding now lives in `plc/lease_maintenance.py` through an eighth late-bound capability for the shared active-lease guard. The root function remains a compatibility wrapper. Model ID validation, fencing, in-flight rejection, lease write order, PostgreSQL transaction, browser serial ownership and ACK evidence are unchanged.
 
 PLC workstation claim and activation transitions now live in `plc/lease_acquisition.py` with explicit late-bound capabilities. The application entry retains compatibility wrappers, while the same PostgreSQL row-mutation transaction, permission gate, browser serial ownership, and ACK evidence rules remain in force.
