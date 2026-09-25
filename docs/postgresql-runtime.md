@@ -384,7 +384,7 @@ Agent policy display reads use a short PostgreSQL transaction without the per-ac
 
 ## Fixed-reference model read transaction
 
-The model-profile repository now has a short read transaction for already-determined profile versions and the usage-call list. It performs no advisory lock acquisition; each PostgreSQL statement reads committed data, so the immutable profile and mutable test status are not promised as a shared fixed snapshot. Cold initialization migration, admin display, version/binding writes, connection-test registration and call writes retain the global model-profile advisory transaction lock. Task snapshot reads use short read transactions as described below. No DDL is changed.
+The model-profile repository now has a short read transaction for already-determined profile versions and the usage-call list. It performs no advisory lock acquisition; each PostgreSQL statement reads committed data, so the immutable profile and mutable test status are not promised as a shared fixed snapshot. Cold initialization migration, version/binding writes, connection-test registration and call writes retain the global model-profile advisory transaction lock. Task snapshots and admin display reads use short read transactions as described below. No DDL is changed.
 
 
 ## Model registry initialization fast path
@@ -394,3 +394,7 @@ For model-profile initialization, an already committed truthy `state` row is rea
 ## Model task snapshot read transactions
 
 Task snapshot reads use the existing `model_profiles.Repository.read_tx()` lifecycle: commit on success, rollback on exception, and cursor close in all cases, without the global model-profile advisory lock. The first state read in `snapshot_for_record()` closes before its nonhistorical fallback calls `snapshot()`; model-profile writes and cold initialization still use the advisory write transaction.
+
+## Model admin public read transaction
+
+The administrator model-profile projection now uses `Repository.read_tx()`: commit on success, rollback on failure, and cursor close in all cases. It does not acquire the global model-profile advisory lock. Its state revision/heads are captured together, but mutable connection-test rows may be observed at different committed statement times. This is not a fixed database-wide snapshot.

@@ -1887,3 +1887,7 @@ The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_
 ## Model task snapshot read transactions
 
 `scripts/smoke_model_profile_snapshot_reads.py` runs against an isolated PostgreSQL schema in backend CI. It verifies committed snapshots during an uncommitted writer, old task replay after version changes, binding/head coherence across a concurrent commit, independent write progress during a paused read, separate fallback transaction timing, scope behavior, strict timestamp cases, and rollback/IDLE/cursor closure after injected state or profile decode failures. The full model-profile registry smoke remains in CI; no provider or PLC is contacted.
+
+## Model admin public read transaction
+
+`scripts/smoke_model_profile_public_read.py` runs in backend CI against a random PostgreSQL schema. It checks revision/binding/profile order, version-bound connection status, secret omission, old committed output during an uncommitted writer, new output after commit, writer progress during a paused display read, state/head capture across a concurrent commit, eager version-read error order, and rollback/closed cursor/connection reuse after state, version or test-row decode errors. Existing model API permission and write-race smoke remains in CI.

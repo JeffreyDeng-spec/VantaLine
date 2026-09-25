@@ -802,3 +802,7 @@ The model registry initialization fast path is a read-path-only change for alrea
 ## Model task snapshot read transactions
 
 The snapshot read change has no schema, release topology, migration, or configuration change. The isolated PostgreSQL regression joins the backend CI gate; continue the normal immutable Web release and rollback procedure.
+
+## Model admin public read transaction
+
+This read-path change has no schema, topology, migration or configuration change. The isolated real-PostgreSQL projection regression joins backend CI; continue the normal immutable Web release and full-package rollback procedure.

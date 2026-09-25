@@ -979,3 +979,7 @@ For a model initialization fast-path release, require the isolated PostgreSQL wa
 ## Model task snapshot read transactions
 
 Task model snapshots may now return the last committed binding while an administrator has an uncommitted update. Newly submitted tasks continue to persist their selected snapshot; pre-migration tasks retain their historical migration snapshot. No operator action or new configuration is required.
+
+## Model admin public read transaction
+
+The administrator model-library view may show the last committed revision while a settings write is in progress; a refresh after commit shows the new revision. Connection-test statuses are read by version and may reflect separately committed statements. No operator setting or rollout action is required.
