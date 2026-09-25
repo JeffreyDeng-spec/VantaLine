@@ -94,8 +94,8 @@ def main():
         else:
             raise AssertionError("oversized batch accepted")
 
-        # The batch must hold the old advisory fence until its own transaction
-        # commits, and failures during row handling must roll it back.
+        # Pure batch reads must not take the write fence, and row failures
+        # must still roll the read transaction back.
         second = default_postgres_connector(dsn)
         try:
             original_decode = PostgresRuntimeRepository._row_to_dict
@@ -103,14 +103,14 @@ def main():
             def check_lock(instance, cursor, row):
                 with second.cursor() as probe:
                     probe.execute(lock_sql)
-                    assert not probe.fetchone()[0], "batch released advisory fence too early"
+                    assert probe.fetchone()[0], "batch read retained write advisory fence"
                 second.commit()
                 return original_decode(instance, cursor, row)
             with patch.object(PostgresRuntimeRepository, "_row_to_dict", check_lock):
                 assert repo.runs_for_tasks("alice", ["task_00002"])
             with second.cursor() as probe:
                 probe.execute(lock_sql)
-                assert probe.fetchone()[0], "batch retained advisory fence after commit"
+                assert probe.fetchone()[0], "batch read left advisory fence held"
             second.commit()
 
             failure = RuntimeError("injected batch row failure")

@@ -1,3 +1,5 @@
+Ordinary native task/run and legacy-source list reads now release the label global write fence while keeping owner filters, ordering, projection and the existing PostgreSQL connection lifecycle. POST run idempotency and model-snapshot selection still wait on the write fence; the fixed 15-minute page snapshot remains a write transaction. First-page assembly is not a database-wide consistent snapshot across read calls.
+
 The account-owned label task list now reads native runs in bounded task-ID batches before applying the existing per-task history projection. Read-only and falsey-ID task fallbacks retain their prior behavior, including per-task JSON decode/error order. Old text/manual/Beta grouping, filters, sorting and fixed 15-minute page cursors are unchanged. No detection algorithm, provider call, model binding or paid-call claim changes in this batch.
 
 # Text inspection v2

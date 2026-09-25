@@ -222,9 +222,14 @@ class ListContract(unittest.TestCase):
                     old = list_client(baseline_register(), old_repo, Path(temp))
                     new = list_client(api.register, new_repo, Path(temp))
                     self.assertEqual(new, old)
-                    self.assertEqual(sum(c[0] == "list" and c[2] == "run"
-                                         for c in old_repo.calls), count)
-                    self.assertFalse(any(c[0] == "batch" for c in old_repo.calls))
+                    old_batch_count = sum(c[0] == "batch" for c in old_repo.calls)
+                    if old_batch_count:
+                        self.assertEqual(old_batch_count, (count + 63) // 64)
+                        self.assertFalse(any(c[0] == "list" and c[2] == "run"
+                                             for c in old_repo.calls))
+                    else:
+                        self.assertEqual(sum(c[0] == "list" and c[2] == "run"
+                                             for c in old_repo.calls), count)
 
 
 if __name__ == "__main__":
