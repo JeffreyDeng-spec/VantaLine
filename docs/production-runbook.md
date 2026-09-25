@@ -1,3 +1,5 @@
+The PLC lease-maintenance extraction requires no schema migration or worker topology change. Deploy the full release and retain the previous complete release for rollback; no PLC hardware or paid inference is needed for its synthetic CI contract.
+
 The legacy PLC config diagnostic extraction keeps the same Web topology and browser-owned serial I/O. It introduces no schema migration, worker mode or operator setting. Deploy or restore the complete release with source manifest v124; do not copy individual PLC modules.
 
 PLC dispatch/diagnostic HTTP extraction keeps the Web process, shared database and browser-owned serial I/O. There is no schema migration, worker topology or operator setting change. Deploy or restore the full release with source manifest v123; do not copy individual PLC files.
