@@ -1,3 +1,5 @@
+Codex comparison task-list and event-history repository reads now use short PostgreSQL transactions without the global comparison advisory lock. The SELECT, owner filter, ordering, limits and response projection are unchanged. Detail `get`, submission, claim, cancellation, report writes and worker prechecks still use the original serialized transaction; the HTTP events endpoint first performs a locked ownership/detail lookup, so this change does not make that whole request lock-free. No worker mode, model policy or paid-call retry changes.
+
 # Codex label inspection beta
 
 The Web API now composes typed capabilities for access, standard records, document

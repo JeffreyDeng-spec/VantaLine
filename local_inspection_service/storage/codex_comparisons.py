@@ -32,6 +32,18 @@ class CodexComparisonsRepository:
         finally:
             cursor.close()
 
+    @contextmanager
+    def read_tx(self):
+        cursor = self.repository._cursor()
+        try:
+            yield cursor
+            self.repository.connection.commit()
+        except Exception:
+            self.repository.connection.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def rows(self, c):
         return [self.repository._row_to_dict(c, row)['raw_json'] for row in c.fetchall()]
 
@@ -59,12 +71,12 @@ class CodexComparisonsRepository:
             return self.read(c, owner, identifier)
 
     def list(self, owner, before='', limit=30):
-        with self.tx() as c:
+        with self.read_tx() as c:
             c.execute(f'SELECT raw_json FROM {self.table(TASKS)} WHERE owner_user_id=%s AND (%s=\'\' OR id<%s) ORDER BY id DESC LIMIT %s', (owner, before, before, limit))
             return self.rows(c)
 
     def events(self, owner, identifier, after):
-        with self.tx() as c:
+        with self.read_tx() as c:
             c.execute(f'SELECT raw_json FROM {self.table(EVENTS)} WHERE owner_user_id=%s AND task_id=%s AND sequence>%s ORDER BY sequence LIMIT 100', (owner, identifier, after))
             return self.rows(c)
 
