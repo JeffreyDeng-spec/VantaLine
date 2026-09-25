@@ -1,3 +1,5 @@
+The legacy `/api/plc/config` GET response is assembled through `plc/config_diagnostics.py`; POST still requires `system_settings` and returns the existing 410 before any write. The diagnostic projection keeps its original validation order, audit ordering and lock-scoped shallow snapshot of active attempts. It does not read or write physical serial.
+
 The dispatch/diagnostic HTTP boundary covers attempt declaration, diagnostic plan/receipt/confirmation and dispatch receipt through `plc/dispatch_diagnostic_api.py`. The three diagnostic routes still require `system_settings` before workstation authorization. Original dispatch IDs and payloads reach unchanged business functions; ACK, idempotent receipt and uncertain write handling do not move.
 
 The connection-lease HTTP boundary registers connect, activate, heartbeat, model rebind and disconnect through `plc/connection_lease_api.py` and delegates to `plc/connection_lease.py`. Station authorization precedes every operation; model rebind separately checks model permission before its mutation. Existing lease state, database clock, fencing, draining and physical browser I/O do not move.
