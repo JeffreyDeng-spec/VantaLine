@@ -1,3 +1,5 @@
+The account-owned label task list now reads native runs in bounded task-ID batches before applying the existing per-task history projection. Read-only and falsey-ID task fallbacks retain their prior behavior, including per-task JSON decode/error order. Old text/manual/Beta grouping, filters, sorting and fixed 15-minute page cursors are unchanged. No detection algorithm, provider call, model binding or paid-call claim changes in this batch.
+
 # Text inspection v2
 
 The incoming-text medium OCR engine now calls the shared `runtime.paddle` bootstrap

@@ -1,5 +1,5 @@
 {
-  "version": 130,
+  "version": 131,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -339,6 +339,8 @@
     "standard_preparation.py",
     "qwen_evidence_jobs.py",
     "qwen_ocr_evidence.py",
-    "evidence_matching.py"
+    "evidence_matching.py",
+    "label_inspection/api.py",
+    "storage/label_inspection.py"
   ]
 }

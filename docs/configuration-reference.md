@@ -1,3 +1,5 @@
+Label task-list batching adds no operator setting, default, model permission or provider selection. Source manifest v131 appends the actual `label_inspection/api.py` and `storage/label_inspection.py` sources (341 entries) for new task fingerprints; historical task snapshots, prompt bindings and secret references are not rewritten.
+
 PLC diagnostic receipt extraction adds no operator setting, model permission, default, protocol version or secret. Source manifest v130 retains 339 actual source entries and fingerprints the changed diagnostic state source for new tasks; historical model snapshots, fingerprints and secret references remain unchanged.
 
 PLC diagnostic confirmation extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v129 retains 339 entries and fingerprints the changed diagnostic state source for new tasks; historical model snapshots, fingerprints and secret references remain unchanged.

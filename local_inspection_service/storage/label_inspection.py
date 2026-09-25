@@ -10,6 +10,7 @@ from .agent_operations import OperationConflict
 
 TABLE = "label_inspection_objects"
 ACTIVE = {"queued", "running"}
+RUN_BATCH_SIZE = 64
 
 
 class LabelRepository:
@@ -326,6 +327,25 @@ class LabelRepository:
                 (owner, kind, task) if task else (owner, kind),
             )
             return self.rows(c)
+
+    def runs_for_tasks(self, owner, task_ids):
+        """Read one bounded page of owned runs for task-list projection."""
+        if not task_ids:
+            return {}
+        if len(task_ids) > RUN_BATCH_SIZE:
+            raise ValueError("run batch exceeds limit")
+        with self.tx() as c:
+            c.execute(
+                f"SELECT task_id,raw_json FROM {self.table} "
+                "WHERE owner_user_id=%s AND kind='run' AND task_id=ANY(%s::text[]) "
+                "ORDER BY created_at DESC,id DESC",
+                (owner, list(task_ids)),
+            )
+            grouped = {task_id: [] for task_id in task_ids}
+            for row in c.fetchall():
+                value = self.repository._row_to_dict(c, row)
+                grouped[value["task_id"]].append(value["raw_json"])
+            return grouped
 
     def legacy(self, owner, kind):
         if (owner, kind) in self._legacy_cache:
