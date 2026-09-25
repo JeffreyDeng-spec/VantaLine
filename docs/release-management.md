@@ -793,3 +793,8 @@ The Agent policy read-path change has no topology or schema migration. Required 
 ## Fixed-reference model read transaction
 
 The fixed-reference model read change is compatible with the current single-service embedded-worker release. Backend CI runs a new isolated PostgreSQL concurrency regression alongside the existing registry test. There is no schema, secret migration, prompt-source update or topology change; use the ordinary immutable release and whole-release rollback process.
+
+
+## Model registry initialization fast path
+
+The model registry initialization fast path is a read-path-only change for already initialized installations. Cold migration and whole-release rollback use the existing topology and storage. Backend CI adds an isolated PostgreSQL cold-race/failure regression alongside the registry and fixed-reference tests; no worker or schema change ships with this PR.
