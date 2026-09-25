@@ -1,3 +1,5 @@
+The Codex comparison list/event repository read change needs no migration, setting or worker switch. It preserves the existing Web restart and full-package rollback; keep task/event evidence and prior releases intact. A successful repository read bypasses the comparison advisory lock, while detail and all writes still wait for it. The HTTP events route retains its preliminary locked ownership lookup.
+
 The first-page legacy label-record index changes only in-process list assembly and source manifest v133. It requires no migration, setting, worker switch or special rollout; CI compares the exact accepted parent before merge. Deploy and restore complete immutable packages while preserving page snapshots and run/call evidence.
 
 The second label-list read optimization removes the global advisory lock only from task/run/legacy list reads. A concurrent uncommitted writer is not visible to these PostgreSQL reads; POST run idempotency and its bound model snapshot still use the original write lock. No topology, schema, PLC or operator setting changes. Release and rollback as a complete immutable package; preserve 15-minute page snapshots and run/call evidence.

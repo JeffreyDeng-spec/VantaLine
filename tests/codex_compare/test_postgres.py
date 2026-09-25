@@ -1,5 +1,6 @@
 """Real PostgreSQL, random disposable schema. Never reads production DATABASE_URL."""
 import concurrent.futures
+import threading
 import copy
 import io
 import os
@@ -7,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 import psycopg
+from psycopg.pq import TransactionStatus
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -278,3 +280,177 @@ print(json.dumps({'type':'turn.completed','usage':{}}),flush=True)
     assert result['status']=='completed' and result['skill_sha256']==digest((worker.SKILL/'SKILL.md').read_bytes()), diagnostics
     assert len(result['checks'])==13
     assert result['summary']['decision']=='REVIEW_REQUIRED'
+
+
+def _bounded_connection(repo):
+    connection = repo.repository.connection
+    connection.execute("SET lock_timeout = '6000ms'")
+    connection.execute("SET statement_timeout = '8000ms'")
+    connection.commit()
+    assert connection.info.transaction_status == TransactionStatus.IDLE
+
+def _advisory_wait(storage, backend_pid):
+    monitor = storage().repository.connection
+    try:
+        for _ in range(80):
+            row = monitor.execute(
+                "SELECT wait_event_type, wait_event FROM pg_stat_activity WHERE pid=%s",
+                (backend_pid,),
+            ).fetchone()
+            monitor.commit()
+            if row == ('Lock', 'advisory'):
+                return
+            time.sleep(0.05)
+        pytest.fail('expected real PostgreSQL advisory-lock wait')
+    finally:
+        monitor.rollback()
+        assert monitor.info.transaction_status == TransactionStatus.IDLE
+
+def test_list_events_read_committed_projection_and_sql_bounds(storage):
+    repo = storage()
+    first = repo.create('a', 'read-list-a-first', {})
+    second = repo.create('a', 'read-list-a-second', {})
+    other = repo.create('b', 'read-list-b-other', {})
+    expected_ids = sorted((first['id'], second['id']), reverse=True)
+    assert [row['id'] for row in repo.list('a')] == expected_ids
+    assert [row['id'] for row in repo.list('a', limit=1)] == expected_ids[:1]
+    assert [row['id'] for row in repo.list('a', before=expected_ids[0])] == expected_ids[1:]
+    assert [row['id'] for row in repo.list('b')] == [other['id']]
+    assert repo.events('b', first['id'], 0) == []
+    assert [row['sequence'] for row in repo.events('a', first['id'], 0)] == [1]
+
+    writer = storage()
+    changed = copy.deepcopy(first)
+    changed['status'] = 'running'
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        with writer.tx() as cursor:
+            writer.event(cursor, changed, 'uncommitted-event', {})
+            writer.save(cursor, changed)
+            list_reader = storage()
+            events_reader = storage()
+            _bounded_connection(list_reader)
+            _bounded_connection(events_reader)
+            old_list = pool.submit(list_reader.list, 'a')
+            old_events = pool.submit(events_reader.events, 'a', first['id'], 0)
+            assert next(row for row in old_list.result(timeout=3) if row['id'] == first['id'])['status'] == 'queued'
+            assert [row['sequence'] for row in old_events.result(timeout=3)] == [1]
+    assert next(row for row in repo.list('a') if row['id'] == first['id'])['status'] == 'running'
+    assert [row['sequence'] for row in repo.events('a', first['id'], 0)] == [1, 2]
+    assert [row['sequence'] for row in repo.events('a', first['id'], 1)] == [2]
+    with writer.tx() as cursor:
+        for index in range(101):
+            writer.event(cursor, changed, 'page-probe', {'index': index})
+        writer.save(cursor, changed)
+    assert [row['sequence'] for row in repo.events('a', first['id'], 2)] == list(range(3, 103))
+    assert [row['sequence'] for row in repo.events('a', first['id'], 102)] == [103]
+    assert repo.events('a', other['id'], 0) == []
+
+
+@pytest.mark.parametrize('method', ('list', 'events'))
+def test_list_events_decode_does_not_hold_write_fence(storage, monkeypatch, method):
+    repo = storage()
+    task = repo.create('a', 'decode-probe-' + method, {})
+    reader = storage()
+    original = PostgresRuntimeRepository._row_to_dict
+    entered = threading.Event()
+    release = threading.Event()
+
+    def paused_decode(self, cursor, row):
+        if self is reader.repository:
+            entered.set()
+            assert release.wait(3), 'decode probe did not finish'
+        return original(self, cursor, row)
+
+    monkeypatch.setattr(PostgresRuntimeRepository, '_row_to_dict', paused_decode)
+    operation = (lambda: reader.list('a')) if method == 'list' else (lambda: reader.events('a', task['id'], 0))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(operation)
+        try:
+            assert entered.wait(3), 'nonempty read did not decode a row'
+            writer = storage()
+            writer.repository.connection.execute("SET lock_timeout = '750ms'")
+            with writer.tx() as cursor:
+                cursor.execute('SELECT 1')
+        finally:
+            release.set()
+        assert future.result(timeout=3)
+
+
+@pytest.mark.parametrize('method', ('list', 'events'))
+def test_list_events_decode_failure_rolls_back_closes_and_reuses(storage, monkeypatch, method):
+    repo = storage()
+    task = repo.create('a', 'decode-failure-' + method, {})
+    reader = storage()
+    original_decode = PostgresRuntimeRepository._row_to_dict
+    original_cursor = PostgresRuntimeRepository._cursor
+    opened = []
+    marker = RuntimeError('synthetic row decode failure')
+
+    def tracked_cursor(self):
+        cursor = original_cursor(self)
+        if self is reader.repository:
+            opened.append(cursor)
+        return cursor
+
+    def fail_decode(self, cursor, row):
+        if self is reader.repository:
+            raise marker
+        return original_decode(self, cursor, row)
+
+    monkeypatch.setattr(PostgresRuntimeRepository, '_cursor', tracked_cursor)
+    monkeypatch.setattr(PostgresRuntimeRepository, '_row_to_dict', fail_decode)
+    operation = (lambda: reader.list('a')) if method == 'list' else (lambda: reader.events('a', task['id'], 0))
+    with pytest.raises(RuntimeError) as caught:
+        operation()
+    assert caught.value is marker
+    assert reader.repository.connection.info.transaction_status == TransactionStatus.IDLE
+    assert opened[-1].closed
+    monkeypatch.setattr(PostgresRuntimeRepository, '_row_to_dict', original_decode)
+    assert operation()
+    assert reader.repository.connection.info.transaction_status == TransactionStatus.IDLE
+    assert opened[-1].closed
+    empty = reader.list('missing-account') if method == 'list' else reader.events('b', task['id'], 0)
+    assert empty == []
+    assert reader.repository.connection.info.transaction_status == TransactionStatus.IDLE
+    assert opened[-1].closed
+
+@pytest.mark.parametrize('method', ('get', 'cancel'))
+def test_get_and_cancel_keep_advisory_fence_and_committed_state(storage, method):
+    repo = storage()
+    task = repo.create('a', 'locked-read-' + method, {})
+    writer = storage()
+    changed = copy.deepcopy(task)
+    changed['status'] = 'running'
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        with writer.tx() as cursor:
+            writer.save(cursor, changed)
+            reader = storage()
+            _bounded_connection(reader)
+            operation = (lambda: reader.get('a', task['id'])) if method == 'get' else (lambda: reader.cancel('a', task['id']))
+            future = pool.submit(operation)
+            _advisory_wait(storage, reader.repository.connection.info.backend_pid)
+            assert not future.done()
+        result = future.result(timeout=3)
+    assert result['status'] == ('running' if method == 'get' else 'cancel_requested')
+
+
+def test_write_report_keeps_advisory_fence_and_rejects_revoked_token(storage):
+    repo = storage()
+    task = repo.create('a', 'locked-report-revoke', {})
+    active, token = repo.claim({'a'}, 'fixed', 'test')
+    assert active['id'] == task['id']
+    writer = storage()
+    changed = copy.deepcopy(active)
+    changed['token_hash'] = ''
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        with writer.tx() as cursor:
+            writer.save(cursor, changed)
+            reader = storage()
+            _bounded_connection(reader)
+            future = pool.submit(reader.write_report, 'a', task['id'], active['attempt_id'], token,
+                                 'late-report-key', 'progress', {'message': 'late'})
+            _advisory_wait(storage, reader.repository.connection.info.backend_pid)
+            assert not future.done()
+        with pytest.raises(OperationDenied):
+            future.result(timeout=3)
+    assert [row['kind'] for row in repo.events('a', task['id'], 0)] == ['queued', 'running']
