@@ -788,3 +788,8 @@ The immutable release includes `scripts/configure_pdf_proxy.py`. It changes only
 ## Agent policy read transaction
 
 The Agent policy read-path change has no topology or schema migration. Required backend CI now runs the original Agent operation PostgreSQL regression and a separate isolated-schema read concurrency regression. The production service remains on the existing immutable artifact and release/rollback process; no new worker is enabled by this change.
+
+
+## Fixed-reference model read transaction
+
+The fixed-reference model read change is compatible with the current single-service embedded-worker release. Backend CI runs a new isolated PostgreSQL concurrency regression alongside the existing registry test. There is no schema, secret migration, prompt-source update or topology change; use the ordinary immutable release and whole-release rollback process.

@@ -28,6 +28,18 @@ class Repository:
         finally:
             cursor.close()
 
+    @contextmanager
+    def read_tx(self):
+        cursor = self.runtime._cursor()
+        try:
+            yield cursor
+            self.runtime.connection.commit()
+        except Exception:
+            self.runtime.connection.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def get(self, cursor, identity):
         cursor.execute(f'SELECT raw_json FROM {self.table} WHERE id=%s', (identity,))
         row = cursor.fetchone()

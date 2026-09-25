@@ -209,7 +209,7 @@ class Service:
         if not reference:
             return dict(enabled=False, configured=False, provider='', model='', api_key='', base_url='', timeout_seconds=30, status='unconfigured', message='请管理员配置此功能的模型', profile_purpose=purpose)
         repo = self.repository()
-        with repo.transaction() as c:
+        with repo.read_tx() as c:
             p = repo.get(c, f"{reference['id']}:{reference['version']}")
             tested = repo.get(c, f"test:{reference['id']}:{reference['version']}")
         if not p:
@@ -293,7 +293,7 @@ class Service:
 
     def calls(self):
         repo = self.repository()
-        with repo.transaction() as c:
+        with repo.read_tx() as c:
             c.execute(f"SELECT raw_json FROM {repo.table} WHERE kind='call' ORDER BY created_at DESC,id DESC LIMIT 500")
             rows = [repo.runtime._row_to_dict(c,r)['raw_json'] for r in c.fetchall()]
         return [json.loads(r) if isinstance(r,str) else r for r in rows]

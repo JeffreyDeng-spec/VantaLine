@@ -349,6 +349,7 @@ jobs:
           python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py
+          python scripts/smoke_model_profile_read_transactions.py
           python local_inspection_service/scripts/smoke_model_profile_routing.py
           python local_inspection_service/scripts/smoke_doc_images.py
           python local_inspection_service/scripts/smoke_document_label_classifier.py

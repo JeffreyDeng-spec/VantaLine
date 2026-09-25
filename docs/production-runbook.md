@@ -965,3 +965,8 @@ For unified PDF releases, verify the actual proxy multipart allowance (201m), PD
 ## Agent policy read transaction
 
 For an Agent policy read-path release, inspect the backend CI Agent PostgreSQL regressions before promotion. The policy display read may return the preceding committed policy while an update is in flight; a later read returns the committed update. Policy updates and admission still serialize on the account advisory lock. Roll back the complete immutable release if policy reads fail; no data migration or worker topology switch is involved.
+
+
+## Fixed-reference model read transaction
+
+For a fixed-reference model read-path release, verify both the existing model-profile PostgreSQL contract and the new isolated read-transaction regression in backend CI. A pinned task remains on its stored model version and secret reference; a connection-test status or usage call being written appears only after commit. Roll back the complete immutable release on a read-path failure, retaining profile versions, secrets, tests, calls and task snapshots.
