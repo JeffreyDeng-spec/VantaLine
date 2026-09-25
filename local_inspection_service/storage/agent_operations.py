@@ -50,6 +50,22 @@ class AgentOperationsRepository:
         finally:
             cursor.close()
 
+    @contextmanager
+    def read_transaction(self, owner):
+        if not owner:
+            raise OperationDenied("account required")
+        cursor = self.repository._cursor()
+        try:
+            # Preserve the old owner-key validation before any policy query.
+            _ = "agent:" + owner
+            yield cursor
+            self.repository.connection.commit()
+        except Exception:
+            self.repository.connection.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def table(self, name):
         return self.repository._qualified_table(name)
 
@@ -80,7 +96,7 @@ class AgentOperationsRepository:
         self.write(cursor, "agent_operation_audit", {"id":uuid.uuid4().hex, "owner_user_id":owner, "created_at":int(time.time()), "operation_id":operation_id, "event":event}, insert=True)
 
     def policy(self, owner):
-        with self.transaction(owner) as cursor:
+        with self.read_transaction(owner) as cursor:
             return self.read(cursor, "agent_policies", owner, owner)
 
     def set_policy(self, owner, *, expected_version, enabled, budget, cloud_targets):

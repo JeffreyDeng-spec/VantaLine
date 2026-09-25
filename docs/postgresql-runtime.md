@@ -375,3 +375,8 @@ for complete-release rollback. Never remove a secret used by unfinished work.
 ## Unified PDF inspection
 
 PDF task JSON extends label_inspection_objects with source pdf, import manifest/checkpoints/lease, and import_queued/import_running/import_failed states. No DDL migration. One advisory-lock-protected importer owns a token with a 300s renewed lease; stale tokens cannot checkpoint or publish. Revision 1 is inserted atomically only after all pages render. Existing runs freeze pdf-page-v1 or label strategy. Old manual standards/sessions/pages/records are owner-scoped read-only projections.
+
+
+## Agent policy read transaction
+
+Agent policy display reads use a short PostgreSQL transaction without the per-account advisory lock. A concurrent write can leave a read seeing the preceding committed version; the next read sees the new committed version. `set_policy`, admission, reservation and operation transitions still acquire the per-account advisory transaction lock and read/check/write inside that transaction. No schema or migration is needed.

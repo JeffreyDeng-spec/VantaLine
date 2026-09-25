@@ -960,3 +960,8 @@ uncertain paid calls. New-library edits are not written back into legacy setting
 ## Unified PDF inspection
 
 For unified PDF releases, verify the actual proxy multipart allowance (201m), PDF limit 200 MiB, importer progress after refresh, complete standard count and a clearly named synthetic comparison. Confirm old manual URLs/history remain readable and Word/image/Beta flows remain available. Roll back the entire previous immutable release and stop new PDF submissions; preserve PDF tasks, assets, leases, runs and call records. Never infer real-photo accuracy from rendered-page tests.
+
+
+## Agent policy read transaction
+
+For an Agent policy read-path release, inspect the backend CI Agent PostgreSQL regressions before promotion. The policy display read may return the preceding committed policy while an update is in flight; a later read returns the committed update. Policy updates and admission still serialize on the account advisory lock. Roll back the complete immutable release if policy reads fail; no data migration or worker topology switch is involved.

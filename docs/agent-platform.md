@@ -357,3 +357,8 @@ permissions `ai_config`, `agent_config`, and `system_settings` now require admin
 role in both backend checks and frontend action permissions. Legacy automation
 configuration writes are retired with 409; use the admin model profile API.
 Ordinary users retain their permitted task/device operations without library access.
+
+
+## Agent policy read transaction
+
+Agent policy display reads now use a short PostgreSQL transaction without the account advisory lock. They still require a nonempty owner and return the committed owner-scoped policy. Policy updates, operation admission, reservations, revocation, and state transitions keep their original account lock and transaction. The disposable-schema regression `scripts/smoke_agent_policy_read_transactions.py` verifies a read can complete while an update holds the lock, that decoding does not fence an independent writer, and that write/admission races still serialize.
