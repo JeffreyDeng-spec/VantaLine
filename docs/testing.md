@@ -1873,3 +1873,8 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 ## Agent policy read transaction
 
 The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_agent_operations_postgres.py` and `scripts/smoke_agent_policy_read_transactions.py` with `AGENT_TEST_DATABASE_URL` set to the disposable CI database. The latter creates its own random schema and checks committed reads during an uncommitted policy update, read/write lock independence, exception rollback and connection reuse, and advisory serialization for policy revisions and operation admission. It performs no model or PLC I/O.
+
+
+## Fixed-reference model read transaction
+
+`scripts/smoke_model_profile_read_transactions.py` runs in backend CI against a random disposable PostgreSQL schema. It checks fixed-version secret and proxy binding, committed reads while a writer holds the global advisory lock, independent writer progress during nonempty decoding, rollback/IDLE/cursor closure and connection reuse after injected failures, missing-version 503 query order, post-commit call JSON errors, and the 500-call ordering limit. The existing `smoke_model_profiles.py` continues to cover migration, admin permissions, binding races, historical and async snapshots, key rotation and secret projection. No provider or PLC is contacted.

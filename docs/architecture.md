@@ -1454,3 +1454,8 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 ## Agent policy read transaction
 
 The Agent policy display path in `storage/agent_operations.py` uses a short owner-scoped read transaction. Agent writes and admission still use the per-account advisory transaction lock, so a display read cannot reserve budget or make an admission decision. This is a read-path boundary only; operation state ownership and worker topology remain unchanged.
+
+
+## Fixed-reference model read transaction
+
+A fixed model profile reference now reads its immutable profile version and mutable connection-test row through a short PostgreSQL transaction. The existing `resolve` path still obtains an initialized, locked snapshot when no explicit reference or scope is available; admin snapshots, migration and all writes keep their advisory lock. Usage-call listing also uses a short read transaction, with row conversion inside the transaction and JSON decoding afterward. Secret and proxy references remain bound to the requested version and are read only after the transaction closes.

@@ -380,3 +380,8 @@ PDF task JSON extends label_inspection_objects with source pdf, import manifest/
 ## Agent policy read transaction
 
 Agent policy display reads use a short PostgreSQL transaction without the per-account advisory lock. A concurrent write can leave a read seeing the preceding committed version; the next read sees the new committed version. `set_policy`, admission, reservation and operation transitions still acquire the per-account advisory transaction lock and read/check/write inside that transaction. No schema or migration is needed.
+
+
+## Fixed-reference model read transaction
+
+The model-profile repository now has a short read transaction for already-determined profile versions and the usage-call list. It performs no advisory lock acquisition; each PostgreSQL statement reads committed data, so the immutable profile and mutable test status are not promised as a shared fixed snapshot. Initialization, snapshot creation, admin reads that depend on migration, version/binding writes, connection-test registration and call writes retain the global model-profile advisory transaction lock. No DDL is changed.

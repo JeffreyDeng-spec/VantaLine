@@ -1067,3 +1067,8 @@ PDF import accepts at most 200 MiB and 500 split entries. Configure the site mul
 
 
 PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.
+
+
+## Fixed-reference model read transaction
+
+Fixed-reference model resolution and the admin usage-call list use short PostgreSQL read transactions. An explicit version remains pinned across later edits and secret rotation. A concurrent uncommitted connection-test update or call is not visible until commit; a reference to a still-uncommitted new version can fail with the existing missing-version 503 before that commit. This changes no configuration key, binding default, prompt-source manifest, stored snapshot, or migration.
