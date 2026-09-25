@@ -2650,33 +2650,24 @@ def plc_web_serial_activate_lease(station_id: str, request: PlcWorkstationLeaseA
     return _plc_web_serial_record(state.get("lease")) or {}
 
 
+from .plc.lease_maintenance import LeaseMaintenance as _LeaseMaintenance
+from .plc.lease_maintenance_ports import LeaseMaintenancePorts as _LeaseMaintenancePorts
+
+_plc_lease_maintenance = _LeaseMaintenance(
+    _LeaseMaintenancePorts(
+        mutate=lambda: _plc_web_serial_mutate,
+        record=lambda: _plc_web_serial_record,
+        lease_row=lambda: _plc_workstation_lease_row,
+        current_user=lambda: current_auth_user,
+        clock=lambda: time.time,
+        active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
+        config_error=lambda: PlcConfigError,
+    )
+)
+
+
 def plc_web_serial_heartbeat(station_id: str, request: PlcWorkstationLeaseHeartbeatRequest) -> dict[str, Any]:
-    user_id = str((current_auth_user() or {}).get("id") or "")
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        lease = _plc_web_serial_record(state.get("lease"))
-        station = _plc_web_serial_record(state.get("station"))
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        if not lease or not station:
-            raise PlcConfigError("plc_workstation_lease_missing")
-        valid = (
-            lease.get("session_id") == request.session_id
-            and int(lease.get("lease_epoch") or -1) == int(request.lease_epoch)
-            and lease.get("owner_user_id") == user_id
-            and lease.get("state") == "active"
-            and int(lease.get("expires_at") or 0) > now
-            and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
-        )
-        if not valid:
-            raise PlcConfigError("plc_workstation_lease_fenced")
-        lease["heartbeat_at"] = now
-        lease["expires_at"] = now + WEB_SERIAL_ACTIVE_LEASE_SECONDS
-        if str(lease.get("in_flight_dispatch_id") or "").startswith("plcweb_"):
-            lease["in_flight_deadline_at"] = lease["expires_at"]
-        state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, None, mutate)
-    return _plc_web_serial_record(state.get("lease")) or {}
+    return _plc_lease_maintenance.heartbeat(station_id, request)
 
 
 def plc_web_serial_rebind_model(station_id: str, request: PlcWorkstationLeaseRebindRequest) -> dict[str, Any]:
@@ -2702,22 +2693,7 @@ def plc_web_serial_rebind_model(station_id: str, request: PlcWorkstationLeaseReb
 
 
 def plc_web_serial_release_lease(station_id: str, request: PlcWorkstationLeaseHeartbeatRequest) -> dict[str, Any]:
-    user_id = str((current_auth_user() or {}).get("id") or "")
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        lease = _plc_web_serial_record(state.get("lease"))
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        if not lease:
-            return
-        if lease.get("session_id") == request.session_id and int(lease.get("lease_epoch") or -1) == int(request.lease_epoch) and lease.get("owner_user_id") == user_id:
-            in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-            lease["state"] = "draining" if in_flight_deadline > now else "released"
-            lease["heartbeat_at"] = now
-            lease["expires_at"] = max(now, in_flight_deadline)
-            state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, None, mutate)
-    return _plc_web_serial_record(state.get("lease")) or {"state": "released"}
+    return _plc_lease_maintenance.release(station_id, request)
 
 
 def _plc_web_serial_require_active_lease(

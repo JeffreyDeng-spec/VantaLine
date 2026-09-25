@@ -1,3 +1,5 @@
+The PLC lease-maintenance extraction is a Web-compatible module move with unchanged route signatures and topology. Source manifest v125 adds the two actual modules (335 entries); new tasks use its new fingerprint, while historical snapshots remain unchanged. Publish and rollback only complete immutable releases.
+
 The legacy PLC config diagnostic extraction ships as one compatible Web release with the original GET/POST signatures and route order, plus source manifest v124. The accepted-original replay runs locally; CI runs the candidate offline contract and existing PLC/HTTP checks. Rollback restores the previous complete release without rewriting workstation or model data.
 
 PLC dispatch/diagnostic HTTP extraction ships in one compatible Web release with five original root signatures and route order, and source manifest v123. CI runs the offline dispatch/diagnostic contract and existing PLC/HTTP checks. Rollback restores the previous complete release; existing workstation and call evidence remains.
