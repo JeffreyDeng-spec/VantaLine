@@ -1,3 +1,5 @@
+The PLC diagnostic reservation extraction ships as one Web-compatible release with unchanged API, PostgreSQL mutation and browser serial topology. Source manifest v128 (339 entries) includes the two new business modules. Locally replay accepted-original behavior; CI runs candidate offline/isolated PostgreSQL plus existing PLC/HTTP contracts. Roll back the previous complete immutable release without rewriting lease or receipt evidence.
+
 The PLC model-rebind extraction ships as one Web-compatible complete release with unchanged API, lease transaction and browser serial topology. Source manifest v127 (337 entries) covers the changed maintenance source. Local checks replay accepted-original behavior; CI runs candidate offline/isolated PostgreSQL contracts and existing PLC/HTTP gates; rollback restores only the previous complete release.
 
 The PLC lease acquisition extraction is a complete Web-compatible release with unchanged route signatures and runtime topology. Source manifest v126 tracks the new business modules; deploy and roll back only the complete immutable package.

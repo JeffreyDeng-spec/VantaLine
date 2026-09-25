@@ -1,3 +1,5 @@
+PLC diagnostic reservation now uses a separate state module but retains the same browser serial ownership and PostgreSQL lease transaction. Deploy and restore the full release with source manifest v128. Do not retry unknown physical writes or copy individual PLC files during rollback; existing token-hash and ACK evidence remains intact.
+
 PLC model rebinding now runs through lease maintenance with the shared active-lease fence and original PostgreSQL mutation transaction. The Web process and browser-owned serial topology are unchanged. Deploy and restore the complete release with source manifest v127; do not copy individual PLC files or alter lease and dispatch evidence during rollback.
 
 The PLC lease acquisition extraction requires no schema migration, worker switch or device operation. CI uses synthetic workstation data and isolated PostgreSQL; rollback restores the previous complete release without copying individual modules or altering lease and dispatch evidence.
