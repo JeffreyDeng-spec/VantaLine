@@ -970,3 +970,8 @@ For an Agent policy read-path release, inspect the backend CI Agent PostgreSQL r
 ## Fixed-reference model read transaction
 
 For a fixed-reference model read-path release, verify both the existing model-profile PostgreSQL contract and the new isolated read-transaction regression in backend CI. A pinned task remains on its stored model version and secret reference; a connection-test status or usage call being written appears only after commit. Roll back the complete immutable release on a read-path failure, retaining profile versions, secrets, tests, calls and task snapshots.
+
+
+## Model registry initialization fast path
+
+For a model initialization fast-path release, require the isolated PostgreSQL warm/cold race and failure-retry regression in backend CI. Existing installations should take the short committed-state read; a new or missing state still migrates under the original advisory lock. On failure, restore the previous complete immutable release and retain profile rows, secret versions and task snapshots; do not attempt a reverse migration.

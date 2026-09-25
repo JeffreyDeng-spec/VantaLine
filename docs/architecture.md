@@ -1459,3 +1459,8 @@ The Agent policy display path in `storage/agent_operations.py` uses a short owne
 ## Fixed-reference model read transaction
 
 A fixed model profile reference now reads its immutable profile version and mutable connection-test row through a short PostgreSQL transaction. The existing `resolve` path still obtains an initialized, locked snapshot when no explicit reference or scope is available; admin snapshots, migration and all writes keep their advisory lock. Usage-call listing also uses a short read transaction, with row conversion inside the transaction and JSON decoding afterward. Secret and proxy references remain bound to the requested version and are read only after the transaction closes.
+
+
+## Model registry initialization fast path
+
+Model profile `initialize()` first checks the committed state row in a short read transaction. A truthy row ends initialization without waiting for the global profile write lock. If state is missing or falsey, the read transaction closes before acquiring the original advisory transaction lock, and the original state check repeats inside that lock before any migration or secret operation. Snapshot, admin display and writes retain their existing transaction boundaries.

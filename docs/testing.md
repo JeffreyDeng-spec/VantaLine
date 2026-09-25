@@ -1878,3 +1878,8 @@ The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_
 ## Fixed-reference model read transaction
 
 `scripts/smoke_model_profile_read_transactions.py` runs in backend CI against a random disposable PostgreSQL schema. It checks fixed-version secret and proxy binding, committed reads while a writer holds the global advisory lock, independent writer progress during nonempty decoding, rollback/IDLE/cursor closure and connection reuse after injected failures, missing-version 503 query order, post-commit call JSON errors, and the 500-call ordering limit. The existing `smoke_model_profiles.py` continues to cover migration, admin permissions, binding races, historical and async snapshots, key rotation and secret projection. No provider or PLC is contacted.
+
+
+## Model registry initialization fast path
+
+`scripts/smoke_model_profile_initialize_fast_path.py` runs in backend CI against disposable PostgreSQL schemas. It proves warm initialization completes while a writer holds the global lock; simultaneous cold initializers serialize and create one state/profile/audit; a migration failure rolls back DB state and can be retried; falsey state takes the old cold path; injected state-read failures preserve exception identity and leave an IDLE reusable connection with a closed cursor. Existing model-profile and fixed-reference PostgreSQL regressions still run.

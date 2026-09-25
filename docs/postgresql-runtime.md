@@ -384,4 +384,9 @@ Agent policy display reads use a short PostgreSQL transaction without the per-ac
 
 ## Fixed-reference model read transaction
 
-The model-profile repository now has a short read transaction for already-determined profile versions and the usage-call list. It performs no advisory lock acquisition; each PostgreSQL statement reads committed data, so the immutable profile and mutable test status are not promised as a shared fixed snapshot. Initialization, snapshot creation, admin reads that depend on migration, version/binding writes, connection-test registration and call writes retain the global model-profile advisory transaction lock. No DDL is changed.
+The model-profile repository now has a short read transaction for already-determined profile versions and the usage-call list. It performs no advisory lock acquisition; each PostgreSQL statement reads committed data, so the immutable profile and mutable test status are not promised as a shared fixed snapshot. Cold initialization migration, snapshot creation, admin reads that depend on migration, version/binding writes, connection-test registration and call writes retain the global model-profile advisory transaction lock. No DDL is changed.
+
+
+## Model registry initialization fast path
+
+For model-profile initialization, an already committed truthy `state` row is read in a short transaction without the global advisory lock. Missing or falsey state ends that read transaction and takes the existing advisory write transaction, where state is read again before migration. Migration profile/version inserts, initial snapshot, audit and secret calls stay in their previous locked sequence. No schema migration or process-local initialized cache is introduced.

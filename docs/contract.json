@@ -74,7 +74,7 @@
     },
     {
       "name": "Model profile binding and source provenance",
-      "paths": ["local_inspection_service/model_profiles/**", "local_inspection_service/model_providers/**", "scripts/smoke_model_profile_read_transactions.py", "scripts/smoke_provider_foundations.py", "scripts/smoke_openai_transport.py", "scripts/smoke_gemini_transport.py", "scripts/smoke_image_provider_transports.py", "scripts/smoke_provider_orchestration.py", "scripts/smoke_public_status.py", "scripts/smoke_legacy_provider_settings.py", "scripts/smoke_provider_configuration_policy.py", "scripts/smoke_provider_key_registry.py", "scripts/smoke_key_material.py", "scripts/smoke_provider_metering.py", "local_inspection_service/qwen_evidence_jobs.py", "local_inspection_service/qwen_ocr_evidence.py"],
+      "paths": ["local_inspection_service/model_profiles/**", "local_inspection_service/model_providers/**", "scripts/smoke_model_profile_read_transactions.py", "scripts/smoke_model_profile_initialize_fast_path.py", "scripts/smoke_provider_foundations.py", "scripts/smoke_openai_transport.py", "scripts/smoke_gemini_transport.py", "scripts/smoke_image_provider_transports.py", "scripts/smoke_provider_orchestration.py", "scripts/smoke_public_status.py", "scripts/smoke_legacy_provider_settings.py", "scripts/smoke_provider_configuration_policy.py", "scripts/smoke_provider_key_registry.py", "scripts/smoke_key_material.py", "scripts/smoke_provider_metering.py", "local_inspection_service/qwen_evidence_jobs.py", "local_inspection_service/qwen_ocr_evidence.py"],
       "required_docs": ["docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md"]
     },
     {

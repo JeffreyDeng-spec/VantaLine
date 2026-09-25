@@ -1072,3 +1072,8 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 ## Fixed-reference model read transaction
 
 Fixed-reference model resolution and the admin usage-call list use short PostgreSQL read transactions. An explicit version remains pinned across later edits and secret rotation. A concurrent uncommitted connection-test update or call is not visible until commit; a reference to a still-uncommitted new version can fail with the existing missing-version 503 before that commit. This changes no configuration key, binding default, prompt-source manifest, stored snapshot, or migration.
+
+
+## Model registry initialization fast path
+
+The model registry warm-start check now reads committed state without taking the global advisory lock. A missing or falsey state still uses the original locked migration with an in-lock recheck. No setting, default, stored binding, snapshot, secret reference or prompt-source fingerprint changes. External secret writes made before a failed database migration retain their existing non-transactional behavior.

@@ -112,6 +112,9 @@ class Service:
 
     def initialize(self):
         repo = self.repository()
+        with repo.read_tx() as c:
+            if repo.state(c):
+                return
         with repo.transaction() as c:
             if repo.state(c):
                 return
