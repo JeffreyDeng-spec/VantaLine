@@ -5726,50 +5726,13 @@ def _plc_deadline_snapshot(
             }
 
 
-def plc_config_response(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    current = config if isinstance(config, dict) else load_config()
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(current))
-        validation_error = ""
-    except PlcConfigError as exc:
-        settings = dict(DEFAULT_PLC_CONFIG)
-        validation_error = str(exc)
-    capability_errors = plc_activation_errors(settings) if not validation_error else []
-    if capability_errors:
-        validation_error = capability_errors[0]["code"]
-    records = list(reversed(plc_dispatch_audit_records(current)))[:PLC_DISPATCH_AUDIT_LIMIT]
+def _plc_active_attempts_snapshot() -> list[dict[str, Any]]:
     with _config_io_lock:
-        active_attempts = [dict(item) for item in _plc_active_attempts.values()]
-    return {
-        "config": settings,
-        "resolved_addresses": {
-            "result_register": logical_device_address(settings["result_register"]),
-            "output_control_point": (
-                logical_device_address(settings["output_control_point"])
-                if settings["output_control_point"] else ""
-            ),
-            "capture_input_register": (
-                logical_device_address(settings["capture_input_register"])
-                if settings["capture_input_register"] else ""
-            ),
-        },
-        "device_profile_verified": plc_device_profile_verified(settings),
-        "read_profile_verified": plc_read_profile_verified(settings),
-        "protocol_options": [{"id": PLC_PROTOCOL_ID, "label": "三菱 FX 编程口（ASCII）"}],
-        "recent_dispatches": records,
-        "validation_error": validation_error,
-        "validation_errors": (
-            capability_errors
-            if capability_errors
-            else ([{"code": "invalid_plc_config", "message": validation_error}] if validation_error else [])
-        ),
-        "effective_enabled": bool(settings.get("enabled")) if not validation_error else False,
-        "control_generation": int(current.get(PLC_CONTROL_GENERATION_KEY) or 0),
-        "in_flight_attempts": active_attempts,
-        "disable_notice": "关闭后不会开始新的重试或目标指令；已经进入底层串口调用的单次操作无法被强制撤回。",
-        "queue_wait_seconds": PLC_QUEUE_WAIT_SECONDS,
-        "worker_total_timeout_seconds": PLC_WORKER_TOTAL_TIMEOUT_SECONDS,
-    }
+        return [dict(item) for item in _plc_active_attempts.values()]
+
+
+def plc_config_response(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _plc_config_diagnostics.response(config)
 
 
 def plc_dispatch_identity(result: dict[str, Any], *, source: str, fingerprint: str) -> tuple[str, str, bool]:
@@ -17010,18 +16973,12 @@ def get_config_summary(user_id: str | None = None) -> dict[str, Any]:
     return redact_config_summary_for_user(payload, user)
 
 
-@app.get("/api/plc/config")
 def get_plc_config() -> dict[str, Any]:
     return plc_config_response()
 
 
-@app.post("/api/plc/config")
 def update_plc_config(request: PlcConfigRequest) -> dict[str, Any]:
-    require_permission("system_settings")
-    raise HTTPException(
-        status_code=410,
-        detail="legacy_server_serial_config_is_read_only_use_workstation_config",
-    )
+    return _plc_config_diagnostics.update(request)
     request_payload = plc_config_request_payload(request)
     request_fields = set(request_payload)
     legacy_fields = {"d206_address", "y04_address", "write_y04"}
@@ -17061,6 +17018,50 @@ def update_plc_config(request: PlcConfigRequest) -> dict[str, Any]:
         status_code = 409 if str(exc).startswith("plc_") and str(exc).endswith(("_unavailable", "_missing", "_unverified")) else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     return plc_config_response(config)
+
+
+from .plc.config_diagnostics import ConfigDiagnostics as _ConfigDiagnostics
+from .plc.config_diagnostics_api import register_config_diagnostics_routes as _register_config_diagnostics_routes
+from .plc.config_diagnostics_ports import (
+    ConfigAccess as _ConfigAccess, ConfigDisplay as _ConfigDisplay,
+    ConfigErrors as _ConfigErrors, ConfigRuntime as _ConfigRuntime,
+    ConfigSources as _ConfigSources,
+)
+
+_plc_config_diagnostics = _ConfigDiagnostics(
+    _ConfigSources(
+        load=lambda: load_config,
+        raw_namespace=lambda: raw_plc_namespace,
+        normalize=lambda: normalize_plc_config,
+        defaults=lambda: DEFAULT_PLC_CONFIG,
+        activation_errors=lambda: plc_activation_errors,
+        dispatch_audit=lambda: plc_dispatch_audit_records,
+    ),
+    _ConfigDisplay(
+        logical_address=lambda: logical_device_address,
+        device_verified=lambda: plc_device_profile_verified,
+        read_verified=lambda: plc_read_profile_verified,
+    ),
+    _ConfigRuntime(
+        active_attempts=lambda: _plc_active_attempts_snapshot,
+        audit_limit=lambda: PLC_DISPATCH_AUDIT_LIMIT,
+        protocol_id=lambda: PLC_PROTOCOL_ID,
+        generation_key=lambda: PLC_CONTROL_GENERATION_KEY,
+        queue_wait_seconds=lambda: PLC_QUEUE_WAIT_SECONDS,
+        worker_total_timeout_seconds=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS,
+    ),
+    _ConfigAccess(require_permission=lambda: require_permission),
+    _ConfigErrors(
+        config_error=lambda: PlcConfigError,
+        http_error=lambda: HTTPException,
+    ),
+)
+
+_register_config_diagnostics_routes(
+    app,
+    get_config=get_plc_config,
+    update_config=update_plc_config,
+)
 
 
 @app.get("/api/version")

@@ -1,3 +1,5 @@
+The legacy PLC config diagnostic extraction changes no PLC setting, default, permission, protocol or secret. POST stays read-only and returns 410 after authorization. Source manifest v124 adds three actual files (333 entries) for new task fingerprints; historical model snapshots are unchanged.
+
 PLC dispatch/diagnostic HTTP extraction changes no protocol, model, permission setting, default or secret. Source manifest v123 adds three actual files (330 entries) for new task fingerprints; historical model snapshots and fingerprints remain untouched.
 
 PLC connection-lease HTTP extraction changes no PLC profile, model permission, default, protocol or secret. Source manifest v122 adds the three actual lease boundary files (327 entries) for new task fingerprints; existing model snapshots and historical fingerprints remain unchanged.
