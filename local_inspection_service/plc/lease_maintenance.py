@@ -53,3 +53,24 @@ class LeaseMaintenance:
 
         state = self.ports.mutate()(station_id, None, mutate)
         return self.ports.record()(state.get("lease")) or {"state": "released"}
+
+    def rebind_model(self, station_id: str, request: Any) -> dict[str, Any]:
+        clean_model_id = str(request.model_id or "").strip()
+        if not clean_model_id:
+            raise self.ports.config_error()("plc_workstation_model_required")
+
+        def mutate(state: dict[str, dict[str, Any] | None]) -> None:
+            _, lease, now = self.ports.require_active_lease()(
+                state, request.session_id, request.lease_epoch
+            )
+            in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
+            in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
+            if in_flight_id and in_flight_deadline > now:
+                raise self.ports.config_error()("plc_workstation_attempt_in_flight")
+            lease["model_id"] = clean_model_id
+            lease["heartbeat_at"] = now
+            lease["expires_at"] = now + self.ports.active_ttl()
+            state["lease"] = self.ports.lease_row()(lease)
+
+        state = self.ports.mutate()(station_id, None, mutate)
+        return self.ports.record()(state.get("lease")) or {}

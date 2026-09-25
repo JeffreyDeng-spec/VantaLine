@@ -14,3 +14,4 @@ class LeaseMaintenancePorts:
     clock: Getter
     active_ttl: Callable[[], int]
     config_error: Callable[[], type[Exception]]
+    require_active_lease: Getter

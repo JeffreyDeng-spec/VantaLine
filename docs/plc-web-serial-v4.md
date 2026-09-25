@@ -1,3 +1,5 @@
+The model rebind state transition lives in `plc/lease_maintenance.py`. It still strips and validates the model before the station mutation, then invokes the shared active-lease guard before the strict in-flight deadline check. It updates only model, heartbeat and expiry; the existing browser-owned serial path and ACK evidence remain unchanged.
+
 The browser lease claim and activation state machine is implemented in `plc/lease_acquisition.py`. Claim still checks release consistency, client ID, protocol and model permission before the station transaction. A lease may be reclaimed at expiry equality; activation still rejects a repeated activation and preserves its distinct missing, fenced, expired and generation errors.
 
 The lease heartbeat and disconnect state transitions now use `plc/lease_maintenance.py`. Heartbeat still fences session, epoch, owner, active state, expiry and configuration generation before extending a `plcweb_` in-flight deadline. Disconnect still returns released for a missing lease and drains only while an in-flight deadline remains; it does not alter browser ACK evidence.

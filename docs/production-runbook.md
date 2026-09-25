@@ -1,3 +1,5 @@
+PLC model rebinding now runs through lease maintenance with the shared active-lease fence and original PostgreSQL mutation transaction. The Web process and browser-owned serial topology are unchanged. Deploy and restore the complete release with source manifest v127; do not copy individual PLC files or alter lease and dispatch evidence during rollback.
+
 The PLC lease acquisition extraction requires no schema migration, worker switch or device operation. CI uses synthetic workstation data and isolated PostgreSQL; rollback restores the previous complete release without copying individual modules or altering lease and dispatch evidence.
 
 The PLC lease-maintenance extraction requires no schema migration or worker topology change. Deploy the full release and retain the previous complete release for rollback; no PLC hardware or paid inference is needed for its synthetic CI contract.
