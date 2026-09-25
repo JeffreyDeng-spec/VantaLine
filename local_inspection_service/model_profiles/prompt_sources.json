@@ -1,5 +1,5 @@
 {
-  "version": 125,
+  "version": 126,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -8,6 +8,8 @@
     "plc/connection_lease_ports.py",
     "plc/lease_maintenance.py",
     "plc/lease_maintenance_ports.py",
+    "plc/lease_acquisition.py",
+    "plc/lease_acquisition_ports.py",
     "plc/config_diagnostics.py",
     "plc/config_diagnostics_api.py",
     "plc/config_diagnostics_ports.py",

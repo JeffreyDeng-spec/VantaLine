@@ -1,3 +1,5 @@
+The lease acquisition extraction changes no operator setting, model permission, default, protocol version or secret. Source manifest v126 adds its two actual modules (337 entries) to new task fingerprints; historical model snapshots and secret references are unchanged.
+
 PLC lease maintenance changes no operator setting, default, protocol or secret. Source manifest v125 adds the two lease state modules (335 entries) for new task fingerprints; historical task snapshots and secret references are unchanged.
 
 The legacy PLC config diagnostic extraction changes no PLC setting, default, permission, protocol or secret. POST stays read-only and returns 410 after authorization. Source manifest v124 adds three actual files (333 entries) for new task fingerprints; historical model snapshots are unchanged.

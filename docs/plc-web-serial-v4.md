@@ -1,3 +1,5 @@
+The browser lease claim and activation state machine is implemented in `plc/lease_acquisition.py`. Claim still checks release consistency, client ID, protocol and model permission before the station transaction. A lease may be reclaimed at expiry equality; activation still rejects a repeated activation and preserves its distinct missing, fenced, expired and generation errors.
+
 The lease heartbeat and disconnect state transitions now use `plc/lease_maintenance.py`. Heartbeat still fences session, epoch, owner, active state, expiry and configuration generation before extending a `plcweb_` in-flight deadline. Disconnect still returns released for a missing lease and drains only while an in-flight deadline remains; it does not alter browser ACK evidence.
 
 The legacy `/api/plc/config` GET response is assembled through `plc/config_diagnostics.py`; POST still requires `system_settings` and returns the existing 410 before any write. The diagnostic projection keeps its original validation order, audit ordering and lock-scoped shallow snapshot of active attempts. It does not read or write physical serial.

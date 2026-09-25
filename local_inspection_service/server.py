@@ -2574,80 +2574,35 @@ def plc_web_serial_set_verified(station_id: str, verified: bool) -> dict[str, An
     return plc_web_serial_station_payload(record)
 
 
+from .plc.lease_acquisition import LeaseAcquisition as _LeaseAcquisition
+from .plc.lease_acquisition_ports import LeaseAcquisitionPorts as _LeaseAcquisitionPorts
+
+_plc_lease_acquisition = _LeaseAcquisition(
+    _LeaseAcquisitionPorts(
+        current_user=lambda: current_auth_user,
+        release_version=lambda: current_release_version,
+        fullmatch=lambda: re.fullmatch,
+        protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        require_model_permission=lambda: require_analyze_model_permission,
+        mutate=lambda: _plc_web_serial_mutate,
+        record=lambda: _plc_web_serial_record,
+        migrate_config=lambda: migrate_web_serial_config,
+        clock=lambda: time.time,
+        uuid4=lambda: uuid.uuid4,
+        connecting_ttl=lambda: WEB_SERIAL_CONNECTING_LEASE_SECONDS,
+        active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
+        lease_row=lambda: _plc_workstation_lease_row,
+        config_error=lambda: PlcConfigError,
+    )
+)
+
+
 def plc_web_serial_claim_connecting_lease(station_id: str, request: PlcWorkstationLeaseRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    client_instance_id = str(request.client_instance_id or "").strip()
-    model_id = str(request.model_id or "").strip()
-    bundle_version = str(request.bundle_version or "").strip()
-    if not current_release_version()["consistent"]:
-        raise PlcConfigError("plc_release_version_mismatch")
-    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", client_instance_id):
-        raise PlcConfigError("invalid_client_instance_id")
-    if bundle_version != WEB_SERIAL_PROTOCOL_VERSION:
-        raise PlcConfigError("plc_browser_protocol_version_mismatch")
-    require_analyze_model_permission(model_id or None)
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        station = _plc_web_serial_record(state.get("station"))
-        if not station:
-            raise PlcConfigError("plc_workstation_not_found")
-        config = migrate_web_serial_config(station.get("config") if isinstance(station.get("config"), dict) else {})
-        if not config["enabled"]:
-            raise PlcConfigError("plc_workstation_disabled")
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        current = _plc_web_serial_record(state.get("lease"))
-        if current and current.get("state") in {"connecting", "active", "draining"} and int(current.get("expires_at") or 0) > now:
-            raise PlcConfigError("plc_workstation_in_use")
-        epoch = int((current or {}).get("lease_epoch") or 0) + 1
-        lease = {
-            "station_id": station_id,
-            "session_id": f"plcwsess_{uuid.uuid4().hex}",
-            "state": "connecting",
-            "lease_epoch": epoch,
-            "owner_user_id": str(user.get("id") or ""),
-            "model_id": model_id,
-            "client_instance_id": client_instance_id,
-            "bundle_version": bundle_version,
-            "config_generation": int(station.get("config_generation") or 0),
-            "heartbeat_at": now,
-            "expires_at": now + WEB_SERIAL_CONNECTING_LEASE_SECONDS,
-            "serial_info": {},
-        }
-        state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, None, mutate)
-    lease = _plc_web_serial_record(state.get("lease"))
-    if not lease:
-        raise PlcConfigError("plc_lease_persist_failed")
-    return lease
+    return _plc_lease_acquisition.claim(station_id, request)
 
 
 def plc_web_serial_activate_lease(station_id: str, request: PlcWorkstationLeaseActivateRequest) -> dict[str, Any]:
-    user_id = str((current_auth_user() or {}).get("id") or "")
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        lease = _plc_web_serial_record(state.get("lease"))
-        station = _plc_web_serial_record(state.get("station"))
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        if not lease or not station:
-            raise PlcConfigError("plc_workstation_lease_missing")
-        if lease.get("session_id") != request.session_id or int(lease.get("lease_epoch") or -1) != int(request.lease_epoch):
-            raise PlcConfigError("plc_workstation_lease_fenced")
-        if lease.get("owner_user_id") != user_id or lease.get("state") != "connecting" or int(lease.get("expires_at") or 0) <= now:
-            raise PlcConfigError("plc_workstation_lease_expired")
-        if int(lease.get("config_generation") or -1) != int(station.get("config_generation") or 0):
-            raise PlcConfigError("plc_workstation_generation_changed")
-        lease["state"] = "active"
-        lease["heartbeat_at"] = now
-        lease["expires_at"] = now + WEB_SERIAL_ACTIVE_LEASE_SECONDS
-        lease["serial_info"] = {
-            "usb_vendor_id": request.usb_vendor_id,
-            "usb_product_id": request.usb_product_id,
-        }
-        state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, None, mutate)
-    return _plc_web_serial_record(state.get("lease")) or {}
+    return _plc_lease_acquisition.activate(station_id, request)
 
 
 from .plc.lease_maintenance import LeaseMaintenance as _LeaseMaintenance
