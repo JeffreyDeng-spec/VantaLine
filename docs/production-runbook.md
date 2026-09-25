@@ -1,3 +1,5 @@
+Diagnostic confirmation now runs through the diagnostic state module but retains the original transaction and active-lease fence. It does not clear in-flight evidence or imply successful physical I/O. Deploy and roll back complete releases with source manifest v129; continue using browser ACK/receipt evidence for physical outcomes and do not retry unknown writes.
+
 PLC diagnostic reservation now uses a separate state module but retains the same browser serial ownership and PostgreSQL lease transaction. Deploy and restore the full release with source manifest v128. Do not retry unknown physical writes or copy individual PLC files during rollback; existing token-hash and ACK evidence remains intact.
 
 PLC model rebinding now runs through lease maintenance with the shared active-lease fence and original PostgreSQL mutation transaction. The Web process and browser-owned serial topology are unchanged. Deploy and restore the complete release with source manifest v127; do not copy individual PLC files or alter lease and dispatch evidence during rollback.
