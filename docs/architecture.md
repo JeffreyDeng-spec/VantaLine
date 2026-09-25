@@ -1458,9 +1458,13 @@ The Agent policy display path in `storage/agent_operations.py` uses a short owne
 
 ## Fixed-reference model read transaction
 
-A fixed model profile reference now reads its immutable profile version and mutable connection-test row through a short PostgreSQL transaction. The existing `resolve` path still obtains an initialized, locked snapshot when no explicit reference or scope is available; admin snapshots, migration and all writes keep their advisory lock. Usage-call listing also uses a short read transaction, with row conversion inside the transaction and JSON decoding afterward. Secret and proxy references remain bound to the requested version and are read only after the transaction closes.
+A fixed model profile reference now reads its immutable profile version and mutable connection-test row through a short PostgreSQL transaction. When no explicit reference or scope is available, `resolve` obtains an initialized task snapshot; this snapshot now uses a short read transaction. Migration, admin display and all writes retain their advisory lock. Usage-call listing also uses a short read transaction, with row conversion inside the transaction and JSON decoding afterward. Secret and proxy references remain bound to the requested version and are read only after the transaction closes.
 
 
 ## Model registry initialization fast path
 
-Model profile `initialize()` first checks the committed state row in a short read transaction. A truthy row ends initialization without waiting for the global profile write lock. If state is missing or falsey, the read transaction closes before acquiring the original advisory transaction lock, and the original state check repeats inside that lock before any migration or secret operation. Snapshot, admin display and writes retain their existing transaction boundaries.
+Model profile `initialize()` first checks the committed state row in a short read transaction. A truthy row ends initialization without waiting for the global profile write lock. If state is missing or falsey, the read transaction closes before acquiring the original advisory transaction lock, and the original state check repeats inside that lock before any migration or secret operation. Cold migration, admin display and writes retain their advisory transaction boundaries; task snapshots use short read transactions as described below.
+
+## Model task snapshot read transactions
+
+`Service.snapshot()` and the first state read in `snapshot_for_record()` now use short PostgreSQL read transactions. Snapshot projection still reads the binding state first and then its append-only profile versions; a concurrent uncommitted binding update returns the last committed binding. Historical records still compare `created_at` strictly with `migrated_at` and deep-copy the migration snapshot. For other records the first transaction closes before the existing separate `snapshot()` call. The scope, secret resolver, public admin view and every write transaction retain their prior behavior.

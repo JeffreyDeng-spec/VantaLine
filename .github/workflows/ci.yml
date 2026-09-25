@@ -351,6 +351,7 @@ jobs:
           python local_inspection_service/scripts/smoke_model_profiles.py
           python scripts/smoke_model_profile_read_transactions.py
           python scripts/smoke_model_profile_initialize_fast_path.py
+          python scripts/smoke_model_profile_snapshot_reads.py
           python local_inspection_service/scripts/smoke_model_profile_routing.py
           python local_inspection_service/scripts/smoke_doc_images.py
           python local_inspection_service/scripts/smoke_document_label_classifier.py
