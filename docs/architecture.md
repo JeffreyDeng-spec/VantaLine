@@ -1472,3 +1472,7 @@ Model profile `initialize()` first checks the committed state row in a short rea
 ## Model admin public read transaction
 
 `Service.public()` now reads the model-profile state, append-only head versions and each version-bound connection-test row in a short repository read transaction. The state revision, bindings and heads are captured before projection, preserving profile order and `used_by`; mutable test rows can reflect later committed statements because PostgreSQL READ COMMITTED is used. The projection whitelist and administrator route guard are unchanged. Cold migration, profile/binding writes, tests and usage-call registration retain their advisory write transactions.
+
+## Label list-only run payloads
+
+The first task-list page now calls a bounded list-only run reader for groups of at most 64 native task IDs. Its SQL result removes only five fields that `public()` already discards for JSON objects whose own `kind` is `run`: `model`, `prompt_hash`, `layout`, `transformations`, and `profile_snapshot`. Non-run or non-object JSON is returned unchanged. The API still decodes, projects and sorts every run per task before filtering the mixed native/legacy/manual/Beta rows or creating the fixed 15-minute page snapshot. Detail continues to fetch complete run JSON. This lowers transfer size for ordinary runs; it does not yet replace full-row reads with SQL summaries or remove the older source scans.

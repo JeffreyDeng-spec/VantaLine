@@ -338,7 +338,11 @@ jobs:
           python local_inspection_service/scripts/smoke_data_analysis.py
           python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py
           python local_inspection_service/scripts/smoke_endpoint_runtime_store_probe.py
-          python scripts/smoke_label_run_batch.py
+          git fetch --no-tags --depth=1 origin d16b33c28c7f78acc74e9c569ee4bc7076efed07
+          test "$(git rev-parse 'd16b33c28c7f78acc74e9c569ee4bc7076efed07:local_inspection_service/label_inspection/api.py')" = '1f89c00266ca4e2978e1fb66af3d5b2db9fa97a9'
+          git show 'd16b33c28c7f78acc74e9c569ee4bc7076efed07:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_v564_api.py"
+          VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_v564_api.py" python scripts/smoke_label_run_batch.py
+          python scripts/smoke_label_list_payloads.py
           git show 'HEAD^:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_legacy_parent_api.py"
           VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_parent_api.py" python scripts/smoke_label_legacy_index.py
           git fetch --no-tags --depth=1 origin cf9c61577c0ccb1f32404e88b46ec07cb9e482e5

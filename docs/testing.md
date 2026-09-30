@@ -1891,3 +1891,7 @@ The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_
 ## Model admin public read transaction
 
 `scripts/smoke_model_profile_public_read.py` runs in backend CI against a random PostgreSQL schema. It checks revision/binding/profile order, version-bound connection status, secret omission, old committed output during an uncommitted writer, new output after commit, writer progress during a paused display read, state/head capture across a concurrent commit, eager version-read error order, and rollback/closed cursor/connection reuse after state, version or test-row decode errors. Existing model API permission and write-race smoke remains in CI.
+
+## Label list-only run payloads
+
+CI replays the exact v564 `label_inspection/api.py` source against candidate list fixtures, including redacted heavy fields, same-second floating JSON times, nonlatest errors, native/legacy/manual/Beta ordering, and cursor pages. `scripts/smoke_label_list_payloads.py` checks real PostgreSQL field trimming, scalar/non-run preservation, SQL-vs-JSON task mismatch, owner isolation, committed reads under a write lock, exception rollback/IDLE and connection reuse. The 1,000/10,000-task isolated PostgreSQL benchmark alternates full and list-only bounded reads five times and compares output identity, serialized payload bytes, P95 and repository-level peak memory. This synthetic benchmark does not certify production latency or a complete SQL summary.

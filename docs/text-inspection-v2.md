@@ -648,3 +648,7 @@ new work requires a new PDF import. Beta retains its own route and behavior.
 
 
 PDF result compatibility: optional `consistentItems` entries may be strings or objects with a string `description`. Only that non-decision summary is normalized; raw provider evidence remains immutable. Missing/invalid descriptions and contradictory difference decisions still fail closed. Label parsing, PDF prompts, image inputs and model settings are unchanged. The PDF scope caption refers to page content rather than other labels. A regression covers enriched agreement summaries, input immutability and contradictory results.
+
+## Label first-page run payloads
+
+The label task-list first page now removes five fields already discarded by the existing public projection from ordinary native run transfers. It still processes all runs and merges old label, manual and Beta histories before filtering and snapshot pagination. Run detail continues to load complete evidence. No inspection decision or prompt changes.

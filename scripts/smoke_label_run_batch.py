@@ -70,6 +70,15 @@ class FakeRepository:
             return {key: [] for key in task_ids}
         return {key: copy.deepcopy(self.runs.get(key, [])) for key in task_ids}
 
+    def list_run_payloads_for_tasks(self, owner, task_ids):
+        values = self.runs_for_tasks(owner, task_ids)
+        discarded = {"model", "prompt_hash", "layout", "transformations", "profile_snapshot"}
+        return {task_id: [
+            {k: v for k, v in row.items() if k not in discarded}
+            if isinstance(row, dict) and row.get("kind") == "run" else row
+            for row in runs
+        ] for task_id, runs in values.items()}
+
     def legacy(self, owner, kind):
         self.calls.append(("legacy", owner, kind))
         return copy.deepcopy(self.legacy_rows[kind]) if owner == self.owner else []
@@ -155,6 +164,35 @@ class ListContract(unittest.TestCase):
                         self.assertEqual(items[0]["run_count"], 1)
                         self.assertEqual(items[0]["status"], "succeeded")
 
+    def test_list_only_payload_retains_projection_and_error_order(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for register in filter(None, (baseline_register(), api.register)):
+                repo = FakeRepository(2)
+                first, second = repo.tasks
+                heavy = "synthetic-" + "x" * 4096
+                repo.runs[first["id"]] = [
+                    {"id": "later", "kind": "run", "task_id": first["id"],
+                     "created_at": 2.75, "status": "succeeded", "decision": "MATCH",
+                     "model": heavy, "prompt_hash": heavy, "layout": {"blob": heavy},
+                     "transformations": [heavy], "profile_snapshot": {"secret_ref": heavy}},
+                    {"id": "earlier", "kind": "run", "task_id": first["id"],
+                     "created_at": 1.25, "status": "failed", "decision": "DIFFERENCES"},
+                ]
+                repo.runs[second["id"]] = [
+                    {"id": "other-kind", "kind": "legacy", "task_id": second["id"],
+                     "created_at": 3, "status": "ready", "model": heavy},
+                ]
+                items = list_client(register, repo, Path(temp))
+                by_id = {item["id"]: item for item in items}
+                self.assertEqual(by_id[first["id"]]["run_count"], 2)
+                self.assertEqual(by_id[first["id"]]["decision"], "MATCH")
+                self.assertEqual(by_id[second["id"]]["status"], "ready")
+                if register is api.register:
+                    light = repo.list_run_payloads_for_tasks(repo.owner, [first["id"], second["id"]])
+                    self.assertFalse(any(k in light[first["id"]][0] for k in
+                                         ("model", "prompt_hash", "layout", "transformations", "profile_snapshot")))
+                    self.assertEqual(light[second["id"]][0]["model"], heavy)
+
     def test_large_synthetic_list_query_bound(self):
         with tempfile.TemporaryDirectory() as temp:
             for count, expected_batches in ((1000, 16), (10000, 157)):
@@ -188,6 +226,25 @@ class ListContract(unittest.TestCase):
                 self.assertEqual(by_id[""]["run_count"], 1)
                 self.assertEqual(by_id[""]["decision"], "MATCH")
                 self.assertFalse(any(c[0] == "batch" for c in repo.calls))
+
+    def test_nonlatest_bad_run_precedes_later_bad_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            outcomes = []
+            for register in filter(None, (baseline_register(), api.register)):
+                repo = FakeRepository(2)
+                first, second = repo.tasks
+                repo.runs[first["id"]] = [
+                    {"id": "newer", "kind": "run", "task_id": first["id"],
+                     "created_at": 2.75, "status": "succeeded"},
+                    {"id": "older", "kind": "run", "task_id": first["id"],
+                     "created_at": 1.25, "status": "failed", "import": []},
+                ]
+                repo.runs[second["id"]] = ["{malformed later json"]
+                with self.assertRaises(AttributeError) as raised:
+                    list_client(register, repo, Path(temp))
+                outcomes.append((type(raised.exception), str(raised.exception)))
+            self.assertEqual(outcomes[0], outcomes[-1])
+            self.assertIn("items", outcomes[-1][1])
 
     def test_first_task_error_precedes_later_missing_metadata(self):
         with tempfile.TemporaryDirectory() as temp:

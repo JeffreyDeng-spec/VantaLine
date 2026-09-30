@@ -1085,3 +1085,7 @@ No configuration value changes. The task snapshot and historical-record state re
 ## Model admin public read transaction
 
 No model setting, default, binding, permission, secret reference or prompt-source fingerprint changes. The administrator model-library GET projection uses a short PostgreSQL read transaction; writes and connection-test registration still use the existing serialized write transaction.
+
+## Label list-only run payloads
+
+No operator setting, source filter, model binding, media permission or cursor format changes. The first-page label task list transfers fewer fields from native run rows; task detail and previously created 15-minute cursor snapshots remain unchanged. New tasks naturally record the prompt-source fingerprint of the changed shipped API/storage files; historical fingerprints and model bindings are not rewritten.

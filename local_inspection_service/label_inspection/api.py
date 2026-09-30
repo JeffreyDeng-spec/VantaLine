@@ -298,7 +298,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                     task["id"] for task in batch
                     if not task.get("read_only") and task.get("revision") and task.get("id")
                 ]
-                native_runs = repo.runs_for_tasks(owner, run_ids) if run_ids else {}
+                native_runs = repo.list_run_payloads_for_tasks(owner, run_ids) if run_ids else {}
                 for task in batch:
                     runs = histories(
                         repo, owner, task,
