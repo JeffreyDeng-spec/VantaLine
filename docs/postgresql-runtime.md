@@ -398,3 +398,7 @@ Task snapshot reads use the existing `model_profiles.Repository.read_tx()` lifec
 ## Model admin public read transaction
 
 The administrator model-profile projection now uses `Repository.read_tx()`: commit on success, rollback on failure, and cursor close in all cases. It does not acquire the global model-profile advisory lock. Its state revision/heads are captured together, but mutable connection-test rows may be observed at different committed statement times. This is not a fixed database-wide snapshot.
+
+## Label list-only run payloads
+
+A dedicated owner-scoped `list_run_payloads_for_tasks` query keeps the existing 64-ID bound, SQL task grouping and short read transaction. For object JSON carrying `kind=run`, PostgreSQL removes five fields later discarded by the API run projection; other JSON shapes pass through unchanged. It reads all run rows and retains SQL column ordering only as the input to the existing per-task JSON-time sort. There is no schema or index change; writes and claims keep the advisory transaction lock.

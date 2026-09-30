@@ -806,3 +806,7 @@ The snapshot read change has no schema, release topology, migration, or configur
 ## Model admin public read transaction
 
 This read-path change has no schema, topology, migration or configuration change. The isolated real-PostgreSQL projection regression joins backend CI; continue the normal immutable Web release and full-package rollback procedure.
+
+## Label list-only run payloads
+
+This read-only transfer change has no schema, topology, configuration or worker-mode change. The accepted v564 list source and isolated PostgreSQL 1,000/10,000-task comparison are CI gates. Release and rollback remain full immutable packages.

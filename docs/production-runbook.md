@@ -983,3 +983,7 @@ Task model snapshots may now return the last committed binding while an administ
 ## Model admin public read transaction
 
 The administrator model-library view may show the last committed revision while a settings write is in progress; a refresh after commit shows the new revision. Connection-test statuses are read by version and may reflect separately committed statements. No operator setting or rollout action is required.
+
+## Label list-only run payloads
+
+No operator action is needed. The first label task-list page transfers fewer model/prompt/layout/snapshot fields from native run rows; details and saved 15-minute cursor pages retain their existing content. Continue normal complete-release rollback if list behavior regresses.

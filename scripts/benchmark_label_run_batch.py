@@ -67,7 +67,7 @@ def main():
                         run = {"id": run_id, "task_id": task_id, "kind": "run",
                                "status": "succeeded", "decision": "MATCH",
                                "created_at": index + ordinal / 10,
-                               "evidence": "synthetic-" + "x" * 2048}
+                               "profile_snapshot": {"synthetic": "x" * 2048}}
                         stream.write_row((run_id, "alice", task_id, "run",
                                           "succeeded", index, index,
                                           "run:" + run_id,
@@ -187,11 +187,56 @@ def main():
             # this comparison for review rather than treating it as API peak.
             assert max(new_peaks) <= max(max(old_peaks) * 1.5,
                                          max(old_peaks) + 8 * 1024 * 1024)
+        payload_metrics = []
+        for size in (1000, 10000):
+            task_ids = [f"task_{index:05}" for index in range(size)]
+            def payload_read(method, *, count_bytes=False):
+                fingerprints = []
+                wire_bytes = 0
+                for task_batch in chunks(task_ids, RUN_BATCH_SIZE):
+                    grouped = method("alice", task_batch)
+                    if count_bytes:
+                        wire_bytes += sum(len(row) if isinstance(row, str)
+                                          else len(json.dumps(row, separators=(",", ":")))
+                                          for rows in grouped.values() for row in rows)
+                    for task_id in task_batch:
+                        values = [json.loads(row) if isinstance(row, str) else row
+                                  for row in grouped[task_id]]
+                        fingerprints.append((task_id, signature(values)))
+                    del grouped
+                return fingerprints, wire_bytes
+            old_times, new_times, old_peaks, new_peaks = [], [], [], []
+            old_sample = payload_read(repo.runs_for_tasks, count_bytes=True)
+            new_sample = payload_read(repo.list_run_payloads_for_tasks, count_bytes=True)
+            assert new_sample[0] == old_sample[0]
+            assert new_sample[1] < old_sample[1] * 0.4
+            for iteration in range(5):
+                if iteration % 2:
+                    new_result, new_elapsed, new_peak = measure(lambda: payload_read(repo.list_run_payloads_for_tasks))
+                    old_result, old_elapsed, old_peak = measure(lambda: payload_read(repo.runs_for_tasks))
+                else:
+                    old_result, old_elapsed, old_peak = measure(lambda: payload_read(repo.runs_for_tasks))
+                    new_result, new_elapsed, new_peak = measure(lambda: payload_read(repo.list_run_payloads_for_tasks))
+                assert new_result[0] == old_result[0]
+                old_times.append(old_elapsed); new_times.append(new_elapsed)
+                old_peaks.append(old_peak); new_peaks.append(new_peak)
+            old_p95 = sorted(old_times)[math.ceil(0.95 * len(old_times)) - 1]
+            new_p95 = sorted(new_times)[math.ceil(0.95 * len(new_times)) - 1]
+            assert new_p95 <= max(old_p95 * 1.25, old_p95 + 0.25)
+            assert max(new_peaks) <= max(max(old_peaks) * 1.25, max(old_peaks) + 8 * 1024 * 1024)
+            payload_metrics.append({
+                "tasks": size, "samples": 5,
+                "old_bytes": old_sample[1], "new_bytes": new_sample[1],
+                "old_p95_seconds": round(old_p95, 3),
+                "new_p95_seconds": round(new_p95, 3),
+                "old_peak_mib": round(max(old_peaks) / (1024 * 1024), 2),
+                "new_peak_mib": round(max(new_peaks) / (1024 * 1024), 2),
+            })
         status = getattr(getattr(connection, "info", None), "transaction_status", None)
         if status is None:
             status = connection.get_transaction_status()
         assert int(status) == 0, status
-        print(json.dumps({"label_run_batch_benchmark": metrics}, sort_keys=True))
+        print(json.dumps({"label_run_batch_benchmark": metrics, "label_run_payload_benchmark": payload_metrics}, sort_keys=True))
     finally:
         connection.rollback()
         with connection.cursor() as cursor:
