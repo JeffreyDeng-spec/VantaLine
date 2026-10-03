@@ -1476,3 +1476,7 @@ Model profile `initialize()` first checks the committed state row in a short rea
 ## Label list-only run payloads
 
 The first task-list page now calls a bounded list-only run reader for groups of at most 64 native task IDs. Its SQL result removes only five fields that `public()` already discards for JSON objects whose own `kind` is `run`: `model`, `prompt_hash`, `layout`, `transformations`, and `profile_snapshot`. Non-run or non-object JSON is returned unchanged. The API still decodes, projects and sorts every run per task before filtering the mixed native/legacy/manual/Beta rows or creating the fixed 15-minute page snapshot. Detail continues to fetch complete run JSON. This lowers transfer size for ordinary runs; it does not yet replace full-row reads with SQL summaries or remove the older source scans.
+
+## Native label run summary fast path
+
+For a first-page batch containing only current, writable native tasks, one owner-scoped statement checks every run and returns SQL counts and compact id/time/status/decision rows when every history has a safe numeric JSON time, matching SQL/JSON identifiers, a valid import shape and conservative post-trim decoding bounds. Python retains its original per-task sort. Any uncertain group returns its complete rows from that same statement for the old per-task projection and error order. A batch containing legacy, read-only or incomplete tasks continues through the prior single bounded payload query. Detail and fixed 15-minute cursor snapshots are unchanged.

@@ -652,3 +652,7 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 ## Label first-page run payloads
 
 The label task-list first page now removes five fields already discarded by the existing public projection from ordinary native run transfers. It still processes all runs and merges old label, manual and Beta histories before filtering and snapshot pagination. Run detail continues to load complete evidence. No inspection decision or prompt changes.
+
+## Native label run summary fast path
+
+A first-page batch containing only ordinary native tasks may use one SQL statement to return counts and compact rows for safe native histories, including ordinary fractional times. Oversized or deep payloads and any uncertain history shape remain on the original per-task projection using rows from that statement; mixed native/legacy/read-only batches retain the existing bounded payload path. Run detail, error order and fixed cursor snapshots remain unchanged.

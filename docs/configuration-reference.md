@@ -1089,3 +1089,7 @@ No model setting, default, binding, permission, secret reference or prompt-sourc
 ## Label list-only run payloads
 
 No operator setting, source filter, model binding, media permission or cursor format changes. The first-page label task list transfers fewer fields from native run rows; task detail and previously created 15-minute cursor snapshots remain unchanged. New tasks naturally record the prompt-source fingerprint of the changed shipped API/storage files; historical fingerprints and model bindings are not rewritten.
+
+## Native label run summary fast path
+
+The native label list summary adds no configuration key. It only changes first-page read shaping for safe native task batches; the existing fixed page snapshot, model-version binding, provider settings and worker mode remain unchanged. Full run detail is still available through its existing owner-checked route.

@@ -12,6 +12,7 @@ import uuid
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.label_inspection.api import public
 from local_inspection_service.storage.label_inspection import LabelRepository, RUN_BATCH_SIZE
 from local_inspection_service.storage.postgres_schema import postgres_ddl
 from local_inspection_service.storage.postgres_runtime_repository import PostgresRuntimeRepository
@@ -67,7 +68,8 @@ def main():
                         run = {"id": run_id, "task_id": task_id, "kind": "run",
                                "status": "succeeded", "decision": "MATCH",
                                "created_at": index + ordinal / 10,
-                               "profile_snapshot": {"synthetic": "x" * 2048}}
+                               "profile_snapshot": {"synthetic": "x" * 2048},
+                               "quality": {"synthetic": "x" * 512}}
                         stream.write_row((run_id, "alice", task_id, "run",
                                           "succeeded", index, index,
                                           "run:" + run_id,
@@ -232,11 +234,117 @@ def main():
                 "old_peak_mib": round(max(old_peaks) / (1024 * 1024), 2),
                 "new_peak_mib": round(max(new_peaks) / (1024 * 1024), 2),
             })
+        summary_metrics = []
+        for size in (1000, 10000):
+            task_ids = [f"task_{index:05}" for index in range(size)]
+            def summarize(method):
+                result = []
+                for task_batch in chunks(task_ids, RUN_BATCH_SIZE):
+                    groups = method("alice", task_batch)
+                    for task_id in task_batch:
+                        group = groups[task_id]
+                        values = group["runs"] if isinstance(group, dict) and "safe" in group else group
+                        rows = [public(row) for row in values]
+                        rows.sort(key=lambda row: (row["created_at"], row["id"]), reverse=True)
+                        latest = rows[0] if rows else {}
+                        count = group["count"] if isinstance(group, dict) and group["safe"] else len(rows)
+                        result.append((task_id, count, latest.get("id"), latest.get("status"),
+                                       latest.get("decision")))
+                return result
+            full = lambda: summarize(repo.list_run_payloads_for_tasks)
+            compact = lambda: summarize(repo.native_run_summaries_for_tasks)
+            assert compact() == full()
+            old_times, new_times, old_peaks, new_peaks = [], [], [], []
+            for iteration in range(5):
+                if iteration % 2:
+                    new_result, new_elapsed, new_peak = measure(compact)
+                    old_result, old_elapsed, old_peak = measure(full)
+                else:
+                    old_result, old_elapsed, old_peak = measure(full)
+                    new_result, new_elapsed, new_peak = measure(compact)
+                assert new_result == old_result
+                old_times.append(old_elapsed); new_times.append(new_elapsed)
+                old_peaks.append(old_peak); new_peaks.append(new_peak)
+            old_p95 = sorted(old_times)[math.ceil(0.95 * len(old_times)) - 1]
+            new_p95 = sorted(new_times)[math.ceil(0.95 * len(new_times)) - 1]
+            assert new_p95 <= max(old_p95 * 1.25, old_p95 + 0.25)
+            assert max(new_peaks) <= max(max(old_peaks) * 1.25, max(old_peaks) + 8 * 1024 * 1024)
+            safe_nonempty = 0
+            nonempty = 0
+            for task_batch in chunks(task_ids, RUN_BATCH_SIZE):
+                for group in repo.native_run_summaries_for_tasks("alice", task_batch).values():
+                    if group["count"]:
+                        nonempty += 1
+                        safe_nonempty += bool(group["safe"])
+            assert safe_nonempty > 0
+            summary_metrics.append({"tasks": size, "samples": 5,
+                                    "safe_nonempty": safe_nonempty,
+                                    "nonempty": nonempty,
+                                    "old_p95_seconds": round(old_p95, 3),
+                                    "new_p95_seconds": round(new_p95, 3),
+                                    "old_peak_mib": round(max(old_peaks) / (1024 * 1024), 2),
+                                    "new_peak_mib": round(max(new_peaks) / (1024 * 1024), 2)})
+        # Real submissions commonly carry fractional JSON time. Exercise that
+        # path independently from the mixed integer/fractional seed.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"UPDATE {table} SET raw_json=jsonb_set(raw_json,'{{created_at}}',"
+                "to_jsonb((raw_json->>'created_at')::numeric + 0.25),false) "
+                "WHERE owner_user_id='alice' AND kind='run' "
+                "AND jsonb_typeof(raw_json->'created_at')='number'"
+            )
+        connection.commit()
+        fractional_metrics = []
+        for size in (1000, 10000):
+            task_ids = [f"task_{index:05}" for index in range(size)]
+            def read_old():
+                output = []
+                for task_batch in chunks(task_ids, RUN_BATCH_SIZE):
+                    grouped = repo.list_run_payloads_for_tasks("alice", task_batch)
+                    output.extend((task_id, signature(grouped[task_id])) for task_id in task_batch)
+                return output
+            def read_fallback():
+                output = []
+                for task_batch in chunks(task_ids, RUN_BATCH_SIZE):
+                    grouped = repo.native_run_summaries_for_tasks("alice", task_batch)
+                    output.extend((task_id, signature(grouped[task_id]["runs"]))
+                                  for task_id in task_batch)
+                return output
+            old_times, new_times, old_peaks, new_peaks = [], [], [], []
+            assert read_old() == read_fallback()
+            for iteration in range(5):
+                if iteration % 2:
+                    new_result, new_elapsed, new_peak = measure(read_fallback)
+                    old_result, old_elapsed, old_peak = measure(read_old)
+                else:
+                    old_result, old_elapsed, old_peak = measure(read_old)
+                    new_result, new_elapsed, new_peak = measure(read_fallback)
+                assert new_result == old_result
+                old_times.append(old_elapsed); new_times.append(new_elapsed)
+                old_peaks.append(old_peak); new_peaks.append(new_peak)
+            old_p95 = sorted(old_times)[math.ceil(0.95 * len(old_times)) - 1]
+            new_p95 = sorted(new_times)[math.ceil(0.95 * len(new_times)) - 1]
+            assert new_p95 <= max(old_p95 * 1.25, old_p95 + 0.25)
+            assert max(new_peaks) <= max(max(old_peaks) * 1.25, max(old_peaks) + 8 * 1024 * 1024)
+            safe_nonempty = 0
+            nonempty = 0
+            for task_batch in chunks(task_ids, RUN_BATCH_SIZE):
+                for group in repo.native_run_summaries_for_tasks("alice", task_batch).values():
+                    if group["count"]:
+                        nonempty += 1
+                        safe_nonempty += bool(group["safe"])
+            fractional_metrics.append({"tasks": size, "samples": 5,
+                                       "safe_nonempty": safe_nonempty,
+                                       "nonempty": nonempty,
+                                       "old_p95_seconds": round(old_p95, 3),
+                                       "new_p95_seconds": round(new_p95, 3),
+                                       "old_peak_mib": round(max(old_peaks) / (1024 * 1024), 2),
+                                       "new_peak_mib": round(max(new_peaks) / (1024 * 1024), 2)})
         status = getattr(getattr(connection, "info", None), "transaction_status", None)
         if status is None:
             status = connection.get_transaction_status()
         assert int(status) == 0, status
-        print(json.dumps({"label_run_batch_benchmark": metrics, "label_run_payload_benchmark": payload_metrics}, sort_keys=True))
+        print(json.dumps({"label_run_batch_benchmark": metrics, "label_run_payload_benchmark": payload_metrics, "label_native_summary_benchmark": summary_metrics, "label_native_fractional_fallback_benchmark": fractional_metrics}, sort_keys=True))
     finally:
         connection.rollback()
         with connection.cursor() as cursor:

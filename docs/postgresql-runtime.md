@@ -402,3 +402,7 @@ The administrator model-profile projection now uses `Repository.read_tx()`: comm
 ## Label list-only run payloads
 
 A dedicated owner-scoped `list_run_payloads_for_tasks` query keeps the existing 64-ID bound, SQL task grouping and short read transaction. For object JSON carrying `kind=run`, PostgreSQL removes five fields later discarded by the API run projection; other JSON shapes pass through unchanged. It reads all run rows and retains SQL column ordering only as the input to the existing per-task JSON-time sort. There is no schema or index change; writes and claims keep the advisory transaction lock.
+
+## Native label run summary fast path
+
+The bounded `native_run_summaries_for_tasks` read uses one short transaction and a single statement. Window checks cover every run in each task group, including a 32 KiB post-trim payload cap, at most 64 bracket tokens and no 512-digit sequence, before compacting safe rows to the fields needed by the list; unsafe groups return the v566 five-field-trimmed JSON in the same statement. The original SQL column order is preserved as input to Python JSON-time/id sorting, including stable ties. No DDL or write-lock behavior changes.

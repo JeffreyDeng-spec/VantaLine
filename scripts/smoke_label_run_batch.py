@@ -3,6 +3,7 @@ import ast
 import copy
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -78,6 +79,38 @@ class FakeRepository:
             if isinstance(row, dict) and row.get("kind") == "run" else row
             for row in runs
         ] for task_id, runs in values.items()}
+
+    def native_run_summaries_for_tasks(self, owner, task_ids):
+        self.calls.append(("summary", owner, tuple(task_ids)))
+        grouped = self.runs_for_tasks(owner, task_ids) if task_ids else {}
+        output = {}
+        discarded = {"model", "prompt_hash", "layout", "transformations", "profile_snapshot"}
+        for task_id, runs in grouped.items():
+            trimmed = [
+                {k: v for k, v in row.items() if k not in discarded}
+                if isinstance(row, dict) and row.get("kind") == "run" else row
+                for row in runs
+            ]
+            def valid(row):
+                if not isinstance(row, dict):
+                    return False
+                raw = json.dumps(row, separators=(",", ":"), ensure_ascii=False)
+                return (row.get("kind") == "run"
+                        and isinstance(row.get("id"), str)
+                        and row.get("task_id") == task_id
+                        and type(row.get("created_at")) in (int, float)
+                        and ("import" not in row or isinstance(row["import"], dict))
+                        and len(raw.encode("utf-8")) <= 32768
+                        and raw.count("[") + raw.count("{") <= 64
+                        and re.search(r"[0-9]{512}", raw) is None)
+            safe = all(valid(row) for row in trimmed)
+            values = [
+                {k: row[k] for k in ("kind", "id", "created_at", "status", "decision") if k in row}
+                for row in trimmed
+            ] if safe else trimmed
+            output[task_id] = {"safe": safe, "count": len(runs),
+                               "runs": copy.deepcopy(values)}
+        return output
 
     def legacy(self, owner, kind):
         self.calls.append(("legacy", owner, kind))
@@ -193,6 +226,33 @@ class ListContract(unittest.TestCase):
                                          ("model", "prompt_hash", "layout", "transformations", "profile_snapshot")))
                     self.assertEqual(light[second["id"]][0]["model"], heavy)
 
+    def test_native_integer_summary_matches_accepted_list_and_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            outcomes = []
+            for register in filter(None, (baseline_register(), api.register)):
+                repo = FakeRepository(2)
+                first, second = repo.tasks
+                repo.legacy_rows = {key: [] for key in repo.legacy_rows}
+                repo.runs[first["id"]] = [
+                    {"id": "older", "kind": "run", "task_id": first["id"],
+                     "created_at": 10, "status": "failed", "decision": "DIFFERENCES"},
+                    {"id": "newer", "kind": "run", "task_id": first["id"],
+                     "created_at": 11, "status": "succeeded", "decision": "MATCH"},
+                ]
+                repo.runs[second["id"]] = [
+                    {"id": "fraction", "kind": "run", "task_id": second["id"],
+                     "created_at": 11.5, "status": "failed", "decision": "REVIEW_REQUIRED"},
+                ]
+                result = list_client(register, repo, Path(temp))
+                outcomes.append(result)
+                if register is api.register:
+                    self.assertEqual([call[0] for call in repo.calls].count("summary"), 1)
+                    self.assertFalse(any(call[0] == "list" and call[2] == "run" for call in repo.calls))
+                    self.assertEqual(repo.native_run_summaries_for_tasks(repo.owner, [first["id"]])[first["id"]]["count"], 2)
+                    self.assertTrue(repo.native_run_summaries_for_tasks(repo.owner, [first["id"]])[first["id"]]["safe"])
+                    self.assertTrue(repo.native_run_summaries_for_tasks(repo.owner, [second["id"]])[second["id"]]["safe"])
+            self.assertEqual(outcomes[0], outcomes[-1])
+
     def test_large_synthetic_list_query_bound(self):
         with tempfile.TemporaryDirectory() as temp:
             for count, expected_batches in ((1000, 16), (10000, 157)):
@@ -263,6 +323,7 @@ class ListContract(unittest.TestCase):
             for register in filter(None, (baseline_register(), api.register)):
                 repo = FakeRepository(2)
                 first, second = repo.tasks
+                repo.legacy_rows = {key: [] for key in repo.legacy_rows}
                 repo.runs[first["id"]] = [{"id": "missing_created_at", "status": "failed"}]
                 repo.runs[second["id"]] = ["{malformed json"]
                 status, body = list_client(register, repo, Path(temp), 404)

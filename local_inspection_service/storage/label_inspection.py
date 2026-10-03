@@ -382,6 +382,52 @@ class LabelRepository:
                 grouped[value["task_id"]].append(value["raw_json"])
             return grouped
 
+    def native_run_summaries_for_tasks(self, owner, task_ids):
+        """Count native runs and compact safe histories in one statement."""
+        if not task_ids:
+            return {}
+        if len(task_ids) > RUN_BATCH_SIZE:
+            raise ValueError("run batch exceeds limit")
+        discarded = ("model", "prompt_hash", "layout", "transformations", "profile_snapshot")
+        with self.read_tx() as c:
+            c.execute(
+                f"WITH payload AS (SELECT task_id,created_at,id, "
+                "CASE WHEN jsonb_typeof(raw_json)='object' AND raw_json->>'kind'='run' "
+                "THEN raw_json - %s::text[] ELSE raw_json END AS raw_json FROM "
+                + self.table + " WHERE owner_user_id=%s AND kind='run' "
+                "AND task_id=ANY(%s::text[])), "
+                "source AS (SELECT task_id,raw_json,created_at,id, "
+                "jsonb_typeof(raw_json)='object' "
+                "AND raw_json->>'kind'='run' "
+                "AND jsonb_typeof(raw_json->'id')='string' AND raw_json->>'id'=id "
+                "AND jsonb_typeof(raw_json->'task_id')='string' AND raw_json->>'task_id'=task_id "
+                "AND jsonb_typeof(raw_json->'created_at')='number' "
+                "AND (NOT (raw_json ? 'import') OR jsonb_typeof(raw_json->'import')='object') "
+                "AND octet_length(raw_json::text) <= 32768 "
+                "AND length(raw_json::text)-length(translate(raw_json::text,'[{','')) <= 64 "
+                "AND raw_json::text !~ '[0-9]{128}[0-9]{128}[0-9]{128}[0-9]{128}' "
+                "AS shape_ok FROM payload), "
+                "marked AS (SELECT *,bool_and(COALESCE(shape_ok,false)) OVER (PARTITION BY task_id) AS safe_group, "
+                "count(*) OVER (PARTITION BY task_id) AS run_count FROM source) "
+                "SELECT task_id,safe_group,run_count, "
+                "CASE WHEN safe_group THEN "
+                "jsonb_build_object('kind','run','id',raw_json->'id','created_at',raw_json->'created_at') "
+                "|| CASE WHEN raw_json ? 'status' THEN jsonb_build_object('status',raw_json->'status') ELSE '{}'::jsonb END "
+                "|| CASE WHEN raw_json ? 'decision' THEN jsonb_build_object('decision',raw_json->'decision') ELSE '{}'::jsonb END "
+                "ELSE raw_json END AS raw_json "
+                "FROM marked ORDER BY created_at DESC,id DESC",
+                (list(discarded), owner, list(task_ids)),
+            )
+            grouped = {task_id: {"safe": True, "count": 0, "runs": []}
+                       for task_id in task_ids}
+            for row in c.fetchall():
+                value = self.repository._row_to_dict(c, row)
+                group = grouped[value["task_id"]]
+                group["safe"] = value["safe_group"]
+                group["count"] = value["run_count"]
+                group["runs"].append(value["raw_json"])
+            return grouped
+
     def legacy(self, owner, kind):
         if (owner, kind) in self._legacy_cache:
             return self._legacy_cache[(owner, kind)]

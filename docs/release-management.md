@@ -810,3 +810,7 @@ This read-path change has no schema, topology, migration or configuration change
 ## Label list-only run payloads
 
 This read-only transfer change has no schema, topology, configuration or worker-mode change. The accepted v564 list source and isolated PostgreSQL 1,000/10,000-task comparison are CI gates. Release and rollback remain full immutable packages.
+
+## Native label run summary fast path
+
+This compatible read-only release keeps the embedded worker, database schema, model binding, business API and existing installer. CI gates the accepted v566 list projection, real PostgreSQL safety/fallback and oversized/deep JSON contract and 1,000/10,000-task summary benchmark. Merge only after exact-head checks and restore the prior complete immutable release on failure.

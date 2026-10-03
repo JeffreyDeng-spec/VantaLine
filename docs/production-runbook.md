@@ -987,3 +987,7 @@ The administrator model-library view may show the last committed revision while 
 ## Label list-only run payloads
 
 No operator action is needed. The first label task-list page transfers fewer model/prompt/layout/snapshot fields from native run rows; details and saved 15-minute cursor pages retain their existing content. Continue normal complete-release rollback if list behavior regresses.
+
+## Native label run summary fast path
+
+Native label list summary is read-only and keeps the embedded worker and current service topology. A batch of ordinary native tasks uses one statement; uncertain histories and mixed batches use the original projection; ordinary fractional-time histories can take the compact path. No new setting or migration is required. The accepted v566 source comparison, real PostgreSQL fallback contract and 1,000/10,000 benchmark must pass before merge. Roll back the entire immutable release on failure; do not rewrite historical run JSON.

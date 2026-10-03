@@ -298,14 +298,29 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                     task["id"] for task in batch
                     if not task.get("read_only") and task.get("revision") and task.get("id")
                 ]
-                native_runs = repo.list_run_payloads_for_tasks(owner, run_ids) if run_ids else {}
+                summary_batch = all(
+                    task.get("id") and task.get("revision")
+                    and not task.get("read_only") and not task.get("legacy_id")
+                    for task in batch
+                )
+                summaries = (
+                    repo.native_run_summaries_for_tasks(owner, run_ids)
+                    if summary_batch else {}
+                )
+                native_runs = (
+                    repo.list_run_payloads_for_tasks(owner, run_ids)
+                    if not summary_batch and run_ids else {}
+                )
                 for task in batch:
+                    summary = summaries.get(task["id"]) if summary_batch else None
                     runs = histories(
                         repo, owner, task,
-                        native_runs.get(task["id"], []) if task.get("id") else None,
+                        (summary["runs"] if summary else native_runs.get(task["id"], []))
+                        if task.get("id") else None,
                         legacy_records,
                     )
                     latest = runs[0] if runs else {}
+                    run_count = summary["count"] if summary and summary["safe"] else len(runs)
                     rows.append(
                         {
                             "id": task["id"],
@@ -319,12 +334,12 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                                 task.get("updated_at", 0), latest.get("created_at", 0)
                             ),
                             "standard_count": len(task["assets"]),
-                            "run_count": len(runs),
+                            "run_count": run_count,
                             "decision": latest.get("decision", "REVIEW_REQUIRED"),
                             "status": latest.get("status", task.get("status", "ready")),
                         }
                     )
-                del native_runs
+                del native_runs, summaries
             for task in manual_history.rows(repo, owner):
                 history = task["manual_history"]
                 records = history["pages"]
