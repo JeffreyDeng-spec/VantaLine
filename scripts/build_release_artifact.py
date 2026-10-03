@@ -28,6 +28,18 @@ parser.add_argument("--output", required=True, type=Path)
 parser.add_argument("--doc-image-bundle", required=True, type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
+source_commit = subprocess.run(
+    ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+).stdout.strip()
+if args.git_commit != source_commit:
+    raise SystemExit("release commit does not match packaged HEAD")
+release_script_diff = subprocess.run(
+    ["git", "diff", "--quiet", "HEAD", "--",
+     "scripts/build_release_artifact.py", "scripts/install_release.sh"],
+    cwd=root, check=False,
+)
+if release_script_diff.returncode != 0:
+    raise SystemExit("release scripts differ from packaged HEAD")
 dist = root / "local_inspection_service/frontend/dist-production"
 index = (dist / "index.html").read_text(encoding="utf-8")
 matches = re.findall(r'<script[^>]+src="[^"]*/assets/([^"?]+\.js)', index)
@@ -55,6 +67,7 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
     source_tar.write_bytes(archive)
     with tarfile.open(source_tar) as handle:
         handle.extractall(stage, filter="data")
+
     shutil.copytree(dist, stage / "local_inspection_service/frontend/dist-production")
     doc_bundle = args.doc_image_bundle.resolve()
     manifest = json.loads((doc_bundle / "manifest.json").read_text())
@@ -74,6 +87,15 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
         shutil.copy2(doc_bundle / name, target)
     shutil.copy2(doc_bundle / "manifest.json", destination / "manifest.json")
     (stage / "VERSION.json").write_text(json.dumps(version, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    topology = {
+        "schema": 1,
+        "git_commit": args.git_commit,
+        "worker_mode": "embedded",
+        "services": ["vantaline"],
+    }
+    (stage / "RUNTIME_TOPOLOGY.json").write_text(
+        json.dumps(topology, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
     files = sorted(path for path in stage.rglob("*") if path.is_file())
     sums = "".join(f"{sha256(path)}  {path.relative_to(stage).as_posix()}\n" for path in files)
     (stage / "SHA256SUMS").write_text(sums, encoding="utf-8")
