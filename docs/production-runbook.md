@@ -745,8 +745,8 @@ releases use the existing complete-release deployment and rollback procedure.
 
 ## COS evacuation tooling
 
-`scripts/cos_migrate.py` provides operator-run inventory, upload and independent
-verification. It does not switch runtime storage, modify database records, delete
+`scripts/cos_migrate.py` provides operator-run inventory, upload, independent
+verification and isolated restore. It does not switch runtime storage, modify database records, delete
 local data, or authorize disk detachment. Pause relevant file writers for the final
 inventory/transfer; an online inventory is only preliminary evidence.
 
@@ -778,6 +778,19 @@ retirement, preserve restricted remote copies of the manifests and receipts and
 verify recovery of original paths and permissions. Completed receipts alone do not
 prove runtime readiness, account isolation, database restore, or sufficient local
 working space; those remain separate cutover gates.
+
+For a representative restore, use `restore --manifest MANIFEST --bucket BUCKET
+--region REGION --destination NEW_DIRECTORY --include RELATIVE_FILE_OR_SUBTREE`.
+Omit `--include` only when a complete restore fits locally. The original source
+disk need not exist. The command requires a new destination and enough free space
+for all selected bytes plus a 256 MiB reserve. It verifies each complete download
+before publishing that file, fails on corruption, and never replaces existing
+files. Restored files are private (0600) under a private root (0700); the operator
+must apply the reviewed application's ownership/permissions after validation.
+Retain the command's result and manifest digest as recovery evidence. A partial
+directory after failure is not a successful restore; use a fresh destination for
+another attempt. For database restore checks, enumerate every application schema,
+not only `public`, and reject a validation run that checked no business tables.
 
 Runtime connection/identity extraction uses ordinary complete-release restart and
 rollback. It adds no service, flag, migration or maintenance gate. Existing worker

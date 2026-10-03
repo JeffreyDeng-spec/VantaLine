@@ -14,6 +14,8 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import sys
+import shutil
+import uuid
 from typing import Any
 
 CHUNK = 1024 * 1024
@@ -121,9 +123,17 @@ def load_manifest(path: Path) -> tuple[dict, list[dict]]:
         raise ValueError("invalid manifest header")
     if records[-1].get("type") != "complete":
         raise ValueError("incomplete inventory cannot be uploaded")
+    selected = [safe_relative(item) for item in records[0].get("includes", [])]
+    if not selected or len(set(selected)) != len(selected) or any(
+        a != b and a in b.parents for a in selected for b in selected
+    ):
+        raise ValueError("invalid selected roots")
     files, paths, excluded = [], set(), 0
     for row in records[1:-1]:
         relative = safe_relative(row["path"]).as_posix()
+        relative_path = PurePosixPath(relative)
+        if not any(root == relative_path or root in relative_path.parents for root in selected):
+            raise ValueError("manifest path outside selected roots")
         if relative in paths:
             raise ValueError("duplicate manifest path")
         paths.add(relative)
@@ -139,6 +149,69 @@ def load_manifest(path: Path) -> tuple[dict, list[dict]]:
     if (footer.get("files"), footer.get("bytes"), footer.get("excluded")) != (len(files), sum(x["size"] for x in files), excluded):
         raise ValueError("manifest totals do not match")
     return records[0], files
+
+
+def restore(client, bucket: str, prefix: str, manifest: Path, destination: Path,
+            includes: list[str] | None = None) -> dict:
+    """Restore into a NEW private directory, publishing files only after hashing.
+
+    This intentionally does not restore source owners or replace existing data.
+    Operators must validate the directory and apply deployment ownership separately.
+    """
+    _, files = load_manifest(manifest)
+    if includes:
+        selected = [safe_relative(item) for item in includes]
+        matched = set()
+        chosen = []
+        for row in files:
+            path = PurePosixPath(row["path"])
+            for root in selected:
+                if root == path or root in path.parents:
+                    matched.add(root)
+                    break
+            else:
+                continue
+            chosen.append(row)
+        if set(selected) != matched:
+            raise ValueError("restore selection contains no files")
+        files = chosen
+    needed = sum(row["size"] for row in files)
+    parent = destination.absolute().parent.resolve(strict=True)
+    destination = parent / destination.name
+    if shutil.disk_usage(parent).free < needed + 256 * CHUNK:
+        raise ValueError("insufficient restore space with safety reserve")
+    destination.mkdir(mode=0o700, exist_ok=False)
+    summary = {"restored_files": 0, "restored_bytes": 0}
+    for row in files:
+        path = local_path(destination, row["path"])
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = path.parent / (".cos-restore-" + uuid.uuid4().hex)
+        stream = None
+        try:
+            response = client.get_object(Bucket=bucket, Key=object_key(prefix, row))
+            stream = response["Body"].get_raw_stream()
+            checksum, size = hashlib.sha256(), 0
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as out:
+                while block := stream.read(CHUNK):
+                    size += len(block)
+                    if size > row["size"]:
+                        raise ValueError("restore object exceeds expected size")
+                    checksum.update(block)
+                    out.write(block)
+                if (checksum.hexdigest(), size) != (row["sha256"], row["size"]):
+                    raise ValueError("restore content verification failed")
+                out.flush()
+                os.fsync(out.fileno())
+            # link is exclusive: never replace an existing target, even on races.
+            os.link(temporary, path)
+            summary["restored_files"] += 1
+            summary["restored_bytes"] += size
+        finally:
+            if stream is not None:
+                stream.close()
+            temporary.unlink(missing_ok=True)
+    return summary
 
 
 def object_key(prefix: str, row: dict) -> str:
@@ -207,10 +280,14 @@ def main() -> None:
     scan.add_argument("--root", type=Path, required=True)
     scan.add_argument("--include", action="append", required=True, help="reviewed relative subtree; repeatable")
     scan.add_argument("--manifest", type=Path, required=True)
-    for name in ("upload", "verify"):
+    for name in ("upload", "verify", "restore"):
         command = commands.add_parser(name)
         command.add_argument("--manifest", type=Path, required=True)
-        command.add_argument("--receipt", type=Path, required=True)
+        if name == "restore":
+            command.add_argument("--destination", type=Path, required=True, help="new private directory")
+            command.add_argument("--include", action="append", help="relative file/subtree to restore; defaults to all")
+        else:
+            command.add_argument("--receipt", type=Path, required=True)
         command.add_argument("--bucket", required=True)
         command.add_argument("--region", required=True)
         command.add_argument("--prefix", default="objects")
@@ -222,8 +299,11 @@ def main() -> None:
         client = CosS3Client(CosConfig(Region=args.region, Scheme="https",
             SecretId=os.environ["COS_SECRET_ID"], SecretKey=os.environ["COS_SECRET_KEY"],
             Token=os.environ.get("COS_SESSION_TOKEN")))
-        result = transfer(client, args.bucket, args.prefix, args.manifest, args.receipt,
-                          upload=args.command == "upload")
+        if args.command == "restore":
+            result = restore(client, args.bucket, args.prefix, args.manifest, args.destination, args.include)
+        else:
+            result = transfer(client, args.bucket, args.prefix, args.manifest, args.receipt,
+                              upload=args.command == "upload")
     print(json.dumps(result, sort_keys=True))
 
 

@@ -1345,6 +1345,9 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 COS evacuation: `python scripts/smoke_cos_migrate.py` runs offline synthetic checks
 for interrupted inventories, source mutation before/during upload, same-length
 remote corruption, deduplicated resume, secret/symlink exclusion and path escape.
+It also restores without the original source disk, rejects a pre-existing target,
+never publishes corrupt restored files, checks subset selection and free-space
+failure, and rejects manifest entries outside their declared subtrees.
 The fake client performs no network calls. Real SDK transfer, full production
 readback, database restore and runtime cutover remain separate operational gates.
 

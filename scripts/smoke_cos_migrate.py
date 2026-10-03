@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from cos_migrate import inventory, load_manifest, object_key, transfer
+from cos_migrate import inventory, load_manifest, object_key, transfer, restore
 
 
 class Missing(Exception):
@@ -97,6 +97,57 @@ class MigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs from inventory"):
             self.run_transfer()
         self.assertEqual(self.client.uploads, 0)
+
+    def test_restore_works_without_original_disk_and_refuses_existing_target(self):
+        self.scan()
+        self.run_transfer()
+        self.root.rename(self.base / "unmounted-disk")
+        target = self.base / "restored"
+        result = restore(self.client, "synthetic-bucket", "objects", self.manifest, target)
+        self.assertEqual(result["restored_files"], 1)
+        self.assertEqual((target / "outputs/a.png").read_bytes(), b"image-evidence")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o700)
+        self.assertEqual((target / "outputs/a.png").stat().st_mode & 0o777, 0o600)
+        with self.assertRaises(FileExistsError):
+            restore(self.client, "synthetic-bucket", "objects", self.manifest, target)
+
+    def test_restore_corruption_never_publishes_file(self):
+        self.scan()
+        self.run_transfer()
+        _, files = load_manifest(self.manifest)
+        self.client.objects[object_key("objects", files[0])] = b"x" * files[0]["size"]
+        target = self.base / "corrupt-restore"
+        with self.assertRaisesRegex(ValueError, "verification failed"):
+            restore(self.client, "synthetic-bucket", "objects", self.manifest, target)
+        self.assertEqual(list(target.rglob("*.*")), [])
+
+    def test_restore_subset_missing_selection_and_space_gate(self):
+        from unittest.mock import patch
+        (self.root / "outputs/second.png").write_bytes(b"second")
+        self.scan()
+        self.run_transfer()
+        target = self.base / "subset"
+        result = restore(self.client, "synthetic-bucket", "objects", self.manifest,
+                         target, ["outputs/second.png"])
+        self.assertEqual(result["restored_files"], 1)
+        self.assertFalse((target / "outputs/a.png").exists())
+        with self.assertRaisesRegex(ValueError, "no files"):
+            restore(self.client, "synthetic-bucket", "objects", self.manifest,
+                    self.base / "missing", ["outputs/missing.png"])
+        with patch("cos_migrate.shutil.disk_usage") as usage:
+            usage.return_value.free = 0
+            with self.assertRaisesRegex(ValueError, "insufficient"):
+                restore(self.client, "synthetic-bucket", "objects", self.manifest,
+                        self.base / "full")
+        self.assertFalse((self.base / "full").exists())
+
+    def test_manifest_cannot_select_file_outside_declared_subtrees(self):
+        self.scan()
+        rows = [json.loads(line) for line in self.manifest.read_text().splitlines()]
+        rows[1]["path"] = "unselected/a.png"
+        self.manifest.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        with self.assertRaisesRegex(ValueError, "outside selected"):
+            load_manifest(self.manifest)
 
     def test_change_during_upload_fails(self):
         self.scan()
