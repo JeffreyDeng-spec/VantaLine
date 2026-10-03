@@ -22,6 +22,8 @@ DISCARDED = {'model', 'prompt_hash', 'layout', 'transformations', 'profile_snaps
 
 
 def main():
+    if hasattr(sys, 'set_int_max_str_digits'):
+        sys.set_int_max_str_digits(4300)
     dsn = os.environ['VANTALINE_POSTGRES_DSN']
     schema = 'label_payload_' + uuid.uuid4().hex
     connections = []
@@ -121,6 +123,39 @@ def main():
         else:
             assert decode_outcomes[1]['safe'] is False
             assert decode_outcomes[1]['runs'] == decode_outcomes[0], decode_outcomes
+        with writer.tx() as cursor:
+            cursor.execute(
+                f'INSERT INTO {table} (id,owner_user_id,task_id,kind,status,created_at,updated_at,idempotency_key,raw_json) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)',
+                ('a-huge-old', 'alice', 'a-huge-task', 'run', 'failed', 0, 0,
+                 'key-a-huge',
+                 '{"id":"a-huge-old","kind":"run","task_id":"a-huge-task",'
+                 '"created_at":0,"status":"failed","x":' + '9' * 6000 + '}'),
+            )
+        cross_errors = []
+        for reader_fn in (reader.list_run_payloads_for_tasks, reader.native_run_summaries_for_tasks):
+            try:
+                reader_fn('alice', ['a-huge-task', 'huge-task'])
+            except ValueError as exc:
+                cross_errors.append(str(exc))
+            else:
+                raise AssertionError('cross-task huge number decoder unexpectedly succeeded')
+        assert cross_errors[0] == cross_errors[1]
+        assert '5000' in cross_errors[0], cross_errors
+
+        many_numbers = dict(id='many-numbers', kind='run', task_id='many-task',
+                            created_at=23, status='succeeded', evidence=list(range(600)))
+        with writer.tx() as cursor:
+            cursor.execute(
+                f'INSERT INTO {table} (id,owner_user_id,task_id,kind,status,created_at,updated_at,idempotency_key,raw_json) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)',
+                ('many-numbers', 'alice', 'many-task', 'run', 'succeeded', 23, 23,
+                 'key-many', json.dumps(many_numbers)),
+            )
+        many = reader.native_run_summaries_for_tasks('alice', ['many-task'])['many-task']
+        assert many['safe'] is False
+        assert many['runs'] == reader.list_run_payloads_for_tasks('alice', ['many-task'])['many-task']
+
         deep = {'id': 'deep-old', 'kind': 'run', 'task_id': 'deep-task',
                 'created_at': 1, 'status': 'failed', 'evidence': []}
         nested = deep['evidence']

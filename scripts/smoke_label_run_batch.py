@@ -3,7 +3,6 @@ import ast
 import copy
 import json
 import os
-import re
 from pathlib import Path
 import sys
 import tempfile
@@ -102,7 +101,7 @@ class FakeRepository:
                         and ("import" not in row or isinstance(row["import"], dict))
                         and len(raw.encode("utf-8")) <= 32768
                         and raw.count("[") + raw.count("{") <= 64
-                        and re.search(r"[0-9]{512}", raw) is None)
+                        and sum(ch in "0123456789" for ch in raw) < 512)
             safe = all(valid(row) for row in trimmed)
             values = [
                 {k: row[k] for k in ("kind", "id", "created_at", "status", "decision") if k in row}
