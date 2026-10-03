@@ -40,6 +40,8 @@ jobs:
           fi
       - name: Verify PLC release contract
         run: python scripts/verify_release_contract.py
+      - name: Verify COS evacuation integrity and failure boundaries
+        run: python scripts/smoke_cos_migrate.py
       - name: Verify browser camera and file-drop contracts
         run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
       - name: Validate release shell syntax

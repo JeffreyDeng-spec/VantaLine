@@ -664,6 +664,11 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+The source-safety CI job runs the offline COS evacuation smoke. The operational
+tool does not run during release installation and does not enable COS in the
+application. Merging its tooling alone cannot authorize source-file removal or
+disk retirement; use the independent cutover gates in the production runbook.
+
 The runtime identity/connection extraction is a separate PR after model dependency
 injection. Its native thread-pool and real PostgreSQL scope tests supplement the
 unchanged HTTP baseline; no external-worker cutover occurs in this release.

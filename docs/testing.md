@@ -1342,6 +1342,12 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 **Status: Authoritative**
 
+COS evacuation: `python scripts/smoke_cos_migrate.py` runs offline synthetic checks
+for interrupted inventories, source mutation before/during upload, same-length
+remote corruption, deduplicated resume, secret/symlink exclusion and path escape.
+The fake client performs no network calls. Real SDK transfer, full production
+readback, database restore and runtime cutover remain separate operational gates.
+
 ## Backend extraction contract
 
 `python -X utf8 scripts/smoke_model_dependency_contract.py` verifies callable loader
