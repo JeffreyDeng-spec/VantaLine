@@ -267,6 +267,11 @@ def main():
                 old_peaks.append(old_peak); new_peaks.append(new_peak)
             old_p95 = sorted(old_times)[math.ceil(0.95 * len(old_times)) - 1]
             new_p95 = sorted(new_times)[math.ceil(0.95 * len(new_times)) - 1]
+            print(json.dumps({"native_summary_precheck": {"tasks": size,
+                "old_times": [round(t, 3) for t in old_times],
+                "new_times": [round(t, 3) for t in new_times],
+                "old_peak_mib": round(max(old_peaks) / (1024 * 1024), 2),
+                "new_peak_mib": round(max(new_peaks) / (1024 * 1024), 2)}}), flush=True)
             assert new_p95 <= max(old_p95 * 1.25, old_p95 + 0.25)
             assert max(new_peaks) <= max(max(old_peaks) * 1.25, max(old_peaks) + 8 * 1024 * 1024)
             safe_nonempty = 0
