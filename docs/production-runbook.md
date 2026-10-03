@@ -743,6 +743,55 @@ releases use the existing complete-release deployment and rollback procedure.
 
 **Status: Authoritative**
 
+## COS evacuation tooling
+
+`scripts/cos_migrate.py` provides operator-run inventory, upload, independent
+verification and isolated restore. It does not switch runtime storage, modify database records, delete
+local data, or authorize disk detachment. Pause relevant file writers for the final
+inventory/transfer; an online inventory is only preliminary evidence.
+
+Run `inventory --root SOURCE --include outputs --manifest MANIFEST` with reviewed,
+non-overlapping relative roots; repeat `--include` for other selected subtrees. Keep
+manifests and receipts outside the source filesystem in a restricted directory.
+The tool creates new 0600 files and refuses overwrites. Dot paths, credential/key
+names, local environment/config/auth files and symlinks are recorded as excluded;
+review exclusions and preserve required local-only state separately. A file scan
+is not a consistent PostgreSQL backup: take `pg_dump` with the approved database
+identity, verify restore separately, and select the dump as a reviewed input.
+Never copy live PostgreSQL data files into COS.
+
+Install the official `cos-python-sdk-v5` in a separate operational environment and
+record its resolved version. Supply `COS_SECRET_ID`, `COS_SECRET_KEY` and optional
+`COS_SESSION_TOKEN` through restricted process credentials, never command history,
+TAT command text, source or reports. The application environment is unchanged.
+Use `upload --manifest MANIFEST --receipt NEW_RECEIPT --bucket BUCKET --region REGION`.
+The default `objects/sha256/` layout is content-addressed: manifests map legacy
+paths to checksums, and receipts record final object keys. The target bucket must
+be private and in the approved region; uploads request STANDARD storage over HTTPS.
+Credentials need scoped read/write/multipart operations, not deletion or management.
+
+Each object is read back in full and SHA-256/length checked. Existing objects are
+verified rather than overwritten; partial runs have no complete footer. Retry with
+the same manifest and a new receipt. Changed sources require a new inventory.
+Use `verify` with the same options for an independent remote readback. Before disk
+retirement, preserve restricted remote copies of the manifests and receipts and
+verify recovery of original paths and permissions. Completed receipts alone do not
+prove runtime readiness, account isolation, database restore, or sufficient local
+working space; those remain separate cutover gates.
+
+For a representative restore, use `restore --manifest MANIFEST --bucket BUCKET
+--region REGION --destination NEW_DIRECTORY --include RELATIVE_FILE_OR_SUBTREE`.
+Omit `--include` only when a complete restore fits locally. The original source
+disk need not exist. The command requires a new destination and enough free space
+for all selected bytes plus a 256 MiB reserve. It verifies each complete download
+before publishing that file, fails on corruption, and never replaces existing
+files. Restored files are private (0600) under a private root (0700); the operator
+must apply the reviewed application's ownership/permissions after validation.
+Retain the command's result and manifest digest as recovery evidence. A partial
+directory after failure is not a successful restore; use a fresh destination for
+another attempt. For database restore checks, enumerate every application schema,
+not only `public`, and reject a validation run that checked no business tables.
+
 Runtime connection/identity extraction uses ordinary complete-release restart and
 rollback. It adds no service, flag, migration or maintenance gate. Existing worker
 cleanup remains on its own thread; do not close an active worker's connection from
