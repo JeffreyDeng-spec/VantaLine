@@ -2005,3 +2005,5 @@ A frozen root-storage predecessor executes the schema-1 policy handoff on UID998
 application directories, validates root recovery storage, promotes the successor,
 then exercises a later managed embedded510 transition. These remain isolated
 service substitutes; production policy commissioning is separately accepted.
+
+The synthetic run-batch/payload benchmark explicitly analyzes its newly bulk-loaded table before either query shape is prepared or timed. Both arms then start with statistics for the same committed fixture; timed loops, output equivalence, query bounds, memory guards and P95 thresholds are unchanged. Plan diagnostics belong to separate probes and must not be inserted into measured runs. A prior hosted 10,000-task payload failure is retained as evidence; a passing local ANALYZE comparison does not reconstruct that runner's exact plan.

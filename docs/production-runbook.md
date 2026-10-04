@@ -1184,3 +1184,5 @@ service state with both PIDs zero before a pointer switch. A 510-second PID1 fal
 does not extend that deadline or guarantee forced exit in 500 seconds. If stop or
 rollback cannot verify exit, retain both releases, root journal and call evidence;
 do not start a candidate, clear admission state or retry uncertain paid calls.
+
+The benchmark statistics preparation is confined to disposable synthetic schemas in local/CI validation. It requires no production database command, configuration change or manual deployment action. Whole-release acceptance and rollback requirements remain unchanged.

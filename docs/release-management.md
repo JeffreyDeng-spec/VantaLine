@@ -914,3 +914,5 @@ pointer switch and candidate startup; an unsuccessful whole-release rollback
 retains recovery evidence and admission fencing. This bridge still declares
 schema 1 and cannot activate an external worker. Installed-controller digest and
 whole-release acceptance must precede the separate schema-2 activation package.
+
+The stop-allowance bridge also prepares planner statistics in its isolated synthetic PostgreSQL benchmark before timing. This test-fixture correction does not execute ANALYZE on production or change business SQL, indexes, runtime configuration or performance thresholds. Required CI must pass again on the resulting exact head.
