@@ -1089,3 +1089,7 @@ No model setting, default, binding, permission, secret reference or prompt-sourc
 ## Label list-only run payloads
 
 No operator setting, source filter, model binding, media permission or cursor format changes. The first-page label task list transfers fewer fields from native run rows; task detail and previously created 15-minute cursor snapshots remain unchanged. New tasks naturally record the prompt-source fingerprint of the changed shipped API/storage files; historical fingerprints and model bindings are not rewritten.
+
+## Label consumer lifecycle
+
+Label consumer lifecycle introduces no setting, model choice, default, permission or secret change. Source manifest v134 has 343 actual source entries, including the consumer and Web adapter; new task provenance follows those sources without rewriting historical snapshots. The 480-second drain budget is an application wait limit, not a cancellation deadline or proof of the host systemd stop budget.

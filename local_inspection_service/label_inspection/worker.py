@@ -4,9 +4,10 @@ import copy
 import json
 import os
 import threading
+import logging
+import math
 from collections.abc import Callable
 from pathlib import Path
-from fastapi import FastAPI
 from .dependencies import RepositoryLifecycle, ModelProvider, require_models
 import time
 from . import model, quality, manual
@@ -250,51 +251,126 @@ def process(
             pass  # Expiration is authoritative; late completion cannot turn green.
 
 
-def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Callable[[], Path], models: ModelProvider):
-    stop = threading.Event()
+class LabelWorker:
+    """Own two consumer threads and acknowledge drain only after both exit.
 
-    def loop():
-        while not stop.is_set():
-            run = None
+    Admission is linearized under a short process-local lock. A poll admitted
+    before request_stop may still be connecting/claiming; it belongs to drain.
+    No lock is held across database work, model calls, connection cleanup or join.
+    The repository retains the global concurrency and paid-call fences.
+    """
+
+    SHUTDOWN_SECONDS = 420 + 60
+
+    def __init__(self, repositories: RepositoryLifecycle,
+                 data_directory: Callable[[], Path], models: ModelProvider):
+        self.repositories = repositories
+        self.data_directory = data_directory
+        self.models = models
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._threads: list[threading.Thread] = []
+        self._drainers = 0
+        self._timed_out = False
+        self._cleanup_failed = False
+
+    def start(self):
+        with self._lock:
+            if self._cleanup_failed:
+                raise RuntimeError("Label worker connection cleanup failed; process restart required")
+            alive = [thread.is_alive() for thread in self._threads]
+            if self._drainers or (any(alive) and self._stop.is_set()):
+                raise RuntimeError("Label worker is still draining")
+            if any(alive):
+                if not all(alive):
+                    raise RuntimeError("Label worker lost a consumer")
+                return  # Duplicate startup must not double consumer threads.
+            self._stop = threading.Event()
+            self._timed_out = False
+            self._threads = []
             try:
-                if (
-                    os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower()
-                    == "true"
-                ):
-                    raw_repo = repositories.repository()
-                    if raw_repo:
-                        repo = LabelRepository(raw_repo)
-                        run = repo.claim()
-                        if run:
-                            reference = run.get("profile_snapshot") or require_models(models).snapshot_for_record(run).get("label")
-                            resolved = (
-                                require_models(models).resolve("label", reference)
-                                if reference
-                                else None
-                            )
-                            process(
-                                repo,
-                                MediaStore(
-                                    data_directory() / "label_inspection" / "media"
-                                ),
-                                run,
-                                resolved["api_key"] if resolved else "",
-                                resolved=resolved,
-                                record_call=require_models(models).record_call,
-                            )
+                for index in range(2):
+                    thread = threading.Thread(target=self._loop, args=(self._stop,),
+                                              name=f"label-inspection-{index}", daemon=True)
+                    thread.start()
+                    self._threads.append(thread)
+            except BaseException:
+                self._stop.set()  # Retain all started threads for drain/restart fencing.
+                raise
+
+    def status(self) -> dict:
+        with self._lock:
+            alive = sum(thread.is_alive() for thread in self._threads)
+            state = ("timed_out" if self._timed_out else "draining") if alive and self._stop.is_set() else (
+                "running" if alive == 2 else "failed" if alive else "stopped")
+            return {"state": "failed" if self._cleanup_failed else state, "live_threads": alive}
+
+    def request_stop(self):
+        with self._lock:
+            self._stop.set()
+
+    def drain(self, timeout: float = SHUTDOWN_SECONDS) -> bool:
+        """Request stop and wait a total budget; False never means drained."""
+        if timeout < 0 or not math.isfinite(timeout):
+            raise ValueError("Drain timeout must be finite and nonnegative")
+        deadline = time.monotonic() + timeout
+        with self._lock:
+            self._stop.set()
+            threads = tuple(self._threads)
+            self._drainers += 1
+        try:
+            for thread in threads:
+                thread.join(max(0, deadline - time.monotonic()))
+            drained = not any(thread.is_alive() for thread in threads)
+            with self._lock:
+                self._timed_out = not drained
+                return drained and not self._cleanup_failed
+        finally:
+            with self._lock:
+                self._drainers -= 1
+
+    def _loop(self, stop):
+        while True:
+            with self._lock:
+                if stop.is_set():
+                    return
+                # This iteration is now admitted, including a pending DB claim.
+            claimed = False
+            try:
+                claimed = self._iteration()
             except Exception:
-                pass  # Transient DB/config failures must not replay a claimed run.
+                # Deliberately exclude exception messages/tracebacks: providers and
+                # drivers may include credentials, media or customer information.
+                logging.getLogger(__name__).error('{"event":"label_worker_iteration_failed"}')
             finally:
-                repositories.clear()
-            if not run:
+                try:
+                    self.repositories.clear()
+                except Exception:
+                    with self._lock:
+                        self._cleanup_failed = True
+                        stop.set()
+                    logging.getLogger(__name__).error('{"event":"label_worker_cleanup_failed"}')
+            if not claimed:
                 stop.wait(1)
 
-    def start():
-        stop.clear()
-        for index in range(2):
-            threading.Thread(
-                target=loop, name=f"label-inspection-{index}", daemon=True
-            ).start()
-
-    app.on_event("startup")(start)
-    app.on_event("shutdown")(stop.set)
+    def _iteration(self) -> dict | None:
+        run = None
+        try:
+            if os.getenv("VANTALINE_LABEL_INSPECTION_ENABLED", "").lower() != "true":
+                return None
+            raw_repo = self.repositories.repository()
+            if not raw_repo:
+                return None
+            repo = LabelRepository(raw_repo)
+            run = repo.claim()
+            if not run:
+                return run
+            # A claimed run is never requeued, including model resolution failure.
+            reference = run.get("profile_snapshot") or require_models(self.models).snapshot_for_record(run).get("label")
+            resolved = require_models(self.models).resolve("label", reference) if reference else None
+            process(repo, MediaStore(self.data_directory() / "label_inspection" / "media"),
+                    run, resolved["api_key"] if resolved else "", resolved=resolved,
+                    record_call=require_models(self.models).record_call)
+        except Exception:
+            logging.getLogger(__name__).error('{"event":"label_worker_iteration_failed"}')
+        return run

@@ -16032,7 +16032,7 @@
   ],
   "shutdown": [
     "set",
-    "set"
+    "stop"
   ],
   "startup": [
     "start_plc_runtime_workers",
