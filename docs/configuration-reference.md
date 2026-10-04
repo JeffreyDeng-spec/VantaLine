@@ -1093,3 +1093,5 @@ No operator setting, source filter, model binding, media permission or cursor fo
 ## Label consumer lifecycle
 
 Label consumer lifecycle introduces no setting, model choice, default, permission or secret change. Source manifest v134 has 343 actual source entries, including the consumer and Web adapter; new task provenance follows those sources without rewriting historical snapshots. The 480-second drain budget is an application wait limit, not a cancellation deadline or proof of the host systemd stop budget.
+
+The label batch/payload benchmark diagnostic output adds no runtime setting. It uses the existing isolated `VANTALINE_POSTGRES_DSN` test database and emits synthetic timing, memory and payload-size values only; the DSN and records are never printed.

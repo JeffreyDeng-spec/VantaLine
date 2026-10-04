@@ -1484,3 +1484,5 @@ The label consumer lifecycle now belongs to `label_inspection/worker.py:LabelWor
 A connection-cleanup exception marks that consumer generation failed even after its threads exit. Drain returns false and in-process restart is rejected; process restart is required. The lifecycle regression also retains falsey repository/run handling and the original idle decision after cleanup.
 
 Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.
+
+Label batch/payload performance acceptance now emits per-case synthetic samples before failing a guard. This is diagnostic instrumentation of the existing isolated PostgreSQL benchmark; repository, HTTP and worker boundaries are unchanged.

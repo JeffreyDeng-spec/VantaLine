@@ -182,6 +182,17 @@ def main():
                 "old_peak_mib": round(max(old_peaks) / (1024 * 1024), 2),
                 "new_peak_mib": round(max(new_peaks) / (1024 * 1024), 2),
             })
+            # Emit every sample before a guard can abort the process. A failed
+            # runner must retain enough evidence to distinguish the two paths.
+            print(json.dumps({
+                "benchmark_case": "label_run_batch",
+                "tasks": size, "sample_order": ["old-new", "new-old", "old-new", "new-old", "old-new"],
+                "old_seconds": old_times, "new_seconds": new_times,
+                "old_peak_bytes": old_peaks, "new_peak_bytes": new_peaks,
+                "old_p95_seconds": old_p95, "new_p95_seconds": new_p95,
+                "p95_limit_seconds": max(old_p95 * 1.25, old_p95 + 0.25),
+                "peak_limit_bytes": max(max(old_peaks) * 1.5, max(old_peaks) + 8 * 1024 * 1024),
+            }, sort_keys=True), flush=True)
             assert new_p95 <= max(old_p95 * 1.25, old_p95 + 0.25)
             # Repository-level memory omits API task/snapshot allocations; report
             # this comparison for review rather than treating it as API peak.
@@ -222,6 +233,18 @@ def main():
                 old_peaks.append(old_peak); new_peaks.append(new_peak)
             old_p95 = sorted(old_times)[math.ceil(0.95 * len(old_times)) - 1]
             new_p95 = sorted(new_times)[math.ceil(0.95 * len(new_times)) - 1]
+            # Emit every sample before a guard can abort the process. A failed
+            # runner must retain enough evidence to distinguish the two paths.
+            print(json.dumps({
+                "benchmark_case": "label_run_payload",
+                "tasks": size, "sample_order": ["old-new", "new-old", "old-new", "new-old", "old-new"],
+                "old_seconds": old_times, "new_seconds": new_times,
+                "old_peak_bytes": old_peaks, "new_peak_bytes": new_peaks,
+                "old_p95_seconds": old_p95, "new_p95_seconds": new_p95,
+                "p95_limit_seconds": max(old_p95 * 1.25, old_p95 + 0.25),
+                "peak_limit_bytes": max(max(old_peaks) * 1.25, max(old_peaks) + 8 * 1024 * 1024),
+                "old_wire_bytes": old_sample[1], "new_wire_bytes": new_sample[1],
+            }, sort_keys=True), flush=True)
             assert new_p95 <= max(old_p95 * 1.25, old_p95 + 0.25)
             assert max(new_peaks) <= max(max(old_peaks) * 1.25, max(old_peaks) + 8 * 1024 * 1024)
             payload_metrics.append({
