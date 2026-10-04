@@ -47,7 +47,7 @@ def main():
         return
     if operation == 'capabilities' and not arguments:
         print(json.dumps({'schema': 1, 'topologies': [1, 2], 'runtime_protocol': 1,
-                          'services': [WEB, LABEL], 'drain_budget_seconds': 500, 'recovery_storage_schema': 1}, sort_keys=True))
+                          'services': [WEB, LABEL], 'drain_budget_seconds': 500, 'recovery_storage_schema': 1, 'configuration_schema': 1}, sort_keys=True))
         return
     if operation == 'validate' and len(arguments) == 3:
         directory, commit, allow_legacy = Path(arguments[0]), arguments[1], arguments[2] == '1'

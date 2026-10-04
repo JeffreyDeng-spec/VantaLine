@@ -59,9 +59,11 @@ def main():
                     return await call_next(request)
                 finally:
                     account.reset(token)
-            def build_control(build, lifecycle, worker):
-                return LabelRuntimeControl(build, lifecycle, worker, directory=root/"control", allowed_uid=os.getuid())
-            with patch.object(worker_api, "create_control_factory", return_value=factory), \
+            def build_control(build, lifecycle, worker, **options):
+                return LabelRuntimeControl(build, lifecycle, worker, directory=root/"control", allowed_uid=os.getuid(), **options)
+            configuration = worker_api.ConfigurationSnapshot.capture({"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": "fixture"}, root)
+            with patch.object(worker_api.ConfigurationSnapshot, "capture", return_value=configuration), \
+                    patch.object(worker_api, "create_control_factory", return_value=factory), \
                     patch.object(worker_api, "read_identity", return_value=identity), \
                     patch.object(worker_api, "LabelRuntimeControl", side_effect=build_control), \
                     patch.object(pdf_import, "register", return_value=None):

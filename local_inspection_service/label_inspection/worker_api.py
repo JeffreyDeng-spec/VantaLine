@@ -1,9 +1,12 @@
 """Web lifecycle adapter; the consumer itself does not import the Web app."""
 from fastapi import FastAPI
+from dataclasses import replace
+import os
 from .dependencies import RepositoryLifecycle, ModelProvider
 from .worker import LabelWorker
 from ..runtime.label_identity import read_identity
 from ..runtime.control_connections import create_control_factory
+from ..runtime.configuration import ConfigurationSnapshot
 from .runtime_control import LabelRuntimeControl
 from collections.abc import Callable
 from pathlib import Path
@@ -25,10 +28,12 @@ def register(app: FastAPI, repositories: RepositoryLifecycle,
         identity = read_identity(Path(__file__).resolve().parents[2], current=Path("/opt/vantaline/current"))
         control = None
         if identity is not None:
+            configuration = ConfigurationSnapshot.capture(os.environ, data_directory())
+            identity = replace(identity, config_revision=configuration.revision)
             control_factory = create_control_factory()
             control_repositories = RepositoryLifecycle(
                 lambda: control_factory.selection().repository, control_factory.clear)
-            control = LabelRuntimeControl(identity, control_repositories, worker)
+            control = LabelRuntimeControl(identity, control_repositories, worker, configuration=configuration)
         worker.runtime_identity = identity
         worker.runtime_control = control
         app.state.label_worker = worker

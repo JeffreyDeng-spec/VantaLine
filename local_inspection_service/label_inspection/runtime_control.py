@@ -8,6 +8,7 @@ import time
 import uuid
 
 from ..runtime.control_socket import ControlSocket
+from ..runtime.configuration import ConfigurationSnapshot
 from ..runtime.label_identity import LabelRuntimeIdentity, RuntimeUnavailable
 from ..storage.label_runtime import LabelRuntimeStore
 from .dependencies import RepositoryLifecycle
@@ -16,9 +17,13 @@ from .worker import LabelWorker
 
 class LabelRuntimeControl:
     def __init__(self, identity: LabelRuntimeIdentity, repositories: RepositoryLifecycle, worker: LabelWorker | None, *, role="web",
-                 directory=Path("/opt/vantaline/shared/data/runtime-control"), allowed_uid=0):
+                 directory=Path("/opt/vantaline/shared/data/runtime-control"), allowed_uid=0,
+                 configuration: ConfigurationSnapshot | None = None):
         self.identity, self.repositories, self.worker = identity, repositories, worker
         self.role = role
+        self.configuration = configuration
+        if configuration is not None and configuration.revision != identity.config_revision:
+            raise RuntimeUnavailable("Runtime configuration identity mismatch")
         self.instance = uuid.uuid4().hex
         self.pid = os.getpid()
         self._lock = threading.Lock()
@@ -78,12 +83,14 @@ class LabelRuntimeControl:
                 or not isinstance(value["revision"], str) or not re.fullmatch(r"[0-9a-f]{32}", value["revision"])):
             raise RuntimeUnavailable("Invalid runtime control request")
         command = value["command"]
-        if command not in ("status", "pause", "resume", "open_admission", "close_admission"):
+        if command not in ("status", "pause", "resume", "open_admission", "close_admission", "configuration"):
             raise RuntimeUnavailable("Unsupported runtime control request")
         if command in ("open_admission", "close_admission") and self.role != "web":
             raise RuntimeUnavailable("Only Web controls admission")
         if command in ("pause", "resume") and self.worker is None:
             raise RuntimeUnavailable("This process is not the label consumer")
+        if command == "configuration" and (self.role != "web" or self.configuration is None):
+            raise RuntimeUnavailable("Runtime configuration export unavailable")
         with self._lock, self.store() as store:
             if command in ("open_admission", "close_admission"):
                 store.change(self.identity, value["revision"], maintenance=command == "close_admission")
@@ -98,11 +105,12 @@ class LabelRuntimeControl:
                 self.worker.resume()
             state, queue = store.snapshot(self.identity)
             runtime = self.worker.runtime_status() if self.worker is not None else {"state": "ready", "active_iterations": 0}
-            return {"schema": 1, "git_commit": self.identity.commit, "release": self.identity.release,
+            response = {"schema": 1, "git_commit": self.identity.commit, "release": self.identity.release,
                     "worker_mode": self.identity.mode, "role": self.role, "instance": self.instance,
                     "pid": self.pid, "heartbeat": time.monotonic(), "control_revision": state["revision"],
                     "maintenance": state["maintenance"], "config_revision": self.identity.config_revision,
                     "queued_runs": queue["queued_runs"], "active_runs": queue["active_runs"], **runtime}
+            return {"state": response, "snapshot": self.configuration.export()} if command == "configuration" else response
 
     def close(self):
         with self._lifecycle_lock:

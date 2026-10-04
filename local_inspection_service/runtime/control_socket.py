@@ -10,6 +10,7 @@ import threading
 import time
 
 from .label_identity import RuntimeUnavailable
+from .configuration_contract import CONFIGURATION_LIMIT
 
 
 class ControlSocket:
@@ -90,7 +91,8 @@ class ControlSocket:
                     value = json.loads(body)
                     response = self.handler(value)
                     encoded = json.dumps(response, separators=(",", ":")).encode() + b"\n"
-                    if len(encoded) > 16384:
+                    limit = CONFIGURATION_LIMIT + 32768 if isinstance(value, dict) and value.get("command") == "configuration" else 16384
+                    if len(encoded) > limit:
                         raise ValueError()
                     connection.settimeout(1)
                     connection.sendall(encoded)

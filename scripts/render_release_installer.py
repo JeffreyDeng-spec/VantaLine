@@ -5,23 +5,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SOURCES = ('release_runtime_contract.py', 'release_runtime_client.py', 'release_services.py',
-           'release_runtime_transition.py', 'release_runtime_main.py')
+           'release_runtime_configuration.py', 'release_runtime_transition.py', 'release_runtime_main.py')
+CONFIGURATION_SOURCE = 'local_inspection_service/runtime/configuration_contract.py'
+CONFIGURATION_MODULE = 'local_inspection_service.runtime.configuration_contract'
 TEMPLATE = 'install_release.template.sh'
 MARKER = '@@VANTALINE_RUNTIME_CONTROLLER@@'
 
 
 def render():
     blocks = []
-    for name in SOURCES:
-        source = (ROOT/name).read_text(encoding='utf-8-sig')
+    inputs = [(CONFIGURATION_MODULE, ROOT.parent / CONFIGURATION_SOURCE)] + [(name[:-3], ROOT / name) for name in SOURCES]
+    bundled = {module for module, path in inputs}
+    for module, path in inputs:
+        source = path.read_text(encoding='utf-8-sig')
         lines = source.splitlines(keepends=True)
         for node in ast.parse(source).body:
-            if isinstance(node, ast.ImportFrom) and node.module in {item[:-3] for item in SOURCES}:
+            if isinstance(node, ast.ImportFrom) and node.module in bundled:
                 lines[node.lineno-1:node.end_lineno] = ['' for _ in range(node.end_lineno-node.lineno+1)]
-        blocks.append('# Source: scripts/'+name+'\n'+''.join(lines).rstrip()+'\n')
+        blocks.append('# Source: '+path.relative_to(ROOT.parent).as_posix()+'\n'+''.join(lines).rstrip()+'\n')
     helper = "runtime_controller() {\n  /usr/bin/python3 -I -S - \"$@\" <<'PY_VANTALINE_RUNTIME'\n"+'\n'.join(blocks)+"PY_VANTALINE_RUNTIME\n}\n"
     template = (ROOT/TEMPLATE).read_text(encoding='utf-8')
-    if template.count(MARKER) != 1 or any('PY_VANTALINE_RUNTIME' in (ROOT/name).read_text(encoding='utf-8-sig') for name in SOURCES):
+    if template.count(MARKER) != 1 or any('PY_VANTALINE_RUNTIME' in path.read_text(encoding='utf-8-sig') for module, path in inputs):
         raise ValueError('Invalid installer source boundaries')
     return template.replace(MARKER, helper).encode('utf-8')
 
