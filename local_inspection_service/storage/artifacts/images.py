@@ -4,6 +4,26 @@ from pathlib import Path
 
 from .files import BusinessFiles
 from .types import ArtifactUnavailable
+from .runtime import get_runtime
+
+
+class StoredImageBackend:
+    """Explicit per-port view; every non-file OpenCV operation stays unchanged."""
+    def __init__(self, backend, runtime):
+        self.backend = backend
+        self.files = ImageFiles(lambda: backend, files=BusinessFiles(runtime_provider=lambda: runtime))
+
+    def __getattr__(self, name):
+        if name in {"imread", "imwrite"}:
+            return getattr(self.files, name)
+        return getattr(self.backend, name)
+
+
+def image_backend(backend):
+    # Return the exact injected object in local mode, preserving method binding
+    # and callback order for independent compositions and their existing tests.
+    runtime = get_runtime()
+    return backend if runtime is None else StoredImageBackend(backend, runtime)
 
 
 class ImageFiles:

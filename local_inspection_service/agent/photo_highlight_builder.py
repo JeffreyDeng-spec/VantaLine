@@ -1,6 +1,7 @@
 """Photo-highlight sprite coordination with explicit capabilities."""
 from pathlib import Path
 from typing import Any
+from ..storage.artifacts.types import ArtifactUnavailable, ArtifactConflict
 import cv2
 from ..storage.artifacts.images import ImageFiles
 _image_files = ImageFiles(lambda: cv2)
@@ -238,6 +239,8 @@ class PhotoHighlightSpriteBuilder:
                     preview_bgra = cv2.cvtColor(cut_bgr, cv2.COLOR_BGR2BGRA)
                     preview_bgra[:, :, 3] = raw_cut_mask
                     _image_files.imwrite(str(transparent_path), preview_bgra)
+                except (ArtifactUnavailable, ArtifactConflict):
+                    raise
                 except Exception:
                     pass
                 processing_artifacts = {

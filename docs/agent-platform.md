@@ -366,3 +366,5 @@ Agent policy display reads now use a short PostgreSQL transaction without the ac
 ## COS image persistence compatibility
 
 Photo highlight and background-plate image reads/writes have an opt-in storage adapter. Provider output is durably published before its file reference is exposed. A storage failure propagates instead of claiming a successful image write. Default local behavior remains covered by existing contracts; native worker workspace conversion and budgeted real-provider acceptance remain cutover gates.
+
+In COS mode, photo-highlight ROI and mask persistence failures propagate before successful artifact publication. Optional local image-processing fallback must not hide a failed durable write.

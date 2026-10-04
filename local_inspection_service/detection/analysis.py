@@ -1,5 +1,7 @@
 """Ordinary detection selection, inference and output orchestration."""
 from pathlib import Path
+from ..storage.artifacts.images import image_backend
+from ..storage.artifacts.types import ArtifactUnavailable, ArtifactConflict
 from typing import Any
 import numpy as np
 from .analysis_ports import AnalysisInput, AnalysisRouting, AnalysisInference, AnalysisOutput
@@ -29,6 +31,8 @@ class DetectionAnalysis:
                             "fallback_used": False,
                         }
                         return promoted
+                    except (ArtifactUnavailable, ArtifactConflict):
+                        raise
                     except Exception as exc:
                         # Production should fall back to the API teacher if the promoted
                         # student model is missing or temporarily unhealthy.
@@ -63,7 +67,7 @@ class DetectionAnalysis:
         out_name = f"{request_id}_annotated.jpg"
         out_path = self.output.directory("inspection") / out_name
         preview = self.output.resize()(annotated, self.output.max_side())
-        self.output.images().imwrite(str(out_path), preview, [int(self.output.images().IMWRITE_JPEG_QUALITY), self.output.quality()])
+        image_backend(self.output.images()).imwrite(str(out_path), preview, [int(self.output.images().IMWRITE_JPEG_QUALITY), self.output.quality()])
         return {
             "request_id": request_id,
             "passed": rule["passed"],

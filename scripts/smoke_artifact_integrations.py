@@ -31,6 +31,44 @@ class IntegrationTests(unittest.TestCase):
     def runtime(self, mode="cos"):
         return ArtifactRuntime(self.store, self.root.resolve(), mode)
 
+    def test_detection_native_port_publishes_verified_bytes_and_propagates_failure(self):
+        import cv2
+        import numpy as np
+        from unittest.mock import patch
+        from local_inspection_service.detection.inspection_image_store import InspectionImageStore
+        from local_inspection_service.detection.media_ports import InspectionImagePolicy
+        from local_inspection_service.storage.artifacts.images import image_backend
+        self.budget.limits.update(cache=1024 * 1024, upload=1024 * 1024)
+        self.budget.free_bytes = lambda: 10 * 1024 * 1024
+        policy = InspectionImagePolicy(lambda: self.root / "outputs/inspection", lambda: 100, lambda: 90)
+        writer = InspectionImageStore(lambda: cv2, policy, lambda: 1, lambda s: s)
+        pixels = np.full((8, 8, 3), 120, dtype=np.uint8)
+        with patch("local_inspection_service.storage.artifacts.images.get_runtime", self.runtime):
+            path = writer.write_mcp_inspection_image(pixels, "fixture")
+            self.assertFalse(path.exists())
+            restored = image_backend(cv2).imread(str(path))
+            np.testing.assert_array_equal(restored, pixels)
+            before = dict(self.locations.rows)
+            self.client.fail = True
+            with self.assertRaises(ArtifactUnavailable):
+                writer.write_mcp_inspection_image(pixels, "failed")
+            self.assertEqual(self.locations.rows, before)
+
+    def test_storage_failure_does_not_trigger_paid_teacher_fallback(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from local_inspection_service.detection.analysis import DetectionAnalysis
+        inputs = SimpleNamespace(scope=lambda: lambda v: v, load=lambda: {},
+                                 select=lambda *a: {"is_ai_detection": True, "task_id": "fixture"},
+                                 task_id=lambda: lambda v: v,
+                                 state=lambda _: {"settings": {"enabled": True, "serving_mode": "promoted_yolo"},
+                                                  "active_model_id": "fixture"})
+        paid = Mock()
+        routing = SimpleNamespace(analyze=Mock(side_effect=ArtifactUnavailable("synthetic COS failure")), ai=paid)
+        with self.assertRaises(ArtifactUnavailable):
+            DetectionAnalysis(inputs, routing, None, None).analyze_bgr(None, "fixture")
+        paid.assert_not_called()
+
     def test_multipart_admission_precedes_handler_and_releases_reservations(self):
         from fastapi import UploadFile, File
         from local_inspection_service.storage.artifacts.admission import UploadAdmission

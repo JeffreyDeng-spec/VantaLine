@@ -1,5 +1,7 @@
 """Dataset and model availability projection for pipeline tasks."""
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 import re
 from typing import Any
 
@@ -17,7 +19,7 @@ class PipelineResourceStatus:
         if str(task.get("dataset_status") or "") == "deleted":
             return "deleted"
         dataset_dir, _ = self.links.find_dataset()(dataset_id)
-        if dataset_dir and dataset_dir.exists():
+        if dataset_dir and _business_files.exists(dataset_dir):
             return "available"
         if task.get("stage") == "samples" and str(task.get("status") or "") in {"running", "queued", "pending"}:
             return "pending"
@@ -46,7 +48,7 @@ class PipelineResourceStatus:
         specs = trained_model_specs if trained_model_specs is not None else self.links.list_trained_specs()()
         spec = next((item for item in specs if str(item.get("run_id")) == clean_run_id), None)
         model_path = str((spec or {}).get("path") or "")
-        if spec and model_path and Path(model_path).exists():
+        if spec and model_path and _business_files.exists(Path(model_path)):
             return "available"
         if task.get("stage") == "training" and str(task.get("status") or "") in {"running", "queued", "pending"}:
             return "pending"

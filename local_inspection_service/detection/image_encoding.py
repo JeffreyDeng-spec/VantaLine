@@ -1,4 +1,5 @@
 """JPEG data URLs from arrays and local images."""
+from ..storage.artifacts.images import image_backend
 from collections.abc import Callable
 from pathlib import Path
 import base64
@@ -21,7 +22,7 @@ class ImageEncoding:
         return f"data:image/jpeg;base64,{base64.b64encode(encoded.tobytes()).decode('ascii')}"
 
     def image_path_data_url(self, path: Path, max_side: int = 1024, quality: int = 78) -> str | None:
-        image = self.images().imread(str(path), self.images().IMREAD_COLOR)
+        image = image_backend(self.images()).imread(str(path), self.images().IMREAD_COLOR)
         if image is None:
             return None
         return self.encode(image, max_side=max_side, quality=quality)

@@ -1,4 +1,6 @@
 """Inspection image persistence with existing failure boundaries."""
+from ..storage.artifacts.images import image_backend
+from ..storage.artifacts.types import ArtifactUnavailable, ArtifactConflict
 from collections.abc import Callable
 from pathlib import Path
 import hashlib
@@ -20,7 +22,9 @@ class InspectionImageStore:
                 image = self.images().resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=self.images().INTER_AREA)
             digest = hashlib.sha1(f"{request_id}:{self.now_ns()}".encode("utf-8")).hexdigest()[:12]
             path = self.policy.directory() / f"{self.name(request_id)[:80]}_{digest}.jpg"
-            ok = self.images().imwrite(str(path), image, [int(self.images().IMWRITE_JPEG_QUALITY), self.policy.quality()])
+            ok = image_backend(self.images()).imwrite(str(path), image, [int(self.images().IMWRITE_JPEG_QUALITY), self.policy.quality()])
             return path if ok else None
+        except (ArtifactUnavailable, ArtifactConflict):
+            raise
         except Exception:
             return None
