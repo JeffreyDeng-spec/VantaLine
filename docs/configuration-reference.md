@@ -1133,3 +1133,6 @@ never COS credentials or application configuration. Native image and comparison
 workers require hard limits in COS mode, hold the shared exclusive work lease,
 and publish results before completion. Missing runtime authentication fails before
 a paid invocation. Keep both services' KillMode=control-group and mount dependencies.
+## Label consumer lifecycle
+
+Label consumer lifecycle introduces no setting, model choice, default, permission or secret change. Source manifest v134 has 343 actual source entries, including the consumer and Web adapter; new task provenance follows those sources without rewriting historical snapshots. The 480-second drain budget is an application wait limit, not a cancellation deadline or proof of the host systemd stop budget.

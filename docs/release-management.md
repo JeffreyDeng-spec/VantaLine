@@ -829,6 +829,9 @@ remains unchanged. The installer dependency check must pass before publishing th
 complete package; this change preserves the existing topology, signal handling,
 installer SHA promotion and same-release retry fixes. Enabling COS and retiring the
 disk require the separate production-runbook gates and a complete COS rollback
-release. Prompt source manifest v137 includes the storage adapter modules and native image adapter.
+release. Prompt source manifest v138 includes the storage adapter modules and native image adapter.
 
 The COS compatibility release includes an operator-invoked temporary-volume provisioning script. Merely installing the release does not create volumes, enable COS, or unmount business data. Any commissioning and storage-mode change requires the separate runbook gates and a complete COS-compatible rollback artifact.
+## Label consumer lifecycle
+
+The label lifecycle controller ships in an embedded-only complete release. CI exercises real-thread drain contracts and the existing label/PostgreSQL, HTTP, frontend and package gates. No worker service is installed or enabled. Application shutdown waits at most 480 seconds, but the currently installed host unit has no verified matching TimeoutStopSec; the later publisher/worker switch must establish that host budget before claiming complete production drain support. Rollback restores the prior complete release and retains all task/call evidence.
