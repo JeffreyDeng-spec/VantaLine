@@ -10,6 +10,30 @@ permissions:
   contents: read
 
 jobs:
+  artifact-storage:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: storage_fixture
+          POSTGRES_DB: vantaline_cos_storage_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U vantaline"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      ARTIFACT_TEST_DATABASE_URL: postgresql://vantaline:storage_fixture@127.0.0.1:5432/vantaline_cos_storage_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install -c requirements-production.lock pillow fastapi httpx 'psycopg[binary]' cos-python-sdk-v5
+      - run: python scripts/smoke_artifact_storage.py
+      - run: python scripts/smoke_artifact_integrations.py
+      - run: python scripts/smoke_artifact_postgres.py
   doc-image-runtime:
     runs-on: ubuntu-latest
     steps:

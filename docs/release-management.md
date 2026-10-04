@@ -821,3 +821,12 @@ This read-only transfer change has no schema, topology, configuration or worker-
 An embedded-only immutable package now declares `RUNTIME_TOPOLOGY.json` with the exact release commit and sole service `vantaline`. The installer rejects a missing or unsupported declaration before stopping the Web service. The first bridge release is still applied by the preceding host installer; after health acceptance, that installer promotes the bundled successor. The release workflow verifies the promoted installer SHA-256 against the packaged file and checks the live `/api/version` commit before publishing. A later embedded release is required to exercise the new installer on the host. This bridge does not start, stop, or roll back an independent label worker.
 
 An already-installed retry checks the live commit before installer promotion. It may validate an older package without a topology manifest, but it never promotes an installer from that legacy package. If the application has passed health checks and installer promotion then fails, the installer exits nonzero while preserving the accepted application; uploading and applying the same release again retries promotion. Do not publish the GitHub Release until the installer digest and live commit agree.
+
+
+The COS compatibility stage adds a separate artifact-storage CI job, an additive
+file-index migration and pinned official COS SDK dependencies. Default local mode
+remains unchanged. The installer dependency check must pass before publishing the
+complete package; this change preserves the existing topology, signal handling,
+installer SHA promotion and same-release retry fixes. Enabling COS and retiring the
+disk require the separate production-runbook gates and a complete COS rollback
+release. Prompt source manifest v134 includes the storage adapter modules.

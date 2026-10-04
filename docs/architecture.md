@@ -1476,3 +1476,23 @@ Model profile `initialize()` first checks the committed state row in a short rea
 ## Label list-only run payloads
 
 The first task-list page now calls a bounded list-only run reader for groups of at most 64 native task IDs. Its SQL result removes only five fields that `public()` already discards for JSON objects whose own `kind` is `run`: `model`, `prompt_hash`, `layout`, `transformations`, and `profile_snapshot`. Non-run or non-object JSON is returned unchanged. The API still decodes, projects and sorts every run per task before filtering the mixed native/legacy/manual/Beta rows or creating the fixed 15-minute page snapshot. Detail continues to fetch complete run JSON. This lowers transfer size for ordinary runs; it does not yet replace full-row reads with SQL summaries or remove the older source scans.
+
+
+## COS compatibility stage
+
+`storage/artifacts` owns explicit logical paths, append-only PostgreSQL generations,
+private content-addressed STANDARD objects, verified pinned reads and Unix process-shared
+scratch reservations. Business modules never patch `Path`/`open` or mount COS as a filesystem.
+The default remains `local`. The comparison/text media stores, output HTTP responses,
+training archive/export/transfer/import, dataset/model catalog and native model loader
+now have opt-in adapters. This is not yet a complete production cutover: remaining
+upload, generation, image-processing and worker file operations require conversion
+and disk-inaccessible acceptance before enabling COS on production.
+
+COS publication verifies a complete remote SHA-256/length before a CAS appends the
+next available generation. Database failure retains unreferenced remote objects and
+the producer source; deletion adds a tombstone without deleting historical objects.
+HTTP ownership and RunPod token authorization precede lookup; HEAD/Range use a pinned
+selected generation. Training ZIPs stream indexed original bytes without a second
+dataset tree or lossy transcode. Native model initialization uses an original-name
+leased file and cleans it after the loader returns.

@@ -1089,3 +1089,23 @@ No model setting, default, binding, permission, secret reference or prompt-sourc
 ## Label list-only run payloads
 
 No operator setting, source filter, model binding, media permission or cursor format changes. The first-page label task list transfers fewer fields from native run rows; task detail and previously created 15-minute cursor snapshots remain unchanged. New tasks naturally record the prompt-source fingerprint of the changed shipped API/storage files; historical fingerprints and model bindings are not rewritten.
+
+
+## Opt-in COS file storage
+
+`VANTALINE_FILE_STORE` defaults to `local`; `hybrid` reads an unmapped legacy file
+locally and `cos` never falls back for mapped business roots. Tombstones never fall
+back. Production must remain local until the complete disk-independent gate passes.
+Nonlocal modes require `VANTALINE_DATA_ROOT`, `VANTALINE_ARTIFACT_WORK_ROOT`,
+`VANTALINE_ARTIFACT_CACHE_ROOT`, `VANTALINE_COS_BUCKET`, the existing `DATABASE_URL`,
+and systemd-provided `CREDENTIALS_DIRECTORY`. Work/cache live outside the logical
+data root on one filesystem; COS mode also requires the data root on that filesystem.
+The region is `ap-hongkong`, transport HTTPS and new storage class STANDARD.
+
+Each service uses `LoadCredential=cos-credentials.json:<restricted source file>`;
+the JSON has `COS_SECRET_ID`, `COS_SECRET_KEY` and optional `COS_SESSION_TOKEN`.
+The runtime rejects symlink/nonprivate credential files. Never place values in Git,
+normal environment configuration, logs or reports. Web and worker share a restricted
+Unix group and group-writable control/cache directories; configuration is fixed until
+restart. Initial fixed budgets are cache 6 GiB, work 12 GiB, upload 2 GiB and an
+8 GiB free-space floor. Only one work reservation runs at a time.

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from .runpod_exports import ExportTaskUpdate
 from .runpod_upload_store import ArtifactReceiver, UploadStream
+from ..storage.artifacts.runtime import get_runtime
 
 Record = dict[str, Any]
 
@@ -25,9 +26,10 @@ class TransferPaths:
 
 class RunPodTrainingTransfer:
     def __init__(self, find: Callable[[str], Record | None], token_hash: Callable[[str], str],
-                 clock: Callable[[], float], paths: TransferPaths, uploads: ArtifactReceiver, update_provider: Callable[[], ExportTaskUpdate]):
+                 clock: Callable[[], float], paths: TransferPaths, uploads: ArtifactReceiver, update_provider: Callable[[], ExportTaskUpdate], *, runtime_provider=get_runtime):
         self.find, self.token_hash, self.clock = find, token_hash, clock
         self.paths, self.uploads, self.update_provider = paths, uploads, update_provider
+        self.runtime_provider = runtime_provider
 
     def download_runpod_training_dataset(self, job_id: str, token: str) -> FileResponse:
         clean_job_id = str(job_id or "").strip()
@@ -42,11 +44,25 @@ class RunPodTrainingTransfer:
         expires_at = int(task.get("runpod_dataset_token_expires_at") or 0)
         if expires_at and expires_at < int(self.clock()):
             raise HTTPException(status_code=410, detail="Training dataset URL expired")
-        archive_path = self.paths.resolve()(task.get("runpod_dataset_archive_path") or "")
+        archive_path = self.paths.resolve()(task.get("runpod_dataset_archive_path") or "").resolve()
         try:
             archive_path.relative_to(self.paths.output().resolve())
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Training dataset not found") from exc
+        runtime = self.runtime_provider()
+        if runtime is not None:
+            key = runtime.key(archive_path)
+            row = runtime.store.locations.get(key)
+            if row is not None or runtime.mode == "cos":
+                if row is None or row.state != "ready":
+                    raise HTTPException(status_code=404, detail="Training dataset not found")
+                if (row.sha256 != task.get("runpod_dataset_archive_sha256") or
+                        row.size != task.get("runpod_dataset_archive_size")):
+                    raise HTTPException(status_code=409, detail="Training dataset version changed")
+                from ..storage.artifacts.http import ArtifactResponse
+                name = re.sub(r"[^A-Za-z0-9_.@-]+", "_", clean_job_id).strip("._") or "training"
+                return ArtifactResponse(runtime, row, "application/zip", filename=f"{name}_dataset.zip",
+                                        headers={"cache-control": "no-store"})
         if not archive_path.exists() or not archive_path.is_file():
             raise HTTPException(status_code=404, detail="Training dataset not found")
         download_name = re.sub(r"[^A-Za-z0-9_.@-]+", "_", clean_job_id).strip("._") or "training"

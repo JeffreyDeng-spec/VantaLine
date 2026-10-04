@@ -1555,7 +1555,11 @@ app.mount(
     StaticFiles(directory=REACT_PREVIEW_ASSETS_DIR, check_dir=False),
     name="react-preview-assets",
 )
-app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
+from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
+
+app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR), name="outputs")
 
 from .detection.model_selection import ModelSelection
 from .detection.local_models import LocalModels
@@ -8329,6 +8333,26 @@ def load_json_file_mtime_cached(path: Path) -> Any:
     """Parse a JSON file with an mtime/size-validated cache. Returns None when
     the file is missing or invalid. Callers must treat the result as
     read-only."""
+    runtime = _business_files.runtime(path)
+    if runtime is not None:
+        logical = runtime.key(path)
+        row = runtime.store.locations.get(logical)
+        if row is not None or runtime.mode == "cos":
+            if row is None or row.state != "ready":
+                return None
+            key = "cos:" + logical
+            with _json_file_cache_lock:
+                entry = _json_file_cache.get(key)
+                if entry and entry[0] == row.generation and entry[1] == row.size:
+                    return entry[2]
+            try:
+                with runtime.store.cache.open(row) as local:
+                    value = json.loads(local.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return None
+            with _json_file_cache_lock:
+                _json_file_cache[key] = (row.generation, row.size, value)
+            return value
     try:
         stat_result = path.stat()
     except OSError:

@@ -652,3 +652,10 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 ## Label first-page run payloads
 
 The label task-list first page now removes five fields already discarded by the existing public projection from ordinary native run transfers. It still processes all runs and merges old label, manual and Beta histories before filtering and snapshot pagination. Run detail continues to load complete evidence. No inspection decision or prompt changes.
+
+
+TextMedia has an opt-in COS read/write adapter behind the existing owner/standard
+path checks and expected-hash/size checks. New media is persisted and verified before
+asset records reference it. Missing/deleted files retain their missing semantics;
+COS failures do not report successful upload. Default local mode and its atomic
+replace path remain available during compatibility rollout.

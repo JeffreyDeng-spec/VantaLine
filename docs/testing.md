@@ -1906,3 +1906,25 @@ The backend PostgreSQL CI job runs both `local_inspection_service/scripts/smoke_
 CI replays the exact v564 `label_inspection/api.py` source against candidate list fixtures, including redacted heavy fields, same-second floating JSON times, nonlatest errors, native/legacy/manual/Beta ordering, and cursor pages. `scripts/smoke_label_list_payloads.py` checks real PostgreSQL field trimming, scalar/non-run preservation, SQL-vs-JSON task mismatch, owner isolation, committed reads under a write lock, exception rollback/IDLE and connection reuse. The 1,000/10,000-task isolated PostgreSQL benchmark alternates full and list-only bounded reads five times and compares output identity, serialized payload bytes, P95 and repository-level peak memory. This synthetic benchmark does not certify production latency or a complete SQL summary.
 
 `git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > /tmp/legacy-installer-v566.sh` followed by `VANTALINE_BASE_INSTALLER=/tmp/legacy-installer-v566.sh bash scripts/smoke_release_installer_bridge.sh` executes the production installer inside private Linux mount namespaces with synthetic archives and stubbed systemd/database/HTTP commands. It checks successful embedded installation, missing/mismatched/unsupported topology and bad checksum before service stop, failed health rollback, post-commit installer promotion failure and exact-release retry, and rejection when the already-installed live commit differs. The matrix also executes the frozen v566 installer for the first bridge package, the promoted installer for a second embedded release, legacy-current retry without installer downgrade, and TERM/INT on both sides of the application commit boundary. The CI release-package job builds the complete immutable package and verifies VERSION, topology, installer bytes and checksums. These tests do not prove an independent worker topology or real production latency. The release workflow separately compares the promoted host installer digest with the immutable artifact and checks the live commit before publishing.
+
+
+## COS runtime tests
+
+Run `scripts/smoke_artifact_storage.py` for failed/corrupt upload, immutable object
+retention after DB failure, CAS conflict, cache pins/eviction, reserved-space refusal
+and kernel-lock release after process death. `scripts/smoke_artifact_integrations.py`
+checks comparison/text media ownership, real HTTP middleware with synthetic users,
+HEAD/Range/ETag, legacy sharing, original-byte ZIP packaging, RunPod token transfer,
+synthetic artifact import and named local model loading without source files.
+These tests do not claim real model inference or remote GPU acceptance.
+
+Set `ARTIFACT_TEST_DATABASE_URL` to a disposable database named exactly
+`vantaline_cos_storage_test` and run `scripts/smoke_artifact_postgres.py`; it refuses
+other database names and checks real concurrent CAS, migration idempotence, prefix
+isolation, rollback and retained versions. The CI artifact-storage job uses its own
+PostgreSQL service and synthetic fixtures.
+
+`benchmark_artifact_workspace.py --report NEW_REPORT` is an opt-in 3,920,294,827-byte
+incompressible synthetic ZIP benchmark, not a paid training call or a substitute
+for actual historical-dataset acceptance. It records output/reserved space, free
+space and cleanup and retains no benchmark archive.

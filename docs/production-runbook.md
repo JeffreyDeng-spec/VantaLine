@@ -1042,3 +1042,29 @@ No operator action is needed. The first label task-list page transfers fewer mod
 For the first bridge release, expect the old host installer to perform the application switch and then promote the new installer. The production workflow must read back the installed script digest and exact live `/api/version` commit before publishing. The next embedded release exercises the new manifest check. Only `vantaline` is permitted in this bridge; there is no separate label-worker service or joint-service rollback yet.
 
 If promotion fails after the application has passed health checks, the command reports `application_committed=true control_promotion=incomplete` and fails. Verify the live commit, then retry the same immutable release to complete promotion; do not infer that the application rolled back. If the application fails before commitment, the installer restores the previous symlink and Web service as before. Never enable a separate worker based on this embedded-only bridge.
+
+
+## COS runtime transition gates
+
+The compatibility adapters remain disabled by default; their presence is not disk
+retirement evidence. First install the pinned SDK dependencies through the existing
+controlled dependency update, then deploy a complete CI-approved immutable package.
+Do not copy application modules to the host. Keep a complete COS-compatible rollback
+package before changing storage mode.
+
+`import_cos_locations.py --pair MANIFEST RECEIPT --report NEW_REPORT` validates
+complete manifest/receipt identity and reads every unique remote object back without
+opening the original disk. Add `--apply` to append missing locations after verification.
+Provide runtime configuration and systemd credentials as above. Reports are exclusive
+0600 files; partial imports can resume, but a conflicting path requires explicit delta
+reconciliation. Historical object keys are reused, never copied to a second prefix.
+
+Do not enable production COS until every business file producer/consumer, active
+missing reference, two-account permission test, largest-dataset preparation, bounded
+real RunPod/detection test, final paused-writer delta, fresh database restore and
+rollback gate pass. Normal maintenance starts only after readiness; begin rollback
+at minute 25 and restore within 30 minutes. If the expired disk is reclaimed first,
+remain in maintenance and recover only with a COS-compatible complete package.
+After normal unmount, verify service restart, host reboot, a complete release and
+COS rollback with no legacy-disk fallback or fstab dependency. Observe seven days
+without formatting the original disk or deleting historical COS objects.

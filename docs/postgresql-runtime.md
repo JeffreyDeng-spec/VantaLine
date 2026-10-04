@@ -402,3 +402,15 @@ The administrator model-profile projection now uses `Repository.read_tx()`: comm
 ## Label list-only run payloads
 
 A dedicated owner-scoped `list_run_payloads_for_tasks` query keeps the existing 64-ID bound, SQL task grouping and short read transaction. For object JSON carrying `kind=run`, PostgreSQL removes five fields later discarded by the API run projection; other JSON shapes pass through unchanged. It reads all run rows and retains SQL column ordering only as the input to the existing per-task JSON-time sort. There is no schema or index change; writes and claims keep the advisory transaction lock.
+
+
+## File location index
+
+`2026_10_04_artifact_locations.sql` is an idempotent expand migration.
+`vantaline.artifact_locations` retains logical path, generation, object key, size,
+SHA-256, ready/deleted state and creation time. The composite primary key and
+per-path transaction advisory lock implement compare-and-swap publication. Reads
+and writes own short separate connections; no business transaction is borrowed.
+Rollback retains this additive table and every prior generation. The initial
+index importer rejects a differing existing path and re-verifies remote contents
+before publishing missing rows. It does not overwrite newer business writes.

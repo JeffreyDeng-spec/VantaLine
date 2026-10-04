@@ -6,6 +6,7 @@ import shutil
 import tempfile
 from typing import Any
 from PIL import Image
+from ..storage.artifacts.runtime import get_runtime
 
 
 def file_sha256(path: Path) -> str:
@@ -18,11 +19,27 @@ def file_sha256(path: Path) -> str:
 
 class DatasetArchives:
     def __init__(self, safe_name: Callable[[str], str], skip_dirs: Callable[[], Set[str]],
-                 jpeg_quality: Callable[[], int], digest: Callable[[Path], str]):
+                 jpeg_quality: Callable[[], int], digest: Callable[[Path], str], *, runtime_provider=get_runtime):
         self.safe_name, self.skip_dirs = safe_name, skip_dirs
         self.jpeg_quality, self.digest = jpeg_quality, digest
+        self.runtime_provider = runtime_provider
+
+    def _cos_package(self, dataset_dir: Path, *, worker=False):
+        runtime = self.runtime_provider()
+        if runtime is None:
+            return None
+        key = runtime.key(dataset_dir)
+        if runtime.mode == "hybrid" and not runtime.store.list(key):
+            return None
+        from ..storage.artifacts.archives import package
+        # RunPod accepts native PNG training images. Stream original bytes to
+        # avoid an unbounded second image tree or lossy changes during migration.
+        return package(runtime.store, key, skip_dirs=self.skip_dirs() if worker else ())
 
     def package_training_dataset(self, dataset_dir: Path, job_id: str) -> tuple[tempfile.TemporaryDirectory[str], Path]:
+        remote = self._cos_package(dataset_dir)
+        if remote is not None:
+            return remote
         if not dataset_dir.exists() or not dataset_dir.is_dir():
             raise RuntimeError(f"Training dataset directory is missing: {dataset_dir}")
         temp_dir = tempfile.TemporaryDirectory(prefix=f"vantaline_{self.safe_name(job_id)}_")
@@ -40,6 +57,9 @@ class DatasetArchives:
     so converting the extension is safe and keeps the dataset trainable while
     cutting the payload several-fold.
     """
+        remote = self._cos_package(dataset_dir, worker=True)
+        if remote is not None:
+            return remote
         if not dataset_dir.exists() or not dataset_dir.is_dir():
             raise RuntimeError(f"Training dataset directory is missing: {dataset_dir}")
         temp_dir = tempfile.TemporaryDirectory(prefix=f"vantaline_worker_{self.safe_name(job_id)}_")
@@ -68,6 +88,13 @@ class DatasetArchives:
         return temp_dir, archive_path
 
     def dataset_file_manifest(self, dataset_dir: Path) -> list[dict[str, Any]]:
+        runtime = self.runtime_provider()
+        if runtime is not None:
+            key = runtime.key(dataset_dir)
+            rows = runtime.store.list(key)
+            if rows or runtime.mode != "hybrid":
+                return [{"path": Path(row.path).relative_to(key).as_posix(), "size": row.size,
+                         "sha256": row.sha256} for row in rows]
         files = []
         for path in sorted(item for item in dataset_dir.rglob("*") if item.is_file()):
             rel = path.relative_to(dataset_dir).as_posix()

@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""Storage adapters with real HTTP middleware, synthetic accounts/bytes, no cloud."""
+import ast
+import asyncio
+import hashlib
+import io
+from pathlib import Path, PurePosixPath
+import sys
+import unittest
+import zipfile
+
+from fastapi import FastAPI, HTTPException
+from starlette.testclient import TestClient
+
+from smoke_artifact_storage import StorageTests
+from local_inspection_service.auth.middleware import SecurityDependencies, register_security_middleware
+from local_inspection_service.runtime.identity import RequestIdentity
+from local_inspection_service.storage.artifacts.runtime import ArtifactRuntime
+from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
+from local_inspection_service.storage.artifacts.types import ArtifactUnavailable
+from local_inspection_service.codex_compare.media import MediaStore
+from local_inspection_service.text_inspection.media import TextMedia, TextMediaRecords
+from local_inspection_service.training.dataset_archives import DatasetArchives
+
+
+class IntegrationTests(unittest.TestCase):
+    setUp = StorageTests.setUp
+    tearDown = StorageTests.tearDown
+    put = StorageTests.put
+
+    def runtime(self, mode="cos"):
+        return ArtifactRuntime(self.store, self.root.resolve(), mode)
+
+    def test_comparison_media_two_accounts_and_no_local_files(self):
+        media = MediaStore(self.root / "codex_comparisons", runtime_provider=self.runtime)
+        sha = media.put("alice", b"image")
+        self.assertFalse(media.path("alice", sha).exists())
+        self.assertEqual(media.read("alice", sha), b"image")
+        with self.assertRaises(FileNotFoundError):
+            media.read("bob", sha)
+        self.assertEqual(media.put("alice", b"image"), sha)
+        self.assertEqual(len(self.client.calls), 1)
+
+    def test_hybrid_tombstone_never_resurrects_local_comparison_media(self):
+        media = MediaStore(self.root / "codex_comparisons", runtime_provider=lambda: self.runtime("hybrid"))
+        sha = media.put("alice", b"image")
+        path = media.path("alice", sha)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"image")
+        self.store.remove(self.runtime().key(path), expected_generation=1)
+        with self.assertRaises(FileNotFoundError):
+            media.read("alice", sha)
+
+    def test_text_media_integrity_owner_and_upload_failure(self):
+        media = TextMedia(lambda: self.root / "text_inspection_v2", lambda b: hashlib.sha256(b).hexdigest(),
+                          TextMediaRecords(lambda: None, lambda *args: True), runtime_provider=self.runtime)
+        path = media.media_path("alice", "std", "source.png")
+        media.write(path, b"source")
+        self.assertFalse(path.exists())
+        self.assertEqual(media.read_verified(str(path), "alice", "std"), b"source")
+        for owner, standard, sha in [("bob", "std", ""), ("alice", "wrong", ""), ("alice", "std", "0"*64)]:
+            with self.assertRaises(HTTPException):
+                media.read_verified(str(path), owner, standard, expected_sha256=sha)
+        self.client.fail = True
+        with self.assertRaises(ArtifactUnavailable):
+            media.write(path, b"changed")
+        self.assertEqual(self.store.stat(self.runtime().key(path)).generation, 1)
+
+    def http(self):
+        outputs = self.root / "outputs"
+        outputs.mkdir(exist_ok=True)
+        app = FastAPI()
+        # Execute the actual application's small ownership predicate, avoiding
+        # importing its unrelated model/worker startup in this HTTP contract.
+        source = ast.parse((Path(__file__).resolve().parents[1] / "local_inspection_service/server.py").read_text())
+        function = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == "output_path_visible_to_user")
+        scope = {"OUTPUT_DIR": outputs, "PurePosixPath": PurePosixPath,
+                 "Any": object, "user_is_admin": lambda u: u.get("role") == "admin"}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "actual_output_ownership", "exec"), scope)
+        def authenticate(request, **kwargs):
+            owner = request.headers.get("x-test-owner")
+            return ({"id": owner, "role": "user"} if owner else None, {"users": True}, False)
+        register_security_middleware(app, SecurityDependencies(
+            authenticate, lambda store: True, RequestIdentity(), scope["output_path_visible_to_user"],
+            lambda *args: True, lambda *args: False))
+        app.mount("/outputs", ArtifactStaticFiles(directory=outputs, runtime_provider=self.runtime))
+        return TestClient(app)
+
+    def test_http_owner_head_range_etag_and_legacy_share(self):
+        self.put(contents=b"0123456789")
+        self.put("outputs/legacy.png", b"legacy")
+        with self.http() as client:
+            url = "/outputs/users/a/image.png"
+            self.assertEqual(client.get(url).status_code, 401)
+            self.assertEqual(client.get(url, headers={"x-test-owner": "b"}).status_code, 404)
+            headers = {"x-test-owner": "a"}
+            response = client.get(url, headers=headers)
+            self.assertEqual(response.content, b"0123456789")
+            self.assertEqual(response.headers["content-type"], "image/png")
+            head = client.head(url, headers=headers)
+            self.assertEqual((head.status_code, head.content, head.headers["content-length"]), (200, b"", "10"))
+            response = client.get(url, headers={**headers, "range": "bytes=2-4"})
+            self.assertEqual((response.status_code, response.content), (206, b"234"))
+            self.assertEqual(client.get(url, headers={**headers, "range": "bytes=99-100"}).status_code, 416)
+            self.assertEqual(client.get(url, headers={**headers, "if-none-match": head.headers["etag"]}).status_code, 304)
+            self.assertEqual(client.get("/outputs/legacy.png", headers={"x-test-owner": "b"}).content, b"legacy")
+
+    def test_http_cos_failure_is_redacted_and_never_serves_old_local_file(self):
+        row = self.put()
+        local = self.root / row.path
+        local.parent.mkdir(parents=True)
+        local.write_bytes(b"stale")
+        self.client.fail = True
+        with self.http() as client:
+            response = client.get("/" + row.path, headers={"x-test-owner": "a"})
+            self.assertEqual(response.status_code, 503)
+            self.assertNotIn(b"signed-secret", response.content)
+            self.assertNotIn(b"stale", response.content)
+
+    def test_cos_training_packages_without_local_dataset_and_keeps_original_bytes(self):
+        self.budget.limits["work"] = 4*1024*1024
+        self.budget.free_bytes = lambda: 20*1024*1024
+        prefix = "outputs/users/a/dataset"
+        self.put(prefix + "/images/train/a.png", b"native-png")
+        self.put(prefix + "/labels/train/a.txt", b"0 0.5 0.5 0.2 0.2")
+        self.put(prefix + "/previews/a.png", b"preview")
+        archives = DatasetArchives(lambda s: s, lambda: {"previews"}, lambda: 90,
+                                   lambda p: self.fail("no source disk access"), runtime_provider=self.runtime)
+        dataset = self.root / prefix
+        self.assertFalse(dataset.exists())
+        self.assertEqual(len(archives.dataset_file_manifest(dataset)), 3)
+        temp, path = archives.build_worker_training_bundle(dataset, "fixture")
+        try:
+            with zipfile.ZipFile(path) as archive:
+                self.assertEqual(archive.namelist(), ["images/train/a.png", "labels/train/a.txt"])
+                self.assertEqual(archive.read("images/train/a.png"), b"native-png")
+            with self.assertRaises(ArtifactUnavailable):
+                archives.package_training_dataset(dataset, "second")
+        finally:
+            temp.cleanup()
+        self.assertFalse(path.exists())
+
+    def test_corrupt_training_input_never_returns_successful_package(self):
+        self.budget.limits["work"] = 4*1024*1024
+        self.budget.free_bytes = lambda: 20*1024*1024
+        self.put("outputs/dataset/image.png", b"image")
+        self.client.corrupt = True
+        from local_inspection_service.storage.artifacts.archives import package
+        with self.assertRaises(ArtifactUnavailable):
+            package(self.store, "outputs/dataset")
+        self.assertFalse(list((self.budget.root / "scratch").iterdir()))
+
+    def test_runpod_export_token_download_upload_and_model_import(self):
+        from local_inspection_service.training.runpod_exports import RunPodExports, RunPodExportPaths, RunPodExportPolicy
+        from local_inspection_service.training.runpod_transfer import RunPodTrainingTransfer, TransferPaths
+        from local_inspection_service.training.runpod_upload_store import RunPodUploadStore
+        from local_inspection_service.training.runpod_artifacts import RunPodArtifacts, RunPodArtifactPaths
+        self.budget.limits.update(work=4*1024*1024, upload=2*1024*1024, cache=2*1024*1024)
+        self.budget.free_bytes = lambda: 20*1024*1024
+        output = self.root / "outputs"
+        dataset = output / "users/alice/training_datasets/sample"
+        self.put(self.runtime().key(dataset / "images/train/a.png"), b"image")
+        tasks = {"job": {"job_id": "job", "owner_user_id": "alice"}}
+        updates = []
+        def update(job, **values):
+            updates.append(values)
+            tasks[job].update(values)
+        digest = lambda data: hashlib.sha256(data).hexdigest()
+        archives = DatasetArchives(str, lambda: set(), lambda: 90, lambda p: digest(p.read_bytes()), runtime_provider=self.runtime)
+        output_path = lambda kind, owner: output / "users" / owner / kind
+        exports = RunPodExports(RunPodExportPaths(lambda: Path, output_path, str),
+                                RunPodExportPolicy(lambda s: digest(s.encode()), lambda: 300, lambda: "https://fixture.invalid"),
+                                archives.build_worker_training_bundle, lambda p: digest(p.read_bytes()), lambda: update,
+                                runtime_provider=self.runtime)
+        exported = exports.create_runpod_training_dataset_archive("job", tasks["job"], {"dataset_dir": str(dataset)})
+        self.assertFalse(Path(exported["path"]).exists())
+        token = exported["url"].split("/")[-2]
+        receiver = RunPodUploadStore(lambda: 2*1024*1024, runtime_provider=self.runtime)
+        transfers = RunPodTrainingTransfer(tasks.get, lambda s: digest(s.encode()), lambda: 0,
+                                          TransferPaths(lambda: Path, lambda: output), receiver, lambda: update,
+                                          runtime_provider=self.runtime)
+        app = FastAPI()
+        @app.get("/download/{token}")
+        def download(token):
+            return transfers.download_runpod_training_dataset("job", token)
+        with TestClient(app) as client:
+            self.assertEqual(client.get("/download/wrong").status_code, 404)
+            response = client.get("/download/" + token)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(digest(response.content), exported["sha256"])
+        upload = exports.create_runpod_training_artifact_upload("job", tasks["job"])
+        upload_token = upload["url"].split("/")[-2]
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("train/weights/best.pt", b"synthetic-model")
+        class Body:
+            async def stream(self):
+                yield buffer.getvalue()
+        received = asyncio.run(transfers.upload_runpod_training_artifact("job", upload_token, Body()))
+        self.assertTrue(received["ok"])
+        self.assertFalse(Path(upload["path"]).exists())
+        importer = RunPodArtifacts(RunPodArtifactPaths(Path, lambda: output, lambda: output_path),
+                                  tasks.get, lambda value: value, runtime_provider=self.runtime)
+        result = importer.import_runpod_yolo_artifacts(tasks["job"], {"artifacts": {"best_pt": {"sha256": digest(b"synthetic-model")}}})
+        self.assertEqual(self.store.read_bytes(self.runtime().key(Path(result["imported_model_path"])), max_bytes=100), b"synthetic-model")
+        from local_inspection_service.storage.artifacts.files import BusinessFiles
+        from local_inspection_service.detection.local_models import LocalModels
+        loaded_paths = []
+        def load(path):
+            loaded_paths.append(Path(path))
+            self.assertEqual(Path(path).suffix, ".pt")
+            return Path(path).read_bytes()
+        models = LocalModels(lambda *args: {"id": "model", "path": result["imported_model_path"]},
+                             lambda: load, lambda: [], lambda config: [], files=BusinessFiles(self.runtime))
+        self.assertEqual(models.model("model"), b"synthetic-model")
+        self.assertFalse(loaded_paths[0].exists())
+        # A failed replacement upload cannot report success or update task refs.
+        count = len(updates)
+        self.client.fail = True
+        with self.assertRaises(ArtifactUnavailable):
+            asyncio.run(transfers.upload_runpod_training_artifact("job", upload_token, Body()))
+        self.assertEqual(len(updates), count)
+        self.assertFalse(list((self.budget.root / "scratch").iterdir()))
+
+
+if __name__ == "__main__":
+    unittest.main(defaultTest="IntegrationTests")

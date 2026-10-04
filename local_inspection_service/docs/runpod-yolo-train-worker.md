@@ -159,3 +159,16 @@ Real acceptance still needs the manager-gated RunPod endpoint:
 3. Confirm training reaches `completed`.
 4. Confirm `best.pt` `sha256` and artifact download/upload.
 5. Confirm inference smoke passes with the returned model.
+
+
+## COS compatibility path
+
+In opt-in COS mode, the host builds ZIPs from indexed objects using one bounded
+workspace, preserving native image bytes and skipping the existing training-only
+excluded folders. The RunPod worker still receives the same token-protected ZIP
+URL and SHA-256/size contract. It accepts native PNGs; only the old local path
+performs the historical JPEG conversion. Dataset publication verifies COS before
+saving task tokens/references. Uploads are bounded and verified before task success;
+model imports retain original logical paths and immutable object history. No local
+CPU/GPU fallback or new paid retry is introduced. Real remote acceptance remains
+a separate budgeted gate after synthetic transfer tests.

@@ -3,11 +3,14 @@ import os
 import re
 from pathlib import Path
 from .contracts import digest, normalize_image
+from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.types import ArtifactConflict
 
 
 class MediaStore:
-    def __init__(self, root):
+    def __init__(self, root, *, runtime_provider=get_runtime):
         self.root = Path(root).resolve()
+        self.runtime_provider = runtime_provider
 
     def path(self, owner, sha):
         if not re.fullmatch('[a-f0-9]{64}', sha):
@@ -20,6 +23,21 @@ class MediaStore:
     def put(self, owner, data):
         sha = digest(data)
         path = self.path(owner, sha)
+        runtime = self.runtime_provider()
+        if runtime is not None:
+            key = runtime.key(path)
+            existing = runtime.store.locations.get(key)
+            if existing and existing.state == 'ready':
+                if (existing.sha256, existing.size) != (sha, len(data)):
+                    raise ValueError('Corrupt stored evidence')
+                return sha
+            try:
+                runtime.store.put_bytes(key, data, expected_generation=existing.generation if existing else 0)
+            except ArtifactConflict:
+                current = runtime.store.stat(key)
+                if (current.sha256, current.size) != (sha, len(data)):
+                    raise
+            return sha
         # The provisioned root group is limited to web/worker accounts.
         self.root.mkdir(parents=True, exist_ok=True)
         try:
@@ -51,7 +69,21 @@ class MediaStore:
                 'preview': self.put(owner, preview), 'size': size}
 
     def read(self, owner, sha):
-        data = self.path(owner, sha).read_bytes()
+        path = self.path(owner, sha)
+        runtime = self.runtime_provider()
+        if runtime is None:
+            data = path.read_bytes()
+        else:
+            key = runtime.key(path)
+            row = runtime.store.locations.get(key)
+            if row is not None:
+                if row.state != 'ready':
+                    raise FileNotFoundError('Evidence was removed')
+                data = runtime.store.read_bytes(key, max_bytes=row.size)
+            else:
+                if runtime.mode != 'hybrid':
+                    raise FileNotFoundError('Evidence not found')
+                data = path.read_bytes()
         if digest(data) != sha:
             raise ValueError('Evidence hash mismatch')
         return data
