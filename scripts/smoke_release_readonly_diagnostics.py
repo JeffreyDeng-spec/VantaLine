@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,11 +117,58 @@ class DiagnosticTests(unittest.TestCase):
              mock.patch.object(M,'bounded',side_effect=fake_read), \
              mock.patch.object(M.urllib.request,'build_opener',return_value=opener) as build, \
              contextlib.redirect_stdout(output):
-            M.main()
+            print(json.dumps(M.collect()))
         opener.open.assert_called_once_with('http://127.0.0.1:8765/api/version',timeout=5)
         self.assertEqual(build.call_args.args[0].proxies,{})
         self.assertIsInstance(build.call_args.args[1],M.NoRedirect)
         self.assertNotIn('NEVER_PRINT',output.getvalue());M.validate_report(json.loads(output.getvalue()))
+
+    @unittest.skipIf(os.name=='nt','POSIX open-file rename semantics')
+    def test_lock_aba_fd_identity(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw);lock=root/'lock';saved=root/'saved';replacement=root/'replacement'
+            lock.write_bytes(b'42\n');replacement.write_bytes(b'77\n')
+            actual_open=os.open;changed=[]
+            def swap(path,flags,*args,**kwargs):
+                if Path(path)==lock and not changed:
+                    changed.append(True);lock.rename(saved);replacement.rename(lock)
+                    fd=actual_open(path,flags,*args,**kwargs)
+                    lock.rename(replacement);saved.rename(lock)
+                    return fd
+                return actual_open(path,flags,*args,**kwargs)
+            with mock.patch.object(M.os,'open',side_effect=swap):value=M.lock_state(lock,root/'proc')
+            self.assertEqual(lock.read_bytes(),b'42\n')
+            self.assertFalse(value['stable_during_read']);self.assertNotIn('process',value)
+            self.assertEqual(value['inspection'],'unavailable')
+
+    @unittest.skipIf(os.name=='nt','POSIX diagnostic deadline')
+    def test_overall_deadline_stops_drip_response(self):
+        stopped=threading.Event()
+        class Drip(BaseHTTPRequestHandler):
+            def log_message(self,*args):pass
+            def do_GET(self):
+                self.send_response(200);self.end_headers()
+                while not stopped.wait(.02):
+                    try:self.wfile.write(b' ');self.wfile.flush()
+                    except (BrokenPipeError,ConnectionResetError):break
+        server=ThreadingHTTPServer(('127.0.0.1',0),Drip)
+        thread=threading.Thread(target=server.serve_forever);thread.start()
+        real=M.urllib.request.build_opener(M.urllib.request.ProxyHandler({}),M.NoRedirect())
+        opener=mock.Mock()
+        opener.open.side_effect=lambda *a,**kw:real.open('http://127.0.0.1:'+str(server.server_port),timeout=.1)
+        output=io.StringIO();started=time.monotonic()
+        try:
+            with mock.patch.object(M,'lock_state',return_value={'present':False}), \
+                 mock.patch.object(M,'service_state',return_value={'inspection':'unavailable'}), \
+                 mock.patch.object(M,'bounded',side_effect=OSError('private')), \
+                 mock.patch.object(M.urllib.request,'build_opener',return_value=opener), \
+                 mock.patch.object(M,'DEADLINE_SECONDS',.2),contextlib.redirect_stdout(output):
+                with self.assertRaisesRegex(SystemExit,'Diagnostic deadline exceeded; no report emitted'):M.main()
+            self.assertLess(time.monotonic()-started,1)
+            self.assertEqual(output.getvalue(),'')
+            self.assertEqual(M.signal.getitimer(M.signal.ITIMER_REAL),(0,0))
+        finally:
+            stopped.set();server.shutdown();server.server_close();thread.join(timeout=2)
 
     def test_workflow_transport_and_environment_guards(self):
         source=(ROOT/'.github/workflows/release-readonly-diagnostics.yml').read_text()

@@ -51,4 +51,4 @@ jobs:
             echo 'Read-only SSH diagnostic failed; transport details suppressed.'
             exit 1
           fi
-          python3 scripts/read_production_release_state.py --validate < "$task_dir/ssh.stdout"
+          python3 -I -S -B scripts/read_production_release_state.py --validate < "$task_dir/ssh.stdout"
