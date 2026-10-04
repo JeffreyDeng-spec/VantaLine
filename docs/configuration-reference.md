@@ -1141,7 +1141,7 @@ The label batch/payload benchmark diagnostic output adds no runtime setting. It 
 
 The existing VANTALINE_FILE_STORE setting also governs shared file checksums used by startup guide provenance and training metadata. No additional hash setting or local fallback is introduced; COS reads use a pinned, verified cache file.
 
-The controller bridge adds no business configuration or worker-mode override. `--capabilities` is a read-only installed-controller probe. A future external topology requires an already-running protocol-1 embedded bridge and a non-null shared configuration revision; both roles must agree on that revision. This release still packages the exact schema-1 embedded manifest and does not install a worker unit during ordinary schema-1 deployments.
+The controller bridge adds no business configuration or worker-mode override. `--capabilities` is a read-only installed-controller probe. A future external topology requires an already-running protocol-1 embedded bridge and a non-null shared configuration revision; both roles must agree on that revision. The builder now emits the exact schema-2 embedded manifest with runtime protocol 1 and the sole Web service. No separate worker unit is installed.
 
 Rollback pauses the candidate before waiting for its active runs and admitted iterations to finish; it preserves queued rows without starting paid work on an unaccepted build. A forward switch from an already-paused predecessor also retains its backlog and pause intent. An active predecessor still drains its queue before a normal forward switch. State-machine and rendered-installer faults cover queued legacy-to-managed rollback and paused-backlog transitions; queued work is not evidence of an active call.
 
