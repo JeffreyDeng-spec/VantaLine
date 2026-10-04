@@ -81,6 +81,11 @@ def main():
                                   "succeeded", 2, 2, "mismatch_run",
                                   json.dumps({"id": "mismatch_run", "task_id": "wrong_json_id",
                                               "status": "succeeded", "created_at": 2})))
+        # COPY creates a fresh synthetic table without planner statistics.
+        # Analyze before either query shape is prepared or timed so asynchronous
+        # auto-analyze cannot give the two arms different starting statistics.
+        with connection.cursor() as cursor:
+            cursor.execute(f"ANALYZE {table}")
         connection.commit()
         raw = PostgresRuntimeRepository(connection, "<redacted>", schema_name=schema)
         repo = LabelRepository(raw)

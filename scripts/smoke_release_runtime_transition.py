@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+from release_services import ServiceCommands
 
 from release_runtime_contract import ContractError, WEB, LABEL, Topology
 from release_runtime_transition import RuntimeTransition
@@ -384,6 +386,44 @@ class Transitions(unittest.TestCase):
         with self.assertRaises(ContractError): h.transition.begin(h.old,h.new)
         self.assertEqual(h.events,[])
         self.assertFalse(h.journal.exists())
+
+    def test_stop_timeout_retains_old_pointer_and_never_starts_candidate(self):
+        h = self.h
+        original_pid = h.processes[WEB]['pid']
+        original_install = h.install
+        def install(*args, **kwargs):
+            original_install(*args, **kwargs)
+            h.now += 60  # Budget already spent before the stop loop.
+        h.install = install
+        deadlines = []
+        def stuck_stop(services, *, deadline):
+            deadlines.append(deadline)
+            commands = ServiceCommands()
+            def state(service, field, **options):
+                return {'ActiveState':'deactivating', 'MainPID':str(original_pid), 'ControlPID':'77'}[field]
+            with (patch('release_services.time.monotonic', side_effect=h.transition.clock),
+                  patch('release_services.time.sleep', side_effect=h.sleep),
+                  patch.object(commands, 'property', side_effect=state),
+                  patch.object(commands, 'run', side_effect=lambda *args, **kw: h.events.append(args))):
+                commands.stop_all(services, deadline=deadline)
+        h.stop_all = stuck_stop
+        with self.assertRaisesRegex(ContractError, 'stop budget expired'):
+            h.transition.begin(h.old, h.new)
+            h.switch()
+            h.transition.start()
+        self.assertEqual(deadlines, [510.0])  # Initial virtual time10 + shared500.
+        self.assertEqual(h.now, 510.0)
+        self.assertEqual(h.current.resolve(), h.old)
+        self.assertEqual(h.processes[WEB]['pid'], original_pid)
+        self.assertNotIn(LABEL, h.processes)
+        self.assertFalse(any(event[0] == 'start' for event in h.events))
+        self.assertEqual(json.loads(h.journal.read_text())['phase'], 'stopping')
+        with self.assertRaisesRegex(ContractError, 'stop budget expired'):
+            h.transition.rollback(h.current)
+        self.assertEqual(h.current.resolve(), h.old)
+        self.assertTrue(h.journal.exists())
+        self.assertTrue(h.maintenance)
+        self.assertFalse(any(event[0] in ('start', 'restore') for event in h.events))
 
 
 if __name__ == '__main__': unittest.main()

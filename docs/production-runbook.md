@@ -1138,7 +1138,7 @@ The managed embedded runtime requires the installed controller bridge and prior 
 
 The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.
 
-Managed embedded activation requires a schema-2/protocol-1 package; the recovery-storage repair bridge currently emits schema 1. Its first installation uses the accepted controller, retains the sole Web service, initializes the new build paused behind maintenance, and reopens only after acceptance. The controller checks the effective 500-second stop setting and control-group kill mode before stopping services; a later administrator drop-in that wins the setting causes a pre-stop failure and restoration, not an assumed drain budget. The earlier COS commissioning 510-second instruction is for unmanaged embedded hosts; retain its actual administrator-owned file and reconcile its effective precedence during managed commissioning. This release does not enable an external worker.
+Managed embedded activation requires a schema-2/protocol-1 package; the recovery-storage repair bridge currently emits schema 1. Its first installation uses the accepted controller, retains the sole Web service, initializes the new build paused behind maintenance, and reopens only after acceptance. The compatible controller checks exact effective Web allowances of 500 or 510 seconds, worker allowance of 500 seconds, and control-group kill mode before stopping services. Unsupported effective values cause pre-stop failure and restoration. Retain the earlier COS commissioning administrator-owned 510-second file; the compatibility policy must be promoted through its preceding schema-1 release before managed commissioning. This release does not enable an external worker.
 
 
 ## Recovery storage bridge operation
@@ -1160,6 +1160,29 @@ old controller's same-ID retry cannot promote on the application-owned backups
 layout; recover with a different complete, reviewed schema-1 release. Retain all
 accepted and failed release evidence. Only after successor promotion and complete
 release acceptance may a separate schema-2 commissioning PR proceed. Effective
-500-second stop allowance and control-group mode remain mandatory for that later
-managed transition; this repair never rewrites an administrator's 510-second
-setting or claims that its precedence has been validated in production.
+Web allowance of exactly 500 or 510 seconds, worker allowance of exactly 500 seconds
+and control-group mode are mandatory with the separately promoted compatibility
+controller. The storage repair never rewrites an administrator's 510-second setting
+or claims that its precedence has been validated in production.
+
+
+## Commissioned stop allowance bridge
+
+Deploy the Web stop-allowance policy as a new complete schema-1 release after the
+root-storage bridge is accepted. This normal successor-driven installation also
+validates or creates the new root-only recovery directory; do not create it with a
+separate host command. Verify the exact promoted installer digest and healthy
+schema-1 version before a later schema-2 release. Merely bundling the policy in the
+schema-2 activation package is insufficient: the previously installed strict
+controller would still execute that transition.
+
+Keep administrator unit files unchanged. Managed commissioning checks the effective
+Web allowance is exactly 500 or 510 seconds and the label-worker allowance exactly
+500 seconds, with control-group mode for every involved service. The installer
+still has a shared 500-second forward drain/stop deadline and requires stopped
+service state with both PIDs zero before a pointer switch. A 510-second PID1 fallback
+does not extend that deadline or guarantee forced exit in 500 seconds. If stop or
+rollback cannot verify exit, retain both releases, root journal and call evidence;
+do not start a candidate, clear admission state or retry uncertain paid calls.
+
+The benchmark statistics preparation is confined to disposable synthetic schemas in local/CI validation. It requires no production database command, configuration change or manual deployment action. Whole-release acceptance and rollback requirements remain unchanged.

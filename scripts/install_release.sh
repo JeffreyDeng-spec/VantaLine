@@ -389,7 +389,10 @@ class UnitChanges:
             self.write(LABEL_UNIT, LABEL_TEMPLATE)
         self.commands.run('daemon-reload', timeout=budget())
         for service in dict.fromkeys((*topology.services, *stopping_services)):
-            if duration_seconds(self.commands.property(service, 'TimeoutStopUSec', timeout=budget())) != 500:
+            # Web may retain the previously commissioned administrator allowance.
+            # This is PID1's fallback, not an extension of the controller deadline.
+            allowed = (500, 510) if service == WEB else (500,)
+            if duration_seconds(self.commands.property(service, 'TimeoutStopUSec', timeout=budget())) not in allowed:
                 raise ContractError('Effective service stop budget mismatch')
             if self.commands.property(service, 'KillMode', timeout=budget()) != 'control-group':
                 raise ContractError('Effective service kill mode mismatch')
