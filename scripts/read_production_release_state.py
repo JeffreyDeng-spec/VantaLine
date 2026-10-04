@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import signal
 import subprocess
 import sys
 import math
@@ -21,15 +22,21 @@ PROC = Path("/proc")
 INSTALLER = Path("/usr/local/sbin/vantaline-install-release")
 
 
-def bounded(path, limit):
+def identity(info):
+    return info.st_dev, info.st_ino, info.st_mtime_ns, (info.st_ctime_ns if os.name != "nt" else None), info.st_size
+
+
+def bounded(path, limit, *, metadata=False):
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
     with os.fdopen(descriptor, "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode):
             raise ValueError("Diagnostic input is not a regular file")
         data = stream.read(limit + 1)
+        after = os.fstat(stream.fileno())
     if len(data) > limit:
         raise ValueError("Diagnostic input exceeds bound")
-    return data
+    return (data, before, after) if metadata else data
 
 
 def process_state(pid, proc=PROC):
@@ -69,7 +76,13 @@ def lock_state(path=BASE / "backups/.production-release.lock", proc=PROC):
     if not result["regular_file"]:
         return result
     try:
-        value = bounded(path, 64).strip()
+        data, opened, finished = bounded(path, 64, metadata=True)
+        after = path.lstat()
+        result["stable_during_read"] = len({identity(item) for item in (before, opened, finished, after)}) == 1
+        if not result["stable_during_read"]:
+            result["inspection"] = "unavailable"
+            return result
+        value = data.strip()
         if re.fullmatch(rb"[1-9][0-9]{0,9}", value):
             process = process_state(int(value), proc)
             result["process"] = process
@@ -77,9 +90,6 @@ def lock_state(path=BASE / "backups/.production-release.lock", proc=PROC):
                 result["process_started_before_lock"] = process["started_at_epoch"] <= before.st_mtime
         else:
             result["pid_format"] = "invalid"
-        after = path.lstat()
-        result["stable_during_read"] = (before.st_ino, before.st_mtime_ns, before.st_size) == (
-            after.st_ino, after.st_mtime_ns, after.st_size)
     except Exception:
         result["inspection"] = "unavailable"
     return result
@@ -181,7 +191,7 @@ def validate_report(value):
     return value
 
 
-def main():
+def collect():
     result = {"schema": 1, "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="microseconds"),
               "lock": lock_state(), "services": {}}
     for name in ("vantaline", "vantaline-label-worker"):
@@ -204,6 +214,32 @@ def main():
         result["http_version"] = version_fields(json.loads(raw))
     except Exception:
         result["http_version"] = {"inspection": "unavailable"}
+    return result
+
+
+class DiagnosticDeadline(BaseException):
+    """Not swallowed by per-field unavailable fallback."""
+
+
+def deadline_handler(signum, frame):
+    raise DiagnosticDeadline()
+
+
+DEADLINE_SECONDS = 30
+
+
+def main():
+    if not hasattr(signal, "SIGALRM"):
+        raise SystemExit("Diagnostic collection requires POSIX deadline support")
+    previous = signal.signal(signal.SIGALRM, deadline_handler)
+    signal.setitimer(signal.ITIMER_REAL, DEADLINE_SECONDS)
+    try:
+        result = collect()
+    except DiagnosticDeadline:
+        raise SystemExit("Diagnostic deadline exceeded; no report emitted") from None
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
     print(json.dumps(validate_report(result), sort_keys=True))
 
 
