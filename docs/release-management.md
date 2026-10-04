@@ -818,7 +818,7 @@ This read-only transfer change has no schema, topology, configuration or worker-
 
 ## Embedded release installer bridge
 
-An embedded-only immutable package now declares `RUNTIME_TOPOLOGY.json` with the exact release commit and sole service `vantaline`. The installer rejects a missing or unsupported declaration before stopping the Web service. The successor controller additionally understands fixed schema-2 embedded/external declarations with runtime protocol 1, and the current release builder emits schema 2 embedded with runtime protocol 1. The first bridge release is still applied by the preceding host installer; after health acceptance, that installer promotes the bundled successor. The release workflow verifies the promoted installer SHA-256 against the packaged file and checks the live `/api/version` commit before publishing. A later embedded release is required to exercise the new installer on the host. This bridge does not start, stop, or roll back an independent label worker.
+An embedded-only immutable package now declares `RUNTIME_TOPOLOGY.json` with the exact release commit and sole service `vantaline`. The installer rejects a missing or unsupported declaration before stopping the Web service. The successor controller additionally understands fixed schema-2 embedded/external declarations with runtime protocol 1, and the recovery-storage repair bridge emits schema 1 embedded; schema-2 activation requires a later separately accepted package. The first bridge release is still applied by the preceding host installer; after health acceptance, that installer promotes the bundled successor. The release workflow verifies the promoted installer SHA-256 against the packaged file and checks the live `/api/version` commit before publishing. A later embedded release is required to exercise the new installer on the host. This bridge does not start, stop, or roll back an independent label worker.
 
 An already-installed retry checks the live commit before installer promotion. It may validate an older package without a topology manifest, but it never promotes an installer from that legacy package. If the application has passed health checks and installer promotion then fails, the installer exits nonzero while preserving the accepted application; uploading and applying the same release again retries promotion. Do not publish the GitHub Release until the installer digest and live commit agree.
 
@@ -846,7 +846,7 @@ The installed script is generated from the checked-in installer template and run
 
 Schema-1 releases keep the existing Web restart path. A schema-2 transition journals the previous complete release, managed unit files and enable state before mutation. It checks live build/PID/instance/heartbeat/configuration identity, closes label admission, allows the existing queue to finish, and obtains a same-instance paused/empty acknowledgement. The 500-second shared controller budget covers drain and stopping all old roles; the managed unit stop fallback is also 500 seconds and effective systemd settings are verified. Inactive service state is not a drain acknowledgement. New roles are checked before admission is restored. Only the fixed Web drop-in and label-worker unit can be changed; unmanaged files are refused.
 
-A failed transition stops candidate roles before restoring managed units, the previous complete release pointer and its declared roles. Failed stop/drain evidence fails rollback closed and retains the journal and releases; it never restarts an old consumer alongside an unverified new one. The current package activates only schema-2 embedded controls after the accepted controller and additive state migration. Private-namespace drills and real PostgreSQL/control-socket integration cover that bridge. Shared configuration and independent-worker acceptance are still required before publishing an external topology.
+A failed transition stops candidate roles before restoring managed units, the previous complete release pointer and its declared roles. Failed stop/drain evidence fails rollback closed and retains the journal and releases; it never restarts an old consumer alongside an unverified new one. Managed embedded controls activate only in a schema-2 package after the accepted controller and additive state migration. The recovery-storage repair package temporarily declares schema 1 and leaves these controls inactive. Private-namespace drills and real PostgreSQL/control-socket integration cover that bridge. Shared configuration and independent-worker acceptance are still required before publishing an external topology.
 
 An unfinished managed journal is examined under the root release lock before requiring a live Web service. A stop before pointer replacement restores and verifies the previous release before retrying the exact archive; a verified pointer switch before startup starts the candidate in the paused state, then repeats full application acceptance. A same-release retry cannot promote a merely drained candidate: it must finish the journal-bound acceptance and preserve any preexisting maintenance/pause state. Interrupted rollback pointers are revision-bound and reusable. External-to-schema-1 downgrade is rejected before stopping services; its rollback partner must be a managed embedded bridge.
 
@@ -864,3 +864,33 @@ The label runtime-state preparation release adds only the idempotent `2026_10_04
 The managed embedded label runtime requires the preceding controller and empty operational-state migration before activation in a schema-2 embedded package. It retains one Web service and two embedded label threads. Root control commands are bounded and peer-authenticated; duplicate role startup fails before operational state is changed. Real PostgreSQL, thread and HTTP tests cover admission races, pause, re-entry and restart. External worker/configuration activation remains a later independently validated package.
 
 The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.
+
+
+## Recovery storage repair bridge
+
+The repair bridge is a new complete schema-1 embedded release. The previously
+installed controller applies its ordinary Web restart and promotes the successor
+only after application health passes. Use a fresh release identity: retrying an
+already-installed package through the old controller still checks its old journal
+parent and fails on an application-owned backups directory. The repair does not
+change ownership or modes of the existing application tree or backups.
+
+The successor creates only the absent fixed `/var/lib/vantaline-release` directory
+as root with mode 0700 during installation. It validates every ancestor, rejects
+symlinks, non-root owners and writable ancestors, and refuses unsafe existing
+state without repairing it. Capabilities, topology validation and mode discovery
+remain read-only. Recovery journals remain root-owned 0600 files written by atomic
+replacement and fsync. The existing guard and PID lock retain their locations and
+acquisition order for cross-version coordination. Any old-location journal, any
+other-release new-location journal, or an invalid current journal blocks before
+service stop; old evidence is never silently migrated or deleted.
+
+If old-controller installer promotion fails after the application was accepted,
+keep that accepted version running and collect the exact version and installed
+script digest. Its same-release retry cannot repair this ownership mismatch.
+Recovery requires another reviewed, CI-approved, newly identified complete
+schema-1 release through the ordinary deployment process. Do not repack or replace
+an existing release, copy an installer, change permissions, or clear locks/journals.
+After the successor is promoted, normal same-release retries use its trusted state
+location. Schema-2 commissioning remains a separate release; neither this bridge
+nor capabilities alone enable an independent worker.

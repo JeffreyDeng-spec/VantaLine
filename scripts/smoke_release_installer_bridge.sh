@@ -5,10 +5,10 @@ set -euo pipefail
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
   for scenario in active_lock success missing_manifest wrong_commit unknown_service boolean_schema bad_checksum health_failure promote_failure wrong_live_commit legacy_handoff legacy_current_no_downgrade term_before_commit int_after_commit; do
-    if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    if [[ "$EUID" -ne 0 ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
-      unshare -Ur -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
+      unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     fi
   done
   echo 'PASS embedded release installer bridge fault matrix'
@@ -18,6 +18,7 @@ scenario="${2:?scenario required}"
 source_root="$(cd "$(dirname "$0")/.." && pwd)"
 mount -t tmpfs -o size=3G tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
+mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
 base=/opt/vantaline
 mkdir -p "$base"/{incoming,releases,backups,shared/data,shared/models,testbin,venv/bin}
 ln -s "$(command -v python3)" "$base/venv/bin/python"

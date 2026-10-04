@@ -1119,7 +1119,7 @@ code rollback.
 
 After the root-owned script digest matches the immutable artifact, the workflow checks its read-only capabilities. Schema-1 deployments still use the existing embedded Web restart; the 500-second managed stop settings apply only when the later schema-2 runtime bridge is installed. Do not enable a worker from capability output alone. A first schema-2 external deployment must be preceded by an accepted embedded control protocol and explicit shared-configuration migration.
 
-Managed transitions retain root-only recovery evidence under the backups directory. A queue that cannot drain aborts the switch and attempts to restore the same instance's prior admission state. Missing/stale runtime identity, unavailable database evidence, wrong configuration and missing bridge prerequisites fail closed. A rollback failure keeps admission fenced, retains both complete releases and the transition journal, and reports failure instead of claiming recovery. Restore both declared roles from one complete version; never copy a runtime module or replay an uncertain paid call. Synthetic controller fault drills do not replace real worker, configuration, PostgreSQL concurrency and production acceptance tests.
+Managed transitions retain root-only recovery evidence under `/var/lib/vantaline-release`; any journal left in the older backups location blocks installation for inspection. A queue that cannot drain aborts the switch and attempts to restore the same instance's prior admission state. Missing/stale runtime identity, unavailable database evidence, wrong configuration and missing bridge prerequisites fail closed. A rollback failure keeps admission fenced, retains both complete releases and the transition journal, and reports failure instead of claiming recovery. Restore both declared roles from one complete version; never copy a runtime module or replay an uncertain paid call. Synthetic controller fault drills do not replace real worker, configuration, PostgreSQL concurrency and production acceptance tests.
 
 A killed installer leaves a PID lock and managed journal. A root advisory guard allows retry only when the old PID is demonstrably gone; an alive or ambiguous owner still blocks. Retry the same verified archive to recover the recorded phase, including when Web is stopped. Recovery checks the package before startup and repeats version, static assets, service journal and PDF proxy acceptance before reopening label admission. A different pending transition blocks another release. Do not delete the journal to bypass recovery. Existing maintenance and paused consumer states survive success or rollback.
 
@@ -1138,4 +1138,28 @@ The managed embedded runtime requires the installed controller bridge and prior 
 
 The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.
 
-The managed embedded package now declares schema 2/protocol 1. Its first installation uses the accepted controller, retains the sole Web service, initializes the new build paused behind maintenance, and reopens only after acceptance. The controller checks the effective 500-second stop setting and control-group kill mode before stopping services; a later administrator drop-in that wins the setting causes a pre-stop failure and restoration, not an assumed drain budget. The earlier COS commissioning 510-second instruction is for unmanaged embedded hosts; retain its actual administrator-owned file and reconcile its effective precedence during managed commissioning. This release does not enable an external worker.
+Managed embedded activation requires a schema-2/protocol-1 package; the recovery-storage repair bridge currently emits schema 1. Its first installation uses the accepted controller, retains the sole Web service, initializes the new build paused behind maintenance, and reopens only after acceptance. The controller checks the effective 500-second stop setting and control-group kill mode before stopping services; a later administrator drop-in that wins the setting causes a pre-stop failure and restoration, not an assumed drain budget. The earlier COS commissioning 510-second instruction is for unmanaged embedded hosts; retain its actual administrator-owned file and reconcile its effective precedence during managed commissioning. This release does not enable an external worker.
+
+
+## Recovery storage bridge operation
+
+Install the new schema-1 repair bridge as a fresh immutable release through normal
+CI deployment. Preserve the existing application-owned base/backups directories,
+legacy root guard and PID lock protocol, and administrator systemd drop-ins. The
+successor installer validates or creates its root-only 0700 state directory at
+`/var/lib/vantaline-release` during its next installation; read-only capability
+probes do not create this directory. Never use chmod/chown, file replacement or
+journal deletion to bypass a failed state check. Existing unsafe entries, legacy
+journals, other-release pending journals and malformed current journals require
+inspection before another transition.
+
+The old controller can accept the bridge application and then fail installer
+promotion. In this window the application may be healthy while the release remains
+unpublished. Confirm live release/commit and installer digest before recovery. The
+old controller's same-ID retry cannot promote on the application-owned backups
+layout; recover with a different complete, reviewed schema-1 release. Retain all
+accepted and failed release evidence. Only after successor promotion and complete
+release acceptance may a separate schema-2 commissioning PR proceed. Effective
+500-second stop allowance and control-group mode remain mandatory for that later
+managed transition; this repair never rewrites an administrator's 510-second
+setting or claims that its precedence has been validated in production.

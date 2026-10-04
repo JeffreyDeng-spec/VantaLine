@@ -1972,4 +1972,21 @@ The managed runtime deployment smoke combines the shipped release controller/cli
 
 The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.
 
-The release-package gate asserts the complete schema-2 embedded/protocol-1 manifest and sole Web role. The real PostgreSQL/control-socket deployment harness now imports the controller from this same checkout; it no longer requires another worktree on PYTHONPATH. Pre-stop effective-setting rejection, paused candidate acceptance and full rollback remain covered.
+For the recovery-storage bridge, the release-package gate asserts an exact schema-1 embedded manifest and sole Web role. Later managed activation must restore an explicit schema-2/protocol-1 package assertion. The real PostgreSQL/control-socket deployment harness now imports the controller from this same checkout; it no longer requires another worktree on PYTHONPATH. Pre-stop effective-setting rejection, paused candidate acceptance and full rollback remain covered.
+
+
+Recovery-storage regression runs `scripts/smoke_release_runtime_storage.py` on
+Linux for ancestor/owner/type/mode checks, permission and fsync failures, atomic
+journal replacement failure, capability read-only behavior and journal validation.
+The two `managed_root_journal_*` scenarios in the rendered installer suite freeze
+the accepted predecessor script by SHA-256 and run as root in private mount
+namespaces. They use real UID/GID 998 ownership for the base/backups, then verify
+schema-1 installation, successor promotion, same-release retry and a later managed
+embedded transition. Promotion failure also proves the old controller's exact
+same-release failure with the same archive restored, then recovers via a fresh
+complete schema-1 identity. Twelve unsafe/pending-storage cases assert unchanged
+Web PID, current pointer and offending metadata without a stop or permission fix.
+The original managed and embedded fault matrices remain required. Systemd, HTTP
+health and database replies are substitutes; Unix sockets and filesystem ownership
+are real. These tests do not certify production unit precedence, actual service
+availability throughout a deployment, or standalone worker acceptance.

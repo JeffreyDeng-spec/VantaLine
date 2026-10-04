@@ -78,6 +78,7 @@ jobs:
         run: |
           python scripts/render_release_installer.py
           python scripts/smoke_release_runtime_contract.py
+          python scripts/smoke_release_runtime_storage.py
           python scripts/smoke_release_runtime_client.py
           python scripts/smoke_release_runtime_transition.py
           python scripts/smoke_release_services.py
@@ -89,6 +90,11 @@ jobs:
         run: |
           git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"
           VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/legacy-installer-v566.sh" bash scripts/smoke_release_installer_bridge.sh
+      - name: Verify root journal bridge against the installed controller and UID998 layout
+        run: |
+          git show db29353bff54258d88c9b07ff62b2db41042327a:scripts/install_release.sh > "$RUNNER_TEMP/installed-controller-a.sh"
+          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_handoff
+          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_promotion_failure
       - name: Keep mutable backgrounds outside immutable releases
         shell: bash
         run: |
@@ -136,7 +142,7 @@ jobs:
           version = json.loads((root / 'VERSION.json').read_text())
           topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
           assert version['git_commit'] == commit
-          assert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,
+          assert topology == {'schema': 1, 'git_commit': commit,
                               'worker_mode': 'embedded', 'services': ['vantaline']}
           PY
   documentation:
