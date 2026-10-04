@@ -31,7 +31,17 @@ class ImageFiles:
         self.cv2_provider, self.pil_provider = cv2_provider, pil_provider
         self.files = files if files is not None else BusinessFiles()
 
-    def imread(self, filename, *args, **kwargs):
+    @property
+    def imread(self):
+        # Select the native callee before argument evaluation in local mode,
+        # exactly as cv2.imread(...), including injected/mutable backends.
+        return self.cv2_provider().imread if self.files.runtime_provider() is None else self._imread
+
+    @property
+    def imwrite(self):
+        return self.cv2_provider().imwrite if self.files.runtime_provider() is None else self._imwrite
+
+    def _imread(self, filename, *args, **kwargs):
         cv2 = self.cv2_provider()
         if self.files.runtime(filename) is None:
             return cv2.imread(filename, *args, **kwargs)
@@ -45,7 +55,7 @@ class ImageFiles:
             return None
         return cv2.imdecode(np.frombuffer(contents, dtype=np.uint8), flags)
 
-    def imwrite(self, filename, image, *args, **kwargs):
+    def _imwrite(self, filename, image, *args, **kwargs):
         cv2 = self.cv2_provider()
         if self.files.runtime(filename) is None:
             return cv2.imwrite(filename, image, *args, **kwargs)
