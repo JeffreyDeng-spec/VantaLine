@@ -29,6 +29,7 @@ JSON_COLUMNS = frozenset(
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
 PRIMARY_KEY_COLUMNS = {
+    "label_runtime_state": ("id",),
     "codex_comparison_tasks": ("id",),
     "codex_comparison_events": ("id",),
     "text_ocr_evidence": ("id",),

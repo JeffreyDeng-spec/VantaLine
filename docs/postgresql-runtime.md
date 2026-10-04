@@ -416,3 +416,8 @@ index importer rejects a differing existing path and re-verifies remote contents
 before publishing missing rows. It does not overwrite newer business writes.
 
 The additive artifact_locations index retains mtime_ns alongside immutable object identity and generation. Historical manifest imports preserve source time; new publications use database clock time. No original business table or legacy reference is rewritten by this expansion. JSON file mutations bind to the generation read, so a later concurrent version rejects publication.
+
+
+## Label runtime state preparation
+
+The additive `2026_10_04_label_runtime_state` migration creates an empty operational-state table with a text primary key, bigint update time and JSONB payload. It seeds no admission or worker state and changes no existing table, row, lock or runtime query. Generated PostgreSQL/SQLite schemas and the repository table/key registry include the same shape. A later release will define and use the runtime control protocol; this migration alone does not change label execution.

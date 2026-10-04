@@ -1126,3 +1126,7 @@ A killed installer leaves a PID lock and managed journal. A root advisory guard 
 The rollback journal records restored pointer/units before restarting old roles and binds their verified instances before reopening admission. Same-transition recovery then resumes that restoration without stopping a live old consumer, including a crash after admission reopened. Retain the journal until the whole-release health check and final cleanup succeed.
 
 Rollback pauses the candidate before waiting for its active runs and admitted iterations to finish; it preserves queued rows without starting paid work on an unaccepted build. A forward switch from an already-paused predecessor also retains its backlog and pause intent. An active predecessor still drains its queue before a normal forward switch. State-machine and rendered-installer faults cover queued legacy-to-managed rollback and paused-backlog transitions; queued work is not evidence of an active call.
+
+## Label runtime state preparation
+
+Deploy `2026_10_04_label_runtime_state` through the immutable release installer and its existing migration checksum ledger. It creates an empty table for later label runtime control. Roll back the whole release while retaining this table and any later operational records; never reverse the migration. Existing label tasks, calls, model bindings and PLC evidence are untouched, and the worker remains embedded.
