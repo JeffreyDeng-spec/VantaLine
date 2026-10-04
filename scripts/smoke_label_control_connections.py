@@ -1,5 +1,8 @@
 """Control-only connection options and configuration; no production database."""
 import os
+import socket
+import threading
+import time
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -27,6 +30,31 @@ class ControlConnections(unittest.TestCase):
                     {"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": ""}):
             with self.subTest(env=env), self.assertRaises(RuntimeUnavailable):
                 create_control_factory(env)
+
+    def test_real_libpq_connection_handshake_timeout(self):
+        # Loopback fixture accepts a socket but never completes PG startup.
+        import psycopg
+        connected, stop = threading.Event(), threading.Event()
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            listener.settimeout(5)
+            def server():
+                with listener.accept()[0]:
+                    connected.set()
+                    stop.wait(5)
+            thread = threading.Thread(target=server)
+            thread.start()
+            started = time.monotonic()
+            try:
+                with self.assertRaises(psycopg.OperationalError):
+                    control_connector(f"host=127.0.0.1 port={listener.getsockname()[1]} dbname=fixture sslmode=disable")
+                self.assertTrue(connected.is_set())
+                self.assertLess(time.monotonic() - started, 4.5)
+            finally:
+                stop.set()
+                thread.join(6)
+                self.assertFalse(thread.is_alive())
 
     def test_control_factory_owns_separate_connection_and_captured_configuration(self):
         source = {"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": "synthetic-old"}
