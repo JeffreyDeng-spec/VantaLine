@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
-  for scenario in managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
+  for scenario in managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback managed_embedded_510 managed_embedded_510_rollback managed_reject_web_499 managed_reject_web_511 managed_reject_worker_510 managed_reject_kill_mode; do
     if [[ "$EUID" -ne 0 ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
@@ -220,6 +220,11 @@ if command=='show':
         'ActiveState':'active' if pid(service) else 'inactive',
         'LoadState':'loaded' if service=='vantaline' or pathlib.Path('/etc/systemd/system/vantaline-label-worker.service').exists() else 'not-found',
         'TimeoutStopUSec':'8min 20s','KillMode':'control-group'}
+    # Read private synthetic administrator drop-ins in effective lexical order.
+    for dropin in sorted((pathlib.Path('/etc/systemd/system')/(service+'.service.d')).glob('*.conf')):
+        for line in dropin.read_text().splitlines():
+            if line.startswith('TimeoutStopSec='): values['TimeoutStopUSec']=line.split('=',1)[1]+'s'
+            if line.startswith('KillMode='): values['KillMode']=line.split('=',1)[1]
     print(values[field]); sys.exit(0)
 if command=='is-enabled':
     print('enabled' if (base/'worker-enabled').exists() else 'disabled'); sys.exit(0)
@@ -288,8 +293,8 @@ python3 - "$previous" "$work" <<'PY'
 import json,pathlib,sys,os
 for directory,mode in ((pathlib.Path(sys.argv[1]),'embedded'),(pathlib.Path(sys.argv[2]),'external')):
     version=json.loads((directory/'VERSION.json').read_text())
-    legacy=os.environ['TEST_RUNTIME_SCENARIO'] in ('managed_embedded_bridge', 'managed_legacy_queued_rollback', 'managed_root_journal_handoff', 'managed_root_journal_promotion_failure')
-    if legacy: mode='embedded'
+    legacy=os.environ['TEST_RUNTIME_SCENARIO'] in ('managed_embedded_bridge', 'managed_legacy_queued_rollback', 'managed_root_journal_handoff', 'managed_root_journal_promotion_failure', 'managed_root_budget_handoff')
+    if legacy or os.environ['TEST_RUNTIME_SCENARIO'].startswith('managed_embedded_510'): mode='embedded'
     doc={'schema':1 if legacy and directory==pathlib.Path(sys.argv[1]) else 2,'git_commit':version['git_commit'],
         'worker_mode':mode,'services':['vantaline']+(['vantaline-label-worker'] if mode=='external' else [])}
     if doc['schema']==2: doc['runtime_protocol']=1
@@ -313,12 +318,21 @@ elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').ex
     raise SystemExit(23)
 PY_CHECKPOINT
 systemctl start vantaline
-if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
+if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff ]]; then
   # Reproduce the observed application-owned layout using real ownership.
   # This case runs as root inside private mount namespaces, never on host paths.
   /usr/bin/chown 998:998 "$base" "$base/backups"
   test "$(/usr/bin/stat -c '%u %g %a' "$base/backups")" = '998 998 755'
-  test "$(sha256sum "${VANTALINE_BASE_INSTALLER:?}" | awk '{print $1}')" = 6e061881db09466198f3c42397d1b61f89a8d374c2fce5e2a6d7725f38c06515
+  expected_predecessor=6e061881db09466198f3c42397d1b61f89a8d374c2fce5e2a6d7725f38c06515
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then expected_predecessor=748695bec0eaa2f56e5bc45d0d7b7f8a0d92affb4d6db8f218518979e2a38a1e; fi
+  test "$(sha256sum "${VANTALINE_BASE_INSTALLER:?}" | awk '{print $1}')" = "$expected_predecessor"
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then
+    bridge_admin=/etc/systemd/system/vantaline.service.d/90-administrator.conf
+    mkdir -p "$(dirname "$bridge_admin")"
+    printf '[Service]\nTimeoutStopSec=510\nKillMode=control-group\n' > "$bridge_admin"
+    chmod 640 "$bridge_admin"
+    bridge_admin_digest="$(sha256sum "$bridge_admin")"
+  fi
   cp "$VANTALINE_BASE_INSTALLER" /usr/local/sbin/vantaline-install-release
   bridge="$base/build/vantaline-v2026.10.0"
   cp -a "$work" "$bridge"
@@ -373,10 +387,22 @@ PY_FRESH_BRIDGE
   bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
     --release "$bridge_release" --commit "$bridge_commit" --apply
   cmp "$source_root/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
-  test ! -e /var/lib/vantaline-release
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then
+    test "$(sha256sum "$bridge_admin")" = "$bridge_admin_digest"
+    test "$(stat -c '%a' "$bridge_admin")" = 640
+  fi
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then
+    test "$(/usr/bin/stat -c '%u %a' /var/lib/vantaline-release)" = '0 700'
+  else
+    test ! -e /var/lib/vantaline-release
+  fi
   # Capabilities must not create recovery storage even after successful promotion.
   bash /usr/local/sbin/vantaline-install-release --capabilities >/dev/null
-  test ! -e /var/lib/vantaline-release
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then
+    test "$(/usr/bin/stat -c '%u %a' /var/lib/vantaline-release)" = '0 700'
+  else
+    test ! -e /var/lib/vantaline-release
+  fi
   previous="$base/releases/$bridge_release"
   test "$(readlink -f "$base/current")" = "$previous"
   old_pid="$(cat "$base/vantaline.pid")"
@@ -384,6 +410,10 @@ PY_FRESH_BRIDGE
   bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
     --release "$bridge_release" --commit "$bridge_commit" --apply
   test "$(cat "$base/vantaline.pid")" = "$old_pid"
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then
+    test "$(sha256sum "$bridge_admin")" = "$bridge_admin_digest"
+    test "$(stat -c '%a' "$bridge_admin")" = 640
+  fi
   test "$(/usr/bin/stat -c '%u %a' /var/lib/vantaline-release)" = '0 700'
   test "$(/usr/bin/stat -c '%u %g %a' "$base")" = '998 998 755'
   test "$(/usr/bin/stat -c '%u %g %a' "$base/backups")" = '998 998 755'
@@ -431,7 +461,33 @@ if [[ "$scenario" == managed_root_journal_handoff ]]; then
     echo "PASS recovery storage rejects $storage_fault without stop or repair"
   done
 fi
-if [[ "$scenario" == managed_health_failure ]]; then export TEST_FAIL_HEALTH=1; fi
+admin_file=""
+case "$scenario" in
+  managed_root_budget_handoff|managed_embedded_510|managed_embedded_510_rollback|managed_reject_web_499|managed_reject_web_511|managed_reject_kill_mode)
+    admin_file=/etc/systemd/system/vantaline.service.d/90-administrator.conf
+    seconds=510; kill_mode=control-group
+    if [[ "$scenario" == managed_reject_web_499 ]]; then seconds=499; fi
+    if [[ "$scenario" == managed_reject_web_511 ]]; then seconds=511; fi
+    if [[ "$scenario" == managed_reject_kill_mode ]]; then kill_mode=process; fi
+    ;;
+  managed_reject_worker_510)
+    admin_file=/etc/systemd/system/vantaline-label-worker.service.d/90-administrator.conf
+    seconds=510; kill_mode=control-group
+    ;;
+esac
+if [[ -n "$admin_file" ]]; then
+  if [[ "$scenario" == managed_root_budget_handoff ]]; then
+    test "$(sha256sum "$admin_file")" = "$bridge_admin_digest"
+    test "$(stat -c '%a' "$admin_file")" = 640
+  else
+    mkdir -p "$(dirname "$admin_file")"
+    printf '[Service]\nTimeoutStopSec=%s\nKillMode=%s\n' "$seconds" "$kill_mode" > "$admin_file"
+    chmod 640 "$admin_file"
+  fi
+  admin_digest="$(sha256sum "$admin_file")"
+  before_pid="$(cat "$base/vantaline.pid")"
+fi
+if [[ "$scenario" == managed_health_failure || "$scenario" == managed_embedded_510_rollback ]]; then export TEST_FAIL_HEALTH=1; fi
 set +e
 bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sha256 "$archive_sha" \
   --release v2026.10.1 --commit "$commit" --apply > "$base/result.log" 2>&1
@@ -467,11 +523,11 @@ if [[ "$scenario" == managed_interrupted_accept || "$scenario" == managed_interr
     --release v2026.10.1 --commit "$commit" --apply > "$base/recovery.log" 2>&1 || { cat "$base/recovery.log"; exit 1; }
   result=0
 fi
-if [[ "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
+if [[ "$scenario" == managed_embedded_510 || "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
   if [[ "$result" != 0 ]]; then cat "$base/result.log"; exit 1; fi
   test "$(readlink -f "$base/current")" = "$base/releases/v2026.10.1"
   systemctl is-active --quiet vantaline
-  if [[ "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
+  if [[ "$scenario" == managed_root_budget_handoff || "$scenario" == managed_embedded_510 || "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
     if systemctl is-active --quiet vantaline-label-worker; then exit 1; fi
     test ! -e /etc/systemd/system/vantaline-label-worker.service
     test ! -e "$base/worker-enabled"
@@ -504,6 +560,18 @@ PY_PAUSED
   test ! -e "$base/worker-enabled"
   if [[ "$scenario" == managed_database_failure ]]; then test ! -s "$base/runtime-events"; fi
 fi
+if [[ -n "$admin_file" ]]; then
+  test "$(sha256sum "$admin_file")" = "$admin_digest"
+  test "$(stat -c '%a' "$admin_file")" = 640
+  if [[ "$scenario" == managed_reject_* ]]; then
+    test "$(cat "$base/vantaline.pid")" = "$before_pid"
+    if grep -Eq '^(stop|start) ' "$base/runtime-events"; then exit 1; fi
+    test ! -e /etc/systemd/system/vantaline.service.d/70-label-runtime.conf
+  fi
+  if [[ "$scenario" == managed_embedded_510_rollback ]]; then
+    test ! -e /etc/systemd/system/vantaline.service.d/70-label-runtime.conf
+  fi
+fi
 if [[ "$scenario" == managed_journal_failure ]]; then
   if grep -q synthetic-customer-secret "$base/result.log"; then exit 1; fi
 fi
@@ -511,7 +579,7 @@ if [[ "$scenario" == managed_paused_rollback || "$scenario" == managed_legacy_qu
   test "$(cat "$base/queued")" -eq 3
   if grep -q '^v2026.10.1 resume$' "$base/control-events"; then exit 1; fi
 fi
-if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
+if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff ]]; then
   test "$(/usr/bin/stat -c '%u %g %a' "$base")" = '998 998 755'
   test "$(/usr/bin/stat -c '%u %g %a' "$base/backups")" = '998 998 755'
 fi

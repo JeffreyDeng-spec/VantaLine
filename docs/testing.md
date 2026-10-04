@@ -1990,3 +1990,18 @@ The original managed and embedded fault matrices remain required. Systemd, HTTP
 health and database replies are substitutes; Unix sockets and filesystem ownership
 are real. These tests do not certify production unit precedence, actual service
 availability throughout a deployment, or standalone worker acceptance.
+
+
+The Web stop-allowance compatibility suite adds exact {500,510} Web acceptance,
+strict worker500 and control-group checks, administrator-file byte/mode preservation,
+and unsupported near-duration rejection. The real stop polling loop runs with a
+virtual monotonic clock for stuck state/MainPID/ControlPID cases; the transition
+integration proves its shared500 deadline includes time already spent before stop,
+never switches the pointer or starts a candidate after timeout, and retains the
+journal if rollback also cannot verify exit. The rendered installer additionally
+covers effective510 success and health rollback, Web499/511, worker510 and unsafe
+kill-mode pre-stop rejection using actual private administrator drop-in files.
+A frozen root-storage predecessor executes the schema-1 policy handoff on UID998
+application directories, validates root recovery storage, promotes the successor,
+then exercises a later managed embedded510 transition. These remain isolated
+service substitutes; production policy commissioning is separately accepted.

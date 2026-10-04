@@ -4,9 +4,10 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from release_runtime_contract import ContractError, Topology, WEB, LABEL
-from release_services import UnitChanges, WEB_DROPIN, LABEL_UNIT, MARKER, duration_seconds
+from release_services import ServiceCommands, UnitChanges, WEB_DROPIN, LABEL_UNIT, MARKER, duration_seconds
 
 
 class Commands:
@@ -87,6 +88,65 @@ class Units(unittest.TestCase):
             self.assertEqual(duration_seconds(value),500)
         for value in ('infinity','500','500s garbage','-500s',''):
             with self.assertRaises(ContractError): duration_seconds(value)
+
+    def test_commissioned_web_allowance_preserves_admin_file_and_template(self):
+        admin = self.root / WEB_DROPIN.parent / '90-administrator.conf'
+        admin.parent.mkdir(); content = '[Service]\nTimeoutStopSec=510\n'
+        admin.write_text(content); admin.chmod(0o640)
+        self.commands.budget = '8min 30s'
+        saved = self.units.capture()
+        self.units.install(self.embedded)
+        self.assertIn('TimeoutStopSec=500', (self.root / WEB_DROPIN).read_text())
+        self.assertEqual(admin.read_text(), content)
+        self.units.restore(saved)
+        self.assertEqual(admin.read_text(), content)
+        self.assertEqual(admin.stat().st_mode & 0o777, 0o640)
+        self.assertFalse((self.root / WEB_DROPIN).exists())
+
+    def test_only_web_exact_500_or_510_is_compatible(self):
+        for value in ('0s', '479s', '480s', '499s', '500.1s', '509s', '510.1s', '511s', '600s', 'infinity'):
+            with self.subTest(value=value):
+                self.commands.budget = value
+                with self.assertRaises(ContractError): self.units.install(self.embedded)
+        self.commands.budget = '510s'
+        with self.assertRaises(ContractError): self.units.install(self.external)
+        self.assertNotIn(('enable', LABEL), self.commands.events)
+        self.commands.kill = 'process'
+        with self.assertRaises(ContractError): self.units.install(self.embedded)
+
+    def test_web510_and_worker500_can_be_verified_together(self):
+        self.commands.budget = '510s'
+        original = self.commands.property
+        def property_value(service, name, **options):
+            if service == LABEL and name == 'TimeoutStopUSec': return '500s'
+            return original(service, name, **options)
+        with patch.object(self.commands, 'property', side_effect=property_value):
+            self.units.install(self.external)
+        self.assertIn(('enable', LABEL), self.commands.events)
+        self.assertIn('TimeoutStopSec=500', (self.root / LABEL_UNIT).read_text())
+
+    def test_stop_deadline_requires_inactive_and_both_pids_zero(self):
+        # Real stop loop with a virtual clock, not 500 seconds of sleeping.
+        for field, value in (('ActiveState', 'deactivating'), ('MainPID', '12'), ('ControlPID', '13')):
+            with self.subTest(field=field):
+                now = [0.0]; commands = ServiceCommands(); events = []
+                def sleep(amount): now[0] += amount
+                def state(service, name, **options):
+                    self.assertGreater(options['timeout'], 0)
+                    return value if name == field else {'ActiveState':'inactive', 'MainPID':'0', 'ControlPID':'0'}[name]
+                with (patch('release_services.time.monotonic', side_effect=lambda: now[0]),
+                      patch('release_services.time.sleep', side_effect=sleep),
+                      patch.object(commands, 'property', side_effect=state),
+                      patch.object(commands, 'run', side_effect=lambda *args, **kw: events.append(args))):
+                    with self.assertRaisesRegex(ContractError, 'stop budget expired'):
+                        commands.stop_all((WEB,), deadline=500)
+                self.assertEqual(now[0], 500)
+                self.assertEqual(events, [('stop', '--no-block', WEB)])
+        commands = ServiceCommands()
+        with (patch.object(commands, 'property', side_effect=lambda service, name, **kw: {'ActiveState':'inactive', 'MainPID':'0', 'ControlPID':'0'}[name]),
+              patch.object(commands, 'run') as run, patch('release_services.time.monotonic', return_value=0)):
+            commands.stop_all((WEB, LABEL), deadline=500)
+            run.assert_called_once_with('stop', '--no-block', WEB, LABEL, timeout=500)
 
 
 if __name__=='__main__': unittest.main()

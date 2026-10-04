@@ -834,7 +834,7 @@ release. Prompt source manifest v138 includes the storage adapter modules and na
 The COS compatibility release includes an operator-invoked temporary-volume provisioning script. Merely installing the release does not create volumes, enable COS, or unmount business data. Any commissioning and storage-mode change requires the separate runbook gates and a complete COS-compatible rollback artifact.
 ## Label consumer lifecycle
 
-The label lifecycle controller ships in an embedded-only complete release. CI exercises real-thread drain contracts and the existing label/PostgreSQL, HTTP, frontend and package gates. No worker service is installed or enabled. Application shutdown waits at most 480 seconds, and the managed embedded installer writes its owned 500-second stop allowance, then checks effective TimeoutStopUSec and KillMode before stopping any service. Conflicting administrator overrides abort before stop and restore the captured unit state. Rollback restores the prior complete release and retains all task/call evidence.
+The label lifecycle controller ships in an embedded-only complete release. CI exercises real-thread drain contracts and the existing label/PostgreSQL, HTTP, frontend and package gates. No worker service is installed or enabled. Application shutdown waits at most 480 seconds, and the managed embedded installer writes its owned 500-second stop allowance, then checks effective TimeoutStopUSec and KillMode before stopping any service. Web may retain the commissioned exact 510-second administrator allowance; other unsupported effective values or kill modes abort before stop and restore the captured unit state. Rollback restores the prior complete release and retains all task/call evidence.
 
 The label benchmark evidence correction changes CI diagnostics only. Main CI previously failed an existing payload P95 guard before emitting its summary, and automatic deployment correctly remained blocked. The corrected script prints all synthetic samples and original limits before asserting. Production code, schema, topology and rollback remain unchanged; a passing PR alone does not substitute for main CI and release acceptance.
 
@@ -844,7 +844,7 @@ The COS startup checksum correction ships as another complete compatibility rele
 
 The installed script is generated from the checked-in installer template and runtime modules. CI and packaging require byte-exact regeneration and reject dirty generation inputs. Promotion is still one atomic root-owned script replacement followed by a digest read-back. The deployment workflow also reads `--capabilities`; capability support is not evidence that a worker is enabled or accepted.
 
-Schema-1 releases keep the existing Web restart path. A schema-2 transition journals the previous complete release, managed unit files and enable state before mutation. It checks live build/PID/instance/heartbeat/configuration identity, closes label admission, allows the existing queue to finish, and obtains a same-instance paused/empty acknowledgement. The 500-second shared controller budget covers drain and stopping all old roles; the managed unit stop fallback is also 500 seconds and effective systemd settings are verified. Inactive service state is not a drain acknowledgement. New roles are checked before admission is restored. Only the fixed Web drop-in and label-worker unit can be changed; unmanaged files are refused.
+Schema-1 releases keep the existing Web restart path. A schema-2 transition journals the previous complete release, managed unit files and enable state before mutation. It checks live build/PID/instance/heartbeat/configuration identity, closes label admission, allows the existing queue to finish, and obtains a same-instance paused/empty acknowledgement. The 500-second shared controller budget covers drain and stopping all old roles; the managed unit template remains 500 seconds, with exact effective Web allowances of 500 or 510 seconds and worker allowance of 500 seconds. Effective systemd settings are verified. Inactive service state is not a drain acknowledgement. New roles are checked before admission is restored. Only the fixed Web drop-in and label-worker unit can be changed; unmanaged files are refused.
 
 A failed transition stops candidate roles before restoring managed units, the previous complete release pointer and its declared roles. Failed stop/drain evidence fails rollback closed and retains the journal and releases; it never restarts an old consumer alongside an unverified new one. Managed embedded controls activate only in a schema-2 package after the accepted controller and additive state migration. The recovery-storage repair package temporarily declares schema 1 and leaves these controls inactive. Private-namespace drills and real PostgreSQL/control-socket integration cover that bridge. Shared configuration and independent-worker acceptance are still required before publishing an external topology.
 
@@ -894,3 +894,23 @@ an existing release, copy an installer, change permissions, or clear locks/journ
 After the successor is promoted, normal same-release retries use its trusted state
 location. Schema-2 commissioning remains a separate release; neither this bridge
 nor capabilities alone enable an independent worker.
+
+
+## Commissioned Web stop allowance compatibility
+
+A separate schema-1 embedded bridge promotes the installer policy before any later
+managed activation. It accepts only exact effective Web stop allowances of 500 or
+510 seconds; a future independent worker must still use 500 seconds. Both roles
+require `KillMode=control-group`. The controller writes its existing 500-second
+managed template and neither rewrites nor deletes an administrator's later 510-second
+drop-in. All other effective durations, including near values and infinity, fail
+before stopping services.
+
+The shared forward drain/stop deadline remains 500 seconds. The systemd allowance
+is a fallback termination setting, not a promise that every process exits within
+the controller deadline. After nonblocking stop, the controller requires inactive
+or failed state and both MainPID and ControlPID zero. A deadline failure prevents
+pointer switch and candidate startup; an unsuccessful whole-release rollback
+retains recovery evidence and admission fencing. This bridge still declares
+schema 1 and cannot activate an external worker. Installed-controller digest and
+whole-release acceptance must precede the separate schema-2 activation package.

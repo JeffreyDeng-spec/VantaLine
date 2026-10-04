@@ -95,6 +95,11 @@ jobs:
           git show db29353bff54258d88c9b07ff62b2db41042327a:scripts/install_release.sh > "$RUNNER_TEMP/installed-controller-a.sh"
           sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_handoff
           sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_promotion_failure
+      - name: Verify commissioned Web allowance with the frozen root-storage predecessor
+        run: |
+          git fetch --no-tags --depth=1 origin efb80cdccd0ad713a4b984c29f36a3a094881fe4
+          git show efb80cdccd0ad713a4b984c29f36a3a094881fe4:scripts/install_release.sh > "$RUNNER_TEMP/root-storage-installer.sh"
+          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/root-storage-installer.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_budget_handoff
       - name: Keep mutable backgrounds outside immutable releases
         shell: bash
         run: |
