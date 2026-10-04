@@ -1228,3 +1228,29 @@ Standalone signal handlers only assign a monotonic stop latch. Normal control fl
 Managed processes publish bounded heartbeats on the existing private control thread with a five-second target interval after the previous tick completes. Database work and control requests can delay a tick. Each uses the dedicated thread-owned connection factory. The operational table stores only build/configuration/process identity, worker state, process-lifetime counters and fixed recent-error codes. A blocked heartbeat retains the same role lock on shutdown timeout. The private deployment protocol remains unchanged.
 
 `GET /api/label-inspection/runtime` requires administrator access before any database call. Its short unlocked READ COMMITTED transaction samples state, queue and heartbeat in separate statements; these are not an atomic health snapshot. It returns queue/active counts, oldest queue age, maintenance/pause intent and expected-role heartbeats; missing, mismatched or older-than-15-second samples are unhealthy. Heartbeat freshness is sampled liveness, not a guarantee against a subsequent crash. Lock acquisition counts/total/max wait include successful and timed-out acquisition attempts. These and rejected duplicate submission/stage-call counters belong to the process lifetime: process restart resets them, while a control restart within the same process changes the instance but retains counters. Idempotent replay is not counted as rejection. Errors never include exception strings, media, customer fields, secrets or filesystem paths. Real PostgreSQL/HTTP tests cover authorization, redaction, actual lock contention, duplicate refusals, stale generations and heartbeat shutdown. Manifest v142 names 367 actual sources. This candidate remains embedded and requires preceding release acceptance and external activation review.
+
+## Independent label worker acceptance
+
+This activation requires the preceding managed embedded configuration and monitoring
+releases to be accepted first. Normal immutable deployment closes detection admission
+with the existing maintenance response and waits for accepted queued/in-flight work;
+it aborts and restores intent when draining fails. Already-paused predecessors keep
+their backlog and pause intent. The controller verifies old-process exit before
+switching releases. Web then owns HTTP/control only; `vantaline-label-worker` owns
+exactly two label consumer threads. Training and image workers retain their current
+process arrangement.
+
+Accept only matching Web/worker build and configuration identities, new process
+instances, successful control acknowledgements and application checks. The admin
+runtime endpoint exposes sampled queue age/counts, active work, expected role
+heartbeats and bounded operational counters. Samples older than 15 seconds or
+identity mismatches are unhealthy; a fresh sample is not continuous-availability
+proof. No credentials, internal paths or customer payloads are returned.
+
+Worker signals stop further admission and wait up to the existing 480-second drain
+allowance; the task deadline remains 420 seconds. Systemd worker stop allowance is
+500 seconds and Web allows exactly 500 or 510. On failed acceptance the controller
+stops the new worker before restoring the whole managed embedded release and its
+configuration. Preserve recovery journals if exit or rollback cannot be verified.
+Actual production capacity and latency require release observation; synthetic tests
+must not be reported as paid-model or physical-PLC acceptance.

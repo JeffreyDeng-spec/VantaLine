@@ -96,8 +96,8 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
         "schema": 2,
         "runtime_protocol": 1,
         "git_commit": args.git_commit,
-        "worker_mode": "embedded",
-        "services": ["vantaline"],
+        "worker_mode": "external",
+        "services": ["vantaline", "vantaline-label-worker"],
     }
     (stage / "RUNTIME_TOPOLOGY.json").write_text(
         json.dumps(topology, sort_keys=True, indent=2) + "\n", encoding="utf-8"

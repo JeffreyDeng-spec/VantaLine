@@ -1172,3 +1172,12 @@ Managed processes publish bounded heartbeats on the existing private control thr
 `GET /api/label-inspection/runtime` requires administrator access before any database call. Its short unlocked READ COMMITTED transaction samples state, queue and heartbeat in separate statements; these are not an atomic health snapshot. It returns queue/active counts, oldest queue age, maintenance/pause intent and expected-role heartbeats; missing, mismatched or older-than-15-second samples are unhealthy. Heartbeat freshness is sampled liveness, not a guarantee against a subsequent crash. Lock acquisition counts/total/max wait include successful and timed-out acquisition attempts. These and rejected duplicate submission/stage-call counters belong to the process lifetime: process restart resets them, while a control restart within the same process changes the instance but retains counters. Idempotent replay is not counted as rejection. Errors never include exception strings, media, customer fields, secrets or filesystem paths. Real PostgreSQL/HTTP tests cover authorization, redaction, actual lock contention, duplicate refusals, stale generations and heartbeat shutdown. Manifest v142 names 367 actual sources. This candidate remains embedded and requires preceding release acceptance and external activation review.
 
 The administrator runtime endpoint is registered in the exhaustive tested label-route guard set. The assembled authentication regression exercises anonymous 401, member 403 (including a synthetic stored inspection/system-settings over-grant), administrator 200 and zero monitor access on rejection. Endpoint-local admin authorization and public error formats remain unchanged; no broad route exemption or additional feature grant is introduced.
+
+## External label topology selection
+
+Independent label mode is declared by the immutable release topology, not a mutable
+business setting. Web exports a bounded revision-bound configuration through its
+private authenticated control socket; the installed controller publishes its private
+version and provisions the worker credential/mount dependencies. The worker must match
+that configuration and build before detection admission is restored. Existing model
+secret references and unset/empty environment distinctions are preserved.

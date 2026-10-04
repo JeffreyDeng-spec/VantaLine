@@ -2048,3 +2048,19 @@ Managed processes publish bounded heartbeats on the existing private control thr
 `GET /api/label-inspection/runtime` requires administrator access before any database call. Its short unlocked READ COMMITTED transaction samples state, queue and heartbeat in separate statements; these are not an atomic health snapshot. It returns queue/active counts, oldest queue age, maintenance/pause intent and expected-role heartbeats; missing, mismatched or older-than-15-second samples are unhealthy. Heartbeat freshness is sampled liveness, not a guarantee against a subsequent crash. Lock acquisition counts/total/max wait include successful and timed-out acquisition attempts. These and rejected duplicate submission/stage-call counters belong to the process lifetime: process restart resets them, while a control restart within the same process changes the instance but retains counters. Idempotent replay is not counted as rejection. Errors never include exception strings, media, customer fields, secrets or filesystem paths. Real PostgreSQL/HTTP tests cover authorization, redaction, actual lock contention, duplicate refusals, stale generations and heartbeat shutdown. Manifest v142 names 367 actual sources. This candidate remains embedded and requires preceding release acceptance and external activation review.
 
 The administrator runtime endpoint is registered in the exhaustive tested label-route guard set. The assembled authentication regression exercises anonymous 401, member 403 (including a synthetic stored inspection/system-settings over-grant), administrator 200 and zero monitor access on rejection. Endpoint-local admin authorization and public error formats remain unchanged; no broad route exemption or additional feature grant is introduced.
+
+## External topology activation checks
+
+The release package must declare external mode and exactly Web plus label worker,
+with the same full commit as VERSION.json. Activation changes only this literal,
+the matching CI assertion and documentation; bootstrap, model binding, controller,
+configuration and monitoring source must match the accepted predecessor.
+
+Run the isolated PostgreSQL state/control/HTTP/deployment, standalone process,
+external deployment and monitoring checks together. Retain signal-startup races,
+configuration credential/mount checks, duplicate-claim/stage fences, two global
+claims, stale/build fencing, installer fault matrices, HTTP/model/PLC contracts and
+front-end build. Separate-process tests use synthetic processing and a disposable
+Unix-socket-only database. Exact-head hosted CI and independent release artifact
+review are required; production acceptance must verify both roles, and is distinct
+from a real-provider or hardware test.

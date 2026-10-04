@@ -959,3 +959,26 @@ Standalone signal handlers only assign a monotonic stop latch. Normal control fl
 Managed processes publish bounded heartbeats on the existing private control thread with a five-second target interval after the previous tick completes. Database work and control requests can delay a tick. Each uses the dedicated thread-owned connection factory. The operational table stores only build/configuration/process identity, worker state, process-lifetime counters and fixed recent-error codes. A blocked heartbeat retains the same role lock on shutdown timeout. The private deployment protocol remains unchanged.
 
 `GET /api/label-inspection/runtime` requires administrator access before any database call. Its short unlocked READ COMMITTED transaction samples state, queue and heartbeat in separate statements; these are not an atomic health snapshot. It returns queue/active counts, oldest queue age, maintenance/pause intent and expected-role heartbeats; missing, mismatched or older-than-15-second samples are unhealthy. Heartbeat freshness is sampled liveness, not a guarantee against a subsequent crash. Lock acquisition counts/total/max wait include successful and timed-out acquisition attempts. These and rejected duplicate submission/stage-call counters belong to the process lifetime: process restart resets them, while a control restart within the same process changes the instance but retains counters. Idempotent replay is not counted as rejection. Errors never include exception strings, media, customer fields, secrets or filesystem paths. Real PostgreSQL/HTTP tests cover authorization, redaction, actual lock contention, duplicate refusals, stale generations and heartbeat shutdown. Manifest v142 names 367 actual sources. This candidate remains embedded and requires preceding release acceptance and external activation review.
+
+## Independent label worker activation
+
+The package now declares schema 2/protocol 1 with `worker_mode=external` and exactly
+`vantaline` plus `vantaline-label-worker`. Publish this activation only after the
+managed embedded, shared configuration, standalone bootstrap and monitoring releases
+have each passed CI, independent review and complete production acceptance. The
+installer and application logic are unchanged by this activation.
+
+The installed controller binds configuration export to the accepted Web identity,
+persists recovery evidence, closes new detection admission, and drains an active
+predecessor queue. Failure to drain restores the predecessor intent and aborts.
+A predecessor already paused retains its queue and pause intent. After verified
+exit of the old Web consumer, the controller selects the complete release and
+configuration, starts Web with no consumer, then starts the two-thread label worker.
+Both exact build/configuration/process identities must pass before public acceptance
+and admission restoration. No embedded and separate consumers overlap.
+
+Failure pauses/stops the candidate roles before restoring the previous complete
+managed embedded release, units, configuration pointer and admission intent. An
+uncertain stop or failed rollback retains both releases and journals and reports
+failure. Preserve task/call evidence and secret versions; do not requeue unknown
+paid calls, reverse migrations, or copy individual files.
