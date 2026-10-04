@@ -57,6 +57,7 @@ def fake_threads():
             self.target,self.name,self.daemon=target,name,daemon
             self.args=args
             self.alive=False
+            self.ident=1
         def start(self):self.alive=True;threads.append(self)
         def is_alive(self):return self.alive
         def join(self,timeout):self.alive=False

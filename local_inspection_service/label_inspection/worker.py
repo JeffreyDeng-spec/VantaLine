@@ -273,11 +273,12 @@ class LabelWorker:
         self._drainers = 0
         self._timed_out = False
         self._cleanup_failed = False
+        self._startup_failed = False
 
     def start(self):
         with self._lock:
-            if self._cleanup_failed:
-                raise RuntimeError("Label worker connection cleanup failed; process restart required")
+            if self._cleanup_failed or self._startup_failed:
+                raise RuntimeError("Label worker lifecycle failed; process restart required")
             alive = [thread.is_alive() for thread in self._threads]
             if self._drainers or (any(alive) and self._stop.is_set()):
                 raise RuntimeError("Label worker is still draining")
@@ -292,9 +293,10 @@ class LabelWorker:
                 for index in range(2):
                     thread = threading.Thread(target=self._loop, args=(self._stop,),
                                               name=f"label-inspection-{index}", daemon=True)
-                    thread.start()
                     self._threads.append(thread)
+                    thread.start()
             except BaseException:
+                self._startup_failed = True
                 self._stop.set()  # Retain all started threads for drain/restart fencing.
                 raise
 
@@ -303,7 +305,7 @@ class LabelWorker:
             alive = sum(thread.is_alive() for thread in self._threads)
             state = ("timed_out" if self._timed_out else "draining") if alive and self._stop.is_set() else (
                 "running" if alive == 2 else "failed" if alive else "stopped")
-            return {"state": "failed" if self._cleanup_failed else state, "live_threads": alive}
+            return {"state": "failed" if self._cleanup_failed or self._startup_failed else state, "live_threads": alive}
 
     def request_stop(self):
         with self._lock:
@@ -320,11 +322,15 @@ class LabelWorker:
             self._drainers += 1
         try:
             for thread in threads:
-                thread.join(max(0, deadline - time.monotonic()))
+                # start() can fail before native launch or after it. Retain every
+                # attempted thread; never join an unstarted one or acknowledge a
+                # generation whose startup outcome was uncertain.
+                if thread.ident is not None:
+                    thread.join(max(0, deadline - time.monotonic()))
             drained = not any(thread.is_alive() for thread in threads)
             with self._lock:
                 self._timed_out = not drained
-                return drained and not self._cleanup_failed
+                return drained and not (self._cleanup_failed or self._startup_failed)
         finally:
             with self._lock:
                 self._drainers -= 1

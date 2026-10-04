@@ -158,10 +158,44 @@ class LifecycleContracts(unittest.TestCase):
         with patch.object(worker.threading, 'Thread', side_effect=create):
             with self.assertRaisesRegex(RuntimeError, 'synthetic start failed'):
                 controller.start()
-        self.assertEqual(controller._threads, made[:1])
-        self.assertTrue(controller.drain(3))
-        controller.start()
-        self.assertTrue(controller.drain(3))
+        self.assertEqual(controller._threads, made)
+        self.assertFalse(controller.drain(3))
+        self.assertEqual(controller.status(), {'state': 'failed', 'live_threads': 0})
+        with self.assertRaisesRegex(RuntimeError, 'process restart required'):
+            controller.start()
+
+    def test_start_raises_after_native_launch_never_reports_drained(self):
+        actual_thread = threading.Thread
+        release = threading.Event()
+        self.releases.append(release)
+        controller = self.controller()
+        controller._loop = lambda stop: release.wait(3)
+        class StartThenRaise(actual_thread):
+            def start(self):
+                super().start()
+                raise RuntimeError('synthetic interruption after native start')
+        with patch.object(worker.threading, 'Thread', StartThenRaise):
+            with self.assertRaisesRegex(RuntimeError, 'after native start'):
+                controller.start()
+        self.assertEqual(len(controller._threads), 1)
+        self.assertEqual(controller.status(), {'state': 'failed', 'live_threads': 1})
+        self.assertFalse(controller.drain(0))
+        release.set()
+        self.assertFalse(controller.drain(3))
+        self.assertEqual(controller.status(), {'state': 'failed', 'live_threads': 0})
+
+    def test_concurrent_registration_installs_exactly_one_controller(self):
+        app = FastAPI()
+        repositories = RepositoryLifecycle(lambda: None, lambda: None)
+        directory, models = lambda: Path('fixture'), lambda: None
+        barrier = threading.Barrier(8)
+        def register(_):
+            barrier.wait(3)
+            return worker_api.register(app, repositories, directory, models)
+        with ThreadPoolExecutor(8) as pool:
+            controllers = list(pool.map(register, range(8)))
+        self.assertTrue(all(item is controllers[0] for item in controllers))
+        self.assertEqual((len(app.router.on_startup), len(app.router.on_shutdown)), (1, 1))
 
     def test_all_joins_share_one_budget_and_no_start_during_join(self):
         controller = self.controller()
@@ -170,6 +204,7 @@ class LifecycleContracts(unittest.TestCase):
         self.releases.append(stop)
         budgets = []
         class HeldThread:
+            ident = 1
             def is_alive(self): return True
             def join(self, timeout):
                 budgets.append(timeout)
