@@ -1,5 +1,6 @@
 """Real PostgreSQL, threads and Unix socket control; no model/provider or PLC calls."""
 import json
+from dataclasses import replace
 import os
 from pathlib import Path
 import socket
@@ -13,6 +14,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.runtime.connections import ThreadRepositoryFactory
 from local_inspection_service.runtime.label_identity import LabelRuntimeIdentity, RuntimeUnavailable
+from local_inspection_service.runtime.configuration import ConfigurationSnapshot
 from local_inspection_service.label_inspection.runtime_control import LabelRuntimeControl
 from local_inspection_service.label_inspection.worker import LabelWorker
 from local_inspection_service.label_inspection.dependencies import RepositoryLifecycle
@@ -51,11 +53,11 @@ def main():
         setup.commit()
         with tempfile.TemporaryDirectory(prefix="label-control-") as temporary:
             directory = Path(temporary) / "control"
-            def launch(selected=identity, allowed_uid=None):
+            def launch(selected=identity, allowed_uid=None, configuration=None):
                 worker = LabelWorker(repositories, lambda: Path(temporary), lambda: None)
                 worker._iteration = lambda: False
                 control = LabelRuntimeControl(selected, repositories, worker, directory=directory,
-                    allowed_uid=os.getuid() if allowed_uid is None else allowed_uid)
+                    allowed_uid=os.getuid() if allowed_uid is None else allowed_uid, configuration=configuration)
                 workers.append(worker)
                 controls.append(control)
                 control.start()
@@ -178,6 +180,17 @@ def main():
             assert not hung_control.socket.thread.is_alive()
             assert hung_worker.drain(3)
             hung_control.close()
+            configuration = ConfigurationSnapshot.capture({"VANTALINE_DATA_STORE": "postgres",
+                "DATABASE_URL": "fixture-dsn", "VANTALINE_PROFILE_" + "A"*32: "synthetic-secret"}, Path(temporary))
+            configured_identity = LabelRuntimeIdentity("e"*40, "v2026.10.5", "embedded", configuration.revision)
+            configured_worker, configured = launch(configured_identity, configuration=configuration)
+            exported = request("configuration")
+            assert exported.keys() == {"state", "snapshot"}
+            assert exported["state"]["config_revision"] == configuration.revision
+            assert exported["snapshot"] == configuration.export()
+            assert request("status").keys() == keys and "snapshot" not in request("status")
+            assert configured_worker.drain(3)
+            configured.close()
             assert "label-runtime-control" in closed
         print("label control: real sockets, peer denial, exclusive roles, SQL failures, restart and build activation passed")
     finally:
