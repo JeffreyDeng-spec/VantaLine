@@ -130,3 +130,6 @@ wcwidth==0.8.1
 websockets==16.0
 wheel==0.47.0
 yarl==1.24.2
+cos-python-sdk-v5==1.9.44
+crcmod==1.7
+xmltodict==1.0.4

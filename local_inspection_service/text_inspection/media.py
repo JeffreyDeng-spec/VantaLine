@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from fastapi import HTTPException
+from ..storage.artifacts.runtime import get_runtime
 
 Record = dict[str, Any]
 
@@ -19,10 +20,12 @@ class TextMediaRecords:
 
 
 class TextMedia:
-    def __init__(self, directory: Callable[[], Path], digest: Callable[[bytes], str], records: TextMediaRecords):
+    def __init__(self, directory: Callable[[], Path], digest: Callable[[bytes], str], records: TextMediaRecords,
+                 *, runtime_provider=get_runtime):
         self.directory = directory
         self.digest = digest
         self.records = records
+        self.runtime_provider = runtime_provider
 
 
     def media_path(self, owner_user_id: str, standard_id: str, filename: str) -> Path:
@@ -35,6 +38,12 @@ class TextMedia:
         return target
 
     def write(self, path: Path, contents: bytes) -> None:
+        runtime = self.runtime_provider()
+        if runtime is not None:
+            key = runtime.key(path)
+            existing = runtime.store.locations.get(key)
+            runtime.store.put_bytes(key, contents, expected_generation=existing.generation if existing else 0)
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.parent / f".{uuid.uuid4().hex[:12]}.tmp"
         temp.write_bytes(contents)
@@ -43,7 +52,25 @@ class TextMedia:
     def read_verified(self, path_value: str, owner_user_id: str, standard_id: str, *, expected_sha256: str = "", max_bytes: int = 120 * 1024 * 1024) -> bytes:
         path = Path(path_value).resolve()
         allowed = (self.directory() / owner_user_id / standard_id).resolve()
-        if allowed not in path.parents or not path.is_file() or path.is_symlink():
+        if allowed not in path.parents or path.is_symlink():
+            raise HTTPException(status_code=404, detail="标准资源不存在")
+        runtime = self.runtime_provider()
+        if runtime is not None:
+            key = runtime.key(path)
+            row = runtime.store.locations.get(key)
+            if row is None:
+                if runtime.mode != 'hybrid':
+                    raise HTTPException(status_code=404, detail="标准资源不存在") from None
+            else:
+                if row.state != 'ready':
+                    raise HTTPException(status_code=404, detail="标准资源不存在")
+                if row.size <= 0 or row.size > max_bytes:
+                    raise HTTPException(status_code=409, detail="标准资源大小异常")
+                contents = runtime.store.read_bytes(key, max_bytes=max_bytes)
+                if expected_sha256 and self.digest(contents) != expected_sha256:
+                    raise HTTPException(status_code=409, detail="标准资源完整性校验失败")
+                return contents
+        if not path.is_file():
             raise HTTPException(status_code=404, detail="标准资源不存在")
         stat = path.stat()
         if stat.st_size <= 0 or stat.st_size > max_bytes:

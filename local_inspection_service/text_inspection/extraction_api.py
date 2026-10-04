@@ -14,6 +14,9 @@ from .. import label_extraction as geometry
 from .. import label_bbox
 from collections.abc import Callable
 from .extraction_ports import ExtractionAccess, ExtractionRecords, ExtractionMedia, ExtractionModels
+from ..storage.artifacts.files import BusinessFiles
+
+_business_files = BusinessFiles()
 
 
 def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
@@ -165,10 +168,10 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
                 if not save(tombstone,True):
                     continue
             directory = media_dependencies.path(uid,root["id"],"sentinel.png").parent
-            if directory.is_dir() and not directory.is_symlink():
-                for path in directory.iterdir():
-                    if path.is_file() and not path.is_symlink() and path.suffix == ".png":
-                        path.unlink()
+            if _business_files.is_dir(directory) and not directory.is_symlink():
+                for path in _business_files.iterdir(directory):
+                    if _business_files.is_file(path) and not path.is_symlink() and path.suffix == ".png":
+                        _business_files.unlink(path)
 
     @app.get("/api/text-inspection/extraction-capabilities")
     def capabilities():
@@ -280,7 +283,9 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
         media_dependencies.write(path,cropped)
         revision["crop_path"],revision["crop_sha256"] = str(path),media_dependencies.digest(cropped)
         if not save(revision,True):
-            path.unlink(missing_ok=True)
+            # Keep unreferenced COS bytes and their location for reconciliation.
+            if _business_files.runtime(path) is None:
+                path.unlink(missing_ok=True)
             winner = latest(parent["root_id"],uid)
             if winner.get("polygon") == points and winner.get("status") == revision["status"] and winner.get("standard_asset_id") == revision.get("standard_asset_id") and winner.get("standard_revision_id") == revision.get("standard_revision_id"):
                 return public(winner)

@@ -2,11 +2,13 @@
 from typing import Any
 from pathlib import Path
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from .preview_sprite_ports import PreviewSpriteInventory, PreviewSpritePoses, PreviewSpriteMedia, PreviewSpriteGeometry
 
 def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-    image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    image = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
     if image is None:
         return None
     if image.ndim != 3 or image.shape[2] < 4:

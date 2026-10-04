@@ -653,8 +653,15 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 
 The label task-list first page now removes five fields already discarded by the existing public projection from ordinary native run transfers. It still processes all runs and merges old label, manual and Beta histories before filtering and snapshot pagination. Run detail continues to load complete evidence. No inspection decision or prompt changes.
 
+
+TextMedia has an opt-in COS read/write adapter behind the existing owner/standard
+path checks and expected-hash/size checks. New media is persisted and verified before
+asset records reference it. Missing/deleted files retain their missing semantics;
+COS failures do not report successful upload. Default local mode and its atomic
+replace path remain available during compatibility rollout.
 ## Label consumer lifecycle
 
 The A + Evolving label consumer remains embedded with two threads and the existing 420-second result deadline. Shutdown now requests stop and waits for admitted polls, claims, processing and per-thread cleanup; it acknowledges drain only when both threads have exited. Timeout is explicit and does not requeue tasks, retry unknown calls or accept late passing results. PDF import remains outside this consumer drain. Actual paid-call processing, model resolution order and persisted bindings are unchanged.
 
+In COS mode, normal draft/evidence expiration enumerates indexed media and publishes logical tombstones; historical remote objects remain intact. Failed business-record publication retains unreferenced verified COS media for reconciliation. Retention never marks a failed location update as purged. This does not authorize migration-time history cleanup.
 Label list performance verification retains the existing 1,000/10,000-task datasets and P95/memory limits. Each batch and payload case now flushes raw measurement samples before assertions so a failed main CI gate can be investigated without changing production query behavior.

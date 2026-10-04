@@ -2,6 +2,8 @@
 from collections.abc import Callable
 import json
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 
 
@@ -11,10 +13,10 @@ class BackgroundManifest:
 
     def load_background_sets_manifest(self) -> dict[str, Any]:
         try:
-            return json.loads(self.path().read_text(encoding="utf-8")) if self.path().exists() else {}
+            return _business_files.read_json(self.path()) if _business_files.exists(self.path()) else {}
         except (OSError, json.JSONDecodeError):
             return {}
 
     def write_background_sets_manifest(self, manifest: dict[str, Any]) -> None:
         self.directory().mkdir(parents=True, exist_ok=True)
-        self.path().write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        _business_files.write_json(self.path(), manifest, indent=2)

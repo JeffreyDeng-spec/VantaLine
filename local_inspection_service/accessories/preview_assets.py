@@ -2,6 +2,8 @@
 from typing import Any
 from pathlib import Path
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from .preview_asset_ports import PreviewAssetPolicy, PreviewAssetPaths, PreviewAssetOperations
 
@@ -48,9 +50,9 @@ class PreviewAssetLoader:
     def load_preview_asset_with_metadata(self, item: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
         for asset in item.get("normalized_assets", []):
             path = self._paths.resolve()(asset.get("path"))
-            if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            if _image_files.files.exists(path) and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
                 asset["path"] = str(path)
-                image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+                image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
                 if image is not None:
                     return image, {
                         "asset_path": str(path),
@@ -62,8 +64,8 @@ class PreviewAssetLoader:
                     }
         for path_str in item.get("source_files", []):
             path = self._paths.resolve()(path_str)
-            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"} and path.exists():
-                image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"} and _image_files.files.exists(path):
+                image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
                 if image is not None:
                     return image, {
                         "asset_path": str(path),
@@ -74,8 +76,8 @@ class PreviewAssetLoader:
                         "canonical_asset_dimensions_px": [int(image.shape[1]), int(image.shape[0])],
                     }
         default_path = self._operations.default()(item)
-        if default_path and default_path.exists():
-            image = cv2.imread(str(default_path), cv2.IMREAD_COLOR)
+        if default_path and _image_files.files.exists(default_path):
+            image = _image_files.imread(str(default_path), cv2.IMREAD_COLOR)
             if image is not None:
                 return image, {
                     "asset_path": str(default_path),
@@ -89,9 +91,9 @@ class PreviewAssetLoader:
 
     def load_document_image_candidate(self, path_value: Any, metadata: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]] | None:
         path = self._paths.resolve()(path_value)
-        if not path or not path.exists() or path.suffix.lower() not in self._policy.suffixes():
+        if not path or not _image_files.files.exists(path) or path.suffix.lower() not in self._policy.suffixes():
             return None
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
         if image is None:
             return None
         asset_width = int(metadata.get("width") or image.shape[1])
@@ -182,8 +184,8 @@ class PreviewAssetLoader:
             return selected
 
         default_path = self._operations.default()(item)
-        if default_path and default_path.exists() and default_path.parent.name == "standardized_manuals":
-            image = cv2.imread(str(default_path), cv2.IMREAD_COLOR)
+        if default_path and _image_files.files.exists(default_path) and default_path.parent.name == "standardized_manuals":
+            image = _image_files.imread(str(default_path), cv2.IMREAD_COLOR)
             if image is not None:
                 return image, {
                     "asset_path": str(default_path),

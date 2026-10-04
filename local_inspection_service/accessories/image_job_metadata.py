@@ -1,4 +1,6 @@
 """Image-job identity and provenance, with an explicit immutable-model resolver."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
@@ -69,7 +71,7 @@ class ImageJobMetadata:
             output_path = Path(str(job.get("output_path") or ""))
             output_predates_anchor = False
             try:
-                output_predates_anchor = output_path.exists() and anchor_path.exists() and output_path.stat().st_mtime < anchor_path.stat().st_mtime
+                output_predates_anchor = _business_files.exists(output_path) and _business_files.exists(anchor_path) and _business_files.stat(output_path).st_mtime < _business_files.stat(anchor_path).st_mtime
             except OSError:
                 output_predates_anchor = False
             if job.get("status") == "completed" or output_predates_anchor:
@@ -94,7 +96,7 @@ class ImageJobMetadata:
 
     def ensure_image_job_target_guides(self, job: dict[str, Any]) -> bool:
         pose_family = str(job.get("pose_family") or "")
-        guides = [path for path in self.provenance.guide_images().get(pose_family, []) if path.exists()]
+        guides = [path for path in self.provenance.guide_images().get(pose_family, []) if _business_files.exists(path)]
         if not guides:
             return False
         changed = False

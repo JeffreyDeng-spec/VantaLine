@@ -1,4 +1,6 @@
 """Explicit pose assets service without application imports."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 from .pose_asset_ports import PoseAssetPaths, PoseAssetMaterial, PoseAssetSprites, PoseAssetCalls, PoseAssetCatalog
 
@@ -17,7 +19,7 @@ class AgentPoseAssets:
             if asset.get("kind") != "agent_mcp_pose_reference":
                 continue
             path = self._paths.resolve()(asset.get("path"))
-            if not path.exists() or path.suffix.lower() not in self._paths.suffixes():
+            if not _business_files.exists(path) or path.suffix.lower() not in self._paths.suffixes():
                 continue
             asset["path"] = str(path)
             assets.append(asset)
@@ -87,7 +89,7 @@ class AgentPoseAssets:
             if str(call.get("accessory_id") or "") != accessory_id:
                 continue
             output_path = self._paths.resolve()(call.get("output_path"))
-            if output_path.exists() and output_path.suffix.lower() in self._paths.suffixes():
+            if _business_files.exists(output_path) and output_path.suffix.lower() in self._paths.suffixes():
                 return True
         return False
 

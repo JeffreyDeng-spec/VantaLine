@@ -1,5 +1,5 @@
 {
-  "version": 134,
+  "version": 138,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -342,6 +342,20 @@
     "evidence_matching.py",
     "label_inspection/api.py",
     "storage/label_inspection.py",
+    "storage/artifacts/__init__.py",
+    "storage/artifacts/archives.py",
+    "storage/artifacts/cos.py",
+    "storage/artifacts/disk.py",
+    "storage/artifacts/files.py",
+    "storage/artifacts/http.py",
+    "storage/artifacts/postgres.py",
+    "storage/artifacts/runtime.py",
+    "storage/artifacts/store.py",
+    "storage/artifacts/types.py",
+    "storage/artifacts/images.py",
+    "storage/artifacts/admission.py",
+    "storage/artifacts/native.py",
+    "storage/artifacts/volumes.py",
     "label_inspection/worker.py",
     "label_inspection/worker_api.py"
   ]

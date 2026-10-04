@@ -664,6 +664,11 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+The source-safety CI job runs the offline COS evacuation smoke. The operational
+tool does not run during release installation and does not enable COS in the
+application. Merging its tooling alone cannot authorize source-file removal or
+disk retirement; use the independent cutover gates in the production runbook.
+
 The runtime identity/connection extraction is a separate PR after model dependency
 injection. Its native thread-pool and real PostgreSQL scope tests supplement the
 unchanged HTTP baseline; no external-worker cutover occurs in this release.
@@ -817,6 +822,16 @@ An embedded-only immutable package now declares `RUNTIME_TOPOLOGY.json` with the
 
 An already-installed retry checks the live commit before installer promotion. It may validate an older package without a topology manifest, but it never promotes an installer from that legacy package. If the application has passed health checks and installer promotion then fails, the installer exits nonzero while preserving the accepted application; uploading and applying the same release again retries promotion. Do not publish the GitHub Release until the installer digest and live commit agree.
 
+
+The COS compatibility stage adds a separate artifact-storage CI job, an additive
+file-index migration and pinned official COS SDK dependencies. Default local mode
+remains unchanged. The installer dependency check must pass before publishing the
+complete package; this change preserves the existing topology, signal handling,
+installer SHA promotion and same-release retry fixes. Enabling COS and retiring the
+disk require the separate production-runbook gates and a complete COS rollback
+release. Prompt source manifest v138 includes the storage adapter modules and native image adapter.
+
+The COS compatibility release includes an operator-invoked temporary-volume provisioning script. Merely installing the release does not create volumes, enable COS, or unmount business data. Any commissioning and storage-mode change requires the separate runbook gates and a complete COS-compatible rollback artifact.
 ## Label consumer lifecycle
 
 The label lifecycle controller ships in an embedded-only complete release. CI exercises real-thread drain contracts and the existing label/PostgreSQL, HTTP, frontend and package gates. No worker service is installed or enabled. Application shutdown waits at most 480 seconds, but the currently installed host unit has no verified matching TimeoutStopSec; the later publisher/worker switch must establish that host budget before claiming complete production drain support. Rollback restores the prior complete release and retains all task/call evidence.

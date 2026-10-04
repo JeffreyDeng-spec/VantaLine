@@ -3,6 +3,8 @@ from collections.abc import Callable, Set
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 import re
 from typing import Any
 
@@ -30,7 +32,7 @@ class TrainingBackgroundLibrary:
     def load_training_background_manifest(self) -> dict[str, Any]:
         manifest_path = self.paths.directory() / "background_manifest.json"
         try:
-            return json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+            return json.loads(_business_files.read_text(manifest_path, encoding="utf-8")) if _business_files.exists(manifest_path) else {}
         except json.JSONDecodeError:
             return {}
 
@@ -41,12 +43,12 @@ class TrainingBackgroundLibrary:
         if not files:
             files = sorted(
                 path
-                for path in self.paths.directory().iterdir()
-                if path.is_file() and path.suffix.lower() in self.paths.suffixes()
-            ) if self.paths.directory().exists() else []
-            if self.paths.default_image().exists() and self.paths.default_image() not in files:
+                for path in _business_files.iterdir(self.paths.directory())
+                if _business_files.is_file(path) and path.suffix.lower() in self.paths.suffixes()
+            ) if _business_files.exists(self.paths.directory()) else []
+            if _business_files.exists(self.paths.default_image()) and self.paths.default_image() not in files:
                 files.insert(0, self.paths.default_image())
-        elif set_id == "green_conveyor" and self.paths.default_image().exists() and self.paths.default_image() not in files:
+        elif set_id == "green_conveyor" and _business_files.exists(self.paths.default_image()) and self.paths.default_image() not in files:
             files.insert(0, self.paths.default_image())
         library: list[dict[str, Any]] = []
         for index, path in enumerate(files):

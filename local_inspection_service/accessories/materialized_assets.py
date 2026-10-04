@@ -1,6 +1,8 @@
 """Materialized accessory assets, metadata normalization and readiness."""
 from typing import Any
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 from .materialized_asset_ports import MaterializedAssetPaths, SpriteCatalogPoseOperations, SpriteCatalogMaterialPolicy, SpriteCatalogReadiness, TextCatalogOperations
 
 def clean_sprite_metadata_complete(asset: dict[str, Any]) -> bool:
@@ -81,11 +83,11 @@ class SpriteAssetCatalog:
             if asset.get("kind") != "clean_object_sprite":
                 continue
             path = self._paths.resolve()(asset.get("path"))
-            if not path.exists() or path.suffix.lower() != ".png":
+            if not _image_files.files.exists(path) or path.suffix.lower() != ".png":
                 continue
             asset["path"] = str(path)
             if not asset.get("width") or not asset.get("height"):
-                image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+                image = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
                 if image is not None:
                     asset.setdefault("width", int(image.shape[1]))
                     asset.setdefault("height", int(image.shape[0]))
@@ -144,10 +146,10 @@ class TextAssetCatalog:
             if asset.get("kind") != "canonical_text_image":
                 continue
             path = self._paths.resolve()(asset.get("path"))
-            if not path.exists() or path.suffix.lower() not in self._operations.suffixes():
+            if not _image_files.files.exists(path) or path.suffix.lower() not in self._operations.suffixes():
                 continue
             if not asset.get("width") or not asset.get("height"):
-                image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+                image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
                 if image is not None:
                     asset.setdefault("width", int(image.shape[1]))
                     asset.setdefault("height", int(image.shape[0]))

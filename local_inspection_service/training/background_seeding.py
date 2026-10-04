@@ -2,6 +2,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 import shutil
 from typing import Any
 
@@ -19,7 +21,7 @@ class BackgroundSeeding:
         self.minimum, self.seed, self.clock = minimum, seed, clock
 
     def seed_default_background_set(self) -> None:
-        if not self.paths.default().exists():
+        if not _business_files.exists(self.paths.default()):
             return
         manifest = self.load()
         sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
@@ -27,8 +29,8 @@ class BackgroundSeeding:
         set_dir = self.paths.sets() / default_id
         set_dir.mkdir(parents=True, exist_ok=True)
         original_target = set_dir / self.paths.default().name
-        if not original_target.exists():
-            shutil.copy2(self.paths.default(), original_target)
+        if not _business_files.exists(original_target):
+            _business_files.copy2(self.paths.default(), original_target, local_copy=shutil.copy2)
         self.minimum(default_id)
         sets.setdefault(
             default_id,
@@ -47,5 +49,5 @@ class BackgroundSeeding:
 
     def background_set_dirs(self) -> list[Path]:
         self.seed()
-        dirs = [path for path in self.paths.sets().iterdir() if path.is_dir()] if self.paths.sets().exists() else []
+        dirs = [path for path in _business_files.iterdir(self.paths.sets()) if _business_files.is_dir(path)] if _business_files.exists(self.paths.sets()) else []
         return sorted(dirs, key=lambda path: path.name)

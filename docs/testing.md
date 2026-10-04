@@ -1342,6 +1342,15 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 **Status: Authoritative**
 
+COS evacuation: `python scripts/smoke_cos_migrate.py` runs offline synthetic checks
+for interrupted inventories, source mutation before/during upload, same-length
+remote corruption, deduplicated resume, secret/symlink exclusion and path escape.
+It also restores without the original source disk, rejects a pre-existing target,
+never publishes corrupt restored files, checks subset selection and free-space
+failure, and rejects manifest entries outside their declared subtrees.
+The fake client performs no network calls. Real SDK transfer, full production
+readback, database restore and runtime cutover remain separate operational gates.
+
 ## Backend extraction contract
 
 `python -X utf8 scripts/smoke_model_dependency_contract.py` verifies callable loader
@@ -1898,6 +1907,35 @@ CI replays the exact v564 `label_inspection/api.py` source against candidate lis
 
 `git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > /tmp/legacy-installer-v566.sh` followed by `VANTALINE_BASE_INSTALLER=/tmp/legacy-installer-v566.sh bash scripts/smoke_release_installer_bridge.sh` executes the production installer inside private Linux mount namespaces with synthetic archives and stubbed systemd/database/HTTP commands. It checks successful embedded installation, missing/mismatched/unsupported topology and bad checksum before service stop, failed health rollback, post-commit installer promotion failure and exact-release retry, and rejection when the already-installed live commit differs. The matrix also executes the frozen v566 installer for the first bridge package, the promoted installer for a second embedded release, legacy-current retry without installer downgrade, and TERM/INT on both sides of the application commit boundary. The CI release-package job builds the complete immutable package and verifies VERSION, topology, installer bytes and checksums. These tests do not prove an independent worker topology or real production latency. The release workflow separately compares the promoted host installer digest with the immutable artifact and checks the live commit before publishing.
 
+
+## COS runtime tests
+
+Run `scripts/smoke_artifact_storage.py` for failed/corrupt upload, immutable object
+retention after DB failure, CAS conflict, cache pins/eviction, reserved-space refusal
+and kernel-lock release after process death. `scripts/smoke_artifact_integrations.py`
+checks comparison/text media ownership, real HTTP middleware with synthetic users,
+HEAD/Range/ETag, legacy sharing, original-byte ZIP packaging, RunPod token transfer,
+synthetic artifact import and named local model loading without source files.
+These tests do not claim real model inference or remote GPU acceptance.
+
+Set `ARTIFACT_TEST_DATABASE_URL` to a disposable database named exactly
+`vantaline_cos_storage_test` and run `scripts/smoke_artifact_postgres.py`; it refuses
+other database names and checks real concurrent CAS, migration idempotence, prefix
+isolation, rollback and retained versions. The CI artifact-storage job uses its own
+PostgreSQL service and synthetic fixtures.
+
+`benchmark_artifact_workspace.py --report NEW_REPORT` is an opt-in 3,920,294,827-byte
+incompressible synthetic ZIP benchmark, not a paid training call or a substitute
+for actual historical-dataset acceptance. It records output/reserved space, free
+space and cleanup and retains no benchmark archive.
+
+The image-storage integration test uses actual OpenCV/Pillow PNG round-trips with synthetic data, verifies tombstone behavior and failed replacement preservation, and checks persistence precedes ordinary image analysis. Local Mac floating-point call-trace golden mismatches in background variants and preview rendering were reproduced on unchanged e0b43c3; Linux CI remains the gate and these local checks are not reported as passing.
+
+COS regression coverage also includes multipart admission before the route handler, staging release after failure, stale JSON read-modify-write rejection, and no second paid submission after a successful provider response followed by failed persistence. Real PostgreSQL tests verify historical version retrieval and the additive mtime field. The hard-volume provisioning script is not proof of a live mounted layout; record actual mount/backing-file and capacity evidence during Linux commissioning.
+
+COS RunPod submission reserves upload headroom and publishes a durable per-job claim before the paid POST. An existing claim prevents automatic resubmission after a timeout, process death or lost response; operators must reconcile the original remote job. Dataset generation and ZIP preparation share the exclusive work slot, and COS training rejects local/legacy-worker fallback. Regression fixtures exercise capacity rejection before POST and a timed-out POST that is called only once.
+
+COS integration smoke additionally exercises a real OpenCV inspection-image producer with no local output file, verified readback, and failed-upload propagation. A separate promoted-model fixture proves a storage failure never triggers a paid teacher fallback. The ordinary detection media, analysis, annotation, photo highlight and pipeline-resource contracts remain required.
 ## Label consumer lifecycle
 
 `python scripts/smoke_label_worker_lifecycle.py` checks the actual consumer with real threads and barriers: duplicate startup, two in-flight polls, blocked claims, cleanup on worker threads, timed-out drain/restart fencing, shared join budget, partial startup failure, cleanup failure redaction, disabled/missing repository, conflicting registration, repeated ASGI lifespans, explicit adapter timeout, and import without FastAPI/server. `smoke_label_dependencies.py` retains model/legacy binding and exception-stage behavior on the extracted loop. Assembled HTTP contracts change only the label shutdown callback name from `set` to `stop`; real PostgreSQL label smoke retains the persisted concurrency/deadline/call fences. These synthetic tests do not establish a production 480-second systemd allowance.
@@ -1908,4 +1946,5 @@ Attempted threads are tracked before native launch. Any startup exception fails 
 
 Frozen label-list API replays import the former `worker.register` Web adapter. Their shared test fixture temporarily supplies `worker_api.register` at that old location while retaining the original list function and all assertions; it restores the module immediately afterwards. Production consumer code has no compatibility import back into the Web adapter.
 
+The artifact integration gate also checks indexed retention with no source files: failed database publication cannot mark evidence purged, while successful expiry tombstones its logical location and retains the remote historical bytes.
 The isolated PostgreSQL label batch/payload benchmark flushes the five alternating raw time and peak-memory samples, task count, unrounded P95 and unchanged guard limits before each performance assertion. The payload case also records synthetic wire bytes. Preserve this output when a CI guard fails; a missing post-success summary is not evidence of runner noise. This diagnostic output does not change datasets, measurement order, thresholds, queries or production behavior.

@@ -1477,6 +1477,33 @@ Model profile `initialize()` first checks the committed state row in a short rea
 
 The first task-list page now calls a bounded list-only run reader for groups of at most 64 native task IDs. Its SQL result removes only five fields that `public()` already discards for JSON objects whose own `kind` is `run`: `model`, `prompt_hash`, `layout`, `transformations`, and `profile_snapshot`. Non-run or non-object JSON is returned unchanged. The API still decodes, projects and sorts every run per task before filtering the mixed native/legacy/manual/Beta rows or creating the fixed 15-minute page snapshot. Detail continues to fetch complete run JSON. This lowers transfer size for ordinary runs; it does not yet replace full-row reads with SQL summaries or remove the older source scans.
 
+
+## COS compatibility stage
+
+`storage/artifacts` owns explicit logical paths, append-only PostgreSQL generations,
+private content-addressed STANDARD objects, verified pinned reads and Unix process-shared
+scratch reservations. Business modules never patch `Path`/`open` or mount COS as a filesystem.
+The default remains `local`. The comparison/text media stores, output HTTP responses,
+training archive/export/transfer/import, dataset/model catalog and native model loader
+now have opt-in adapters. This is not yet a complete production cutover: remaining
+upload, generation, image-processing and worker file operations require conversion
+and disk-inaccessible acceptance before enabling COS on production.
+
+COS publication verifies a complete remote SHA-256/length before a CAS appends the
+next available generation. Database failure retains unreferenced remote objects and
+the producer source; deletion adds a tombstone without deleting historical objects.
+HTTP ownership and RunPod token authorization precede lookup; HEAD/Range use a pinned
+selected generation. Training ZIPs stream indexed original bytes without a second
+dataset tree or lossy transcode. Native model initialization uses an original-name
+leased file and cleans it after the loader returns.
+
+The next compatibility slice routes ordinary OpenCV image reads/writes, accessory/background uploads, sample image/label/manifest publication, legacy incoming evidence and video decoding through explicit business-file adapters. Cache-backed native reads use links to read-only cache blobs with original filenames, held by a cache pin and a process lease, so model/video reads do not duplicate whole files or take the training preparation slot. Configuration and packaged files keep local I/O.
+
+Native worker scratch can use independently capped, preallocated ext4 filesystems backed by files on the system disk. This is local temporary storage only. Multipart parsing reserves the upload budget before body receipt; native workers retain the exclusive work reservation through child exit and result publication. COS-mode Cursor Image2 failures never automatically invoke a paid fallback. JSON resource mutations carry the version observed when reading and reject stale updates. The location index preserves source mtime_ns on historical import so cache/provenance checks do not mistake migration time for generation time.
+
+COS RunPod submission reserves upload headroom and publishes a durable per-job claim before the paid POST. An existing claim prevents automatic resubmission after a timeout, process death or lost response; operators must reconcile the original remote job. Dataset generation and ZIP preparation share the exclusive work slot, and COS training rejects local/legacy-worker fallback. Regression fixtures exercise capacity rejection before POST and a timed-out POST that is called only once.
+
+The explicit detection image ports use the shared business-file adapter in COS mode, including inspection evidence, reference sheets, annotations and encoded input. OpenCV transforms remain injected capabilities; only file reads and writes go through verified storage. Pipeline model/dataset availability uses the same index.
 ## Label consumer lifecycle
 
 The label consumer lifecycle now belongs to `label_inspection/worker.py:LabelWorker`, without FastAPI or server imports. `worker_api.py` installs one pair of hooks per application and rejects conflicting repeat registration. Two process-local consumers retain the PostgreSQL global concurrency fence. A short lock admits iterations; stop refuses later admissions, while an earlier admitted connect/claim/process and its thread-local connection cleanup remain in flight. Drain acknowledges success only after both threads exit; all joins share one monotonic 480-second budget, and a live timed-out generation cannot be replaced. This is the embedded topology; PDF imports retain their separate Web daemon.

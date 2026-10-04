@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse
+from ..storage.artifacts.http import file_response
 from ..schemas.text_inspection import IncomingTextRulesRequest, IncomingTextReviewRequest
 from .incoming_catalog import IncomingCatalog
 from .incoming_execution import IncomingExecution
@@ -26,7 +27,7 @@ def register_catalog(app: FastAPI, catalog: IncomingCatalog) -> CatalogRoutes:
 
     @app.get("/api/incoming-text/references/{reference_id}/asset/{asset_kind}")
     def get_incoming_text_reference_asset(reference_id: str, asset_kind: str) -> FileResponse:
-        return FileResponse(catalog.get_incoming_text_reference_asset(reference_id, asset_kind))
+        return file_response(catalog.get_incoming_text_reference_asset(reference_id, asset_kind), local_factory=FileResponse)
 
     @app.post("/api/incoming-text/tasks/{task_id}/references")
     async def create_incoming_text_reference(
@@ -66,7 +67,7 @@ def register_inspections(app: FastAPI, execution: IncomingExecution, reviews: In
 
     @app.get("/api/incoming-text/inspections/{inspection_id}/evidence/{asset_kind}")
     def get_incoming_text_inspection_evidence(inspection_id: str, asset_kind: str) -> FileResponse:
-        return FileResponse(reviews.get_incoming_text_inspection_evidence(inspection_id, asset_kind))
+        return file_response(reviews.get_incoming_text_inspection_evidence(inspection_id, asset_kind), local_factory=FileResponse)
 
     @app.post("/api/incoming-text/inspections/{inspection_id}/review")
     def review_incoming_text_inspection(inspection_id: str, request: IncomingTextReviewRequest) -> dict[str, Any]:

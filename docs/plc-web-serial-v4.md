@@ -108,3 +108,5 @@ Settings → 设备与运行. Only administrators edit system parameters. Author
 operators still choose cameras and connect/disconnect PLC on the detection page.
 The move does not alter browser-owned serial I/O, real-ACK verification, capture
 provenance, leases, addresses or uncertain-write/no-retry behavior.
+
+The opt-in COS file adapter changes camera image persistence only: it must succeed before image analysis can continue. PLC authorization, lease epochs, planned frames, browser-only serial I/O and the ban on retrying uncertain physical writes remain unchanged. Storage tests use synthetic images and perform no PLC I/O.

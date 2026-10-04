@@ -743,6 +743,55 @@ releases use the existing complete-release deployment and rollback procedure.
 
 **Status: Authoritative**
 
+## COS evacuation tooling
+
+`scripts/cos_migrate.py` provides operator-run inventory, upload, independent
+verification and isolated restore. It does not switch runtime storage, modify database records, delete
+local data, or authorize disk detachment. Pause relevant file writers for the final
+inventory/transfer; an online inventory is only preliminary evidence.
+
+Run `inventory --root SOURCE --include outputs --manifest MANIFEST` with reviewed,
+non-overlapping relative roots; repeat `--include` for other selected subtrees. Keep
+manifests and receipts outside the source filesystem in a restricted directory.
+The tool creates new 0600 files and refuses overwrites. Dot paths, credential/key
+names, local environment/config/auth files and symlinks are recorded as excluded;
+review exclusions and preserve required local-only state separately. A file scan
+is not a consistent PostgreSQL backup: take `pg_dump` with the approved database
+identity, verify restore separately, and select the dump as a reviewed input.
+Never copy live PostgreSQL data files into COS.
+
+Install the official `cos-python-sdk-v5` in a separate operational environment and
+record its resolved version. Supply `COS_SECRET_ID`, `COS_SECRET_KEY` and optional
+`COS_SESSION_TOKEN` through restricted process credentials, never command history,
+TAT command text, source or reports. The application environment is unchanged.
+Use `upload --manifest MANIFEST --receipt NEW_RECEIPT --bucket BUCKET --region REGION`.
+The default `objects/sha256/` layout is content-addressed: manifests map legacy
+paths to checksums, and receipts record final object keys. The target bucket must
+be private and in the approved region; uploads request STANDARD storage over HTTPS.
+Credentials need scoped read/write/multipart operations, not deletion or management.
+
+Each object is read back in full and SHA-256/length checked. Existing objects are
+verified rather than overwritten; partial runs have no complete footer. Retry with
+the same manifest and a new receipt. Changed sources require a new inventory.
+Use `verify` with the same options for an independent remote readback. Before disk
+retirement, preserve restricted remote copies of the manifests and receipts and
+verify recovery of original paths and permissions. Completed receipts alone do not
+prove runtime readiness, account isolation, database restore, or sufficient local
+working space; those remain separate cutover gates.
+
+For a representative restore, use `restore --manifest MANIFEST --bucket BUCKET
+--region REGION --destination NEW_DIRECTORY --include RELATIVE_FILE_OR_SUBTREE`.
+Omit `--include` only when a complete restore fits locally. The original source
+disk need not exist. The command requires a new destination and enough free space
+for all selected bytes plus a 256 MiB reserve. It verifies each complete download
+before publishing that file, fails on corruption, and never replaces existing
+files. Restored files are private (0600) under a private root (0700); the operator
+must apply the reviewed application's ownership/permissions after validation.
+Retain the command's result and manifest digest as recovery evidence. A partial
+directory after failure is not a successful restore; use a fresh destination for
+another attempt. For database restore checks, enumerate every application schema,
+not only `public`, and reject a validation run that checked no business tables.
+
 Runtime connection/identity extraction uses ordinary complete-release restart and
 rollback. It adds no service, flag, migration or maintenance gate. Existing worker
 cleanup remains on its own thread; do not close an active worker's connection from
@@ -994,6 +1043,39 @@ For the first bridge release, expect the old host installer to perform the appli
 
 If promotion fails after the application has passed health checks, the command reports `application_committed=true control_promotion=incomplete` and fails. Verify the live commit, then retry the same immutable release to complete promotion; do not infer that the application rolled back. If the application fails before commitment, the installer restores the previous symlink and Web service as before. Never enable a separate worker based on this embedded-only bridge.
 
+
+## COS runtime transition gates
+
+The compatibility adapters remain disabled by default; their presence is not disk
+retirement evidence. First install the pinned SDK dependencies through the existing
+controlled dependency update, then deploy a complete CI-approved immutable package.
+Do not copy application modules to the host. Keep a complete COS-compatible rollback
+package before changing storage mode.
+
+`import_cos_locations.py --pair MANIFEST RECEIPT --report NEW_REPORT` validates
+complete manifest/receipt identity and reads every unique remote object back without
+opening the original disk. Add `--apply` to append missing locations after verification.
+Provide runtime configuration and systemd credentials as above. Reports are exclusive
+0600 files; partial imports can resume, but a conflicting path requires explicit delta
+reconciliation. Historical object keys are reused, never copied to a second prefix.
+
+Do not enable production COS until every business file producer/consumer, active
+missing reference, two-account permission test, largest-dataset preparation, bounded
+real RunPod/detection test, final paused-writer delta, fresh database restore and
+rollback gate pass. Normal maintenance starts only after readiness; begin rollback
+at minute 25 and restore within 30 minutes. If the expired disk is reclaimed first,
+remain in maintenance and recover only with a COS-compatible complete package.
+After normal unmount, verify service restart, host reboot, a complete release and
+COS rollback with no legacy-disk fallback or fstab dependency. Observe seven days
+without formatting the original disk or deleting historical COS objects.
+
+The image adapter slice is still a compatibility rollout, not cutover authorization. Ordinary file and native-reader contracts do not certify live Codex/image-worker scratch directories or every asynchronous provider path. Keep the production file-store mode local until those paths, request staging bounds and the complete disk-inaccessible service tests pass.
+
+Before COS commissioning, review and run `scripts/setup_artifact_volumes.py` without flags for its read-only space plan, then use `--apply` from the verified release to provision local capacity caps. The script creates only absent backing files, never reformats existing files or touches the business-data mount, and requires 8 GiB free plus a 1 GiB setup margin after preallocation. It installs three persistent mount units; it does not change application mode. Configure systemd `RequiresMountsFor` for all three mounts, ReadWritePaths for the state roots, the private LoadCredential, and TMPDIR to upload/spool. Verify the same configuration in the independent acceptance instance before switching either production service. Native workspace failure/unknown provider outcome must not cause an automatic paid retry. A missing image runtime credential is a commissioning gap, not a reason to disable a previously working feature.
+
+COS RunPod submission reserves upload headroom and publishes a durable per-job claim before the paid POST. An existing claim prevents automatic resubmission after a timeout, process death or lost response; operators must reconcile the original remote job. Dataset generation and ZIP preparation share the exclusive work slot, and COS training rejects local/legacy-worker fallback. Regression fixtures exercise capacity rejection before POST and a timed-out POST that is called only once.
+
+Detection image persistence and pipeline resource availability are included in the COS adapter gate. A successful inference with a failed artifact upload is a failed request; do not retry a paid teacher to compensate for unavailable storage. The independent source-inaccessible service acceptance remains required.
 ## Label consumer lifecycle
 
 The embedded label controller now exposes an internal `drain()` result: true means both consumer threads and their cleanup exited; false means drain cannot be acknowledged: threads may still be live, or startup/connection cleanup failed. Inspect the internal state and live-thread count. Stop admission includes already-admitted blocked claims in the drain budget; a failed drain cannot authorize a worker topology switch. The 420-second task deadline fences results but does not cancel external I/O. Application waiting is bounded at 480 seconds; host systemd allowance remains a release-controller prerequisite. No independent label worker or maintenance gate is enabled in this release, and the PDF-import daemon remains in Web. Restore a complete previous release on failure; do not requeue unknown paid calls.

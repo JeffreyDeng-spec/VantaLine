@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from fastapi import HTTPException
 
@@ -26,7 +28,7 @@ class BackgroundValidation:
         clean_task_id = self.sanitize(task_id)
         if not clean_task_id:
             raise HTTPException(status_code=404, detail="AI detection task not found")
-        image_bgr = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+        image_bgr = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
         if image_bgr is None:
             raise HTTPException(status_code=400, detail="无法读取背景图片，请重新上传。")
         model_id = f"{self.prefix()}{clean_task_id}"

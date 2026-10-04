@@ -1,9 +1,12 @@
 """Visible background media lookup and ordered catalog/default projection."""
 from collections.abc import Callable, Collection
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any, Protocol
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
+from ..storage.artifacts.http import file_response
 from .background_selection import BackgroundSetList
 
 Record = dict[str, Any]
@@ -29,9 +32,9 @@ class BackgroundQuery:
             raise HTTPException(status_code=404, detail="Background image not found")
         clean_name = Path(image_name).name
         path = self.sets() / clean_id / clean_name
-        if not path.exists() or path.suffix.lower() not in self.suffixes():
+        if not _business_files.exists(path) or path.suffix.lower() not in self.suffixes():
             raise HTTPException(status_code=404, detail="Background image not found")
-        return FileResponse(path)
+        return file_response(path, local_factory=FileResponse)
 
     def training_background_sets(self, user_id: str | None = None) -> dict[str, Any]:
         user = self.current()

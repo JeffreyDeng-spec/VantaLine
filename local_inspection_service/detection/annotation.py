@@ -1,4 +1,5 @@
 """Detection box geometry, rendering and output with explicit image/storage capabilities."""
+from ..storage.artifacts.images import image_backend
 from collections.abc import Callable
 from pathlib import Path
 import math
@@ -115,7 +116,7 @@ class DetectionAnnotation:
     def write_ai_original_output(self, image_bgr: np.ndarray, request_id: str) -> str:
         out_name = f"{request_id}_ai_original.jpg"
         out_path = self.directory("ai_detection") / out_name
-        self.images().imwrite(str(out_path), image_bgr, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
+        image_backend(self.images()).imwrite(str(out_path), image_bgr, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
         return self.url(out_path)
 
     def write_ai_annotated_output(self, image_bgr: np.ndarray, request_id: str, detections: list[dict[str, Any]], rule: dict[str, Any]) -> str:
@@ -124,5 +125,5 @@ class DetectionAnnotation:
             return self.original(image_bgr, request_id)
         out_name = f"{request_id}_ai_annotated.jpg"
         out_path = self.directory("ai_detection") / out_name
-        self.images().imwrite(str(out_path), annotated, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
+        image_backend(self.images()).imwrite(str(out_path), annotated, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
         return self.url(out_path)

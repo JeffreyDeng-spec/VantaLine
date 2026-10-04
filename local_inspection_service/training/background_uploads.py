@@ -1,4 +1,6 @@
 """Uploaded training backgrounds and task environment captures, preserving file/state write boundaries."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -49,8 +51,7 @@ class BackgroundUpload:
         set_dir = self.paths.sets() / set_id
         set_dir.mkdir(parents=True, exist_ok=True)
         source_path = set_dir / f"source{suffix or '.png'}"
-        with source_path.open("wb") as out:
-            shutil.copyfileobj(file.file, out)
+        _business_files.copy_stream(source_path, file.file, shutil.copyfileobj)
         meta = self.records.update_provider()(
             set_id,
             id=set_id,
@@ -146,8 +147,7 @@ class BackgroundCapture:
         capture_dir = self.paths.output()("task_environment_backgrounds", str(user.get("id") or "")) / clean_task_id
         capture_dir.mkdir(parents=True, exist_ok=True)
         source_path = capture_dir / f"environment_{int(self.clock())}_{self.uuid().hex[:6]}{suffix or '.jpg'}"
-        with source_path.open("wb") as out:
-            shutil.copyfileobj(file.file, out)
+        _business_files.copy_stream(source_path, file.file, shutil.copyfileobj)
         validation = self.background.validate(clean_task_id, task, source_path)
         background_set = self.background.save()(
             clean_task_id,

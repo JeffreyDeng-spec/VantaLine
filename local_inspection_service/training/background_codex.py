@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import threading
 from typing import Protocol, TextIO
+from ..storage.artifacts.files import BusinessFiles
 
 
 class GenerateCodexBackground(Protocol):
@@ -38,6 +39,10 @@ class CodexBackgroundGeneration:
         self.which, self.paths, self.name, self.start = which, paths, name, start
 
     def run_codex_background_generation(self, source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
+        files = BusinessFiles()
+        runtime = files.runtime(set_dir)
+        if runtime is not None:
+            return self._cos_backgrounds(runtime, files, source_path, set_dir, set_id, count)
         if not self.which("codex") or not source_path.exists():
             return []
         set_dir.mkdir(parents=True, exist_ok=True)
@@ -77,6 +82,38 @@ class CodexBackgroundGeneration:
         except Exception:
             return []
         return [path for path in outputs if path.exists()]
+
+    def _cos_backgrounds(self, runtime, files, source_path, set_dir, set_id, count):
+        from PIL import Image
+        from ..storage.artifacts.native import image_job
+        from ..storage.artifacts.types import ArtifactUnavailable
+        if count <= 0:
+            return []
+        if not files.is_file(source_path):
+            raise FileNotFoundError("background reference is unavailable")
+        outputs = [set_dir / f"codex_{self.name(set_id)}_{idx:02d}.png" for idx in range(1, count + 1)]
+        log_path = self.paths.logs() / f"background_{self.name(set_id)}_codexcli.log"
+        versions = {}
+        for path in [*outputs, log_path]:
+            row = runtime.store.locations.get(runtime.key(path))
+            versions[str(path)] = row.generation if row else 0
+        prompt = lambda ignored: "\n".join([
+            "You are the ImageWorker for the local assembly-line inspection service.",
+            "Use the attached reference image as the source environment. Generate realistic, empty, overhead-view background PNGs of the same surface type and same environment. Keep camera geometry, material texture, scratches, dust, lighting, rails/edges if present, and mild natural variation. Do not add objects, text, labels, watermarks, hands, people, manuals, bottles, tools, or parts.",
+            "Save the final PNG files exactly here:", *["/work/" + path.name for path in outputs],
+        ]) + "\n"
+        with image_job(runtime, [source_path], prompt) as (unused, log, code):
+            runtime.store.put(runtime.key(log_path), log, expected_generation=versions[str(log_path)])
+            if code != 0:
+                raise ArtifactUnavailable("background generation did not complete; no automatic paid retry")
+            for path in outputs:
+                local = unused.parent / path.name
+                if local.is_symlink() or not local.is_file():
+                    raise ArtifactUnavailable("background output is incomplete")
+                with Image.open(local) as decoded:
+                    decoded.verify()
+                runtime.store.put(runtime.key(path), local, expected_generation=versions[str(path)])
+        return outputs
 
 
 class CodexBackgroundThread:

@@ -2,6 +2,8 @@
 from typing import Any
 from pathlib import Path
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from .object_preprocessing_ports import ObjectSpritePolicy, ObjectSpriteSources, ObjectSpriteRuntime, ObjectSpriteCutouts, ObjectSpriteComponents, ObjectSpriteMetadata, ObjectSpriteArtifacts
 
@@ -24,7 +26,7 @@ class ObjectSpritePreprocessor:
         pose_jobs = [
             job
             for job in self._sources.jobs()(item)
-            if Path(str(job.get("output_path", ""))).exists() and not job.get("intermediate")
+            if _image_files.files.exists(Path(str(job.get("output_path", "")))) and not job.get("intermediate")
         ]
         expected_pose_sprite_count = len(pose_jobs) * len(self._sources.positions())
         existing = self._policy.existing()(item)
@@ -62,10 +64,10 @@ class ObjectSpritePreprocessor:
         pose_paths = [Path(str(job.get("output_path", ""))) for job in pose_jobs]
         for job in pose_jobs:
             pose_path = Path(str(job.get("output_path", "")))
-            if not pose_path.exists():
+            if not _image_files.files.exists(pose_path):
                 continue
             pose_family = str(job.get("pose_family") or "")
-            pose = cv2.imread(str(pose_path), cv2.IMREAD_COLOR)
+            pose = _image_files.imread(str(pose_path), cv2.IMREAD_COLOR)
             if pose is not None:
                 base_regions = self._sources.regions()(pose, padded=False)
                 for idx, (x1, y1, x2, y2) in enumerate(self._sources.regions()(pose, padded=True)):
@@ -230,7 +232,7 @@ class ObjectSpritePreprocessor:
         if not generated and existing:
             for asset_meta in existing[:18]:
                 path = Path(str(asset_meta.get("path", "")))
-                image_any = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+                image_any = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
                 if image_any is None or image_any.ndim != 3 or image_any.shape[2] < 4:
                     continue
                 alpha = image_any[:, :, 3]
@@ -268,13 +270,13 @@ class ObjectSpritePreprocessor:
             for path in self._sources.images()(item):
                 if path in pose_paths:
                     continue
-                image_any = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+                image_any = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
                 if image_any is not None and image_any.ndim == 3 and image_any.shape[2] >= 4:
                     for cutout in self._components.cutouts()(image_any):
                         add_cutout(cutout, image_any.shape, "source_png_alpha", {"physical_size_mm": physical_size, "material_alpha_policy": alpha_policy})
                 if generated:
                     break
-                image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+                image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
                 if image is None:
                     continue
                 if allow_ai_cutout:
@@ -288,7 +290,7 @@ class ObjectSpritePreprocessor:
             for path in self._sources.images()(item):
                 if path in pose_paths:
                     continue
-                image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+                image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
                 if image is None:
                     continue
                 full_mask = np.full(image.shape[:2], 255, dtype=np.uint8)

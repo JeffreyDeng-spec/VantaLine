@@ -1,4 +1,6 @@
 """Legacy inspection visibility, duplicate lookup and human disposition."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -48,7 +50,7 @@ class IncomingReviews:
         self.access.task()(str(inspection.get("task_id")))
         key = {"source": "source_path", "corrected": "corrected_path", "annotated": "annotated_path"}.get(asset_kind)
         path = Path(str(inspection.get(key or "") or ""))
-        if not key or not path.exists() or not self.media.under(path, self.media.root()):
+        if not key or not _business_files.exists(path) or not self.media.under(path, self.media.root()):
             raise HTTPException(status_code=404, detail="检验证据文件不存在")
         return path
 

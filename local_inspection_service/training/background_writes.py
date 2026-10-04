@@ -1,6 +1,8 @@
 """Background identifier allocation and manifest updates, preserving aliases and write order."""
 from collections.abc import Callable
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -19,11 +21,11 @@ class BackgroundWrites:
         clean_id = self.safe(base_id)
         manifest = self.load()
         sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-        if clean_id not in sets and not (self.sets() / clean_id).exists():
+        if clean_id not in sets and not _business_files.exists(self.sets() / clean_id):
             return clean_id
         for _ in range(50):
             candidate = f"{clean_id}_{self.uuid().hex[:6]}"
-            if candidate not in sets and not (self.sets() / candidate).exists():
+            if candidate not in sets and not _business_files.exists(self.sets() / candidate):
                 return candidate
         return f"{clean_id}_{int(self.clock())}"
 
