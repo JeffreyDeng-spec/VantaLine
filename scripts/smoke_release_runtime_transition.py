@@ -193,6 +193,25 @@ class Transitions(unittest.TestCase):
         self.assertEqual(files.value(previous.revision), previous.export()['configuration'])
         self.assertTrue((files.directory / h.snapshot.revision).is_dir())
 
+    def test_corrupt_distinct_previous_configuration_fails_before_mutation(self):
+        h = self.h
+        previous = ConfigurationSnapshot.capture({'VANTALINE_DATA_STORE':'postgres',
+            'DATABASE_URL':'synthetic', 'HTTP_PROXY':''}, h.root)
+        self.assertNotEqual(previous.revision, h.snapshot.revision)
+        files = h.transition.configurations()
+        files.install(previous.export(), expected_revision=previous.revision)
+        files.select(previous.revision)
+        (files.directory / previous.revision / 'config.json').write_text('{}')
+        with self.assertRaises(ContractError):
+            h.transition.begin(h.old, h.new)
+        self.assertFalse(h.journal.exists())
+        self.assertFalse(h.maintenance)
+        self.assertEqual(set(h.processes), {WEB})
+        self.assertFalse(any(e[0] in ('stop', 'install') or
+            e[0] == 'control' and e[-1] in ('pause', 'close_admission') for e in h.events))
+        self.assertFalse((files.directory / h.snapshot.revision).exists())
+        self.assertEqual(os.readlink(files.directory / 'current'), previous.revision)
+
     def test_invalid_export_fails_before_admission_or_stop(self):
         h = self.h
         original = h.transition.client

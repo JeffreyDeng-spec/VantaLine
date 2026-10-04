@@ -32,9 +32,10 @@ def private_bytes(path: Path, *, owner: int | None, maximum: int, group_read=Fal
 def credential_digest(raw: bytes):
     try:
         value = json.loads(raw)
-        if (not isinstance(value, dict) or not {"COS_SECRET_ID", "COS_SECRET_KEY"} <= value.keys()
-                or not value.keys() <= {"COS_SECRET_ID", "COS_SECRET_KEY", "COS_SESSION_TOKEN"}
-                or any(not isinstance(v, str) or not v or "\x00" in v for v in value.values())):
+        # Match the existing storage reader's consumed fields. Optional token
+        # and unused metadata remain byte-for-byte part of the snapshot.
+        if (not isinstance(value, dict) or not all(isinstance(value.get(key), str) and value[key]
+                for key in ("COS_SECRET_ID", "COS_SECRET_KEY"))):
             raise ValueError()
         return hashlib.sha256(raw).hexdigest()
     except (ValueError, TypeError):

@@ -53,6 +53,17 @@ class ConfigurationPublication(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.files.install(value.export(), expected_revision=value.revision)
 
+    def test_corrupt_candidate_can_be_replaced_with_verified_previous_version(self):
+        first, candidate = self.snapshot(), self.snapshot(HTTP_PROXY="")
+        for value in (first, candidate):
+            self.files.install(value.export(), expected_revision=value.revision)
+        self.files.select(candidate.revision)
+        (self.files.directory / candidate.revision / 'config.json').write_text('{}')
+        with self.assertRaises(ContractError):
+            self.files.capture_pointer()
+        self.files.select(first.revision)
+        self.assertEqual(self.files.capture_pointer(), first.revision)
+
     def test_foreign_pointer_or_digest_rejected_before_selection(self):
         value = self.snapshot()
         with self.assertRaises(ContractError):

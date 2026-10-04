@@ -50,7 +50,7 @@ class ConfigurationFiles:
             raise ContractError("Untrusted runtime configuration parent")
         self._directory(self.directory, create=True)
 
-    def capture_pointer(self):
+    def _pointer_revision(self):
         self.prepare()
         path = self.directory / "current"
         if not os.path.lexists(path):
@@ -62,6 +62,12 @@ class ConfigurationFiles:
         if not re.fullmatch("[0-9a-f]{64}", revision):
             raise ContractError("Untrusted runtime configuration pointer")
         self._directory(self.directory / revision)
+        return revision
+
+    def capture_pointer(self):
+        revision = self._pointer_revision()
+        if revision is not None:
+            self.value(revision)  # Recovery must be usable before admission changes.
         return revision
 
     def _read(self, path, *, mode, limit):
@@ -166,7 +172,7 @@ class ConfigurationFiles:
         if revision is not None and (not isinstance(revision, str) or not re.fullmatch("[0-9a-f]{64}", revision)):
             raise ContractError("Invalid runtime configuration revision")
         current = self.directory / "current"
-        self.capture_pointer()  # Reject a foreign regular file or out-of-tree target.
+        self._pointer_revision()  # A corrupt candidate must not block restoring a verified old version.
         if revision is None:
             current.unlink(missing_ok=True)
         else:

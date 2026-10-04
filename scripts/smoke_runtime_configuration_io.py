@@ -57,6 +57,33 @@ class ConfigurationIO(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 ConfigurationSnapshot.read_worker(path, credentials_directory=worker, owner=os.getuid())
 
+    def test_capture_preserves_storage_reader_credential_compatibility(self):
+        from local_inspection_service.storage.artifacts.runtime import build_runtime
+        import base64
+        for extra in ({"COS_SESSION_TOKEN": None}, {"metadata": {"owner": "synthetic"}}):
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                data, credentials = root / "data", root / "credentials"
+                data.mkdir(); credentials.mkdir()
+                raw = json.dumps({"COS_SECRET_ID": "fixture", "COS_SECRET_KEY": "fixture", **extra}).encode()
+                path = credentials / "cos-credentials.json"
+                path.write_bytes(raw); path.chmod(0o600)
+                # Real pre-bridge reader; SDK construction and database connection
+                # are lazy and never invoked by this local configuration test.
+                runtime = build_runtime("cos", data, root / "work", root / "cache",
+                    "fixture-123", "synthetic", credentials)
+                self.assertEqual(runtime.mode, "cos")
+                snapshot = ConfigurationSnapshot.capture({"VANTALINE_DATA_STORE": "postgres",
+                    "DATABASE_URL": "synthetic", "VANTALINE_FILE_STORE": "cos",
+                    "VANTALINE_DATA_ROOT": str(data), "VANTALINE_ARTIFACT_WORK_ROOT": str(root / "work"),
+                    "VANTALINE_ARTIFACT_CACHE_ROOT": str(root / "cache"), "VANTALINE_COS_BUCKET": "fixture-123",
+                    "CREDENTIALS_DIRECTORY": str(credentials)}, data)
+                self.assertEqual(base64.b64decode(snapshot.export()["credential"]), raw)
+                config = root / "config.json"
+                config.write_bytes(snapshot._payload); config.chmod(0o640)
+                loaded = ConfigurationSnapshot.read_worker(config, credentials_directory=credentials, owner=os.getuid())
+                self.assertEqual(loaded.export(), snapshot.export())
+
     def test_symlink_and_oversized_private_input_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
