@@ -102,7 +102,7 @@
     },
     {
       "name": "Release and deployment",
-      "paths": [".github/workflows/**", "scripts/install_release.sh", "scripts/install_release.template.sh", "scripts/render_release_installer.py", "scripts/release_runtime_*.py", "scripts/release_services.py", "scripts/smoke_release_runtime_*", "scripts/smoke_release_services.py", "scripts/bootstrap_release_host.sh", "scripts/build_release_artifact.py", "local_inspection_service/release_version.py"],
+      "paths": [".github/workflows/**", "scripts/read_production_release_state.py", "scripts/smoke_release_readonly_diagnostics.py", "scripts/install_release.sh", "scripts/install_release.template.sh", "scripts/render_release_installer.py", "scripts/release_runtime_*.py", "scripts/release_services.py", "scripts/smoke_release_runtime_*", "scripts/smoke_release_services.py", "scripts/bootstrap_release_host.sh", "scripts/build_release_artifact.py", "local_inspection_service/release_version.py"],
       "required_docs": ["docs/release-management.md", "docs/production-runbook.md"]
     },
     {
