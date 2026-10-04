@@ -870,3 +870,12 @@ The control endpoint owns a dedicated PostgreSQL connection factory with explici
 The one-off `fix/backend-release-lock-diagnostics` same-repository PR workflow can collect bounded release metadata through the existing pinned deploy SSH identity and the existing `production` environment. Environment reviewer and branch restrictions remain enforced. It uses no sudo, signals, database access, lock writes or service mutations. Only validated lock/PID metadata, service state/stop settings, installer SHA-256 and version fields enter logs; raw SSH output stays in private runner files and is removed on exit. Do not merge this investigation branch or infer stale-lock recovery permission from its report. PR CI cannot trigger the main-only release workflow. Close the investigation PR after evidence collection; follow the normal reviewed recovery/release gates separately.
 
 The diagnostic binds the opened lock descriptor and both descriptor/path metadata before reporting its numeric PID, rejecting a replaced or changed file. Its standalone POSIX process has a 30-second overall alarm in addition to per-operation limits; expiry emits no partial report and exits. A real drip-response regression checks the overall deadline. Process metadata remains a non-atomic observation and cannot certify lock ownership.
+
+The one-off runtime-transition diagnostic adds only fixed lstat metadata for the
+base/backups directories, v2026.10.605 transition journal, installation guard and
+controller-owned Web drop-in, plus systemd ControlPID. It reports type, numeric
+ownership, mode, size and read stability without reading journal payloads or unit
+contents. The existing 30-second collector deadline, bounded allowlist validator,
+pinned production SSH identity, deploy-account privileges and no-mutation/no-database
+guarantees remain. A diagnostic observation does not authorize changing directory
+permissions, removing a lock/journal, restarting services or retrying the release.

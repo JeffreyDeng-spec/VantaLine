@@ -1977,3 +1977,12 @@ The release-package gate asserts the complete schema-2 embedded/protocol-1 manif
 `python scripts/smoke_release_readonly_diagnostics.py` checks bounded file reads, invalid PID/output suppression, POSIX symlink/FIFO refusal, process disappearance, fixed systemctl properties, version redaction, proxy/redirect rejection, CLI validation, and workflow environment/SSH guards with synthetic data. These tests and a diagnostic report do not certify lock ownership or authorize a retry.
 
 The diagnostic binds the opened lock descriptor and both descriptor/path metadata before reporting its numeric PID, rejecting a replaced or changed file. Its standalone POSIX process has a 30-second overall alarm in addition to per-operation limits; expiry emits no partial report and exits. A real drip-response regression checks the overall deadline. Process metadata remains a non-atomic observation and cannot certify lock ownership.
+
+The one-off runtime-transition diagnostic adds only fixed lstat metadata for the
+base/backups directories, v2026.10.605 transition journal, installation guard and
+controller-owned Web drop-in, plus systemd ControlPID. It reports type, numeric
+ownership, mode, size and read stability without reading journal payloads or unit
+contents. The existing 30-second collector deadline, bounded allowlist validator,
+pinned production SSH identity, deploy-account privileges and no-mutation/no-database
+guarantees remain. A diagnostic observation does not authorize changing directory
+permissions, removing a lock/journal, restarting services or retrying the release.

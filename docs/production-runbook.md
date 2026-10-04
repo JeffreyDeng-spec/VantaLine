@@ -1145,3 +1145,12 @@ The managed embedded package now declares schema 2/protocol 1. Its first install
 When the production PID lock blocks installation, retain the failed run and last accepted version. The isolated read-only diagnostic PR can inspect the fixed lock, its numeric PID in `/proc`, fixed service states and stop budgets, the installed script digest, and disk/loopback API version without changing the host. A missing permission, changed lock, disappearing process or malformed report is unavailable evidence, never permission to clear a lock. A numeric PID and installer-name match do not prove lock ownership; process reuse and concurrent operators still require reconciliation. The diagnostic report alone never starts recovery, deletes a lock or retries deployment. Existing production environment gates may prevent the diagnostic workflow; do not relax them to obtain access.
 
 The diagnostic binds the opened lock descriptor and both descriptor/path metadata before reporting its numeric PID, rejecting a replaced or changed file. Its standalone POSIX process has a 30-second overall alarm in addition to per-operation limits; expiry emits no partial report and exits. A real drip-response regression checks the overall deadline. Process metadata remains a non-atomic observation and cannot certify lock ownership.
+
+The one-off runtime-transition diagnostic adds only fixed lstat metadata for the
+base/backups directories, v2026.10.605 transition journal, installation guard and
+controller-owned Web drop-in, plus systemd ControlPID. It reports type, numeric
+ownership, mode, size and read stability without reading journal payloads or unit
+contents. The existing 30-second collector deadline, bounded allowlist validator,
+pinned production SSH identity, deploy-account privileges and no-mutation/no-database
+guarantees remain. A diagnostic observation does not authorize changing directory
+permissions, removing a lock/journal, restarting services or retrying the release.

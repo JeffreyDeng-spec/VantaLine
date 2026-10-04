@@ -22,6 +22,32 @@ PROC = Path("/proc")
 INSTALLER = Path("/usr/local/sbin/vantaline-install-release")
 
 
+# Fixed metadata only. Never read journal payloads, units, environments or secrets.
+METADATA_PATHS = {
+    "base": BASE,
+    "backups": BASE / "backups",
+    "transition_605": BASE / "backups/.runtime-transition-v2026.10.605.json",
+    "installation_guard": BASE / "backups/.installation.guard",
+    "managed_web_dropin": Path("/etc/systemd/system/vantaline.service.d/70-label-runtime.conf"),
+}
+
+
+def path_metadata(path):
+    try:
+        before = path.lstat()
+        after = path.lstat()
+        kind = ("directory" if stat.S_ISDIR(before.st_mode) else
+                "regular" if stat.S_ISREG(before.st_mode) else
+                "symlink" if stat.S_ISLNK(before.st_mode) else "other")
+        return {"present": True, "kind": kind, "owner_uid": before.st_uid,
+                "owner_gid": before.st_gid, "mode": oct(stat.S_IMODE(before.st_mode)),
+                "bytes": before.st_size, "stable_during_read": identity(before) == identity(after)}
+    except FileNotFoundError:
+        return {"present": False}
+    except Exception:
+        return {"present": None, "inspection": "unavailable"}
+
+
 def identity(info):
     return info.st_dev, info.st_ino, info.st_mtime_ns, (info.st_ctime_ns if os.name != "nt" else None), info.st_size
 
@@ -110,7 +136,7 @@ def version_fields(value):
 
 
 def service_state(name):
-    keys = ("LoadState", "ActiveState", "SubState", "MainPID", "TimeoutStopUSec", "KillMode")
+    keys = ("LoadState", "ActiveState", "SubState", "MainPID", "ControlPID", "TimeoutStopUSec", "KillMode")
     try:
         process = subprocess.run(["systemctl", "show", name, "--no-pager", "--property=" + ",".join(keys)],
                                  capture_output=True, text=True, timeout=5, check=False)
@@ -149,11 +175,23 @@ def validate_report(value):
         if "inspection" in item and item["inspection"] not in ("unavailable","invalid","process_disappeared_or_proc_unavailable"):
             raise ValueError("Invalid diagnostic inspection")
     fields(value, {"schema","observed_at","lock","services","installed_script_sha256",
-                   "installed_script","current_version","http_version"})
+                   "installed_script","current_version","http_version","filesystem"})
     if type(value.get("schema")) is not int or value["schema"] != 1:
         raise ValueError("Invalid diagnostic schema")
     scalar_fields({"observed_at":value["observed_at"]}, {"observed_at":r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}\+00:00"})
     datetime.datetime.fromisoformat(value["observed_at"])
+    if "filesystem" in value:
+        fields(value["filesystem"], set(METADATA_PATHS))
+        for item in value["filesystem"].values():
+            fields(item, {"present", "kind", "owner_uid", "owner_gid", "mode", "bytes", "stable_during_read", "inspection"})
+            numbers(item, {"owner_uid", "owner_gid", "bytes"}); inspection(item)
+            if "present" in item and type(item["present"]) is not bool and item["present"] is not None:
+                raise ValueError("Invalid metadata presence")
+            if "stable_during_read" in item and type(item["stable_during_read"]) is not bool:
+                raise ValueError("Invalid metadata stability")
+            if "kind" in item and item["kind"] not in ("directory", "regular", "symlink", "other"):
+                raise ValueError("Invalid metadata type")
+            if "mode" in item: scalar_fields({"mode": item["mode"]}, {"mode": r"0o[0-7]{1,4}"})
     lock=value["lock"]
     fields(lock,{"present","regular_file","bytes","mtime_epoch","owner_uid","mode","process",
                  "process_started_before_lock","pid_format","stable_during_read","inspection"})
@@ -172,12 +210,12 @@ def validate_report(value):
             if type(proc[name]) is not bool:raise ValueError("Invalid process boolean")
     fields(value["services"],{"vantaline","vantaline-label-worker"})
     for service in value["services"].values():
-        fields(service,{"LoadState","ActiveState","SubState","MainPID","TimeoutStopUSec","KillMode","inspection"})
+        fields(service,{"LoadState","ActiveState","SubState","MainPID","ControlPID","TimeoutStopUSec","KillMode","inspection"})
         inspection(service)
         patterns={"LoadState":r"loaded|not-found|error|bad-setting|masked|stub|merged",
                   "ActiveState":r"active|inactive|failed|activating|deactivating|reloading|maintenance|refreshing",
                   "SubState":r"running|dead|failed|exited|start|start-pre|start-post|stop|stop-sigterm|stop-sigkill|stop-post|auto-restart|auto-restart-queued|condition|final-sigterm|final-sigkill|reload|reload-signal|reload-notify|cleaning",
-                  "MainPID":r"[0-9]{1,10}","TimeoutStopUSec":r"infinity|(?:[0-9]+(?:\.[0-9]+)?(?:us|ms|s|min|h|d|w|month|y)(?: |$)){1,6}",
+                  "MainPID":r"[0-9]{1,10}","ControlPID":r"[0-9]{1,10}","TimeoutStopUSec":r"infinity|(?:[0-9]+(?:\.[0-9]+)?(?:us|ms|s|min|h|d|w|month|y)(?: |$)){1,6}",
                   "KillMode":r"control-group|mixed|process|none"}
         scalar_fields({k:v for k,v in service.items() if k!="inspection"},patterns)
     for name in ("current_version","http_version"):
@@ -193,7 +231,8 @@ def validate_report(value):
 
 def collect():
     result = {"schema": 1, "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="microseconds"),
-              "lock": lock_state(), "services": {}}
+              "lock": lock_state(), "services": {},
+              "filesystem": {name: path_metadata(path) for name, path in METADATA_PATHS.items()}}
     for name in ("vantaline", "vantaline-label-worker"):
         result["services"][name] = service_state(name)
     try:

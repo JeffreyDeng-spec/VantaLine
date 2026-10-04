@@ -47,6 +47,30 @@ class DiagnosticTests(unittest.TestCase):
             self.assertNotEqual(r.returncode,0);self.assertEqual(r.stdout,'')
             self.assertEqual(r.stderr.strip(),'Read-only diagnostic report rejected; raw output suppressed')
 
+    def test_fixed_filesystem_metadata_never_reads_contents(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw); journal=root/'journal'; journal.write_text('DO_NOT_READ')
+            with mock.patch.object(M.os,'open',side_effect=AssertionError('content access forbidden')):
+                directory=M.path_metadata(root); regular=M.path_metadata(journal)
+                absent=M.path_metadata(root/'absent')
+            self.assertEqual(directory['kind'],'directory'); self.assertEqual(regular['kind'],'regular')
+            self.assertTrue(regular['stable_during_read']); self.assertEqual(absent,{'present':False})
+            self.assertNotIn('DO_NOT_READ',json.dumps(regular))
+            value=report();value['filesystem']={'backups':directory,'transition_605':regular}
+            self.assertEqual(M.validate_report(value),value)
+        path=mock.Mock();path.lstat.side_effect=PermissionError('private')
+        self.assertEqual(M.path_metadata(path),{'present':None,'inspection':'unavailable'})
+
+    def test_filesystem_validator_rejects_payloads_and_unknown_paths(self):
+        for extra in ({'raw_journal':{'phase':'private'}},{'backups':{'path':'/private'}},
+                      {'backups':{'owner_uid':True}}, {'backups':{'owner_gid':float('nan')}},
+                      {'backups':{'kind':'secret'}}, {'backups':{'mode':'0o777 password'}},
+                      {'backups':{'stable_during_read':1}}, {'backups':{'present':'false'}}):
+            value=report();value['filesystem']=extra
+            with self.assertRaises((ValueError,KeyError)):M.validate_report(value)
+        self.assertEqual(set(M.METADATA_PATHS),{'base','backups','transition_605','installation_guard','managed_web_dropin'})
+        self.assertEqual(str(M.METADATA_PATHS['transition_605']).replace('\\','/'),'/opt/vantaline/backups/.runtime-transition-v2026.10.605.json')
+
     def test_fixed_version_allowlist(self):
         self.assertEqual(M.version_fields({'release':'v2026.10.598','git_commit':'b'*40,
                          'secret':'hidden','path':'/private','consistent':True}),
@@ -173,7 +197,7 @@ class DiagnosticTests(unittest.TestCase):
     def test_workflow_transport_and_environment_guards(self):
         source=(ROOT/'.github/workflows/release-readonly-diagnostics.yml').read_text()
         for required in ('environment: production','persist-credentials: false','StrictHostKeyChecking=yes',
-             "head.ref == 'fix/backend-release-lock-diagnostics'",'head.repo.full_name == github.repository',
+             "head.ref == 'fix/backend-runtime-transition-diagnostics'",'head.repo.full_name == github.repository',
              'python3 -I -S -B -','--validate','2> "$task_dir/ssh.stderr"'):
             self.assertIn(required,source)
         for forbidden in ('pull_request_target','sudo ','StrictHostKeyChecking=no','continue-on-error','workflow_run:'):

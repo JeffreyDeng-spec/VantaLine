@@ -15,7 +15,7 @@ jobs:
   inspect:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'fix/backend-release-lock-diagnostics'
+      github.event.pull_request.head.ref == 'fix/backend-runtime-transition-diagnostics'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: production
