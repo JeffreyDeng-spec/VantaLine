@@ -263,10 +263,11 @@ class LabelWorker:
     SHUTDOWN_SECONDS = 420 + 60
 
     def __init__(self, repositories: RepositoryLifecycle,
-                 data_directory: Callable[[], Path], models: ModelProvider):
+                 data_directory: Callable[[], Path], models: ModelProvider, *, stopping: Callable[[], bool] | None = None):
         self.repositories = repositories
         self.data_directory = data_directory
         self.models = models
+        self.stopping = stopping or (lambda: False)
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
@@ -368,7 +369,7 @@ class LabelWorker:
     def _loop(self, stop):
         while True:
             with self._lock:
-                if stop.is_set():
+                if stop.is_set() or self.stopping():
                     return
                 paused = self._paused
                 if not paused:

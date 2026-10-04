@@ -140,10 +140,33 @@ def main():
             next_control.close()
             # SO_PEERCRED rejects an unauthorized peer before the handler receives input.
             denied_worker, denied = launch(LabelRuntimeIdentity("c"*40, "v2026.10.2", "embedded"), os.getuid()+1)
+            denied_calls = []
+            original_handler = denied.socket.handler
+            def observe_denied_command(value):
+                denied_calls.append(value)
+                return original_handler(value)
+            denied.socket.handler = observe_denied_command
+            with denied.store() as store:
+                denied_before = store.snapshot(denied.identity)
+            assert denied_before[0]["maintenance"] is True
             try:
                 assert request("open_admission") is None
-            except ConnectionResetError:
-                pass
+            except (ConnectionResetError, BrokenPipeError):
+                pass  # A denied peer may close before send, during send, or at recv.
+            # Observe the rejection before sending to deterministically cover EPIPE.
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(3)
+                client.connect(str(denied.socket.path))
+                assert client.recv(1) == b""
+                try:
+                    client.sendall(b'{"schema":1,"command":"open_admission","revision":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n')
+                except BrokenPipeError:
+                    pass
+                else:
+                    raise AssertionError("denied peer accepted input after observed EOF")
+            assert denied_calls == []
+            with denied.store() as store:
+                assert store.snapshot(denied.identity) == denied_before
             assert denied_worker.drain(3)
             denied.close()
             hung_worker, hung_control = launch(LabelRuntimeIdentity("c"*40, "v2026.10.2", "embedded"))

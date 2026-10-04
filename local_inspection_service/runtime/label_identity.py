@@ -1,4 +1,5 @@
 """Immutable label runtime identity; no Web import or environment-based mode switch."""
+from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -26,7 +27,8 @@ class LabelRuntimeIdentity:
             raise RuntimeUnavailable("Invalid label runtime identity")
 
 
-def read_identity(root: Path, *, current: Path | None = None) -> LabelRuntimeIdentity | None:
+def read_identity(root: Path, *, current: Path | None = None,
+                  configuration_revision: Callable[[], str] | None = None) -> LabelRuntimeIdentity | None:
     path = root / "RUNTIME_TOPOLOGY.json"
     if not path.exists():
         # Source checkout; managed production packages always contain the manifest.
@@ -35,15 +37,18 @@ def read_identity(root: Path, *, current: Path | None = None) -> LabelRuntimeIde
         manifest = json.loads(path.read_text(encoding="utf-8"))
         version = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
         commit = version["git_commit"]
-        identity = LabelRuntimeIdentity(commit, version["release"], "embedded")
+        LabelRuntimeIdentity(commit, version["release"], "embedded")  # Validate version fields before config access.
         embedded = {"schema": 1, "git_commit": commit, "worker_mode": "embedded", "services": ["vantaline"]}
         if manifest == embedded and type(manifest.get("schema")) is int:
             return None
-        expected = {**embedded, "schema": 2, "runtime_protocol": 1}
-        if manifest != expected or type(manifest.get("schema")) is not int or type(manifest.get("runtime_protocol")) is not int:
+        mode = manifest.get("worker_mode") if isinstance(manifest, dict) else None
+        expected = {**embedded, "schema": 2, "runtime_protocol": 1, "worker_mode": mode,
+                    "services": ["vantaline"] + (["vantaline-label-worker"] if mode == "external" else [])}
+        if mode not in ("embedded", "external") or manifest != expected or type(manifest.get("schema")) is not int or type(manifest.get("runtime_protocol")) is not int:
             raise RuntimeUnavailable("Unsupported label runtime topology")
         if current is not None and current.resolve() != root.resolve():
             raise RuntimeUnavailable("Runtime package is not the active release")
-        return identity
+        return LabelRuntimeIdentity(commit, version["release"], mode,
+            configuration_revision() if configuration_revision is not None else None)
     except (OSError, ValueError, KeyError, TypeError):
         raise RuntimeUnavailable("Label runtime identity unavailable") from None

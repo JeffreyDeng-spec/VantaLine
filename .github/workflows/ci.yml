@@ -295,6 +295,8 @@ jobs:
           python scripts/smoke_label_dependencies.py
           python scripts/smoke_label_worker_lifecycle.py
           python scripts/smoke_label_runtime_identity.py
+          python scripts/smoke_label_runtime_bootstrap.py
+          python scripts/smoke_label_runtime_signals.py
           python scripts/smoke_label_control_connections.py
           python scripts/smoke_runtime_configuration_contract.py
           python scripts/smoke_runtime_configuration_io.py
@@ -459,6 +461,8 @@ jobs:
           python scripts/smoke_label_runtime_control.py
           python scripts/smoke_label_runtime_http.py
           python scripts/smoke_label_runtime_deployment.py
+          python scripts/smoke_label_process.py
+          python scripts/smoke_label_external_deployment.py
           python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py
