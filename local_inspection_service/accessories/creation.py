@@ -1,4 +1,6 @@
 """Creation and preview orchestration with original partial-effect ordering."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 import shutil
 import time
 import uuid
@@ -54,8 +56,7 @@ class AccessoryCreation:
         target_dir.mkdir(parents=True, exist_ok=True)
         for upload in files:
             path = target_dir / self.media.safe_name(upload.filename)
-            with path.open("wb") as f:
-                shutil.copyfileobj(upload.file, f)
+            _business_files.copy_stream(path, upload.file, shutil.copyfileobj)
             saved_files.append(str(path))
         expanded_source_files, extracted_video_frames = self.media.expand_sources(accessory_id, saved_files)
 
@@ -142,8 +143,7 @@ class AccessoryCreation:
             candidate_source_dir.mkdir(parents=True, exist_ok=True)
             for upload in files:
                 path = candidate_source_dir / self.media.safe_name(upload.filename)
-                with path.open("wb") as f:
-                    shutil.copyfileobj(upload.file, f)
+                _business_files.copy_stream(path, upload.file, shutil.copyfileobj)
                 saved_files.append(str(path))
         physical_size = self.media.physical_size(
             material_type,

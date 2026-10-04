@@ -282,6 +282,32 @@ def prepare_batch_input(task, directory, media):
 
 
 def execute(task, token, config, media):
+    from ..storage.artifacts.runtime import get_runtime
+    runtime = get_runtime()
+    if runtime is None:
+        return _execute(task, token, config, media)
+    budget = runtime.store.budget
+    if not budget.preallocated:
+        raise RuntimeError('Native COS workers require kernel-limited temporary storage')
+    # The work reservation is exclusive across Web and comparison processes.
+    # Bubblewrap gives the child no writable business-data or system-disk tree;
+    # every persistent scratch write stays inside the capped local filesystem.
+    available = shutil.disk_usage(budget.scratch_roots['work']).free
+    size = min(budget.limits['work'], available) - 16 * 1024 * 1024
+    context = budget.workspace('work', max(1, size))
+    try:
+        workspace = context.__enter__()
+    except Exception:
+        with_repo(lambda r: r.settle(task['owner_user_id'], task['id'], task['attempt_id'],
+                                    'failed', '临时空间不足或不可用；未发起模型调用。'))
+        raise
+    try:
+        return _execute(task, token, {**config, 'work_root': str(workspace)}, media)
+    finally:
+        context.__exit__(None, None, None)
+
+
+def _execute(task, token, config, media):
     base = Path(config['work_root'])
     base.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory = Path(tempfile.mkdtemp(prefix=task['id']+'-', dir=base))
@@ -434,6 +460,8 @@ def cleanup_finished(config):
 
 
 def load_config():
+    from ..storage.artifacts.runtime import get_runtime
+    get_runtime()  # validate storage and reclaim this service's dead scratch
     config = {key: os.environ.get('VANTALINE_CODEX_COMPARE_'+key.upper(), '').strip()
               for key in ('model', 'binary', 'auth_home', 'work_root', 'media_root')}
     if not all(config.values()):

@@ -1,4 +1,6 @@
 """Approved-preview validation preserving exact matching and stale-state mutation order."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable
 import json
 from pathlib import Path
@@ -24,10 +26,10 @@ class TrainingPreviewApproval:
         if not request.approved_preview_id:
             return
         preview_path = self.jobs() / f"{request.approved_preview_id}.json"
-        if not preview_path.exists():
+        if not _business_files.exists(preview_path):
             raise HTTPException(status_code=409, detail="Approved preview is no longer available. Generate a fresh preview.")
         try:
-            preview = json.loads(preview_path.read_text(encoding="utf-8"))
+            preview = json.loads(_business_files.read_text(preview_path, encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=409, detail="Approved preview metadata is unreadable. Generate a fresh preview.") from exc
 

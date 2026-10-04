@@ -3,6 +3,8 @@ from typing import Any
 from pathlib import Path
 import time
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from .background_evidence_ports import PlateSources, PlatePolicy, BackgroundMasks, SignatureSources, SignaturePolicy, SignatureProjections
 
@@ -76,11 +78,11 @@ class BackgroundPlateDerivation:
         candidates: list[Path] = []
         for asset in self._sources.pose_assets()(item):
             path = self._sources.resolve()(asset.get("path"))
-            if path.exists() and path.suffix.lower() in self._sources.suffixes():
+            if _image_files.files.exists(path) and path.suffix.lower() in self._sources.suffixes():
                 candidates.append(path)
         for ref in self._sources.contexts()(item, max_images=4):
             path = self._sources.resolve()(ref.get("source_path"))
-            if path.exists() and path.suffix.lower() in self._sources.suffixes():
+            if _image_files.files.exists(path) and path.suffix.lower() in self._sources.suffixes():
                 candidates.append(path)
         def longest_clean_run(occupied: np.ndarray) -> tuple[int, int]:
             best_start = best_len = run_start = run_len = 0
@@ -99,7 +101,7 @@ class BackgroundPlateDerivation:
             if time.monotonic() > deadline:
                 print("[pipeline.bg_plate] time budget exceeded; aborting plate derivation", flush=True)
                 break
-            full = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            full = _image_files.imread(str(path), cv2.IMREAD_COLOR)
             if full is None:
                 continue
             orig_h, orig_w = full.shape[:2]
@@ -176,7 +178,7 @@ class BackgroundPlateDerivation:
             if plate is not None and (plate.shape[0] != orig_h or plate.shape[1] != orig_w):
                 plate = cv2.resize(plate, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
             out_path.parent.mkdir(parents=True, exist_ok=True)
-            if plate is not None and cv2.imwrite(str(out_path), plate):
+            if plate is not None and _image_files.imwrite(str(out_path), plate):
                 print(
                     f"[pipeline.bg_plate] plate ok src={orig_w}x{orig_h} work={width}x{height} "
                     f"method={plate_method} covered_px={covered} elapsed_ms={int((time.monotonic() - t0) * 1000)}",
@@ -195,7 +197,7 @@ class BackgroundReferenceSignatures:
     def background_reference_signatures_from_accessory(self, item: dict[str, Any]) -> list[dict[str, Any]]:
         signatures: list[dict[str, Any]] = []
         for source_path in self._sources.paths()(item, limit=self._sources.limit()):
-            image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+            image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
             if image is None:
                 continue
             height, width = image.shape[:2]

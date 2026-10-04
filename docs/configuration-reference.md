@@ -1098,8 +1098,9 @@ locally and `cos` never falls back for mapped business roots. Tombstones never f
 back. Production must remain local until the complete disk-independent gate passes.
 Nonlocal modes require `VANTALINE_DATA_ROOT`, `VANTALINE_ARTIFACT_WORK_ROOT`,
 `VANTALINE_ARTIFACT_CACHE_ROOT`, `VANTALINE_COS_BUCKET`, the existing `DATABASE_URL`,
-and systemd-provided `CREDENTIALS_DIRECTORY`. Work/cache live outside the logical
-data root on one filesystem; COS mode also requires the data root on that filesystem.
+and systemd-provided `CREDENTIALS_DIRECTORY`. Work/cache live outside the logical data root. The software-only compatibility mode keeps
+these on one filesystem. Production cutover requires the hard-limit layout below,
+where the business configuration and volume backing files reside on the system disk.
 The region is `ap-hongkong`, transport HTTPS and new storage class STANDARD.
 
 Each service uses `LoadCredential=cos-credentials.json:<restricted source file>`;
@@ -1109,3 +1110,26 @@ normal environment configuration, logs or reports. Web and worker share a restri
 Unix group and group-writable control/cache directories; configuration is fixed until
 restart. Initial fixed budgets are cache 6 GiB, work 12 GiB, upload 2 GiB and an
 8 GiB free-space floor. Only one work reservation runs at a time.
+
+The image/native-read adapter slice adds no settings. It uses the same opt-in file store and existing account/root boundaries. Native reads hold links to read-only cache blobs under the cache scratch root; the links contain no second data copy and are removed with their process lease.
+
+
+For production cutover, `VANTALINE_ARTIFACT_HARD_LIMITS=1` and
+`VANTALINE_ARTIFACT_UPLOAD_ROOT` select three fully preallocated local ext4 loop
+volumes (cache 6 GiB, work 12 GiB, upload 2 GiB). These are temporary system-disk
+filesystems, not a COS mount or a new cloud disk. Work/cache/upload are direct
+children of the same state directory; `volumes/<kind>.ext4` backing files must
+be private, fully allocated and on the system disk. Startup verifies mounts and
+backing sizes. Ext4 metadata reduces usable capacity slightly below each limit.
+Set `TMPDIR=<upload root>/spool` for both services. Multipart admission reserves
+the declared length before parsing, requires Content-Length, and leaves room for
+the simultaneous durable publication copy. Chunked ordinary multipart uploads are
+rejected; RunPod's separate bounded raw-upload protocol is unchanged.
+
+Native image generation uses `VANTALINE_IMAGE_CODEX_BINARY` and
+`VANTALINE_IMAGE_CODEX_AUTH_HOME` (a dedicated private, existing Codex auth home).
+The isolated child receives a private working copy of that runtime's auth/config,
+never COS credentials or application configuration. Native image and comparison
+workers require hard limits in COS mode, hold the shared exclusive work lease,
+and publish results before completion. Missing runtime authentication fails before
+a paid invocation. Keep both services' KillMode=control-group and mount dependencies.

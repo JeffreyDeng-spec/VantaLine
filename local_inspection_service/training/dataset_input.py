@@ -1,4 +1,6 @@
 """Dataset input lookup, file validation and sample-count projection for training."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable
 import json
 from typing import Any
@@ -20,10 +22,10 @@ class TrainingDatasetInput:
             raise HTTPException(status_code=404, detail="Training dataset not found")
         manifest_path = dataset_dir / "manifest.json"
         dataset_yaml = dataset_dir / "dataset.yaml"
-        if not dataset_dir.exists() or not manifest_path.exists() or not dataset_yaml.exists():
+        if not _business_files.exists(dataset_dir) or not _business_files.exists(manifest_path) or not _business_files.exists(dataset_yaml):
             raise HTTPException(status_code=404, detail="Training dataset not found")
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = json.loads(_business_files.read_text(manifest_path, encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=500, detail="Training dataset manifest is unreadable") from exc
         if user and item:

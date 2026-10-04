@@ -43,6 +43,10 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image, ImageOps
+from .storage.artifacts.images import ImageFiles
+from .storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
+_image_files = ImageFiles(lambda: cv2, lambda: Image)
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -343,7 +347,7 @@ def resolve_service_root() -> Path:
     if raw_root.name == "local_inspection_service":
         raw_root = raw_root.parent
     root = raw_root.resolve()
-    if not (root / "local_inspection_service").is_dir():
+    if not _business_files.is_dir(root / "local_inspection_service"):
         raise RuntimeError(f"Resolved service root {root} does not contain local_inspection_service")
     return root
 
@@ -535,7 +539,7 @@ LEGACY_MODEL_PATH = (
     / "best.pt"
 )
 REPO_MODEL_PATH = ROOT / "models" / "current_2class_yolo26s_seg_best.pt"
-MODEL_PATH = Path(os.environ.get("INSPECTION_MODEL_PATH", REPO_MODEL_PATH if REPO_MODEL_PATH.exists() else LEGACY_MODEL_PATH))
+MODEL_PATH = Path(os.environ.get("INSPECTION_MODEL_PATH", REPO_MODEL_PATH if _business_files.exists(REPO_MODEL_PATH) else LEGACY_MODEL_PATH))
 FIVE_CLASS_MODEL_PATH = ROOT / "models" / "current_5class_yolo26s_seg_best.pt"
 # Base checkpoint for NEW detection-model training. We train a bbox-only detector
 # (no masks). Override with INSPECTION_DETECT_BASE_MODEL; otherwise transfer-learn
@@ -858,6 +862,9 @@ for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR
     path.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="VantaLine Local Inspection Service", docs_url=None, redoc_url=None, openapi_url=None)
+from .storage.artifacts.admission import UploadAdmission
+if os.environ.get("VANTALINE_FILE_STORE", "local") != "local":
+    app.add_middleware(UploadAdmission)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 LOCAL_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
@@ -1556,8 +1563,6 @@ app.mount(
     name="react-preview-assets",
 )
 from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
-from local_inspection_service.storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 
 app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR), name="outputs")
 
@@ -2086,7 +2091,7 @@ def ensure_dirs() -> None:
         BACKGROUND_SETS_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_PATH.exists():
+    if not _business_files.exists(CONFIG_PATH):
         save_config(DEFAULT_CONFIG)
     migrate_persisted_local_paths_once()
 
@@ -2120,7 +2125,7 @@ def _plc_web_serial_empty_state() -> dict[str, dict[str, Any]]:
 
 def _plc_web_serial_load_local() -> dict[str, dict[str, Any]]:
     try:
-        raw = json.loads(PLC_WEB_SERIAL_STATE_PATH.read_text(encoding="utf-8"))
+        raw = json.loads(_business_files.read_text(PLC_WEB_SERIAL_STATE_PATH, encoding="utf-8"))
     except (FileNotFoundError, OSError, json.JSONDecodeError):
         return _plc_web_serial_empty_state()
     state = _plc_web_serial_empty_state()
@@ -2135,7 +2140,7 @@ def _plc_web_serial_load_local() -> dict[str, dict[str, Any]]:
 def _plc_web_serial_save_local(state: dict[str, dict[str, Any]]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     temporary = PLC_WEB_SERIAL_STATE_PATH.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    _business_files.write_text(temporary, json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     os.replace(temporary, PLC_WEB_SERIAL_STATE_PATH)
 
 
@@ -3066,7 +3071,7 @@ def _read_config_file() -> dict[str, Any] | None:
     """
     for attempt in range(6):
         try:
-            text = CONFIG_PATH.read_text(encoding="utf-8")
+            text = _business_files.read_text(CONFIG_PATH, encoding="utf-8")
         except FileNotFoundError:
             return {}
         except OSError:
@@ -3096,7 +3101,7 @@ def load_config() -> dict[str, Any]:
             # last-good snapshot instead of DEFAULT_CONFIG so we never report that
             # user accessories/models suddenly vanished due to a write race.
             try:
-                backup_text = CONFIG_BACKUP_PATH.read_text(encoding="utf-8")
+                backup_text = _business_files.read_text(CONFIG_BACKUP_PATH, encoding="utf-8")
                 current = json.loads(backup_text)
             except (FileNotFoundError, OSError, json.JSONDecodeError):
                 current = {}
@@ -3134,17 +3139,17 @@ def save_config(config: dict[str, Any]) -> None:
         payload = json.dumps(saved, indent=2)
         tmp_path = CONFIG_PATH.with_name(f"{CONFIG_PATH.name}.tmp.{uuid.uuid4().hex}")
         try:
-            tmp_path.write_text(payload, encoding="utf-8")
+            _business_files.write_text(tmp_path, payload, encoding="utf-8")
             os.replace(tmp_path, CONFIG_PATH)
         finally:
             try:
-                tmp_path.unlink()
+                _business_files.unlink(tmp_path)
             except OSError:
                 pass
         # Best-effort last-good snapshot for disaster recovery.
         try:
             backup_tmp = CONFIG_BACKUP_PATH.with_name(f"{CONFIG_BACKUP_PATH.name}.tmp.{uuid.uuid4().hex}")
-            backup_tmp.write_text(payload, encoding="utf-8")
+            _business_files.write_text(backup_tmp, payload, encoding="utf-8")
             os.replace(backup_tmp, CONFIG_BACKUP_PATH)
         except OSError:
             pass
@@ -6440,7 +6445,7 @@ def public_legacy_owner_id(user: dict[str, Any] | None) -> str:
 
 def migrate_json_file_paths(path: Path) -> bool:
     try:
-        raw_text = path.read_text(encoding="utf-8")
+        raw_text = _business_files.read_text(path, encoding="utf-8")
     except OSError:
         return False
     try:
@@ -6450,7 +6455,7 @@ def migrate_json_file_paths(path: Path) -> bool:
         if migrated_text == raw_text:
             return False
         try:
-            path.write_text(migrated_text, encoding="utf-8")
+            _business_files.write_text(path, migrated_text, encoding="utf-8")
         except OSError:
             return False
         return True
@@ -6458,7 +6463,7 @@ def migrate_json_file_paths(path: Path) -> bool:
     if migrated == original:
         return False
     try:
-        path.write_text(json.dumps(migrated, indent=2), encoding="utf-8")
+        _business_files.write_text(path, json.dumps(migrated, indent=2), encoding="utf-8")
     except OSError:
         return False
     return True
@@ -6473,8 +6478,8 @@ def migrate_persisted_local_paths_once() -> None:
             return
         candidates: set[Path] = {CONFIG_PATH}
         for root in (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR):
-            if root.exists():
-                candidates.update(path for path in root.rglob("*.json") if path.is_file())
+            if _business_files.exists(root):
+                candidates.update(path for path in _business_files.glob(root, "*.json", recursive=True) if _business_files.is_file(path))
         for path in sorted(candidates):
             migrate_json_file_paths(path)
         _path_migration_done = True
@@ -6503,7 +6508,7 @@ def resolve_service_path(value: Any, *, for_write: bool = False) -> Path:
         if key in seen:
             continue
         seen.add(key)
-        if candidate.exists():
+        if _business_files.exists(candidate):
             return candidate.resolve()
     return candidates[0]
 
@@ -6526,7 +6531,7 @@ def public_output_url(path: Path) -> str:
 
 def public_output_url_for_existing(path: Path) -> str:
     resolved = resolve_service_path(path)
-    return public_output_url(resolved) if resolved.exists() and path_is_under(resolved, OUTPUT_DIR) else ""
+    return public_output_url(resolved) if _business_files.exists(resolved) and path_is_under(resolved, OUTPUT_DIR) else ""
 
 
 def output_write_dir(kind: str = "") -> Path:
@@ -6788,7 +6793,7 @@ def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, A
     """Lightweight document pipeline (no image generation): auto-crop the document
     body, deskew/perspective-correct any tilt, then normalize onto the chosen paper
     page (A4/A5/...). The output is always exactly the paper pixel size."""
-    image = cv2.imread(str(src))
+    image = _image_files.imread(str(src))
     if image is None:
         return None
     is_manual_rectified = is_text_rectified_path(src)
@@ -6821,7 +6826,7 @@ def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, A
         warped = resize_document_to_paper(image, target_w, target_h)
         method = "manual_rectified_resize"
     out = target_dir / f"{src.stem}_canonical.png"
-    cv2.imwrite(str(out), warped)
+    _image_files.imwrite(str(out), warped)
     return {
         "kind": "canonical_text_image",
         "path": str(out),
@@ -7017,7 +7022,7 @@ def image_job_matches(candidate: dict[str, Any], job: dict[str, Any], lookup_id:
 def file_sha256(path: Path) -> str | None:
     try:
         digest = hashlib.sha256()
-        with path.open("rb") as handle:
+        with _business_files.open_read(path) as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()
@@ -7508,10 +7513,10 @@ def validate_ai_key_env(value: Any) -> str:
 
 def load_ai_local_config() -> dict[str, Any]:
     ensure_dirs()
-    if not AI_LOCAL_CONFIG_PATH.exists():
+    if not _business_files.exists(AI_LOCAL_CONFIG_PATH):
         return dict(DEFAULT_AI_CONFIG)
     try:
-        raw = json.loads(AI_LOCAL_CONFIG_PATH.read_text(encoding="utf-8"))
+        raw = json.loads(_business_files.read_text(AI_LOCAL_CONFIG_PATH, encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         raw = {}
     if not isinstance(raw, dict):
@@ -7582,7 +7587,7 @@ def save_ai_local_config(config: dict[str, Any]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload = {key: config.get(key, DEFAULT_AI_CONFIG[key]) for key in DEFAULT_AI_CONFIG}
     tmp_path = ai_local_config_temp_path()
-    tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _business_files.write_text(tmp_path, json.dumps(payload, indent=2), encoding="utf-8")
     try:
         os.chmod(tmp_path, 0o600)
     except OSError:
@@ -8347,7 +8352,7 @@ def load_json_file_mtime_cached(path: Path) -> Any:
                     return entry[2]
             try:
                 with runtime.store.cache.open(row) as local:
-                    value = json.loads(local.read_text(encoding="utf-8"))
+                    value = json.loads(_business_files.read_text(local, encoding="utf-8"))
             except json.JSONDecodeError:
                 return None
             with _json_file_cache_lock:
@@ -8363,7 +8368,7 @@ def load_json_file_mtime_cached(path: Path) -> Any:
         if entry and entry[0] == stat_result.st_mtime_ns and entry[1] == stat_result.st_size:
             return entry[2]
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(_business_files.read_text(path, encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
     with _json_file_cache_lock:
@@ -8384,7 +8389,7 @@ def load_auto_optimize_state(task_id: str) -> dict[str, Any]:
     else:
         path = auto_optimize_task_path(clean_task_id)
         try:
-            state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            state = json.loads(_business_files.read_text(path, encoding="utf-8")) if _business_files.exists(path) else {}
         except (OSError, json.JSONDecodeError):
             state = {}
     if not isinstance(state, dict):
@@ -8420,7 +8425,7 @@ def save_auto_optimize_state(state: dict[str, Any]) -> dict[str, Any]:
         return state
     path = auto_optimize_task_path(clean_task_id)
     tmp_path = path.with_suffix(".json.tmp")
-    tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    _business_files.write_text(tmp_path, json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
     tmp_path.replace(path)
     return state
 
@@ -8444,9 +8449,9 @@ def list_auto_optimize_states() -> list[dict[str, Any]]:
         store_read_cache_put("auto_optimize_states", states)
         return list(states)
     states = []
-    for path in AUTO_OPTIMIZE_DIR.glob("*.json"):
+    for path in _business_files.glob(AUTO_OPTIMIZE_DIR, "*.json"):
         try:
-            state = json.loads(path.read_text(encoding="utf-8"))
+            state = json.loads(_business_files.read_text(path, encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(state, dict):
@@ -9078,7 +9083,7 @@ def draw_auto_optimize_review_overlay(
         cv2.rectangle(overlay, (0, 0), (overlay.shape[1] - 1, overlay.shape[0] - 1), (32, 60, 230), 8)
         cv2.putText(overlay, "FAIL no valid AI mask bbox", (32, 54), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (32, 60, 230), 3, cv2.LINE_AA)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(output_path), overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+    _image_files.imwrite(str(output_path), overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
     return public_output_url_for_existing(output_path), {"boxes": rows, "box_count": len(rows)}
 
 
@@ -9448,7 +9453,7 @@ def auto_optimize_write_sprite_artifact(
     normalized_path = sprite_dir / f"{sample_id}_{safe_accessory_id}_sprite.png"
     bgra = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2BGRA)
     bgra[:, :, 3] = roi_mask
-    cv2.imwrite(str(raw_path), bgra)
+    _image_files.imwrite(str(raw_path), bgra)
     metadata = {
         "task_id": "auto_optimize",
         "source_sample_id": sample_id,
@@ -9465,12 +9470,12 @@ def auto_optimize_write_sprite_artifact(
     }
     normalized = write_clean_sprite(normalized_path, roi_bgr, roi_mask, metadata) or {}
     chosen_path = resolve_service_path(normalized.get("path") or normalized_path)
-    if not chosen_path.exists():
+    if not _business_files.exists(chosen_path):
         chosen_path = raw_path
     return {
         "accessory_id": accessory_id,
         "label": label_name,
-        "status": "available" if chosen_path.exists() else "failed",
+        "status": "available" if _business_files.exists(chosen_path) else "failed",
         "path": str(chosen_path),
         "url": public_output_url_for_existing(chosen_path),
         "raw_path": str(raw_path),
@@ -9491,7 +9496,7 @@ def auto_optimize_generate_labels_for_sample(
     artifact_dir: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     image_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-    image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
         return [], [{"status": "failed", "reason": "source_image_unreadable"}], {}
     candidates = [item for item in sample.get("candidate_accessories") or [] if isinstance(item, dict)]
@@ -9569,11 +9574,11 @@ def auto_optimize_generate_labels_for_sample(
         )
         mask_path = artifact_dir / f"{sample_id}_multicolor_mask_{chunk_number + 1}.png"
         mask_path.parent.mkdir(parents=True, exist_ok=True)
-        mask_path.write_bytes(result["bytes"])
-        mask_bgr = cv2.imread(str(mask_path), cv2.IMREAD_COLOR)
+        _business_files.write_bytes(mask_path, result["bytes"])
+        mask_bgr = _image_files.imread(str(mask_path), cv2.IMREAD_COLOR)
         if mask_bgr is None:
             try:
-                mask_path.unlink(missing_ok=True)
+                _business_files.unlink(mask_path, missing_ok=True)
             except OSError:
                 pass
             for item in assignments:
@@ -9591,7 +9596,7 @@ def auto_optimize_generate_labels_for_sample(
             mask_bgr = cv2.resize(mask_bgr, (input_w, input_h), interpolation=cv2.INTER_NEAREST)
         color_masks, mask_meta = decode_multicolor_mask(mask_bgr, assignments)
         try:
-            mask_path.unlink(missing_ok=True)
+            _business_files.unlink(mask_path, missing_ok=True)
         except OSError:
             pass
         for item in assignments:
@@ -9763,7 +9768,7 @@ def auto_optimize_generate_labels_for_sample(
             pre_verifier_mask[full_mask > 8] = tuple(int(value) for value in color_bgr[:3])
     pre_verifier_mask_path = artifact_dir / f"{sample_id}_multicolor_mask_all_targets.png"
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(pre_verifier_mask_path), pre_verifier_mask)
+    _image_files.imwrite(str(pre_verifier_mask_path), pre_verifier_mask)
 
     verifier_meta = {"enabled": False, "status": "skipped"}
     if labels:
@@ -9777,7 +9782,7 @@ def auto_optimize_generate_labels_for_sample(
             combined_mask[full_mask > 8] = tuple(int(value) for value in color_bgr[:3])
     combined_mask_path = artifact_dir / f"{sample_id}_multicolor_mask_combined.png"
     review_overlay_path = artifact_dir / f"{sample_id}_ai_mask_review_overlay.jpg"
-    cv2.imwrite(str(combined_mask_path), combined_mask)
+    _image_files.imwrite(str(combined_mask_path), combined_mask)
     review_url, review_meta = draw_auto_optimize_review_overlay(image_bgr, labels, failures, review_overlay_path)
     for entry in [*labels, *failures]:
         entry.pop("full_mask", None)
@@ -9812,7 +9817,7 @@ def auto_optimize_generate_label_for_candidate(
     artifact_dir: Path,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     image_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-    image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
         return None, {"status": "failed", "reason": "source_image_unreadable"}
     payload = photo_highlight_input_data_url(image_bgr)
@@ -9849,14 +9854,14 @@ def auto_optimize_generate_label_for_candidate(
         }
     mask_path = artifact_dir / f"{safe_record_id(str(sample.get('sample_id') or 'sample'))}_{safe_record_id(str(candidate.get('accessory_id') or 'item'))}.png"
     mask_path.parent.mkdir(parents=True, exist_ok=True)
-    mask_path.write_bytes(result["bytes"])
-    mask_bgr = cv2.imread(str(mask_path), cv2.IMREAD_COLOR)
+    _business_files.write_bytes(mask_path, result["bytes"])
+    mask_bgr = _image_files.imread(str(mask_path), cv2.IMREAD_COLOR)
     mask_url = public_output_url_for_existing(mask_path)
     if mask_bgr is None:
         return None, {"status": "failed", "reason": "generated_mask_unreadable", "mask_url": mask_url}
     if mask_bgr.shape[1] != input_w or mask_bgr.shape[0] != input_h:
         mask_bgr = cv2.resize(mask_bgr, (input_w, input_h), interpolation=cv2.INTER_NEAREST)
-        cv2.imwrite(str(mask_path), mask_bgr)
+        _image_files.imwrite(str(mask_path), mask_bgr)
     ai_mask, mask_meta = decode_photo_highlight_mask(mask_bgr)
     if not mask_meta.get("ok"):
         return None, {
@@ -9921,14 +9926,14 @@ def auto_optimize_generate_label_for_candidate(
             2,
             cv2.LINE_AA,
         )
-        cv2.imwrite(str(box_overlay_path), box_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-        cv2.imwrite(str(roi_path), roi_bgr)
-        cv2.imwrite(str(ai_roi_mask_path), roi_mask)
+        _image_files.imwrite(str(box_overlay_path), box_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        _image_files.imwrite(str(roi_path), roi_bgr)
+        _image_files.imwrite(str(ai_roi_mask_path), roi_mask)
         if auto_mask is not None:
-            cv2.imwrite(str(auto_roi_mask_path), auto_mask)
+            _image_files.imwrite(str(auto_roi_mask_path), auto_mask)
         bgra = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2BGRA)
         bgra[:, :, 3] = roi_mask
-        cv2.imwrite(str(transparent_path), bgra)
+        _image_files.imwrite(str(transparent_path), bgra)
     except Exception:
         pass
     sprite_artifact = auto_optimize_write_sprite_artifact(
@@ -10246,7 +10251,7 @@ def start_auto_optimize_training_check_worker(task_id: str, delay_seconds: float
 
 def auto_optimize_load_sprite(sprite: dict[str, Any]) -> tuple[np.ndarray, np.ndarray] | None:
     path = resolve_service_path(sprite.get("path") or sprite.get("raw_path") or "")
-    image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    image = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
     if image is None or image.size == 0:
         return None
     if image.ndim == 3 and image.shape[2] == 4:
@@ -10306,8 +10311,8 @@ def auto_optimize_backfill_missing_sprites_for_sample(task_id: str, state: dict[
     source_image = sample.get("source_image") if isinstance(sample.get("source_image"), dict) else {}
     image_path = auto_optimize_resolve_artifact_path(source_image.get("path") or source_image.get("url") or "")
     color_mask_path = auto_optimize_resolve_artifact_path(color_mask_url or "")
-    image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    mask_bgr = cv2.imread(str(color_mask_path), cv2.IMREAD_COLOR)
+    image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
+    mask_bgr = _image_files.imread(str(color_mask_path), cv2.IMREAD_COLOR)
     if image_bgr is None or mask_bgr is None:
         return 0
     height, width = image_bgr.shape[:2]
@@ -10387,7 +10392,7 @@ def auto_optimize_source_to_canvas_scale(source_path_value: Any, cache: dict[str
     if source_path in cache:
         return cache[source_path]
     path = resolve_service_path(source_path)
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
     if image is None or image.size == 0:
         cache[source_path] = 1.0
         return 1.0
@@ -10529,7 +10534,7 @@ def auto_optimize_render_synthetic_sample(
         return None
     output_path.parent.mkdir(parents=True, exist_ok=True)
     label_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(output_path), canvas)
+    _image_files.imwrite(str(output_path), canvas)
     height, width = canvas.shape[:2]
     lines = [
         line
@@ -10539,7 +10544,7 @@ def auto_optimize_render_synthetic_sample(
         )
         if line
     ]
-    label_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    _business_files.write_text(label_path, "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
     annotated_url = write_training_annotation_preview(output_path, labels, annotated_path)
     return {
         "image": str(output_path),
@@ -10782,7 +10787,7 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
             image_out = dataset_dir / "images" / split / image_name
             label_out = dataset_dir / "labels" / split / f"{Path(image_name).stem}.txt"
             source_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-            image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+            image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
             if image is None:
                 continue
             height, width = image.shape[:2]
@@ -10817,8 +10822,8 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
             ]
             if not lines:
                 continue
-            shutil.copy2(source_path, image_out)
-            label_out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            _business_files.copy2(source_path, image_out, local_copy=shutil.copy2)
+            _business_files.write_text(label_out, "\n".join(lines) + "\n", encoding="utf-8")
             annotated_url = write_training_annotation_preview(image_out, weak_labels, preview_dir / split / f"{Path(image_name).stem}_boxed.jpg")
             is_bbox_only = sample.get("label_status") == "trainable_bbox_only"
             sample_records.append(
@@ -10843,11 +10848,11 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
             canvas, background_meta = render_training_background(rng, split, dataset_background_set_id)
             image_out.parent.mkdir(parents=True, exist_ok=True)
             label_out.parent.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(image_out), canvas)
-            label_out.write_text("", encoding="utf-8")
+            _image_files.imwrite(str(image_out), canvas)
+            _business_files.write_text(label_out, "", encoding="utf-8")
             annotated_path = preview_dir / split / f"{Path(image_name).stem}_negative.jpg"
             annotated_path.parent.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(annotated_path), canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            _image_files.imwrite(str(annotated_path), canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             sample_records.append(
                 {
                     "image": str(image_out),
@@ -10871,16 +10876,16 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
             synthetic = dict(rendered_or_marker)
             source_image = resolve_service_path(synthetic.get("image") or "")
             source_label = resolve_service_path(synthetic.get("labels") or "")
-            if not source_image.exists() or not source_label.exists():
+            if not _business_files.exists(source_image) or not _business_files.exists(source_label):
                 continue
-            shutil.copy2(source_image, image_out)
-            shutil.copy2(source_label, label_out)
+            _business_files.copy2(source_image, image_out, local_copy=shutil.copy2)
+            _business_files.copy2(source_label, label_out, local_copy=shutil.copy2)
             annotated_source = resolve_service_path(synthetic.get("annotated_path") or "")
             annotated_url = ""
-            if annotated_source.exists():
+            if _business_files.exists(annotated_source):
                 annotated_out = preview_dir / split / f"{Path(image_name).stem}_boxed.jpg"
                 annotated_out.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(annotated_source, annotated_out)
+                _business_files.copy2(annotated_source, annotated_out, local_copy=shutil.copy2)
                 annotated_url = public_training_output_url(annotated_out)
             else:
                 annotated_url = write_training_annotation_preview(image_out, synthetic.get("weak_labels") or [], preview_dir / split / f"{Path(image_name).stem}_boxed.jpg")
@@ -10899,14 +10904,14 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
             sample_records.append(synthetic)
             continue
         source_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-        image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+        image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
         if image is None:
             continue
-        shutil.copy2(source_path, image_out)
-        label_out.write_text("", encoding="utf-8")
+        _business_files.copy2(source_path, image_out, local_copy=shutil.copy2)
+        _business_files.write_text(label_out, "", encoding="utf-8")
         annotated_path = preview_dir / split / f"{Path(image_name).stem}_negative.jpg"
         annotated_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(annotated_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        _image_files.imwrite(str(annotated_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         sample_records.append(
             {
                 "image": str(image_out),
@@ -10981,7 +10986,7 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
         "owner_username": str(state.get("owner_username") or ""),
     }
     manifest_path = dataset_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    _business_files.write_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     return {
         "id": dataset_id,
         "dataset_dir": str(dataset_dir),
@@ -11034,7 +11039,7 @@ def auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
                 return
             model_id = str(candidate.get("model_id") or "")
             image_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-        image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
         if image_bgr is None:
             return
         yolo_result = analyze_bgr(image_bgr, f"shadow_{safe_record_id(sample_id)}", model_id, image_path=image_path)
@@ -11118,10 +11123,10 @@ def cleanup_auto_optimize_retired_candidate_locked(state: dict[str, Any], model_
     deleted_paths: list[str] = []
     for root in training_run_roots():
         run_dir = root / job_id
-        if not run_dir.exists() or not run_dir.is_dir():
+        if not _business_files.exists(run_dir) or not _business_files.is_dir(run_dir):
             continue
         try:
-            shutil.rmtree(run_dir)
+            _business_files.rmtree(run_dir)
             deleted_paths.append(str(run_dir))
         except OSError as exc:
             candidate["retire_cleanup_error"] = bounded_text(str(exc), 180)
@@ -12795,7 +12800,7 @@ def extract_video_reference_frames(video_path: Path, output_dir: Path, max_frame
         extracted = []
         for out_idx, item in enumerate(selected, start=1):
             out_path = output_dir / f"{video_path.stem}_reference_frame_{out_idx:02d}.jpg"
-            cv2.imwrite(str(out_path), item["frame"], [int(cv2.IMWRITE_JPEG_QUALITY), 94])
+            _image_files.imwrite(str(out_path), item["frame"], [int(cv2.IMWRITE_JPEG_QUALITY), 94])
             extracted.append(
                 {
                     "path": str(out_path),
@@ -12827,7 +12832,7 @@ def write_thumbnail(image: np.ndarray, out_path: Path, angle: float = 0.0, size:
     matrix = cv2.getRotationMatrix2D((size / 2, size / 2), angle, 1.0)
     rotated = cv2.warpAffine(patch, matrix, (size, size), flags=cv2.INTER_LINEAR, borderValue=(238, 240, 242))
     canvas[:] = rotated
-    cv2.imwrite(str(out_path), canvas)
+    _image_files.imwrite(str(out_path), canvas)
     return {"url": public_output_url(out_path), "angle": angle, "width": size, "height": size}
 
 
@@ -13171,7 +13176,7 @@ def pose_collection_job_id(item: dict[str, Any], pose_family: str) -> str:
 def source_reference_inputs_for_pose_job(item: dict[str, Any], pose_family: str) -> list[str]:
     inputs: list[str] = []
     anchor = POSE_ANCHOR_IMAGES.get(pose_family)
-    if anchor and anchor.exists():
+    if anchor and _business_files.exists(anchor):
         inputs.append(str(anchor))
     for path in existing_source_image_paths(item):
         text = str(path)
@@ -13190,8 +13195,8 @@ def make_pose_collection_job(item: dict[str, Any], pose_family: str) -> dict[str
         "candidate_name": item.get("name") or accessory_uid(item),
         "label": "正立多角度图" if pose_family == "upright" else "平躺多角度图",
         "queue_kind": "image_generation",
-        "status": "completed" if output_path.exists() else CODEX_IMAGE_WORKER_QUEUE_STATUS,
-        "progress": 100 if output_path.exists() else 0,
+        "status": "completed" if _business_files.exists(output_path) else CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        "progress": 100 if _business_files.exists(output_path) else 0,
         "provider": LOCAL_CODEX_IMAGE_PROVIDER,
         "generation_method": "codex_exec_image_worker",
         "generation_step": "anchor_replacement",
@@ -13204,8 +13209,8 @@ def make_pose_collection_job(item: dict[str, Any], pose_family: str) -> dict[str
         "created_at": int(time.time()),
         **record_audit_fields(item),
     }
-    if output_path.exists():
-        job["completed_at"] = int(output_path.stat().st_mtime)
+    if _business_files.exists(output_path):
+        job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
     ensure_image_job_task_id(item, job)
     ensure_anchor_image_provenance(job)
     ensure_image_job_target_guides(job)
@@ -13238,13 +13243,13 @@ def ensure_pose_collection_image_jobs(item: dict[str, Any]) -> bool:
                 job["queue_kind"] = "image_generation"
                 changed = True
             output_path = image_job_output_path(job, for_write=True)
-            if output_path.exists() and job.get("status") != "completed":
+            if _business_files.exists(output_path) and job.get("status") != "completed":
                 job["status"] = "completed"
                 job["progress"] = 100
-                job["completed_at"] = int(output_path.stat().st_mtime)
+                job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
                 job["output_url"] = public_output_url(output_path)
                 changed = True
-            elif job.get("status") == "completed" and not output_path.exists():
+            elif job.get("status") == "completed" and not _business_files.exists(output_path):
                 job["status"] = CODEX_IMAGE_WORKER_QUEUE_STATUS
                 job["progress"] = 0
                 job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
@@ -13286,7 +13291,7 @@ def pending_pose_collection_jobs(item: dict[str, Any]) -> list[dict[str, Any]]:
         if str(job.get("generation_step") or "") != "anchor_replacement":
             continue
         output_path = image_job_output_path(job, for_write=True)
-        if str(job.get("status") or "") != "completed" or not output_path.exists():
+        if str(job.get("status") or "") != "completed" or not _business_files.exists(output_path):
             copy = dict(job)
             copy["missing_output_path"] = str(output_path)
             pending.append(copy)
@@ -13380,10 +13385,10 @@ def cleanup_accessory_candidate_artifacts(candidate: dict[str, Any]) -> list[str
                 owned_directories.add(owner_dir)
 
     candidate_upload_dir = upload_root / candidate_id
-    if candidate_upload_dir.exists():
+    if _business_files.exists(candidate_upload_dir):
         owned_directories.add(candidate_upload_dir)
     candidate_output_dir = output_root / candidate_id
-    if candidate_output_dir.exists():
+    if _business_files.exists(candidate_output_dir):
         owned_directories.add(candidate_output_dir)
 
     def referenced_paths(record: dict[str, Any]) -> set[Path]:
@@ -13439,13 +13444,13 @@ def cleanup_accessory_candidate_artifacts(candidate: dict[str, Any]) -> list[str
         if allowed_parent == upload_root and not (resolved.name == candidate_id or resolved.name.startswith("src_")):
             raise OSError(f"Refusing to delete ambiguous upload directory: {resolved}")
         if allowed_parent == upload_root and resolved.name.startswith("src_"):
-            contained_files = {path.resolve() for path in resolved.rglob("*") if path.is_file()}
+            contained_files = {path.resolve() for path in _business_files.glob(resolved, "*", recursive=True) if _business_files.is_file(path)}
             if not contained_files.issubset(referenced_upload_files):
                 raise OSError(f"Refusing to delete upload directory containing unreferenced files: {resolved}")
         if allowed_parent == output_root and resolved.name != candidate_id:
             raise OSError(f"Refusing to delete ambiguous output directory: {resolved}")
-        if resolved.exists():
-            shutil.rmtree(resolved)
+        if _business_files.exists(resolved):
+            _business_files.rmtree(resolved)
             deleted.append(str(resolved))
     return deleted
 
@@ -13507,10 +13512,10 @@ def mutate_candidate_image_job(
                     raise
                 latest = candidate
         else:
-            if not path.exists():
+            if not _business_files.exists(path):
                 return job
             try:
-                latest = json.loads(path.read_text(encoding="utf-8"))
+                latest = json.loads(_business_files.read_text(path, encoding="utf-8"))
             except json.JSONDecodeError:
                 latest = candidate
         ensure_candidate_image_job_task_ids(latest)
@@ -13568,10 +13573,10 @@ def image_job_is_active(status: str) -> bool:
 
 
 def codex_log_has_generated_image(log_path: Path) -> bool:
-    if not log_path.exists():
+    if not _business_files.exists(log_path):
         return False
     try:
-        text = log_path.read_text(encoding="utf-8", errors="ignore")
+        text = _business_files.read_text(log_path, encoding="utf-8", errors="ignore")
     except OSError:
         return False
     return "/.codex/generated_images/" in text or "/home/dministrator/.codex/generated_images/" in text
@@ -13590,10 +13595,10 @@ def image_job_log_path(job: dict[str, Any]) -> Path:
 
 
 def read_image_worker_log_tail(log_path: Path) -> str:
-    if not log_path.exists():
+    if not _business_files.exists(log_path):
         return ""
     try:
-        with log_path.open("rb") as handle:
+        with _business_files.open_read(log_path) as handle:
             handle.seek(0, os.SEEK_END)
             size = handle.tell()
             handle.seek(max(0, size - IMAGE_WORKER_LOG_TAIL_BYTES))
@@ -13619,7 +13624,7 @@ def classify_image_worker_failure(log_path: Path, return_code: int | None, outpu
             causes.append("Codex CLI 退出码 0，但没有写出目标 PNG")
         else:
             causes.append(f"Codex CLI 退出码 {return_code}")
-    if not output_path.exists():
+    if not _business_files.exists(output_path):
         causes.append(f"未生成目标 PNG：{output_path}")
     if not causes:
         causes.append("图像生成结束但未产出可用图片")
@@ -13632,21 +13637,21 @@ def image_worker_process_alive(job_id: str) -> bool:
 
 
 def codex_process_has_log_open(log_path: Path) -> bool:
-    if not log_path.exists() or not Path("/proc").exists():
+    if not _business_files.exists(log_path) or not _business_files.exists(Path("/proc")):
         return False
     target = str(log_path.resolve())
-    for pid_dir in Path("/proc").iterdir():
+    for pid_dir in _business_files.iterdir(Path("/proc")):
         if not pid_dir.name.isdigit():
             continue
         try:
-            cmdline = (pid_dir / "cmdline").read_bytes().decode("utf-8", errors="ignore").replace("\x00", " ")
+            cmdline = _business_files.read_bytes(pid_dir / "cmdline").decode("utf-8", errors="ignore").replace("\x00", " ")
         except OSError:
             continue
         if "codex" not in cmdline:
             continue
         fd_dir = pid_dir / "fd"
         try:
-            for fd in fd_dir.iterdir():
+            for fd in _business_files.iterdir(fd_dir):
                 try:
                     linked = os.readlink(fd)
                 except OSError:
@@ -13668,7 +13673,7 @@ def running_image_job_is_stale(job: dict[str, Any], log_path: Path) -> bool:
         return False
     now = int(time.time())
     try:
-        age = now - int(log_path.stat().st_mtime) if log_path.exists() else now - int(job.get("started_at") or job.get("created_at") or now)
+        age = now - int(_business_files.stat(log_path).st_mtime) if _business_files.exists(log_path) else now - int(job.get("started_at") or job.get("created_at") or now)
     except (OSError, ValueError, TypeError):
         age = 0
     provider = str(job.get("provider") or "")
@@ -13691,7 +13696,7 @@ def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | Non
                         save_accessory_candidate(path, candidate)
                     continue
                 depends_on_output = str(job.get("depends_on_output_path") or "")
-                if depends_on_output and not resolve_service_path(depends_on_output).exists():
+                if depends_on_output and not _business_files.exists(resolve_service_path(depends_on_output)):
                     if changed:
                         save_accessory_candidate(path, candidate)
                     continue
@@ -13700,11 +13705,11 @@ def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | Non
                     job["output_path"] = str(output_path)
                     job["output_url"] = public_output_url(output_path)
                     changed = True
-                if output_path.exists():
+                if _business_files.exists(output_path):
                     job["status"] = "completed"
                     job["progress"] = 100
                     job["output_url"] = public_output_url(output_path)
-                    job["completed_at"] = int(output_path.stat().st_mtime)
+                    job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
                     store_candidate_image_job(candidate, job)
                     preprocess_object_clean_sprites(candidate, allow_ai_cutout=True)
                     save_accessory_candidate(path, candidate)
@@ -13731,18 +13736,18 @@ def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | Non
                 if status not in IMAGE_JOB_QUEUED_STATUSES:
                     continue
                 depends_on_output = str(job.get("depends_on_output_path") or "")
-                if depends_on_output and not resolve_service_path(depends_on_output).exists():
+                if depends_on_output and not _business_files.exists(resolve_service_path(depends_on_output)):
                     continue
                 output_path = image_job_output_path(job, for_write=True)
                 if str(output_path) and str(output_path) != str(job.get("output_path", "")):
                     job["output_path"] = str(output_path)
                     job["output_url"] = public_output_url(output_path)
                     changed = True
-                if output_path.exists():
+                if _business_files.exists(output_path):
                     job["status"] = "completed"
                     job["progress"] = 100
                     job["output_url"] = public_output_url(output_path)
-                    job["completed_at"] = int(output_path.stat().st_mtime)
+                    job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
                     store_candidate_image_job(candidate, job)
                     preprocess_object_clean_sprites(candidate, allow_ai_cutout=True)
                     config_changed = True
@@ -13876,7 +13881,7 @@ def image_file_payload(path: Path) -> dict[str, str]:
     return {
         "name": path.name,
         "mime_type": mime_type,
-        "data": base64.b64encode(path.read_bytes()).decode("ascii"),
+        "data": base64.b64encode(_business_files.read_bytes(path)).decode("ascii"),
     }
 
 
@@ -13976,7 +13981,7 @@ def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dic
     missing_input_files: list[str] = []
     for item in job.get("input_files", []) or []:
         input_path = resolve_service_path(item)
-        if input_path.exists():
+        if _business_files.exists(input_path):
             input_files.append(input_path)
         else:
             missing_input_files.append(str(item))
@@ -14076,8 +14081,7 @@ def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dic
             "prompt": str(job.get("prompt") or ""),
             "generation_step": str(job.get("generation_step") or ""),
         }
-        log_path.write_text(
-            json.dumps(
+        _business_files.write_text(log_path, json.dumps(
                 {
                     "provider": LOCAL_CODEX_IMAGE_PROVIDER,
                     "endpoint": masked_url_for_status(endpoint),
@@ -14091,9 +14095,7 @@ def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dic
                 },
                 ensure_ascii=False,
                 indent=2,
-            ),
-            encoding="utf-8",
-        )
+            ), encoding="utf-8")
         response = requests.post(
             f"{endpoint}/images/codex-default-crops",
             data=data,
@@ -14110,8 +14112,8 @@ def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dic
             raise RuntimeError(f"Windows Codex image worker failed: HTTP {response.status_code} {bounded_text(detail, 180)}")
         if not isinstance(payload, dict):
             raise RuntimeError("Windows Codex image worker response was not a JSON object")
-        output_path.write_bytes(windows_worker_image_response_bytes(payload))
-        image = cv2.imread(str(output_path), cv2.IMREAD_UNCHANGED)
+        _business_files.write_bytes(output_path, windows_worker_image_response_bytes(payload))
+        image = _image_files.imread(str(output_path), cv2.IMREAD_UNCHANGED)
         if image is None:
             raise RuntimeError("Windows Codex image worker wrote bytes, but the saved output is not a readable image")
         mutate_candidate_image_job(
@@ -14168,7 +14170,7 @@ def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, 
     missing_input_files: list[str] = []
     for item in job.get("input_files", []) or []:
         input_path = resolve_service_path(item)
-        if input_path.exists():
+        if _business_files.exists(input_path):
             input_files.append(str(input_path))
         else:
             missing_input_files.append(str(item))
@@ -14224,8 +14226,7 @@ def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, 
 
     try:
         payload = cursor_image2_payload(job, input_files, settings)
-        log_path.write_text(
-            json.dumps(
+        _business_files.write_text(log_path, json.dumps(
                 {
                     "provider": CURSOR_IMAGE2_PROVIDER,
                     "endpoint": settings["endpoint_public"],
@@ -14236,9 +14237,7 @@ def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, 
                 },
                 ensure_ascii=False,
                 indent=2,
-            ),
-            encoding="utf-8",
-        )
+            ), encoding="utf-8")
         response = requests.post(
             settings["endpoint"],
             json=payload,
@@ -14250,8 +14249,8 @@ def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, 
         if not isinstance(response_payload, dict):
             raise RuntimeError("Cursor Image2 response was not a JSON object")
         image_bytes = extract_cursor_image2_bytes(response_payload, settings)
-        output_path.write_bytes(image_bytes)
-        image = cv2.imread(str(output_path), cv2.IMREAD_UNCHANGED)
+        _business_files.write_bytes(output_path, image_bytes)
+        image = _image_files.imread(str(output_path), cv2.IMREAD_UNCHANGED)
         if image is None:
             raise RuntimeError("Cursor Image2 returned bytes, but the saved output is not a readable image")
         mutate_candidate_image_job(
@@ -14270,14 +14269,64 @@ def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, 
             },
             preprocess_clean_sprites=True,
         )
-    except requests.HTTPError as exc:
-        detail = exc.response.text[:240] if exc.response is not None else str(exc)
+    except Exception:
+        if _business_files.runtime(output_path) is not None:
+            # Provider acceptance may already have happened. A timeout, storage
+            # failure or database failure must never submit a second paid job.
+            update_image_worker_status(
+                path, candidate, job, status="failed", progress=100,
+                failed_at=int(time.time()), provider=CURSOR_IMAGE2_PROVIDER,
+                error="生成或持久保存未确认成功；未自动重试付费调用，请先核对原任务。",
+                output_path=str(output_path), log_path=str(log_path),
+            )
+            return
         run_codex_image_job(path, candidate, job)
-    except Exception as exc:
-        run_codex_image_job(path, candidate, job)
+
+
+def run_cos_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any], runtime) -> None:
+    from .storage.artifacts.native import image_job
+    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
+    output_path = image_job_output_path(job, for_write=True)
+    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
+    def process_changed(process):
+        if process is None:
+            _image_worker_processes.pop(job_id, None)
+        else:
+            _image_worker_processes[job_id] = process
+    try:
+        inputs = [resolve_service_path(value) for value in (job.get("input_files") or [])[:MAX_IMAGE_WORKER_INPUTS]]
+        if not inputs or not all(_business_files.is_file(value) for value in inputs):
+            raise RuntimeError("missing image input")
+        generations = {}
+        for destination in (output_path, log_path):
+            key = runtime.key(destination)
+            row = runtime.store.locations.get(key)
+            generations[key] = row.generation if row else 0
+        update_image_worker_status(path, candidate, job, status="running", progress=12,
+                                   started_at=int(time.time()), output_path=str(output_path), log_path=str(log_path))
+        prompt = lambda output: image_job_prompt({**job, "output_path": output}) + "\n"
+        with image_job(runtime, inputs, prompt, on_process=process_changed) as (output, log, code):
+            runtime.store.put(runtime.key(log_path), log, expected_generation=generations[runtime.key(log_path)])
+            if code != 0 or not output.is_file() or not codex_log_has_generated_image(log_path):
+                raise RuntimeError("native image generation was not confirmed")
+            if _image_files.imread(str(output), cv2.IMREAD_UNCHANGED) is None:
+                raise RuntimeError("native image output is invalid")
+            runtime.store.put(runtime.key(output_path), output, expected_generation=generations[runtime.key(output_path)])
+        mutate_candidate_image_job(path, candidate, job, {
+            "status": "completed", "progress": 100, "completed_at": int(time.time()),
+            "output_path": str(output_path), "output_url": public_output_url(output_path),
+            "log_path": str(log_path), "note": "图像已生成并持久保存。",
+        }, preprocess_clean_sprites=True)
+    except Exception:
+        update_image_worker_status(path, candidate, job, status="failed", progress=100,
+                                   failed_at=int(time.time()), log_path=str(log_path),
+                                   error="图像生成或持久保存未确认成功；未自动重试付费调用。")
 
 
 def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
+    runtime = _business_files.runtime(image_job_output_path(job, for_write=True))
+    if runtime is not None:
+        return run_cos_codex_image_job(path, candidate, job, runtime)
     job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
     output_path = image_job_output_path(job, for_write=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -14287,7 +14336,7 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
     missing_input_files: list[str] = []
     for item in job.get("input_files", []) or []:
         input_path = resolve_service_path(item)
-        if input_path.exists():
+        if _business_files.exists(input_path):
             input_files.append(str(input_path))
         else:
             missing_input_files.append(str(item))
@@ -14412,7 +14461,7 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
     finally:
         _image_worker_processes.pop(job_id, None)
 
-    if return_code == 0 and output_path.exists() and not codex_log_has_generated_image(log_path):
+    if return_code == 0 and _business_files.exists(output_path) and not codex_log_has_generated_image(log_path):
         updated_job = mutate_candidate_image_job(
             path,
             candidate,
@@ -14429,10 +14478,10 @@ def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, An
         )
         if updated_job.get("status") == "failed":
             try:
-                output_path.unlink()
+                _business_files.unlink(output_path)
             except OSError:
                 pass
-    elif return_code == 0 and output_path.exists():
+    elif return_code == 0 and _business_files.exists(output_path):
         mutate_candidate_image_job(
             path,
             candidate,
@@ -14533,16 +14582,16 @@ def refresh_codex_image_job(job: dict[str, Any]) -> dict[str, Any]:
     if status in {"failed", "stopped"}:
         copy["progress"] = int(copy.get("progress", 100))
         copy.setdefault("output_url", public_output_url_for_existing(output_path))
-        if status == "failed" and not output_path.exists():
+        if status == "failed" and not _business_files.exists(output_path):
             classified_error = classify_image_worker_failure(log_path, None, output_path)
             if any(marker in classified_error for marker in ("TooManyRequests", "FORBIDDEN", "fallback")) and classified_error != copy.get("error"):
                 copy["error"] = classified_error
                 copy["log_path"] = str(log_path)
-    elif output_path.exists():
+    elif _business_files.exists(output_path):
         copy["status"] = "completed"
         copy["progress"] = 100
         copy["output_url"] = public_output_url(output_path)
-        copy["completed_at"] = int(output_path.stat().st_mtime)
+        copy["completed_at"] = int(_business_files.stat(output_path).st_mtime)
         if str(copy.get("generation_method") or "") == "codex_exec_image_worker":
             copy["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
             copy["note"] = "本地图像生成任务已完成。"
@@ -14830,9 +14879,9 @@ def apply_codex_image_job_action(record: dict[str, Any], job: dict[str, Any], lo
             raise HTTPException(status_code=409, detail="Image job is still active; stop it or wait for it to become stale before retrying")
         job.update(refreshed_job)
         output_path = image_job_output_path(job, for_write=True)
-        if output_path.exists():
+        if _business_files.exists(output_path):
             try:
-                output_path.unlink()
+                _business_files.unlink(output_path)
             except OSError:
                 pass
         for key in (
@@ -14964,10 +15013,10 @@ def update_codex_image_candidate(candidate_id: str, action: str) -> dict[str, An
                     }
                 raise HTTPException(status_code=400, detail="Unknown candidate action")
     if repository is None:
-        for path in ACCESSORY_CANDIDATES_DIR.glob("*.json"):
+        for path in _business_files.glob(ACCESSORY_CANDIDATES_DIR, "*.json"):
             with _candidate_store_lock:
                 try:
-                    candidate = json.loads(path.read_text(encoding="utf-8"))
+                    candidate = json.loads(_business_files.read_text(path, encoding="utf-8"))
                 except json.JSONDecodeError:
                     continue
                 if str(candidate.get("id", "")) != candidate_id:
@@ -15034,7 +15083,7 @@ def existing_source_image_paths(item: dict[str, Any]) -> list[Path]:
         key = str(path)
         if key in seen:
             continue
-        if path.exists() and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
+        if _business_files.exists(path) and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
             paths.append(path)
             seen.add(key)
     return paths
@@ -15078,7 +15127,7 @@ def ensure_object_clean_sprites_for_selection(config: dict[str, Any], ids: list[
         pose_jobs = [
             job
             for job in candidate_image_jobs(item)
-            if Path(str(job.get("output_path", ""))).exists() and not job.get("intermediate")
+            if _business_files.exists(Path(str(job.get("output_path", "")))) and not job.get("intermediate")
         ]
         expected_count = min(18, len(pose_jobs) * len(POSE_COLLECTION_GRID_POSITIONS)) if pose_jobs else len(sprites)
         if sprites and len(sprites) >= expected_count and clean_sprites_policy_complete(item, sprites):
@@ -16228,7 +16277,7 @@ def detect_base_model() -> str:
         ROOT / "yolo11s.pt",
         ROOT / "yolov8s.pt",
     ):
-        if candidate.exists():
+        if _business_files.exists(candidate):
             return str(candidate)
     return "yolo26s.pt"
 
@@ -16639,7 +16688,7 @@ delete_user = _user_routes.delete_user
 @app.get("/")
 def index() -> FileResponse:
     index_path = REACT_PRODUCTION_DIST_DIR / "index.html"
-    if not index_path.exists():
+    if not _business_files.exists(index_path):
         raise HTTPException(status_code=404, detail="React production build is not available")
     return FileResponse(
         index_path,
@@ -16698,7 +16747,7 @@ def status(user_id: str | None = None) -> dict[str, Any]:
     available_models = []
     for spec in legacy_model_specs():
         path = Path(spec["path"]) if spec.get("path") else None
-        exists = bool(spec.get("is_ai_detection")) or bool(path and path.exists())
+        exists = bool(spec.get("is_ai_detection")) or bool(path and _business_files.exists(path))
         available_models.append(
             {
                 "id": spec["id"],
@@ -16735,7 +16784,7 @@ def status(user_id: str | None = None) -> dict[str, Any]:
             "artifact_path": str(spec.get("artifact_path") or spec["path"]),
             "metadata_path": str(spec.get("metadata_path") or ""),
             "path": str(spec["path"]),
-            "exists": bool(spec.get("is_ai_detection")) or Path(spec["path"]).exists(),
+            "exists": bool(spec.get("is_ai_detection")) or _business_files.exists(Path(spec["path"])),
             "accessory_names": spec.get("accessory_names") or [],
             "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
             "missing_accessory_ids": spec.get("missing_accessory_ids") or [],
@@ -16790,7 +16839,7 @@ def status(user_id: str | None = None) -> dict[str, Any]:
         cursor_image2 = {"status": "restricted", "configured": False}
     payload = {
         "service": "running",
-        "model_exists": bool(active_spec.get("is_ai_detection")) or bool(active_path and active_path.exists()),
+        "model_exists": bool(active_spec.get("is_ai_detection")) or bool(active_path and _business_files.exists(active_path)),
         "model_path": str(active_spec.get("path") or ""),
         "active_model_id": active_spec["id"],
         "available_models": available_models,
@@ -17703,12 +17752,12 @@ def retry_ai_task_auto_optimize_sample(task_id: str, sample_id: str) -> dict[str
         require_record_access(target, user, write=True)
         source_image = target.get("source_image") if isinstance(target.get("source_image"), dict) else {}
         source_path = resolve_service_path(source_image.get("path") or "")
-        if not source_path.exists():
+        if not _business_files.exists(source_path):
             raise HTTPException(status_code=404, detail="Source image for retry was not found")
         target["label_status"] = "retrying"
         target["retry_requested_at"] = int(time.time())
         save_auto_optimize_state(state)
-    image_bgr = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+    image_bgr = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
         raise HTTPException(status_code=400, detail="Could not decode source image for retry")
     retry_request_id = f"retry_{clean_sample_id}_{int(time.time())}"
@@ -18165,7 +18214,7 @@ async def analyze_camera_image(
     request_id = f"camera_{safe_name(camera_request_id)}"
     upload_path = UPLOAD_DIR / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
     try:
-        upload_path.write_bytes(payload)
+        _business_files.write_bytes(upload_path, payload)
         result = analyze_bgr(image, request_id, model_id, image_path=upload_path)
         completed_dispatch = plc_web_serial_finish_camera_detection(
             str(station["id"]), dispatch_id, plc_session_id, result
@@ -19020,10 +19069,10 @@ def refresh_pipeline_candidate(candidate_id: str) -> tuple[dict[str, Any] | None
                     raise
                 return None, True
         else:
-            if not path.exists():
+            if not _business_files.exists(path):
                 return None, True
             try:
-                candidate = json.loads(path.read_text(encoding="utf-8"))
+                candidate = json.loads(_business_files.read_text(path, encoding="utf-8"))
             except json.JSONDecodeError:
                 return None, True
         candidate = enrich_record_audit_fields(candidate, path)
@@ -21621,7 +21670,7 @@ def react_production_spa(react_path: str) -> FileResponse:
     if first_segment not in REACT_PRODUCTION_ROUTE_SEGMENTS:
         raise HTTPException(status_code=404, detail="Not found")
     index_path = REACT_PRODUCTION_DIST_DIR / "index.html"
-    if not index_path.exists():
+    if not _business_files.exists(index_path):
         raise HTTPException(status_code=404, detail="Production React build is not available")
     return FileResponse(
         index_path,

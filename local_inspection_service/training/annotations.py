@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 from typing import Any
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 
 
 def yolo_label_line(class_index: int, polygon: list[list[int]], width: int = 1280, height: int = 900) -> str | None:
@@ -56,7 +58,7 @@ def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
         "names:",
     ]
     body.extend([f"  {idx}: {name}" for idx, name in enumerate(safe_names)])
-    path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    _image_files.files.write_text(path, "\n".join(body) + "\n", encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,7 @@ class AnnotationPreview:
         self.public_url = public_url
 
     def write_training_annotation_preview(self, image_path: Path, labels: list[dict[str, Any]], out_path: Path) -> str:
-        image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        image = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
         if image is None:
             return ""
         palette = [(0, 210, 60), (45, 125, 255), (250, 170, 35), (210, 65, 210), (60, 220, 220)]
@@ -96,5 +98,5 @@ class AnnotationPreview:
             y = max(24, y1 - 8)
             cv2.putText(image, str(label.get("name") or label.get("id") or "part"), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(out_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        _image_files.imwrite(str(out_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         return self.public_url(out_path)

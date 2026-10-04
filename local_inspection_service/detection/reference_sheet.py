@@ -1,6 +1,8 @@
 """Reference-sheet rendering and process-local descriptor cache."""
 from collections.abc import Callable
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 import hashlib
 import json
@@ -22,7 +24,7 @@ class ReferenceSheet:
                 continue
             ref = refs[0]
             path = Path(str(ref.get("source_path") or ""))
-            if not path.exists() or path.suffix.lower() not in self.policy.suffixes():
+            if not _business_files.exists(path) or path.suffix.lower() not in self.policy.suffixes():
                 continue
             items.append(
                 {
@@ -30,7 +32,7 @@ class ReferenceSheet:
                     "name": self.text()(required.get("name") or profile.get("name") or item_id, 80),
                     "expected_count": int(required.get("expected_count") or 1),
                     "source_path": str(path),
-                    "sha256": str(ref.get("sha256") or hashlib.sha256(path.read_bytes()).hexdigest()),
+                    "sha256": str(ref.get("sha256") or hashlib.sha256(_business_files.read_bytes(path)).hexdigest()),
                 }
             )
         if not items:
@@ -48,7 +50,7 @@ class ReferenceSheet:
             cached = self.cache.records().get(digest)
             if cached and cached.get("data_url") and cached.get("source_path") == str(sheet_path):
                 return dict(cached)
-        if not sheet_path.exists():
+        if not sheet__business_files.exists(path):
             cols = 3 if len(items) > 2 else len(items)
             rows = int(math.ceil(len(items) / max(1, cols)))
             cell_w, cell_h, label_h, margin = 560, 620, 86, 24

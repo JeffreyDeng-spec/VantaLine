@@ -1,5 +1,5 @@
 {
-  "version": 134,
+  "version": 136,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -351,6 +351,10 @@
     "storage/artifacts/postgres.py",
     "storage/artifacts/runtime.py",
     "storage/artifacts/store.py",
-    "storage/artifacts/types.py"
+    "storage/artifacts/types.py",
+    "storage/artifacts/images.py",
+    "storage/artifacts/admission.py",
+    "storage/artifacts/native.py",
+    "storage/artifacts/volumes.py"
   ]
 }

@@ -27,17 +27,17 @@ class PostgresLocations:
 
     @staticmethod
     def decode(row):
-        return Artifact(row[0], int(row[1]), row[2], int(row[3]), row[4]) if row else None
+        return Artifact(row[0], int(row[1]), row[2], int(row[3]), row[4], int(row[5])) if row else None
 
     def get(self, path: str, *, generation: int | None = None) -> Artifact | None:
         path = logical_path(path)
         with self.transaction() as cursor:
             if generation is None:
-                cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state "
+                cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state,mtime_ns "
                                "FROM vantaline.artifact_locations WHERE logical_path=%s "
                                "ORDER BY generation DESC LIMIT 1", (path,))
             else:
-                cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state "
+                cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state,mtime_ns "
                                "FROM vantaline.artifact_locations WHERE logical_path=%s AND generation=%s",
                                (path, generation))
             return self.decode(cursor.fetchone())
@@ -46,8 +46,8 @@ class PostgresLocations:
         prefix = logical_path(prefix).rstrip("/") + "/"
         with self.transaction() as cursor:
             # Literal prefix: '%' and '_' in user paths are not SQL wildcards.
-            cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state FROM ("
-                           "SELECT DISTINCT ON (logical_path) logical_path,generation,sha256,size_bytes,state "
+            cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state,mtime_ns FROM ("
+                           "SELECT DISTINCT ON (logical_path) logical_path,generation,sha256,size_bytes,state,mtime_ns "
                            "FROM vantaline.artifact_locations WHERE left(logical_path,%s)=%s "
                            "ORDER BY logical_path,generation DESC) latest "
                            "WHERE state='ready' ORDER BY logical_path", (len(prefix), prefix))
@@ -63,8 +63,11 @@ class PostgresLocations:
             if int(cursor.fetchone()[0]) != expected_generation:
                 raise ArtifactConflict("file changed concurrently")
             cursor.execute("INSERT INTO vantaline.artifact_locations "
-                           "(logical_path,generation,object_key,sha256,size_bytes,state,created_at) "
-                           "VALUES (%s,%s,%s,%s,%s,%s,extract(epoch FROM clock_timestamp())::bigint)",
+                           "(logical_path,generation,object_key,sha256,size_bytes,state,created_at,mtime_ns) "
+                           "VALUES (%s,%s,%s,%s,%s,%s,extract(epoch FROM clock_timestamp())::bigint,"
+                           "coalesce(nullif(%s,0),(extract(epoch FROM clock_timestamp())*1000000000)::bigint)) "
+                           "RETURNING logical_path,generation,sha256,size_bytes,state,mtime_ns",
                            (artifact.path, artifact.generation, artifact.key, artifact.sha256,
-                            artifact.size, artifact.state))
-        return artifact
+                            artifact.size, artifact.state, artifact.mtime_ns))
+            published = self.decode(cursor.fetchone())
+        return published

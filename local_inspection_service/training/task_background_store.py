@@ -1,4 +1,6 @@
 """Task environment background replacement using request-local arguments and narrow storage ports."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,12 +43,12 @@ class TaskBackgroundStore:
         clean_task_id = self.identity.sanitize(task_id) or self.identity.fallback(task_id)
         set_id = self.identity.safe()(f"task_env_{clean_task_id}")
         set_dir = self.paths.sets() / set_id
-        if set_dir.exists():
-            shutil.rmtree(set_dir, ignore_errors=True)
+        if _business_files.exists(set_dir):
+            _business_files.rmtree(set_dir, ignore_errors=True)
         set_dir.mkdir(parents=True, exist_ok=True)
         suffix = source_path.suffix.lower() if source_path.suffix.lower() in self.paths.suffixes() else ".jpg"
         target_path = set_dir / f"source{suffix}"
-        shutil.copy2(source_path, target_path)
+        _business_files.copy2(source_path, target_path)
         self.create(target_path, set_dir, count=5)
         image_count = len(self.images(set_dir))
         meta = self.records.update_provider()(

@@ -2,6 +2,8 @@
 from typing import Any, Callable
 from pathlib import Path
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 from .background_library_selection_ports import BackgroundOwnership, BackgroundCatalogSources, BackgroundCatalogPolicy, BackgroundMatchSources, BackgroundMatchFeatures
 
 class BackgroundCandidateCatalog:
@@ -29,7 +31,7 @@ class BackgroundCandidateCatalog:
                 continue
             images = self._sources.images()(self._policy.directory() / clean_id)
             source = self._sources.resolve()(meta.get("source"))
-            if source.exists() and source.suffix.lower() in self._policy.suffixes():
+            if _image_files.files.exists(source) and source.suffix.lower() in self._policy.suffixes():
                 images = [source] + [path for path in images if path.resolve() != source.resolve()]
             for image_path in images[:8]:
                 candidates.append((clean_id, image_path, meta))
@@ -49,7 +51,7 @@ class BackgroundLibraryMatcher:
             return None
         best: dict[str, Any] | None = None
         for set_id, image_path, meta in self._sources.candidates()(owner_id):
-            image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+            image = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
             if image is None:
                 continue
             height, width = image.shape[:2]

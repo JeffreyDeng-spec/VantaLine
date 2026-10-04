@@ -2,6 +2,8 @@
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 import re
 from typing import Any
 
@@ -20,12 +22,12 @@ class BackgroundImageFiles:
         self.suffixes = suffixes
 
     def image_file_list(self, path: Path) -> list[Path]:
-        if not path.exists() or not path.is_dir():
+        if not _business_files.exists(path) or not _business_files.is_dir(path):
             return []
         return sorted(
             item
-            for item in path.iterdir()
-            if item.is_file() and item.suffix.lower() in self.suffixes()
+            for item in _business_files.iterdir(path)
+            if _business_files.is_file(item) and item.suffix.lower() in self.suffixes()
         )
 
 

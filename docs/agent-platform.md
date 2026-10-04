@@ -362,3 +362,7 @@ Ordinary users retain their permitted task/device operations without library acc
 ## Agent policy read transaction
 
 Agent policy display reads now use a short PostgreSQL transaction without the account advisory lock. They still require a nonempty owner and return the committed owner-scoped policy. Policy updates, operation admission, reservations, revocation, and state transitions keep their original account lock and transaction. The disposable-schema regression `scripts/smoke_agent_policy_read_transactions.py` verifies a read can complete while an update holds the lock, that decoding does not fence an independent writer, and that write/admission races still serialize.
+
+## COS image persistence compatibility
+
+Photo highlight and background-plate image reads/writes have an opt-in storage adapter. Provider output is durably published before its file reference is exposed. A storage failure propagates instead of claiming a successful image write. Default local behavior remains covered by existing contracts; native worker workspace conversion and budgeted real-provider acceptance remain cutover gates.

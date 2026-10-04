@@ -2,6 +2,8 @@
 from pathlib import Path
 from typing import Any
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from .gallery_ports import GalleryAssets, GalleryStorage, GalleryDisplay
 from .policy import accessory_uid, accessory_material_type
@@ -24,7 +26,7 @@ class AccessoryGallery:
         return self.display.redact(copy, self.display.current_user())
 
     def write_gallery_preview(self, src: Path, out_path: Path, max_side: int = 1200) -> dict[str, Any] | None:
-        raw = cv2.imread(str(src), cv2.IMREAD_UNCHANGED)
+        raw = _image_files.imread(str(src), cv2.IMREAD_UNCHANGED)
         if raw is None:
             return None
         if raw.ndim == 3 and raw.shape[2] >= 4:
@@ -40,7 +42,7 @@ class AccessoryGallery:
         scale = min(max_side / max(h, w), 1.0)
         preview = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(out_path), preview)
+        _image_files.imwrite(str(out_path), preview)
         return {"url": self.storage.public_url(out_path), "width": int(preview.shape[1]), "height": int(preview.shape[0])}
 
     def accessory_detail_payload(self, item: dict[str, Any]) -> dict[str, Any]:
@@ -77,7 +79,7 @@ class AccessoryGallery:
         clean_sprites = self.assets.clean_sprites(item)[:18]
         for job in self.assets.image_jobs(item):
             output_path = Path(str(job.get("output_path", "")))
-            if material_type == "object" and output_path.exists() and str(output_path).startswith(str(self.storage.output_directory())):
+            if material_type == "object" and _image_files.files.exists(output_path) and str(output_path).startswith(str(self.storage.output_directory())):
                 if str(output_path) in shown_paths:
                     continue
                 pose_output_paths.append(output_path)

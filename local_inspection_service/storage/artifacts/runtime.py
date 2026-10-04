@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import shutil
 import threading
 
 from .types import ArtifactUnavailable, logical_path
@@ -43,19 +44,24 @@ def get_runtime() -> ArtifactRuntime | None:
     values = tuple(os.environ.get(key, "") for key in required)
     if not all(values):
         raise ValueError("COS storage requires data, work, cache, database and systemd credential configuration")
-    signature = (mode, *values)
+    hard_limits = os.environ.get("VANTALINE_ARTIFACT_HARD_LIMITS", "0")
+    upload_root = os.environ.get("VANTALINE_ARTIFACT_UPLOAD_ROOT", "")
+    if hard_limits not in {"0", "1"}:
+        raise ValueError("invalid temporary hard-limit setting")
+    signature = (mode, *values, hard_limits, upload_root)
     global _runtime, _signature
     with _lock:
         if _runtime is not None:
             if _signature != signature:
                 raise RuntimeError("storage configuration changed; restart is required")
             return _runtime
-        _runtime = build_runtime(mode, *values)
+        _runtime = build_runtime(mode, *values, hard_limits=hard_limits == "1", upload_root=upload_root)
         _signature = signature
         return _runtime
 
 
-def build_runtime(mode, data_root, work_root, cache_root, bucket, database_url, credentials_directory):
+def build_runtime(mode, data_root, work_root, cache_root, bucket, database_url, credentials_directory,
+                  *, hard_limits=False, upload_root=""):
     from .cos import CosObjects
     from .disk import DiskBudget, ReadCache, directory
     from .postgres import PostgresLocations
@@ -70,7 +76,7 @@ def build_runtime(mode, data_root, work_root, cache_root, bucket, database_url, 
     directory(work)
     directory(cache)
     required_device_paths = (root, work, cache) if mode == "cos" else (work, cache)
-    if len({p.stat().st_dev for p in required_device_paths}) != 1:
+    if not hard_limits and len({p.stat().st_dev for p in required_device_paths}) != 1:
         raise ValueError("data, cache and work roots must use the same system filesystem")
     credential = Path(credentials_directory) / "cos-credentials.json"
     fd = os.open(credential, os.O_RDONLY | os.O_NOFOLLOW)
@@ -101,6 +107,20 @@ def build_runtime(mode, data_root, work_root, cache_root, bucket, database_url, 
             raise ArtifactUnavailable("artifact database unavailable") from None
 
     objects = CosObjects(client, bucket)
-    budget = DiskBudget(work / "control")
+    if hard_limits:
+        from .volumes import validate_volumes
+        from .disk import GiB
+        limits = {"cache": 6 * GiB, "work": 12 * GiB, "upload": 2 * GiB}
+        roots = {"cache": cache, "work": work, "upload": Path(upload_root).resolve()}
+        parent = validate_volumes(work.parent, roots, limits)
+        if mode == "cos" and root.stat().st_dev != parent.stat().st_dev:
+            raise ValueError("business configuration must reside on the system disk")
+        budget = DiskBudget(parent / "control", limits=limits, preallocated=True,
+                            free_bytes=lambda: shutil.disk_usage(parent).free,
+                            scratch_roots={kind: path / "scratch" for kind, path in roots.items()})
+    else:
+        budget = DiskBudget(work / "control")
+    with budget.locked():
+        budget._live()
     store = ArtifactStore(PostgresLocations(connect), objects, ReadCache(cache, budget, objects), budget, work / "staging")
     return ArtifactRuntime(store, root, mode)

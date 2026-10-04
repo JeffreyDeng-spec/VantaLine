@@ -10,6 +10,21 @@ from starlette.datastructures import Headers
 
 from .runtime import get_runtime
 from .types import ArtifactUnavailable
+from .files import BusinessFiles
+
+
+def file_response(path, *, local_factory=FileResponse, **kwargs):
+    """Use only after the calling route's existing permission/ownership checks."""
+    runtime = BusinessFiles().runtime(path)
+    if runtime is None:
+        return local_factory(path, **kwargs)
+    row = runtime.store.locations.get(runtime.key(Path(path)))
+    if row is None and runtime.mode == "hybrid":
+        return local_factory(path, **kwargs)
+    if row is None or row.state != "ready":
+        raise HTTPException(404)
+    return ArtifactResponse(runtime, row, kwargs.get("media_type") or mimetypes.guess_type(str(path))[0] or "application/octet-stream",
+                            filename=kwargs.get("filename"), headers=kwargs.get("headers"))
 
 
 class ArtifactResponse(Response):

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS artifact_locations (
  size_bytes BIGINT NOT NULL CHECK (size_bytes >= 0),
  state TEXT NOT NULL CHECK (state IN ('ready','deleted')),
  created_at BIGINT NOT NULL,
+ mtime_ns BIGINT NOT NULL DEFAULT 0 CHECK (mtime_ns >= 0),
  PRIMARY KEY (logical_path,generation),
  CHECK (object_key = 'objects/sha256/' || left(sha256,2) || '/' || sha256)
 );

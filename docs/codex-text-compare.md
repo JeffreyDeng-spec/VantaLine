@@ -290,3 +290,5 @@ upload and full remote verification precede location publication. Workers and We
 obtain credentials through their own systemd credential directories. Hybrid mode
 never resurrects a tombstoned local file. Default local media behavior is retained;
 this adapter alone does not authorize a production storage switch.
+
+In opt-in COS mode, comparison execution uses the shared exclusive work reservation on the kernel-limited system-disk temporary volume. Input media still passes the owner-scoped media adapter; the child retains its existing bubblewrap isolation and cannot access object-store credentials or original data roots. An unavailable work reservation settles the claimed task as failed before launch. The existing local-mode worker and terminal-state contracts remain unchanged.

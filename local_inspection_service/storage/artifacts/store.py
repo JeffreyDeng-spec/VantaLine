@@ -75,6 +75,31 @@ class ArtifactStore:
             finally:
                 temporary.unlink(missing_ok=True)
 
+    def put_stream(self, path, stream, *, expected_generation):
+        """HTTP spooled uploads are seekable; reserve the exact remaining bytes."""
+        path = logical_path(path)
+        start = stream.tell()
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell() - start
+        stream.seek(start)
+        with self.budget.workspace("upload", size) as workspace:
+            target = workspace / "payload"
+            digest, total = hashlib.sha256(), 0
+            with target.open("xb") as output:
+                while chunk := stream.read(1024*1024):
+                    total += len(chunk)
+                    if total > size:
+                        raise ArtifactIntegrityError("upload stream changed size")
+                    output.write(chunk)
+                    digest.update(chunk)
+                output.flush()
+                os.fsync(output.fileno())
+            if total != size:
+                raise ArtifactIntegrityError("upload stream was truncated")
+            row = Artifact(path, expected_generation + 1, digest.hexdigest(), size)
+            self.objects.put(row, target)
+            return self.locations.publish(row, expected_generation=expected_generation)
+
     @contextmanager
     def read(self, path: str):
         artifact = self.stat(path)

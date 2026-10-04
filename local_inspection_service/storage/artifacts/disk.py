@@ -34,16 +34,21 @@ def directory(path: Path):
 
 class DiskBudget:
     def __init__(self, root: Path, *, limits=None, reserve_bytes: int = 8 * GiB,
-                 free_bytes=None):
+                 free_bytes=None, scratch_roots=None, preallocated=False):
         self.root = root
         self.limits = dict(limits if limits is not None else {"cache": 6*GiB, "work": 12*GiB, "upload": 2*GiB})
         if reserve_bytes < 0 or any(type(x) is not int or x <= 0 for x in self.limits.values()):
             raise ValueError("invalid disk limits")
         self.reserve_bytes = reserve_bytes
         self.free_bytes = free_bytes or (lambda: shutil.disk_usage(self.root).free)
+        self.preallocated = preallocated
+        self.scratch_roots = dict(scratch_roots or {key: root / "scratch" for key in self.limits})
+        if set(self.scratch_roots) != set(self.limits):
+            raise ValueError("scratch roots must cover every storage class")
         directory(root)
         directory(root / "reservations")
-        directory(root / "scratch")
+        for path in self.scratch_roots.values():
+            directory(path)
 
     @contextmanager
     def locked(self):
@@ -66,9 +71,18 @@ class DiskBudget:
                     totals[row["kind"]] += row["bytes"]
                 else:
                     # Kernel releases a dead process's flock; no PID/TTL guessing.
-                    scratch = self.root / "scratch" / path.stem
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    row = json.loads(os.read(fd, 4096))
+                    scratch = self.scratch_roots[row["kind"]] / path.stem
                     if scratch.exists():
-                        shutil.rmtree(scratch)
+                        try:
+                            shutil.rmtree(scratch)
+                        except PermissionError:
+                            # Another service's private native authentication
+                            # subtree is reclaimed when that service restarts.
+                            # Retain its reservation; never pretend space is free.
+                            totals[row["kind"]] += row["bytes"]
+                            continue
                     path.unlink()
             finally:
                 os.close(fd)
@@ -81,8 +95,11 @@ class DiskBudget:
         fd, path = None, self.root / "reservations" / (uuid.uuid4().hex + ".json")
         with self.locked():
             live = self._live()
-            if live[kind] + size > self.limits[kind] or self.free_bytes() - sum(live.values()) - size < self.reserve_bytes:
+            pending = 0 if self.preallocated else sum(live.values()) + size
+            if live[kind] + size > self.limits[kind] or self.free_bytes() - pending < self.reserve_bytes:
                 raise DiskCapacityError("temporary storage capacity unavailable")
+            if self.preallocated and shutil.disk_usage(self.scratch_roots[kind]).free < size:
+                raise DiskCapacityError("temporary filesystem capacity unavailable")
             # One expensive preparation at a time, even across Web/worker processes.
             if kind == "work" and (live[kind] or size == 0):
                 raise DiskCapacityError("training workspace is busy")
@@ -106,7 +123,7 @@ class DiskBudget:
     def workspace(self, kind: str, size: int):
         """Scratch is owned by a kernel-held reservation, including after a crash."""
         with self.reserve(kind, size) as identity:
-            path = self.root / "scratch" / identity
+            path = self.scratch_roots[kind] / identity
             directory(path)
             try:
                 yield path
@@ -134,7 +151,10 @@ class ReadCache:
         limit = self.budget.limits["cache"]
         if needed > limit:
             raise DiskCapacityError("file exceeds read cache capacity")
-        for path in sorted(blobs, key=lambda p: p.stat().st_mtime_ns):
+        def last_read(path):
+            pin = path.with_suffix(".pin")
+            return (pin if pin.exists() else path).stat().st_mtime_ns
+        for path in sorted(blobs, key=last_read):
             if used + needed <= limit:
                 break
             fd = shared_open(path.with_suffix(".pin"), os.O_RDWR | os.O_CREAT)
@@ -174,13 +194,15 @@ class ReadCache:
                     temporary = self.root / (uuid.uuid4().hex + ".part")
                     try:
                         self.objects.download(artifact, temporary)
-                        os.chmod(temporary, 0o660)
+                        os.chmod(temporary, 0o440)
                         os.replace(temporary, path)
                     finally:
                         temporary.unlink(missing_ok=True)
             pin = shared_open(path.with_suffix(".pin"), os.O_RDWR | os.O_CREAT)
             fcntl.flock(pin, fcntl.LOCK_SH)
-            os.utime(path, None)
+            # Different service users share immutable 0440 blobs. They may
+            # update the group-writable pin, never the blob's ownership/mtime.
+            os.utime(path.with_suffix(".pin"), None)
         try:
             yield path
         finally:

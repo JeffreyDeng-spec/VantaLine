@@ -1,4 +1,6 @@
 """Ordered sprite fingerprints and preview metadata completeness checks."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable
 from dataclasses import dataclass
 import hashlib
@@ -38,7 +40,7 @@ class TrainingPreviewCache:
         for idx, asset in enumerate(sprites):
             path = self.resolve()(asset.get("path"))
             try:
-                stat = path.stat()
+                stat = _business_files.stat(path)
                 mtime_ns = stat.st_mtime_ns
                 size = stat.st_size
             except OSError:

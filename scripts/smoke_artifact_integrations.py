@@ -31,6 +31,79 @@ class IntegrationTests(unittest.TestCase):
     def runtime(self, mode="cos"):
         return ArtifactRuntime(self.store, self.root.resolve(), mode)
 
+    def test_multipart_admission_precedes_handler_and_releases_reservations(self):
+        from fastapi import UploadFile, File
+        from local_inspection_service.storage.artifacts.admission import UploadAdmission
+        app, called = FastAPI(), []
+        self.budget.limits["upload"] = 2000
+        app.add_middleware(UploadAdmission, runtime_provider=self.runtime)
+        @app.post("/upload")
+        async def upload(file: UploadFile = File(...)):
+            called.append(await file.read())
+            return {"ok": True}
+        with TestClient(app) as client:
+            self.assertEqual(client.post("/upload", files={"file": ("a.png", b"small")}).status_code, 200)
+            with self.budget.reserve("upload", 1950):
+                self.assertEqual(client.post("/upload", files={"file": ("a.png", b"small")}).status_code, 503)
+            self.assertEqual(client.post("/upload", files={"file": ("a.png", b"x" * 1100)}).status_code, 413)
+            self.assertEqual(client.post("/upload", content=iter([b"x"]),
+                                        headers={"content-type": "multipart/form-data; boundary=a"}).status_code, 411)
+            self.assertEqual(client.post("/upload", files={"file": ("a.png", b"small")},
+                                        headers={"content-length": "2"}).status_code, 413)
+        self.assertEqual(called, [b"small"])
+        self.assertFalse(list((self.budget.root / "reservations").iterdir()))
+
+    def test_document_update_binds_generation_at_read_time(self):
+        from local_inspection_service.storage.artifacts.files import BusinessFiles
+        from local_inspection_service.storage.artifacts.types import ArtifactConflict
+        files = BusinessFiles(runtime_provider=self.runtime)
+        path = self.root / "backgrounds/manifest.json"
+        files.write_json(path, {"sets": {}})
+        first, stale = files.read_json(path), files.read_json(path)
+        first["sets"]["a"] = {"name": "first"}
+        files.write_json(path, first)
+        stale["sets"]["b"] = {"name": "stale"}
+        with self.assertRaises(ArtifactConflict):
+            files.write_json(path, stale)
+        self.assertEqual(list(files.read_json(path)["sets"]), ["a"])
+
+    def test_uncertain_cursor_write_does_not_submit_fallback(self):
+        # Exercise the assembled worker function without model initialization or
+        # external calls. The provider succeeds; persistence then fails.
+        from unittest.mock import Mock
+        from local_inspection_service.storage.artifacts.files import BusinessFiles
+        source = ast.parse((Path(__file__).resolve().parents[1] / "local_inspection_service/server.py").read_text())
+        function = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == "run_cursor_image2_job")
+        import time
+        output = self.root / "outputs/result.png"
+        files = BusinessFiles(runtime_provider=self.runtime)
+        input_path = self.root / "uploads/input.png"
+        self.put("uploads/input.png", b"input")
+        fallback, status = Mock(), Mock()
+        scope = {"Path": Path, "Any": object, "time": time, "json": __import__("json"),
+                 "image_job_output_path": lambda *a, **k: output, "IMAGE_WORKER_LOG_DIR": self.root / "image_worker_logs",
+                 "safe_name": lambda v: v, "resolve_service_path": Path, "_business_files": files,
+                 "cursor_image2_settings": lambda: {"configured": True, "endpoint_public": "fixture", "model": "fixture",
+                                                     "endpoint": "fixture", "api_key": "fixture", "timeout_seconds": 1},
+                 "CURSOR_IMAGE2_PROVIDER": "fixture", "run_codex_image_job": fallback,
+                 "update_image_worker_status": status, "public_output_url": str,
+                 "cursor_image2_payload": lambda *a: {}, "cursor_auth_headers": lambda *a: {},
+                 "requests": Mock(), "extract_cursor_image2_bytes": lambda *a: b"image"}
+        # The pre-call log fits; publication of the generated image fails.
+        self.budget.limits["upload"] = 4096
+        scope["requests"].post.return_value.json.return_value = {}
+        original = files.write_bytes
+        def write(path, data):
+            if path == output:
+                raise ArtifactUnavailable("synthetic upload failure")
+            return original(path, data)
+        files.write_bytes = write
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "actual_cursor_worker", "exec"), scope)
+        scope["run_cursor_image2_job"](self.root / "candidate", {}, {"input_files": [str(input_path)]})
+        scope["requests"].post.assert_called_once()
+        fallback.assert_not_called()
+        self.assertEqual(status.call_args.kwargs["status"], "failed")
+
     def test_comparison_media_two_accounts_and_no_local_files(self):
         media = MediaStore(self.root / "codex_comparisons", runtime_provider=self.runtime)
         sha = media.put("alice", b"image")
@@ -221,6 +294,60 @@ class IntegrationTests(unittest.TestCase):
             asyncio.run(transfers.upload_runpod_training_artifact("job", upload_token, Body()))
         self.assertEqual(len(updates), count)
         self.assertFalse(list((self.budget.root / "scratch").iterdir()))
+
+    def test_native_images_roundtrip_without_business_disk_and_fail_closed(self):
+        import cv2
+        import numpy as np
+        from PIL import Image
+        from local_inspection_service.storage.artifacts.images import ImageFiles
+        from local_inspection_service.storage.artifacts.files import BusinessFiles
+        self.budget.limits.update(cache=100000, upload=100000)
+        self.budget.free_bytes = lambda: 1000000
+        media = ImageFiles(lambda: cv2, lambda: Image, files=BusinessFiles(self.runtime))
+        source = np.full((20, 30, 3), (23, 71, 119), dtype=np.uint8)
+        path = self.root / "outputs/users/alice/sprite.png"
+        self.assertTrue(media.imwrite(str(path), source))
+        self.assertFalse(path.exists())
+        np.testing.assert_array_equal(media.imread(str(path)), source)
+        with media.open(path) as image:
+            self.assertEqual(image.size, (30, 20))
+            target = self.root / "backgrounds/fixture/copy.png"
+            media.save(image, target, format="PNG")
+        np.testing.assert_array_equal(media.imread(str(target)), source)
+        self.assertTrue(media.files.exists(target))
+        media.files.unlink(target)
+        self.assertFalse(media.files.exists(target))
+        self.client.fail = True
+        with self.assertRaises(ArtifactUnavailable):
+            media.imwrite(str(path), source + 1)
+        self.assertEqual(self.store.stat(self.runtime().key(path)).generation, 1)
+
+    def test_ordinary_upload_is_persisted_before_analysis_and_failure_stops_it(self):
+        import cv2
+        import numpy as np
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from fastapi import UploadFile
+        from local_inspection_service.detection import image_upload
+        self.budget.limits.update(upload=100000, cache=100000)
+        self.budget.free_bytes = lambda: 1000000
+        payload = cv2.imencode(".png", np.zeros((20, 30, 3), dtype=np.uint8))[1].tobytes()
+        analyzed = []
+        def analyze(image, request_id, model_id, *, image_path):
+            self.assertEqual(self.store.stat(self.runtime().key(image_path)).sha256, hashlib.sha256(payload).hexdigest())
+            analyzed.append(request_id)
+            return {"ok": True}
+        service = image_upload.ImageUpload(SimpleNamespace(ensure=lambda: None, permit=lambda model: None),
+                                         SimpleNamespace(name=lambda: (lambda filename: "fixture.png"), directory=lambda: self.root / "uploads"),
+                                         lambda: np, lambda: cv2, analyze)
+        with patch.object(image_upload._business_files, "runtime_provider", self.runtime):
+            result = asyncio.run(service.analyze_image(UploadFile(file=io.BytesIO(payload), filename="image.png"), None))
+            self.assertTrue(result["ok"])
+            self.client.fail = True
+            with self.assertRaises(ArtifactUnavailable):
+                asyncio.run(service.analyze_image(UploadFile(file=io.BytesIO(payload), filename="image.png"), None))
+        self.assertEqual(analyzed, ["fixture"])
+        self.assertFalse((self.root / "uploads/fixture.png").exists())
 
 
 if __name__ == "__main__":

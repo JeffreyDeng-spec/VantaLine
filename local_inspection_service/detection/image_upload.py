@@ -1,4 +1,6 @@
 """Ordinary uploaded-image decoding, persistence and analysis."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable
 from typing import Any
 from pathlib import Path
@@ -21,5 +23,5 @@ class ImageUpload:
             raise HTTPException(status_code=400, detail='Could not decode image')
         request_id = self.paths.name()(file.filename).rsplit('.', 1)[0]
         upload_path = self.paths.directory() / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
-        upload_path.write_bytes(payload)
+        _business_files.write_bytes(upload_path, payload)
         return self.analyze(image, request_id, model_id, image_path=upload_path)

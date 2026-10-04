@@ -830,3 +830,5 @@ complete package; this change preserves the existing topology, signal handling,
 installer SHA promotion and same-release retry fixes. Enabling COS and retiring the
 disk require the separate production-runbook gates and a complete COS rollback
 release. Prompt source manifest v134 includes the storage adapter modules.
+
+The COS compatibility release includes an operator-invoked temporary-volume provisioning script. Merely installing the release does not create volumes, enable COS, or unmount business data. Any commissioning and storage-mode change requires the separate runbook gates and a complete COS-compatible rollback artifact.

@@ -414,3 +414,5 @@ and writes own short separate connections; no business transaction is borrowed.
 Rollback retains this additive table and every prior generation. The initial
 index importer rejects a differing existing path and re-verifies remote contents
 before publishing missing rows. It does not overwrite newer business writes.
+
+The additive artifact_locations index retains mtime_ns alongside immutable object identity and generation. Historical manifest imports preserve source time; new publications use database clock time. No original business table or legacy reference is rewritten by this expansion. JSON file mutations bind to the generation read, so a later concurrent version rejects publication.

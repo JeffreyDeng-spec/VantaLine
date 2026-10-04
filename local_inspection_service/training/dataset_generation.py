@@ -1,4 +1,6 @@
 """Dataset file orchestration; rendering and configuration remain explicit dependencies."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -103,7 +105,7 @@ class DatasetGenerator:
                 )
                 if line:
                     lines.append(line)
-            label_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+            _business_files.write_text(label_path, "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
             annotated_path = preview_dir / split / f"sample_{idx + 1:06d}_boxed.jpg"
             annotated_url = self.render.annotation()(image_path, rendered.get("labels", []), annotated_path)
             rendered_labels = rendered.get("labels", [])
@@ -213,5 +215,5 @@ class DatasetGenerator:
             "owner_username": str(task.get("owner_username") or ""),
         }
         manifest_path = dataset_dir / "manifest.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        _business_files.write_text(manifest_path, json.dumps(manifest, indent=2), encoding="utf-8")
         return {"dataset_dir": str(dataset_dir), "dataset_yaml": str(yaml_path), "manifest_path": str(manifest_path)}

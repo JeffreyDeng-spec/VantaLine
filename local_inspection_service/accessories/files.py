@@ -3,6 +3,8 @@ from pathlib import Path
 import shutil
 from typing import Any
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from fastapi import HTTPException, UploadFile
 from ..schemas.accessories import AccessoryTextCropRequest, AccessoryAiReferenceRequest, AccessoryFileDeleteRequest
@@ -35,8 +37,7 @@ class AccessoryFiles:
                 path = target_dir / self.media.safe_name(upload.filename)
                 if path.suffix.lower() not in self.media.image_suffixes():
                     raise HTTPException(status_code=400, detail="Only image files can be added to accessory profiles")
-                with path.open("wb") as f:
-                    shutil.copyfileobj(upload.file, f)
+                _image_files.files.copy_stream(path, upload.file, shutil.copyfileobj)
                 saved_files.append(str(path))
             item.setdefault("source_files", [])
             item["source_files"].extend(saved_files)
@@ -74,7 +75,7 @@ class AccessoryFiles:
             source_path = source_paths[target_raw]
             if self.media.is_rectified(source_path):
                 raise HTTPException(status_code=400, detail="This text image is already manually cropped")
-            image = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+            image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
             if image is None:
                 raise HTTPException(status_code=400, detail="Source image is unreadable")
             height, width = image.shape[:2]
@@ -99,10 +100,10 @@ class AccessoryFiles:
             base = self.media.crop_stem(source_path)
             out_path = target_dir / f"{base}_manual_rectified.png"
             suffix = 1
-            while out_path.exists():
+            while _image_files.files.exists(out_path):
                 out_path = target_dir / f"{base}_manual_rectified_{suffix}.png"
                 suffix += 1
-            if not cv2.imwrite(str(out_path), warped):
+            if not _image_files.imwrite(str(out_path), warped):
                 raise HTTPException(status_code=500, detail="Failed to save cropped image")
             item.setdefault("source_files", [])
             item["source_files"].append(str(out_path))
@@ -134,7 +135,7 @@ class AccessoryFiles:
                 for asset in self.media.detail(item).get("gallery", [])
                 if isinstance(asset, dict) and asset.get("source_path")
             }
-            if target_raw not in allowed or not Path(target_raw).exists():
+            if target_raw not in allowed or not _image_files.files.exists(Path(target_raw)):
                 raise HTTPException(status_code=404, detail="Photo is not available on this accessory")
             item["ai_profile_reference_files"] = [target_raw]
             item["ai_profile"] = self.profiles.fallback(item)
@@ -208,8 +209,8 @@ class AccessoryFiles:
             target_path = Path(target_raw)
             try:
                 resolved = target_path.resolve()
-                if resolved.exists() and resolved.is_relative_to(self.media.data_directory().resolve()):
-                    resolved.unlink()
+                if _image_files.files.exists(resolved) and resolved.is_relative_to(self.media.data_directory().resolve()):
+                    _image_files.files.unlink(resolved)
             except OSError:
                 pass
             if removed_source:

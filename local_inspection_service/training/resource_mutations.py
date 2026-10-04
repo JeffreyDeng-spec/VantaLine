@@ -1,4 +1,6 @@
 """Resource file mutations and existing partial-completion semantics."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable
 from dataclasses import dataclass
 import json
@@ -65,19 +67,19 @@ class TrainingResourceMutations:
             if missing_ok:
                 return None
             raise HTTPException(status_code=404, detail="Dataset not found")
-        shutil.rmtree(dataset_dir)
+        _business_files.rmtree(dataset_dir)
         return item
 
     def delete_training_model_resource(self, run_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
         clean_id = re.sub(r"^trained_", "", run_id)
         spec = next((item for item in self.catalog.models() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
         run_dir = self.catalog.resolve()(spec.get("run_dir")) if spec else None
-        if not run_dir or not run_dir.exists() or not run_dir.is_dir() or not spec:
+        if not run_dir or not _business_files.exists(run_dir) or not _business_files.is_dir(run_dir) or not spec:
             if missing_ok:
                 return None
             raise HTTPException(status_code=404, detail="Model run not found")
         self.access.require(spec, user, write=True)
-        shutil.rmtree(run_dir)
+        _business_files.rmtree(run_dir)
         return spec
 
     def delete_training_dataset(self, dataset_id: str) -> dict[str, Any]:
@@ -102,7 +104,7 @@ class TrainingResourceMutations:
             raise HTTPException(status_code=404, detail="Dataset not found")
         manifest_path = dataset_dir / "manifest.json"
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest = _business_files.read_json(manifest_path)
         except (OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=500, detail="Dataset manifest is unreadable") from exc
         if request.display_name is not None:
@@ -112,7 +114,7 @@ class TrainingResourceMutations:
         if request.note is not None:
             manifest["note"] = request.note.strip()
         manifest["updated_at"] = int(time.time())
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        _business_files.write_json(manifest_path, manifest, indent=2)
         return {"status": "updated", "dataset_id": dataset_id, **self.catalog.payload(user=user)}
 
     def delete_training_dataset_sample(self, dataset_id: str, sample_name: str) -> dict[str, Any]:
@@ -128,14 +130,14 @@ class TrainingResourceMutations:
                 dataset_dir / "labels" / split / f"{sample_stem}.txt",
                 dataset_dir / "previews" / split / f"{sample_stem}_boxed.jpg",
             ):
-                if path.exists():
-                    path.unlink()
+                if _business_files.exists(path):
+                    _business_files.unlink(path)
                     removed += 1
         manifest_path = dataset_dir / "manifest.json"
         removed_manifest_records = 0
-        if manifest_path.exists():
+        if _business_files.exists(manifest_path):
             try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest = _business_files.read_json(manifest_path)
                 raw_samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
                 samples = [
                     item
@@ -145,7 +147,7 @@ class TrainingResourceMutations:
                 removed_manifest_records = len(raw_samples) - len(samples)
                 manifest["samples"] = samples
                 manifest["sample_count"] = len(samples)
-                manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+                _business_files.write_json(manifest_path, manifest, indent=2)
             except (OSError, json.JSONDecodeError):
                 pass
         if removed == 0 and removed_manifest_records == 0:
@@ -170,12 +172,12 @@ class TrainingResourceMutations:
         clean_id = re.sub(r"^trained_", "", run_id)
         spec = next((item for item in self.catalog.models() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
         run_dir = self.catalog.resolve()(spec.get("run_dir")) if spec else None
-        if not run_dir or not run_dir.exists() or not run_dir.is_dir() or not spec:
+        if not run_dir or not _business_files.exists(run_dir) or not _business_files.is_dir(run_dir) or not spec:
             raise HTTPException(status_code=404, detail="Model run not found")
         self.access.require(spec, user, write=True)
         meta_path = run_dir / "library_metadata.json"
         try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+            meta = _business_files.read_json(meta_path) if _business_files.exists(meta_path) else {}
         except json.JSONDecodeError:
             meta = {}
         if request.display_name is not None:
@@ -185,5 +187,5 @@ class TrainingResourceMutations:
         if request.note is not None:
             meta["note"] = request.note.strip()
         meta["updated_at"] = int(time.time())
-        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        _business_files.write_json(meta_path, meta, indent=2)
         return {"status": "updated", "run_id": run_id, **self.catalog.payload(user=user)}

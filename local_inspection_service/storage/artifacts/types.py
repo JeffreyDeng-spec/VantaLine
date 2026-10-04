@@ -66,13 +66,14 @@ class Artifact:
     sha256: str
     size: int
     state: str = "ready"
+    mtime_ns: int = 0
 
     def __post_init__(self):
         logical_path(self.path)
         if (type(self.generation) is not int or self.generation < 1 or
                 type(self.size) is not int or self.size < 0 or
                 not re.fullmatch("[a-f0-9]{64}", self.sha256) or
-                self.state not in {"ready", "deleted"}):
+                self.state not in {"ready", "deleted"} or type(self.mtime_ns) is not int or self.mtime_ns < 0):
             raise ValueError("invalid artifact identity")
 
     @property

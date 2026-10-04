@@ -1928,3 +1928,7 @@ PostgreSQL service and synthetic fixtures.
 incompressible synthetic ZIP benchmark, not a paid training call or a substitute
 for actual historical-dataset acceptance. It records output/reserved space, free
 space and cleanup and retains no benchmark archive.
+
+The image-storage integration test uses actual OpenCV/Pillow PNG round-trips with synthetic data, verifies tombstone behavior and failed replacement preservation, and checks persistence precedes ordinary image analysis. Local Mac floating-point call-trace golden mismatches in background variants and preview rendering were reproduced on unchanged e0b43c3; Linux CI remains the gate and these local checks are not reported as passing.
+
+COS regression coverage also includes multipart admission before the route handler, staging release after failure, stale JSON read-modify-write rejection, and no second paid submission after a successful provider response followed by failed persistence. Real PostgreSQL tests verify historical version retrieval and the additive mtime field. The hard-volume provisioning script is not proof of a live mounted layout; record actual mount/backing-file and capacity evidence during Linux commissioning.

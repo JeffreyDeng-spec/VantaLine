@@ -2,6 +2,8 @@
 from pathlib import Path
 from typing import Any
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 from .photo_highlight_builder_ports import PhotoBuildPolicy, PhotoBuildRuntime, PhotoBuildMasks, PhotoBuildModelPolicy, PhotoBuildPublication, PhotoBuildArtifacts, PoseSpriteMetadata, PoseImageProvider
 
 
@@ -88,7 +90,7 @@ class PhotoHighlightSpriteBuilder:
                     ),
                 ]
             )
-            image_bgr = cv2.imread(str(source_path), cv2.IMREAD_COLOR)
+            image_bgr = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
             if image_bgr is None:
                 failures.append(f"{source_path.name}: source_unreadable")
                 publish_photo_highlight_items(
@@ -163,8 +165,8 @@ class PhotoHighlightSpriteBuilder:
                     continue
                 attempt_suffix = "" if self._model.attempts() <= 1 else f"_attempt{attempt:02d}"
                 mask_path = artifact_dir / f"{ordinal:02d}_{self._runtime.safe_id()(source_path.stem)}_highlight{attempt_suffix}.png"
-                mask_path.write_bytes(result["bytes"])
-                mask_bgr = cv2.imread(str(mask_path), cv2.IMREAD_COLOR)
+                _image_files.files.write_bytes(mask_path, result["bytes"])
+                mask_bgr = _image_files.imread(str(mask_path), cv2.IMREAD_COLOR)
                 if mask_bgr is None:
                     source_attempt_failures.append(f"attempt {attempt}: generated_mask_unreadable")
                     publish_photo_highlight_items(
@@ -189,7 +191,7 @@ class PhotoHighlightSpriteBuilder:
                 if mask_bgr.shape[1] != input_w or mask_bgr.shape[0] != input_h:
                     mask_bgr = cv2.resize(mask_bgr, (input_w, input_h), interpolation=cv2.INTER_NEAREST)
                     resized_mask_path = mask_path.with_name(mask_path.stem + "_resized.png")
-                    cv2.imwrite(str(resized_mask_path), mask_bgr)
+                    _image_files.imwrite(str(resized_mask_path), mask_bgr)
                     mask_path = resized_mask_path
                 ai_mask, mask_meta = self._masks.decode()(mask_bgr)
                 if not mask_meta.get("ok"):
@@ -229,13 +231,13 @@ class PhotoHighlightSpriteBuilder:
                 auto_roi_mask_path = artifact_dir / f"{artifact_stem}_traditional_roi_mask.png"
                 transparent_path = artifact_dir / f"{artifact_stem}_transparent_sprite.png"
                 try:
-                    cv2.imwrite(str(roi_path), cut_bgr)
-                    cv2.imwrite(str(ai_roi_mask_path), raw_cut_mask)
+                    _image_files.imwrite(str(roi_path), cut_bgr)
+                    _image_files.imwrite(str(ai_roi_mask_path), raw_cut_mask)
                     if auto_mask is not None:
-                        cv2.imwrite(str(auto_roi_mask_path), auto_mask)
+                        _image_files.imwrite(str(auto_roi_mask_path), auto_mask)
                     preview_bgra = cv2.cvtColor(cut_bgr, cv2.COLOR_BGR2BGRA)
                     preview_bgra[:, :, 3] = raw_cut_mask
-                    cv2.imwrite(str(transparent_path), preview_bgra)
+                    _image_files.imwrite(str(transparent_path), preview_bgra)
                 except Exception:
                     pass
                 processing_artifacts = {

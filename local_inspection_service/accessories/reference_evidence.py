@@ -3,6 +3,8 @@ from typing import Any
 from pathlib import Path
 import hashlib
 import cv2
+from ..storage.artifacts.images import ImageFiles
+_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from .reference_evidence_ports import ReferencePolicy, ReferencePaths, ReferenceContexts, ReferenceChroma
 
@@ -30,20 +32,20 @@ class ReferenceEvidence:
             if job.get("intermediate"):
                 continue
             output_path = self._paths.resolve()(job.get("output_path"))
-            if output_path.exists():
+            if _image_files.files.exists(output_path):
                 job["output_path"] = str(output_path)
                 paths.append(output_path)
         for asset in item.get("normalized_assets", []):
             path = self._paths.resolve()(asset.get("path"))
-            if path.exists():
+            if _image_files.files.exists(path):
                 asset["path"] = str(path)
                 paths.append(path)
         for path_str in item.get("source_files", []):
             path = self._paths.resolve()(path_str)
-            if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            if _image_files.files.exists(path) and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
                 paths.append(path)
         default_path = self._paths.default()(item)
-        if default_path and default_path.exists():
+        if default_path and _image_files.files.exists(default_path):
             paths.append(default_path)
         unique = []
         seen = set()
@@ -58,7 +60,7 @@ class ReferenceEvidence:
         paths: list[Path] = []
         for path_str in item.get("ai_profile_reference_files", []) or []:
             path = self._paths.resolve()(path_str)
-            if path.exists() and path.suffix.lower() in self._policy.suffixes():
+            if _image_files.files.exists(path) and path.suffix.lower() in self._policy.suffixes():
                 paths.append(path)
         unique = []
         seen = set()
@@ -71,10 +73,10 @@ class ReferenceEvidence:
 
     def image_reference_context(self, path: Path, accessory_id: str, ordinal: int) -> dict[str, Any] | None:
         try:
-            if not path.exists() or path.suffix.lower() not in self._policy.suffixes():
+            if not _image_files.files.exists(path) or path.suffix.lower() not in self._policy.suffixes():
                 return None
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            digest = hashlib.sha256(_image_files.files.read_bytes(path)).hexdigest()
+            image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
             height = int(image.shape[0]) if image is not None else 0
             width = int(image.shape[1]) if image is not None else 0
         except OSError:
@@ -121,7 +123,7 @@ class ReferenceEvidence:
         best = 0.0
         for ref in self._contexts.references()(item, max_images=max_images):
             path = self._paths.resolve()(ref.get("source_path"))
-            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
             if image is None or image.size == 0:
                 continue
             mask = self._chroma.mask()(image, screen)

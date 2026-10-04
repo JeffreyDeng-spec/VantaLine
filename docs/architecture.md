@@ -1496,3 +1496,7 @@ HTTP ownership and RunPod token authorization precede lookup; HEAD/Range use a p
 selected generation. Training ZIPs stream indexed original bytes without a second
 dataset tree or lossy transcode. Native model initialization uses an original-name
 leased file and cleans it after the loader returns.
+
+The next compatibility slice routes ordinary OpenCV image reads/writes, accessory/background uploads, sample image/label/manifest publication, legacy incoming evidence and video decoding through explicit business-file adapters. Cache-backed native reads use links to read-only cache blobs with original filenames, held by a cache pin and a process lease, so model/video reads do not duplicate whole files or take the training preparation slot. Configuration and packaged files keep local I/O.
+
+Native worker scratch can use independently capped, preallocated ext4 filesystems backed by files on the system disk. This is local temporary storage only. Multipart parsing reserves the upload budget before body receipt; native workers retain the exclusive work reservation through child exit and result publication. COS-mode Cursor Image2 failures never automatically invoke a paid fallback. JSON resource mutations carry the version observed when reading and reject stale updates. The location index preserves source mtime_ns on historical import so cache/provenance checks do not mistake migration time for generation time.

@@ -213,7 +213,9 @@ class StorageTests(unittest.TestCase):
         self.store.read_bytes(row.path, max_bytes=100)
         self.client.fail = True
         self.assertEqual(self.store.read_bytes(row.path, max_bytes=100), b"image")
-        (self.root / "cache" / (row.sha256 + ".blob")).write_bytes(b"wrong")
+        blob = self.root / "cache" / (row.sha256 + ".blob")
+        blob.chmod(0o660)  # simulate out-of-band corruption of an immutable cache
+        blob.write_bytes(b"wrong")
         with self.assertRaises(ArtifactIntegrityError):
             self.store.read_bytes(row.path, max_bytes=100)
 

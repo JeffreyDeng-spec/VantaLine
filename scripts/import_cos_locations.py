@@ -20,7 +20,8 @@ def load_pair(manifest, receipt, bucket):
                        "bucket": bucket, "prefix": "objects"}
     if not entries or entries[0] != expected_header:
         raise ValueError("receipt does not identify this manifest and bucket")
-    expected = {row["path"]: Artifact(row["path"], 1, row["sha256"], row["size"]) for row in files}
+    expected = {row["path"]: Artifact(row["path"], 1, row["sha256"], row["size"],
+                                      mtime_ns=row.get("mtime_ns", 0)) for row in files}
     seen = set()
     for row in entries[1:-1]:
         artifact = expected.get(row.get("path"))

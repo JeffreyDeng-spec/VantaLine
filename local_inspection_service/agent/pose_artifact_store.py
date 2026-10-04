@@ -1,4 +1,6 @@
 """Explicit pose artifact store service without application imports."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 from .pose_render_ports import PoseRenderPaths, PoseRenderArtifacts, PoseRenderPresentation
 from pathlib import Path
@@ -27,7 +29,7 @@ class PoseArtifactStore:
     ) -> dict[str, Any]:
         mime_type = str(result.get("mime_type") or "image/png")
         output_path = self._artifacts.output()(task, str(call.get("accessory_id") or ""), str(call.get("pose_id") or ""), mime_type)
-        output_path.write_bytes(result["bytes"])
+        _business_files.write_bytes(output_path, result["bytes"])
         digest = self._artifacts.digest()(output_path)
         provider_key = str(call.get("provider") or result.get("provider") or "gemini_native_image_generation")
         native_provider = "agnes" if provider_key == "agnes_image_generation" else "gemini"
@@ -62,5 +64,7 @@ class PoseArtifactStore:
             "created_at": self._artifacts.now()(),
         }
         metadata_path = output_path.with_suffix(output_path.suffix + ".metadata.json")
-        metadata_path.write_text(self._artifacts.dumps()(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        write = (metadata_path.write_text if _business_files.runtime(metadata_path) is None
+                 else lambda text, **kw: _business_files.write_text(metadata_path, text, **kw))
+        write(self._artifacts.dumps()(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         return {**metadata, "metadata_path": str(metadata_path), "metadata_url": self._artifacts.public_url()(metadata_path)}

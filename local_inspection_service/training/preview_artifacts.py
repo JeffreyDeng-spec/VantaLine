@@ -1,4 +1,6 @@
 """Preview output directory and plan JSON persistence with existing partial-write semantics."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from collections.abc import Callable
 import json
 from pathlib import Path
@@ -15,4 +17,4 @@ class PreviewArtifactStore:
         return job_dir
 
     def write_plan(self, preview_id: str, plan: dict[str, Any]) -> None:
-        (self.jobs() / f"{preview_id}.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+        _business_files.write_text(self.jobs() / f"{preview_id}.json", json.dumps(plan, indent=2), encoding="utf-8")
