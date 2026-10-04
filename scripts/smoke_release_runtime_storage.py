@@ -10,6 +10,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import release_runtime_main as cli
 from release_runtime_contract import ContractError
 from release_runtime_transition import RuntimeTransition

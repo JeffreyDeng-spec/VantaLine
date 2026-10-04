@@ -135,7 +135,7 @@ class Units(unittest.TestCase):
                 self.commands.budget = value
                 with self.assertRaises(ContractError): self.units.install(self.embedded)
         self.commands.budget = '510s'
-        with self.assertRaises(ContractError): self.units.install(self.external)
+        with self.assertRaises(ContractError): self.units.install(self.external, configuration=self.configuration)
         self.assertNotIn(('enable', LABEL), self.commands.events)
         self.commands.kill = 'process'
         with self.assertRaises(ContractError): self.units.install(self.embedded)
@@ -147,7 +147,7 @@ class Units(unittest.TestCase):
             if service == LABEL and name == 'TimeoutStopUSec': return '500s'
             return original(service, name, **options)
         with patch.object(self.commands, 'property', side_effect=property_value):
-            self.units.install(self.external)
+            self.units.install(self.external, configuration=self.configuration)
         self.assertIn(('enable', LABEL), self.commands.events)
         self.assertIn('TimeoutStopSec=500', (self.root / LABEL_UNIT).read_text())
 

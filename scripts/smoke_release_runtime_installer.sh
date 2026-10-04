@@ -25,7 +25,7 @@ mkdir -p "$base"/{incoming,releases,backups,shared/data,shared/models,testbin,ve
 mkdir -p "$base/test-etc"
 cp /etc/passwd /etc/group /etc/nsswitch.conf "$base/test-etc/"
 cp -R -P --preserve=mode,timestamps /etc/alternatives "$base/test-etc/"
-mount -t tmpfs -o size=16M tmpfs /etc
+mount -t tmpfs -o size=16M,mode=0755 tmpfs /etc
 cp -R -P --preserve=mode,timestamps "$base/test-etc/"* /etc/
 mkdir -p /etc/systemd/system /etc/vantaline
 ln -s "$(command -v python3)" "$base/venv/bin/python"
