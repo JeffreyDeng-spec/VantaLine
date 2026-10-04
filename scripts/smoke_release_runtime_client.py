@@ -26,15 +26,21 @@ class ClientContract(unittest.TestCase):
         self.listener.listen()
         self.addCleanup(self.listener.close)
         self.errors = []
+        self.received = []
+        self.finished = threading.Event()
         self.threads = []
         self.addCleanup(self.join)
 
     def join(self):
-        self.listener.close()
-        for thread in self.threads:
-            thread.join(2)
-            self.assertFalse(thread.is_alive())
-        self.assertEqual(self.errors, [])
+        # A peer can connect and reject credentials before the server accepts.
+        # Do not close its listener while that accepted OS connection is pending.
+        try:
+            for thread in self.threads:
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+            self.assertEqual(self.errors, [])
+        finally:
+            self.listener.close()
 
     def serve(self, reply=b'{"ok":true}\n', delay=0):
         def run():
@@ -47,6 +53,7 @@ class ClientContract(unittest.TestCase):
                         part = connection.recv(1024)
                         if not part:
                             return
+                        self.received.append(part)
                         raw.extend(part)
                     message = json.loads(raw)
                     self.assertEqual(message, {'schema': 1, 'command': 'status', 'revision': 'a' * 32})
@@ -60,6 +67,8 @@ class ClientContract(unittest.TestCase):
                 pass  # Expected when a bounded client rejects the response.
             except Exception as error:
                 self.errors.append(type(error).__name__)
+            finally:
+                self.finished.set()
         thread = threading.Thread(target=run, daemon=True)
         self.threads.append(thread)
         thread.start()
@@ -77,6 +86,8 @@ class ClientContract(unittest.TestCase):
         self.serve()
         with self.assertRaisesRegex(ContractError, 'peer mismatch'):
             self.call(pid=os.getpid() + 1)
+        self.assertTrue(self.finished.wait(2))
+        self.assertEqual(self.received, [], "PID mismatch must send no command bytes")
 
     def test_world_readable_socket_rejected(self):
         self.path.chmod(0o666)
