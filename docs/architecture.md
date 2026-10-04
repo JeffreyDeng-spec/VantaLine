@@ -1513,3 +1513,5 @@ A connection-cleanup exception marks that consumer generation failed even after 
 Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.
 
 Label batch/payload performance acceptance now emits per-case synthetic samples before failing a guard. This is diagnostic instrumentation of the existing isolated PostgreSQL benchmark; repository, HTTP and worker boundaries are unchanged.
+
+The shared streaming file checksum helper also uses the business-file adapter. In COS mode, provenance checks during image-job startup pin and read the verified object cache; they cannot open the retired logical file path. Local configuration, package files and temporary archives retain their existing local stream behavior. Missing objects and read failures propagate before metadata is published.
