@@ -24,6 +24,7 @@ class LabelRuntimeControl:
         self._lock = threading.Lock()
         self._lifecycle_lock = threading.Lock()
         self._started = False
+        self._failed = False
         self.socket = ControlSocket(directory, role, self.command, allowed_uid=allowed_uid)
 
     @contextmanager
@@ -42,6 +43,8 @@ class LabelRuntimeControl:
 
     def start(self):
         with self._lifecycle_lock:
+            if self._failed:
+                raise RuntimeUnavailable("Label runtime lifecycle failed; process restart required")
             if self._started:
                 if (self.socket.thread is None or not self.socket.thread.is_alive()
                         or (self.worker is not None and self.worker.runtime_status()["state"] not in ("ready", "drained"))):
@@ -61,6 +64,7 @@ class LabelRuntimeControl:
                 self.socket.start()
                 self._started = True
             except BaseException as error:
+                self._failed = True
                 if self.worker is not None and not self.worker.drain(3):
                     raise RuntimeUnavailable("Label runtime startup drain failed") from None
                 self.socket.close()
@@ -102,5 +106,9 @@ class LabelRuntimeControl:
 
     def close(self):
         with self._lifecycle_lock:
-            self.socket.close()
+            try:
+                self.socket.close()
+            except BaseException:
+                self._failed = True
+                raise
             self._started = False

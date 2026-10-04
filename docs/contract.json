@@ -136,6 +136,8 @@
         "scripts/smoke_label_dependencies.py",
         "scripts/smoke_label_worker_lifecycle.py",
         "scripts/smoke_label_runtime_identity.py",
+        "scripts/smoke_label_control_connections.py",
+        "local_inspection_service/runtime/control_connections.py",
         "scripts/smoke_label_runtime_pause.py",
         "scripts/smoke_label_runtime_state.py",
         "scripts/smoke_label_runtime_control.py",

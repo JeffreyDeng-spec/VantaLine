@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from .dependencies import RepositoryLifecycle, ModelProvider
 from .worker import LabelWorker
 from ..runtime.label_identity import read_identity
+from ..runtime.control_connections import create_control_factory
 from .runtime_control import LabelRuntimeControl
 from collections.abc import Callable
 from pathlib import Path
@@ -22,7 +23,12 @@ def register(app: FastAPI, repositories: RepositoryLifecycle,
             return existing
         worker = LabelWorker(repositories, data_directory, models)
         identity = read_identity(Path(__file__).resolve().parents[2], current=Path("/opt/vantaline/current"))
-        control = LabelRuntimeControl(identity, repositories, worker) if identity is not None else None
+        control = None
+        if identity is not None:
+            control_factory = create_control_factory()
+            control_repositories = RepositoryLifecycle(
+                lambda: control_factory.selection().repository, control_factory.clear)
+            control = LabelRuntimeControl(identity, control_repositories, worker)
         worker.runtime_identity = identity
         worker.runtime_control = control
         app.state.label_worker = worker

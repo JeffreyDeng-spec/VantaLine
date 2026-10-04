@@ -361,6 +361,7 @@
     "runtime/label_identity.py",
     "runtime/control_socket.py",
     "label_inspection/runtime_control.py",
-    "storage/label_runtime.py"
+    "storage/label_runtime.py",
+    "runtime/control_connections.py"
   ]
 }

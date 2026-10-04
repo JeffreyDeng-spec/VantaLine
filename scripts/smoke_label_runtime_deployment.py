@@ -2,6 +2,7 @@
 
 Only systemd and HTTP acceptance are substituted. No providers or physical PLC.
 """
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import json
 import os
@@ -9,6 +10,8 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import threading
+from unittest.mock import patch
 from types import SimpleNamespace
 import uuid
 
@@ -20,6 +23,8 @@ from local_inspection_service.runtime.connections import ThreadRepositoryFactory
 from local_inspection_service.runtime.label_identity import read_identity
 from local_inspection_service.label_inspection.runtime_control import LabelRuntimeControl
 from local_inspection_service.label_inspection.worker import LabelWorker
+from local_inspection_service.label_inspection import worker as worker_module
+from local_inspection_service.storage.label_inspection import LabelRepository
 from local_inspection_service.label_inspection.dependencies import RepositoryLifecycle
 from local_inspection_service.storage.postgres_runtime_repository import PostgresRuntimeRepository
 from local_inspection_service.storage.postgres_schema import postgres_ddl
@@ -104,6 +109,82 @@ class RuntimeHarness:
         self.worker = self.control = None
 
 
+
+def real_claim_pause(root, repositories):
+    from local_inspection_service.runtime.label_identity import LabelRuntimeIdentity
+    identity = LabelRuntimeIdentity("c" * 40, "v2026.10.3", "embedded")
+    calls = []
+    process_entered, cleanup_entered = threading.Event(), threading.Event()
+    release_process, release_cleanup = threading.Event(), threading.Event()
+    count_lock = threading.Lock()
+    cleanup_count = [0]
+    def clear():
+        if threading.current_thread().name.startswith("label-inspection-"):
+            with count_lock:
+                cleanup_count[0] += 1
+                if cleanup_count[0] == 2:
+                    cleanup_entered.set()
+            assert release_cleanup.wait(5)
+        repositories.clear()
+    models = SimpleNamespace(resolve=lambda *a: {"api_key": "fixture"}, record_call=lambda *a: None)
+    worker = LabelWorker(RepositoryLifecycle(repositories.repository, clear), lambda: root, lambda: models)
+    control = LabelRuntimeControl(identity, repositories, worker, directory=root / "control", allowed_uid=os.getuid())
+    def process(repository, media, run, *args, **kwargs):
+        with count_lock:
+            calls.append(run["id"])
+            if len(calls) == 2:
+                process_entered.set()
+        assert release_process.wait(5)
+        repository.update_run(run["owner_user_id"], run["id"], status="completed")
+    client = partial(request, directory=root / "control")
+    transition = RuntimeTransition(root / "journal.json", uid=os.getuid(), client=client,
+        commands=SimpleNamespace(property=lambda service, name, **kw: str(os.getpid())))
+    transition.data = {"revision": "e" * 32}
+    package = {"release": identity.release, "topology": {"commit": identity.commit, "mode": "embedded", "runtime_protocol": 1}}
+    try:
+        with patch.dict(os.environ, {"VANTALINE_LABEL_INSPECTION_ENABLED": "true"}), patch.object(worker_module, "process", process):
+            control.start()
+            control.command({"schema": 1, "command": "open_admission", "revision": "e" * 32})
+            repository = LabelRepository(repositories.repository(), runtime_identity=identity)
+            rows = []
+            for index in range(3):
+                task = repository.create("alice", "claim-" + str(index), "synthetic", [
+                    {"id": "asset", "enabled": True, "media": {"original": "fixture"}}])
+                rows.append(repository.submit("alice", task["id"], "claim-request-" + str(index), 1,
+                    "asset", {"original": "fixture"}, "synthetic-model", "synthetic-prompt",
+                    profile_snapshot={"id": "pinned", "version": 2}))
+            repositories.clear()
+            control.command({"schema": 1, "command": "resume", "revision": "e" * 32})
+            assert process_entered.wait(3)
+            with ThreadPoolExecutor(1) as pool:
+                future = pool.submit(transition.pause, package, {WEB: control.instance},
+                    deadline=time.monotonic() + 5, drain_queue=False)
+                deadline = time.monotonic() + 2
+                while worker.runtime_status()["state"] != "draining":
+                    assert time.monotonic() < deadline
+                    time.sleep(.01)
+                assert not future.done() and len(calls) == 2
+                release_process.set()
+                assert cleanup_entered.wait(3)
+                state = transition.state(package, WEB)
+                assert state.active_runs == 0 and state.queued_runs >= 1
+                assert state.active_iterations == 2 and state.state == "draining" and not future.done()
+                release_cleanup.set()
+                future.result(3)
+            assert len(calls) == 2
+            repository = LabelRepository(repositories.repository())
+            saved = [repository.get("alice", row["id"]) for row in rows]
+            assert sorted(row["status"] for row in saved) == ["completed", "completed", "queued"]
+            assert all(row["profile_snapshot"] == {"id": "pinned", "version": 2} for row in saved)
+            repositories.clear()
+    finally:
+        release_process.set()
+        release_cleanup.set()
+        assert worker.drain(3)
+        control.close()
+        repositories.clear()
+
+
 def main():
     dsn = os.environ["VANTALINE_POSTGRES_DSN"]
     schema = "label_deploy_" + uuid.uuid4().hex[:12]
@@ -121,11 +202,20 @@ def main():
         with setup.cursor() as cursor:
             cursor.execute(postgres_ddl(schema))
         setup.commit()
-        for case in ("accept", "rollback", "retry_rollback", "db_failure", "preserve_pause"):
+        for case in ("accept", "rollback", "retry_rollback", "db_failure", "preserve_pause", "queued_rollback"):
             with tempfile.TemporaryDirectory(prefix="label-deploy-") as temporary:
                 harness = RuntimeHarness(Path(temporary), repositories)
                 transition = harness.transition
-                if case == "preserve_pause":
+                queued = None
+                if case == "queued_rollback":
+                    repository = LabelRepository(repositories.repository(), runtime_identity=harness.control.identity)
+                    task = repository.create("alice", "queued-preserved", "synthetic", [
+                        {"id": "asset", "enabled": True, "media": {"original": "fixture"}}])
+                    queued = repository.submit("alice", task["id"], "queued-request", 1,
+                        "asset", {"original": "fixture"}, "synthetic-model", "synthetic-prompt",
+                        profile_snapshot={"id": "pinned-before-release", "version": 7})
+                    repositories.clear()
+                if case in ("preserve_pause", "queued_rollback"):
                     harness.control.command({"schema": 1, "command": "close_admission", "revision": "d" * 32})
                     harness.control.command({"schema": 1, "command": "pause", "revision": "d" * 32})
                     deadline = time.monotonic() + 2
@@ -183,10 +273,21 @@ def main():
                             assert len([e for e in harness.events if e[0] == "stop"]) == stops
                         assert harness.current.resolve() == harness.old
                         state = transition.state(transition.data["old"], WEB)
-                        assert not state.maintenance and state.state == "ready"
+                        assert state.maintenance == (case == "queued_rollback")
+                        assert state.state == ("drained" if case == "queued_rollback" else "ready")
+                        if queued is not None:
+                            repository = LabelRepository(repositories.repository())
+                            assert repository.get("alice", queued["id"]) == queued
+                            repositories.clear()
                         assert state.instance != original_instance
                 harness.close()
                 harness = None
+        # Discard only this disposable schema's completed scenario fixtures.
+        with setup.cursor() as cursor:
+            cursor.execute(f'DELETE FROM "{schema}".label_inspection_objects')
+        setup.commit()
+        with tempfile.TemporaryDirectory(prefix="label-real-claim-") as temporary:
+            real_claim_pause(Path(temporary), repositories)
         print("label deployment: real controller/client + PG + Unix sockets accept, rollback, retry, DB failure and intent passed")
     finally:
         unavailable[0] = False

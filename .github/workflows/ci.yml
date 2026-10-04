@@ -284,6 +284,7 @@ jobs:
           python scripts/smoke_label_dependencies.py
           python scripts/smoke_label_worker_lifecycle.py
           python scripts/smoke_label_runtime_identity.py
+          python scripts/smoke_label_control_connections.py
           python scripts/smoke_label_runtime_pause.py
           python scripts/smoke_codex_dependencies.py
           python scripts/smoke_history_dependencies.py

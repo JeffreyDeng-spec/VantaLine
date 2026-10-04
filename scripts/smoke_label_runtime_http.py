@@ -61,7 +61,8 @@ def main():
                     account.reset(token)
             def build_control(build, lifecycle, worker):
                 return LabelRuntimeControl(build, lifecycle, worker, directory=root/"control", allowed_uid=os.getuid())
-            with patch.object(worker_api, "read_identity", return_value=identity), \
+            with patch.object(worker_api, "create_control_factory", return_value=factory), \
+                    patch.object(worker_api, "read_identity", return_value=identity), \
                     patch.object(worker_api, "LabelRuntimeControl", side_effect=build_control), \
                     patch.object(pdf_import, "register", return_value=None):
                 api.register(app, LabelAccess(require, lambda: require("admin"), lambda: (account.get(), account.get())),

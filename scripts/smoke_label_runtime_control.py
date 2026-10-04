@@ -5,6 +5,7 @@ from pathlib import Path
 import socket
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from types import SimpleNamespace
@@ -26,7 +27,12 @@ def main():
     setup = default_postgres_connector(dsn)
     closed = []
     failing = [False]
+    blocked = [False]
+    connecting, release_connect = threading.Event(), threading.Event()
     def create():
+        if blocked[0] and threading.current_thread().name == "label-runtime-control":
+            connecting.set()
+            assert release_connect.wait(10)
         if failing[0]:
             raise RuntimeError("synthetic-secret-and-customer-path")
         connection = default_postgres_connector(dsn)
@@ -54,9 +60,9 @@ def main():
                 controls.append(control)
                 control.start()
                 return worker, control
-            def request(command, *, revision="b"*32, raw=None):
+            def request(command, *, revision="b"*32, raw=None, timeout=3):
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                    client.settimeout(3)
+                    client.settimeout(timeout)
                     client.connect(str(directory / "web-control.sock"))
                     body = raw if raw is not None else json.dumps({"schema": 1, "command": command, "revision": revision}).encode() + b"\n"
                     client.sendall(body)
@@ -138,9 +144,45 @@ def main():
                 pass
             assert denied_worker.drain(3)
             denied.close()
+            hung_worker, hung_control = launch(LabelRuntimeIdentity("c"*40, "v2026.10.2", "embedded"))
+            blocked[0] = True
+            try:
+                request("status", timeout=.2)
+            except socket.timeout:
+                pass
+            else:
+                raise AssertionError("unacknowledged blocked connection was reported successful")
+            assert connecting.is_set()
+            try:
+                hung_control.close()
+            except RuntimeUnavailable as error:
+                assert str(error) == "Runtime control thread did not stop"
+            else:
+                raise AssertionError("live control thread was acknowledged stopped")
+            assert hung_control.socket.lock_handle is not None
+            try:
+                hung_control.start()
+            except RuntimeUnavailable:
+                pass
+            else:
+                raise AssertionError("timed-out controller generation restarted")
+            try:
+                launch(LabelRuntimeIdentity("d"*40, "v2026.10.4", "embedded"))
+            except RuntimeUnavailable:
+                pass
+            else:
+                raise AssertionError("role lock released while a command was still running")
+            blocked[0] = False
+            release_connect.set()
+            hung_control.socket.thread.join(2)
+            assert not hung_control.socket.thread.is_alive()
+            assert hung_worker.drain(3)
+            hung_control.close()
             assert "label-runtime-control" in closed
         print("label control: real sockets, peer denial, exclusive roles, SQL failures, restart and build activation passed")
     finally:
+        blocked[0] = False
+        release_connect.set()
         failing[0] = False
         for worker in workers:
             assert worker.drain(3)
