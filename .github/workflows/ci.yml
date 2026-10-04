@@ -437,6 +437,7 @@ jobs:
           git show 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_legacy_v550_api.py"
           VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_v550_api.py" python scripts/benchmark_label_legacy_index.py
           python scripts/smoke_label_read_transactions.py
+          python scripts/smoke_label_runtime_migration.py
           python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py

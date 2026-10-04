@@ -1958,3 +1958,7 @@ The rendered managed installer matrix additionally covers SIGKILL after old-serv
 Rollback fault tests interrupt after old-process startup, before the verified-instance journal save, after resume, after admission reopen and before the final rollback save. Recovery preserves the live old PID and any newly accepted work; it never stops that process merely to repeat rollback. The installer journals restored units/pointer before startup and verified instances before restoring admission.
 
 Rollback pauses the candidate before waiting for its active runs and admitted iterations to finish; it preserves queued rows without starting paid work on an unaccepted build. A forward switch from an already-paused predecessor also retains its backlog and pause intent. An active predecessor still drains its queue before a normal forward switch. State-machine and rendered-installer faults cover queued legacy-to-managed rollback and paused-backlog transitions; queued work is not evidence of an active call.
+
+## Label runtime state preparation
+
+`scripts/smoke_label_runtime_migration.py` uses two randomly named PostgreSQL schemas. It applies the actual new migration to a pre-existing label store, compares the new table columns and primary key with generated DDL, proves repeated application preserves both old task/call/model evidence and new control records, verifies the empty initial state and single migration ledger row, and exercises old label read/write operations afterwards. It contacts no PLC or model service.
