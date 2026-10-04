@@ -526,31 +526,35 @@ class RuntimeTransition:
             raise ContractError('Web and worker runtime configuration mismatch')
         return instances
 
-    def pause(self, identity, instances, *, deadline):
+    def pause(self, identity, instances, *, deadline, drain_queue=True):
         topology = Topology(**identity['topology'])
         web = self.state(identity, WEB, 'close_admission', expected=instances[WEB],
                          revision=self.data['revision'], deadline=deadline)
         if not web.maintenance:
             raise ContractError('Label admission is not fenced')
-        while True:
-            web = self.state(identity, WEB, expected=instances[WEB],
-                             revision=self.data['revision'], deadline=deadline)
-            if not web.maintenance:
-                raise ContractError('Label admission fence changed')
-            if web.queued_runs == 0 and web.active_runs == 0:
-                break
-            if deadline-self.clock() <= 0:
-                raise ContractError('Label queue did not drain')
-            self.sleep(min(.25, max(0, deadline-self.clock())))
+        if drain_queue:
+            # Normal forward switches finish the accepted queue before pausing.
+            while True:
+                web = self.state(identity, WEB, expected=instances[WEB],
+                                 revision=self.data['revision'], deadline=deadline)
+                if not web.maintenance:
+                    raise ContractError('Label admission fence changed')
+                if web.queued_runs == 0 and web.active_runs == 0:
+                    break
+                if deadline-self.clock() <= 0:
+                    raise ContractError('Label queue did not drain')
+                self.sleep(min(.25, max(0, deadline-self.clock())))
         consumer = topology.consumer_service
         state = self.state(identity, consumer, 'pause', expected=instances[consumer],
                            revision=self.data['revision'], deadline=deadline)
-        while state.state == 'draining':
+        # Rollback and an already-paused predecessor retain queued rows. Never
+        # resume an unaccepted candidate merely to execute its paid backlog.
+        while state.state == 'draining' or (state.state == 'drained' and state.active_runs):
             self.sleep(min(.1, max(0, deadline-self.clock())))
             state = self.state(identity, consumer, expected=instances[consumer],
                                revision=self.data['revision'], deadline=deadline)
         state.require_drained()
-        if state.queued_runs or state.active_runs:
+        if not state.maintenance or state.active_runs or (drain_queue and state.queued_runs):
             raise ContractError('Label work appeared after drain acknowledgement')
 
     def restore_admission(self, identity, instances, *, deadline):
@@ -599,7 +603,8 @@ class RuntimeTransition:
         # Persist recovery evidence before admission, units, or services change.
         self.save()
         if old_topology.runtime_protocol:
-            self.pause(old, self.data['old_instances'], deadline=deadline)
+            self.pause(old, self.data['old_instances'], deadline=deadline,
+                       drain_queue=not self.data['previous_paused'])
         self.data['units_changed'] = True
         self.save()
         self.units.install(new_topology, deadline=deadline, stopping_services=old_topology.services)
@@ -717,7 +722,7 @@ class RuntimeTransition:
                         if self.commands.property(service, 'MainPID') != '0']
                 if new_topology.consumer_service in live:
                     instances = {service: self.state(new, service, deadline=deadline).instance for service in live}
-                    self.pause(new, instances, deadline=deadline)
+                    self.pause(new, instances, deadline=deadline, drain_queue=False)
             self.commands.stop_all(new_topology.services, deadline=deadline)
         else:
             self.commands.stop_all(old_topology.services, deadline=deadline)

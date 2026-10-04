@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
-  for scenario in managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
+  for scenario in managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
     if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
@@ -149,6 +149,7 @@ path=base/'shared/data/runtime-control'/('web-control.sock' if service=='vantali
 path.unlink(missing_ok=True)
 listener=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); listener.bind(str(path)); path.chmod(0o600); listener.listen()
 maintenance=base/'maintenance'
+if topology['schema']==1: maintenance.unlink(missing_ok=True)  # Legacy runtime has no gate.
 if version['release']=='v2026.10.1': maintenance.touch()
 state='drained' if maintenance.exists() else 'ready'
 revision='0'*32; instance=uuid.uuid4().hex
@@ -169,6 +170,7 @@ try:
             if os.environ['TEST_RUNTIME_SCENARIO']=='managed_database_failure':
                 connection.sendall(b'{"error":"database_unavailable"}\n'); continue
             command=request['command']
+            with (base/'control-events').open('a') as log: log.write(version['release']+' '+command+'\n')
             if command!='status': revision=request['revision']
             if command=='close_admission': maintenance.touch()
             if command=='open_admission': maintenance.unlink(missing_ok=True)
@@ -187,7 +189,7 @@ try:
             response={'schema':1,'git_commit':version['git_commit'],'release':version['release'],
                 'role':'web' if service=='vantaline' else 'label','worker_mode':topology['worker_mode'],
                 'instance':instance,'pid':os.getpid(),'heartbeat':time.monotonic(),'state':state,
-                'control_revision':revision,'active_iterations':0,'queued_runs':0,'active_runs':0,
+                'control_revision':revision,'active_iterations':0,'queued_runs':int((base/'queued').read_text()) if (base/'queued').exists() else 0,'active_runs':0,
                 'maintenance':maintenance.exists(),'config_revision':'e'*64}
             connection.sendall(json.dumps(response).encode()+b'\n')
 finally:
@@ -285,7 +287,7 @@ python3 - "$previous" "$work" <<'PY'
 import json,pathlib,sys,os
 for directory,mode in ((pathlib.Path(sys.argv[1]),'embedded'),(pathlib.Path(sys.argv[2]),'external')):
     version=json.loads((directory/'VERSION.json').read_text())
-    legacy=os.environ['TEST_RUNTIME_SCENARIO']=='managed_embedded_bridge'
+    legacy=os.environ['TEST_RUNTIME_SCENARIO'] in ('managed_embedded_bridge', 'managed_legacy_queued_rollback')
     if legacy: mode='embedded'
     doc={'schema':1 if legacy and directory==pathlib.Path(sys.argv[1]) else 2,'git_commit':version['git_commit'],
         'worker_mode':mode,'services':['vantaline']+(['vantaline-label-worker'] if mode=='external' else [])}
@@ -293,6 +295,7 @@ for directory,mode in ((pathlib.Path(sys.argv[1]),'embedded'),(pathlib.Path(sys.
     (directory/'RUNTIME_TOPOLOGY.json').write_text(json.dumps(doc))
 PY
 if [[ "$scenario" == managed_paused_rollback ]]; then touch "$base/maintenance"; fi
+if [[ "$scenario" == managed_paused_rollback || "$scenario" == managed_legacy_queued_rollback ]]; then printf 3 > "$base/queued"; fi
 cat > "$work/scripts/configure_pdf_proxy.py" <<'PY_CHECKPOINT'
 import json, os, pathlib, signal
 base=pathlib.Path('/opt/vantaline'); scenario=os.environ['TEST_RUNTIME_SCENARIO']
@@ -303,7 +306,7 @@ elif scenario=='managed_pointer_checkpoint':
     journal=json.loads((base/'backups/.runtime-transition-v2026.10.1.json').read_text())
     (base/('current.runtime-rollback.'+journal['revision'])).symlink_to(journal['old']['directory'])
     raise SystemExit(23)
-elif scenario=='managed_paused_rollback':
+elif scenario in ('managed_paused_rollback', 'managed_legacy_queued_rollback'):
     raise SystemExit(23)
 elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').exists():
     raise SystemExit(23)
@@ -389,6 +392,10 @@ PY_PAUSED
 fi
 if [[ "$scenario" == managed_journal_failure ]]; then
   if grep -q synthetic-customer-secret "$base/result.log"; then exit 1; fi
+fi
+if [[ "$scenario" == managed_paused_rollback || "$scenario" == managed_legacy_queued_rollback ]]; then
+  test "$(cat "$base/queued")" -eq 3
+  if grep -q '^v2026.10.1 resume$' "$base/control-events"; then exit 1; fi
 fi
 test ! -e "$base/backups/.runtime-transition-v2026.10.1.json"
 test ! -e "$base/backups/.production-release.lock"

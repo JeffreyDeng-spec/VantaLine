@@ -119,6 +119,55 @@ class Transitions(unittest.TestCase):
         self.assertLess(h.events.index(('stop', WEB)), h.events.index(('start', LABEL)))
         self.assertEqual(h.events[-1], ('control', WEB, 'open_admission'))
 
+    def test_unaccepted_paused_candidate_rolls_back_with_queued_work_untouched(self):
+        h = self.h
+        # The legacy bridge can inherit a durable queued row from the old Web.
+        h.old.joinpath('RUNTIME_TOPOLOGY.json').write_text(json.dumps({
+            'schema': 1, 'git_commit': 'a'*40, 'worker_mode': 'embedded', 'services': [WEB]}))
+        h.new.joinpath('RUNTIME_TOPOLOGY.json').write_text(json.dumps({
+            'schema': 2, 'git_commit': 'b'*40, 'worker_mode': 'embedded',
+            'services': [WEB], 'runtime_protocol': 1}))
+        h.queue = 3
+        h.transition.begin(h.old, h.new)
+        h.maintenance = True  # New managed Web always initializes fenced.
+        h.switch(); h.transition.start()
+        h.events.clear()
+        h.transition.rollback(h.current)
+        self.assertEqual(h.queue, 3)
+        self.assertEqual(h.current.resolve(), h.old)
+        self.assertNotIn(('control', WEB, 'resume'), h.events)
+        self.assertLess(h.now, 20)
+
+    def test_preexisting_paused_backlog_survives_forward_switch_and_rollback(self):
+        for rollback in (False, True):
+            with self.subTest(rollback=rollback):
+                with tempfile.TemporaryDirectory() as directory:
+                    h = Harness(Path(directory))
+                    h.queue = 4
+                    h.processes[WEB]['state'] = 'drained'
+                    h.maintenance = True
+                    h.transition.begin(h.old, h.new)
+                    h.switch(); h.transition.start()
+                    if rollback:
+                        h.transition.rollback(h.current)
+                    else:
+                        h.transition.accept()
+                    self.assertEqual(h.queue, 4)
+                    self.assertTrue(h.maintenance)
+                    self.assertNotIn('resume', [e[-1] for e in h.events if e[0] == 'control'])
+
+    def test_rollback_does_not_confuse_paused_threads_with_running_database_work(self):
+        h = self.h
+        h.transition.begin(h.old, h.new)
+        h.switch(); h.transition.start()
+        h.queue, h.active = 3, 1
+        h.events.clear()
+        with self.assertRaises(ContractError):
+            h.transition.rollback(h.current)
+        self.assertFalse(any(e[0] == 'stop' for e in h.events))
+        self.assertEqual(h.current.resolve(), h.new)
+        self.assertEqual(h.queue, 3)
+
     def test_queue_timeout_restores_admission_without_stopping_or_installing(self):
         h=self.h; h.queue=1
         with self.assertRaises(ContractError): h.transition.begin(h.old, h.new)
