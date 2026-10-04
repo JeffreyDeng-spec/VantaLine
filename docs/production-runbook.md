@@ -1138,7 +1138,7 @@ The managed embedded runtime requires the installed controller bridge and prior 
 
 The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.
 
-Managed embedded activation requires a schema-2/protocol-1 package; the recovery-storage repair bridge currently emits schema 1. Its first installation uses the accepted controller, retains the sole Web service, initializes the new build paused behind maintenance, and reopens only after acceptance. The compatible controller checks exact effective Web allowances of 500 or 510 seconds, worker allowance of 500 seconds, and control-group kill mode before stopping services. Unsupported effective values cause pre-stop failure and restoration. Retain the earlier COS commissioning administrator-owned 510-second file; the compatibility policy must be promoted through its preceding schema-1 release before managed commissioning. This release does not enable an external worker.
+The current managed embedded activation package declares schema 2/protocol 1, following the accepted schema-1 recovery-storage and stop-allowance bridges. Its first installation uses the accepted controller, retains the sole Web service, initializes the new build paused behind maintenance, and reopens only after acceptance. The compatible controller checks exact effective Web allowances of 500 or 510 seconds, worker allowance of 500 seconds, and control-group kill mode before stopping services. Unsupported effective values cause pre-stop failure and restoration. Retain the earlier COS commissioning administrator-owned 510-second file; the compatibility policy must be promoted through its preceding schema-1 release before managed commissioning. This release does not enable an external worker.
 
 
 ## Recovery storage bridge operation
@@ -1186,3 +1186,20 @@ rollback cannot verify exit, retain both releases, root journal and call evidenc
 do not start a candidate, clear admission state or retry uncertain paid calls.
 
 The benchmark statistics preparation is confined to disposable synthetic schemas in local/CI validation. It requires no production database command, configuration change or manual deployment action. Whole-release acceptance and rollback requirements remain unchanged.
+
+## Managed embedded activation acceptance
+
+Before merging this activation, accept both preceding complete schema-1 bridge
+releases and verify their installed controller digests. The current package enables
+only the embedded control protocol; its declaration still contains one Web service.
+Keep the previous complete bridge as rollback target and preserve incremental tables,
+model secret versions, calls and task snapshots. Do not reuse the failed earlier
+managed release or delete its evidence.
+
+Normal deployment validates root recovery storage, exact effective Web allowance
+500/510 and control-group mode. It stops admission and drains before stopping Web;
+a failed drain restores the previous intent instead of forcing termination. Accept
+the new version only after whole-application checks and matching control identity,
+then restore admission. A failed acceptance uses the journal-bound complete-release
+rollback. This phase neither installs an external label service nor establishes
+shared configuration or actual standalone-worker capacity.

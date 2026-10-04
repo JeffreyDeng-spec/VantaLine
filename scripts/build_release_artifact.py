@@ -93,7 +93,8 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
     shutil.copy2(doc_bundle / "manifest.json", destination / "manifest.json")
     (stage / "VERSION.json").write_text(json.dumps(version, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     topology = {
-        "schema": 1,
+        "schema": 2,
+        "runtime_protocol": 1,
         "git_commit": args.git_commit,
         "worker_mode": "embedded",
         "services": ["vantaline"],

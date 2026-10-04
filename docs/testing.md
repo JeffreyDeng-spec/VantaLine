@@ -1972,7 +1972,7 @@ The managed runtime deployment smoke combines the shipped release controller/cli
 
 The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.
 
-For the recovery-storage bridge, the release-package gate asserts an exact schema-1 embedded manifest and sole Web role. Later managed activation must restore an explicit schema-2/protocol-1 package assertion. The real PostgreSQL/control-socket deployment harness now imports the controller from this same checkout; it no longer requires another worktree on PYTHONPATH. Pre-stop effective-setting rejection, paused candidate acceptance and full rollback remain covered.
+The current managed activation release-package gate asserts an exact schema-2/protocol-1 embedded manifest and sole Web role, after the preceding schema-1 repair bridges. The real PostgreSQL/control-socket deployment harness now imports the controller from this same checkout; it no longer requires another worktree on PYTHONPATH. Pre-stop effective-setting rejection, paused candidate acceptance and full rollback remain covered.
 
 
 Recovery-storage regression runs `scripts/smoke_release_runtime_storage.py` on
@@ -2007,3 +2007,10 @@ then exercises a later managed embedded510 transition. These remain isolated
 service substitutes; production policy commissioning is separately accepted.
 
 The synthetic run-batch/payload benchmark explicitly analyzes its newly bulk-loaded table before either query shape is prepared or timed. Both arms then start with statistics for the same committed fixture; timed loops, output equivalence, query bounds, memory guards and P95 thresholds are unchanged. Plan diagnostics belong to separate probes and must not be inserted into measured runs. A prior hosted 10,000-task payload failure is retained as evidence; a passing local ANALYZE comparison does not reconstruct that runner's exact plan.
+
+Managed embedded reactivation changes only the immutable topology declaration and
+its package assertion. Retain every root-storage/stop-allowance fault test and the
+existing actual label identity, PostgreSQL/control-socket deployment, admission,
+pause, duplicate-worker, model snapshot, HTTP and full application contracts. The
+package gate must assert embedded mode and sole Web service; passing standalone
+controller substitute tests is not evidence that an external worker is enabled.
