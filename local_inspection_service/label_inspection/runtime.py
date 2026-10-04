@@ -23,25 +23,37 @@ class LabelProcess:
                  *, models=None, control_directory=Path("/opt/vantaline/shared/data/runtime-control"), allowed_uid=0):
         if identity.mode != "external" or configuration.revision != identity.config_revision:
             raise RuntimeUnavailable("Standalone label runtime identity mismatch")
+        self._stop_requested = False
         self.repositories = repositories
         self.models = models if models is not None else create_models(repositories, data_directory)
-        self.worker = LabelWorker(repositories, lambda: data_directory, lambda: self.models)
+        self.worker = LabelWorker(repositories, lambda: data_directory, lambda: self.models,
+                                  stopping=lambda: self._stop_requested)
         self.control = LabelRuntimeControl(identity, control_repositories, self.worker, role="label",
             directory=control_directory, allowed_uid=allowed_uid, configuration=configuration)
         self.stopping = threading.Event()
 
     def start(self):
+        if self._stop_requested:
+            return False
         try:
             self.models.initialize()  # Existing registry is required; no legacy migration.
         finally:
             self.repositories.clear()
+        if self._stop_requested:
+            return False
         self.control.start()
+        if self._stop_requested:
+            self.worker.request_stop()
+            return False
+        return True
 
     def request_stop(self, *unused):
-        self.worker.request_stop()
-        self.stopping.set()
+        # Python signal handlers can interrupt the main thread while it owns a
+        # worker/Event lock. Only assign a monotonic latch here; no locking/I/O.
+        self._stop_requested = True
 
     def close(self):
+        self._stop_requested = True
         self.stopping.set()
         if not self.worker.drain():
             raise RuntimeUnavailable("Standalone label drain was not acknowledged")
@@ -49,10 +61,14 @@ class LabelProcess:
 
     def run(self):
         try:
-            self.start()
+            if not self.start():
+                return
             while not self.stopping.wait(.5):
-                if (self.worker.runtime_status()["state"] in ("failed", "timed_out")
-                        or self.control.socket.thread is None or not self.control.socket.thread.is_alive()):
+                if self._stop_requested:
+                    break
+                failed = (self.worker.runtime_status()["state"] in ("failed", "timed_out")
+                          or self.control.socket.thread is None or not self.control.socket.thread.is_alive())
+                if failed and not self._stop_requested:
                     raise RuntimeUnavailable("Standalone label runtime failed")
         finally:
             self.close()

@@ -152,6 +152,7 @@
         "scripts/smoke_label_process.py",
         "scripts/smoke_label_external_deployment.py",
         "scripts/smoke_label_runtime_bootstrap.py",
+          "scripts/smoke_label_runtime_signals.py",
         "scripts/smoke_label_run_batch.py",
         "scripts/smoke_label_list_payloads.py",
         "scripts/smoke_label_read_transactions.py",
