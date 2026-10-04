@@ -13,7 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from local_inspection_service.label_inspection import api
+from local_inspection_service.label_inspection import api, worker, worker_api
 
 
 class FakeRepository:
@@ -120,7 +120,11 @@ def list_client(register, repo, root, expected_status=200):
                              owner=lambda: (repo.owner, "test"))
     repositories = SimpleNamespace(repository=lambda: repo)
     imports = SimpleNamespace(data_directory=lambda: root)
-    with patch.object(api.pdf_import, "register", lambda *_: None), \
+    # Frozen pre-lifecycle API sources import the old Web adapter location.
+    # Adapt only that dependency while replaying the unchanged accepted list
+    # function; no lifespan is entered and the production consumer stays Web-free.
+    with patch.object(worker, "register", worker_api.register, create=True), \
+         patch.object(api.pdf_import, "register", lambda *_: None), \
          patch.dict(register.__globals__, {
              "LabelRepository": lambda raw: raw,
              "MediaStore": lambda *_: object(),
