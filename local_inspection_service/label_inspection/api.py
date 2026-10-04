@@ -789,6 +789,6 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
 
         return call(work)
 
-    from .worker import register as register_worker
+    from .worker_api import register as register_worker
 
     register_worker(app, repositories, imports.data_directory, models)

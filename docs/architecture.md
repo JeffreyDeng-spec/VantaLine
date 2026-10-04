@@ -1476,3 +1476,11 @@ Model profile `initialize()` first checks the committed state row in a short rea
 ## Label list-only run payloads
 
 The first task-list page now calls a bounded list-only run reader for groups of at most 64 native task IDs. Its SQL result removes only five fields that `public()` already discards for JSON objects whose own `kind` is `run`: `model`, `prompt_hash`, `layout`, `transformations`, and `profile_snapshot`. Non-run or non-object JSON is returned unchanged. The API still decodes, projects and sorts every run per task before filtering the mixed native/legacy/manual/Beta rows or creating the fixed 15-minute page snapshot. Detail continues to fetch complete run JSON. This lowers transfer size for ordinary runs; it does not yet replace full-row reads with SQL summaries or remove the older source scans.
+
+## Label consumer lifecycle
+
+The label consumer lifecycle now belongs to `label_inspection/worker.py:LabelWorker`, without FastAPI or server imports. `worker_api.py` installs one pair of hooks per application and rejects conflicting repeat registration. Two process-local consumers retain the PostgreSQL global concurrency fence. A short lock admits iterations; stop refuses later admissions, while an earlier admitted connect/claim/process and its thread-local connection cleanup remain in flight. Drain acknowledges success only after both threads exit; all joins share one monotonic 480-second budget, and a live timed-out generation cannot be replaced. This is the embedded topology; PDF imports retain their separate Web daemon.
+
+A connection-cleanup exception marks that consumer generation failed even after its threads exit. Drain returns false and in-process restart is rejected; process restart is required. The lifecycle regression also retains falsey repository/run handling and the original idle decision after cleanup.
+
+Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.

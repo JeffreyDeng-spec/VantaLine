@@ -652,3 +652,7 @@ PDF result compatibility: optional `consistentItems` entries may be strings or o
 ## Label first-page run payloads
 
 The label task-list first page now removes five fields already discarded by the existing public projection from ordinary native run transfers. It still processes all runs and merges old label, manual and Beta histories before filtering and snapshot pagination. Run detail continues to load complete evidence. No inspection decision or prompt changes.
+
+## Label consumer lifecycle
+
+The A + Evolving label consumer remains embedded with two threads and the existing 420-second result deadline. Shutdown now requests stop and waits for admitted polls, claims, processing and per-thread cleanup; it acknowledges drain only when both threads have exited. Timeout is explicit and does not requeue tasks, retry unknown calls or accept late passing results. PDF import remains outside this consumer drain. Actual paid-call processing, model resolution order and persisted bindings are unchanged.

@@ -15,7 +15,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
-from local_inspection_service.label_inspection import api, model, worker, pdf_import
+from local_inspection_service.label_inspection import api, model, worker, worker_api, pdf_import
 from local_inspection_service.label_inspection.dependencies import (
     LabelAccess, RepositoryLifecycle, LabelImports, require_models,
 )
@@ -53,10 +53,15 @@ def fake_threads():
             self.waits.append(seconds)
             self.set()
     class Thread:
-        def __init__(self,*,target,name,daemon):
+        def __init__(self,*,target,name,daemon,args=()):
             self.target,self.name,self.daemon=target,name,daemon
-        def start(self):threads.append(self)
-    return SimpleNamespace(Event=Event,Thread=Thread,events=events,threads=threads)
+            self.args=args
+            self.alive=False
+            self.ident=1
+        def start(self):self.alive=True;threads.append(self)
+        def is_alive(self):return self.alive
+        def join(self,timeout):self.alive=False
+    return SimpleNamespace(Event=Event,Thread=Thread,Lock=threading.Lock,events=events,threads=threads)
 
 
 class LabelDependencyContracts(unittest.TestCase):
@@ -170,9 +175,13 @@ class LabelDependencyContracts(unittest.TestCase):
                 ['pdf-import','label-inspection-0','label-inspection-1']*2)
             self.assertTrue(all(thread.daemon for thread in fake.threads))
             for callback in first.app.router.on_shutdown:callback()
-            self.assertEqual([event.stopped for event in fake.events],[True,True,False,False])
+            self.assertTrue(first.app.state.label_worker._stop.is_set())
+            self.assertFalse(second.app.state.label_worker._stop.is_set())
+            self.assertTrue(fake.events[0].is_set())  # First app's PDF consumer.
+            self.assertFalse(fake.events[2].is_set())  # Second app's PDF consumer.
             for callback in second.app.router.on_shutdown:callback()
-            self.assertTrue(all(event.stopped for event in fake.events))
+            self.assertTrue(second.app.state.label_worker._stop.is_set())
+            self.assertTrue(fake.events[2].is_set())
 
     def worker_iteration(self,reference,*,error=None,enabled=True,legacy=True,missing=False):
         fake=fake_threads();events=[];app=FastAPI()
@@ -196,7 +205,7 @@ class LabelDependencyContracts(unittest.TestCase):
         with patch.object(worker,'threading',fake),patch.object(worker,'LabelRepository',side_effect=lambda raw:raw), \
              patch.object(worker,'process',side_effect=process) as invoked, \
              patch.dict(os.environ,{'VANTALINE_LABEL_INSPECTION_ENABLED':str(enabled).lower()}):
-            worker.register(app,RepositoryLifecycle(repository,clear),lambda:self.root,provider)
+            controller=worker.LabelWorker(RepositoryLifecycle(repository,clear),lambda:self.root,provider)
             self.assertEqual(events,[])
             replacement=Models('replacement')
             if not legacy:replacement.legacy=None
@@ -207,9 +216,7 @@ class LabelDependencyContracts(unittest.TestCase):
                 def snapshot(record):raise RuntimeError('synthetic legacy snapshot failure')
                 replacement.snapshot_for_record=snapshot
             state.models=None if missing else replacement
-            for callback in app.router.on_startup:callback()
-            self.assertEqual(len(fake.threads),2)
-            fake.threads[0].target()
+            controller._loop(controller._stop)
             self.assertTrue(fake.events[0].is_set())
             self.assertEqual(events[-1],'clear')
             self.assertEqual(initial.calls,[])
