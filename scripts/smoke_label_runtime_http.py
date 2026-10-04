@@ -1,6 +1,7 @@
 """HTTP maintenance behavior with the real label registrar and isolated PostgreSQL."""
 from contextvars import ContextVar
 import io
+from dataclasses import replace
 import os
 from pathlib import Path
 import sys
@@ -64,7 +65,7 @@ def main():
             configuration = worker_api.ConfigurationSnapshot.capture({"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": "fixture"}, root)
             with patch.object(worker_api.ConfigurationSnapshot, "capture", return_value=configuration), \
                     patch.object(worker_api, "create_control_factory", return_value=factory), \
-                    patch.object(worker_api, "read_identity", return_value=identity), \
+                    patch.object(worker_api, "read_identity", side_effect=lambda *args, **kw: replace(identity, config_revision=kw["configuration_revision"]())), \
                     patch.object(worker_api, "LabelRuntimeControl", side_effect=build_control), \
                     patch.object(pdf_import, "register", return_value=None):
                 api.register(app, LabelAccess(require, lambda: require("admin"), lambda: (account.get(), account.get())),

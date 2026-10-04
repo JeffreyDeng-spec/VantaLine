@@ -2030,3 +2030,9 @@ external-role settings, so a missing-configuration rejection cannot masquerade a
 a stop-budget rejection. Both configuration and recovery-storage capabilities are
 required by the post-promotion workflow. The private installer fixture mounts its
 synthetic /etc separately while preserving the root-storage namespace.
+
+## Proposal: standalone label process
+
+The candidate `label_inspection.runtime` bootstrap reads the root-owned immutable configuration and its own systemd credential, checks the active package build/topology, initializes local storage, and creates separate thread-owned business and control repository factories. It imports no Web application. The existing model service is reused through an existing-registry reader: missing registration fails startup rather than migrating legacy settings. Secret-file syntax, environment precedence, immutable version references and usage accounting remain unchanged. Manifest v141 names 366 actual sources; historic snapshots are not rewritten.
+
+In external mode, Web composition owns admission/control only and constructs no label consumer. The standalone process owns the existing two-thread consumer and its exclusive role socket; SIGTERM/SIGINT stop new work and use the existing 480-second drain budget. Real isolated PostgreSQL tests cover old-model resolution after settings changes and reader recreation, actual child PID/peer checks, duplicate-role rejection, signal drain and controller-driven embedded-to-external acceptance, failure and complete rollback. Synthetic model values and local storage are used; no paid inference or PLC call occurs. This draft has not enabled an external release: production-lock recovery, preceding A/B0/B/C1 acceptance, observability and final exact-build validation remain gates.

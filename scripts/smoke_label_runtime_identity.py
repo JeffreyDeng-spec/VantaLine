@@ -36,6 +36,18 @@ class IdentityContracts(unittest.TestCase):
                     path.write_text(json.dumps(altered))
                     with self.assertRaises(RuntimeUnavailable): read_identity(root)
 
+    def test_external_requires_active_package_and_explicit_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'VERSION.json').write_text(json.dumps({'git_commit':'a'*40,'release':'v2026.10.1'}))
+            (root/'RUNTIME_TOPOLOGY.json').write_text(json.dumps({'schema':2,'runtime_protocol':1,
+                'git_commit':'a'*40,'worker_mode':'external','services':['vantaline','vantaline-label-worker']}))
+            with self.assertRaises(RuntimeUnavailable): read_identity(root, current=root)
+            self.assertEqual(read_identity(root, current=root, configuration_revision=lambda: 'b'*64),
+                LabelRuntimeIdentity('a'*40, 'v2026.10.1', 'external', 'b'*64))
+            with self.assertRaises(RuntimeUnavailable):
+                read_identity(root, current=root/'foreign', configuration_revision=lambda: 'b'*64)
+
     def test_corrupt_operational_state_never_resets_to_permissive_defaults(self):
         good={'schema':1,'git_commit':'a'*40,'worker_mode':'embedded','config_revision':None,
               'maintenance':True,'paused':True,'revision':'b'*32}
