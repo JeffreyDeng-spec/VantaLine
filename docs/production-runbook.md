@@ -1036,3 +1036,9 @@ The administrator model-library view may show the last committed revision while 
 ## Label list-only run payloads
 
 No operator action is needed. The first label task-list page transfers fewer model/prompt/layout/snapshot fields from native run rows; details and saved 15-minute cursor pages retain their existing content. Continue normal complete-release rollback if list behavior regresses.
+
+## Embedded installer bridge checks
+
+For the first bridge release, expect the old host installer to perform the application switch and then promote the new installer. The production workflow must read back the installed script digest and exact live `/api/version` commit before publishing. The next embedded release exercises the new manifest check. Only `vantaline` is permitted in this bridge; there is no separate label-worker service or joint-service rollback yet.
+
+If promotion fails after the application has passed health checks, the command reports `application_committed=true control_promotion=incomplete` and fails. Verify the live commit, then retry the same immutable release to complete promotion; do not infer that the application rolled back. If the application fails before commitment, the installer restores the previous symlink and Web service as before. Never enable a separate worker based on this embedded-only bridge.

@@ -28,6 +28,24 @@ deployment_committed=0
 shared_backgrounds=""; legacy_backgrounds=""
 installer_path=/usr/local/sbin/vantaline-install-release
 installer_tmp="/usr/local/sbin/.vantaline-install-release.$$"
+validate_target_topology() {
+  local allow_existing_legacy="$1"
+  python3 - "$target/RUNTIME_TOPOLOGY.json" "$commit" "$allow_existing_legacy" <<'PY'
+import json, pathlib, sys
+path, commit, allow_legacy = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1"
+if not path.is_file():
+    if allow_legacy:
+        print("runtime_topology=legacy-embedded")
+        raise SystemExit(0)
+    raise SystemExit("runtime topology manifest missing")
+doc = json.loads(path.read_text(encoding="utf-8"))
+expected = {"schema": 1, "git_commit": commit,
+            "worker_mode": "embedded", "services": ["vantaline"]}
+if not isinstance(doc, dict) or type(doc.get("schema")) is not int or doc != expected:
+    raise SystemExit("unsupported runtime topology manifest")
+print("runtime_topology=embedded")
+PY
+}
 promote_installer() {
   install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"
   cmp -s "$target/scripts/install_release.sh" "$installer_tmp"
@@ -60,11 +78,14 @@ cleanup() {
     rollback
     if [[ "$target_created" -eq 1 && "$(readlink -f "$current" 2>/dev/null || true)" != "$target" ]]; then rm -rf --one-file-system "$target"; fi
   fi
+  if [[ $status -ne 0 && "$deployment_committed" -eq 1 ]]; then echo "application_committed=true control_promotion=incomplete; retry the same release" >&2; fi
   if [[ "$lock_owned" -eq 1 ]]; then rm -f "$lock"; fi
   rm -f "$staged_archive" "$installer_tmp"
   exit $status
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 sh -c "set -o noclobber; printf '%s\n' '$$' > '$lock'"; lock_owned=1
 systemctl is-active --quiet vantaline
@@ -79,7 +100,11 @@ assert doc["release"]==sys.argv[2] and doc["git_commit"]==sys.argv[3]
 PY
   [[ "$(readlink -f "$current")" == "$target" ]] || { echo "release target exists but is not current" >&2; exit 1; }
   (cd "$target" && sha256sum -c SHA256SUMS)
-  promote_installer
+  validate_target_topology 1
+  version_json="$(curl --max-time 5 -fsS http://127.0.0.1:8765/api/version)"
+  printf '%s' "$version_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1] and d["release"]==sys.argv[2]' "$commit" "$release"
+  deployment_committed=1
+  if [[ -f "$target/RUNTIME_TOPOLOGY.json" ]]; then promote_installer; fi
   rm -f "$archive"
   echo "release=$release already-installed=true"
   exit 0
@@ -108,6 +133,7 @@ with tarfile.open(archive, "r:gz") as handle:
 PY
 rm -f "$staged_archive"
 (cd "$target" && sha256sum -c SHA256SUMS)
+validate_target_topology 0
 python3 - "$target/VERSION.json" "$release" "$commit" <<'PY'
 import json, sys
 doc=json.load(open(sys.argv[1],encoding="utf-8"))
@@ -200,7 +226,7 @@ chown -R root:root "$target"; find "$target" -type d -exec chmod go-w {} +; find
 ln -sfn "$target" "$current.new"; mv -Tf "$current.new" "$current"; switched=1
 systemctl start vantaline
 version_json="$(curl --max-time 5 --retry 45 --retry-delay 1 --retry-all-errors -fsS http://127.0.0.1:8765/api/version)"
-printf '%s' "$version_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1]' "$commit"
+printf '%s' "$version_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1] and d["release"]==sys.argv[2]' "$commit" "$release"
 index="$(curl --max-time 5 -fsS http://127.0.0.1:8765/)"
 while read -r asset; do curl --max-time 5 -fsS "http://127.0.0.1:8765$asset" >/dev/null; done < <(printf '%s' "$index" | grep -oE '/static/assets/[^" ]+\.(js|css)' | sort -u)
 pid="$(systemctl show vantaline -p MainPID --value)"; ! journalctl _PID="$pid" --no-pager | grep -E 'Traceback|ERROR|CRITICAL'

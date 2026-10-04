@@ -104,6 +104,12 @@ jobs:
               --release "$RELEASE_ID" \
               --commit "$RELEASE_SHA" \
               --apply
+          expected_installer_sha="$(tar -xOf "$artifact" "vantaline-$RELEASE_ID/scripts/install_release.sh" | sha256sum | awk '{print $1}')"
+          actual_installer_sha="$(ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" sha256sum /usr/local/sbin/vantaline-install-release | awk '{print $1}')"
+          test "$expected_installer_sha" = "$actual_installer_sha"
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1] and d["release"]==sys.argv[2]' "$RELEASE_SHA" "$RELEASE_ID"
       - name: Publish successful GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

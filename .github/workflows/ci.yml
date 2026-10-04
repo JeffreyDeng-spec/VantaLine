@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Reject tracked runtime and secret files
         shell: bash
         run: |
@@ -46,6 +48,10 @@ jobs:
         run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
       - name: Validate release shell syntax
         run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
+      - name: Exercise embedded installer faults in a private mount namespace
+        run: |
+          git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"
+          VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/legacy-installer-v566.sh" bash scripts/smoke_release_installer_bridge.sh
       - name: Keep mutable backgrounds outside immutable releases
         shell: bash
         run: |
@@ -55,6 +61,47 @@ jobs:
           grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"' scripts/install_release.sh
           grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
 
+  release-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: local_inspection_service/frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build and inspect immutable embedded package
+        run: |
+          (cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)
+          python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
+          python scripts/build_release_artifact.py \
+            --release v2026.10.0 --git-commit "$(git rev-parse HEAD)" \
+            --built-at 2026-10-03T00:00:00Z \
+            --doc-image-bundle "$RUNNER_TEMP/doc-image-bundle" \
+            --output "$RUNNER_TEMP/bridge-package.tar.gz"
+          mkdir -p "$RUNNER_TEMP/bridge-extract"
+          tar -xzf "$RUNNER_TEMP/bridge-package.tar.gz" -C "$RUNNER_TEMP/bridge-extract"
+          (cd "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" && sha256sum -c SHA256SUMS)
+          cmp scripts/install_release.sh "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0/scripts/install_release.sh"
+          python3 - "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" <<'PY'
+          import json, pathlib, subprocess, sys
+          root = pathlib.Path(sys.argv[1])
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          version = json.loads((root / 'VERSION.json').read_text())
+          topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
+          assert version['git_commit'] == commit
+          assert topology == {'schema': 1, 'git_commit': commit,
+                              'worker_mode': 'embedded', 'services': ['vantaline']}
+          PY
   documentation:
     runs-on: ubuntu-latest
     steps:
