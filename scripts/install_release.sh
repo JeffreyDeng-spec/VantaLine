@@ -661,7 +661,7 @@ class RuntimeTransition:
         self.load()
         if self.data['new']['directory'] != str(target) or self.data['new']['topology']['commit'] != commit:
             raise ContractError('Recovery request differs from journal')
-        if (self.data['phase'] in ('rolling_back', 'rolled_back', 'prepared', 'stopping')
+        if (self.data['phase'] in ('rolling_back', 'rollback_starting', 'rollback_verified', 'rolled_back', 'prepared', 'stopping')
                 or current.resolve() != target):
             return 'rollback'
         if self.data['phase'] in ('stopped', 'starting', 'verified', 'accepted'):
@@ -698,25 +698,18 @@ class RuntimeTransition:
             raise ContractError('Release pointer changed outside this transition')
         old_topology, new_topology = Topology(**old['topology']), Topology(**new['topology'])
         deadline = self.clock()+500
-        if self.data['phase'] == 'rolled_back':
-            if current.resolve() != Path(old['directory']):
-                raise ContractError('Recovered release pointer changed')
-            instances = self.ready(old, deadline=deadline)
-            if instances != self.data.get('recovered_instances', {}):
-                raise ContractError('Recovered runtime instance changed')
-            if old_topology.runtime_protocol:
-                self.restore_admission(old, instances, deadline=deadline)
+        if self.data['phase'] in ('rollback_starting', 'rollback_verified', 'rolled_back'):
+            self.finish_rollback(current, deadline=deadline)
             return
         self.data['phase'] = 'rolling_back'
         self.save()
         if not self.data['stop_started']:
-            if old_topology.runtime_protocol:
-                self.restore_admission(old, self.data['old_instances'], deadline=deadline)
             if self.data['units_changed']:
                 self.units.restore(self.data['units'])
-            self.data['phase'] = 'rolled_back'
+            self.data['phase'] = 'rollback_verified'
             self.data['recovered_instances'] = self.data['old_instances']
-            self.save()
+            self.save()  # Bind live roles before restoring any admission.
+            self.finish_rollback(current, deadline=deadline)
             return
         if current.resolve() == Path(new['directory']):
             if new_topology.runtime_protocol:
@@ -748,22 +741,39 @@ class RuntimeTransition:
                 raise ContractError('Unexpected rollback pointer state') from None
         os.replace(temporary, current)
         sync_directory(current.parent)
-        for service in old_topology.services:
-            self.commands.run('start', service)
-        instances = {}
-        if old_topology.runtime_protocol:
+        # Record the restored pointer/units BEFORE starting an old process. A
+        # retry can repeat systemctl start without stopping an already-live role.
+        self.data['phase'] = 'rollback_starting'
+        self.save()
+        self.finish_rollback(current, deadline=deadline)
+
+    def finish_rollback(self, current: Path, *, deadline):
+        old = self.data['old']
+        topology = Topology(**old['topology'])
+        if current.resolve() != Path(old['directory']):
+            raise ContractError('Recovered release pointer changed')
+        if self.data['phase'] == 'rollback_starting':
+            for service in topology.services:
+                self.commands.run('start', service)
             while True:
                 try:
                     instances = self.ready(old, previous_instances=self.data['old_instances'], deadline=deadline)
-                    self.restore_admission(old, instances, deadline=deadline)
                     break
                 except ContractError:
                     if self.clock() >= deadline:
                         raise ContractError('Previous runtime did not recover') from None
                     self.sleep(min(.25, max(0, deadline-self.clock())))
-
+            self.data['recovered_instances'] = instances
+            self.data['phase'] = 'rollback_verified'
+            self.save()  # Resume/open may now be retried without stopping roles.
+        if self.data['phase'] not in ('rollback_verified', 'rolled_back'):
+            raise ContractError('Rollback cannot finish from this phase')
+        instances = self.ready(old, deadline=deadline)
+        if instances != self.data.get('recovered_instances', {}):
+            raise ContractError('Recovered runtime instance changed')
+        if topology.runtime_protocol:
+            self.restore_admission(old, instances, deadline=deadline)
         self.data['phase'] = 'rolled_back'
-        self.data['recovered_instances'] = instances
         self.save()
 
 # Source: scripts/release_runtime_main.py

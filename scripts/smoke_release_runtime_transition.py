@@ -53,6 +53,7 @@ class Harness:
         if command == 'start':
             service = services[0]
             if service == self.fail_start: raise ContractError('Synthetic start failure')
+            if service in self.processes: return  # systemctl start is idempotent.
             self.serial += 1
             directory = self.current.resolve()
             topology = json.loads((directory/'RUNTIME_TOPOLOGY.json').read_text())
@@ -278,6 +279,45 @@ class Transitions(unittest.TestCase):
         h.transition.rollback(h.current)
         self.assertEqual(h.processes[WEB]['pid'],pid)
         self.assertFalse(any(event[0] in ('stop','start','restore') for event in h.events))
+
+    def test_rollback_interrupted_at_each_restoration_checkpoint_keeps_live_roles(self):
+        for checkpoint in ('after_start', 'before_verified', 'after_resume', 'after_open', 'before_rolled_back'):
+            with self.subTest(checkpoint=checkpoint), tempfile.TemporaryDirectory() as directory:
+                h=Harness(Path(directory)); h.transition.begin(h.old,h.new); h.switch(); h.transition.start()
+                original_save, original_client, original_run = h.transition.save, h.transition.client, h.run
+                class Interrupted(BaseException): pass
+                triggered=[False]
+                def interrupt():
+                    triggered[0]=True
+                    raise Interrupted()
+                def save():
+                    phase=h.transition.data['phase']
+                    if ((checkpoint=='before_verified' and phase=='rollback_verified')
+                            or (checkpoint=='before_rolled_back' and phase=='rolled_back')):
+                        interrupt()
+                    return original_save()
+                def client(service, command, *args, **kwargs):
+                    value=original_client(service,command,*args,**kwargs)
+                    if h.current.resolve()==h.old and ((checkpoint=='after_resume' and command=='resume')
+                            or (checkpoint=='after_open' and command=='open_admission')):
+                        interrupt()
+                    return value
+                def run(command, *services, **kwargs):
+                    result=original_run(command,*services,**kwargs)
+                    if checkpoint=='after_start' and command=='start' and h.current.resolve()==h.old:
+                        interrupt()
+                    return result
+                h.transition.save=save; h.transition.client=client; h.run=run
+                with self.assertRaises(Interrupted): h.transition.rollback(h.current)
+                self.assertTrue(triggered[0]); pid=h.processes[WEB]['pid']
+                h.transition.save=original_save; h.transition.client=original_client; h.run=original_run
+                # Already reopened consumers may now own newly submitted work.
+                if not h.maintenance: h.queue=h.active=1
+                h.events.clear(); h.transition.rollback(h.current)
+                self.assertEqual(h.processes[WEB]['pid'],pid)
+                self.assertFalse(any(event[0] in ('stop','restore') for event in h.events))
+                self.assertFalse(h.maintenance)
+                self.assertEqual(json.loads(h.journal.read_text())['phase'],'rolled_back')
 
     def test_background_compatibility_repaired_before_old_restart(self):
         h=self.h; h.transition.backgrounds.mkdir()

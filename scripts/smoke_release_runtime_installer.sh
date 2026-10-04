@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
-  for scenario in managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
+  for scenario in managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
     if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
@@ -172,6 +172,16 @@ try:
             if command!='status': revision=request['revision']
             if command=='close_admission': maintenance.touch()
             if command=='open_admission': maintenance.unlink(missing_ok=True)
+            if (os.environ['TEST_RUNTIME_SCENARIO']=='managed_interrupt_rollback'
+                    and version['release']=='v2026.09.1' and command=='open_admission'):
+                marker=base/'interrupted-once'
+                if not marker.exists():
+                    marker.write_text(str(os.getpid()))
+                    installer_pid=int((pathlib.Path('/proc')/str(peer[0])/'stat').read_text().split(') ')[1].split()[1])
+                    os.kill(peer[0],signal.SIGKILL)
+                    os.kill(installer_pid,signal.SIGKILL)
+                    continue
+                assert int(marker.read_text())==os.getpid(), 'rollback retry replaced the restored process'
             if command=='pause': state='drained'
             if command=='resume': state='ready'
             response={'schema':1,'git_commit':version['git_commit'],'release':version['release'],
@@ -216,6 +226,12 @@ if command in ('enable','disable'):
     else: (base/'worker-enabled').unlink(missing_ok=True)
     sys.exit(0)
 if command=='stop':
+    if (os.environ['TEST_RUNTIME_SCENARIO']=='managed_interrupt_rollback'
+            and (base/'interrupted-once').exists() and (base/'current').resolve().name=='v2026.09.1'):
+        journal=json.loads((base/'backups/.runtime-transition-v2026.10.1.json').read_text())
+        if journal['phase'] in ('rolling_back','rollback_starting','rollback_verified','rolled_back'):
+            (base/'unsafe-rollback-stop').touch()
+            raise SystemExit(99)
     for service in [item for item in args if item!='--no-block']:
         assert service in services; event('stop',service)
         number=pid(service)
@@ -289,6 +305,8 @@ elif scenario=='managed_pointer_checkpoint':
     raise SystemExit(23)
 elif scenario=='managed_paused_rollback':
     raise SystemExit(23)
+elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').exists():
+    raise SystemExit(23)
 PY_CHECKPOINT
 systemctl start vantaline
 : > "$base/runtime-events"
@@ -302,6 +320,20 @@ bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sh
   --release v2026.10.1 --commit "$commit" --apply > "$base/result.log" 2>&1
 result=$?
 set -e
+if [[ "$scenario" == managed_interrupt_rollback ]]; then
+  test "$result" -eq 137
+  test ! -e "$base/maintenance"
+  test "$(readlink -f "$base/current")" = "$previous"
+  test "$(cat "$base/interrupted-once")" = "$(cat "$base/vantaline.pid")"
+  python3 - "$base/backups/.runtime-transition-v2026.10.1.json" <<'PY_ROLLBACK_CHECKPOINT'
+import json,sys
+assert json.load(open(sys.argv[1]))['phase']=='rollback_verified'
+PY_ROLLBACK_CHECKPOINT
+  bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sha256 "$archive_sha" \
+    --release v2026.10.1 --commit "$commit" --apply > "$base/recovery.log" 2>&1 || { cat "$base/recovery.log"; exit 1; }
+  test ! -e "$base/unsafe-rollback-stop"
+  result=0
+fi
 if [[ "$scenario" == managed_interrupted_accept || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
   test "$result" -eq 137
   test -e "$base/maintenance"
@@ -318,7 +350,7 @@ if [[ "$scenario" == managed_interrupted_accept || "$scenario" == managed_interr
     --release v2026.10.1 --commit "$commit" --apply > "$base/recovery.log" 2>&1 || { cat "$base/recovery.log"; exit 1; }
   result=0
 fi
-if [[ "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
+if [[ "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
   if [[ "$result" != 0 ]]; then cat "$base/result.log"; exit 1; fi
   test "$(readlink -f "$base/current")" = "$base/releases/v2026.10.1"
   systemctl is-active --quiet vantaline
