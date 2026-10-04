@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
-  for scenario in managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
+  for scenario in managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
     if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
@@ -86,6 +86,9 @@ printf '%s\n' '-- isolated synthetic schema backup'
 SH
 cat > "$base/testbin/journalctl" <<'SH'
 #!/usr/bin/env bash
+if [[ "$TEST_RUNTIME_SCENARIO" == managed_journal_failure && "$(readlink -f /opt/vantaline/current)" == /opt/vantaline/releases/v2026.10.1 ]]; then
+  printf '%s\n' 'ERROR synthetic-customer-secret'
+fi
 exit 0
 SH
 cat > "$base/testbin/curl" <<'SH'
@@ -351,6 +354,9 @@ PY_PAUSED
   test ! -e /etc/systemd/system/vantaline-label-worker.service
   test ! -e "$base/worker-enabled"
   if [[ "$scenario" == managed_database_failure ]]; then test ! -s "$base/runtime-events"; fi
+fi
+if [[ "$scenario" == managed_journal_failure ]]; then
+  if grep -q synthetic-customer-secret "$base/result.log"; then exit 1; fi
 fi
 test ! -e "$base/backups/.runtime-transition-v2026.10.1.json"
 test ! -e "$base/backups/.production-release.lock"
