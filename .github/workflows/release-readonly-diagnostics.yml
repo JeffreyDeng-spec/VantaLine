@@ -1,0 +1,54 @@
+name: Read-only production release diagnostics
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/release-readonly-diagnostics.yml'
+      - 'scripts/read_production_release_state.py'
+      - 'scripts/smoke_release_readonly_diagnostics.py'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'fix/backend-release-lock-diagnostics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify offline diagnostic bounds
+        run: python3 scripts/smoke_release_readonly_diagnostics.py
+      - name: Read bounded release metadata with existing pinned SSH identity
+        env:
+          PROD_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_USER: ${{ secrets.PROD_SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          task_dir=$(mktemp -d "$RUNNER_TEMP/vantaline-readonly.XXXXXX")
+          cleanup() {
+            rm -f -- "$task_dir/key" "$task_dir/known_hosts" "$task_dir/ssh.stderr" "$task_dir/ssh.stdout"
+            rmdir -- "$task_dir"
+          }
+          trap cleanup EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$task_dir/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$task_dir/known_hosts"
+          if ! ssh -i "$task_dir/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$task_dir/known_hosts" -o ConnectTimeout=10 \
+            -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "$PROD_USER@$PROD_HOST" \
+            python3 -I -S -B - < scripts/read_production_release_state.py > "$task_dir/ssh.stdout" 2> "$task_dir/ssh.stderr"; then
+            echo 'Read-only SSH diagnostic failed; transport details suppressed.'
+            exit 1
+          fi
+          python3 scripts/read_production_release_state.py --validate < "$task_dir/ssh.stdout"
