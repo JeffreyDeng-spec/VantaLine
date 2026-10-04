@@ -1561,3 +1561,5 @@ configuration and creates its own model service, two consumer threads and thread
 business/control repositories without importing the Web application. Both processes
 use one database and one complete release. Authentication ContextVar, task model
 snapshots, stage-call evidence and existing global claim limit remain unchanged.
+
+Label detail reads (`LabelRepository.get`) now use short committed-read transactions without the label write fence. Mutations re-read and validate inside their original transaction; `request_run` retains the fence so an in-flight idempotent submission still resolves its persisted model binding.

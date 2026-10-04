@@ -2064,3 +2064,5 @@ front-end build. Separate-process tests use synthetic processing and a disposabl
 Unix-socket-only database. Exact-head hosted CI and independent release artifact
 review are required; production acceptance must verify both roles, and is distinct
 from a real-provider or hardware test.
+
+`smoke_label_read_transactions.py` now exercises detail reads during an uncommitted update, cross-account/kind denial, post-commit visibility and injected decode failure with connection reuse. Its real `request_run` positive control still waits on the writer and returns the committed original model snapshot.

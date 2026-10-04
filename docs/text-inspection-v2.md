@@ -706,3 +706,5 @@ a managed topology switch, new detection admission returns the existing maintena
 response while accepted work drains; failure restores prior intent. An already-paused
 queue stays paused. Normal rollback restores the entire previous managed release and
 preserves task/call evidence.
+
+Label task/run detail reads now use the last committed version without acquiring the global write advisory lock. Owner/kind filtering and response projection are unchanged; edits and submissions still validate their state inside the existing write transaction.

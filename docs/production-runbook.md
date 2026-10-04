@@ -1254,3 +1254,5 @@ stops the new worker before restoring the whole managed embedded release and its
 configuration. Preserve recovery journals if exit or rollback cannot be verified.
 Actual production capacity and latency require release observation; synthetic tests
 must not be reported as paid-model or physical-PLC acceptance.
+
+The label detail-read change needs no migration or new configuration. Roll back the complete release to restore the former read fence; historical task/call/model evidence remains unchanged.

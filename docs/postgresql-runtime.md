@@ -452,3 +452,5 @@ consumer each own separate thread-bound business and control connection factorie
 Existing claim/stage-call writes retain their coordination locks, and operational
 reads remain short unlocked sampled transactions. Keep runtime state, heartbeat,
 task/call evidence and configuration/secret versions through whole-release rollback.
+
+Label detail reads return the last committed task/run while a writer is in progress. Owner/kind predicates and connection cleanup are unchanged. Submission, task editing, expiry, claim, stage calls, page snapshot writes and bound-request lookup retain their original advisory transactions.

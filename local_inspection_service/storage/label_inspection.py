@@ -71,7 +71,7 @@ class LabelRepository:
         return v if v and (not kind or v["kind"] == kind) else None
 
     def get(self, owner, identity, kind=None):
-        with self.tx() as c:
+        with self.read_tx() as c:
             return self.read(c, owner, identity, kind)
 
     def put(self, c, value, insert=False):
