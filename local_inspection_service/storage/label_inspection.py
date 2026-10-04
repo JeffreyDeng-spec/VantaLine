@@ -14,8 +14,9 @@ RUN_BATCH_SIZE = 64
 
 
 class LabelRepository:
-    def __init__(self, repository):
+    def __init__(self, repository, *, runtime_identity=None):
         self.repository = repository
+        self.runtime_identity = runtime_identity
         self._legacy_cache = {}
         self.table = repository._qualified_table(TABLE)
 
@@ -456,6 +457,9 @@ class LabelRepository:
             old = self.prior(c, owner, "run", key, parameters)
             if old:
                 return old
+            if self.runtime_identity is not None:
+                from .label_runtime import LabelRuntimeStore
+                LabelRuntimeStore(self.repository).require_admission(c, self.runtime_identity)
             task = self.read(c, owner, identity, "task")
             if not task:
                 raise KeyError(identity)
@@ -512,6 +516,10 @@ class LabelRepository:
 
     def claim(self):
         with self.tx() as c:
+            if self.runtime_identity is not None:
+                from .label_runtime import LabelRuntimeStore
+                if not LabelRuntimeStore(self.repository).may_claim(c, self.runtime_identity):
+                    return None
             self.expire(c)
             c.execute(
                 f"SELECT count(*) FROM {self.table} WHERE kind='run' AND status='running'"
