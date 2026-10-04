@@ -1,5 +1,5 @@
 {
-  "version": 139,
+  "version": 140,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -362,6 +362,8 @@
     "runtime/control_socket.py",
     "label_inspection/runtime_control.py",
     "storage/label_runtime.py",
-    "runtime/control_connections.py"
+    "runtime/control_connections.py",
+    "runtime/configuration_contract.py",
+    "runtime/configuration.py"
   ]
 }

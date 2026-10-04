@@ -941,3 +941,7 @@ intent. An already-paused predecessor retains its queued backlog. Missing
 prerequisites or uncertain service exit block either transition. Main CI and live
 release acceptance remain mandatory before shared runtime configuration or a
 standalone worker can be activated.
+
+## Proposal: shared label runtime configuration preparation
+
+The pending configuration bridge defines a bounded data-only snapshot of the existing label/database/storage/network settings, exact existing model-secret environment references and data directory. Unset and explicit empty values remain distinct. COS credentials are represented by their byte digest and transferred only through a private root-authenticated path; a worker must receive its own systemd credential directory. The pure contract and private-file roundtrip tests use synthetic values. These preparation modules have no runtime caller yet: configuration export, root-owned provisioning, mount dependencies, rollback and external activation still need integration and acceptance before this proposal is operational.
