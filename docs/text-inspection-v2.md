@@ -656,3 +656,5 @@ The label task-list first page now removes five fields already discarded by the 
 ## Label consumer lifecycle
 
 The A + Evolving label consumer remains embedded with two threads and the existing 420-second result deadline. Shutdown now requests stop and waits for admitted polls, claims, processing and per-thread cleanup; it acknowledges drain only when both threads have exited. Timeout is explicit and does not requeue tasks, retry unknown calls or accept late passing results. PDF import remains outside this consumer drain. Actual paid-call processing, model resolution order and persisted bindings are unchanged.
+
+Label list performance verification retains the existing 1,000/10,000-task datasets and P95/memory limits. Each batch and payload case now flushes raw measurement samples before assertions so a failed main CI gate can be investigated without changing production query behavior.
