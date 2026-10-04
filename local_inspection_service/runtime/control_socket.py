@@ -14,11 +14,12 @@ from .configuration_contract import CONFIGURATION_LIMIT
 
 
 class ControlSocket:
-    def __init__(self, directory: Path, role: str, handler: Callable[[dict], dict], *, allowed_uid=0):
+    def __init__(self, directory: Path, role: str, handler: Callable[[dict], dict], *, allowed_uid=0, tick: Callable[[], None] | None = None, tick_seconds=5):
         if role not in ("web", "label"):
             raise RuntimeUnavailable("Invalid control role")
         self.directory, self.role, self.handler = directory, role, handler
         self.allowed_uid = allowed_uid
+        self.tick, self.tick_seconds = tick, tick_seconds
         self.listener = self.lock_handle = self.thread = None
         self.path = directory / (role + "-control.sock")
         self._stop = threading.Event()
@@ -65,7 +66,15 @@ class ControlSocket:
         self.thread.start()
 
     def _serve(self):
+        next_tick = time.monotonic() + self.tick_seconds
         while not self._stop.is_set():
+            if self.tick is not None and time.monotonic() >= next_tick:
+                # Same thread/connection lifecycle as commands. A blocked heartbeat
+                # retains the role lock through the existing shutdown deadline.
+                self.tick()
+                next_tick = time.monotonic() + self.tick_seconds
+                if self._stop.is_set():
+                    return
             try:
                 connection, _ = self.listener.accept()
             except socket.timeout:

@@ -53,11 +53,12 @@ def main():
         setup.commit()
         with tempfile.TemporaryDirectory(prefix="label-control-") as temporary:
             directory = Path(temporary) / "control"
-            def launch(selected=identity, allowed_uid=None, configuration=None):
+            def launch(selected=identity, allowed_uid=None, configuration=None, tick_seconds=5):
                 worker = LabelWorker(repositories, lambda: Path(temporary), lambda: None)
                 worker._iteration = lambda: False
                 control = LabelRuntimeControl(selected, repositories, worker, directory=directory,
                     allowed_uid=os.getuid() if allowed_uid is None else allowed_uid, configuration=configuration)
+                control.socket.tick_seconds = tick_seconds
                 workers.append(worker)
                 controls.append(control)
                 control.start()
@@ -206,12 +207,31 @@ def main():
             configuration = ConfigurationSnapshot.capture({"VANTALINE_DATA_STORE": "postgres",
                 "DATABASE_URL": "fixture-dsn", "VANTALINE_PROFILE_" + "A"*32: "synthetic-secret"}, Path(temporary))
             configured_identity = LabelRuntimeIdentity("e"*40, "v2026.10.5", "embedded", configuration.revision)
-            configured_worker, configured = launch(configured_identity, configuration=configuration)
+            configured_worker, configured = launch(configured_identity, configuration=configuration, tick_seconds=.05)
             exported = request("configuration")
             assert exported.keys() == {"state", "snapshot"}
             assert exported["state"]["config_revision"] == configuration.revision
             assert exported["snapshot"] == configuration.export()
             assert request("status").keys() == keys and "snapshot" not in request("status")
+            # Periodic heartbeat runs without a control request and has the same
+            # shutdown/role-lock protection when its connection creation stalls.
+            first_samples = configured.monitor()["roles"]["web"]["metrics"]["lock_samples"]
+            deadline = time.monotonic() + 3
+            while configured.monitor()["roles"]["web"]["metrics"]["lock_samples"] <= first_samples:
+                assert time.monotonic() < deadline
+                time.sleep(.05)
+            release_connect.clear(); connecting.clear(); blocked[0] = True
+            assert connecting.wait(2), "periodic heartbeat did not run"
+            try:
+                configured.close()
+            except RuntimeUnavailable:
+                pass
+            else:
+                raise AssertionError("blocked heartbeat released role lock")
+            assert configured.socket.lock_handle is not None
+            blocked[0] = False; release_connect.set()
+            configured.socket.thread.join(2)
+            assert not configured.socket.thread.is_alive()
             assert configured_worker.drain(3)
             configured.close()
             assert "label-runtime-control" in closed

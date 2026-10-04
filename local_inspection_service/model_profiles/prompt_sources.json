@@ -1,5 +1,5 @@
 {
-  "version": 141,
+  "version": 142,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -366,6 +366,7 @@
     "runtime/configuration_contract.py",
     "runtime/configuration.py",
     "label_inspection/runtime_models.py",
-    "label_inspection/runtime.py"
+    "label_inspection/runtime.py",
+    "runtime/label_metrics.py"
   ]
 }

@@ -301,7 +301,7 @@ def capture_http_errors(app):
     # Label guards live in the endpoint, while other guards live in middleware.
     # Test both instead of trusting only the central permission table.
     paths = ["/api/auth/users", "/api/docs", "/api/admin/model-profiles",
-             "/api/label-inspection/capabilities", "/api/label-inspection/tasks/missing",
+             "/api/label-inspection/runtime", "/api/label-inspection/capabilities", "/api/label-inspection/tasks/missing",
              "/api/text-inspection/standards/missing", "/api/accessories",
              "/api/plc/config", "/api/analyze/image"]
     for path in paths:

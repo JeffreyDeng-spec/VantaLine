@@ -42,6 +42,13 @@
       "content_type": "application/json",
       "status": 401
     },
+    "anonymous /api/label-inspection/runtime": {
+      "body": {
+        "detail": "Authentication required"
+      },
+      "content_type": "application/json",
+      "status": 401
+    },
     "anonymous /api/label-inspection/tasks/missing": {
       "body": {
         "detail": "Authentication required"
@@ -129,6 +136,13 @@
     "reader /api/label-inspection/capabilities": {
       "body": {
         "detail": "Permission denied"
+      },
+      "content_type": "application/json",
+      "status": 403
+    },
+    "reader /api/label-inspection/runtime": {
+      "body": {
+        "detail": "Admin role required"
       },
       "content_type": "application/json",
       "status": 403
@@ -6723,6 +6737,22 @@
             }
           },
           "summary": "Diagnostics"
+        }
+      },
+      "/api/label-inspection/runtime": {
+        "get": {
+          "operationId": "runtime_status_api_label_inspection_runtime_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Runtime Status"
         }
       },
       "/api/label-inspection/tasks": {
@@ -15444,6 +15474,20 @@
         "GET": [
           "inspection"
         ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "runtime_status",
+      "path": "/api/label-inspection/runtime",
+      "permission": {
+        "GET": []
       },
       "response_model_exclude_unset": false,
       "status_code": null

@@ -48,6 +48,10 @@ def main():
         def require(_):
             if not account.get():
                 raise HTTPException(401, "login required")
+        def require_admin():
+            require("admin")
+            if account.get() != "administrator":
+                raise HTTPException(403, "administrator required")
         models = SimpleNamespace(snapshot=lambda: {"label": {"id": "pinned", "version": 1}},
             resolve=lambda *args: {"provider": "doubao", "model": "synthetic", "api_key": "synthetic"})
         with tempfile.TemporaryDirectory(prefix="label-http-") as temporary:
@@ -68,7 +72,7 @@ def main():
                     patch.object(worker_api, "read_identity", side_effect=lambda *args, **kw: replace(identity, config_revision=kw["configuration_revision"]())), \
                     patch.object(worker_api, "LabelRuntimeControl", side_effect=build_control), \
                     patch.object(pdf_import, "register", return_value=None):
-                api.register(app, LabelAccess(require, lambda: require("admin"), lambda: (account.get(), account.get())),
+                api.register(app, LabelAccess(require, require_admin, lambda: (account.get(), account.get())),
                              repositories, LabelImports(lambda: root, lambda *_: ([], []), lambda *_: ([], []),
                                                        lambda *_: b"", lambda *_: b""),
                              lambda: models, lambda: {"enabled": True})
@@ -86,11 +90,28 @@ def main():
                 assert submit(owner="bob").status_code == 404
                 assert repo.list("alice", "run", task["id"]) == []
                 control = app.state.label_worker.runtime_control
+                with patch.object(control, "monitor", side_effect=AssertionError("authorization must precede database")):
+                    assert client.get(api.PREFIX + "/runtime").status_code == 401
+                    for owner in ("alice", "bob"):
+                        assert client.get(api.PREFIX + "/runtime", headers={"x-fixture-account": owner}).status_code == 403
+                admin = {"x-fixture-account": "administrator"}
+                health = client.get(api.PREFIX + "/runtime", headers=admin)
+                assert health.status_code == 200 and health.json()["healthy"]
+                assert health.json()["queued_runs"] == 0
                 control.command({"schema": 1, "command": "open_admission", "revision": "b"*32})
                 response = submit()
                 assert response.status_code == 200, response.status_code
                 assert response.json()["status"] == "queued"
                 run = response.json()
+                assert submit(key="synthetic-duplicate").status_code == 409
+                control.heartbeat()
+                health = client.get(api.PREFIX + "/runtime", headers=admin).json()
+                assert health["queued_runs"] == 1 and health["oldest_queued_seconds"] >= 0
+                assert health["roles"]["web"]["metrics"]["duplicate_submissions"] == 1
+                assert "synthetic" not in str(health) and str(root) not in str(health)
+                with patch.object(control, "monitor", side_effect=RuntimeError("secret-customer-path")):
+                    response = client.get(api.PREFIX + "/runtime", headers=admin)
+                    assert response.status_code == 503 and "secret" not in response.text
                 control.command({"schema": 1, "command": "close_admission", "revision": "c"*32})
                 assert submit().json() == run  # Acknowledged request is not duplicated.
                 assert submit(key="synthetic-new").status_code == 503

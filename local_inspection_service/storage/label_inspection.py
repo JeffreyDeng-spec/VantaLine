@@ -14,9 +14,10 @@ RUN_BATCH_SIZE = 64
 
 
 class LabelRepository:
-    def __init__(self, repository, *, runtime_identity=None):
+    def __init__(self, repository, *, runtime_identity=None, metrics=None):
         self.repository = repository
         self.runtime_identity = runtime_identity
+        self.metrics = metrics
         self._legacy_cache = {}
         self.table = repository._qualified_table(TABLE)
 
@@ -24,9 +25,12 @@ class LabelRepository:
     def tx(self):
         c = self.repository._cursor()
         try:
-            c.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended('label-inspection-v1',0))"
-            )
+            started = time.monotonic()
+            try:
+                c.execute("SELECT pg_advisory_xact_lock(hashtextextended('label-inspection-v1',0))")
+            finally:
+                if self.metrics is not None:
+                    self.metrics.lock_wait(time.monotonic() - started)
             yield c
             self.repository.connection.commit()
         except Exception:
@@ -483,6 +487,8 @@ class LabelRepository:
                 (identity,),
             )
             if c.fetchone():
+                if self.metrics is not None:
+                    self.metrics.duplicate()
                 raise OperationConflict("这个任务已有检测排队或进行中")
             if parent:
                 previous = self.read(c, owner, parent, "run")
@@ -566,6 +572,8 @@ class LabelRepository:
                 (owner, key),
             )
             if c.fetchone():
+                if self.metrics is not None:
+                    self.metrics.duplicate(call=True)
                 raise OperationConflict("该阶段已调用或结果未知，不允许自动重试")
             value = self.new(
                 owner,

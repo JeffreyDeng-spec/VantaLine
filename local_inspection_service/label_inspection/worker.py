@@ -12,6 +12,7 @@ from .dependencies import RepositoryLifecycle, ModelProvider, require_models
 import time
 from . import model, quality, manual
 from ..storage.label_inspection import LabelRepository
+from ..runtime.label_metrics import LabelRuntimeMetrics
 from ..codex_compare.media import MediaStore
 
 
@@ -268,6 +269,8 @@ class LabelWorker:
         self.data_directory = data_directory
         self.models = models
         self.stopping = stopping or (lambda: False)
+
+        self.metrics = LabelRuntimeMetrics()
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
@@ -384,6 +387,7 @@ class LabelWorker:
             except Exception:
                 # Deliberately exclude exception messages/tracebacks: providers and
                 # drivers may include credentials, media or customer information.
+                self.metrics.error("worker_iteration_failed")
                 logging.getLogger(__name__).error('{"event":"label_worker_iteration_failed"}')
             finally:
                 try:
@@ -392,6 +396,7 @@ class LabelWorker:
                     with self._lock:
                         self._cleanup_failed = True
                         stop.set()
+                    self.metrics.error("worker_cleanup_failed")
                     logging.getLogger(__name__).error('{"event":"label_worker_cleanup_failed"}')
                 finally:
                     with self._lock:
@@ -407,7 +412,7 @@ class LabelWorker:
             raw_repo = self.repositories.repository()
             if not raw_repo:
                 return None
-            repo = LabelRepository(raw_repo, runtime_identity=self.runtime_identity) if self.runtime_identity else LabelRepository(raw_repo)
+            repo = LabelRepository(raw_repo, runtime_identity=self.runtime_identity, metrics=self.metrics) if self.runtime_identity else LabelRepository(raw_repo)
             run = repo.claim()
             if not run:
                 return run
@@ -418,5 +423,6 @@ class LabelWorker:
                     run, resolved["api_key"] if resolved else "", resolved=resolved,
                     record_call=require_models(self.models).record_call)
         except Exception:
+            self.metrics.error("worker_iteration_failed")
             logging.getLogger(__name__).error('{"event":"label_worker_iteration_failed"}')
         return run

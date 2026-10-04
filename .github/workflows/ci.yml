@@ -459,6 +459,7 @@ jobs:
           python scripts/smoke_label_runtime_migration.py
           python scripts/smoke_label_runtime_state.py
           python scripts/smoke_label_runtime_control.py
+          python scripts/smoke_label_runtime_monitor.py
           python scripts/smoke_label_runtime_http.py
           python scripts/smoke_label_runtime_deployment.py
           python scripts/smoke_label_process.py

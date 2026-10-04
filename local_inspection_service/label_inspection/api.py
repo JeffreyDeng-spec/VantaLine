@@ -111,10 +111,21 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             raise HTTPException(503, "标签检验需要 PostgreSQL 存储")
         return (
             owner,
-            (LabelRepository(raw, runtime_identity=label_worker.runtime_identity)
+            (LabelRepository(raw, runtime_identity=label_worker.runtime_identity, metrics=label_worker.runtime_control.metrics)
              if label_worker.runtime_identity is not None else LabelRepository(raw)),
             MediaStore(imports.data_directory() / "label_inspection" / "media"),
         )
+
+    @app.get(PREFIX + "/runtime")
+    def runtime_status():
+        access.require_admin()
+        control = label_worker.runtime_control
+        if control is None:
+            raise HTTPException(503, "标签检测运行监控尚未启用")
+        try:
+            return control.monitor()
+        except Exception:
+            raise HTTPException(503, "标签检测运行状态不可用，请稍后重试") from None
 
     def enabled():
         if not configuration()["enabled"]:
