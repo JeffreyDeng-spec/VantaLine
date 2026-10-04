@@ -74,6 +74,17 @@ jobs:
         run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
       - name: Validate release shell syntax
         run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
+      - name: Verify deterministic runtime controller and isolated contracts
+        run: |
+          python scripts/render_release_installer.py
+          python scripts/smoke_release_runtime_contract.py
+          python scripts/smoke_release_runtime_client.py
+          python scripts/smoke_release_runtime_transition.py
+          python scripts/smoke_release_services.py
+          bash scripts/install_release.sh --capabilities
+      - name: Exercise managed runtime installer faults in a private mount namespace
+        run: |
+          VANTALINE_BASE_INSTALLER=scripts/install_release.sh bash scripts/smoke_release_runtime_installer.sh
       - name: Exercise embedded installer faults in a private mount namespace
         run: |
           git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"

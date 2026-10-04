@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
-  for scenario in success missing_manifest wrong_commit unknown_service boolean_schema bad_checksum health_failure promote_failure wrong_live_commit legacy_handoff legacy_current_no_downgrade term_before_commit int_after_commit; do
+  for scenario in active_lock success missing_manifest wrong_commit unknown_service boolean_schema bad_checksum health_failure promote_failure wrong_live_commit legacy_handoff legacy_current_no_downgrade term_before_commit int_after_commit; do
     if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
@@ -130,6 +130,10 @@ cp "$source_root/scripts/install_release.sh" "$work/scripts/install_release.sh"
 printf '#!/usr/bin/env python3\n' > "$work/scripts/verify_production_dependencies.py"
 printf '#!/usr/bin/env python3\n' > "$work/scripts/configure_pdf_proxy.py"
 case "$scenario" in
+  active_lock)
+    printf '%s\n' "$$" > "$base/backups/.production-release.lock"
+    printf 'in-progress archive\n' > "$base/.staged-v2026.10.1.tar.gz"
+    ;;
   missing_manifest) rm "$work/RUNTIME_TOPOLOGY.json" ;;
   unknown_service) python3 - "$work/RUNTIME_TOPOLOGY.json" <<'PY'
 import json, pathlib, sys
@@ -209,10 +213,11 @@ PY
     test "$(readlink -f "$base/current")" = "$base/releases/v2026.10.1"
     cmp "$source_root/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
     ;;
-  missing_manifest|wrong_commit|unknown_service|boolean_schema|bad_checksum)
+  active_lock|missing_manifest|wrong_commit|unknown_service|boolean_schema|bad_checksum)
     if run_installer > "$base/result.log" 2>&1; then cat "$base/result.log"; exit 1; fi
     test "$(readlink -f "$base/current")" = "$previous"
     test ! -s "$base/systemctl.log"
+    if [[ "$scenario" == active_lock ]]; then test "$(cat "$base/.staged-v2026.10.1.tar.gz")" = "in-progress archive"; fi
     ;;
   term_before_commit)
     set +e

@@ -11,6 +11,8 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from render_release_installer import verify as verify_installer, SOURCES, TEMPLATE
+
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -33,9 +35,12 @@ source_commit = subprocess.run(
 ).stdout.strip()
 if args.git_commit != source_commit:
     raise SystemExit("release commit does not match packaged HEAD")
+verify_installer()
 release_script_diff = subprocess.run(
     ["git", "diff", "--quiet", "HEAD", "--",
-     "scripts/build_release_artifact.py", "scripts/install_release.sh"],
+     "scripts/build_release_artifact.py", "scripts/install_release.sh",
+     "scripts/render_release_installer.py", "scripts/"+TEMPLATE,
+     *("scripts/"+name for name in SOURCES)],
     cwd=root, check=False,
 )
 if release_script_diff.returncode != 0:

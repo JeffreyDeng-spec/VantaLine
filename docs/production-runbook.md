@@ -1039,7 +1039,7 @@ No operator action is needed. The first label task-list page transfers fewer mod
 
 ## Embedded installer bridge checks
 
-For the first bridge release, expect the old host installer to perform the application switch and then promote the new installer. The production workflow must read back the installed script digest and exact live `/api/version` commit before publishing. The next embedded release exercises the new manifest check. Only `vantaline` is permitted in this bridge; there is no separate label-worker service or joint-service rollback yet.
+For the first bridge release, expect the old host installer to perform the application switch and then promote the new installer. The production workflow must read back the installed script digest and exact live `/api/version` commit before publishing. The next embedded release exercises the new manifest check. The package still declares only `vantaline`. The promoted controller can recognize the fixed future label-worker topology, but no standalone worker is enabled by this embedded package.
 
 If promotion fails after the application has passed health checks, the command reports `application_committed=true control_promotion=incomplete` and fails. Verify the live commit, then retry the same immutable release to complete promotion; do not infer that the application rolled back. If the application fails before commitment, the installer restores the previous symlink and Web service as before. Never enable a separate worker based on this embedded-only bridge.
 
@@ -1114,3 +1114,11 @@ COS mode, private credentials, system-disk data root and volume dependencies;
 then restart every release-consuming service and recheck version and business
 reads. Never restore pre-COS storage configuration with an otherwise compatible
 code rollback.
+
+## Installed runtime controller checks
+
+After the root-owned script digest matches the immutable artifact, the workflow checks its read-only capabilities. Schema-1 deployments still use the existing embedded Web restart; the 500-second managed stop settings apply only when the later schema-2 runtime bridge is installed. Do not enable a worker from capability output alone. A first schema-2 external deployment must be preceded by an accepted embedded control protocol and explicit shared-configuration migration.
+
+Managed transitions retain root-only recovery evidence under the backups directory. A queue that cannot drain aborts the switch and attempts to restore the same instance's prior admission state. Missing/stale runtime identity, unavailable database evidence, wrong configuration and missing bridge prerequisites fail closed. A rollback failure keeps admission fenced, retains both complete releases and the transition journal, and reports failure instead of claiming recovery. Restore both declared roles from one complete version; never copy a runtime module or replay an uncertain paid call. Synthetic controller fault drills do not replace real worker, configuration, PostgreSQL concurrency and production acceptance tests.
+
+A killed installer leaves a PID lock and managed journal. A root advisory guard allows retry only when the old PID is demonstrably gone; an alive or ambiguous owner still blocks. Retry the same verified archive to recover the recorded phase, including when Web is stopped. Recovery checks the package before startup and repeats version, static assets, service journal and PDF proxy acceptance before reopening label admission. A different pending transition blocks another release. Do not delete the journal to bypass recovery. Existing maintenance and paused consumer states survive success or rollback.
