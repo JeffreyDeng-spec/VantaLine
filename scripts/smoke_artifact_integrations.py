@@ -31,6 +31,28 @@ class IntegrationTests(unittest.TestCase):
     def runtime(self, mode="cos"):
         return ArtifactRuntime(self.store, self.root.resolve(), mode)
 
+    def test_startup_guide_provenance_hashes_cos_bytes_without_local_source(self):
+        from unittest.mock import patch
+        from local_inspection_service.accessories import image_job_metadata
+        from local_inspection_service.training import dataset_archives
+        from local_inspection_service.storage.artifacts.files import BusinessFiles
+        row = self.put("anchor_pose_guides/fixture.png", b"verified guide bytes")
+        path = self.root / row.path
+        self.assertFalse(path.exists())
+        files = BusinessFiles(runtime_provider=self.runtime)
+        metadata = image_job_metadata.ImageJobMetadata(
+            image_job_metadata.ProvenanceDependencies(
+                dataset_archives.file_sha256, lambda: "fixture",
+                lambda: {"circle": [path]}, lambda: 8,
+            ), None,
+        )
+        job = {"pose_family": "circle", "input_files": []}
+        with patch.object(image_job_metadata, "_business_files", files), patch.object(dataset_archives, "_business_files", files):
+            self.assertTrue(metadata.ensure_image_job_target_guides(job))
+            self.assertEqual(job["target_guide_sha256"], {path.name: row.sha256})
+            self.assertFalse(path.exists())
+            self.assertFalse(metadata.ensure_image_job_target_guides(job))
+
     def test_detection_native_port_publishes_verified_bytes_and_propagates_failure(self):
         import cv2
         import numpy as np

@@ -7,13 +7,17 @@ import tempfile
 from typing import Any
 from PIL import Image
 from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.files import BusinessFiles
+
+_business_files = BusinessFiles()
 
 
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+    with _business_files.local_file(path) as local_path:
+        with local_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
     return digest.hexdigest()
 
 

@@ -1085,3 +1085,5 @@ A connection-cleanup exception marks that consumer generation failed even after 
 Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.
 
 If the label batch or payload benchmark blocks main CI, retain its per-case raw samples and limits before investigating latency. Do not infer runner noise or loosen the P95 guard from a bare assertion. Automatic release stays blocked until the normal CI gate succeeds; production remains on the last accepted complete release.
+
+Source-inaccessible acceptance must include application startup with existing image-job records: guide/provenance hashes use the same COS file adapter as business media. Verify production dependencies and SDK imports as both actual service accounts before installation; a root-only successful import does not establish readable package metadata for systemd services.
