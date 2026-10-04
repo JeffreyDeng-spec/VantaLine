@@ -14,12 +14,13 @@ import uuid
 
 from release_runtime_contract import ContractError, ConsumerState, Topology, WEB, LABEL, read_object, sync_directory
 from release_runtime_client import request
+from release_runtime_configuration import ConfigurationFiles
 from release_services import ServiceCommands, UnitChanges, SYSTEMD
 
 
 class RuntimeTransition:
     def __init__(self, journal: Path, *, commands=None, units=None, client=request,
-                 clock=time.monotonic, sleep=time.sleep, uid=None,
+                 clock=time.monotonic, sleep=time.sleep, uid=None, configuration_files=None,
                  backgrounds=Path('/opt/vantaline/shared/data/backgrounds')):
         self.journal = journal
         self.commands = commands or ServiceCommands()
@@ -28,8 +29,31 @@ class RuntimeTransition:
         self.clock = clock
         self.sleep = sleep
         self.uid = pwd.getpwnam('vantaline').pw_uid if uid is None else uid
+        self.configuration_files = configuration_files
         self.data = None
         self.backgrounds = backgrounds
+
+    def configurations(self):
+        if self.configuration_files is None:
+            self.configuration_files = ConfigurationFiles(gid=pwd.getpwnam('vantaline').pw_gid)
+        return self.configuration_files
+
+    def configuration(self, identity, *, instance, revision, deadline):
+        pid_text = self.commands.property(WEB, 'MainPID', timeout=min(5, deadline-self.clock()))
+        if not pid_text.isdecimal() or int(pid_text) <= 0:
+            raise ContractError('Runtime service is unavailable')
+        value = self.client(WEB, 'configuration', self.data['revision'], uid=self.uid,
+                            pid=int(pid_text), timeout=min(5, deadline-self.clock()))
+        if (self.commands.property(WEB, 'MainPID', timeout=min(5, deadline-self.clock())) != pid_text
+                or not isinstance(value, dict) or value.keys() != {'state', 'snapshot'}):
+            raise ContractError('Runtime configuration response mismatch')
+        state = ConsumerState.verify(value['state'], topology=Topology(**identity['topology']),
+            release=identity['release'], service=WEB, pid=int(pid_text), now=self.clock(),
+            expected_instance=instance)
+        state.require_available()
+        if state.config_revision != revision:
+            raise ContractError('Runtime configuration changed during capture')
+        return value['snapshot']
 
     def save(self):
         descriptor, temporary = tempfile.mkstemp(prefix='.runtime-', dir=self.journal.parent)
@@ -175,6 +199,11 @@ class RuntimeTransition:
             old_state = self.state(old, WEB, deadline=deadline)
             if old_state.config_revision is None:
                 raise ContractError('Shared runtime configuration must be activated first')
+            snapshot = self.configuration(old, instance=self.data['old_instances'][WEB],
+                revision=self.data['expected_config'], deadline=deadline)
+            files = self.configurations()
+            self.data['previous_config_pointer'] = files.capture_pointer()
+            self.data['candidate_config_pointer'] = files.install(snapshot, expected_revision=self.data['expected_config'])
         # Persist recovery evidence before admission, units, or services change.
         self.save()
         if old_topology.runtime_protocol:
@@ -182,11 +211,16 @@ class RuntimeTransition:
                        drain_queue=not self.data['previous_paused'])
         self.data['units_changed'] = True
         self.save()
-        self.units.install(new_topology, deadline=deadline, stopping_services=old_topology.services)
+        options = {}
+        if new_topology.mode == 'external':
+            options['configuration'] = self.configurations().value(self.data['candidate_config_pointer'])
+        self.units.install(new_topology, deadline=deadline, stopping_services=old_topology.services, **options)
         self.data['stop_started'] = True
         self.data['phase'] = 'stopping'
         self.save()
         self.commands.stop_all(old_topology.services, deadline=deadline)
+        if 'candidate_config_pointer' in self.data:
+            self.configurations().select(self.data['candidate_config_pointer'])
         self.data['phase'] = 'stopped'
         self.save()
         if new_topology.mode == 'embedded' and self.commands.property(LABEL, 'LoadState') == 'loaded':
@@ -196,6 +230,8 @@ class RuntimeTransition:
         self.load()
         identity = self.data['new']
         topology = Topology(**identity['topology'])
+        if 'candidate_config_pointer' in self.data:
+            self.configurations().select(self.data['candidate_config_pointer'])
         self.data['phase'] = 'starting'
         self.save()
         self.commands.run('start', WEB)
@@ -313,6 +349,8 @@ class RuntimeTransition:
             if not legacy_backgrounds.is_dir():
                 raise ContractError('Previous background storage is unavailable')
         self.units.restore(self.data['units'])
+        if 'previous_config_pointer' in self.data:
+            self.configurations().select(self.data['previous_config_pointer'])
         temporary = current.with_name('current.runtime-rollback.'+self.data['revision'])
         try:
             temporary.symlink_to(old['directory'], target_is_directory=True)

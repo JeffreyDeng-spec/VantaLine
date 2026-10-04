@@ -8,6 +8,9 @@ import threading
 import time
 import unittest
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from release_runtime_client import request
 from release_runtime_contract import ContractError
 
@@ -42,7 +45,7 @@ class ClientContract(unittest.TestCase):
         finally:
             self.listener.close()
 
-    def serve(self, reply=b'{"ok":true}\n', delay=0):
+    def serve(self, reply=b'{"ok":true}\n', delay=0, command='status'):
         def run():
             try:
                 connection, _ = self.listener.accept()
@@ -56,7 +59,7 @@ class ClientContract(unittest.TestCase):
                         self.received.append(part)
                         raw.extend(part)
                     message = json.loads(raw)
-                    self.assertEqual(message, {'schema': 1, 'command': 'status', 'revision': 'a' * 32})
+                    self.assertEqual(message, {'schema': 1, 'command': command, 'revision': 'a' * 32})
                     if delay:
                         for byte in reply:
                             time.sleep(delay)
@@ -76,7 +79,8 @@ class ClientContract(unittest.TestCase):
     def call(self, **options):
         args = dict(uid=os.getuid(), pid=os.getpid(), directory=self.root, timeout=0.25)
         args.update(options)
-        return request('vantaline', 'status', 'a' * 32, **args)
+        command = args.pop('command', 'status')
+        return request('vantaline', command, 'a' * 32, **args)
 
     def test_actual_peer_credentials_and_json(self):
         self.serve()
@@ -98,6 +102,19 @@ class ClientContract(unittest.TestCase):
         self.serve(b'x' * 17000 + b'\n')
         with self.assertRaises(ContractError):
             self.call()
+
+    def test_configuration_has_a_separate_bounded_private_response(self):
+        value = {'synthetic': 'x' * 20000}
+        self.serve(json.dumps(value).encode() + b'\n', command='configuration')
+        self.assertEqual(self.call(command='configuration'), value)
+
+    def test_configuration_limit_and_role_are_checked(self):
+        self.serve(b'x' * 300000 + b'\n', command='configuration')
+        with self.assertRaises(ContractError):
+            self.call(command='configuration')
+        with self.assertRaises(ContractError):
+            request('vantaline-label-worker', 'configuration', 'a' * 32,
+                    uid=os.getuid(), pid=os.getpid(), directory=self.root)
 
     def test_slow_peer_cannot_extend_total_deadline(self):
         self.serve(delay=0.04)

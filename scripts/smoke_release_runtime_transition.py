@@ -1,5 +1,6 @@
 """Offline deployment state-machine faults with explicit process/queue evidence."""
 import copy
+import os
 import json
 from pathlib import Path
 import tempfile
@@ -7,8 +8,13 @@ import unittest
 from unittest.mock import patch
 from release_services import ServiceCommands
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from release_runtime_contract import ContractError, WEB, LABEL, Topology
 from release_runtime_transition import RuntimeTransition
+from release_runtime_configuration import ConfigurationFiles
+from local_inspection_service.runtime.configuration import ConfigurationSnapshot
 
 
 class Harness:
@@ -21,14 +27,16 @@ class Harness:
         self.now, self.serial = 10.0, 100
         self.events, self.processes = [], {}
         self.queue, self.active = 0, 0
-        self.maintenance, self.config = False, 'e'*64
+        self.snapshot = ConfigurationSnapshot.capture({'VANTALINE_DATA_STORE':'postgres', 'DATABASE_URL':'synthetic'}, root)
+        self.maintenance, self.config = False, self.snapshot.revision
         self.fail_start = self.fail_status = self.fail_stop = None
         self.mutate = lambda service, value: value
         self.run('start', WEB)
         self.events.clear()
         self.journal = root/'journal.json'
         self.transition = RuntimeTransition(self.journal, commands=self, units=self,
-            client=self.request, clock=lambda: self.now, sleep=self.sleep, uid=1000, backgrounds=root/'shared-backgrounds')
+            client=self.request, clock=lambda: self.now, sleep=self.sleep, uid=1000, backgrounds=root/'shared-backgrounds',
+            configuration_files=ConfigurationFiles(root/'configuration', uid=os.getuid(), gid=os.getgid()))
 
     def release(self, name, commit, mode, protocol):
         path = self.root/name; path.mkdir()
@@ -72,7 +80,7 @@ class Harness:
         self.events.append(('capture',))
         return {'fixture': True}
 
-    def install(self, topology, *, deadline=None, stopping_services=()): self.events.append(('install', topology.mode))
+    def install(self, topology, *, deadline=None, stopping_services=(), configuration=None): self.events.append(('install', topology.mode))
     def restore(self, snapshot):
         assert snapshot == {'fixture': True}
         self.events.append(('restore',))
@@ -94,7 +102,8 @@ class Harness:
             'control_revision': process['revision'], 'active_iterations': 0,
             'queued_runs': self.queue, 'active_runs': self.active,
             'maintenance': self.maintenance, 'config_revision': self.config}
-        return self.mutate(service, value)
+        value = self.mutate(service, value)
+        return {'state': value, 'snapshot': self.snapshot.export()} if command == 'configuration' else value
 
     def switch(self):
         self.current.unlink(); self.current.symlink_to(self.new, target_is_directory=True)
@@ -169,6 +178,51 @@ class Transitions(unittest.TestCase):
         self.assertFalse(any(e[0] == 'stop' for e in h.events))
         self.assertEqual(h.current.resolve(), h.new)
         self.assertEqual(h.queue, 3)
+
+    def test_configuration_pointer_is_restored_with_whole_release(self):
+        h = self.h
+        previous = ConfigurationSnapshot.capture({'VANTALINE_DATA_STORE':'postgres',
+            'DATABASE_URL':'synthetic', 'HTTP_PROXY':''}, h.root)
+        files = h.transition.configurations()
+        files.install(previous.export(), expected_revision=previous.revision)
+        files.select(previous.revision)
+        h.transition.begin(h.old, h.new)
+        self.assertEqual(files.capture_pointer(), h.snapshot.revision)
+        h.switch(); h.transition.start(); h.transition.rollback(h.current)
+        self.assertEqual(files.capture_pointer(), previous.revision)
+        self.assertEqual(files.value(previous.revision), previous.export()['configuration'])
+        self.assertTrue((files.directory / h.snapshot.revision).is_dir())
+
+    def test_invalid_export_fails_before_admission_or_stop(self):
+        h = self.h
+        original = h.transition.client
+        def corrupted(service, command, *args, **kwargs):
+            value = original(service, command, *args, **kwargs)
+            if command == 'configuration':
+                value['snapshot']['revision'] = '0' * 64
+            return value
+        h.transition.client = corrupted
+        with self.assertRaises(ContractError): h.transition.begin(h.old, h.new)
+        self.assertFalse(h.maintenance)
+        self.assertFalse(h.journal.exists())
+        self.assertFalse(any(e[0] in ('stop', 'install') for e in h.events))
+
+    def test_configuration_pointer_crash_recovers_before_old_restart(self):
+        h = self.h
+        files = h.transition.configurations()
+        original = files.select
+        class Interrupted(BaseException): pass
+        def interrupted(revision):
+            original(revision)
+            raise Interrupted()
+        files.select = interrupted
+        with self.assertRaises(Interrupted): h.transition.begin(h.old, h.new)
+        self.assertEqual(files.capture_pointer(), h.snapshot.revision)
+        self.assertEqual(h.processes, {})
+        files.select = original
+        h.transition.rollback(h.current)
+        self.assertIsNone(files.capture_pointer())
+        self.assertEqual(set(h.processes), {WEB})
 
     def test_queue_timeout_restores_admission_without_stopping_or_installing(self):
         h=self.h; h.queue=1

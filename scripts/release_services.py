@@ -12,6 +12,8 @@ import stat
 import subprocess
 import tempfile
 
+from local_inspection_service.runtime.configuration_contract import configuration_validate, ConfigurationError
+
 from release_runtime_contract import ContractError, WEB, LABEL, Topology, sync_directory
 
 SYSTEMD = Path('/etc/systemd/system')
@@ -31,7 +33,7 @@ Type=simple
 User=vantaline
 Group=vantaline
 WorkingDirectory=/opt/vantaline/current
-ExecStart=/opt/vantaline/current/.venv/bin/python -m local_inspection_service.label_inspection.runtime --config /etc/vantaline/runtime/current.json
+ExecStart=/opt/vantaline/current/.venv/bin/python -m local_inspection_service.label_inspection.runtime --config /etc/vantaline/runtime/current/config.json
 TimeoutStopSec=500
 KillMode=control-group
 Restart=on-failure
@@ -40,6 +42,32 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 '''
+
+
+def label_unit(configuration):
+    try:
+        configuration_validate(configuration)
+        environment = configuration['environment']
+        paths = {configuration['data_directory']}
+        for key in ('VANTALINE_DATA_ROOT', 'VANTALINE_ARTIFACT_WORK_ROOT',
+                    'VANTALINE_ARTIFACT_CACHE_ROOT', 'VANTALINE_ARTIFACT_UPLOAD_ROOT', 'TMPDIR'):
+            value = environment[key]
+            if value:
+                path = Path(value)
+                if not path.is_absolute() or '..' in path.parts:
+                    raise ValueError()
+                paths.add(value)
+        def unit_path(value):
+            if any(ord(character) < 32 or ord(character) == 127 for character in value):
+                raise ValueError()
+            return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%') + '"'
+        mounts = 'RequiresMountsFor=' + ' '.join(unit_path(value) for value in sorted(paths)) + '\n'
+        text = LABEL_TEMPLATE.replace('[Unit]\n', '[Unit]\n' + mounts)
+        if configuration['cos_credential_sha256'] is not None:
+            text = text.replace('[Service]\n', '[Service]\nLoadCredential=cos-credentials.json:/etc/vantaline/runtime/current/cos-credentials.json\n')
+        return text
+    except (ConfigurationError, ValueError, KeyError, TypeError):
+        raise ContractError('Worker service configuration is invalid') from None
 
 
 class ServiceCommands:
@@ -140,15 +168,16 @@ class UnitChanges:
             if os.path.lexists(temporary):
                 os.unlink(temporary)
 
-    def install(self, topology: Topology, *, deadline=None, stopping_services=()):
+    def install(self, topology: Topology, *, deadline=None, stopping_services=(), configuration=None):
         def budget():
             remaining = 15 if deadline is None else min(15, deadline-time.monotonic())
             if remaining <= 0:
                 raise ContractError('Runtime unit budget expired')
             return remaining
+        worker_text = label_unit(configuration) if topology.mode == 'external' else None
         self.write(WEB_DROPIN, WEB_TEMPLATE)
         if topology.mode == 'external':
-            self.write(LABEL_UNIT, LABEL_TEMPLATE)
+            self.write(LABEL_UNIT, worker_text)
         self.commands.run('daemon-reload', timeout=budget())
         for service in dict.fromkeys((*topology.services, *stopping_services)):
             # Web may retain the previously commissioned administrator allowance.

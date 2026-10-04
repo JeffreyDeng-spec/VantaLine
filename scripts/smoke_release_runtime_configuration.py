@@ -1,5 +1,8 @@
 """Root configuration publication/rollback paths in private temporary directories."""
 import base64
+import ast
+import json
+import subprocess
 import hashlib
 import os
 from pathlib import Path
@@ -60,6 +63,26 @@ class ConfigurationPublication(unittest.TestCase):
         with self.assertRaises(ContractError):
             self.files.select(None)
         self.assertTrue((self.files.directory / "current").is_symlink())
+
+    def test_missing_fixed_parent_is_created_privately(self):
+        files = ConfigurationFiles(self.root / 'new-parent/runtime', uid=os.getuid(), gid=os.getgid())
+        files.prepare()
+        self.assertEqual(files.directory.parent.stat().st_mode & 0o777, 0o750)
+        self.assertEqual(files.directory.stat().st_mode & 0o777, 0o750)
+
+    def test_installer_runs_without_application_imports_or_search_path(self):
+        from render_release_installer import render
+        text = render().decode()
+        helper = text.split("<<'PY_VANTALINE_RUNTIME'\n", 1)[1].split('PY_VANTALINE_RUNTIME\n', 1)[0]
+        for node in ast.walk(ast.parse(helper)):
+            names = ([item.name for item in node.names] if isinstance(node, ast.Import)
+                     else [node.module] if isinstance(node, ast.ImportFrom) else [])
+            for name in names:
+                self.assertIn(name.split('.')[0], sys.stdlib_module_names)
+        result = subprocess.run([sys.executable, '-I', '-S', '-', 'capabilities'], input=helper,
+            text=True, cwd=self.root, capture_output=True, check=True, env={})
+        self.assertEqual(json.loads(result.stdout)['configuration_schema'], 1)
+        self.assertEqual(result.stderr, '')
 
     def test_cos_credentials_remain_private_and_exact(self):
         credential_dir = self.root / "credentials"

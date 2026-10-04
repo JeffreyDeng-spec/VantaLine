@@ -31,7 +31,20 @@ class ConfigurationFiles:
             raise ContractError("Untrusted runtime configuration directory")
 
     def prepare(self):
-        parent = self.directory.parent.lstat()
+        try:
+            parent = self.directory.parent.lstat()
+        except FileNotFoundError:
+            ancestor = self.directory.parent.parent.lstat()
+            if (not stat.S_ISDIR(ancestor.st_mode) or ancestor.st_uid != self.uid
+                    or stat.S_IMODE(ancestor.st_mode) & 0o022):
+                raise ContractError("Untrusted runtime configuration ancestor")
+            try:
+                self.directory.parent.mkdir(mode=0o750)
+                os.chown(self.directory.parent, self.uid, self.gid)
+                sync_directory(self.directory.parent.parent)
+            except FileExistsError:
+                pass
+            parent = self.directory.parent.lstat()
         if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != self.uid
                 or stat.S_IMODE(parent.st_mode) & 0o022):
             raise ContractError("Untrusted runtime configuration parent")
@@ -126,6 +139,28 @@ class ConfigurationFiles:
                     temporary.rmdir()
         return revision
 
+    def value(self, revision):
+        if not isinstance(revision, str) or not re.fullmatch("[0-9a-f]{64}", revision):
+            raise ContractError("Invalid runtime configuration revision")
+        self.prepare()
+        directory = self.directory / revision
+        self._directory(directory)
+        try:
+            raw = self._read(directory / "config.json", mode=0o640, limit=CONFIGURATION_LIMIT)
+            value = json.loads(raw)
+            if configuration_validate(value) != revision or configuration_bytes(value) != raw:
+                raise ContractError("Runtime configuration digest mismatch")
+            credential_hash = value["cos_credential_sha256"]
+            if credential_hash is not None:
+                credential = self._read(directory / "cos-credentials.json", mode=0o600, limit=16384)
+                if hashlib.sha256(credential).hexdigest() != credential_hash:
+                    raise ContractError("Runtime credential digest mismatch")
+            elif os.path.lexists(directory / "cos-credentials.json"):
+                raise ContractError("Unexpected runtime credential")
+            return value
+        except (ValueError, TypeError, ConfigurationError):
+            raise ContractError("Runtime configuration invalid") from None
+
     def select(self, revision):
         self.prepare()
         if revision is not None and (not isinstance(revision, str) or not re.fullmatch("[0-9a-f]{64}", revision)):
@@ -135,7 +170,7 @@ class ConfigurationFiles:
         if revision is None:
             current.unlink(missing_ok=True)
         else:
-            self._directory(self.directory / revision)
+            self.value(revision)
             temporary = self.directory / (".current-" + uuid.uuid4().hex)
             try:
                 temporary.symlink_to(revision)

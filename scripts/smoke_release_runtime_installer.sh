@@ -19,9 +19,15 @@ source_root="$(cd "$(dirname "$0")/.." && pwd)"
 mount -t tmpfs -o size=3G tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
 mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
-mount -t tmpfs -o size=16M tmpfs /etc/systemd/system
 base=/opt/vantaline
 mkdir -p "$base"/{incoming,releases,backups,shared/data,shared/models,testbin,venv/bin}
+# Configuration publication is confined to the same private namespace.
+mkdir -p "$base/test-etc"
+cp /etc/passwd /etc/group /etc/nsswitch.conf "$base/test-etc/"
+cp -R -P --preserve=mode,timestamps /etc/alternatives "$base/test-etc/"
+mount -t tmpfs -o size=16M tmpfs /etc
+cp -R -P --preserve=mode,timestamps "$base/test-etc/"* /etc/
+mkdir -p /etc/systemd/system /etc/vantaline
 ln -s "$(command -v python3)" "$base/venv/bin/python"
 cat > "$base/testbin/sudo" <<'SH'
 #!/usr/bin/env bash
@@ -141,11 +147,19 @@ printf 'vantaline:x:0:0:synthetic runtime:/nonexistent:/usr/sbin/nologin\n' >> "
 mount --bind "$base/test-passwd" /etc/passwd
 mkdir -p "$base/shared/data/runtime-control"
 export TEST_RUNTIME_SCENARIO="$scenario"
+python3 - "$source_root" "$base/snapshot.json" <<'PY'
+import json, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+from local_inspection_service.runtime.configuration import ConfigurationSnapshot
+snapshot = ConfigurationSnapshot.capture({'VANTALINE_DATA_STORE':'postgres', 'DATABASE_URL':'synthetic'}, pathlib.Path('/opt/vantaline/shared/data'))
+pathlib.Path(sys.argv[2]).write_text(json.dumps(snapshot.export()))
+PY
 cat > "$base/mock-runtime.py" <<'PY'
 import json, os, pathlib, signal, socket, struct, sys, time, uuid
 base=pathlib.Path('/opt/vantaline'); service=sys.argv[1]
 topology=json.loads((base/'current/RUNTIME_TOPOLOGY.json').read_text())
 version=json.loads((base/'current/VERSION.json').read_text())
+snapshot=json.loads((base/'snapshot.json').read_text())
 path=base/'shared/data/runtime-control'/('web-control.sock' if service=='vantaline' else 'label-control.sock')
 path.unlink(missing_ok=True)
 listener=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); listener.bind(str(path)); path.chmod(0o600); listener.listen()
@@ -191,7 +205,8 @@ try:
                 'role':'web' if service=='vantaline' else 'label','worker_mode':topology['worker_mode'],
                 'instance':instance,'pid':os.getpid(),'heartbeat':time.monotonic(),'state':state,
                 'control_revision':revision,'active_iterations':0,'queued_runs':int((base/'queued').read_text()) if (base/'queued').exists() else 0,'active_runs':0,
-                'maintenance':maintenance.exists(),'config_revision':'e'*64}
+                'maintenance':maintenance.exists(),'config_revision':snapshot['revision']}
+            if command=='configuration': response={'state':response,'snapshot':snapshot}
             connection.sendall(json.dumps(response).encode()+b'\n')
 finally:
     listener.close(); path.unlink(missing_ok=True)

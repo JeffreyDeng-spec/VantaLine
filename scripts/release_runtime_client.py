@@ -12,11 +12,13 @@ import stat
 import struct
 import time
 
+from local_inspection_service.runtime.configuration_contract import CONFIGURATION_LIMIT
+
 from release_runtime_contract import ContractError, PROTOCOL, WEB, LABEL
 
 SOCKET_NAMES = {WEB: "web-control.sock", LABEL: "label-control.sock"}
 CONTROL_DIRECTORY = Path("/opt/vantaline/shared/data/runtime-control")
-ALLOWED_COMMANDS = frozenset({"status", "close_admission", "open_admission", "pause", "resume"})
+ALLOWED_COMMANDS = frozenset({"status", "close_admission", "open_admission", "pause", "resume", "configuration"})
 
 
 def request(service: str, command: str, revision: str, *, uid: int, pid: int,
@@ -27,7 +29,7 @@ def request(service: str, command: str, revision: str, *, uid: int, pid: int,
         raise ContractError("Invalid runtime control revision")
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
         raise ContractError("Invalid runtime control timeout")
-    if command in ("close_admission", "open_admission") and service != WEB:
+    if command in ("close_admission", "open_admission", "configuration") and service != WEB:
         raise ContractError("Maintenance belongs to Web admission")
     deadline = time.monotonic() + timeout
     path = directory / SOCKET_NAMES[service]
@@ -43,14 +45,15 @@ def request(service: str, command: str, revision: str, *, uid: int, pid: int,
                 raise ContractError("Runtime control peer mismatch")
             body = json.dumps({"schema": PROTOCOL, "command": command, "revision": revision}, separators=(",", ":")).encode()
             connection.sendall(body + b"\n")
+            limit = CONFIGURATION_LIMIT + 32768 if command == "configuration" else 16384
             received = bytearray()
             while not received.endswith(b"\n"):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise ContractError("Runtime control timed out")
                 connection.settimeout(remaining)
-                part = connection.recv(16385 - len(received))
-                if not part or len(received) + len(part) > 16384:
+                part = connection.recv(min(65536, limit + 1 - len(received)))
+                if not part or len(received) + len(part) > limit:
                     raise ContractError("Invalid runtime control response")
                 received.extend(part)
             value = json.loads(received)

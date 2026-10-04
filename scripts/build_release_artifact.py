@@ -11,7 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from render_release_installer import verify as verify_installer, SOURCES, TEMPLATE
+from render_release_installer import verify as verify_installer, SOURCES, TEMPLATE, CONFIGURATION_SOURCE
 
 
 def sha256(path: Path) -> str:
@@ -40,7 +40,7 @@ release_script_diff = subprocess.run(
     ["git", "diff", "--quiet", "HEAD", "--",
      "scripts/build_release_artifact.py", "scripts/install_release.sh",
      "scripts/render_release_installer.py", "scripts/"+TEMPLATE,
-     *("scripts/"+name for name in SOURCES)],
+     CONFIGURATION_SOURCE, *("scripts/"+name for name in SOURCES)],
     cwd=root, check=False,
 )
 if release_script_diff.returncode != 0:

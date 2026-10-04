@@ -6,8 +6,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from release_runtime_contract import ContractError, Topology, WEB, LABEL
-from release_services import ServiceCommands, UnitChanges, WEB_DROPIN, LABEL_UNIT, MARKER, duration_seconds
+from local_inspection_service.runtime.configuration_contract import configuration_capture
+from release_services import ServiceCommands, label_unit, UnitChanges, WEB_DROPIN, LABEL_UNIT, MARKER, duration_seconds
 
 
 class Commands:
@@ -27,11 +31,12 @@ class Units(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name); self.commands=Commands(); self.units=UnitChanges(self.root,self.commands)
+        self.configuration=configuration_capture({'VANTALINE_DATA_STORE':'postgres','DATABASE_URL':'synthetic'}, str(self.root))
         self.external=Topology('a'*40,'external',1)
         self.embedded=Topology('a'*40,'embedded',1)
 
     def test_new_units_restore_to_absence_and_disable_before_removal(self):
-        saved=self.units.capture(); self.units.install(self.external)
+        saved=self.units.capture(); self.units.install(self.external, configuration=self.configuration)
         self.assertTrue((self.root/WEB_DROPIN).is_file())
         self.assertIn('TimeoutStopSec=500',(self.root/LABEL_UNIT).read_text())
         self.units.restore(saved)
@@ -41,13 +46,13 @@ class Units(unittest.TestCase):
     def test_owned_unit_bytes_mode_and_enabled_state_restored(self):
         path=self.root/LABEL_UNIT; text=MARKER+'[Service]\nRestart=no\n'; path.write_text(text); path.chmod(0o640)
         self.commands.enabled='enabled'
-        saved=self.units.capture(); self.units.install(self.external); self.units.restore(saved)
+        saved=self.units.capture(); self.units.install(self.external, configuration=self.configuration); self.units.restore(saved)
         self.assertEqual(path.read_text(),text); self.assertEqual(path.stat().st_mode & 0o777,0o640)
         self.assertEqual(self.commands.events[-1],('enable',LABEL))
 
     def test_masked_worker_restored_without_enabling(self):
         path=self.root/LABEL_UNIT; path.symlink_to('/dev/null'); self.commands.enabled='masked'
-        saved=self.units.capture(); self.units.install(self.external); self.units.restore(saved)
+        saved=self.units.capture(); self.units.install(self.external, configuration=self.configuration); self.units.restore(saved)
         self.assertTrue(path.is_symlink()); self.assertEqual(os.readlink(path),'/dev/null')
         self.assertEqual(self.commands.events.count(('enable',LABEL)),1)
 
@@ -80,8 +85,29 @@ class Units(unittest.TestCase):
         for field,value in (('budget','90s'),('kill','process')):
             with self.subTest(field=field):
                 commands=Commands(); setattr(commands,field,value)
-                with self.assertRaises(ContractError): UnitChanges(self.root,commands).install(self.external)
+                with self.assertRaises(ContractError): UnitChanges(self.root,commands).install(self.external, configuration=self.configuration)
                 self.assertNotIn(('enable',LABEL),commands.events)
+
+    def test_worker_inherits_mounts_and_its_own_credential(self):
+        value = configuration_capture({'VANTALINE_DATA_STORE':'postgres', 'DATABASE_URL':'synthetic',
+            'VANTALINE_FILE_STORE':'cos', 'VANTALINE_COS_BUCKET':'synthetic',
+            'VANTALINE_DATA_ROOT':'/data/private', 'VANTALINE_ARTIFACT_WORK_ROOT':'/volume/work space',
+            'VANTALINE_ARTIFACT_CACHE_ROOT':'/volume/cache%name'}, '/data/private',
+            cos_credential_sha256='a' * 64)
+        text = label_unit(value)
+        self.assertIn('RequiresMountsFor="/data/private" "/volume/cache%%name" "/volume/work space"', text)
+        self.assertIn('LoadCredential=cos-credentials.json:/etc/vantaline/runtime/current/cos-credentials.json', text)
+        self.assertIn('--config /etc/vantaline/runtime/current/config.json', text)
+        self.assertNotIn('CREDENTIALS_DIRECTORY=', text)
+        value['environment']['VANTALINE_ARTIFACT_WORK_ROOT'] = '/volume/work\nExecStart=bad'
+        with self.assertRaises(ContractError): label_unit(value)
+        value['environment']['VANTALINE_ARTIFACT_WORK_ROOT'] = '../relative'
+        with self.assertRaises(ContractError): label_unit(value)
+
+    def test_missing_configuration_cannot_write_external_units(self):
+        with self.assertRaises(ContractError): self.units.install(self.external)
+        self.assertFalse((self.root / WEB_DROPIN).exists())
+        self.assertEqual(self.commands.events, [])
 
     def test_effective_budget_parser(self):
         for value in ('8min 20s','500s','500000000us','500000ms'):
