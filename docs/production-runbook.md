@@ -1087,3 +1087,30 @@ Attempted threads are tracked before native launch. Any startup exception fails 
 If the label batch or payload benchmark blocks main CI, retain its per-case raw samples and limits before investigating latency. Do not infer runner noise or loosen the P95 guard from a bare assertion. Automatic release stays blocked until the normal CI gate succeeds; production remains on the last accepted complete release.
 
 Source-inaccessible acceptance must include application startup with existing image-job records: guide/provenance hashes use the same COS file adapter as business media. Verify production dependencies and SDK imports as both actual service accounts before installation; a root-only successful import does not establish readable package metadata for systemd services.
+
+### COS commissioning service and rollback checks
+
+For the embedded label controller's 480-second drain, commission a systemd
+`TimeoutStopSec=510s` allowance with `KillMode=control-group` before the controlled
+release restart. Check the effective unit values after `daemon-reload`. Drain
+active jobs before maintenance; this allowance does not extend the 30-minute
+normal cutover window or permit a retry of an uncertain paid call.
+
+Validate the source-inaccessible instance with normal application lifespan
+hooks enabled. A diagnostic instance started with `--lifespan off` can locate
+individual request failures, but cannot satisfy startup or worker acceptance.
+For authenticated media checks, retain both existing rules: a user's private
+output subtree rejects another user, while root-level administrator/legacy
+outputs remain shared with authenticated users. Anonymous access remains denied.
+
+Retain the immutable package, archive digest, source commit and verified live
+version for each accepted COS rollback target. The installer's successful
+same-release retry is an integrity/readiness check, not a fresh release test.
+The post-unmount full-release gate must exercise installation of a different
+complete CI-approved release. Switching back to an already installed complete
+rollback tree requires stopped/drained services, package verification and an
+atomic `current` symlink replacement under the production release lock. Preserve
+COS mode, private credentials, system-disk data root and volume dependencies;
+then restart every release-consuming service and recheck version and business
+reads. Never restore pre-COS storage configuration with an otherwise compatible
+code rollback.
