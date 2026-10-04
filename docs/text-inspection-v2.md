@@ -665,3 +665,10 @@ The A + Evolving label consumer remains embedded with two threads and the existi
 
 In COS mode, normal draft/evidence expiration enumerates indexed media and publishes logical tombstones; historical remote objects remain intact. Failed business-record publication retains unreferenced verified COS media for reconciliation. Retention never marks a failed location update as purged. This does not authorize migration-time history cleanup.
 Label list performance verification retains the existing 1,000/10,000-task datasets and P95/memory limits. Each batch and payload case now flushes raw measurement samples before assertions so a failed main CI gate can be investigated without changing production query behavior.
+
+
+## Managed embedded label control
+
+During a managed label maintenance window, new detection submissions return HTTP 503 with `detail` explaining maintenance. Acknowledged idempotent submissions and existing task/history reads retain their results and ownership rules. Queued work continues before consumer pause; no unknown paid call is automatically retried and no historical profile snapshot is rewritten. Model and prompt algorithms are unchanged; new source provenance uses the versioned source manifest.
+
+The control endpoint owns a dedicated PostgreSQL connection factory with explicit connect/TCP failure-detection settings; request and paid-task connections retain their configuration. SQL timeouts apply after connection, and the root client has a separate bounded acknowledgement deadline; these do not constitute a hard total deadline for every driver operation. A control-thread shutdown timeout retains its role lock and fails that controller generation until process restart. Regression probes block connection creation and verify no duplicate role, then release the old thread for cleanup. A real claim/processing-substitute/cleanup integration proves pause does not acknowledge drain until two admitted iterations finish, while queued task snapshots remain unchanged.

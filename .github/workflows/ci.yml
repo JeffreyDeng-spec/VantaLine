@@ -136,7 +136,7 @@ jobs:
           version = json.loads((root / 'VERSION.json').read_text())
           topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
           assert version['git_commit'] == commit
-          assert topology == {'schema': 1, 'git_commit': commit,
+          assert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,
                               'worker_mode': 'embedded', 'services': ['vantaline']}
           PY
   documentation:
@@ -283,6 +283,9 @@ jobs:
           python scripts/smoke_accessory_routing.py
           python scripts/smoke_label_dependencies.py
           python scripts/smoke_label_worker_lifecycle.py
+          python scripts/smoke_label_runtime_identity.py
+          python scripts/smoke_label_control_connections.py
+          python scripts/smoke_label_runtime_pause.py
           python scripts/smoke_codex_dependencies.py
           python scripts/smoke_history_dependencies.py
           python scripts/smoke_document_job_dependencies.py
@@ -438,6 +441,10 @@ jobs:
           VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_v550_api.py" python scripts/benchmark_label_legacy_index.py
           python scripts/smoke_label_read_transactions.py
           python scripts/smoke_label_runtime_migration.py
+          python scripts/smoke_label_runtime_state.py
+          python scripts/smoke_label_runtime_control.py
+          python scripts/smoke_label_runtime_http.py
+          python scripts/smoke_label_runtime_deployment.py
           python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py

@@ -274,8 +274,11 @@ class LabelWorker:
         self._timed_out = False
         self._cleanup_failed = False
         self._startup_failed = False
+        self._paused = False
+        self._active_iterations = 0
+        self.runtime_identity = None
 
-    def start(self):
+    def start(self, *, paused: bool = False):
         with self._lock:
             if self._cleanup_failed or self._startup_failed:
                 raise RuntimeError("Label worker lifecycle failed; process restart required")
@@ -288,6 +291,8 @@ class LabelWorker:
                 return  # Duplicate startup must not double consumer threads.
             self._stop = threading.Event()
             self._timed_out = False
+            self._paused = paused
+            self._active_iterations = 0
             self._threads = []
             try:
                 for index in range(2):
@@ -306,6 +311,31 @@ class LabelWorker:
             state = ("timed_out" if self._timed_out else "draining") if alive and self._stop.is_set() else (
                 "running" if alive == 2 else "failed" if alive else "stopped")
             return {"state": "failed" if self._cleanup_failed or self._startup_failed else state, "live_threads": alive}
+
+    def request_pause(self):
+        """Fence new iterations; admitted DB/model/cleanup work still counts."""
+        with self._lock:
+            self._paused = True
+
+    def resume(self):
+        with self._lock:
+            if (self._cleanup_failed or self._startup_failed or self._stop.is_set()
+                    or len(self._threads) != 2 or not all(t.is_alive() for t in self._threads)):
+                raise RuntimeError("Label worker cannot resume; process restart required")
+            self._paused = False
+
+    def runtime_status(self) -> dict:
+        with self._lock:
+            alive = sum(t.is_alive() for t in self._threads)
+            if self._cleanup_failed or self._startup_failed or alive != 2:
+                state = "failed"
+            elif self._stop.is_set():
+                state = "timed_out" if self._timed_out else "draining"
+            elif self._paused:
+                state = "draining" if self._active_iterations else "drained"
+            else:
+                state = "ready"
+            return {"state": state, "active_iterations": self._active_iterations}
 
     def request_stop(self):
         with self._lock:
@@ -340,7 +370,13 @@ class LabelWorker:
             with self._lock:
                 if stop.is_set():
                     return
-                # This iteration is now admitted, including a pending DB claim.
+                paused = self._paused
+                if not paused:
+                    # Include connecting, claiming, model work and connection cleanup.
+                    self._active_iterations += 1
+            if paused:
+                stop.wait(.1)
+                continue
             claimed = False
             try:
                 claimed = self._iteration()
@@ -356,6 +392,9 @@ class LabelWorker:
                         self._cleanup_failed = True
                         stop.set()
                     logging.getLogger(__name__).error('{"event":"label_worker_cleanup_failed"}')
+                finally:
+                    with self._lock:
+                        self._active_iterations -= 1
             if not claimed:
                 stop.wait(1)
 
@@ -367,7 +406,7 @@ class LabelWorker:
             raw_repo = self.repositories.repository()
             if not raw_repo:
                 return None
-            repo = LabelRepository(raw_repo)
+            repo = LabelRepository(raw_repo, runtime_identity=self.runtime_identity) if self.runtime_identity else LabelRepository(raw_repo)
             run = repo.claim()
             if not run:
                 return run

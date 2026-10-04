@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from . import model, pdf_import, manual, manual_history
 from ..storage.label_inspection import LabelRepository, RUN_BATCH_SIZE
 from ..storage.agent_operations import OperationConflict
+from ..storage.label_runtime import LabelMaintenance
+from ..runtime.label_identity import RuntimeUnavailable
 from ..codex_compare.media import MediaStore
 from ..codex_compare.contracts import digest
 from ..comparison_history import project, state
@@ -109,7 +111,8 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             raise HTTPException(503, "标签检验需要 PostgreSQL 存储")
         return (
             owner,
-            LabelRepository(raw),
+            (LabelRepository(raw, runtime_identity=label_worker.runtime_identity)
+             if label_worker.runtime_identity is not None else LabelRepository(raw)),
             MediaStore(imports.data_directory() / "label_inspection" / "media"),
         )
 
@@ -120,6 +123,10 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
     def call(fn):
         try:
             return fn()
+        except LabelMaintenance:
+            raise HTTPException(503, "标签检测维护中，请稍后重试；已提交任务继续处理") from None
+        except RuntimeUnavailable:
+            raise HTTPException(503, "标签检测运行状态不可用，请稍后重试") from None
         except KeyError:
             raise HTTPException(404, "任务或记录不存在") from None
         except OperationConflict as exc:
@@ -791,4 +798,4 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
 
     from .worker_api import register as register_worker
 
-    register_worker(app, repositories, imports.data_directory, models)
+    label_worker = register_worker(app, repositories, imports.data_directory, models)

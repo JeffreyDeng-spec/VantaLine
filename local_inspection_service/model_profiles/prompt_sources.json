@@ -1,5 +1,5 @@
 {
-  "version": 138,
+  "version": 139,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -357,6 +357,11 @@
     "storage/artifacts/native.py",
     "storage/artifacts/volumes.py",
     "label_inspection/worker.py",
-    "label_inspection/worker_api.py"
+    "label_inspection/worker_api.py",
+    "runtime/label_identity.py",
+    "runtime/control_socket.py",
+    "label_inspection/runtime_control.py",
+    "storage/label_runtime.py",
+    "runtime/control_connections.py"
   ]
 }
