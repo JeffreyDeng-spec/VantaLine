@@ -67,6 +67,25 @@ class IntegrationTests(unittest.TestCase):
             files.write_json(path, stale)
         self.assertEqual(list(files.read_json(path)["sets"]), ["a"])
 
+    def test_runpod_unknown_submission_is_not_repeated_and_disk_rejection_is_pre_call(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from local_inspection_service.training.runpod_flow import RunPodFlow
+        from local_inspection_service.storage.artifacts.types import ArtifactConflict, DiskCapacityError
+        submit = Mock(side_effect=TimeoutError("synthetic uncertain submission"))
+        flow = RunPodFlow(None, None, SimpleNamespace(submit=submit), None, runtime_provider=self.runtime)
+        with self.assertRaises(DiskCapacityError):
+            flow._submit_once("fixture", {})
+        submit.assert_not_called()
+        self.budget.limits["upload"] = 1024 ** 3
+        self.budget.free_bytes = lambda: 3 * 1024 ** 3
+        with self.assertRaises(TimeoutError):
+            flow._submit_once("fixture", {})
+        with self.assertRaises(ArtifactConflict):
+            flow._submit_once("fixture", {})
+        submit.assert_called_once()
+        self.assertFalse(list((self.budget.root / "reservations").iterdir()))
+
     def test_uncertain_cursor_write_does_not_submit_fallback(self):
         # Exercise the assembled worker function without model initialization or
         # external calls. The provider succeeds; persistence then fails.

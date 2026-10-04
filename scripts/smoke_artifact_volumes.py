@@ -73,7 +73,7 @@ def main():
             objects = CosObjects(client, "synthetic-bucket")
             store = ArtifactStore(locations, objects, ReadCache(roots["cache"], budget, objects), budget, parent / "stage")
             row = store.put_bytes("outputs/private.png", b"synthetic-image", expected_generation=0)
-            store.read_bytes(row.path)
+            store.read_bytes(row.path, max_bytes=100)
             for root, directories, files in os.walk(parent):
                 if Path(root) == volumes:
                     continue

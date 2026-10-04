@@ -221,7 +221,9 @@ def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None,
     for path in ('/etc/ssl', '/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf'):
         if Path(path).exists():
             command += ['--ro-bind', path, path]
-    command += ['--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--dir', '/run',
+    temporary_mount = (['--bind', str(task_dir/'tmp'), '/tmp'] if (task_dir/'tmp').is_dir()
+                       else ['--tmpfs', '/tmp'])
+    command += ['--proc', '/proc', '--dev', '/dev', *temporary_mount, '--dir', '/run',
                 '--ro-bind', str(runtime.parent), '/codex-runtime',
                 '--ro-bind', str(task_dir/'input'), '/input', '--bind', str(task_dir/'work'), '/work',
                 '--bind', str(auth_dir), '/codex', '--dir', '/tools', '--ro-bind', str(MODULE/'cli.py'), '/tools/cli.py',
@@ -302,7 +304,7 @@ def execute(task, token, config, media):
                                     'failed', '临时空间不足或不可用；未发起模型调用。'))
         raise
     try:
-        return _execute(task, token, {**config, 'work_root': str(workspace)}, media)
+        return _execute(task, token, {**config, 'work_root': str(workspace), 'bounded_artifacts': True}, media)
     finally:
         context.__exit__(None, None, None)
 
@@ -321,6 +323,8 @@ def _execute(task, token, config, media):
     try:
         for name in ('input', 'work', 'bin', 'auth'):
             (directory/name).mkdir(mode=0o700)
+        if config.get('bounded_artifacts'):
+            (directory/'tmp').mkdir(mode=0o700)
         if task.get('report_version') == 'label-batch-v3':
             prepare_batch_input(task, directory/'input', media)
         else:

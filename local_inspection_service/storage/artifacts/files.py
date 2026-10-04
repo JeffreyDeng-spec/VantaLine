@@ -14,7 +14,7 @@ from .types import Artifact, ArtifactConflict
 
 def _path(value):
     # Preserve Path subclasses and their observable local behavior.
-    return value if isinstance(value, Path) else Path(value)
+    return Path(value) if isinstance(value, str) else value
 
 
 class VersionedDocument(dict):

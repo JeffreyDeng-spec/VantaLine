@@ -1,4 +1,6 @@
 """Explicit photo highlight sources service without application imports."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 from .photo_highlight_ports import PhotoSourceMedia, PhotoSpriteLimits, PhotoSpriteReadiness
 from pathlib import Path
@@ -19,7 +21,7 @@ class PhotoHighlightSources:
                 continue
             if path.stem.endswith("_rectified"):
                 continue
-            if not path.exists():
+            if not _business_files.exists(path):
                 continue
             paths.append(path)
             seen.add(path)

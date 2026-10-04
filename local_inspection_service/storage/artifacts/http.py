@@ -1,5 +1,7 @@
 """File responses behind the application's existing ownership middleware."""
 import mimetypes
+import os
+import stat
 from pathlib import Path
 
 from anyio import CancelScope, to_thread
@@ -43,7 +45,10 @@ class ArtifactResponse(Response):
         try:
             # Pin the exact selected generation through the final response byte,
             # including disconnects, HEAD and Range responses.
-            response = FileResponse(path, media_type=self.media_type, filename=self.filename, headers={
+            modified = self.artifact.mtime_ns / 1e9
+            metadata = os.stat_result((stat.S_IFREG | 0o440, 0, 0, 1, 0, 0,
+                                       self.artifact.size, modified, modified, modified))
+            response = FileResponse(path, media_type=self.media_type, filename=self.filename, stat_result=metadata, headers={
                 "etag": '"' + self.artifact.sha256 + '"',
                 "cache-control": "private, no-cache",
                 **self.file_headers,

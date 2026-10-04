@@ -2,9 +2,13 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 import time
+import hashlib
+import json
 from typing import Any, Protocol
 from urllib.parse import quote
 from .runpod_submission import RunPodRequest
+from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.types import ArtifactConflict
 
 Record = dict[str, Any]
 
@@ -48,9 +52,29 @@ class RunPodFlowResults:
 
 class RunPodFlow:
     def __init__(self, settings: RunPodFlowSettings, records: RunPodFlowRecords,
-                 inputs: RunPodFlowInputs, results: RunPodFlowResults):
+                 inputs: RunPodFlowInputs, results: RunPodFlowResults, *, runtime_provider=get_runtime):
         self.settings, self.records = settings, records
         self.inputs, self.results = inputs, results
+        self.runtime_provider = runtime_provider
+
+    def _submit_once(self, job_id, payload):
+        runtime = self.runtime_provider()
+        if runtime is None:
+            return self.inputs.submit(payload)
+        key = "training_tasks/submission_claims/" + hashlib.sha256(job_id.encode()).hexdigest() + ".json"
+        if runtime.store.locations.get(key) is not None:
+            raise ArtifactConflict("RunPod submission already attempted; reconcile the original job before retrying")
+        # Admission and a durable CAS claim both precede the only paid POST.
+        # An interrupted/ambiguous request keeps the claim and is never replayed.
+        with runtime.store.budget.reserve("upload", 512 * 1024 * 1024):
+            claim = runtime.store.put_bytes(key, json.dumps({"job_id": job_id, "state": "submitting",
+                                                            "created_at": int(time.time())}).encode(), expected_generation=0)
+            submission = self.inputs.submit(payload)
+            remote_id = str(submission.get("id") or submission.get("job_id") or "").strip()
+            runtime.store.put_bytes(key, json.dumps({"job_id": job_id, "state": "accepted" if remote_id else "uncertain",
+                                                    "remote_job_id": remote_id, "updated_at": int(time.time())}).encode(),
+                                    expected_generation=claim.generation)
+            return submission
 
     def run_runpod_training_task(self, job_id: str, task: dict[str, Any], dataset: dict[str, Any]) -> None:
         endpoint_id = self.settings.endpoint()
@@ -66,7 +90,7 @@ class RunPodFlow:
         )
         archive = self.inputs.archive(job_id, task, dataset)
         payload = self.inputs.payload(job_id, task, archive)
-        submission = self.inputs.submit(payload)
+        submission = self._submit_once(job_id, payload)
         runpod_job_id = str(submission.get("id") or submission.get("job_id") or "").strip()
         if not runpod_job_id:
             raise RuntimeError("RunPod did not return a job id")

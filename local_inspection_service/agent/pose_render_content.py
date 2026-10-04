@@ -1,4 +1,6 @@
 """Explicit pose render content service without application imports."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 from .pose_render_ports import PoseRenderReferences, PoseRenderPresentation
 
@@ -15,10 +17,10 @@ class PoseRenderContent:
             if not isinstance(ref, dict):
                 continue
             path = self._references.resolve()(ref.get("source_path"))
-            if not path.exists():
+            if not _business_files.exists(path):
                 continue
             mime_type = str(ref.get("mime_type") or self._references.mime()(path.name)[0] or "image/png")
-            data_url = f"data:{mime_type};base64,{self._references.encode()(path.read_bytes()).decode('ascii')}"
+            data_url = f"data:{mime_type};base64,{self._references.encode()(_business_files.read_bytes(path)).decode('ascii')}"
             content.append({"type": "image_url", "image_url": {"url": data_url}})
             refs.append(
                 {

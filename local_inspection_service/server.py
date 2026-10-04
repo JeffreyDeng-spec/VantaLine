@@ -7239,7 +7239,7 @@ _pose_sprite_builder = _PoseSpriteBuilder(
     _PoseChromaSources(threshold=lambda: CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD, fraction=lambda: accessory_reference_chroma_fraction, screen=lambda: normalize_chroma_screen),
     _PoseSpritePolicy(material=lambda: accessory_material_type, references=lambda: agent_mcp_pose_reference_assets, existing=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete, deduplicate=lambda: dedup_agent_mcp_pose_references, alpha=lambda: object_alpha_material_policy),
     _PoseSpriteRuntime(version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, root=lambda: NORMALIZED_DIR, identifier=lambda: accessory_uid, rng=lambda: np.random.default_rng, safe_id=lambda: safe_record_id, now=lambda: time.time),
-    _PoseSpriteImages(read_mode=lambda: cv2.IMREAD_COLOR, read=lambda: cv2.imread, segment=lambda: segment_agent_mcp_pose_object, write=lambda: write_clean_sprite),
+    _PoseSpriteImages(read_mode=lambda: cv2.IMREAD_COLOR, read=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, segment=lambda: segment_agent_mcp_pose_object, write=lambda: write_clean_sprite),
     _PoseSpriteMetadata(laying=lambda: apply_laying_standard_render_size_hints, scale=lambda: apply_upright_scale_correction_metadata, normalize=lambda: normalize_sprite_family_canvases, footprint=lambda: pose_render_footprint_metadata),
     _PoseAssetMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, digest=lambda: file_sha256, public_url=lambda: public_output_url),
 )
@@ -12149,7 +12149,7 @@ _sprite_render_metadata = _SpriteRenderMetadata(
 
     _SpriteRenderOperations(bounds=lambda: alpha_bbox, family=lambda: canonical_pose_family_name, visible=lambda: asset_visible_shape_px, orient=lambda: source_long_short_oriented_px, footprint=lambda: pose_render_footprint_metadata, physical=lambda: physical_render_size_px),
 
-    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
+    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
 
 )
 
@@ -12352,18 +12352,18 @@ _sprite_artifact_writer = _SpriteArtifactWriter(
 
     _SpriteArtifactMetadata(alpha=lambda: material_aware_object_alpha, footprint=lambda: pose_render_footprint_metadata),
 
-    _SpriteImageEncoder(convert=lambda: cv2.cvtColor, bgra_mode=lambda: cv2.COLOR_BGR2BGRA, write=lambda: cv2.imwrite),
+    _SpriteImageEncoder(convert=lambda: cv2.cvtColor, bgra_mode=lambda: cv2.COLOR_BGR2BGRA, write=lambda: cv2.imwrite if _business_files.runtime_provider() is None else _image_files.imwrite),
 
 )
 _sprite_canvas_normalizer = _SpriteCanvasNormalizer(
 
     _SpriteCanvasGeometry(trim=lambda: trim_masked_asset, margin=lambda: add_sprite_safety_margin, bounds=lambda: alpha_bbox, edge_max=lambda: alpha_edge_max, edge_stats=lambda: alpha_edge_stats),
 
-    _SpriteCanvasImageReads(resolve=lambda: resolve_service_path, decode=lambda: cv2.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
+    _SpriteCanvasImageReads(resolve=lambda: resolve_service_path, decode=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
 
     _SpriteResampling(resize=lambda: cv2.resize, cubic=lambda: cv2.INTER_CUBIC, area=lambda: cv2.INTER_AREA, linear=lambda: cv2.INTER_LINEAR),
 
-    _SpriteImageEncoder(convert=lambda: cv2.cvtColor, bgra_mode=lambda: cv2.COLOR_BGR2BGRA, write=lambda: cv2.imwrite),
+    _SpriteImageEncoder(convert=lambda: cv2.cvtColor, bgra_mode=lambda: cv2.COLOR_BGR2BGRA, write=lambda: cv2.imwrite if _business_files.runtime_provider() is None else _image_files.imwrite),
 
 )
 

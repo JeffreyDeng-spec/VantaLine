@@ -7,6 +7,8 @@ import time
 from typing import Any, Protocol, TextIO
 from ..model_profiles.dependencies import ResolverProvider
 from ..model_profiles.snapshots import pinned
+from ..storage.artifacts.files import BusinessFiles
+from ..storage.artifacts.runtime import get_runtime
 
 Record = dict[str, Any]
 
@@ -75,9 +77,13 @@ class TrainingRunner:
         try:
             self.records.update_provider()(job_id, status="running", progress=5, started_at=int(time.time()), note="任务已启动。")
             executor_mode = self.datasets.mode()
+            runtime = get_runtime()
+            if runtime is not None and executor_mode != "runpod":
+                raise RuntimeError("COS training requires RunPod; local training fallback is disabled")
             task_dataset_yaml = self.paths.resolve()(task.get("dataset_yaml", ""))
-            has_local_dataset = bool(task.get("dataset_yaml") and task_dataset_yaml.exists())
-            if task.get("dataset_yaml") and task_dataset_yaml.exists():
+            files = BusinessFiles()
+            has_local_dataset = bool(task.get("dataset_yaml") and files.exists(task_dataset_yaml))
+            if task.get("dataset_yaml") and files.exists(task_dataset_yaml):
                 dataset = {
                     "dataset_dir": str(self.paths.resolve()(task.get("dataset_dir", "")) if task.get("dataset_dir") else task_dataset_yaml.parent),
                     "dataset_yaml": str(task_dataset_yaml),
@@ -85,7 +91,13 @@ class TrainingRunner:
                 }
                 self.records.update_provider()(job_id, status="running", progress=74, note="已选择样本集，正在启动 YOLO 训练。", **dataset)
             else:
-                dataset = self.datasets.generate(task)
+                if runtime is None:
+                    dataset = self.datasets.generate(task)
+                else:
+                    # Images publish directly to COS. Hold the same cross-process
+                    # work slot as packaging so two large preparations cannot run.
+                    with runtime.store.budget.reserve("work", 1):
+                        dataset = self.datasets.generate(task)
             if task.get("action") == "generate_samples":
                 self.records.update_provider()(job_id, status="completed", progress=100, completed_at=int(time.time()), note="训练样本已生成完成。", **dataset)
                 self.records.sync(job_id)

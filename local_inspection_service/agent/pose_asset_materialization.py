@@ -1,4 +1,6 @@
 """Explicit pose asset materialization service without application imports."""
+from ..storage.artifacts.files import BusinessFiles
+_business_files = BusinessFiles()
 from typing import Any
 from .pose_materialization_ports import PoseChromaSources, PoseMaterializationState, PoseAssetMedia, PoseMaterializationSprites
 
@@ -31,7 +33,7 @@ class PoseAssetMaterialization:
             if not item:
                 continue
             output_path = self._media.resolve()(call.get("output_path"))
-            if not output_path.exists() or output_path.suffix.lower() not in self._media.suffixes():
+            if not _business_files.exists(output_path) or output_path.suffix.lower() not in self._media.suffixes():
                 continue
             normalized_assets = item.setdefault("normalized_assets", [])
             if not any(

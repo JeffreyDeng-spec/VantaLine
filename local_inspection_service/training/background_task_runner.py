@@ -2,6 +2,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from ..storage.artifacts.files import BusinessFiles
 from typing import Any, Protocol
 from ..model_profiles.dependencies import ResolverProvider
 from ..model_profiles.snapshots import pinned
@@ -49,7 +50,7 @@ class BackgroundTaskRunner:
         source_path = Path(str(task.get("source_path") or ""))
         set_dir = self.generation.sets() / self.generation.safe(set_id)
         try:
-            if not source_path.exists():
+            if not BusinessFiles().exists(source_path):
                 raise RuntimeError("上传的背景源图不存在。")
             self.records.update_provider()(job_id, status="running", progress=8, started_at=int(self.clock()), note="背景任务已启动，正在准备源图。")
             self.generation.update_provider()(set_id, status="generating", updated_at=int(self.clock()))
