@@ -925,11 +925,19 @@ are accepted and the installed installer supports root-owned recovery storage an
 the commissioned Web stop allowance. The bundled installer is unchanged from that
 accepted predecessor. Application, model/prompt, database and PLC code are unchanged.
 
-The installed controller validates the root recovery directory and effective units,
-closes label admission, drains the old queue, stops the sole Web service and starts
-the new immutable build paused. Application health and matching build/process/control
-identity must pass before admission reopens. Failure restores the previous complete
+The first schema-1-to-schema-2 installation validates root recovery storage and
+effective units, then stops the sole Web service using its existing shutdown
+lifecycle and 480-second consumer wait. The schema-1 predecessor has no managed
+control protocol: this first switch cannot acknowledge a maintenance pause or
+require its whole queue to drain before stop. Queued records may remain for the
+accepted successor. The controller must verify service exit before switching the
+immutable build; the candidate starts paused until application health and matching
+build/process/control identity pass. Failure restores the previous complete
 schema-1 bridge and retains all task/call/model evidence; no external worker starts.
-Missing prerequisites, a nonempty undrainable queue or uncertain service exit block
-the switch. Main CI and live release acceptance remain mandatory before shared
-runtime configuration or a standalone worker can be activated.
+
+Later managed-to-managed forward transitions pause admission and drain an active
+predecessor through its control protocol; a failed drain aborts and restores prior
+intent. An already-paused predecessor retains its queued backlog. Missing
+prerequisites or uncertain service exit block either transition. Main CI and live
+release acceptance remain mandatory before shared runtime configuration or a
+standalone worker can be activated.

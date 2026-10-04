@@ -1197,9 +1197,14 @@ model secret versions, calls and task snapshots. Do not reuse the failed earlier
 managed release or delete its evidence.
 
 Normal deployment validates root recovery storage, exact effective Web allowance
-500/510 and control-group mode. It stops admission and drains before stopping Web;
-a failed drain restores the previous intent instead of forcing termination. Accept
-the new version only after whole-application checks and matching control identity,
-then restore admission. A failed acceptance uses the journal-bound complete-release
-rollback. This phase neither installs an external label service nor establishes
-shared configuration or actual standalone-worker capacity.
+500/510 and control-group mode. On this first schema-1-to-schema-2 switch the old
+Web has no managed pause/drain acknowledgement. Stop uses its existing shutdown
+lifecycle and 480-second consumer wait; queued records may survive for the accepted
+successor. Require verified service exit before changing the release pointer.
+The new build starts paused and is accepted only after whole-application checks
+and matching control identity, then admission is restored. Later managed-to-managed
+forward transitions pause admission and drain an active predecessor before stop;
+a failed drain restores prior intent. An already-paused predecessor keeps its backlog.
+A failed acceptance uses the journal-bound complete-release rollback. This phase
+neither installs an external label service nor establishes shared configuration or
+actual standalone-worker capacity.
