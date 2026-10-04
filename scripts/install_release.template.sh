@@ -30,7 +30,8 @@ db_url='postgresql:///vantaline?host=/var/run/postgresql&user=vantaline'
 previous=""; switched=0; lock_owned=0; service_stopped=0; target_created=0
 deployment_committed=0
 controller_started=0; rollback_failed=0
-runtime_journal="$base/backups/.runtime-transition-$release.json"
+runtime_directory=/var/lib/vantaline-release
+runtime_journal="$runtime_directory/.runtime-transition-$release.json"
 shared_backgrounds=""; legacy_backgrounds=""
 installer_path=/usr/local/sbin/vantaline-install-release
 installer_tmp="/usr/local/sbin/.vantaline-install-release.$$"
@@ -139,8 +140,15 @@ else:
     raise SystemExit('Another release owner is still alive')
 PY_RELEASE_LOCK
 sh -c "set -o noclobber; printf '%s\n' '$$' > '$lock'"; lock_owned=1
+# Keep the existing release guard protocol for old/new installer coordination.
+# Old journals are never migrated, ignored or deleted by the storage bridge.
 for pending in "$base"/backups/.runtime-transition-*.json; do
-  [[ ! -e "$pending" || "$pending" == "$runtime_journal" ]] || { echo 'Unfinished runtime transition must be recovered first' >&2; exit 1; }
+  [[ ! -e "$pending" && ! -L "$pending" ]] || { echo 'Legacy runtime transition requires inspection' >&2; exit 1; }
+done
+runtime_controller prepare_storage
+runtime_controller check_journal "$runtime_journal"
+for pending in "$runtime_directory"/.runtime-transition-*.json; do
+  [[ ( ! -e "$pending" && ! -L "$pending" ) || "$pending" == "$runtime_journal" ]] || { echo 'Unfinished runtime transition must be recovered first' >&2; exit 1; }
 done
 [[ "$(stat -c '%U:%G' "$archive")" == "vantaline-deploy:vantaline-deploy" ]]
 echo "$archive_sha256  $archive" | sha256sum -c -

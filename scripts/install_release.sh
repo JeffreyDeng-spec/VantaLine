@@ -794,12 +794,42 @@ from pathlib import Path
 
 
 
+RUNTIME_STORAGE = Path('/var/lib/vantaline-release')
+
+
+def trusted_directory(path, *, private=False):
+    info = path.lstat()
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) & 0o022
+            or (private and stat.S_IMODE(info.st_mode) != 0o700)):
+        raise ContractError('Untrusted runtime recovery directory')
+
+
+def runtime_storage(*, create=False):
+    # Every ancestor is root-owned and not writable by the application account.
+    # Existing paths are checked, never chowned/chmodded or silently replaced.
+    if os.geteuid() != 0:
+        raise ContractError('Runtime recovery storage requires root')
+    for ancestor in reversed(RUNTIME_STORAGE.parents):
+        trusted_directory(ancestor)
+    if create:
+        try:
+            RUNTIME_STORAGE.mkdir(mode=0o700)
+            sync_directory(RUNTIME_STORAGE.parent)
+        except FileExistsError:
+            pass
+    trusted_directory(RUNTIME_STORAGE, private=True)
+
+
 def main():
     arguments = sys.argv[1:]
     operation = arguments.pop(0)
+    if operation == 'prepare_storage' and not arguments:
+        runtime_storage(create=True)
+        return
     if operation == 'capabilities' and not arguments:
         print(json.dumps({'schema': 1, 'topologies': [1, 2], 'runtime_protocol': 1,
-                          'services': [WEB, LABEL], 'drain_budget_seconds': 500}, sort_keys=True))
+                          'services': [WEB, LABEL], 'drain_budget_seconds': 500, 'recovery_storage_schema': 1}, sort_keys=True))
         return
     if operation == 'validate' and len(arguments) == 3:
         directory, commit, allow_legacy = Path(arguments[0]), arguments[1], arguments[2] == '1'
@@ -814,22 +844,24 @@ def main():
         identities = [RuntimeTransition.identity(Path(item)) for item in arguments]
         print('managed' if any(item['topology']['runtime_protocol'] for item in identities) else 'legacy')
         return
-    if operation not in ('begin', 'start', 'accept', 'rollback', 'finish', 'verify', 'recover', 'previous', 'recovery_mode', 'prepare_recovery') or len(arguments) < 1:
+    if operation not in ('begin', 'start', 'accept', 'rollback', 'finish', 'verify', 'recover', 'previous', 'recovery_mode', 'prepare_recovery', 'check_journal') or len(arguments) < 1:
         raise ContractError('Unsupported controller operation')
     journal = Path(arguments.pop(0))
-    if not journal.name.startswith('.runtime-transition-') or journal.parent != Path('/opt/vantaline/backups'):
+    if not journal.name.startswith('.runtime-transition-') or journal.parent != RUNTIME_STORAGE:
         raise ContractError('Invalid transition journal location')
-    info = journal.parent.lstat()
-    if journal.parent.is_symlink() or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o022:
-        raise ContractError('Untrusted transition journal directory')
-    if journal.exists():
+    runtime_storage()
+    if os.path.lexists(journal):
         info = journal.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o600:
             raise ContractError('Untrusted transition journal')
+    if operation == 'check_journal' and not arguments:
+        if os.path.lexists(journal):
+            read_object(journal, limit=65536)
+        return
     if operation == 'finish' and not arguments:
         journal.unlink(missing_ok=True)
         return
-    if operation == 'rollback' and not journal.exists():
+    if operation == 'rollback' and not os.path.lexists(journal):
         return  # Preparation failed before any mutable action.
     if operation == 'verify' and len(arguments) == 1:
         identity = RuntimeTransition.identity(Path(arguments[0]))
@@ -855,7 +887,7 @@ def main():
     elif operation == 'recover' and len(arguments) == 1:
         controller.recover(Path(arguments[0]))
     elif operation == 'verify' and len(arguments) == 1:
-        if journal.exists():
+        if os.path.lexists(journal):
             raise ContractError('Pending transition requires explicit recovery')
         controller.data = {'revision': uuid.uuid4().hex}
         controller.ready(controller.identity(Path(arguments[0])), deadline=time.monotonic()+15)
@@ -900,7 +932,8 @@ db_url='postgresql:///vantaline?host=/var/run/postgresql&user=vantaline'
 previous=""; switched=0; lock_owned=0; service_stopped=0; target_created=0
 deployment_committed=0
 controller_started=0; rollback_failed=0
-runtime_journal="$base/backups/.runtime-transition-$release.json"
+runtime_directory=/var/lib/vantaline-release
+runtime_journal="$runtime_directory/.runtime-transition-$release.json"
 shared_backgrounds=""; legacy_backgrounds=""
 installer_path=/usr/local/sbin/vantaline-install-release
 installer_tmp="/usr/local/sbin/.vantaline-install-release.$$"
@@ -1009,8 +1042,15 @@ else:
     raise SystemExit('Another release owner is still alive')
 PY_RELEASE_LOCK
 sh -c "set -o noclobber; printf '%s\n' '$$' > '$lock'"; lock_owned=1
+# Keep the existing release guard protocol for old/new installer coordination.
+# Old journals are never migrated, ignored or deleted by the storage bridge.
 for pending in "$base"/backups/.runtime-transition-*.json; do
-  [[ ! -e "$pending" || "$pending" == "$runtime_journal" ]] || { echo 'Unfinished runtime transition must be recovered first' >&2; exit 1; }
+  [[ ! -e "$pending" && ! -L "$pending" ]] || { echo 'Legacy runtime transition requires inspection' >&2; exit 1; }
+done
+runtime_controller prepare_storage
+runtime_controller check_journal "$runtime_journal"
+for pending in "$runtime_directory"/.runtime-transition-*.json; do
+  [[ ( ! -e "$pending" && ! -L "$pending" ) || "$pending" == "$runtime_journal" ]] || { echo 'Unfinished runtime transition must be recovered first' >&2; exit 1; }
 done
 [[ "$(stat -c '%U:%G' "$archive")" == "vantaline-deploy:vantaline-deploy" ]]
 echo "$archive_sha256  $archive" | sha256sum -c -

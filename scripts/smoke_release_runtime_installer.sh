@@ -5,10 +5,10 @@ set -euo pipefail
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
   for scenario in managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback; do
-    if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    if [[ "$EUID" -ne 0 ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
-      unshare -Ur -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
+      unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     fi
   done
   echo 'PASS managed release installer fault matrix'
@@ -18,6 +18,7 @@ scenario="${2:?scenario required}"
 source_root="$(cd "$(dirname "$0")/.." && pwd)"
 mount -t tmpfs -o size=3G tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
+mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
 mount -t tmpfs -o size=16M tmpfs /etc/systemd/system
 base=/opt/vantaline
 mkdir -p "$base"/{incoming,releases,backups,shared/data,shared/models,testbin,venv/bin}
@@ -230,7 +231,7 @@ if command in ('enable','disable'):
 if command=='stop':
     if (os.environ['TEST_RUNTIME_SCENARIO']=='managed_interrupt_rollback'
             and (base/'interrupted-once').exists() and (base/'current').resolve().name=='v2026.09.1'):
-        journal=json.loads((base/'backups/.runtime-transition-v2026.10.1.json').read_text())
+        journal=json.loads((pathlib.Path('/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json')).read_text())
         if journal['phase'] in ('rolling_back','rollback_starting','rollback_verified','rolled_back'):
             (base/'unsafe-rollback-stop').touch()
             raise SystemExit(99)
@@ -287,7 +288,7 @@ python3 - "$previous" "$work" <<'PY'
 import json,pathlib,sys,os
 for directory,mode in ((pathlib.Path(sys.argv[1]),'embedded'),(pathlib.Path(sys.argv[2]),'external')):
     version=json.loads((directory/'VERSION.json').read_text())
-    legacy=os.environ['TEST_RUNTIME_SCENARIO'] in ('managed_embedded_bridge', 'managed_legacy_queued_rollback')
+    legacy=os.environ['TEST_RUNTIME_SCENARIO'] in ('managed_embedded_bridge', 'managed_legacy_queued_rollback', 'managed_root_journal_handoff', 'managed_root_journal_promotion_failure')
     if legacy: mode='embedded'
     doc={'schema':1 if legacy and directory==pathlib.Path(sys.argv[1]) else 2,'git_commit':version['git_commit'],
         'worker_mode':mode,'services':['vantaline']+(['vantaline-label-worker'] if mode=='external' else [])}
@@ -303,7 +304,7 @@ if scenario=='managed_interrupted_accept' and not (base/'interrupted-once').exis
     (base/'interrupted-once').touch()
     os.kill(os.getppid(),signal.SIGKILL)
 elif scenario=='managed_pointer_checkpoint':
-    journal=json.loads((base/'backups/.runtime-transition-v2026.10.1.json').read_text())
+    journal=json.loads((pathlib.Path('/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json')).read_text())
     (base/('current.runtime-rollback.'+journal['revision'])).symlink_to(journal['old']['directory'])
     raise SystemExit(23)
 elif scenario in ('managed_paused_rollback', 'managed_legacy_queued_rollback'):
@@ -312,11 +313,124 @@ elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').ex
     raise SystemExit(23)
 PY_CHECKPOINT
 systemctl start vantaline
+if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
+  # Reproduce the observed application-owned layout using real ownership.
+  # This case runs as root inside private mount namespaces, never on host paths.
+  /usr/bin/chown 998:998 "$base" "$base/backups"
+  test "$(/usr/bin/stat -c '%u %g %a' "$base/backups")" = '998 998 755'
+  test "$(sha256sum "${VANTALINE_BASE_INSTALLER:?}" | awk '{print $1}')" = 6e061881db09466198f3c42397d1b61f89a8d374c2fce5e2a6d7725f38c06515
+  cp "$VANTALINE_BASE_INSTALLER" /usr/local/sbin/vantaline-install-release
+  bridge="$base/build/vantaline-v2026.10.0"
+  cp -a "$work" "$bridge"
+  python3 - "$bridge" <<'PY_BRIDGE'
+import json,pathlib,sys
+root=pathlib.Path(sys.argv[1]);version=json.loads((root/'VERSION.json').read_text())
+version.update(release='v2026.10.0',git_commit='b'*40)
+(root/'VERSION.json').write_text(json.dumps(version))
+(root/'RUNTIME_TOPOLOGY.json').write_text(json.dumps({'schema':1,'git_commit':'b'*40,'worker_mode':'embedded','services':['vantaline']}))
+PY_BRIDGE
+  (cd "$bridge" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+  bridge_archive="$base/incoming/v2026.10.0.tar.gz"
+  tar -C "$base/build" -czf "$bridge_archive" vantaline-v2026.10.0
+  cp "$bridge_archive" "$base/bridge-package.tar.gz"
+  bridge_sha="$(sha256sum "$bridge_archive" | awk '{print $1}')"
+  bridge_release=v2026.10.0
+  bridge_commit="$(printf 'b%.0s' {1..40})"
+  if [[ "$scenario" == managed_root_journal_promotion_failure ]]; then
+    if TEST_FAIL_PROMOTE=1 bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
+      --release "$bridge_release" --commit "$bridge_commit" --apply > "$base/promotion-failed.log" 2>&1; then exit 1; fi
+    grep -q 'application_committed=true control_promotion=incomplete' "$base/promotion-failed.log"
+    cmp "$VANTALINE_BASE_INSTALLER" /usr/local/sbin/vantaline-install-release
+    test "$(readlink -f "$base/current")" = "$base/releases/$bridge_release"
+    committed_pid="$(cat "$base/vantaline.pid")"
+    # Prove old A cannot safely retry this identity on the observed UID998 layout.
+    cp "$base/bridge-package.tar.gz" "$bridge_archive"
+    if bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
+      --release "$bridge_release" --commit "$bridge_commit" --apply > "$base/old-retry.log" 2>&1; then exit 1; fi
+    grep -q 'Runtime transition failed; retained recovery evidence requires inspection' "$base/old-retry.log"
+    test "$(cat "$base/vantaline.pid")" = "$committed_pid"
+    cmp "$VANTALINE_BASE_INSTALLER" /usr/local/sbin/vantaline-install-release
+    # Recovery is a different complete schema-1 release, never a file/permission fix.
+    bridge_release=v2026.10.2
+    bridge_commit="$(printf 'c%.0s' {1..40})"
+    next_bridge="$base/build/vantaline-$bridge_release"
+    cp -a "$bridge" "$next_bridge"
+    bridge="$next_bridge"
+    python3 - "$bridge" "$bridge_release" "$bridge_commit" <<'PY_FRESH_BRIDGE'
+import json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+for name in ('VERSION.json','RUNTIME_TOPOLOGY.json'):
+    data=json.loads((root/name).read_text());data['git_commit']=sys.argv[3]
+    if name=='VERSION.json': data['release']=sys.argv[2]
+    (root/name).write_text(json.dumps(data))
+PY_FRESH_BRIDGE
+    (cd "$bridge" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+    bridge_archive="$base/incoming/$bridge_release.tar.gz"
+    tar -C "$base/build" -czf "$bridge_archive" "vantaline-$bridge_release"
+    cp "$bridge_archive" "$base/bridge-package.tar.gz"
+    bridge_sha="$(sha256sum "$bridge_archive" | awk '{print $1}')"
+  fi
+  bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
+    --release "$bridge_release" --commit "$bridge_commit" --apply
+  cmp "$source_root/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
+  test ! -e /var/lib/vantaline-release
+  # Capabilities must not create recovery storage even after successful promotion.
+  bash /usr/local/sbin/vantaline-install-release --capabilities >/dev/null
+  test ! -e /var/lib/vantaline-release
+  previous="$base/releases/$bridge_release"
+  test "$(readlink -f "$base/current")" = "$previous"
+  old_pid="$(cat "$base/vantaline.pid")"
+  cp "$base/bridge-package.tar.gz" "$bridge_archive"
+  bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
+    --release "$bridge_release" --commit "$bridge_commit" --apply
+  test "$(cat "$base/vantaline.pid")" = "$old_pid"
+  test "$(/usr/bin/stat -c '%u %a' /var/lib/vantaline-release)" = '0 700'
+  test "$(/usr/bin/stat -c '%u %g %a' "$base")" = '998 998 755'
+  test "$(/usr/bin/stat -c '%u %g %a' "$base/backups")" = '998 998 755'
+fi
 : > "$base/runtime-events"
 (cd "$work" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 archive="$base/incoming/v2026.10.1.tar.gz"
 tar -C "$base/build" -czf "$archive" vantaline-v2026.10.1
 archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+if [[ "$scenario" == managed_root_journal_handoff ]]; then
+  stable_pid="$(cat "$base/vantaline.pid")"
+  storage=/var/lib/vantaline-release
+  for storage_fault in old_regular old_dangling other_pending current_dangling current_directory current_fifo current_invalid current_owner root_owner root_mode root_symlink ancestor_mode; do
+    probe="$storage/.runtime-transition-v2026.10.1.json"
+    case "$storage_fault" in
+      old_regular) probe="$base/backups/.runtime-transition-v2026.09.2.json"; printf '{}' > "$probe"; chmod 600 "$probe" ;;
+      old_dangling) probe="$base/backups/.runtime-transition-v2026.09.2.json"; ln -s /nonexistent "$probe" ;;
+      other_pending) probe="$storage/.runtime-transition-v2026.09.2.json"; printf '{}' > "$probe"; chmod 600 "$probe" ;;
+      current_dangling) ln -s /nonexistent "$probe" ;;
+      current_directory) mkdir "$probe" ;;
+      current_fifo) mkfifo "$probe" ;;
+      current_invalid) printf 'invalid' > "$probe"; chmod 600 "$probe" ;;
+      current_owner) printf '{}' > "$probe"; chmod 600 "$probe"; /usr/bin/chown 998:998 "$probe" ;;
+      root_owner) probe="$storage"; /usr/bin/chown 998:998 "$storage" ;;
+      root_mode) probe="$storage"; chmod 777 "$storage" ;;
+      root_symlink) mv "$storage" "$storage.saved"; ln -s "$storage.saved" "$storage"; probe="$storage" ;;
+      ancestor_mode) probe=/var/lib; chmod 777 /var/lib ;;
+    esac
+    before="$(/usr/bin/stat -c '%F %u %g %a %s' "$probe")"
+    if bash /usr/local/sbin/vantaline-install-release --archive "$archive" --archive-sha256 "$archive_sha" \
+      --release v2026.10.1 --commit "$commit" --apply > "$base/storage-fault.log" 2>&1; then cat "$base/storage-fault.log"; exit 1; fi
+    test "$(/usr/bin/stat -c '%F %u %g %a %s' "$probe")" = "$before"
+    test "$(cat "$base/vantaline.pid")" = "$stable_pid"
+    test "$(readlink -f "$base/current")" = "$previous"
+    test ! -e "$base/releases/v2026.10.1"
+    test ! -s "$base/runtime-events"
+    case "$storage_fault" in
+      root_owner) /usr/bin/chown 0:0 "$storage" ;;
+      root_mode) chmod 700 "$storage" ;;
+      root_symlink) rm "$storage"; mv "$storage.saved" "$storage" ;;
+      ancestor_mode) chmod 755 /var/lib ;;
+      current_directory) rmdir "$probe" ;;
+      *) rm "$probe" ;;
+    esac
+    echo "PASS recovery storage rejects $storage_fault without stop or repair"
+  done
+fi
 if [[ "$scenario" == managed_health_failure ]]; then export TEST_FAIL_HEALTH=1; fi
 set +e
 bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sha256 "$archive_sha" \
@@ -328,7 +442,7 @@ if [[ "$scenario" == managed_interrupt_rollback ]]; then
   test ! -e "$base/maintenance"
   test "$(readlink -f "$base/current")" = "$previous"
   test "$(cat "$base/interrupted-once")" = "$(cat "$base/vantaline.pid")"
-  python3 - "$base/backups/.runtime-transition-v2026.10.1.json" <<'PY_ROLLBACK_CHECKPOINT'
+  python3 - "/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json" <<'PY_ROLLBACK_CHECKPOINT'
 import json,sys
 assert json.load(open(sys.argv[1]))['phase']=='rollback_verified'
 PY_ROLLBACK_CHECKPOINT
@@ -340,7 +454,7 @@ fi
 if [[ "$scenario" == managed_interrupted_accept || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
   test "$result" -eq 137
   test -e "$base/maintenance"
-  test -e "$base/backups/.runtime-transition-v2026.10.1.json"
+  test -e "/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json"
   if [[ "$scenario" == managed_interrupt_stopped ]]; then
     test "$(readlink -f "$base/current")" = "$previous"
   else
@@ -353,11 +467,11 @@ if [[ "$scenario" == managed_interrupted_accept || "$scenario" == managed_interr
     --release v2026.10.1 --commit "$commit" --apply > "$base/recovery.log" 2>&1 || { cat "$base/recovery.log"; exit 1; }
   result=0
 fi
-if [[ "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
+if [[ "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
   if [[ "$result" != 0 ]]; then cat "$base/result.log"; exit 1; fi
   test "$(readlink -f "$base/current")" = "$base/releases/v2026.10.1"
   systemctl is-active --quiet vantaline
-  if [[ "$scenario" == managed_embedded_bridge ]]; then
+  if [[ "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
     if systemctl is-active --quiet vantaline-label-worker; then exit 1; fi
     test ! -e /etc/systemd/system/vantaline-label-worker.service
     test ! -e "$base/worker-enabled"
@@ -397,6 +511,10 @@ if [[ "$scenario" == managed_paused_rollback || "$scenario" == managed_legacy_qu
   test "$(cat "$base/queued")" -eq 3
   if grep -q '^v2026.10.1 resume$' "$base/control-events"; then exit 1; fi
 fi
-test ! -e "$base/backups/.runtime-transition-v2026.10.1.json"
+if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure ]]; then
+  test "$(/usr/bin/stat -c '%u %g %a' "$base")" = '998 998 755'
+  test "$(/usr/bin/stat -c '%u %g %a' "$base/backups")" = '998 998 755'
+fi
+test ! -e "/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json"
 test ! -e "$base/backups/.production-release.lock"
 echo "PASS release runtime installer $scenario"
