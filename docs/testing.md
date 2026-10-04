@@ -1945,3 +1945,5 @@ A connection-cleanup exception marks that consumer generation failed even after 
 Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.
 
 Frozen label-list API replays import the former `worker.register` Web adapter. Their shared test fixture temporarily supplies `worker_api.register` at that old location while retaining the original list function and all assertions; it restores the module immediately afterwards. Production consumer code has no compatibility import back into the Web adapter.
+
+The artifact integration gate also checks indexed retention with no source files: failed database publication cannot mark evidence purged, while successful expiry tombstones its logical location and retains the remote historical bytes.

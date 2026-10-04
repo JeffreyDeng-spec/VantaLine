@@ -4,6 +4,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 from fastapi import HTTPException
+from ..storage.artifacts.files import BusinessFiles
 from .standard_ports import (Record, Upload, StandardAccess, StandardRecords,
                              StandardWrites, StandardMedia, StandardRevisions, StandardPreparation)
 
@@ -77,10 +78,12 @@ class StandardEdits:
                         standard["updated_at"] = now
                     self.records.save("standards", standard)
         except HTTPException:
-            media_path.unlink(missing_ok=True)
+            if BusinessFiles().runtime(media_path) is None:
+                media_path.unlink(missing_ok=True)
             raise
         except Exception as exc:
-            media_path.unlink(missing_ok=True)
+            if BusinessFiles().runtime(media_path) is None:
+                media_path.unlink(missing_ok=True)
             raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试") from exc
         return {"asset": self.records.public()(asset), "standard": self.records.public()(standard)}
 

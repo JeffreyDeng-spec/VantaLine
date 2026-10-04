@@ -69,6 +69,29 @@ class IntegrationTests(unittest.TestCase):
             DetectionAnalysis(inputs, routing, None, None).analyze_bgr(None, "fixture")
         paid.assert_not_called()
 
+    def test_retention_tombstones_index_and_keeps_remote_history(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        from local_inspection_service.text_inspection import incoming_retention
+        from local_inspection_service.storage.artifacts.files import BusinessFiles
+        source = self.put("outputs/incoming/source.png", b"history")
+        record = {"id": "fixture", "created_at": 1, "source_path": str(self.root / source.path)}
+        repository = Mock()
+        repository.incoming_text_retention_candidates.return_value = [record]
+        repository.mark_incoming_text_evidence_purged.return_value = True
+        media = SimpleNamespace(root=lambda: self.root / "outputs", under=lambda p, root: p.is_relative_to(root))
+        retention = incoming_retention.IncomingRetention(None, media, SimpleNamespace(repository=lambda: repository),
+                                                         None, lambda: Mock(), lambda: "system")
+        with patch.object(incoming_retention, "_business_files", BusinessFiles(runtime_provider=self.runtime)):
+            self.locations.fail = True
+            with self.assertRaises(RuntimeError):
+                retention.purge()
+            repository.mark_incoming_text_evidence_purged.assert_not_called()
+            self.locations.fail = False
+            self.assertEqual(retention.purge(), {"records": 1, "files": 1})
+        self.assertEqual(self.locations.rows[source.path].state, "deleted")
+        self.assertEqual(self.client.rows[source.key], b"history")
+
     def test_multipart_admission_precedes_handler_and_releases_reservations(self):
         from fastapi import UploadFile, File
         from local_inspection_service.storage.artifacts.admission import UploadAdmission

@@ -662,3 +662,5 @@ replace path remain available during compatibility rollout.
 ## Label consumer lifecycle
 
 The A + Evolving label consumer remains embedded with two threads and the existing 420-second result deadline. Shutdown now requests stop and waits for admitted polls, claims, processing and per-thread cleanup; it acknowledges drain only when both threads have exited. Timeout is explicit and does not requeue tasks, retry unknown calls or accept late passing results. PDF import remains outside this consumer drain. Actual paid-call processing, model resolution order and persisted bindings are unchanged.
+
+In COS mode, normal draft/evidence expiration enumerates indexed media and publishes logical tombstones; historical remote objects remain intact. Failed business-record publication retains unreferenced verified COS media for reconciliation. Retention never marks a failed location update as purged. This does not authorize migration-time history cleanup.

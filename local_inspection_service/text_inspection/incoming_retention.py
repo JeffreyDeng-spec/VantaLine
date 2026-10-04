@@ -6,6 +6,10 @@ from collections.abc import Callable
 from pathlib import Path
 from fastapi import HTTPException
 from .incoming_ports import IncomingInspections, IncomingMedia, IncomingWrites, IncomingJSON, Record
+from ..storage.artifacts.files import BusinessFiles
+from ..storage.artifacts.types import ArtifactUnavailable, ArtifactConflict
+
+_business_files = BusinessFiles()
 
 
 class IncomingCapacity:
@@ -44,11 +48,11 @@ class IncomingRetention:
             all_removed = True
             for key in ("source_path", "corrected_path", "annotated_path"):
                 path = Path(str(inspection.get(key) or ""))
-                if path.exists() and self.media.under(path, self.media.root()):
+                if _business_files.exists(path) and self.media.under(path, self.media.root()):
                     try:
-                        path.unlink()
+                        _business_files.unlink(path)
                         deleted_files += 1
-                    except OSError:
+                    except (OSError, ArtifactUnavailable, ArtifactConflict):
                         all_removed = False
             if not all_removed:
                 continue
