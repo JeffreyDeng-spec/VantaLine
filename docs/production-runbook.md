@@ -1130,3 +1130,8 @@ Rollback pauses the candidate before waiting for its active runs and admitted it
 ## Label runtime state preparation
 
 Deploy `2026_10_04_label_runtime_state` through the immutable release installer and its existing migration checksum ledger. It creates an empty table for later label runtime control. Roll back the whole release while retaining this table and any later operational records; never reverse the migration. Existing label tasks, calls, model bindings and PLC evidence are untouched, and the worker remains embedded.
+
+
+## Managed embedded label control
+
+The managed embedded runtime requires the installed controller bridge and prior additive state migration. Its private control endpoint returns exact release/build/process identity, monotonic heartbeat, queue counts and drain acknowledgement. Each newly installed build starts paused/closed until controller acceptance. Same-build restarts preserve the durable state. On rollback, the previous managed build starts fenced and the controller restores its prior intent. Keep the complete previous release, task/call evidence and operational table; do not clear the table to bypass a gate. Independent worker, shared credentials/configuration and COS service mount inheritance must be verified in their later transitions.

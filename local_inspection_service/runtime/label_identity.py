@@ -26,7 +26,7 @@ class LabelRuntimeIdentity:
             raise RuntimeUnavailable("Invalid label runtime identity")
 
 
-def read_identity(root: Path) -> LabelRuntimeIdentity | None:
+def read_identity(root: Path, *, current: Path | None = None) -> LabelRuntimeIdentity | None:
     path = root / "RUNTIME_TOPOLOGY.json"
     if not path.exists():
         # Source checkout; managed production packages always contain the manifest.
@@ -35,12 +35,15 @@ def read_identity(root: Path) -> LabelRuntimeIdentity | None:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         version = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
         commit = version["git_commit"]
+        identity = LabelRuntimeIdentity(commit, version["release"], "embedded")
         embedded = {"schema": 1, "git_commit": commit, "worker_mode": "embedded", "services": ["vantaline"]}
         if manifest == embedded and type(manifest.get("schema")) is int:
             return None
         expected = {**embedded, "schema": 2, "runtime_protocol": 1}
         if manifest != expected or type(manifest.get("schema")) is not int or type(manifest.get("runtime_protocol")) is not int:
             raise RuntimeUnavailable("Unsupported label runtime topology")
-        return LabelRuntimeIdentity(commit, version["release"], "embedded")
+        if current is not None and current.resolve() != root.resolve():
+            raise RuntimeUnavailable("Runtime package is not the active release")
+        return identity
     except (OSError, ValueError, KeyError, TypeError):
         raise RuntimeUnavailable("Label runtime identity unavailable") from None

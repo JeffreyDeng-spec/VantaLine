@@ -1962,3 +1962,10 @@ Rollback pauses the candidate before waiting for its active runs and admitted it
 ## Label runtime state preparation
 
 `scripts/smoke_label_runtime_migration.py` uses two randomly named PostgreSQL schemas. It applies the actual new migration to a pre-existing label store, compares the new table columns and primary key with generated DDL, proves repeated application preserves both old task/call/model evidence and new control records, verifies the empty initial state and single migration ledger row, and exercises old label read/write operations afterwards. It contacts no PLC or model service.
+
+
+## Managed embedded label control
+
+Managed label controls are tested by `smoke_label_runtime_identity.py` (strict immutable activation and malformed state), `smoke_label_runtime_pause.py` (real threads including blocked cleanup and repeated pause/resume), and real PostgreSQL `smoke_label_runtime_state.py`, `smoke_label_runtime_control.py`, `smoke_label_runtime_http.py`. They cover shared-lock admission ordering, two global claims under competing connections, paused queue retention, wrong build, rollback-safe state, actual Unix sockets/SO_PEERCRED, duplicate roles and startup, reconnection and error redaction, same-build restart/new-build fencing, HTTP 503 maintenance, 401/404 ownership, idempotent replay and frozen model references. Model/provider and PLC calls are absent. The HTTP fixture tests the actual label registrar and deliberately omits the unrelated PDF importer; the existing full label/PDF smoke remains required.
+
+The managed runtime deployment smoke combines the shipped release controller/client with real PostgreSQL, private Unix sockets and consumer lifespans. It verifies acceptance, failed public-health rollback, interruption after rollback admission, database failure before service stop and preserved maintenance/pause intent. Systemd and the public HTTP health result are substituted; actual installer/service fault tests remain separate.

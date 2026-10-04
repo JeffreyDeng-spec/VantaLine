@@ -1,4 +1,5 @@
 """Bounded, root-authenticated local control endpoint with an exclusive process lock."""
+from collections.abc import Callable
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ from .label_identity import RuntimeUnavailable
 
 
 class ControlSocket:
-    def __init__(self, directory: Path, role: str, handler, *, allowed_uid=0):
+    def __init__(self, directory: Path, role: str, handler: Callable[[dict], dict], *, allowed_uid=0):
         if role not in ("web", "label"):
             raise RuntimeUnavailable("Invalid control role")
         self.directory, self.role, self.handler = directory, role, handler

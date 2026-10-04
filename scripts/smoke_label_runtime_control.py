@@ -67,6 +67,15 @@ def main():
                             return None
                         result.extend(part)
                     return json.loads(result)
+            failing[0] = True
+            try:
+                launch()
+            except RuntimeUnavailable as error:
+                assert str(error) == "Label runtime startup failed"
+            else:
+                raise AssertionError("unavailable database allowed startup")
+            assert not (directory / "web-control.sock").exists()
+            failing[0] = False
             worker, control = launch()
             original_threads = tuple(worker._threads)
             original_instance = control.instance

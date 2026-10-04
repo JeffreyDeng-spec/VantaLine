@@ -421,3 +421,8 @@ The additive artifact_locations index retains mtime_ns alongside immutable objec
 ## Label runtime state preparation
 
 The additive `2026_10_04_label_runtime_state` migration creates an empty operational-state table with a text primary key, bigint update time and JSONB payload. It seeds no admission or worker state and changes no existing table, row, lock or runtime query. Generated PostgreSQL/SQLite schemas and the repository table/key registry include the same shape. A later release will define and use the runtime control protocol; this migration alone does not change label execution.
+
+
+## Managed embedded label control
+
+`LabelRuntimeStore` persists the current build/mode, optional configuration revision, maintenance/paused intent and control revision in the already-added operational table. All control writes take the existing label advisory transaction lock. A managed submission checks maintenance inside its original submit transaction after acknowledged-idempotency lookup, and a managed claim checks the paused/build fence before expiration and task selection. Thus maintenance acknowledgement cannot race a later new enqueue; existing acknowledged requests remain readable. Maintenance permits the queued work to drain. Pause prevents further claims without requeueing or rewriting calls. State/queue probes use short reads; malformed/missing state and mismatched generations fail closed. The global concurrency limit remains two.

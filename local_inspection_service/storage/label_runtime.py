@@ -5,6 +5,7 @@ import time
 import uuid
 
 from ..runtime.label_identity import LabelRuntimeIdentity, RuntimeUnavailable
+from .postgres_runtime_repository import PostgresRuntimeRepository
 
 CONTROL_ID = "control"
 KEYS = {"schema", "git_commit", "worker_mode", "config_revision", "maintenance", "paused", "revision"}
@@ -37,7 +38,7 @@ def decode_state(value):
 
 
 class LabelRuntimeStore:
-    def __init__(self, repository):
+    def __init__(self, repository: PostgresRuntimeRepository):
         self.repository = repository
         self.table = repository._qualified_table("label_runtime_state")
         self.jobs = repository._qualified_table("label_inspection_objects")

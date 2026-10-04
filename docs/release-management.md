@@ -857,3 +857,8 @@ Rollback pauses the candidate before waiting for its active runs and admitted it
 ## Label runtime state preparation
 
 The label runtime-state preparation release adds only the idempotent `2026_10_04_label_runtime_state` migration, matching schema registries and synthetic checks. It neither starts a separate worker nor enables a maintenance gate. The previous complete release is compatible with the additional table; rollback preserves it and uses the existing full-package process.
+
+
+## Managed embedded label control
+
+The managed embedded label runtime requires the preceding controller and empty operational-state migration before activation in a schema-2 embedded package. It retains one Web service and two embedded label threads. Root control commands are bounded and peer-authenticated; duplicate role startup fails before operational state is changed. Real PostgreSQL, thread and HTTP tests cover admission races, pause, re-entry and restart. External worker/configuration activation remains a later independently validated package.

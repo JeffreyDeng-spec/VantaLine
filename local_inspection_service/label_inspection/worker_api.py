@@ -21,7 +21,7 @@ def register(app: FastAPI, repositories: RepositoryLifecycle,
                 raise RuntimeError("Label worker is already registered with different dependencies")
             return existing
         worker = LabelWorker(repositories, data_directory, models)
-        identity = read_identity(Path(__file__).resolve().parents[2])
+        identity = read_identity(Path(__file__).resolve().parents[2], current=Path("/opt/vantaline/current"))
         control = LabelRuntimeControl(identity, repositories, worker) if identity is not None else None
         worker.runtime_identity = identity
         worker.runtime_control = control

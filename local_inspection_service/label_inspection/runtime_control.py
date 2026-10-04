@@ -10,10 +10,12 @@ import uuid
 from ..runtime.control_socket import ControlSocket
 from ..runtime.label_identity import LabelRuntimeIdentity, RuntimeUnavailable
 from ..storage.label_runtime import LabelRuntimeStore
+from .dependencies import RepositoryLifecycle
+from .worker import LabelWorker
 
 
 class LabelRuntimeControl:
-    def __init__(self, identity: LabelRuntimeIdentity, repositories, worker, *, role="web",
+    def __init__(self, identity: LabelRuntimeIdentity, repositories: RepositoryLifecycle, worker: LabelWorker | None, *, role="web",
                  directory=Path("/opt/vantaline/shared/data/runtime-control"), allowed_uid=0):
         self.identity, self.repositories, self.worker = identity, repositories, worker
         self.role = role
@@ -58,10 +60,12 @@ class LabelRuntimeControl:
                     self.worker.start(paused=state["paused"])
                 self.socket.start()
                 self._started = True
-            except BaseException:
+            except BaseException as error:
                 if self.worker is not None and not self.worker.drain(3):
                     raise RuntimeUnavailable("Label runtime startup drain failed") from None
                 self.socket.close()
+                if isinstance(error, Exception):
+                    raise RuntimeUnavailable("Label runtime startup failed") from None
                 raise
 
     def command(self, value):
