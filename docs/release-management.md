@@ -982,3 +982,5 @@ managed embedded release, units, configuration pointer and admission intent. An
 uncertain stop or failed rollback retains both releases and journals and reports
 failure. Preserve task/call evidence and secret versions; do not requeue unknown
 paid calls, reverse migrations, or copy individual files.
+
+The PLC structural batch integrates previously checked same-domain extractions and runs their twelve smoke commands in backend CI. Its prompt-source manifest appends only the actual twenty new PLC/schema source files under one new manifest version. Existing task snapshots and old provenance are not rewritten; new snapshots identify the new release source set.

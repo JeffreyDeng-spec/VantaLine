@@ -274,6 +274,18 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
+          python scripts/smoke_plc_event_projection.py
+          python scripts/smoke_plc_transition_policy.py
+          python scripts/smoke_plc_persisted_validation.py
+          python scripts/smoke_plc_event_commands.py
+          python scripts/smoke_plc_dispatch_mutations.py
+          python scripts/smoke_plc_station_service.py
+          python scripts/smoke_plc_browser_dispatch.py
+          python scripts/smoke_plc_workstation_repository.py
+          python scripts/smoke_plc_request_models.py
+          python scripts/smoke_plc_legacy_dispatch.py
+          python scripts/smoke_plc_dispatch_runtime_state.py
+          python scripts/smoke_plc_capture_state.py
           python scripts/smoke_runtime_lifecycle.py --postgres
           python scripts/smoke_cost_ledger.py
           python scripts/smoke_analysis_records.py --postgres

@@ -1,5 +1,5 @@
 {
-  "version": 142,
+  "version": 143,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -367,6 +367,26 @@
     "runtime/configuration.py",
     "label_inspection/runtime_models.py",
     "label_inspection/runtime.py",
-    "runtime/label_metrics.py"
+    "runtime/label_metrics.py",
+    "plc/errors.py",
+    "plc/event_projection.py",
+    "plc/transition_policy.py",
+    "plc/persisted_validation.py",
+    "plc/event_commands.py",
+    "plc/dispatch_mutations.py",
+    "plc/dispatch_mutation_ports.py",
+    "plc/station_service.py",
+    "plc/station_ports.py",
+    "plc/browser_dispatch.py",
+    "plc/browser_dispatch_ports.py",
+    "plc/workstation_repository.py",
+    "plc/workstation_repository_ports.py",
+    "schemas/plc.py",
+    "plc/legacy_dispatch.py",
+    "plc/legacy_dispatch_ports.py",
+    "plc/dispatch_runtime_state.py",
+    "plc/dispatch_runtime_state_ports.py",
+    "plc/plc_capture_state.py",
+    "plc/plc_capture_state_ports.py"
   ]
 }

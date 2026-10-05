@@ -1563,3 +1563,9 @@ use one database and one complete release. Authentication ContextVar, task model
 snapshots, stage-call evidence and existing global claim limit remain unchanged.
 
 Label detail reads (`LabelRepository.get`) now use short committed-read transactions without the label write fence. Mutations re-read and validate inside their original transaction; `request_run` retains the fence so an in-flight idempotent submission still resolves its persisted model binding.
+
+### PLC domain boundaries
+
+`plc/` now owns historical event projection, evidence transition policy and persisted-record validation; dispatch mutation and browser receipt services; workstation service/repository adapters; retained legacy dispatch/runtime/capture-state workflows. `schemas/plc.py` owns strict request models. The application entry composes these services with explicit storage, identity, lease and policy interfaces. Business modules do not import the entry, and dependency checks include both PLC protocol modules.
+
+This is structural relocation. The browser retains physical serial ownership; legacy server transport stays disabled. No lease, ACK, uncertain-write retry, timeout, receipt or callback-order policy changes are included. Temporary entry forwarders preserve assembled endpoint and existing dependency-replacement contracts until final composition cleanup.
