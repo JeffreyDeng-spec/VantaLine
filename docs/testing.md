@@ -2158,3 +2158,73 @@ smoke_artifact_file_policies.py replays the original digest/name functions throu
 smoke_runtime_repository_access.py replays four original helpers through VANTALINE_REPOSITORY_ACCESS_BASELINE_SOURCE and exercises the actual service with fake stores. It checks JSON/no-query selection, exact error/status/cause boundaries, count/fingerprint order, selected repository identity and per-call providers. Keep the existing endpoint probe/source guards, two-account async/thread lifecycle checks, model binding, HTTP contracts and real PostgreSQL connection cleanup tests.
 
 smoke_protected_config_ownership.py compares the two original entry methods via VANTALINE_PROTECTED_CONFIG_BASELINE_SOURCE against AppConfigStore. Preserve existing config tests; cover JSON unprotected changes, reentrant guard/exclusion/release, prior authorization restoration after failed save, falsey repositories, commit-before-reload failure and no retry. Isolated PostgreSQL uses two independent local guards with the shared database namespace lock for concurrent increments, then rejects a second-row write failure and unprotected mutation without committing partial changes. The endpoint source guard follows the actual methods and exact root aliases, retaining its minimum repository-call threshold.
+
+### Native list count/latest aggregation
+
+`smoke_label_history_statistics.py` uses disposable PostgreSQL and the actual API,
+with the complete pre-change `tasks` function frozen at fdb3ce9 in
+`tests/backend_contract/label_history_tasks_baseline.py`. Its canonical LF SHA is
+checked before compiling; surrounding API functions remain shared and unchanged.
+It covers finite float/Unicode ordering, unknown-version unsafe casts, complete and
+partial proofs, empty groups, original SQL grouping, owner isolation, raw-ID aliases,
+historical NaN legacy input, malformed nonlatest native-before-legacy failures, old
+cursors, old-writer visibility, unlocked reads and connection recovery. Existing
+summary-read, HTTP/permission and business regression checks remain required.
+
+`benchmark_label_history_statistics.py` compares the complete first-page endpoint
+to that frozen endpoint: the original 1,000/10,000 task workloads plus 1,000 tasks
+with 20 runs each, all at 0/50/100% synthetic cache coverage. Each uses four warmups,
+31 alternating timing samples and a separate three-pass memory sample. The same
+25%/10ms latency and 25%/1MiB memory guards apply. This measures SQL, projection and
+page snapshot persistence, excluding HTTP transport/serialization. Synthetic
+repeated histories demonstrate aggregation scaling; they do not establish the
+production distribution or make sparse histories inherently faster.
+
+The history benchmark adds a distinct fixed protocol: one 1k/0%-hit A/A control
+using the frozen parent endpoint, then three complete repetitions of its nine
+workloads (28 cases total). The existing reader protocol still runs all 19 cases.
+Each history case/group carries the history depth, comparison and frozen endpoint
+SHA; missing, duplicated, reordered or mislabeled cases fail. Actual synthetic
+run counts are checked before timing: default 1k/10k populations have 1,003/10,029
+runs and 142/1,421 empty tasks; the 1k x 20 population has 20,000 runs and no empty
+tasks. Coverage follows the original run-ID prefix, not random production hits.
+No threshold, sample count, query bound or original timed statement changes.
+Failure diagnostics and exclusive report writes preserve primary exceptions.
+`smoke_label_history_benchmark.py` tests all 28 failure positions, late coverage
+mutations, old/new endpoint separation and report/summary output failures. The
+reader baseline explicitly adapts the new history call to its frozen pre-cache
+payload reader; the history baseline instead uses the frozen complete endpoint
+with the current cached payload reader. Neither comparison silently runs both
+arms through the aggregate query. Fresh main CI and release acceptance remain
+required; this does not explain historical CI #645's tail-latency failure.
+
+The population check is outside timed windows but can warm PostgreSQL buffers;
+this is not an identical total measurement environment to earlier protocols.
+Reader19 compares the pre-cache payload baseline with the cumulative current
+endpoint. History28 compares the pre-aggregation cached endpoint with aggregation.
+Their percentage changes answer different questions and are not interchangeable.
+
+The history smoke also compares wide 40-run histories with the cached payload
+reader: complete histories preserve Python latest/count, while partial, excluded
+and unknown-version groups preserve every payload in source order. SQL and JSON
+timestamps deliberately disagree; unsafe unknown-version timestamps cannot affect
+fallback. The full fixed reader19/history28 protocols and guards remain required.
+The first actual-main history candidate failed repetition 2 of the 1k/0% history
+P95 gate; that failure is retained. Late payload projection is a substantive SQL
+revision, not a rerun exemption or a proven explanation of that earlier tail.
+
+History result decoding now reuses column names only within one fetched result
+set. It obtains metadata lazily for the first non-mapping row, preserving empty
+results and mapping-row behavior; the generic repository decoder still accepts
+all existing callers without supplied columns. Duplicate-column overwrite,
+shallow mapping copies and decode-failure rollback/close remain unchanged. This
+removes repeated psycopg Column construction without changing SQL, transactions,
+query counts, source ordering or proof eligibility. The real PostgreSQL history
+smoke verifies one metadata access across a wide mixed-result batch and retains
+the original sentinel decode-failure check.
+
+Column-name reuse assumes the stable metadata of one psycopg result set. A private decoder override that avoids metadata, or a nonstandard cursor that changes columns between rows, is outside this optimization contract. Default decoder callers retain the original list-based metadata construction.
+
+The native history reader combines a same-statement current-proof gate with result-local column-name reuse. A batch with no current owned proof uses the ordered fallback branch without history windows; proven batches retain guarded count/latest aggregation. The gate and both source branches use the original typed owner comparison rather than converting the owner parameter to text. This is a new candidate combining two previously separately measured mechanisms, not a retry or acceptance of earlier failed candidates. Both fixed performance protocols and their original latency, memory and query limits remain mandatory; no universal speedup is claimed.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.

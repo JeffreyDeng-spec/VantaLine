@@ -5,9 +5,11 @@ import json
 import time
 import uuid
 from contextlib import contextmanager
+from collections.abc import Mapping
 from ..codex_compare.contracts import digest, encode
 from .agent_operations import OperationConflict
-from ..label_inspection.run_summary import VERSION as RUN_SUMMARY_VERSION
+from ..label_inspection.run_summary import VERSION as RUN_SUMMARY_VERSION, DISCARDED
+from ..label_inspection.history_summary import RunHistorySummary
 
 TABLE = "label_inspection_objects"
 ACTIVE = {"queued", "running"}
@@ -388,6 +390,79 @@ class LabelRepository:
             for row in c.fetchall():
                 value = self.repository._row_to_dict(c, row)
                 grouped[value["task_id"]].append(value["raw_json"])
+            return grouped
+
+    def list_run_history_for_tasks(self, owner, task_ids, *, summary_task_ids):
+        """Aggregate proven histories; retain fallback order and public projection.
+
+        Flat string/bool/null quality objects cannot hide numeric/depth decode
+        failures and public() already replaces them with a checked marker.
+        All other quality shapes and the detail reader retain original data.
+        """
+        if not task_ids:
+            return {}
+        if len(task_ids) > RUN_BATCH_SIZE:
+            raise ValueError("run batch exceeds limit")
+        target = self.repository._qualified_table("label_run_projection")
+        with self.read_tx() as c:
+            c.execute(
+                f"""WITH inputs AS MATERIALIZED (
+      SELECT %s::integer AS version,%s::text[] AS eligible,
+             %s::text[] AS tasks,%s::text[] AS discarded
+    ), available AS MATERIALIZED (
+      SELECT EXISTS(SELECT 1 FROM {target} proof JOIN {self.table} source ON source.id=proof.id
+        WHERE proof.projection_version=(SELECT version FROM inputs)
+          AND source.owner_user_id=%s AND source.kind='run'
+          AND source.task_id=ANY((SELECT tasks FROM inputs)::text[])) AS hit
+    ), ranked AS (
+      SELECT source.task_id,source.created_at,source.id,source.raw_json AS source_json,
+             proof.raw_json AS proof_json,proof.projection_version,
+             count(*) OVER history AS total,
+             count(*) FILTER(WHERE proof.projection_version=(SELECT version FROM inputs)
+               AND source.task_id=ANY((SELECT eligible FROM inputs)::text[])) OVER history AS known,
+             row_number() OVER (PARTITION BY source.task_id ORDER BY
+               CASE WHEN proof.projection_version=(SELECT version FROM inputs) THEN (proof.raw_json->>'created_at')::double precision END DESC,
+               CASE WHEN proof.projection_version=(SELECT version FROM inputs) THEN proof.raw_json->>'id' END COLLATE "C" DESC) AS position
+      FROM {self.table} source LEFT JOIN {target} proof ON proof.id=source.id
+      WHERE (SELECT hit FROM available) AND source.owner_user_id=%s
+        AND source.kind='run' AND source.task_id=ANY((SELECT tasks FROM inputs)::text[])
+      WINDOW history AS (PARTITION BY source.task_id)
+    ), selected AS (
+      SELECT task_id,created_at,id,raw_json AS source_json,NULL::jsonb AS proof_json,
+             NULL::smallint AS projection_version,NULL::bigint AS total
+      FROM {self.table} WHERE NOT (SELECT hit FROM available)
+        AND owner_user_id=%s AND kind='run'
+        AND task_id=ANY((SELECT tasks FROM inputs)::text[])
+      UNION ALL
+      SELECT task_id,created_at,id,source_json,proof_json,projection_version,
+             CASE WHEN total=known THEN total END AS total
+      FROM ranked WHERE total<>known OR position=1
+    ) SELECT task_id,total,
+      CASE WHEN projection_version=(SELECT version FROM inputs) THEN proof_json ELSE
+        CASE WHEN jsonb_typeof(source_json)='object' AND source_json->>'kind'='run'
+         THEN (CASE WHEN jsonb_typeof(source_json->'quality')='object' THEN
+           CASE WHEN source_json->'quality'<>'{{}}'::jsonb AND NOT EXISTS (
+             SELECT 1 FROM jsonb_each(source_json->'quality') evidence
+             WHERE jsonb_typeof(evidence.value) NOT IN ('string','boolean','null'))
+           THEN jsonb_set(source_json,'{{quality}}','{{"checked":true}}'::jsonb)
+           ELSE source_json END ELSE source_json END)-(SELECT discarded FROM inputs)
+         ELSE source_json END END AS raw_json
+      FROM (SELECT * FROM selected ORDER BY created_at DESC,id DESC OFFSET 0) ordered
+      ORDER BY created_at DESC,id DESC""",
+                (RUN_SUMMARY_VERSION,list(summary_task_ids),list(task_ids),list(DISCARDED),owner,owner,owner),
+            )
+            grouped = {task_id: [] for task_id in task_ids}
+            columns = None
+            for row in c.fetchall():
+                if columns is None and not isinstance(row, Mapping):
+                    # psycopg constructs Column objects on each description access.
+                    # Reuse names only within this result set, never across executes.
+                    columns = tuple(str(item[0]) for item in (getattr(c, "description", None) or ()))
+                value = self.repository._row_to_dict(c,row,columns=columns)
+                if value["total"] is not None:
+                    grouped[value["task_id"]] = RunHistorySummary(value["total"],value["raw_json"])
+                else:
+                    grouped[value["task_id"]].append(value["raw_json"])
             return grouped
 
     def legacy(self, owner, kind):

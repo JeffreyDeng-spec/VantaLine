@@ -1029,3 +1029,15 @@ Runtime repository HTTP access ships as a structural module move under manifest 
 Protected configuration ownership under manifest v158 requires original config regression, real PostgreSQL concurrency/rollback, source binding guards, full HTTP and PLC contracts. It has no data migration, new setting or topology change. Rollback uses the previous complete accepted Web/worker release.
 
 This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+
+CI also checks native count/latest against the frozen pre-change list endpoint on
+real isolated PostgreSQL, including mixed historical ordering and original plus
+repeated-run performance workloads. These checks use synthetic data and no paid
+model/PLC activity. They do not activate the external worker or replace production
+release observation and whole-package rollback verification.
+
+The native history reader combines a same-statement current-proof gate with result-local column-name reuse. A batch with no current owned proof uses the ordered fallback branch without history windows; proven batches retain guarded count/latest aggregation. The gate and both source branches use the original typed owner comparison rather than converting the owner parameter to text. This is a new candidate combining two previously separately measured mechanisms, not a retry or acceptance of earlier failed candidates. Both fixed performance protocols and their original latency, memory and query limits remain mandatory; no universal speedup is claimed.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.
+
+The current native-history integration retains the accepted foundation and readiness modules. Its bundled manifest is v158 with 480 unique sources. Historical counts above describe earlier isolated slices. The original 47 reader/history cases and both frozen baselines remain required; legacy/manual/Beta SQL aggregation is not completed by this native slice.

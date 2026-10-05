@@ -725,3 +725,19 @@ The label summary reader checks its actual database SELECT/schema prerequisites 
 The retained label lifecycle dependency contract separately checks per-app preflight ordering and independent consumer stops; its fake thread/record setup does not stand in for PostgreSQL permission acceptance.
 
 Label list validation now repeats the complete synthetic cached-reader comparison three times with fresh per-size fixtures and an additional frozen-reader A/A control. Each original pagination, query, latency and memory assertion remains required; failure diagnostics do not alter list behavior or permit a failed repetition to pass.
+
+For native tasks without a legacy extension, the first list page may use SQL
+count/latest when every stored run has a current derived proof. The public fields
+and count still represent the complete history. Mixed legacy extensions and
+partially proven groups retain the full old projection/sort, including historical
+error behavior. Detail continues reading complete source JSON; manual/Beta rows,
+filters and fixed 15-minute snapshots are unchanged. No history backfill occurs.
+
+Native task-list history projection constructs returned JSON after source-order
+selection. Complete proofs retain count/latest compression; partial, mixed legacy,
+excluded and unknown-version groups retain full fallback processing and its
+existing errors. Snapshot pagination and task detail behavior remain unchanged.
+
+History result column-name reuse is confined to a single query result. It changes no configuration, schema, API or worker topology; whole-release rollback and snapshot/call evidence retention remain unchanged.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.

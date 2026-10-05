@@ -30,17 +30,25 @@ class CountingCursor:
     def __getattr__(self,key):return getattr(self.cursor,key)
 
 
-def measure_fixture(mode,repetition,size,ratios,reports):
-    with Fixture() as f:
+def measure_fixture(mode,repetition,size,ratios,reports, *, fixture_type=Fixture,
+                    comparison="cached payloads versus c798 parent reader", history_depth=None, baseline_sha256=None):
+    with fixture_type() as f:
         def native_rows():
             for i in range(size):
                 tid=f'task_{i:05}'
                 yield {**f.task(tid),'created_at':i,'updated_at':i,
                        **({'legacy_id':f'legacy_{i}'} if i%500==0 else {})}
-                count=30 if i%200==0 else (0 if i%7==0 else 1)
+                count=history_depth if history_depth is not None else (30 if i%200==0 else (0 if i%7==0 else 1))
                 for j in range(count):yield f.run(f'run_{i:05}_{j:02}',tid,created_at=i+j/10,
                     profile_snapshot={'synthetic':'x'*2048})
         f.insert('label_inspection_objects',native_rows())
+        # Validate actual synthetic population outside latency/memory samples.
+        actual_counts=dict(f.writer.connection.execute(
+            f"SELECT task_id,count(*) FROM {f.table} WHERE kind='run' GROUP BY task_id"))
+        f.writer.connection.commit()
+        expected_counts={f'task_{i:05}':(history_depth if history_depth is not None else
+                         (30 if i%200==0 else (0 if i%7==0 else 1))) for i in range(size)}
+        assert actual_counts=={key:value for key,value in expected_counts.items() if value}
         f.insert('text_inspection_standards',[
             dict(id=f'legacy_{i}',owner_user_id='alice',name=f'Legacy {i}',standard_type='label',created_at=i,updated_at=i)
             for i in range(0,size,500)]+[dict(id='manual',owner_user_id='alice',name='Manual',standard_type='manual',created_at=0,updated_at=0)])
@@ -94,7 +102,9 @@ def measure_fixture(mode,repetition,size,ratios,reports):
                 for variant in ((True,False) if iteration%2==0 else (False,True)):
                     _,peak,_,_,_=run(variant,True);peaks[variant].append(peak)
             old=p95(times[True]);new=p95(times[False]);old_peak=max(peaks[True]);new_peak=max(peaks[False])
-            report=dict(tasks=size,synthetic_run_cache_ratio=ratio,synthetic_quality_bytes=8192,
+            report=dict(comparison=comparison,baseline_sha256=baseline_sha256,synthetic_history_depth=history_depth,
+                synthetic_run_count=sum(actual_counts.values()),synthetic_empty_tasks=size-len(actual_counts),
+                tasks=size,synthetic_run_cache_ratio=ratio,synthetic_quality_bytes=8192,
                 samples=31,old_seconds=times[True],new_seconds=times[False],old_p95_seconds=old,new_p95_seconds=new,
                 old_peak_bytes=old_peak,new_peak_bytes=new_peak,old_queries=counts[True],new_queries=counts[False],
                 latency_limit=max(old*1.25,old+.01),memory_limit=max(old_peak*1.25,old_peak+1024*1024))

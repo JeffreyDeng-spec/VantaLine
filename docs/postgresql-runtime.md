@@ -533,3 +533,34 @@ FileDigest now owns the existing streamed file SHA-256 helper in storage/artifac
 Repository selection and administrative row-count projection moved to runtime/repository_access.py. The factory still acquires/releases connections per execution thread; the new service holds no connection. There is no SQL, advisory-lock, transaction, migration or fallback policy change. Failed count probes retain existing HTTP redaction; malformed count results and fingerprint errors preserve their original uncaught boundaries.
 
 Protected namespace ownership is structural: mutate_app_config_namespace still acquires its existing transaction-scoped advisory lock, reads/mutates/writes protected rows and commits before a fresh configuration load. That load may see a later committed writer; a reload failure after successful commit does not undo or replay it. save_app_config continues to omit accessory-table replacement. No SQL, transaction, write-lock or isolation policy changes.
+
+The native list statistics reader uses one unlocked statement per 64-task batch.
+Window counts and row selection share one authoritative source/cache view; the
+proof-version CASE guards casts even on fallback groups. Missing/unknown proofs
+return the previous ordered payloads, not partial counts. Aggregate eligibility is
+explicitly restricted to IDs without mixed legacy history. It introduces no new
+table, index, write lock or cache repair, and leaves all write transactions intact.
+
+History payload projection occurs after the source-ordered selection subquery.
+The OFFSET 0 boundary prevents PostgreSQL from flattening that projection into
+the sort; the outer ORDER BY still explicitly specifies returned source order.
+This avoids sorting constructed wide fallback JSON in the observed PostgreSQL 16
+plan. It does not remove window work or promise a fixed plan on every server.
+Unknown-version proofs still cannot reach the guarded timestamp cast, and partial
+or excluded histories still return all previous payloads from the same snapshot.
+
+History result decoding now reuses column names only within one fetched result
+set. It obtains metadata lazily for the first non-mapping row, preserving empty
+results and mapping-row behavior; the generic repository decoder still accepts
+all existing callers without supplied columns. Duplicate-column overwrite,
+shallow mapping copies and decode-failure rollback/close remain unchanged. This
+removes repeated psycopg Column construction without changing SQL, transactions,
+query counts, source ordering or proof eligibility. The real PostgreSQL history
+smoke verifies one metadata access across a wide mixed-result batch and retains
+the original sentinel decode-failure check.
+
+Column-name reuse assumes the stable metadata of one psycopg result set. A private decoder override that avoids metadata, or a nonstandard cursor that changes columns between rows, is outside this optimization contract. Default decoder callers retain the original list-based metadata construction.
+
+The native history reader combines a same-statement current-proof gate with result-local column-name reuse. A batch with no current owned proof uses the ordered fallback branch without history windows; proven batches retain guarded count/latest aggregation. The gate and both source branches use the original typed owner comparison rather than converting the owner parameter to text. This is a new candidate combining two previously separately measured mechanisms, not a retry or acceptance of earlier failed candidates. Both fixed performance protocols and their original latency, memory and query limits remain mandatory; no universal speedup is claimed.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.

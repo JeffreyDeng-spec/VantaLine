@@ -1,5 +1,5 @@
 {
-  "version": 157,
+  "version": 158,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -479,6 +479,7 @@
     "runtime/text_policy.py",
     "config/environment.py",
     "detection/image_geometry.py",
-    "runtime/repository_access.py"
+    "runtime/repository_access.py",
+    "label_inspection/history_summary.py"
   ]
 }
