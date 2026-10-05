@@ -24,11 +24,36 @@ from local_inspection_service.storage.postgres_schema import postgres_ddl  # noq
 from local_inspection_service.storage.schema import SCHEMA_VERSION, TABLES  # noqa: E402
 
 
-def compact_generated_ddl(sql: str) -> str:
-    """Make generated DDL safe for postgres --single's line-oriented input."""
-    without_comments = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
-    statements = [" ".join(part.split()) + ";" for part in without_comments.split(";") if part.strip()]
-    return "\n".join(statements)
+def single_user_input(commands: list[str]) -> str:
+    """Frame complete SQL commands for postgres --single -j without parsing SQL.
+
+    Commands must use LF line endings. The backend input reader recognizes
+    ;\n\n even inside quotes; reject it instead of changing SQL contents.
+    """
+    framed = []
+    for command in commands:
+        if "\r" in command:
+            raise ValueError("Single-user SQL command must use LF line endings")
+        command = command.rstrip("\n")
+        if ";\n\n" in command:
+            raise ValueError("SQL contains the single-user command delimiter")
+        if not command.endswith(";"):
+            raise ValueError("Single-user SQL command must end with a semicolon")
+        framed.append(command + "\n\n")
+    return "".join(framed)
+
+
+def verify_input_framing() -> None:
+    command = "DO $body$\nBEGIN\n    PERFORM 'two  spaces;quoted';\nEND;\n$body$;"
+    if single_user_input([command]) != command + "\n\n":
+        raise AssertionError("SQL command content was changed during framing")
+    for invalid in ("SELECT ';\n\nquoted';", "SELECT 1;\r\n", "SELECT 1"):
+        try:
+            single_user_input([invalid])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("unsafe single-user input framing was accepted")
 
 
 def run_command(command: list[str], *, env: dict[str, str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -52,6 +77,7 @@ def assert_clean_process(result: subprocess.CompletedProcess[str], label: str) -
 
 
 def main() -> int:
+    verify_input_framing()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--postgres-bin-dir", default=os.environ.get("VANTALINE_POSTGRES_BIN_DIR", ""))
     parser.add_argument("--library-dir", default=os.environ.get("VANTALINE_POSTGRES_LIBRARY_DIR", ""))
@@ -84,8 +110,8 @@ def main() -> int:
         assert_clean_process(init_result, "initdb")
 
         schema_name = args.schema_name
-        ddl = compact_generated_ddl(postgres_ddl(schema_name))
-        verification_sql = "\n".join(
+        ddl = postgres_ddl(schema_name)
+        verification_sql = single_user_input(
             [
                 ddl,
                 f"SET search_path TO \"{schema_name}\", public;",
@@ -94,10 +120,17 @@ def main() -> int:
                     "SELECT count(*) AS table_count FROM information_schema.tables "
                     f"WHERE table_schema = '{schema_name}' AND table_type = 'BASE TABLE';"
                 ),
-                "",
+                (
+                    "SELECT count(*) AS invalidation_trigger_count FROM pg_trigger t "
+                    "JOIN pg_class c ON c.oid=t.tgrelid "
+                    "JOIN pg_namespace n ON n.oid=c.relnamespace "
+                    f"WHERE n.nspname='{schema_name}' AND c.relname='label_inspection_objects' "
+                    "AND t.tgname='invalidate_label_run_projection' AND NOT t.tgisinternal;"
+                ),
+                "SELECT 'semi;colon' AS input_framing;",
             ]
         )
-        ddl_result = run_command([str(postgres), "--single", "-D", str(data_dir), "postgres"], env=env, input_text=verification_sql)
+        ddl_result = run_command([str(postgres), "--single", "-j", "-D", str(data_dir), "postgres"], env=env, input_text=verification_sql)
         assert_clean_process(ddl_result, "postgres DDL single-user smoke")
 
         if SCHEMA_VERSION not in ddl_result.stdout:
@@ -107,6 +140,25 @@ def main() -> int:
             raise AssertionError(
                 f"expected {len(TABLES)} PostgreSQL tables in schema {schema_name}; output was:\n{ddl_result.stdout[-4000:]}"
             )
+        for expected in ('invalidation_trigger_count = "1"', 'input_framing = "semi;colon"'):
+            if expected not in ddl_result.stdout:
+                raise AssertionError(f"single-user verification output missing {expected}")
+
+        # Single-user mode can return zero despite a SQL error: keep the output
+        # gate effective, rather than treating process success as DDL success.
+        invalid_result = run_command(
+            [str(postgres), "--single", "-j", "-D", str(data_dir), "postgres"],
+            env=env,
+            input_text=single_user_input(["SELECT 1/0;"]),
+        )
+        if "ERROR:" not in invalid_result.stdout + invalid_result.stderr:
+            raise AssertionError("negative SQL control did not emit ERROR")
+        try:
+            assert_clean_process(invalid_result, "intentional invalid SQL")
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("SQL error was accepted by the real-engine gate")
     finally:
         if owned_tmp is not None:
             owned_tmp.cleanup()

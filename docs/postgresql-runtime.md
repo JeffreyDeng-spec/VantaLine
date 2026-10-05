@@ -495,3 +495,5 @@ appending SQL to that migration does not retain the exception. Other migrations
 retain the existing guard. Reapplying identical SQL preserves cache rows and the
 single ledger entry. A five-second lock timeout aborts migration atomically if
 the short source-table DDL lock cannot be obtained.
+
+The isolated generated-schema and import validators use complete multiline single-user SQL input, including PL/pgSQL bodies. They do not split SQL on semicolons. The schema validator checks trigger presence and rejects database error output; this validation change does not alter generated or deployed migration SQL.

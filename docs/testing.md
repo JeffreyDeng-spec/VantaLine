@@ -2091,3 +2091,5 @@ mid-migration error to prove atomic rollback and reentry. No application cache
 read or paid/PLC call occurs. Migration guard tests retain all previous negative
 cases and reject changes to the exact audited exception, including another
 target/schema, missing WHERE, dynamic SQL, and surrounding executable SQL.
+
+The generated-schema and CSV-import real-engine smokes send complete SQL blocks to `postgres --single -j`, preserving semicolons inside quoted trigger bodies. Embedded single-user input delimiters are rejected explicitly. The schema smoke verifies the installed trigger and a quoted semicolon, and proves that an intentional SQL error is rejected even when the backend process exits successfully.
