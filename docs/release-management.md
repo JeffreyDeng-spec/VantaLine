@@ -1009,3 +1009,5 @@ v149/470 and the previous additive cache migration; no cache read or backfill
 is enabled. Exact-head CI and preceding release acceptance remain mandatory.
 
 The derived-label list reader preserves the predecessor release topology. CI compares the actual full list endpoint and real PostgreSQL paging to the frozen pre-reader method, then measures 1,000/10,000 synthetic tasks with 0/50/100% cache hits. Exact-head review/CI and preceding complete-release acceptance remain necessary; local candidate evidence cannot authorize bypassing release gates.
+
+Reader activation includes a first-startup prerequisite on the actual Web repository connection. Failed verification prevents candidate control readiness and separate-worker startup; the existing installed controller follows whole-release rollback. It runs after the ordinary switch and may extend a failed restart window. No new root-executed candidate validator or installer bridge is introduced. CI includes restricted-role startup rejection and controller rollback, and the HTTP contract baseline changes only by the explicit new first startup callback.

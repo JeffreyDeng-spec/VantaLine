@@ -130,7 +130,7 @@
     {
       "name": "A Evolving label inspection",
       "paths": [
-        "local_inspection_service/label_inspection/**", "scripts/smoke_label_summary_reads.py", "scripts/benchmark_label_summary_reads.py", "tests/backend_contract/label_summary_reader_baseline.py", "local_inspection_service/storage/label_run_projection.py", "scripts/smoke_label_run_summary.py", "scripts/smoke_label_run_projection.py", "scripts/smoke_label_summary_worker.py", "scripts/benchmark_label_projection.py", "scripts/smoke_label_public_projection.py",
+        "local_inspection_service/label_inspection/**", "scripts/smoke_label_summary_reads.py", "scripts/smoke_label_reader_readiness.py", "scripts/benchmark_label_summary_reads.py", "tests/backend_contract/label_summary_reader_baseline.py", "local_inspection_service/storage/label_run_projection.py", "scripts/smoke_label_run_summary.py", "scripts/smoke_label_run_projection.py", "scripts/smoke_label_summary_worker.py", "scripts/benchmark_label_projection.py", "scripts/smoke_label_public_projection.py",
         "local_inspection_service/frontend/src/features/label-inspection/**",
         "local_inspection_service/scripts/smoke_label_inspection.py",
         "scripts/smoke_label_dependencies.py",

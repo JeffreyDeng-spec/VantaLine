@@ -195,7 +195,7 @@ class LifecycleContracts(unittest.TestCase):
         with ThreadPoolExecutor(8) as pool:
             controllers = list(pool.map(register, range(8)))
         self.assertTrue(all(item is controllers[0] for item in controllers))
-        self.assertEqual((len(app.router.on_startup), len(app.router.on_shutdown)), (1, 1))
+        self.assertEqual((len(app.router.on_startup), len(app.router.on_shutdown)), (2, 1))
 
     def test_all_joins_share_one_budget_and_no_start_during_join(self):
         controller = self.controller()
@@ -244,7 +244,7 @@ class LifecycleContracts(unittest.TestCase):
         first = worker_api.register(app, repositories, directory, models)
         self.workers.append(first)
         self.assertIs(worker_api.register(app, repositories, directory, models), first)
-        self.assertEqual((len(app.router.on_startup), len(app.router.on_shutdown)), (1, 1))
+        self.assertEqual((len(app.router.on_startup), len(app.router.on_shutdown)), (2, 1))
         with self.assertRaisesRegex(RuntimeError, 'different dependencies'):
             worker_api.register(app, RepositoryLifecycle(lambda: None, lambda: None), directory, models)
         for _ in range(2):
