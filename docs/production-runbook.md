@@ -1307,3 +1307,17 @@ The list cache reader must follow the accepted empty-table/invalidation and publ
 The reader prerequisite is enforced during candidate Web startup, after the normal package switch but before background callbacks, control readiness or HTTP serving. Missing source/projection SELECT/schema or a timed-out SQL check rejects readiness with a fixed safe error; the installed controller cannot start the candidate worker or accept/open admission and performs its existing complete-release rollback. This can extend the ordinary restart interruption on failure; it is not a pre-switch or zero-downtime check. The query uses the actual business connection and only required columns with LIMIT 0, accepting column-level grants. It uses a read-only transaction, 1 s lock and 1.5 s statement limits, followed by rollback and connection release. These SQL limits are not an end-to-end network/connect deadline. Do not grant permissions automatically or change DSNs to pass the check.
 
 Reader benchmark diagnostics run only on isolated synthetic PostgreSQL. They do not query production, change runtime topology, retry model calls or relax deployment gates. A failed benchmark leaves release unaccepted; continue using the last accepted complete package until the new commit passes the normal CI and release verification.
+
+Service-path relocation preserves existing file migration and output placement semantics and changes no production data automatically. File writes retain the original error and partial-effect behavior. Request identity is resolved for each placement call. Rollback restores the previous complete Web/worker package.
+
+Request/store/JSON cache instances now own their state independently. Existing process-local invalidation, five-second cross-process TTL and metadata-key freshness remain unchanged; no eviction, data migration or lock redesign is introduced. Deploy and roll back the complete release; process restart recreates in-memory caches.
+
+Directory/path-migration state is now owned by an application lifecycle object. The existing migration still marks completion only after callbacks finish; an exception leaves it retryable, and partial earlier file effects remain. No extra migration or historical rewrite is introduced. Rollback restores the complete release and retains mutable data.
+
+Stateless foundation policy relocation changes no worker, configuration, database or release procedure. Deploy and restore complete packages with the versioned source manifest; no historical task data is changed.
+
+Digest/name relocation changes no file storage selection, upload limit, worker topology or naming policy. The existing name helper is not a new path sanitizer. Restore whole releases and retain runtime data and task/model evidence.
+
+The runtime repository HTTP adapter relocation keeps administrative authorization in the existing endpoint and connection cleanup in the existing thread scope. It introduces no new probe data, connection pool or monitor. Rollback restores the previous complete release without changing database or task evidence.
+
+Protected configuration methods move into AppConfigStore with the existing shared RLock and context-local authorization. Database commit followed by response/load failure retains the original partial-success semantics; do not infer rollback or retry. Restore a complete accepted release if needed, retaining additive schema, source records, snapshots and call evidence.

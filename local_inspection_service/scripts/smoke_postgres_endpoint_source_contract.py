@@ -162,6 +162,29 @@ def main() -> None:
     contract = SourceContract()
     contract.visit(tree)
 
+    # The administrative count probe belongs to the explicit HTTP repository adapter.
+    # Check its actual module and composition rather than requiring its body in server.py.
+    access_path = ROOT / "local_inspection_service" / "runtime" / "repository_access.py"
+    access_tree = ast.parse(access_path.read_text(encoding="utf-8"))
+    access_contract = SourceContract()
+    access_contract.visit(access_tree)
+    require("count_rows" in access_contract.called_attributes, "runtime repository access missing count probe")
+    constructions = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                     and isinstance(n.func, ast.Name) and n.func.id == "RuntimeRepositoryAccess"]
+    require(len(constructions) == 1, "expected one runtime repository HTTP adapter")
+    capabilities = {keyword.arg: keyword.value for keyword in constructions[0].keywords}
+    for key, target in {"factory": "_runtime_repositories", "selection": "runtime_repository_selection",
+                        "probe_id": "runtime_repository_connection_probe_id", "postgres_store": "POSTGRES_STORE"}.items():
+        require(key in capabilities and ast.dump(capabilities[key]) == ast.dump(ast.parse("lambda: " + target, mode="eval").body),
+                "runtime repository adapter must keep per-call " + key)
+    for name in ("runtime_repository_selection", "runtime_postgres_repository_or_none", "runtime_store_probe_payload"):
+        wrapper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+        statements = wrapper.body[1:] if ast.get_docstring(wrapper) is not None else wrapper.body
+        expected = ast.parse("return _runtime_repository_access." + name + "()").body[0]
+        require(len(statements) == 1 and ast.dump(statements[0]) == ast.dump(expected),
+                "runtime repository entry must delegate " + name)
+    contract.called_attributes.update(access_contract.called_attributes)
+
     # Verify the actual extracted repository and its explicit composition import;
     # do not retain dead table-name strings in server.py just to pass this gate.
     require(any(isinstance(node, ast.ImportFrom) and node.module == "analytics.analysis_repository"
@@ -278,12 +301,20 @@ def main() -> None:
     config_store = SourceContract(injected_repository=True,
                                   repository_expression="self.rows.runtime_postgres_repository_or_none()")
     config_store.visit(ast.parse(config_path.read_text(encoding="utf-8")))
-    require({"load_config", "save_config"} <= config_store.functions_with_runtime_repository_entry,
+    require({"load_config", "save_config", "save_app_config", "mutate_app_config_atomically"} <= config_store.functions_with_runtime_repository_entry,
             "config load/save must use the explicit repository factory")
     require({"app_config", "accessories"} <= config_store.string_literals,
             "config store must retain actual config/accessory table access")
     require("replace_app_config_preserving_keys" in config_store.called_attributes,
             "config save must retain protected-key replacement")
+    require("mutate_app_config_namespace" in config_store.called_attributes,
+            "protected mutation must retain the repository namespace transaction")
+    for name in ("save_app_config", "mutate_app_config_atomically"):
+        aliases = [n for n in tree.body if isinstance(n, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)]
+        expected_alias = ast.parse("_app_config_store." + name, mode="eval").body
+        require(len(aliases) == 1 and ast.dump(aliases[0].value) == ast.dump(expected_alias),
+                "protected config entry must bind actual store: " + name)
     for name, arguments in {"_read_config_file": "", "load_config": "", "save_config": "config"}.items():
         function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
         body = function.body[1:] if ast.get_docstring(function, clean=False) is not None else function.body

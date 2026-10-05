@@ -1023,78 +1023,31 @@ _runtime_repositories = ThreadRepositoryFactory(
 )
 
 
+from .runtime.repository_access import RuntimeRepositoryAccess
+
+_runtime_repository_access = RuntimeRepositoryAccess(
+    factory=lambda: _runtime_repositories,
+    selection=lambda: runtime_repository_selection,
+    probe_id=lambda: runtime_repository_connection_probe_id,
+    postgres_store=lambda: POSTGRES_STORE,
+)
+
+
 def runtime_repository_selection() -> Any:
     """Build the explicit runtime repository selection with HTTP-safe errors."""
-
-    try:
-        return _runtime_repositories.selection()
-    except RuntimeStoreConfigError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "runtime_store_config_error",
-                "message": str(exc),
-                "json_fallback_used": False,
-            },
-        ) from None
-    except RuntimeStoreConnectionError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "runtime_store_connection_error",
-                "message": str(exc),
-                "json_fallback_used": False,
-            },
-        ) from None
+    return _runtime_repository_access.runtime_repository_selection()
 
 def runtime_postgres_repository_or_none() -> Any | None:
     """Return the explicit PostgreSQL repository, or None for JSON runtime."""
-
-    selection = runtime_repository_selection()
-    if selection.store == POSTGRES_STORE:
-        return selection.repository
-    return None
+    return _runtime_repository_access.runtime_postgres_repository_or_none()
 
 
-def runtime_repository_connection_probe_id(repository: Any) -> str:
-    """Return a non-secret process-local fingerprint for the repository connection."""
-
-    connection = getattr(repository, "connection", None)
-    if connection is None:
-        return ""
-    material = f"{os.getpid()}:{threading.get_ident()}:{id(connection)}"
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+from .runtime.repository_access import runtime_repository_connection_probe_id
 
 
 def runtime_store_probe_payload() -> dict[str, Any]:
     """Return a non-secret runtime-store probe for an admin HTTP endpoint."""
-
-    selection = runtime_repository_selection()
-    payload: dict[str, Any] = {
-        "store": selection.store,
-        "repository_kind": selection.repository.kind,
-        "json_fallback_used": False,
-        "repository_connection_id": None,
-        "repository_connection_scope": None,
-    }
-    if selection.store == POSTGRES_STORE:
-        try:
-            counts = selection.repository.count_rows(("schema_migrations",))
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "code": "runtime_store_probe_error",
-                    "message": type(exc).__name__,
-                    "json_fallback_used": False,
-                },
-            ) from None
-        payload["postgres_count_probe"] = {"schema_migrations": counts.get("schema_migrations", 0)}
-        payload["repository_connection_id"] = runtime_repository_connection_probe_id(selection.repository)
-        payload["repository_connection_scope"] = "thread-local"
-    else:
-        payload["postgres_count_probe"] = None
-    return payload
+    return _runtime_repository_access.runtime_store_probe_payload()
 
 
 from .analytics.cost_pricing import (
@@ -1613,8 +1566,6 @@ _candidate_store_lock = threading.RLock()
 from .runtime.training_tasks import TrainingTaskRuntime
 _training_task_runtime = TrainingTaskRuntime()
 _training_task_lock = _training_task_runtime.lock
-_path_migration_lock = threading.RLock()
-_path_migration_done = False
 _image_worker_thread: threading.Thread | None = None
 _image_worker_processes: dict[str, subprocess.Popen] = {}
 _training_task_threads = _training_task_runtime.threads
@@ -1959,24 +1910,19 @@ def apply_ai_profile_dimensions_to_physical_size(item: dict[str, Any], dimension
     return _accessory_dimensions.apply_ai_profile_dimensions_to_physical_size(item, dimensions)
 
 
-def ensure_dirs() -> None:
-    for path in (
-        UPLOAD_DIR,
-        OUTPUT_DIR,
-        DATA_DIR,
-        NORMALIZED_DIR,
-        TRAINING_JOBS_DIR,
-        TRAINING_TASKS_DIR,
-        ACCESSORY_CANDIDATES_DIR,
-        AUTO_OPTIMIZE_DIR,
-        IMAGE_WORKER_LOG_DIR,
-        BACKGROUND_DIR,
-        BACKGROUND_SETS_DIR,
-    ):
-        path.mkdir(parents=True, exist_ok=True)
-    if not _business_files.exists(CONFIG_PATH):
-        save_config(DEFAULT_CONFIG)
-    migrate_persisted_local_paths_once()
+from .runtime.directories import ServiceDirectories, LocalPathMigration
+
+_service_directories = ServiceDirectories(
+    paths=lambda: (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR,
+                   TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, AUTO_OPTIMIZE_DIR,
+                   IMAGE_WORKER_LOG_DIR, BACKGROUND_DIR, BACKGROUND_SETS_DIR),
+    config_path=lambda: CONFIG_PATH,
+    defaults=lambda: DEFAULT_CONFIG,
+    files=lambda: _business_files,
+    save_config=lambda: save_config,
+    migrate=lambda: migrate_persisted_local_paths_once,
+)
+ensure_dirs = _service_directories.ensure
 
 
 _config_io_lock = threading.RLock()
@@ -2427,16 +2373,7 @@ def save_config(config: dict[str, Any]) -> None:
     return _app_config_store.save_config(config)
 
 
-def save_app_config(config: dict[str, Any]) -> None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        with _config_io_lock:
-            repository.replace_app_config_preserving_keys(
-                app_config_rows(config, updated_at=int(time.time())),
-                PLC_PROTECTED_CONFIG_KEYS,
-            )
-        return
-    save_config(config)
+save_app_config = _app_config_store.save_app_config
 
 
 # Presentation-only window. Durable idempotency/state authority is never trimmed by this value.
@@ -2875,42 +2812,7 @@ def plc_dispatch_existing(dispatch_id: str) -> dict[str, Any] | None:
     return None
 
 
-def mutate_app_config_atomically(mutator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
-    """Atomically mutate only the protected PLC app-config namespace.
-
-    JSON is single-process/thread safe. PostgreSQL additionally uses a
-    transaction-scoped advisory lock so independent repository instances share
-    the same namespace linearization point.
-    """
-    with _config_io_lock:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            def mutate_protected(values: dict[str, Any]) -> None:
-                mutator(values)
-                unexpected = set(values) - set(PLC_PROTECTED_CONFIG_KEYS)
-                if unexpected:
-                    raise ValueError(f"PLC namespace mutator wrote unprotected keys: {sorted(unexpected)}")
-
-            repository.mutate_app_config_namespace(
-                PLC_PROTECTED_CONFIG_KEYS,
-                mutate_protected,
-                updated_at=int(time.time()),
-            )
-            return load_config()
-        config = load_config()
-        unprotected_before = {
-            key: copy.deepcopy(value) for key, value in config.items() if key not in PLC_PROTECTED_CONFIG_KEYS
-        }
-        mutator(config)
-        unprotected_after = {key: value for key, value in config.items() if key not in PLC_PROTECTED_CONFIG_KEYS}
-        if unprotected_after != unprotected_before:
-            raise ValueError("PLC namespace mutator changed unprotected app-config keys")
-        token = _plc_namespace_write_authorized.set(True)
-        try:
-            save_app_config(config)
-        finally:
-            _plc_namespace_write_authorized.reset(token)
-        return config
+mutate_app_config_atomically = _app_config_store.mutate_app_config_atomically
 
 
 from .plc.errors import PlcDispatchStateConflict
@@ -3423,60 +3325,55 @@ def object_alpha_policy_label(policy: str) -> str:
     return _accessory_policy.object_alpha_policy_label(policy)
 
 
+from .runtime.service_paths import ServicePaths
+from .runtime.service_path_ports import ServicePathSettings, PathProjectionPolicy, PathCalls, PathFiles, PathIdentity
+
+_service_paths = ServicePaths(
+    settings=ServicePathSettings(
+        ROOT=lambda: ROOT,
+        APP_DIR=lambda: APP_DIR,
+        OUTPUT_DIR=lambda: OUTPUT_DIR,
+    ),
+    policy=PathProjectionPolicy(
+        STALE_REPO_PATH_PREFIXES=lambda: STALE_REPO_PATH_PREFIXES,
+        REMOVED_PHASE1_PUBLIC_CONFIG_KEYS=lambda: REMOVED_PHASE1_PUBLIC_CONFIG_KEYS,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
+    ),
+    calls=PathCalls(
+        rebase_stale_local_path_text=lambda: rebase_stale_local_path_text,
+        rebase_stale_local_payload_text=lambda: rebase_stale_local_payload_text,
+        public_path_sanitized=lambda: public_path_sanitized,
+        service_rebased_path=lambda: service_rebased_path,
+        resolve_service_path=lambda: resolve_service_path,
+        path_is_under=lambda: path_is_under,
+        public_output_url=lambda: public_output_url,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+    ),
+    files=PathFiles(
+        _business_files=lambda: _business_files,
+    ),
+    identity=PathIdentity(
+        _request_user=lambda: _request_user,
+        user_is_admin=lambda: user_is_admin,
+    ),
+)
+
+
 def service_rebased_path(path: Path) -> Path | None:
-    raw = str(path).replace("\\", "/")
-    parts = PurePosixPath(raw).parts
-    if "assembly_line_optimize" in parts:
-        index = parts.index("assembly_line_optimize")
-        return ROOT.joinpath(*parts[index + 1 :])
-    if "local_inspection_service" not in parts:
-        return None
-    index = parts.index("local_inspection_service")
-    return ROOT.joinpath(*parts[index:])
+    return _service_paths.service_rebased_path(path)
 
 
 def rebase_stale_local_path_text(value: str) -> str:
-    text = str(value or "")
-    if not text:
-        return text
-    normalized = text.replace("\\", "/")
-    for prefix in STALE_REPO_PATH_PREFIXES:
-        normalized = normalized.replace(prefix, ROOT.as_posix())
-    return normalized
+    return _service_paths.rebase_stale_local_path_text(value)
 
 
 def rebase_stale_local_payload_text(text: str) -> str:
-    migrated = text
-    root_text = ROOT.as_posix()
-    for prefix in STALE_REPO_PATH_PREFIXES:
-        normalized_prefix = prefix.replace("\\", "/")
-        variants = {
-            prefix,
-            normalized_prefix,
-            normalized_prefix.replace("/", "\\/"),
-        }
-        if ":" in normalized_prefix:
-            variants.add(normalized_prefix.replace("/", "\\\\"))
-        for variant in variants:
-            replacement = root_text.replace("/", "\\/") if "\\/" in variant else root_text
-            migrated = migrated.replace(variant, replacement)
-    return migrated
+    return _service_paths.rebase_stale_local_payload_text(text)
 
 
 def public_path_sanitized(value: Any) -> Any:
-    if isinstance(value, dict):
-        value = {k:v for k,v in value.items() if k not in {"model_profiles", "profile_snapshot", "secret_ref", "operational"}}
-    if isinstance(value, dict):
-        return {
-            rebase_stale_local_path_text(key) if isinstance(key, str) else key: public_path_sanitized(item)
-            for key, item in value.items()
-            if key not in REMOVED_PHASE1_PUBLIC_CONFIG_KEYS
-        }
-    if isinstance(value, list):
-        return [public_path_sanitized(item) for item in value]
-    if isinstance(value, str):
-        return rebase_stale_local_path_text(value)
-    return value
+    return _service_paths.public_path_sanitized(value)
 
 
 def public_auth_features(user: dict[str, Any] | None) -> dict[str, str]:
@@ -3492,119 +3389,44 @@ def public_legacy_owner_id(user: dict[str, Any] | None) -> str:
 
 
 def migrate_json_file_paths(path: Path) -> bool:
-    try:
-        raw_text = _business_files.read_text(path, encoding="utf-8")
-    except OSError:
-        return False
-    try:
-        original = json.loads(raw_text)
-    except json.JSONDecodeError:
-        migrated_text = rebase_stale_local_payload_text(raw_text)
-        if migrated_text == raw_text:
-            return False
-        try:
-            _business_files.write_text(path, migrated_text, encoding="utf-8")
-        except OSError:
-            return False
-        return True
-    migrated = public_path_sanitized(original)
-    if migrated == original:
-        return False
-    try:
-        _business_files.write_text(path, json.dumps(migrated, indent=2), encoding="utf-8")
-    except OSError:
-        return False
-    return True
+    return _service_paths.migrate_json_file_paths(path)
 
 
-def migrate_persisted_local_paths_once() -> None:
-    global _path_migration_done
-    if _path_migration_done:
-        return
-    with _path_migration_lock:
-        if _path_migration_done:
-            return
-        candidates: set[Path] = {CONFIG_PATH}
-        for root in (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR):
-            if _business_files.exists(root):
-                candidates.update(path for path in _business_files.glob(root, "*.json", recursive=True) if _business_files.is_file(path))
-        for path in sorted(candidates):
-            migrate_json_file_paths(path)
-        _path_migration_done = True
+_local_path_migration = LocalPathMigration(
+    config_path=lambda: CONFIG_PATH,
+    roots=lambda: (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR),
+    files=lambda: _business_files,
+    migrate_file=lambda: migrate_json_file_paths,
+)
+migrate_persisted_local_paths_once = _local_path_migration.run
 
 
 def resolve_service_path(value: Any, *, for_write: bool = False) -> Path:
-    raw = rebase_stale_local_path_text(str(value or "")).strip()
-    if not raw:
-        return Path("")
-    path = Path(raw).expanduser()
-    rebased = service_rebased_path(path)
-    if for_write and rebased is not None:
-        return rebased
-
-    candidates: list[Path] = []
-    if rebased is not None:
-        candidates.append(rebased)
-    if path.is_absolute():
-        candidates.append(path)
-    else:
-        candidates.extend([APP_DIR / path, ROOT / path, path])
-
-    seen: set[str] = set()
-    for candidate in candidates:
-        key = str(candidate)
-        if key in seen:
-            continue
-        seen.add(key)
-        if _business_files.exists(candidate):
-            return candidate.resolve()
-    return candidates[0]
+    return _service_paths.resolve_service_path(value, for_write=for_write)
 
 
 def path_is_under(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
+    return _service_paths.path_is_under(path, root)
 
 
 def public_output_url(path: Path) -> str:
-    resolved = resolve_service_path(path, for_write=True)
-    try:
-        return f"/outputs/{resolved.relative_to(OUTPUT_DIR).as_posix()}"
-    except ValueError:
-        return ""
+    return _service_paths.public_output_url(path)
 
 
 def public_output_url_for_existing(path: Path) -> str:
-    resolved = resolve_service_path(path)
-    return public_output_url(resolved) if _business_files.exists(resolved) and path_is_under(resolved, OUTPUT_DIR) else ""
+    return _service_paths.public_output_url_for_existing(path)
 
 
 def output_write_dir(kind: str = "") -> Path:
-    user = _request_user.get()
-    return output_write_dir_for_owner(kind, user["id"] if user and not user_is_admin(user) else "")
+    return _service_paths.output_write_dir(kind)
 
 
 def output_write_dir_for_owner(kind: str = "", owner_user_id: str = "") -> Path:
-    safe_kind = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(kind or "").strip()).strip("._")
-    clean_owner = str(owner_user_id or "").strip()
-    if clean_owner and clean_owner not in {LEGACY_OWNER_ID, SYSTEM_OWNER_ID}:
-        root = OUTPUT_DIR / "users" / clean_owner
-    else:
-        root = OUTPUT_DIR
-    target = root / safe_kind if safe_kind else root
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    return _service_paths.output_write_dir_for_owner(kind, owner_user_id)
 
 
 def output_url(path: Path) -> str:
-    resolved = resolve_service_path(path, for_write=True)
-    try:
-        return f"/outputs/{resolved.relative_to(OUTPUT_DIR).as_posix()}"
-    except ValueError:
-        return ""
+    return _service_paths.output_url(path)
 
 
 from .accessories.text_preparation import AccessoryTextPreparation
@@ -3897,15 +3719,13 @@ def image_job_matches(candidate: dict[str, Any], job: dict[str, Any], lookup_id:
     return lookup_id in {str(job.get("job_id") or ""), str(job.get("task_id") or "")}
 
 
+from .storage.artifacts.files import FileDigest
+
+_file_digest = FileDigest(files=lambda: _business_files)
+
+
 def file_sha256(path: Path) -> str | None:
-    try:
-        digest = hashlib.sha256()
-        with _business_files.open_read(path) as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except OSError:
-        return None
+    return _file_digest.file_sha256(path)
 
 
 def ensure_anchor_image_provenance(job: dict[str, Any]) -> bool:
@@ -3954,16 +3774,10 @@ def ai_profile_reference_paths(item: dict[str, Any]) -> list[Path]:
     return _reference_evidence.ai_profile_reference_paths(item)
 
 
-def env_flag(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+from .config.environment import env_flag
 
 
-def bounded_text(value: Any, limit: int = 240) -> str:
-    text = re.sub(r"\s+", " ", str(value or "")).strip()
-    return text[:limit]
+from .runtime.text_policy import bounded_text
 
 
 def string_list(value: Any, fallback: list[str] | None = None, *, max_items: int = 12, max_len: int = 96) -> list[str]:
@@ -4508,14 +4322,7 @@ def redact_accessory_payload_for_user(payload: dict[str, Any], user: dict[str, A
 
 
 
-def resize_bgr_max_side(image_bgr: np.ndarray, max_side: int) -> np.ndarray:
-    height, width = image_bgr.shape[:2]
-    longest = max(width, height)
-    if longest <= max_side:
-        return image_bgr
-    scale = max_side / float(longest)
-    next_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
-    return cv2.resize(image_bgr, next_size, interpolation=cv2.INTER_AREA)
+from .detection.image_geometry import resize_bgr_max_side
 
 
 
@@ -4832,102 +4639,23 @@ def initialize_auto_optimize_for_pipeline_task(task: dict[str, Any], config: dic
     return _auto_optimization_initialization.initialize_auto_optimize_for_pipeline_task(task, config)
 
 
-# Request-scoped memoization for hot read paths (list endpoints). The cache is
-# only active inside read_path_cache_scope(); callers within a scope must treat
-# cached payloads as read-only.
-_read_path_cache: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
-    "vantaline_read_path_cache", default=None
-)
+# Cache instances belong to this application composition; no request identity
+# or database connection is retained in shared cache state.
+from .runtime.read_caches import RequestReadCache, StoreReadCache, JsonFileReadCache
 
+_request_read_cache = RequestReadCache()
+_read_path_cache = _request_read_cache.current
+read_path_cache_scope = _request_read_cache.scope
 
-@contextlib.contextmanager
-def read_path_cache_scope():
-    if _read_path_cache.get() is not None:
-        # Nested scopes reuse the outer cache.
-        yield
-        return
-    token = _read_path_cache.set({})
-    try:
-        yield
-    finally:
-        _read_path_cache.reset(token)
-
-
-# Short-lived module caches for hot store reads shared by the list endpoints.
-# In-process writers invalidate their key on save/delete; the TTL only bounds
-# staleness for writes that bypass this process entirely.
+# The unchanged TTL bounds cross-process writes; local writers invalidate keys.
 STORE_READ_CACHE_TTL_SECONDS = 5.0
-_store_read_cache_lock = threading.Lock()
-_store_read_cache: dict[str, tuple[float, Any]] = {}
+_store_cache = StoreReadCache(lambda: STORE_READ_CACHE_TTL_SECONDS, lambda: time.monotonic())
+store_read_cache_get = _store_cache.get
+store_read_cache_put = _store_cache.put
+store_read_cache_invalidate = _store_cache.invalidate
 
-
-def store_read_cache_get(key: str) -> tuple[bool, Any]:
-    now = time.monotonic()
-    with _store_read_cache_lock:
-        entry = _store_read_cache.get(key)
-        if entry and now - entry[0] < STORE_READ_CACHE_TTL_SECONDS:
-            return True, entry[1]
-    return False, None
-
-
-def store_read_cache_put(key: str, value: Any) -> None:
-    with _store_read_cache_lock:
-        _store_read_cache[key] = (time.monotonic(), value)
-
-
-def store_read_cache_invalidate(*keys: str) -> None:
-    with _store_read_cache_lock:
-        for key in keys:
-            _store_read_cache.pop(key, None)
-
-
-# mtime/size-validated cache for JSON files (dataset/run manifests, run
-# metadata) that are re-read by every list request but change rarely. A stat
-# call revalidates on every access, so results are never stale.
-_json_file_cache_lock = threading.Lock()
-_json_file_cache: dict[str, tuple[int, int, Any]] = {}
-
-
-def load_json_file_mtime_cached(path: Path) -> Any:
-    """Parse a JSON file with an mtime/size-validated cache. Returns None when
-    the file is missing or invalid. Callers must treat the result as
-    read-only."""
-    runtime = _business_files.runtime(path)
-    if runtime is not None:
-        logical = runtime.key(path)
-        row = runtime.store.locations.get(logical)
-        if row is not None or runtime.mode == "cos":
-            if row is None or row.state != "ready":
-                return None
-            key = "cos:" + logical
-            with _json_file_cache_lock:
-                entry = _json_file_cache.get(key)
-                if entry and entry[0] == row.generation and entry[1] == row.size:
-                    return entry[2]
-            try:
-                with runtime.store.cache.open(row) as local:
-                    value = json.loads(_business_files.read_text(local, encoding="utf-8"))
-            except json.JSONDecodeError:
-                return None
-            with _json_file_cache_lock:
-                _json_file_cache[key] = (row.generation, row.size, value)
-            return value
-    try:
-        stat_result = path.stat()
-    except OSError:
-        return None
-    key = str(path)
-    with _json_file_cache_lock:
-        entry = _json_file_cache.get(key)
-        if entry and entry[0] == stat_result.st_mtime_ns and entry[1] == stat_result.st_size:
-            return entry[2]
-    try:
-        value = json.loads(_business_files.read_text(path, encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    with _json_file_cache_lock:
-        _json_file_cache[key] = (stat_result.st_mtime_ns, stat_result.st_size, value)
-    return value
+_json_cache = JsonFileReadCache(lambda: _business_files)
+load_json_file_mtime_cached = _json_cache.load
 
 
 def load_auto_optimize_state(task_id: str) -> dict[str, Any]:
@@ -9146,10 +8874,7 @@ def ocr_engine() -> Any:
 
 
 
-def safe_name(filename: str) -> str:
-    stem = Path(filename).stem.replace(" ", "_")[:80] or "upload"
-    suffix = Path(filename).suffix.lower() or ".bin"
-    return f"{int(time.time())}_{uuid.uuid4().hex[:8]}_{stem}{suffix}"
+from .runtime.service_paths import safe_name
 
 
 from .detection.geometry import (
@@ -12112,18 +11837,7 @@ def decode_photo_highlight_mask(mask_bgr: np.ndarray) -> tuple[np.ndarray, dict[
     return _decode_photo_highlight_mask_impl(mask_bgr)
 
 
-def bbox_iou_xyxy(a: list[int], b: list[int]) -> float:
-    if len(a) < 4 or len(b) < 4:
-        return 0.0
-    ax1, ay1, ax2, ay2 = [int(value) for value in a[:4]]
-    bx1, by1, bx2, by2 = [int(value) for value in b[:4]]
-    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-    area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
-    area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
-    union = area_a + area_b - inter
-    return float(inter) / float(union) if union > 0 else 0.0
+from .detection.geometry import bbox_iou_xyxy
 
 
 def photo_highlight_auto_roi_mask(roi_bgr: np.ndarray, ai_roi_mask: np.ndarray) -> tuple[np.ndarray | None, dict[str, Any]]:
