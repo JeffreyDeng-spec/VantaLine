@@ -1575,3 +1575,7 @@ This is structural relocation. The browser retains physical serial ownership; le
 The `training/auto_optimization_*` modules own settings, recommendations, task initialization and storage, readiness, capture, status, mask policy/verification, label generation, sprite sizing/publication, rendering, synthetic batches, dataset construction, training scheduling, label processing, shadow evaluation and request handling. Focused typed ports connect each service to its existing collaborators. The application entry assembles them and retains temporary forwarding functions; no new process, global user or database connection is introduced.
 
 This is structural relocation of existing workflows. Prompt text, callback selection/evaluation order, locks, mutable task ownership, partial effects and exception behavior remain unchanged. Model binding still surrounds the existing caller. No inference, training or image algorithm is adjusted.
+
+### Pipeline workflow boundaries
+
+Pipeline auto-optimization links, task projection, candidate flow, metadata, mutations and AI activation now live in focused `pipeline/` modules. Each receives its own typed record, access, model or execution capabilities. The application entry assembles them and temporarily forwards existing call sites. Shared task locks, saved state, partial mutations, model binding and scheduling order remain with their original owners; this batch changes no workflow algorithm.

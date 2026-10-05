@@ -56,3 +56,5 @@ Do not deploy from a dirty worktree, copy individual files to production, build 
 PLC backend policy and workflows are organized under `local_inspection_service/plc/`: event/transition/validation policy, browser dispatch and durable evidence, workstation repository/service, and retained legacy dispatch/capture state. Strict HTTP payload models live in `schemas/plc.py`. The entry keeps composition and migration forwarders; physical I/O remains browser-only.
 
 Auto-optimization application workflows now live in `local_inspection_service/training/auto_optimization_*`. Each workflow has its own policy, state or execution boundary and narrow dependencies. Temporary entry forwarders preserve callers while composition cleanup is pending; the existing training/image task process topology is unchanged.
+
+The remaining pipeline link/projection/candidate/metadata/mutation/AI-activation workflows are under `local_inspection_service/pipeline/`. Follow each focused service and its typed ports instead of placing new business logic in application-entry forwarders.
