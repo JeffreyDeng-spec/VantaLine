@@ -148,7 +148,7 @@ jobs:
           topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
           assert version['git_commit'] == commit
           assert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,
-                              'worker_mode': 'embedded', 'services': ['vantaline']}
+                              'worker_mode': 'external', 'services': ['vantaline', 'vantaline-label-worker']}
           PY
   documentation:
     runs-on: ubuntu-latest
