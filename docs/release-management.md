@@ -986,3 +986,5 @@ paid calls, reverse migrations, or copy individual files.
 The PLC structural batch integrates previously checked same-domain extractions and runs their twelve smoke commands in backend CI. Its prompt-source manifest appends only the actual twenty new PLC/schema source files under one new manifest version. Existing task snapshots and old provenance are not rewritten; new snapshots identify the new release source set.
 
 The auto-optimization structural batch combines previously reviewed same-domain relocations into one independently deployable change. It registers nineteen focused smoke commands and appends thirty-seven actual source files under manifest v144. CI, exact-head independent review and whole-package release verification remain required.
+
+The pipeline structural batch integrates six previously reviewed workflow boundaries, registers six CI smoke commands and appends twelve actual source files under manifest v145. Exact-head CI/review and whole-release artifact validation remain necessary.

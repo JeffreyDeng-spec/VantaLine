@@ -1,5 +1,5 @@
 {
-  "version": 144,
+  "version": 145,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -424,6 +424,18 @@
     "training/auto_optimization_requests.py",
     "training/auto_optimization_requests_ports.py",
     "training/auto_optimization_sprite_publication.py",
-    "training/auto_optimization_sprite_publication_ports.py"
+    "training/auto_optimization_sprite_publication_ports.py",
+    "pipeline/auto_optimization_links.py",
+    "pipeline/auto_optimization_links_ports.py",
+    "pipeline/task_projection.py",
+    "pipeline/task_projection_ports.py",
+    "pipeline/candidate_flow.py",
+    "pipeline/candidate_flow_ports.py",
+    "pipeline/task_metadata.py",
+    "pipeline/task_metadata_ports.py",
+    "pipeline/task_mutations.py",
+    "pipeline/task_mutations_ports.py",
+    "pipeline/ai_activation.py",
+    "pipeline/ai_activation_ports.py"
   ]
 }

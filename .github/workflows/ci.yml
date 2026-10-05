@@ -274,6 +274,12 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
+          python scripts/smoke_pipeline_auto_optimization_links.py
+          python scripts/smoke_pipeline_task_projection.py
+          python scripts/smoke_pipeline_candidate_flow.py
+          python scripts/smoke_pipeline_task_metadata.py
+          python scripts/smoke_pipeline_task_mutations.py
+          python scripts/smoke_pipeline_ai_activation.py
           python scripts/smoke_auto_optimization_settings.py
           python scripts/smoke_auto_optimization_recommendations.py
           python scripts/smoke_auto_optimization_initialization.py

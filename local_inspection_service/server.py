@@ -5273,17 +5273,27 @@ def auto_optimize_linked_pipeline_model_id(state: dict[str, Any]) -> str:
     return _auto_optimization_readiness.auto_optimize_linked_pipeline_model_id(state)
 
 
+from .pipeline.task_metadata import PipelineTaskMetadata
+from .pipeline.task_metadata_ports import MetadataPolicy, MetadataSnapshots
+
+_pipeline_task_metadata = PipelineTaskMetadata(
+    policy=MetadataPolicy(
+        PIPELINE_DETECTION_METHODS=lambda: PIPELINE_DETECTION_METHODS,
+        PIPELINE_TRAINING_METHODS=lambda: PIPELINE_TRAINING_METHODS,
+        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+    ),
+    snapshots=MetadataSnapshots(
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        pipeline_task_label_snapshot=lambda: pipeline_task_label_snapshot,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        record_owner_username=lambda: record_owner_username,
+        accessory_id_aliases=lambda: accessory_id_aliases,
+    ),
+)
+
+
 def pipeline_task_model_id(task: dict[str, Any]) -> str:
-    model_id = str(task.get("ai_model_id") or "").strip()
-    if model_id:
-        return model_id
-    run_id = str(task.get("model_run_id") or task.get("training_task_id") or "").strip()
-    if not run_id:
-        return ""
-    clean_run_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", re.sub(r"^trained_", "", run_id))
-    method = normalize_pipeline_detection_method(str(task.get("detection_method") or ""))
-    variant = "yolo_ocr" if method == "yolo_ocr" else "yolo"
-    return f"trained_{clean_run_id}__{variant}"
+    return _pipeline_task_metadata.pipeline_task_model_id(task)
 
 
 def auto_optimize_stop_capture_for_model_locked(state: dict[str, Any], model_id: str, *, reason: str) -> bool:
@@ -12432,33 +12442,32 @@ def delete_ai_detection_task_record(task_id: str, user: dict[str, Any], *, missi
     return clean_task_id
 
 
+from .pipeline.task_mutations import PipelineTaskMutations
+from .pipeline.task_mutations_ports import MutationStorage, MutationAccess
+
+_pipeline_task_mutations = PipelineTaskMutations(
+    storage=MutationStorage(
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        save_pipeline_task=lambda: save_pipeline_task,
+        save_pipeline_tasks=lambda: save_pipeline_tasks,
+        _pipeline_tasks_lock=lambda: _pipeline_tasks_lock,
+        load_pipeline_tasks=lambda: load_pipeline_tasks,
+        load_pipeline_task=lambda: load_pipeline_task,
+        save_pipeline_task_batch_changes=lambda: save_pipeline_task_batch_changes,
+    ),
+    access=MutationAccess(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        record_mutable_by_user=lambda: record_mutable_by_user,
+    ),
+)
+
+
 def save_pipeline_task_batch_changes(tasks: list[dict[str, Any]], changed_tasks: list[dict[str, Any]]) -> None:
-    if not changed_tasks:
-        return
-    if runtime_postgres_repository_or_none() is not None:
-        for task in changed_tasks:
-            save_pipeline_task(task)
-        return
-    save_pipeline_tasks(tasks)
+    return _pipeline_task_mutations.save_pipeline_task_batch_changes(tasks, changed_tasks)
 
 
 def mark_pipeline_ai_task_deleted(ai_task_id: str, user: dict[str, Any]) -> int:
-    clean_task_id = sanitize_ai_detection_task_id(ai_task_id)
-    if not clean_task_id:
-        return 0
-    now = int(time.time())
-    changed = 0
-    with _pipeline_tasks_lock:
-        tasks = load_pipeline_tasks()
-        changed_tasks: list[dict[str, Any]] = []
-        for task in tasks:
-            if str(task.get("ai_task_id") or "") != clean_task_id or not record_mutable_by_user(task, user):
-                continue
-            task.update({"model_status": "deleted", "model_exists": False, "model_deleted_at": now, "updated_at": now})
-            changed_tasks.append(task)
-            changed += 1
-        save_pipeline_task_batch_changes(tasks, changed_tasks)
-    return changed
+    return _pipeline_task_mutations.mark_pipeline_ai_task_deleted(ai_task_id, user)
 
 
 @app.delete("/api/ai/tasks/{task_id}")
@@ -13606,13 +13615,8 @@ def delete_pipeline_task_row(task_id: str) -> bool:
 
 
 def mark_pipeline_task_advancing(task: dict[str, Any]) -> None:
-    """Flag a task (in memory) as queued for the async advance runner. The caller
-    persists it and then schedules the worker after releasing _pipeline_tasks_lock."""
-    task["advancing"] = True
-    task["advance_started_at"] = int(time.time())
-    task["last_error"] = ""
-    task["job_note"] = "正在推进…"
-    task["updated_at"] = int(time.time())
+    'Flag a task (in memory) as queued for the async advance runner. The caller\n    persists it and then schedules the worker after releasing _pipeline_tasks_lock.'
+    return _pipeline_task_mutations.mark_pipeline_task_advancing(task)
 
 
 def persist_pipeline_task_progress(
@@ -13622,49 +13626,61 @@ def persist_pipeline_task_progress(
     progress: int | None = None,
     status: str | None = None,
 ) -> None:
-    """Write live sub-step progress to the stored task record so the UI reflects
-    an in-flight advance immediately. Safe to call from the advance worker thread
-    (it briefly takes _pipeline_tasks_lock); never call while already holding it."""
-    if not task_id:
-        return
-    with _pipeline_tasks_lock:
-        stored = load_pipeline_task(task_id)
-        if not stored:
-            return
-        if job_note is not None:
-            stored["job_note"] = job_note
-        if progress is not None:
-            stored["progress"] = int(progress)
-        if status is not None:
-            stored["status"] = status
-        stored["updated_at"] = int(time.time())
-        save_pipeline_task(stored)
+    'Write live sub-step progress to the stored task record so the UI reflects\n    an in-flight advance immediately. Safe to call from the advance worker thread\n    (it briefly takes _pipeline_tasks_lock); never call while already holding it.'
+    return _pipeline_task_mutations.persist_pipeline_task_progress(task_id, job_note=job_note, progress=progress, status=status)
 
 
 def normalize_pipeline_detection_method(value: str | None) -> str:
-    method = str(value or "").strip().lower()
-    if method in {"ai_detection", "ai_inspect", "gemini"}:
-        return "ai"
-    return method if method in PIPELINE_DETECTION_METHODS else "yolo_ocr"
+    return _pipeline_task_metadata.normalize_pipeline_detection_method(value)
 
 
 def pipeline_method_uses_training(method: str | None) -> bool:
-    return normalize_pipeline_detection_method(method) in PIPELINE_TRAINING_METHODS
+    return _pipeline_task_metadata.pipeline_method_uses_training(method)
+
+
+from .pipeline.candidate_flow import PipelineCandidateFlow
+from .pipeline.candidate_flow_ports import CandidateStorage, CandidateProgress, CandidateProjection
+
+_pipeline_candidate_flow = PipelineCandidateFlow(
+    storage=CandidateStorage(
+        ACCESSORY_CANDIDATES_DIR=lambda: ACCESSORY_CANDIDATES_DIR,
+        _candidate_store_lock=lambda: _candidate_store_lock,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        load_accessory_candidate=lambda: load_accessory_candidate,
+        HTTPException=lambda: HTTPException,
+        _business_files=lambda: _business_files,
+        save_accessory_candidate=lambda: save_accessory_candidate,
+        load_config=lambda: load_config,
+        load_pipeline_state=lambda: load_pipeline_state,
+        update_pipeline_state=lambda: update_pipeline_state,
+    ),
+    progress=CandidateProgress(
+        candidate_image_jobs=lambda: candidate_image_jobs,
+        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+        candidate_confirmed_accessory_id=lambda: candidate_confirmed_accessory_id,
+        ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids,
+        refresh_codex_image_job=lambda: refresh_codex_image_job,
+        store_candidate_image_job=lambda: store_candidate_image_job,
+        refresh_pipeline_candidate=lambda: refresh_pipeline_candidate,
+    ),
+    projection=CandidateProjection(
+        resolve_accessory_id=lambda: resolve_accessory_id,
+        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
+        pipeline_candidate_job_status=lambda: pipeline_candidate_job_status,
+        accessory_material_type=lambda: accessory_material_type,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        record_owner_username=lambda: record_owner_username,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        record_visible_to_user=lambda: record_visible_to_user,
+        pipeline_candidate_public=lambda: pipeline_candidate_public,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        serialize_accessory=lambda: serialize_accessory,
+    ),
+)
 
 
 def canonical_pipeline_accessory_ids(config: dict[str, Any], raw_ids: list[str]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for raw_id in raw_ids or []:
-        resolved = resolve_accessory_id(config, str(raw_id))
-        if not resolved:
-            continue
-        item_id, _ = resolved
-        if item_id in seen:
-            continue
-        seen.add(item_id)
-        result.append(item_id)
-    return result
+    return _pipeline_candidate_flow.canonical_pipeline_accessory_ids(config, raw_ids)
 
 
 
@@ -13702,73 +13718,19 @@ def remove_pipeline_pending_candidate_id(candidate_id: str) -> dict[str, list[st
 
 
 def candidate_confirmed_accessory_id(candidate: dict[str, Any]) -> str:
-    return str(candidate.get("confirmed_accessory_id") or "").strip()
+    return _pipeline_candidate_flow.candidate_confirmed_accessory_id(candidate)
 
 
 def pipeline_candidate_job_status(candidate: dict[str, Any]) -> tuple[str, int, str]:
-    jobs = candidate_image_jobs(candidate)
-    if not jobs:
-        return "ready", 100, "已上传，待确认"
-    statuses = [str(job.get("status") or "") for job in jobs]
-    progress = max(0, min(100, int(sum(int(job.get("progress") or 0) for job in jobs) / max(1, len(jobs)))))
-    if any(status in IMAGE_JOB_ACTIVE_STATUSES for status in statuses):
-        if any(status == "running" for status in statuses):
-            return "running", progress, "生成中"
-        return "running", progress, "排队中"
-    if any(status == "failed" for status in statuses):
-        return "failed", 100, "建档失败"
-    if all(status == "completed" for status in statuses):
-        return "ready", 100, "已生成，待确认"
-    return statuses[0] or "ready", progress, "已上传，待确认"
+    return _pipeline_candidate_flow.pipeline_candidate_job_status(candidate)
 
 
 def pipeline_candidate_public(candidate: dict[str, Any]) -> dict[str, Any]:
-    candidate = enrich_record_audit_fields(candidate)
-    status, progress, status_text = pipeline_candidate_job_status(candidate)
-    return {
-        "id": str(candidate.get("id") or ""),
-        "name": str(candidate.get("name") or "新配件"),
-        "material_type": accessory_material_type(candidate),
-        "status": status,
-        "status_text": status_text,
-        "progress": progress,
-        "created_at": int(candidate.get("created_at") or 0),
-        "updated_at": int(candidate.get("updated_at") or candidate.get("created_at") or 0),
-        "owner_user_id": str(candidate.get("owner_user_id") or LEGACY_OWNER_ID),
-        "owner_username": str(candidate.get("owner_username") or record_owner_username(candidate)),
-    }
+    return _pipeline_candidate_flow.pipeline_candidate_public(candidate)
 
 
 def refresh_pipeline_candidate(candidate_id: str) -> tuple[dict[str, Any] | None, bool]:
-    path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
-    with _candidate_store_lock:
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            try:
-                candidate = load_accessory_candidate(candidate_id)
-            except HTTPException as exc:
-                if exc.status_code != 404:
-                    raise
-                return None, True
-        else:
-            if not _business_files.exists(path):
-                return None, True
-            try:
-                candidate = json.loads(_business_files.read_text(path, encoding="utf-8"))
-            except json.JSONDecodeError:
-                return None, True
-        candidate = enrich_record_audit_fields(candidate, path)
-        if candidate_confirmed_accessory_id(candidate):
-            return candidate, True
-        changed = ensure_candidate_image_job_task_ids(candidate)
-        for job in candidate_image_jobs(candidate):
-            refreshed = refresh_codex_image_job(job)
-            if any(refreshed.get(key) != job.get(key) for key in ("status", "progress", "completed_at", "failed_at", "error", "output_path", "output_url", "log_path")):
-                store_candidate_image_job(candidate, refreshed)
-                changed = True
-        if changed:
-            save_accessory_candidate(path, candidate)
-        return candidate, False
+    return _pipeline_candidate_flow.refresh_pipeline_candidate(candidate_id)
 
 
 def pipeline_accessories_payload(
@@ -13776,60 +13738,7 @@ def pipeline_accessories_payload(
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    config = config or load_config()
-    accessories_by_id = accessory_lookup_by_id(config)
-    state = load_pipeline_state()
-    accessory_ids: list[str] = []
-    seen_accessories: set[str] = set()
-    for item_id in state["accessory_ids"]:
-        resolved = resolve_accessory_id(config, item_id)
-        if not resolved:
-            continue
-        canonical_id, _ = resolved
-        if canonical_id in seen_accessories:
-            continue
-        seen_accessories.add(canonical_id)
-        accessory_ids.append(canonical_id)
-    if accessory_ids != state["accessory_ids"]:
-        def prune_accessories(latest: dict[str, list[str]]) -> None:
-            latest["accessory_ids"] = accessory_ids
-
-        update_pipeline_state(prune_accessories)
-    pending_candidates: list[dict[str, Any]] = []
-    kept_candidate_ids: list[str] = []
-    remove_candidate_ids: list[str] = []
-    migrated_accessory_ids: list[str] = []
-    for candidate_id in state["pending_candidate_ids"]:
-        candidate, remove = refresh_pipeline_candidate(candidate_id)
-        if remove:
-            confirmed_id = candidate_confirmed_accessory_id(candidate or {})
-            resolved = resolve_accessory_id(config, confirmed_id) if confirmed_id else None
-            if resolved:
-                confirmed_accessory_id, _ = resolved
-                if confirmed_accessory_id not in seen_accessories:
-                    seen_accessories.add(confirmed_accessory_id)
-                    accessory_ids.insert(0, confirmed_accessory_id)
-                migrated_accessory_ids.append(confirmed_accessory_id)
-            remove_candidate_ids.append(candidate_id)
-            continue
-        if candidate:
-            kept_candidate_ids.append(candidate_id)
-            if not user or record_visible_to_user(candidate, user, target_user_id):
-                pending_candidates.append(pipeline_candidate_public(candidate))
-    if remove_candidate_ids or migrated_accessory_ids:
-        def prune_candidates(latest: dict[str, list[str]]) -> None:
-            remove_ids = set(remove_candidate_ids)
-            latest["pending_candidate_ids"] = [item_id for item_id in latest["pending_candidate_ids"] if item_id not in remove_ids]
-            for item_id in reversed(migrated_accessory_ids):
-                if item_id and item_id not in latest["accessory_ids"]:
-                    latest["accessory_ids"].insert(0, item_id)
-            latest["accessory_ids"] = canonical_pipeline_accessory_ids(config, latest["accessory_ids"])
-
-        update_pipeline_state(prune_candidates)
-    return {
-        "accessories": [serialize_accessory(accessories_by_id[item_id]) for item_id in accessory_ids],
-        "pending_candidates": pending_candidates,
-    }
+    return _pipeline_candidate_flow.pipeline_accessories_payload(config, user, target_user_id)
 
 
 from .pipeline.task_snapshots import PipelineTaskSnapshots as _PipelineTaskSnapshots
@@ -13853,43 +13762,7 @@ def pipeline_task_accessory_snapshot(config: dict[str, Any], task: dict[str, Any
 
 
 def ensure_pipeline_task_accessory_objects(config: dict[str, Any], tasks: list[dict[str, Any]]) -> bool:
-    accessories = config.setdefault("accessories", [])
-    accessories_by_id = accessory_lookup_by_id(config)
-    changed = False
-    now = int(time.time())
-    for task in tasks:
-        raw_ids = [str(item_id) for item_id in task.get("accessory_ids") or [] if str(item_id).strip()]
-        if not raw_ids:
-            continue
-        labels = pipeline_task_label_snapshot(task)
-        raw_names = [str(item) for item in task.get("accessory_names") or [] if str(item).strip()]
-        for index, item_id in enumerate(dict.fromkeys(raw_ids)):
-            if item_id in accessories_by_id:
-                continue
-            label = labels.get(item_id) or (raw_names[index] if index < len(raw_names) else "") or item_id
-            item = {
-                "id": item_id,
-                "name": label,
-                "label": label,
-                "material_type": "object",
-                "status": "archived",
-                "source": "task_snapshot",
-                "task_snapshot_only": True,
-                "archived_from_task_id": str(task.get("id") or ""),
-                "source_files": [],
-                "original_source_files": [],
-                "normalized_assets": [],
-                "detection_route": str(task.get("detection_method") or "ai"),
-                "training_role": "detect_and_classify",
-                "created_at": int(task.get("created_at") or now),
-                "updated_at": now,
-                "owner_user_id": str(task.get("owner_user_id") or LEGACY_OWNER_ID),
-                "owner_username": str(task.get("owner_username") or record_owner_username(task)),
-            }
-            accessories.append(item)
-            accessories_by_id[item_id] = item
-            changed = True
-    return changed
+    return _pipeline_task_metadata.ensure_pipeline_task_accessory_objects(config, tasks)
 
 
 from .pipeline.resource_status import PipelineResourceStatus as _PipelineResourceStatus
@@ -13919,64 +13792,43 @@ def pipeline_task_model_status(
     )
 
 
+from .pipeline.auto_optimization_links import PipelineAutoOptimizationLinks
+from .pipeline.auto_optimization_links_ports import LinkState, LinkProjection, LinkMatching
+
+_auto_optimization_links = PipelineAutoOptimizationLinks(
+    state=LinkState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        fast_completed_auto_optimize_model_id=lambda: fast_completed_auto_optimize_model_id,
+        list_auto_optimize_states=lambda: list_auto_optimize_states,
+        auto_optimize_states_by_task_id=lambda: auto_optimize_states_by_task_id,
+    ),
+    projection=LinkProjection(
+        auto_optimize_phase_name=lambda: auto_optimize_phase_name,
+        ai_detection_task_model_id=lambda: ai_detection_task_model_id,
+        public_auto_optimize_link_for_task_id=lambda: public_auto_optimize_link_for_task_id,
+    ),
+    matching=LinkMatching(
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+    ),
+)
+
+
 def fast_completed_auto_optimize_model_id(state: dict[str, Any]) -> str:
-    active_model_id = str(state.get("active_model_id") or "").strip()
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-    if active_model_id and settings.get("serving_mode") == "promoted_yolo":
-        return active_model_id
-    for candidate in state.get("candidate_models") or []:
-        if not isinstance(candidate, dict):
-            continue
-        model_id = str(candidate.get("model_id") or "").strip()
-        status = str(candidate.get("status") or "").strip()
-        if model_id and status == "completed":
-            return model_id
-    return active_model_id
+    return _auto_optimization_links.fast_completed_auto_optimize_model_id(state)
 
 
 def public_auto_optimize_link_for_task_id(task_id: str, *, source: str, state: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        return None
-    if state is None:
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(clean_task_id)
-            completed_model_id = auto_optimize_completed_model_id(state)
-            if completed_model_id and auto_optimize_stop_capture_for_model_locked(
-                state,
-                completed_model_id,
-                reason="completed_model_ready",
-            ):
-                save_auto_optimize_state(state)
-    else:
-        state = dict(state)
-        completed_model_id = fast_completed_auto_optimize_model_id(state)
-    if state is None:
-        state = load_auto_optimize_state(clean_task_id)
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-    active_model_id = str(state.get("active_model_id") or "").strip()
-    return {
-        "task_id": clean_task_id,
-        "task_name": state.get("task_name") or "",
-        "source": source,
-        "enabled": bool(settings.get("enabled")),
-        "serving_mode": settings.get("serving_mode") or "api_primary",
-        "phase": auto_optimize_phase_name(state),
-        "ai_model_id": ai_detection_task_model_id(clean_task_id),
-        "active_model_id": active_model_id,
-        "completed_model_id": completed_model_id or active_model_id,
-        "capture_stopped_at": state.get("capture_stopped_at") or 0,
-        "capture_stop_reason": state.get("capture_stop_reason") or "",
-    }
+    return _auto_optimization_links.public_auto_optimize_link_for_task_id(task_id, source=source, state=state)
 
 
 def auto_optimize_states_by_task_id(states: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {
-        clean_id: state
-        for state in states
-        for clean_id in [sanitize_ai_detection_task_id(state.get("task_id") or "")]
-        if clean_id
-    }
+    return _auto_optimization_links.auto_optimize_states_by_task_id(states)
 
 
 def pipeline_task_auto_optimize_link(
@@ -13986,50 +13838,30 @@ def pipeline_task_auto_optimize_link(
     auto_optimize_states: list[dict[str, Any]] | None = None,
     auto_optimize_states_by_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    states = auto_optimize_states if auto_optimize_states is not None else list_auto_optimize_states()
-    states_by_task_id = (
-        auto_optimize_states_by_id
-        if auto_optimize_states_by_id is not None
-        else auto_optimize_states_by_task_id(states)
-    )
-    direct_task_id = sanitize_ai_detection_task_id(task.get("ai_task_id"))
-    if direct_task_id:
-        state = states_by_task_id.get(direct_task_id)
-        if auto_optimize_states is not None and state is None:
-            return None
-        return public_auto_optimize_link_for_task_id(direct_task_id, source="direct", state=state)
-    target_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-    if not target_ids:
-        return None
-    target_counts = normalize_pipeline_accessory_counts(config, target_ids, task.get("accessory_counts"))
-    target_key = sorted(target_ids)
-    owner_id = str(task.get("owner_user_id") or "").strip()
-    newest_match: tuple[int, str] | None = None
-    for state in states:
-        state_owner_id = str(state.get("owner_user_id") or "").strip()
-        if owner_id and state_owner_id and owner_id != state_owner_id:
-            continue
-        state_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in state.get("selected_accessory_ids") or []])
-        if sorted(state_ids) != target_key:
-            continue
-        state_counts = normalize_pipeline_accessory_counts(config, state_ids, state.get("required_accessory_counts"))
-        if {item_id: int(state_counts.get(item_id, 1)) for item_id in state_ids} != {
-            item_id: int(target_counts.get(item_id, 1)) for item_id in target_ids
-        }:
-            continue
-        state_task_id = sanitize_ai_detection_task_id(state.get("task_id") or "")
-        if not state_task_id:
-            continue
-        updated_at = int(state.get("updated_at") or state.get("created_at") or 0)
-        if newest_match is None or updated_at > newest_match[0]:
-            newest_match = (updated_at, state_task_id)
-    if not newest_match:
-        return None
-    return public_auto_optimize_link_for_task_id(
-        newest_match[1],
-        source="accessory_match",
-        state=states_by_task_id.get(newest_match[1]),
-    )
+    return _auto_optimization_links.pipeline_task_auto_optimize_link(task, config, auto_optimize_states=auto_optimize_states, auto_optimize_states_by_id=auto_optimize_states_by_id)
+
+
+from .pipeline.task_projection import PipelineTaskProjection
+from .pipeline.task_projection_ports import ProjectionMetadata, ProjectionResources
+
+_task_projection = PipelineTaskProjection(
+    metadata=ProjectionMetadata(
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
+        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+        pipeline_method_uses_training=lambda: pipeline_method_uses_training,
+        resolve_accessory_id=lambda: resolve_accessory_id,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+        pipeline_task_accessory_snapshot=lambda: pipeline_task_accessory_snapshot,
+        accessory_material_type=lambda: accessory_material_type,
+    ),
+    resources=ProjectionResources(
+        pipeline_task_dataset_status=lambda: pipeline_task_dataset_status,
+        pipeline_task_model_status=lambda: pipeline_task_model_status,
+        pipeline_task_auto_optimize_link=lambda: pipeline_task_auto_optimize_link,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+)
 
 
 def pipeline_task_public(
@@ -14042,71 +13874,11 @@ def pipeline_task_public(
     auto_optimize_states_by_id: dict[str, dict[str, Any]] | None = None,
     sanitize: bool = True,
 ) -> dict[str, Any]:
-    accessories_by_id = accessory_lookup_by_id(config)
-    copy = enrich_record_audit_fields(task)
-    copy.pop("model_profiles", None)
-    params = copy.get("params") if isinstance(copy.get("params"), dict) else {}
-    copy["detection_method"] = normalize_pipeline_detection_method(str(copy.get("detection_method") or params.get("train_mode") or params.get("route") or ""))
-    copy["uses_training_flow"] = pipeline_method_uses_training(str(copy.get("detection_method") or ""))
-    raw_accessory_ids = [str(item_id) for item_id in copy.get("accessory_ids") or [] if str(item_id).strip()]
-    accessory_ids: list[str] = []
-    seen_ids: set[str] = set()
-    for raw_id in raw_accessory_ids:
-        resolved = resolve_accessory_id(config, raw_id)
-        item_id = resolved[0] if resolved else raw_id
-        if item_id and item_id not in seen_ids:
-            seen_ids.add(item_id)
-            accessory_ids.append(item_id)
-    copy["accessory_ids"] = accessory_ids
-    copy["accessory_counts"] = normalize_pipeline_accessory_counts(config, copy["accessory_ids"], copy.get("accessory_counts"))
-    labels, names = pipeline_task_accessory_snapshot(config, task, copy["accessory_ids"])
-    copy["accessory_labels"] = {item_id: labels.get(item_id, names[index]) for index, item_id in enumerate(copy["accessory_ids"])}
-    copy["accessory_names"] = names
-    copy["accessories"] = [
-        {
-            "id": item_id,
-            "name": names[index],
-            "material_type": accessory_material_type(accessories_by_id.get(item_id, {})),
-            "count": int(copy["accessory_counts"].get(item_id, 1)),
-        }
-        for index, item_id in enumerate(copy.get("accessory_ids") or [])
-    ]
-    copy["dataset_status"] = pipeline_task_dataset_status(copy)
-    copy["dataset_exists"] = copy["dataset_status"] == "available"
-    copy["model_status"] = pipeline_task_model_status(
-        copy,
-        ai_task_ids=ai_task_ids,
-        trained_model_specs=trained_model_specs,
-    )
-    copy["model_exists"] = copy["model_status"] == "available"
-    auto_optimize_link = pipeline_task_auto_optimize_link(
-        copy,
-        config,
-        auto_optimize_states=auto_optimize_states,
-        auto_optimize_states_by_id=auto_optimize_states_by_id,
-    )
-    if auto_optimize_link:
-        copy["auto_optimize_task_id"] = auto_optimize_link["task_id"]
-        copy["ai_baseline_task_id"] = auto_optimize_link["task_id"]
-        copy["ai_baseline_model_id"] = auto_optimize_link["ai_model_id"]
-        copy["auto_optimize_link"] = auto_optimize_link
-    return public_path_sanitized(copy) if sanitize else copy
+    return _task_projection.pipeline_task_public(task, config, ai_task_ids=ai_task_ids, trained_model_specs=trained_model_specs, auto_optimize_states=auto_optimize_states, auto_optimize_states_by_id=auto_optimize_states_by_id, sanitize=sanitize)
 
 
 def normalize_pipeline_accessory_counts(config: dict[str, Any], accessory_ids: list[str], raw_counts: Any = None) -> dict[str, int]:
-    raw = raw_counts if isinstance(raw_counts, dict) else {}
-    accessories_by_id = accessory_lookup_by_id(config)
-    result: dict[str, int] = {}
-    for item_id in accessory_ids:
-        item = accessories_by_id.get(item_id)
-        aliases = accessory_id_aliases(item) if item else [item_id]
-        count_value = next((raw.get(alias) for alias in aliases if alias in raw), raw.get(item_id, 1))
-        try:
-            count = max(1, min(99, int(count_value or 1)))
-        except (TypeError, ValueError):
-            count = 1
-        result[item_id] = count
-    return result
+    return _pipeline_task_metadata.normalize_pipeline_accessory_counts(config, accessory_ids, raw_counts)
 
 
 from .agent.orchestration_state import AgentOrchestrationState as _AgentOrchestrationState
@@ -14601,70 +14373,35 @@ def agent_mcp_training_quality_gate(task: dict[str, Any]) -> bool:
     return _agent_orchestration_state.agent_mcp_training_quality_gate(task)
 
 
+from .pipeline.ai_activation import PipelineAiActivation
+from .pipeline.ai_activation_ports import ActivationPolicy, ActivationStorage
+
+_pipeline_ai_activation = PipelineAiActivation(
+    policy=ActivationPolicy(
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        HTTPException=lambda: HTTPException,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+        clean_ai_detection_task_name=lambda: clean_ai_detection_task_name,
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+    ),
+    storage=ActivationStorage(
+        current_owner_fields=lambda: current_owner_fields,
+        find_ai_detection_task=lambda: find_ai_detection_task,
+        save_ai_detection_task=lambda: save_ai_detection_task,
+        serialize_ai_detection_task=lambda: serialize_ai_detection_task,
+        upsert_pipeline_ai_detection_task=lambda: upsert_pipeline_ai_detection_task,
+    ),
+)
+
+
 def upsert_pipeline_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-    if not accessory_ids:
-        raise HTTPException(status_code=400, detail="AI 检测任务还没有选择配件")
-    accessories_by_id = accessory_lookup_by_id(config)
-    counts = normalize_pipeline_accessory_counts(config, accessory_ids, task.get("accessory_counts"))
-    labels = {item_id: str(accessories_by_id[item_id].get("name") or item_id) for item_id in accessory_ids}
-    payload = {
-        "name": clean_ai_detection_task_name(task.get("name"), "流水线 AI 检测任务"),
-        "selected_accessory_ids": accessory_ids,
-        "required_accessory_counts": counts,
-        "accessory_labels": labels,
-        "source": "pipeline",
-    }
-    task_id = sanitize_ai_detection_task_id(task.get("ai_task_id"))
-    now = time.time()
-    owner_fields = {
-        "owner_user_id": str(task.get("owner_user_id") or ""),
-        "owner_username": str(task.get("owner_username") or ""),
-        "shared_with_user_ids": task.get("shared_with_user_ids") if isinstance(task.get("shared_with_user_ids"), list) else [],
-    }
-    if not owner_fields["owner_user_id"]:
-        owner_fields = current_owner_fields()
-    existing = find_ai_detection_task(task_id) if task_id else None
-    if existing:
-        updated = {**existing, **payload, "id": task_id, "created_at": float(existing.get("created_at") or now), "updated_at": now}
-        if owner_fields:
-            updated["owner_user_id"] = updated.get("owner_user_id") or owner_fields["owner_user_id"]
-            updated["owner_username"] = updated.get("owner_username") or owner_fields.get("owner_username", "")
-        save_ai_detection_task(updated)
-        return serialize_ai_detection_task(updated, config)
-    created = {"id": f"aitask_{uuid.uuid4().hex[:10]}", "created_at": now, "updated_at": now, **owner_fields, **payload}
-    save_ai_detection_task(created, prepend=True)
-    return serialize_ai_detection_task(created, config)
+    return _pipeline_ai_activation.upsert_pipeline_ai_detection_task(task, config)
 
 
 def activate_pipeline_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> bool:
-    detection_method = normalize_pipeline_detection_method(str(task.get("detection_method") or (task.get("params") or {}).get("route") or ""))
-    if detection_method != "ai":
-        return False
-    if not task.get("accessory_ids"):
-        return False
-    ai_task = upsert_pipeline_ai_detection_task(task, config)
-    params = dict(task.get("params") or {})
-    params["route"] = "ai"
-    params.pop("train_mode", None)
-    before = json.dumps(task, sort_keys=True, ensure_ascii=False, default=str)
-    task.update(
-        {
-            "detection_method": "ai",
-            "stage": "library",
-            "status": "completed",
-            "progress": 100,
-            "params": params,
-            "ai_task_id": ai_task["id"],
-            "ai_model_id": ai_task["model_id"],
-            "linked_view": "aiInspect",
-            "last_error": "",
-            "job_note": "AI 检测任务已创建，可在检测中心直接使用。",
-            "updated_at": int(time.time()),
-        }
-    )
-    after = json.dumps(task, sort_keys=True, ensure_ascii=False, default=str)
-    return before != after
+    return _pipeline_ai_activation.activate_pipeline_ai_detection_task(task, config)
 
 
 def sync_ready_pipeline_ai_detection_tasks(
@@ -14738,18 +14475,7 @@ def sync_pipeline_ai_detection_tasks(
 
 
 def normalize_pipeline_task_auto_advance_defaults(tasks: list[dict[str, Any]]) -> bool:
-    changed = False
-    for task in tasks:
-        detection_method = normalize_pipeline_detection_method(
-            str(task.get("detection_method") or (task.get("params") or {}).get("train_mode") or (task.get("params") or {}).get("route") or "")
-        )
-        if detection_method != "ai":
-            continue
-        if task.get("auto_advance") is not False:
-            task["auto_advance"] = False
-            task["updated_at"] = int(time.time())
-            changed = True
-    return changed
+    return _pipeline_task_metadata.normalize_pipeline_task_auto_advance_defaults(tasks)
 
 
 from .pipeline.training_status import PipelineTrainingStatus as _PipelineTrainingStatus

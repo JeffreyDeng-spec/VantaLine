@@ -458,3 +458,5 @@ Label detail reads return the last committed task/run while a writer is in progr
 PLC domain modules receive existing repository and atomic mutation capabilities. The extraction does not change transaction scopes, advisory fences, SQL, migration versions or PostgreSQL-versus-JSON authority. Synthetic store probes supplement the existing real-PostgreSQL CI contracts; they do not replace concurrency evidence.
 
 Auto-optimization state storage is supplied its existing runtime repository, account and clock capabilities. PostgreSQL stays authoritative when selected, without JSON fallback on database failure. Transaction scopes, locking, key selection and rollback behavior are unchanged; the real PostgreSQL state-store contract remains in CI.
+
+Pipeline workflow extraction uses the existing task stores and atomic operations through explicit interfaces. It does not change SQL, account filters, transactions or lock ownership. Focused synthetic probes supplement the existing real PostgreSQL contracts rather than replacing them.
