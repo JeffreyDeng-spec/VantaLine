@@ -114,3 +114,5 @@ The opt-in COS file adapter changes camera image persistence only: it must succe
 ### Backend module ownership
 
 Request schemas live in `schemas/plc.py`. `plc/browser_dispatch.py` and `plc/dispatch_mutations.py` retain declaration-before-I/O, workstation/browser ownership and durable receipt handling. Workstation service/repository interfaces retain existing leases and atomic writes. Historical projection, transition, validation, capture and legacy-dispatch modules preserve readable evidence without reviving server serial I/O. Unknown outcomes remain non-retryable and a late completed callback cannot turn an expired analysis into a pass.
+
+Auto-optimization capture extraction retains its existing source and state collaborators. It does not grant the backend serial ownership or add physical output. Browser leases, actual ACK requirements and uncertain-write non-retry behavior are unchanged.

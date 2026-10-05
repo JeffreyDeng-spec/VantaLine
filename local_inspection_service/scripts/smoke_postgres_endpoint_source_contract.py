@@ -436,6 +436,56 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(training_store, attribute))
 
+    auto_state_path = training_path.with_name("auto_optimization_state_store.py")
+    auto_state_tree = ast.parse(auto_state_path.read_text(encoding="utf-8"), filename=str(auto_state_path))
+    auto_state = SourceContract(injected_repository=True,
+                                repository_expression="self.storage.runtime_postgres_repository_or_none()")
+    auto_state.visit(auto_state_tree)
+    auto_state_helpers = {"load_auto_optimize_state", "save_auto_optimize_state", "list_auto_optimize_states"}
+    require(auto_state.runtime_repository_entry_call_count == 3
+            and auto_state.functions_with_runtime_repository_entry == auto_state_helpers,
+            "auto-optimization store must retain three actual per-operation repository selections")
+    expected_operations = {
+        "load_auto_optimize_state": 'repository.fetch_by_primary_key("auto_optimize_states", {"task_id": clean_task_id})',
+        "save_auto_optimize_state": 'repository.upsert_row("auto_optimize_states", row)',
+        "list_auto_optimize_states": 'repository.fetch_all("auto_optimize_states")',
+    }
+    auto_methods = {node.name: node for node in ast.walk(auto_state_tree) if isinstance(node, ast.FunctionDef)}
+    for name, operation in expected_operations.items():
+        require(any(isinstance(node, ast.Call) and ast.dump(node) == ast.dump(ast.parse(operation, mode="eval").body)
+                    for node in ast.walk(auto_methods[name])),
+                "auto-optimization store missing actual table operation: " + name)
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "training.auto_optimization_state_store"
+                and any(alias.name == "AutoOptimizationStateStore" for alias in node.names)
+                for node in tree.body), "server missing auto-optimization store composition")
+    compositions = [node for node in tree.body if isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Name) and target.id == "_auto_optimization_state_store"
+                            for target in node.targets)]
+    require(len(compositions) == 1 and isinstance(compositions[0].value, ast.Call)
+            and isinstance(compositions[0].value.func, ast.Name)
+            and compositions[0].value.func.id == "AutoOptimizationStateStore",
+            "expected one actual auto-optimization store composition")
+    storage = next(keyword.value for keyword in compositions[0].value.keywords if keyword.arg == "storage")
+    require(isinstance(storage, ast.Call) and isinstance(storage.func, ast.Name)
+            and storage.func.id == "AutoOptimizationStateStorage",
+            "auto-optimization store must receive its explicit storage capabilities")
+    repository = next(keyword.value for keyword in storage.keywords if keyword.arg == "runtime_postgres_repository_or_none")
+    require(ast.dump(repository) == ast.dump(ast.parse("lambda: runtime_postgres_repository_or_none", mode="eval").body),
+            "auto-optimization store must resolve the current thread repository factory lazily")
+    for name, arguments in {"auto_optimize_task_path": "task_id", "load_auto_optimize_state": "task_id",
+                            "save_auto_optimize_state": "state", "list_auto_optimize_states": ""}.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        expected = ast.parse("_auto_optimization_state_store." + name + "(" + arguments + ")", mode="eval").body
+        require(len(function.body) == 1 and isinstance(function.body[0], ast.Return)
+                and ast.dump(function.body[0].value) == ast.dump(expected),
+                "auto-optimization store forward changed: " + name)
+    # This composition getter returns a callable, so the root visitor counts no
+    # repository entry for it. Add each of the three actual store calls once.
+    contract.runtime_repository_entry_call_count += auto_state.runtime_repository_entry_call_count
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(auto_state, attribute))
+
     for module, class_name, instance, expected_helpers, forwards in (
         ("task_store", "PipelineTaskStore", "_pipeline_task_store",
          {"load_pipeline_tasks", "save_pipeline_tasks", "load_pipeline_task", "save_pipeline_task", "delete_pipeline_task_row"},

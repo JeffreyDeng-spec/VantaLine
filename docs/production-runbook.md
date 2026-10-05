@@ -1258,3 +1258,5 @@ must not be reported as paid-model or physical-PLC acceptance.
 The label detail-read change needs no migration or new configuration. Roll back the complete release to restore the former read fence; historical task/call/model evidence remains unchanged.
 
 PLC structural modules are packaged together with Web and the release-declared label worker. Deployment and rollback remain complete immutable releases. No PLC hardware calls are made by the new validation checks; browser ownership and server-side transport disablement remain mandatory.
+
+The auto-optimization structural batch is included in the complete release with Web and the declared label worker. No database migration or service topology change is required. Roll back the complete prior release and its declared topology; preserve task records and model evidence.

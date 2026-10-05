@@ -54,3 +54,5 @@ The browser owns camera capture and physical serial I/O. FastAPI authenticates, 
 Do not deploy from a dirty worktree, copy individual files to production, build on the server, bypass PR/CI, commit mutable data/secrets, infer production configuration from examples, or revive archived server-side pyserial/input-polling designs. If repository truth conflicts with runtime truth, stop, collect read-only evidence, and reconcile both through a PR.
 
 PLC backend policy and workflows are organized under `local_inspection_service/plc/`: event/transition/validation policy, browser dispatch and durable evidence, workstation repository/service, and retained legacy dispatch/capture state. Strict HTTP payload models live in `schemas/plc.py`. The entry keeps composition and migration forwarders; physical I/O remains browser-only.
+
+Auto-optimization application workflows now live in `local_inspection_service/training/auto_optimization_*`. Each workflow has its own policy, state or execution boundary and narrow dependencies. Temporary entry forwarders preserve callers while composition cleanup is pending; the existing training/image task process topology is unchanged.
