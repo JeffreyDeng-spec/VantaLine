@@ -274,6 +274,25 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
+          python scripts/smoke_auto_optimization_settings.py
+          python scripts/smoke_auto_optimization_recommendations.py
+          python scripts/smoke_auto_optimization_initialization.py
+          python scripts/smoke_auto_optimization_state_store.py --postgres
+          python scripts/smoke_auto_optimization_readiness.py
+          python scripts/smoke_auto_optimization_capture.py
+          python scripts/smoke_auto_optimization_status.py
+          python scripts/smoke_auto_optimization_mask_policy.py
+          python scripts/smoke_auto_optimization_mask_verification.py
+          python scripts/smoke_auto_optimization_label_generation.py
+          python scripts/smoke_auto_optimization_sprites.py
+          python scripts/smoke_auto_optimization_rendering.py
+          python scripts/smoke_auto_optimization_synthetic_batch.py
+          python scripts/smoke_auto_optimization_dataset.py
+          python scripts/smoke_auto_optimization_training_scheduling.py
+          python scripts/smoke_auto_optimization_label_processing.py
+          python scripts/smoke_auto_optimization_shadow_evaluation.py
+          python scripts/smoke_auto_optimization_requests.py
+          python scripts/smoke_auto_optimization_sprite_publication.py
           python scripts/smoke_plc_event_projection.py
           python scripts/smoke_plc_transition_policy.py
           python scripts/smoke_plc_persisted_validation.py

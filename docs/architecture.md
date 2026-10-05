@@ -1569,3 +1569,9 @@ Label detail reads (`LabelRepository.get`) now use short committed-read transact
 `plc/` now owns historical event projection, evidence transition policy and persisted-record validation; dispatch mutation and browser receipt services; workstation service/repository adapters; retained legacy dispatch/runtime/capture-state workflows. `schemas/plc.py` owns strict request models. The application entry composes these services with explicit storage, identity, lease and policy interfaces. Business modules do not import the entry, and dependency checks include both PLC protocol modules.
 
 This is structural relocation. The browser retains physical serial ownership; legacy server transport stays disabled. No lease, ACK, uncertain-write retry, timeout, receipt or callback-order policy changes are included. Temporary entry forwarders preserve assembled endpoint and existing dependency-replacement contracts until final composition cleanup.
+
+### Auto-optimization domain boundaries
+
+The `training/auto_optimization_*` modules own settings, recommendations, task initialization and storage, readiness, capture, status, mask policy/verification, label generation, sprite sizing/publication, rendering, synthetic batches, dataset construction, training scheduling, label processing, shadow evaluation and request handling. Focused typed ports connect each service to its existing collaborators. The application entry assembles them and retains temporary forwarding functions; no new process, global user or database connection is introduced.
+
+This is structural relocation of existing workflows. Prompt text, callback selection/evaluation order, locks, mutable task ownership, partial effects and exception behavior remain unchanged. Model binding still surrounds the existing caller. No inference, training or image algorithm is adjusted.

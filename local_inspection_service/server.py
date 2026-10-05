@@ -1630,7 +1630,10 @@ AUTO_OPTIMIZE_MASK_RETRY_MAX_SECONDS = max(
     float(os.environ.get("VANTALINE_AUTO_OPT_MASK_RETRY_MAX_SECONDS", "45")),
 )
 AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT = max(1, min(10, int(os.environ.get("VANTALINE_AUTO_OPT_REAL_BBOX_SAMPLE_WEIGHT", "3"))))
+from .training.auto_optimization_settings import AutoOptimizationSettings, normalize_expected_production_count
+
 AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE = max(0, min(20, int(os.environ.get("VANTALINE_AUTO_OPT_NEGATIVES_PER_REAL_IMAGE", "3"))))
+_auto_optimization_settings = AutoOptimizationSettings(AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE)
 _auto_optimize_image_request_semaphore = threading.BoundedSemaphore(AUTO_OPTIMIZE_MASK_MAX_PARALLEL)
 _data_analysis_store_lock = threading.RLock()
 _windows_worker_status_lock = threading.RLock()
@@ -4962,104 +4965,73 @@ persist_data_analysis_record_for_ai_detection = _analysis_publisher.persist_data
 upsert_data_analysis_image_processing_record = _analysis_publisher.upsert_data_analysis_image_processing_record
 
 
+from .training.auto_optimization_state_store import AutoOptimizationStateStore
+from .training.auto_optimization_state_ports import AutoOptimizationStateStorage, AutoOptimizationStatePolicy, AutoOptimizationStateCache
+
+_auto_optimization_state_store = AutoOptimizationStateStore(
+    storage=AutoOptimizationStateStorage(
+        AUTO_OPTIMIZE_DIR=lambda: AUTO_OPTIMIZE_DIR,
+        AI_DETECTION_MODEL_ID=lambda: AI_DETECTION_MODEL_ID,
+        _business_files=lambda: _business_files,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        auto_optimize_task_path=lambda: auto_optimize_task_path,
+    ),
+    policy=AutoOptimizationStatePolicy(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        safe_record_id=lambda: safe_record_id,
+        row_raw_json_list=lambda: row_raw_json_list,
+        auto_optimize_state_row=lambda: auto_optimize_state_row,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        resolve_model_profiles=lambda: resolve_model_profiles,
+    ),
+    cache=AutoOptimizationStateCache(
+        _read_path_cache=lambda: _read_path_cache,
+        store_read_cache_get=lambda: store_read_cache_get,
+        store_read_cache_put=lambda: store_read_cache_put,
+        store_read_cache_invalidate=lambda: store_read_cache_invalidate,
+    ),
+)
+
+
 def auto_optimize_task_path(task_id: str) -> Path:
-    safe_task_id = safe_record_id(sanitize_ai_detection_task_id(task_id) or AI_DETECTION_MODEL_ID)
-    return AUTO_OPTIMIZE_DIR / f"{safe_task_id}.json"
+    return _auto_optimization_state_store.auto_optimize_task_path(task_id)
 
 
 def default_auto_optimize_settings() -> dict[str, Any]:
-    min_trainable_samples = max(20, int(os.environ.get("VANTALINE_AUTO_OPT_MIN_TRAINABLE_SAMPLES", "200")))
-    return {
-        "enabled": False,
-        "serving_mode": "api_primary",
-        "samples_per_real_image": max(1, min(50, int(os.environ.get("VANTALINE_AUTO_OPT_SAMPLES_PER_REAL_IMAGE", "12")))),
-        "training_epochs": max(1, min(500, int(os.environ.get("VANTALINE_AUTO_OPT_EPOCHS", "60")))),
-        "training_image_size": max(320, min(2048, int(os.environ.get("VANTALINE_AUTO_OPT_IMAGE_SIZE", "640")))),
-        "min_trainable_samples": min_trainable_samples,
-        "min_positive_samples": max(
-            1,
-            int(os.environ.get("VANTALINE_AUTO_OPT_MIN_POSITIVE_SAMPLES", str(min_trainable_samples))),
-        ),
-        "min_negative_samples": max(0, int(os.environ.get("VANTALINE_AUTO_OPT_MIN_NEGATIVE_SAMPLES", "0"))),
-        "negative_samples_per_real_image": AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
-        "max_label_jobs_per_cycle": max(1, int(os.environ.get("VANTALINE_AUTO_OPT_MAX_LABEL_JOBS_PER_CYCLE", "3"))),
-        "mask_compare_min_score": max(0.0, min(1.0, float(os.environ.get("VANTALINE_AUTO_OPT_MASK_COMPARE_MIN_SCORE", "0.72")))),
-        "shadow_min_samples": max(10, int(os.environ.get("VANTALINE_AUTO_OPT_SHADOW_MIN_SAMPLES", "80"))),
-        "shadow_min_agreement": max(0.0, min(1.0, float(os.environ.get("VANTALINE_AUTO_OPT_SHADOW_MIN_AGREEMENT", "0.98")))),
-        "auto_promote": True,
-    }
+    return _auto_optimization_settings.default_auto_optimize_settings()
 
 
 def auto_optimize_negative_samples_per_real_image(settings: dict[str, Any] | None) -> int:
-    opts = {**default_auto_optimize_settings(), **(settings if isinstance(settings, dict) else {})}
-    try:
-        raw_value = (
-            opts.get("negative_samples_per_real_image")
-            if opts.get("negative_samples_per_real_image") is not None
-            else AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE
-        )
-        return max(0, min(20, int(raw_value)))
-    except (TypeError, ValueError):
-        return AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE
+    return _auto_optimization_settings.auto_optimize_negative_samples_per_real_image(settings)
 
 
 def auto_optimize_positive_derivatives_per_real_image(settings: dict[str, Any] | None) -> int:
     """Positive derivatives are the remainder after generated negatives."""
-    samples_per_real = auto_optimize_samples_per_real_image(settings)
-    negative_per_real = auto_optimize_negative_samples_per_real_image(settings)
-    return max(0, samples_per_real - negative_per_real)
+    return _auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image(settings)
 
 
 def auto_optimize_training_requirements(settings: dict[str, Any] | None, *, real_positive_source_count: int = 0) -> dict[str, int]:
-    opts = {**default_auto_optimize_settings(), **(settings if isinstance(settings, dict) else {})}
-    try:
-        min_trainable = max(1, int(opts.get("min_trainable_samples") or 200))
-    except (TypeError, ValueError):
-        min_trainable = 200
-    try:
-        min_positive = max(1, int(opts.get("min_positive_samples") or min_trainable))
-    except (TypeError, ValueError):
-        min_positive = min_trainable
-    try:
-        min_negative = max(0, int(opts.get("min_negative_samples") or 0))
-    except (TypeError, ValueError):
-        min_negative = 0
-    negative_per_real = auto_optimize_negative_samples_per_real_image(opts)
-    return {
-        "min_trainable_samples": min_trainable,
-        "min_positive_samples": min_positive,
-        "min_negative_samples": min_negative,
-        "negative_samples_per_real_image": negative_per_real,
-        "positive_derivatives_per_real_image": auto_optimize_positive_derivatives_per_real_image(opts),
-    }
+    return _auto_optimization_settings.auto_optimize_training_requirements(settings, real_positive_source_count=real_positive_source_count)
 
 
 def auto_optimize_samples_per_real_image(settings: dict[str, Any] | None) -> int:
-    opts = {**default_auto_optimize_settings(), **(settings if isinstance(settings, dict) else {})}
-    try:
-        return max(1, min(50, int(opts.get("samples_per_real_image") or 12)))
-    except (TypeError, ValueError):
-        return 12
+    return _auto_optimization_settings.auto_optimize_samples_per_real_image(settings)
 
 
 def auto_optimize_training_parameters(settings: dict[str, Any] | None) -> dict[str, int]:
-    opts = {**default_auto_optimize_settings(), **(settings if isinstance(settings, dict) else {})}
-    try:
-        epochs = max(1, min(500, int(opts.get("training_epochs") or opts.get("epochs") or 60)))
-    except (TypeError, ValueError):
-        epochs = 60
-    try:
-        image_size = max(320, min(2048, int(opts.get("training_image_size") or opts.get("image_size") or 640)))
-    except (TypeError, ValueError):
-        image_size = 640
-    return {"training_epochs": epochs, "training_image_size": image_size}
+    return _auto_optimization_settings.auto_optimize_training_parameters(settings)
 
 
-def normalize_expected_production_count(value: Any) -> int:
-    try:
-        return max(0, min(1_000_000, int(float(value or 0))))
-    except (TypeError, ValueError):
-        return 0
+
+
+from .training.auto_optimization_recommendations import AutoOptimizationRecommendations
+
+_auto_optimization_recommendations = AutoOptimizationRecommendations(
+    settings=_auto_optimization_settings,
+    accessory_lookup_by_id=lambda config: accessory_lookup_by_id(config),
+    accessory_material_type=lambda item: accessory_material_type(item),
+    bounded_text=lambda: bounded_text,
+)
 
 
 def auto_optimize_complexity_rule_recommendation(
@@ -5067,56 +5039,7 @@ def auto_optimize_complexity_rule_recommendation(
     accessory_ids: list[str],
     expected_production_count: int,
 ) -> dict[str, Any]:
-    accessories_by_id = accessory_lookup_by_id(config)
-    selected = [accessories_by_id.get(item_id, {}) for item_id in accessory_ids]
-    class_count = max(1, len(selected))
-    material_types = {accessory_material_type(item) for item in selected if item}
-    has_text = "text" in material_types
-    low_reference_count = any(len(item.get("source_files") or []) < 3 for item in selected if item)
-    if has_text:
-        min_samples = 400 if class_count <= 3 else 700
-        complexity = "text_yolo_ocr"
-    elif class_count <= 2:
-        min_samples = 300
-        complexity = "simple"
-    elif class_count <= 6:
-        min_samples = 800
-        complexity = "medium"
-    else:
-        min_samples = 1500
-        complexity = "complex"
-    if low_reference_count:
-        min_samples += 150
-    min_samples = max(150, min(3000, min_samples))
-    early_quota = int(expected_production_count * 0.3) if expected_production_count else 0
-    feasible = bool(expected_production_count and min_samples <= expected_production_count and min_samples <= early_quota)
-    if not expected_production_count:
-        reason = "未填写预计产量，无法判断当前生产流程能否覆盖训练样本，默认关闭自动优化。"
-    elif min_samples > expected_production_count:
-        reason = f"预计至少需要 {min_samples} 张可训练样本，已超过预计产量 {expected_production_count}，不适合开启自动优化。"
-    elif min_samples > early_quota:
-        reason = f"预计至少需要 {min_samples} 张可训练样本，但前 30% 产量约 {early_quota} 张，训练上线可能赶不上当前产线。"
-    else:
-        reason = f"任务复杂度 {complexity}，预计产量 {expected_production_count}，建议以 {min_samples} 张可训练样本作为训练阈值。"
-    return {
-        "enabled": feasible,
-        "complexity": complexity,
-        "samples_per_real_image": 12 if class_count <= 6 else 16,
-        "training_epochs": 80 if has_text or class_count > 2 else 60,
-        "training_image_size": 768 if has_text else 640,
-        "min_trainable_samples": min_samples,
-        "min_positive_samples": min_samples,
-        "min_negative_samples": 0,
-        "negative_samples_per_real_image": AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
-        "max_label_jobs_per_cycle": 5 if feasible and expected_production_count >= 3000 else 3,
-        "shadow_min_samples": max(20, min(120, int(min_samples * 0.25))),
-        "shadow_min_agreement": 0.98,
-        "auto_promote": bool(feasible and expected_production_count >= min_samples * 3),
-        "expected_production_count": expected_production_count,
-        "early_training_quota": early_quota,
-        "reason": reason,
-        "source": "rules",
-    }
+    return _auto_optimization_recommendations.auto_optimize_complexity_rule_recommendation(config, accessory_ids, expected_production_count)
 
 
 def clamp_auto_optimize_initialization_recommendation(
@@ -5124,114 +5047,38 @@ def clamp_auto_optimize_initialization_recommendation(
     fallback: dict[str, Any],
     expected_production_count: int,
 ) -> dict[str, Any]:
-    result = dict(fallback)
-    try:
-        min_samples = max(150, min(3000, int(raw.get("min_trainable_samples") or fallback["min_trainable_samples"])))
-    except (TypeError, ValueError):
-        min_samples = int(fallback["min_trainable_samples"])
-    raw_min_positive = raw.get("min_positive_samples") if "min_positive_samples" in raw else fallback.get("min_positive_samples")
-    try:
-        min_positive = max(1, min(3000, int(raw_min_positive or min_samples)))
-    except (TypeError, ValueError):
-        min_positive = int(fallback.get("min_positive_samples") or min_samples)
-    raw_min_negative = raw.get("min_negative_samples") if "min_negative_samples" in raw else fallback.get("min_negative_samples")
-    try:
-        min_negative = max(0, min(3000, int(0 if raw_min_negative is None else raw_min_negative)))
-    except (TypeError, ValueError):
-        min_negative = int(fallback.get("min_negative_samples") or 0)
-    raw_negative_per_real = (
-        raw.get("negative_samples_per_real_image")
-        if "negative_samples_per_real_image" in raw
-        else fallback.get("negative_samples_per_real_image")
-    )
-    try:
-        raw_negative_ratio = raw_negative_per_real if raw_negative_per_real is not None else AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE
-        negative_per_real = max(0, min(20, int(raw_negative_ratio)))
-    except (TypeError, ValueError):
-        negative_per_real = int(fallback.get("negative_samples_per_real_image") or AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE)
-    early_quota = int(expected_production_count * 0.3) if expected_production_count else 0
-    required_samples = max(min_samples, min_positive + min_negative)
-    feasible = bool(expected_production_count and required_samples <= expected_production_count and required_samples <= early_quota)
-    result.update(
-        {
-            "enabled": feasible and bool(raw.get("enabled", fallback.get("enabled"))),
-            "complexity": bounded_text(raw.get("complexity") or fallback.get("complexity") or "unknown", 80),
-            "min_trainable_samples": min_samples,
-            "min_positive_samples": min_positive,
-            "min_negative_samples": min_negative,
-            "negative_samples_per_real_image": negative_per_real,
-            "samples_per_real_image": max(1, min(50, int(raw.get("samples_per_real_image") or fallback.get("samples_per_real_image") or 12))),
-            "training_epochs": max(1, min(500, int(raw.get("training_epochs") or fallback.get("training_epochs") or 60))),
-            "training_image_size": max(320, min(2048, int(raw.get("training_image_size") or fallback.get("training_image_size") or 640))),
-            "max_label_jobs_per_cycle": max(1, min(20, int(raw.get("max_label_jobs_per_cycle") or fallback.get("max_label_jobs_per_cycle") or 3))),
-            "shadow_min_samples": max(10, min(500, int(raw.get("shadow_min_samples") or fallback.get("shadow_min_samples") or 80))),
-            "shadow_min_agreement": max(0.8, min(1.0, float(raw.get("shadow_min_agreement") or fallback.get("shadow_min_agreement") or 0.98))),
-            "auto_promote": bool(raw.get("auto_promote", fallback.get("auto_promote", True))) and feasible,
-            "expected_production_count": expected_production_count,
-            "early_training_quota": early_quota,
-            "source": "gemini",
-            "reason": bounded_text(raw.get("reason") or fallback.get("reason") or "", 240),
-        }
-    )
-    if expected_production_count and not feasible:
-        result["enabled"] = False
-        if required_samples > expected_production_count:
-            result["reason"] = f"Agent 估算需要 {required_samples} 张可用训练样本，超过预计产量 {expected_production_count}，自动优化关闭。"
-        elif required_samples > early_quota:
-            result["reason"] = f"Agent 估算需要 {required_samples} 张可用训练样本，超过前 30% 产量 {early_quota}，当前产线不适合自动训练切换。"
-    return result
+    return _auto_optimization_recommendations.clamp_auto_optimize_initialization_recommendation(raw, fallback, expected_production_count)
 
 
 def public_auto_optimize_initialization_payload(state: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
-    raw = state.get("auto_optimize_initialization")
-    payload = dict(raw) if isinstance(raw, dict) else {}
-    expected_production_count = normalize_expected_production_count(
-        state.get("expected_production_count") or payload.get("expected_production_count")
-    )
-    requirements = auto_optimize_training_requirements(settings)
-    min_trainable = int(requirements.get("min_trainable_samples") or 0)
-    min_positive = int(requirements.get("min_positive_samples") or min_trainable)
-    min_negative = int(requirements.get("min_negative_samples") or 0)
-    required_samples = max(min_trainable, min_positive + min_negative)
-    early_quota = int(expected_production_count * 0.3) if expected_production_count else 0
-    payload.update(
-        {
-            "expected_production_count": expected_production_count,
-            "early_training_quota": early_quota,
-            "min_trainable_samples": min_trainable,
-            "min_positive_samples": min_positive,
-            "min_negative_samples": min_negative,
-            "samples_per_real_image": auto_optimize_samples_per_real_image(settings),
-            "negative_samples_per_real_image": auto_optimize_negative_samples_per_real_image(settings),
-            "positive_derivatives_per_real_image": auto_optimize_positive_derivatives_per_real_image(settings),
-        }
-    )
-    if not expected_production_count:
-        payload["reason"] = "未填写预计产量，无法判断当前生产流程能否覆盖训练样本，默认关闭自动优化。"
-    elif required_samples > expected_production_count:
-        payload["reason"] = (
-            f"Agent 估算需要 {required_samples} 张可用训练样本"
-            f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），"
-            f"超过预计产量 {expected_production_count}，自动优化关闭。"
-        )
-    elif required_samples > early_quota:
-        payload["reason"] = (
-            f"Agent 估算需要 {required_samples} 张可用训练样本"
-            f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），"
-            f"超过前 30% 产量 {early_quota}，当前产线不适合自动训练切换。"
-        )
-    elif payload.get("enabled"):
-        payload["reason"] = (
-            f"预计产量 {expected_production_count}，训练阈值 {required_samples}，"
-            f"派生负样本计入单图派生预算，可开启自动优化。"
-        )
-    else:
-        payload["reason"] = (
-            f"按当前配置需要 {required_samples} 张可用训练样本"
-            f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），"
-            f"未超过前 30% 产量 {early_quota}；自动优化当前未由初始化建议开启。"
-        )
-    return payload
+    return _auto_optimization_recommendations.public_auto_optimize_initialization_payload(state, settings)
+
+
+from .training.auto_optimization_initialization import AutoOptimizationInitialization
+from .training.auto_optimization_initialization_ports import AutoOptimizationAdvisorPorts, AutoOptimizationTaskInitializationPorts
+
+_auto_optimization_initialization = AutoOptimizationInitialization(
+    negative_samples_default=AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
+    advisor=AutoOptimizationAdvisorPorts(
+        ai_detection_settings=lambda: ai_detection_settings,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        accessory_material_type=lambda: accessory_material_type,
+        bounded_text=lambda: bounded_text,
+        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
+        clamp_auto_optimize_initialization_recommendation=lambda: clamp_auto_optimize_initialization_recommendation,
+    ),
+    task=AutoOptimizationTaskInitializationPorts(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        auto_optimize_complexity_rule_recommendation=lambda: auto_optimize_complexity_rule_recommendation,
+        agent_auto_optimize_initialization_recommendation=lambda: agent_auto_optimize_initialization_recommendation,
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+    ),
+)
 
 
 def agent_auto_optimize_initialization_recommendation(
@@ -5240,141 +5087,11 @@ def agent_auto_optimize_initialization_recommendation(
     expected_production_count: int,
     fallback: dict[str, Any],
 ) -> dict[str, Any]:
-    settings = ai_detection_settings("training_vision")
-    if not settings.get("configured"):
-        return fallback
-    accessories_by_id = accessory_lookup_by_id(config)
-    payload_accessories = []
-    for item_id in accessory_ids:
-        item = accessories_by_id.get(item_id) or {}
-        profile = item.get("ai_profile") if isinstance(item.get("ai_profile"), dict) else {}
-        payload_accessories.append(
-            {
-                "id": item_id,
-                "name": item.get("name") or item_id,
-                "material_type": accessory_material_type(item),
-                "source_image_count": len(item.get("source_files") or []),
-                "profile": {
-                    "description": bounded_text(profile.get("description") or "", 220),
-                    "visual_signature": bounded_text(profile.get("visual_signature") or "", 220),
-                    "tags": profile.get("tags") if isinstance(profile.get("tags"), list) else [],
-                    "dimensions_mm": profile.get("dimensions_mm") if isinstance(profile.get("dimensions_mm"), dict) else {},
-                },
-            }
-        )
-    system = (
-        "你是工业视觉质检平台的自动优化初始化 Agent。"
-        "根据任务预计产量、配件数量、图片/画像复杂度，判断是否值得在当前生产任务内开启自动优化训练。"
-        "只输出 JSON 对象，不要输出解释文本。字段："
-        '{"enabled": bool, "complexity": string, "min_trainable_samples": int, '
-        '"min_positive_samples": int, "min_negative_samples": int, "negative_samples_per_real_image": int, '
-        '"samples_per_real_image": int, "training_epochs": int, "training_image_size": int, '
-        '"max_label_jobs_per_cycle": int, "shadow_min_samples": int, "shadow_min_agreement": number, '
-        '"auto_promote": bool, "reason": "中文一句话理由"}。'
-        "samples_per_real_image 表示每张真实照片总共派生多少训练图；"
-        "negative_samples_per_real_image 表示这些派生图里有多少张是负样本，不是额外追加的负样本。"
-        "如果所需样本超过总产量，或超过前 30% 产量能采集到的样本量，enabled 必须为 false。"
-    )
-    prompt = {
-        "expected_production_count": expected_production_count,
-        "front_30_percent_quota": int(expected_production_count * 0.3) if expected_production_count else 0,
-        "accessories": payload_accessories,
-        "fallback": fallback,
-        "policy": {
-            "simple_min": 300,
-            "medium_min": 800,
-            "complex_min": 1500,
-            "hard_min": 150,
-            "max_threshold": 3000,
-            "samples_per_real_image_default": 12,
-            "samples_per_real_image_range": [8, 20],
-            "negative_samples_per_real_image_default": AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
-            "negative_samples_per_real_image_range": [0, 20],
-            "negative_samples_are_part_of_samples_per_real_image": True,
-            "training_epochs_range": [40, 120],
-            "training_image_size_options": [640, 768, 960],
-        },
-    }
-    try:
-        parsed, latency_ms, meta = generate_provider_json_with_fallback(
-            settings,
-            system,
-            [{"type": "text", "text": json.dumps(prompt, ensure_ascii=False)}],
-            max_tokens=800,
-            max_attempts=1,
-        )
-        recommendation = clamp_auto_optimize_initialization_recommendation(parsed, fallback, expected_production_count)
-        recommendation["provider"] = settings.get("provider") or ""
-        recommendation["model"] = settings.get("model") or ""
-        recommendation["latency_ms"] = latency_ms
-        if meta.get("usage_metadata"):
-            recommendation["usage_metadata"] = meta.get("usage_metadata")
-        return recommendation
-    except Exception as exc:  # noqa: BLE001 - 初始化建议失败不能阻断任务创建
-        return {**fallback, "agent_error": bounded_text(str(exc), 180)}
+    return _auto_optimization_initialization.agent_auto_optimize_initialization_recommendation(config, accessory_ids, expected_production_count, fallback)
 
 
 def initialize_auto_optimize_for_pipeline_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    ai_task_id = sanitize_ai_detection_task_id(task.get("ai_task_id"))
-    if not ai_task_id:
-        return {}
-    expected_count = normalize_expected_production_count(
-        task.get("expected_production_count") or (task.get("params") or {}).get("expected_production_count")
-    )
-    accessory_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-    fallback = auto_optimize_complexity_rule_recommendation(config, accessory_ids, expected_count)
-    recommendation = agent_auto_optimize_initialization_recommendation(config, accessory_ids, expected_count, fallback)
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(ai_task_id)
-        settings = {**default_auto_optimize_settings(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
-        settings.update(
-            {
-                "enabled": bool(recommendation.get("enabled")),
-                "min_trainable_samples": int(recommendation.get("min_trainable_samples") or settings.get("min_trainable_samples") or 200),
-                "min_positive_samples": int(recommendation.get("min_positive_samples") or settings.get("min_positive_samples") or recommendation.get("min_trainable_samples") or 200),
-                "min_negative_samples": max(0, int(recommendation.get("min_negative_samples") or settings.get("min_negative_samples") or 0)),
-                "negative_samples_per_real_image": max(
-                    0,
-                    min(
-                        20,
-                        int(
-                            recommendation.get("negative_samples_per_real_image")
-                            if recommendation.get("negative_samples_per_real_image") is not None
-                            else settings.get("negative_samples_per_real_image", AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE)
-                        ),
-                    ),
-                ),
-                "samples_per_real_image": max(1, min(50, int(recommendation.get("samples_per_real_image") or settings.get("samples_per_real_image") or 12))),
-                "training_epochs": max(1, min(500, int(recommendation.get("training_epochs") or settings.get("training_epochs") or 60))),
-                "training_image_size": max(320, min(2048, int(recommendation.get("training_image_size") or settings.get("training_image_size") or 640))),
-                "max_label_jobs_per_cycle": int(recommendation.get("max_label_jobs_per_cycle") or settings.get("max_label_jobs_per_cycle") or 3),
-                "shadow_min_samples": int(recommendation.get("shadow_min_samples") or settings.get("shadow_min_samples") or 80),
-                "shadow_min_agreement": float(recommendation.get("shadow_min_agreement") or settings.get("shadow_min_agreement") or 0.98),
-                "auto_promote": bool(recommendation.get("auto_promote")),
-                "serving_mode": "api_primary",
-            }
-        )
-        state.update(
-            {
-                "task_id": ai_task_id,
-                "task_name": task.get("name") or state.get("task_name") or "",
-                "owner_user_id": task.get("owner_user_id") or state.get("owner_user_id") or "",
-                "owner_username": task.get("owner_username") or state.get("owner_username") or "",
-                "selected_accessory_ids": accessory_ids,
-                "required_accessory_counts": task.get("accessory_counts") or state.get("required_accessory_counts") or {},
-                "expected_production_count": expected_count,
-                "auto_optimize_initialization": recommendation,
-                "settings": settings,
-            }
-        )
-        save_auto_optimize_state(state)
-    task["auto_optimize_initialization"] = recommendation
-    task["expected_production_count"] = expected_count
-    if isinstance(task.get("params"), dict):
-        task["params"]["expected_production_count"] = expected_count
-    if recommendation.get("enabled"):
-        start_auto_optimize_label_worker(ai_task_id)
-    return recommendation
+    return _auto_optimization_initialization.initialize_auto_optimize_for_pipeline_task(task, config)
 
 
 # Request-scoped memoization for hot read paths (list endpoints). The cache is
@@ -5476,261 +5193,84 @@ def load_json_file_mtime_cached(path: Path) -> Any:
 
 
 def load_auto_optimize_state(task_id: str) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id) or AI_DETECTION_MODEL_ID
-    read_cache = _read_path_cache.get()
-    cache_key = f"auto_optimize_state:{clean_task_id}"
-    if read_cache is not None and cache_key in read_cache:
-        return read_cache[cache_key]
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = repository.fetch_by_primary_key("auto_optimize_states", {"task_id": clean_task_id})
-        state = row_raw_json_list([row])[0] if row else {}
-    else:
-        path = auto_optimize_task_path(clean_task_id)
-        try:
-            state = json.loads(_business_files.read_text(path, encoding="utf-8")) if _business_files.exists(path) else {}
-        except (OSError, json.JSONDecodeError):
-            state = {}
-    if not isinstance(state, dict):
-        state = {}
-    settings = {**default_auto_optimize_settings(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
-    state.setdefault("task_id", clean_task_id)
-    state.setdefault("created_at", int(time.time()))
-    state.setdefault("updated_at", int(time.time()))
-    state.setdefault("samples", [])
-    state.setdefault("datasets", [])
-    state.setdefault("candidate_models", [])
-    state.setdefault("shadow_runs", [])
-    state.setdefault("active_model_id", "")
-    state.setdefault("retired_model_ids", [])
-    state["settings"] = settings
-    if read_cache is not None:
-        read_cache[cache_key] = state
-    return state
+    return _auto_optimization_state_store.load_auto_optimize_state(task_id)
 
 
 def save_auto_optimize_state(state: dict[str, Any]) -> dict[str, Any]:
-    freeze_model_record(resolve_model_profiles, state)
-    AUTO_OPTIMIZE_DIR.mkdir(parents=True, exist_ok=True)
-    state["updated_at"] = int(time.time())
-    clean_task_id = sanitize_ai_detection_task_id(state.get("task_id")) or AI_DETECTION_MODEL_ID
-    state["task_id"] = clean_task_id
-    store_read_cache_invalidate("auto_optimize_states")
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        row = auto_optimize_state_row(state, fallback_id=clean_task_id)
-        if row:
-            repository.upsert_row("auto_optimize_states", row)
-        return state
-    path = auto_optimize_task_path(clean_task_id)
-    tmp_path = path.with_suffix(".json.tmp")
-    _business_files.write_text(tmp_path, json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp_path.replace(path)
-    return state
+    return _auto_optimization_state_store.save_auto_optimize_state(state)
 
 
 def list_auto_optimize_states() -> list[dict[str, Any]]:
-    cached, cached_states = store_read_cache_get("auto_optimize_states")
-    if cached:
-        return list(cached_states)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        states: list[dict[str, Any]] = []
-        for row in repository.fetch_all("auto_optimize_states"):
-            raw_states = row_raw_json_list([row])
-            state = raw_states[0] if raw_states else {}
-            if not isinstance(state, dict):
-                continue
-            task_id = str(row.get("task_id") or "").strip()
-            if task_id and not state.get("task_id"):
-                state["task_id"] = task_id
-            states.append(state)
-        store_read_cache_put("auto_optimize_states", states)
-        return list(states)
-    states = []
-    for path in _business_files.glob(AUTO_OPTIMIZE_DIR, "*.json"):
-        try:
-            state = json.loads(_business_files.read_text(path, encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(state, dict):
-            if not state.get("task_id"):
-                state["task_id"] = path.stem
-            states.append(state)
-    store_read_cache_put("auto_optimize_states", states)
-    return list(states)
+    return _auto_optimization_state_store.list_auto_optimize_states()
+
+
+from .training.auto_optimization_status import AutoOptimizationStatus
+from .training.auto_optimization_status_ports import AutoOptimizationStatusState, AutoOptimizationStatusPolicy
+
+_auto_optimization_status = AutoOptimizationStatus(
+    AutoOptimizationStatusState(
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
+        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+        find_training_task=lambda: find_training_task,
+        record_visible_to_user=lambda: record_visible_to_user,
+        current_auth_user=lambda: current_auth_user,
+        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+        public_auto_optimize_state=lambda: public_auto_optimize_state,
+    ),
+    AutoOptimizationStatusPolicy(
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        auto_optimize_public_sprite_pool=lambda: auto_optimize_public_sprite_pool,
+        background_set_payload=lambda: background_set_payload,
+        auto_optimize_samples_per_real_image=lambda: auto_optimize_samples_per_real_image,
+        auto_optimize_training_parameters=lambda: auto_optimize_training_parameters,
+        auto_optimize_training_requirements=lambda: auto_optimize_training_requirements,
+        auto_optimize_negative_samples_per_real_image=lambda: auto_optimize_negative_samples_per_real_image,
+        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+        public_path_sanitized=lambda: public_path_sanitized,
+        auto_optimize_phase_name=lambda: auto_optimize_phase_name,
+        normalize_expected_production_count=lambda: normalize_expected_production_count,
+        public_auto_optimize_initialization_payload=lambda: public_auto_optimize_initialization_payload,
+    ),
+)
 
 
 def public_auto_optimize_state(task_id: str, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(task_id)
-        state_changed = hydrate_auto_optimize_background_from_ai_task(state)
-        completed_model_id = auto_optimize_completed_model_id(state)
-        if completed_model_id and auto_optimize_stop_capture_for_model_locked(
-            state,
-            completed_model_id,
-            reason="completed_model_ready",
-        ):
-            state_changed = True
-        if state_changed:
-            save_auto_optimize_state(state)
-    samples = [sample for sample in state.get("samples") or [] if isinstance(sample, dict)]
-    if user:
-        samples = [sample for sample in samples if record_visible_to_user(sample, user)]
-    label_counts = Counter(str(sample.get("label_status") or "captured") for sample in samples)
-    shadow_runs = [run for run in state.get("shadow_runs") or [] if isinstance(run, dict)]
-    agreements = [float(run.get("agreement") or 0.0) for run in shadow_runs if run.get("status") == "completed"]
-    latest_dataset = next((item for item in state.get("datasets") or [] if isinstance(item, dict)), None)
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else default_auto_optimize_settings()
-    sprite_pool = auto_optimize_public_sprite_pool(state)
-    background_set_id = str(state.get("background_set_id") or "")
-    environment_background = state.get("environment_background") if isinstance(state.get("environment_background"), dict) else {}
-    background_set = background_set_payload(background_set_id) if background_set_id else {}
-    dataset_synthetic_samples = sum(int((dataset or {}).get("synthetic_sample_count") or 0) for dataset in state.get("datasets") or [] if isinstance(dataset, dict))
-    generated_synthetic_samples = sum(int((sample or {}).get("synthetic_count") or 0) for sample in samples if isinstance(sample, dict))
-    synthetic_samples = max(dataset_synthetic_samples, generated_synthetic_samples)
-    samples_per_real_image = auto_optimize_samples_per_real_image(settings)
-    for candidate in state.get("candidate_models") or []:
-        if not isinstance(candidate, dict):
-            continue
-        task = find_training_task(str(candidate.get("job_id") or ""))
-        if task:
-            candidate["status"] = task.get("status") or candidate.get("status") or ""
-            candidate["progress"] = task.get("progress") or candidate.get("progress") or 0
-            candidate["note"] = task.get("note") or candidate.get("note") or ""
-    latest_candidate = next((item for item in state.get("candidate_models") or [] if isinstance(item, dict)), None)
-    training_parameters = auto_optimize_training_parameters(settings)
-    positive_samples = label_counts.get("trainable", 0)
-    bbox_only_samples = label_counts.get("trainable_bbox_only", 0)
-    negative_samples = label_counts.get("negative", 0)
-    real_positive_source_count = positive_samples + bbox_only_samples
-    training_requirements = auto_optimize_training_requirements(settings, real_positive_source_count=real_positive_source_count)
-    negative_samples_per_real_image = auto_optimize_negative_samples_per_real_image(settings)
-    positive_derivatives_per_real_image = auto_optimize_positive_derivatives_per_real_image(settings)
-    generated_negative_samples = real_positive_source_count * negative_samples_per_real_image
-    projected_negative_training_samples = negative_samples + generated_negative_samples
-    projected_real_bbox_training_samples = (positive_samples + bbox_only_samples) * AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT
-    projected_positive_training_samples = positive_samples * positive_derivatives_per_real_image + projected_real_bbox_training_samples
-    return {
-        "task_id": state.get("task_id") or task_id,
-        "enabled": bool(settings.get("enabled")),
-        "serving_mode": settings.get("serving_mode") or "api_primary",
-        "active_model_id": state.get("active_model_id") or "",
-        "samples_total": len(samples),
-        "captured_samples": len(samples),
-        "pending_labels": label_counts.get("pending", 0),
-        "trainable_samples": positive_samples,
-        "bbox_only_samples": bbox_only_samples,
-        "review_required_samples": label_counts.get("review_required", 0),
-        "negative_samples": negative_samples,
-        "generated_negative_sample_count": generated_negative_samples,
-        "projected_negative_training_samples": projected_negative_training_samples,
-        "negative_samples_per_real_image": negative_samples_per_real_image,
-        "positive_derivatives_per_real_image": positive_derivatives_per_real_image,
-        "usable_training_samples": positive_samples + bbox_only_samples + negative_samples,
-        "projected_positive_training_samples": projected_positive_training_samples,
-        "projected_training_samples": projected_positive_training_samples + projected_negative_training_samples,
-        "projected_real_bbox_training_samples": projected_real_bbox_training_samples,
-        "real_bbox_sample_weight": AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        "samples_per_real_image": samples_per_real_image,
-        "sprite_pool_count": len(sprite_pool),
-        "sprite_pool": sprite_pool,
-        "synthetic_sample_count": synthetic_samples,
-        "generated_synthetic_sample_count": generated_synthetic_samples,
-        "dataset_synthetic_sample_count": dataset_synthetic_samples,
-        "rejected_samples": label_counts.get("rejected", 0) + label_counts.get("failed", 0),
-        "latest_sample_at": max([int(sample.get("created_at") or 0) for sample in samples] or [0]),
-        "latest_dataset": public_path_sanitized(latest_dataset or {}),
-        "latest_candidate_model": public_path_sanitized(latest_candidate or {}),
-        "candidate_model_count": len(state.get("candidate_models") or []),
-        "shadow_runs": len(shadow_runs),
-        "shadow_agreement": round(sum(agreements) / len(agreements), 6) if agreements else 0.0,
-        "settings": settings,
-        "training_requirements": training_requirements,
-        "training_parameters": training_parameters,
-        "background_set_id": background_set_id,
-        "environment_background": public_path_sanitized(environment_background),
-        "background_set": public_path_sanitized(background_set) if background_set else {},
-        "phase": auto_optimize_phase_name(state),
-        "expected_production_count": normalize_expected_production_count(state.get("expected_production_count")),
-        "initialization": public_auto_optimize_initialization_payload(state, settings),
-        "samples": [public_path_sanitized(sample) for sample in samples[:80]],
-    }
+    return _auto_optimization_status.public_auto_optimize_state(task_id, user=user)
+
+
+from .training.auto_optimization_readiness import AutoOptimizationReadiness
+from .training.auto_optimization_readiness_ports import AutoOptimizationReadinessPorts
+
+_auto_optimization_readiness = AutoOptimizationReadiness(AutoOptimizationReadinessPorts(
+    find_training_task=lambda: find_training_task,
+    auto_optimize_linked_pipeline_model_id=lambda: auto_optimize_linked_pipeline_model_id,
+    load_config=lambda: load_config,
+    canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+    normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+    load_pipeline_tasks=lambda: load_pipeline_tasks,
+    normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+    pipeline_task_model_status=lambda: pipeline_task_model_status,
+    pipeline_task_model_id=lambda: pipeline_task_model_id,
+    default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+))
 
 
 def auto_optimize_phase_name(state: dict[str, Any]) -> str:
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-    if state.get("active_model_id") and settings.get("serving_mode") == "promoted_yolo":
-        return "promoted"
-    if not settings.get("enabled"):
-        return "paused"
-    if state.get("candidate_models"):
-        return "shadow_compare"
-    if state.get("datasets"):
-        return "training_candidate"
-    samples = state.get("samples") if isinstance(state.get("samples"), list) else []
-    if any((sample or {}).get("label_status") in {"trainable", "trainable_bbox_only"} for sample in samples if isinstance(sample, dict)):
-        return "weak_labeling"
-    return "capture"
+    return _auto_optimization_readiness.auto_optimize_phase_name(state)
 
 
 def auto_optimize_completed_model_id(state: dict[str, Any]) -> str:
-    active_model_id = str(state.get("active_model_id") or "").strip()
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-    if active_model_id and settings.get("serving_mode") == "promoted_yolo":
-        return active_model_id
-    for candidate in state.get("candidate_models") or []:
-        if not isinstance(candidate, dict):
-            continue
-        model_id = str(candidate.get("model_id") or "").strip()
-        if not model_id:
-            continue
-        task = find_training_task(str(candidate.get("job_id") or ""))
-        status = str((task or {}).get("status") or candidate.get("status") or "").strip()
-        if status == "completed":
-            return model_id
-    pipeline_model_id = auto_optimize_linked_pipeline_model_id(state)
-    if pipeline_model_id:
-        return pipeline_model_id
-    return ""
+    return _auto_optimization_readiness.auto_optimize_completed_model_id(state)
 
 
 def auto_optimize_linked_pipeline_model_id(state: dict[str, Any]) -> str:
-    config = load_config()
-    selected_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in state.get("selected_accessory_ids") or []])
-    if not selected_ids:
-        return ""
-    expected_counts = normalize_pipeline_accessory_counts(config, selected_ids, state.get("required_accessory_counts"))
-    expected_key = sorted(selected_ids)
-    owner_id = str(state.get("owner_user_id") or "").strip()
-    newest_match: tuple[int, str] | None = None
-    for task in load_pipeline_tasks():
-        if not isinstance(task, dict):
-            continue
-        task_owner_id = str(task.get("owner_user_id") or "").strip()
-        if owner_id and task_owner_id and task_owner_id != owner_id:
-            continue
-        if str(task.get("stage") or "") != "library" or str(task.get("status") or "") not in {"completed", "已上线"}:
-            continue
-        if normalize_pipeline_detection_method(str(task.get("detection_method") or "")) not in {"yolo", "yolo_ocr"}:
-            continue
-        task_ids = canonical_pipeline_accessory_ids(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
-        if sorted(task_ids) != expected_key:
-            continue
-        task_counts = normalize_pipeline_accessory_counts(config, task_ids, task.get("accessory_counts"))
-        if {item_id: int(task_counts.get(item_id, 1)) for item_id in task_ids} != {
-            item_id: int(expected_counts.get(item_id, 1)) for item_id in selected_ids
-        }:
-            continue
-        if pipeline_task_model_status(task) != "available":
-            continue
-        model_id = pipeline_task_model_id(task)
-        if not model_id:
-            continue
-        updated_at = int(task.get("updated_at") or task.get("created_at") or 0)
-        if newest_match is None or updated_at > newest_match[0]:
-            newest_match = (updated_at, model_id)
-    return newest_match[1] if newest_match else ""
+    return _auto_optimization_readiness.auto_optimize_linked_pipeline_model_id(state)
 
 
 def pipeline_task_model_id(task: dict[str, Any]) -> str:
@@ -5747,241 +5287,90 @@ def pipeline_task_model_id(task: dict[str, Any]) -> str:
 
 
 def auto_optimize_stop_capture_for_model_locked(state: dict[str, Any], model_id: str, *, reason: str) -> bool:
-    if not model_id:
-        return False
-    settings = {**default_auto_optimize_settings(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
-    changed = False
-    if state.get("active_model_id") != model_id and settings.get("auto_promote", True):
-        state["active_model_id"] = model_id
-        settings["serving_mode"] = "promoted_yolo"
-        state["last_promotion"] = {
-            "model_id": model_id,
-            "agreement": state.get("last_promotion", {}).get("agreement") if isinstance(state.get("last_promotion"), dict) else None,
-            "sample_count": state.get("last_promotion", {}).get("sample_count") if isinstance(state.get("last_promotion"), dict) else 0,
-            "promoted_at": int(time.time()),
-            "source": reason,
-        }
-        changed = True
-    if settings.get("enabled"):
-        settings["enabled"] = False
-        state["capture_stopped_at"] = int(time.time())
-        state["capture_stop_reason"] = reason
-        changed = True
-    if changed:
-        state["settings"] = settings
-    return changed
+    return _auto_optimization_readiness.auto_optimize_stop_capture_for_model_locked(state, model_id, reason=reason)
 
 
 def auto_optimize_capture_enabled(state: dict[str, Any]) -> bool:
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-    if not settings.get("enabled"):
-        return False
-    if auto_optimize_completed_model_id(state):
-        return False
-    return True
+    return _auto_optimization_readiness.auto_optimize_capture_enabled(state)
 
 
 def auto_optimize_update_settings(task_id: str, request: Any) -> dict[str, Any]:
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(task_id)
-        settings = {**default_auto_optimize_settings(), **(state.get("settings") or {})}
-        payload = request.dict(exclude_unset=True) if hasattr(request, "dict") else dict(request or {})
-        for key in ("enabled", "auto_promote"):
-            if key in payload and payload[key] is not None:
-                settings[key] = bool(payload[key])
-        for key in ("min_trainable_samples", "min_positive_samples", "samples_per_real_image", "max_label_jobs_per_cycle", "shadow_min_samples"):
-            if key in payload and payload[key] is not None:
-                settings[key] = max(1, int(payload[key]))
-        if "training_epochs" in payload and payload["training_epochs"] is not None:
-            settings["training_epochs"] = max(1, min(500, int(payload["training_epochs"])))
-        if "training_image_size" in payload and payload["training_image_size"] is not None:
-            settings["training_image_size"] = max(320, min(2048, int(payload["training_image_size"])))
-        if "min_negative_samples" in payload and payload["min_negative_samples"] is not None:
-            settings["min_negative_samples"] = max(0, int(payload["min_negative_samples"]))
-        if "negative_samples_per_real_image" in payload and payload["negative_samples_per_real_image"] is not None:
-            settings["negative_samples_per_real_image"] = max(0, min(20, int(payload["negative_samples_per_real_image"])))
-        for key in ("mask_compare_min_score", "shadow_min_agreement"):
-            if key in payload and payload[key] is not None:
-                settings[key] = max(0.0, min(1.0, float(payload[key])))
-        if settings.get("enabled") and settings.get("serving_mode") == "disabled":
-            settings["serving_mode"] = "api_primary"
-        state["settings"] = settings
-        completed_model_id = auto_optimize_completed_model_id(state)
-        if completed_model_id:
-            auto_optimize_stop_capture_for_model_locked(state, completed_model_id, reason="completed_model_ready")
-        save_auto_optimize_state(state)
-    if state.get("settings", {}).get("enabled"):
-        start_auto_optimize_label_worker(str(state.get("task_id") or task_id))
-    return public_auto_optimize_state(str(state.get("task_id") or task_id), user=current_auth_user())
+    return _auto_optimization_status.auto_optimize_update_settings(task_id, request)
+
+
+from .training.auto_optimization_capture import AutoOptimizationCapture
+from .training.auto_optimization_capture_ports import AutoOptimizationCapturePorts
+
+_auto_optimization_capture = AutoOptimizationCapture(AutoOptimizationCapturePorts(
+    _auto_optimize_lock=lambda: _auto_optimize_lock,
+    load_auto_optimize_state=lambda: load_auto_optimize_state,
+    save_auto_optimize_state=lambda: save_auto_optimize_state,
+    sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+    auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+    auto_optimize_capture_enabled=lambda: auto_optimize_capture_enabled,
+    resolve_service_path=lambda: resolve_service_path,
+    bounded_text=lambda: bounded_text,
+    current_owner_fields=lambda: current_owner_fields,
+    start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+    start_auto_optimize_shadow_worker=lambda: start_auto_optimize_shadow_worker,
+    auto_optimize_detection_candidates=lambda: auto_optimize_detection_candidates,
+))
 
 
 def auto_optimize_detection_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
-    detections = result.get("detections") if isinstance(result.get("detections"), list) else []
-    candidates: list[dict[str, Any]] = []
-    for det in detections:
-        if not isinstance(det, dict) or det.get("present") is not True:
-            continue
-        try:
-            confidence = float(det.get("confidence") or 0.0)
-        except (TypeError, ValueError):
-            confidence = 0.0
-        if confidence <= 0.0:
-            continue
-        count = det.get("count")
-        if count is not None and type(count) is int and count != 1:
-            continue
-        candidates.append(
-            {
-                "accessory_id": str(det.get("accessory_id") or ""),
-                "label": str(det.get("label") or det.get("accessory_id") or ""),
-                "confidence": round(max(0.0, min(1.0, confidence)), 4),
-                "evidence": bounded_text(det.get("evidence") or "", 180),
-            }
-        )
-    return [item for item in candidates if item["accessory_id"]]
+    return _auto_optimization_capture.auto_optimize_detection_candidates(result)
 
 
 def record_auto_optimize_capture(record: dict[str, Any] | None, result: dict[str, Any], request_id: str, image_path: Path | None) -> None:
-    if not record:
-        return
-    model_payload = result.get("model") if isinstance(result.get("model"), dict) else {}
-    if not model_payload.get("is_ai_detection"):
-        return
-    task_id = sanitize_ai_detection_task_id(model_payload.get("task_id") or model_payload.get("run_id") or "")
-    if not task_id:
-        return
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(task_id)
-        completed_model_id = auto_optimize_completed_model_id(state)
-        if completed_model_id:
-            auto_optimize_stop_capture_for_model_locked(state, completed_model_id, reason="completed_model_ready")
-            save_auto_optimize_state(state)
-        enabled = auto_optimize_capture_enabled(state)
-    if not enabled:
-        return
-    source_path = str(resolve_service_path(image_path)) if image_path else str((record.get("source_image") or {}).get("path") or "")
-    if not source_path:
-        return
-    candidates = auto_optimize_detection_candidates(result)
-    ai_payload = result.get("ai") if isinstance(result.get("ai"), dict) else {}
-    ai_detection_passed = bool(result.get("passed"))
-    provider_failure = bool(
-        ai_payload.get("error")
-        or ai_payload.get("overloaded")
-        or ai_payload.get("timed_out")
-        or str(ai_payload.get("provider_status") or "").lower() in {"failed", "error", "overloaded", "timeout"}
-    )
-    if provider_failure:
-        label_status = "failed"
-        sample_type = "provider_failure"
-        label_reject_reason = "ai_detection_provider_failed"
-    elif not ai_detection_passed:
-        label_status = "failed"
-        sample_type = "failed_detection"
-        label_reject_reason = "ai_detection_not_passed"
-    elif candidates:
-        label_status = "pending"
-        sample_type = "positive_candidate"
-        label_reject_reason = ""
-    else:
-        label_status = "failed"
-        sample_type = "failed_detection"
-        label_reject_reason = "ai_detection_no_positive_candidates"
-    now = int(time.time())
-    sample = {
-        "sample_id": f"autoopt_{now}_{uuid.uuid4().hex[:8]}",
-        "record_id": record.get("record_id") or "",
-        "request_id": request_id,
-        "task_id": task_id,
-        **current_owner_fields(),
-        "created_at": now,
-        "source_image": {
-            "path": source_path,
-            "url": (record.get("source_image") or {}).get("url") or record.get("image_url") or result.get("annotated_url") or "",
-            "filename": Path(source_path).name,
-        },
-        "ai_result": {
-            "passed": bool(result.get("passed")),
-            "rule": result.get("rule") if isinstance(result.get("rule"), dict) else {},
-            "detections": result.get("detections") if isinstance(result.get("detections"), list) else [],
-            "model": model_payload,
-            "provider_model": ai_payload.get("provider_model") or "",
-            "provider_failure": provider_failure,
-            "provider_error": bounded_text(ai_payload.get("error") or "", 240),
-        },
-        "candidate_accessories": candidates,
-        "labels": [],
-        "sample_type": sample_type,
-        "label_status": label_status,
-        "label_reject_reason": label_reject_reason,
-        "shadow_status": "pending",
-    }
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(task_id)
-        state["task_name"] = model_payload.get("task_label") or model_payload.get("label") or ""
-        state["owner_user_id"] = sample.get("owner_user_id") or state.get("owner_user_id") or ""
-        state["owner_username"] = sample.get("owner_username") or state.get("owner_username") or ""
-        state["selected_accessory_ids"] = model_payload.get("selected_accessory_ids") or state.get("selected_accessory_ids") or []
-        state["required_accessory_counts"] = model_payload.get("required_accessory_counts") or state.get("required_accessory_counts") or {}
-        state.setdefault("samples", [])
-        state["samples"].insert(0, sample)
-        state["samples"] = state["samples"][:10000]
-        save_auto_optimize_state(state)
-    if label_status == "pending":
-        start_auto_optimize_label_worker(task_id)
-    if label_status == "pending":
-        start_auto_optimize_shadow_worker(task_id, sample["sample_id"])
+    return _auto_optimization_capture.record_auto_optimize_capture(record, result, request_id, image_path)
 
 
 AUTO_OPTIMIZE_MASK_PROMPT_MODE = "plain_description_v1"
 AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION = "structured_profile_v1"
 
 
+from .training.auto_optimization_mask_prompts import AutoOptimizationMaskPrompts
+from .training.auto_optimization_mask_visuals import AutoOptimizationMaskVisuals
+from .training.auto_optimization_mask_ports import AutoOptimizationMaskPromptPorts, AutoOptimizationMaskVisualPorts
+
+_auto_optimization_mask_prompts = AutoOptimizationMaskPrompts(AutoOptimizationMaskPromptPorts(
+    LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+    AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION=lambda: AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION,
+    bounded_text=lambda: bounded_text,
+    string_list=lambda: string_list,
+    accessory_material_type=lambda: accessory_material_type,
+    load_config=lambda: load_config,
+    scope_config_for_user=lambda: scope_config_for_user,
+    accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+    build_mask_target_profile=lambda: build_mask_target_profile,
+    auto_optimize_mask_owner_user=lambda: auto_optimize_mask_owner_user,
+    auto_optimize_mask_target_payload=lambda: auto_optimize_mask_target_payload,
+))
+
+_auto_optimization_mask_visuals = AutoOptimizationMaskVisuals(AutoOptimizationMaskVisualPorts(
+    DOCUMENT_LIKE_TEXT_HINTS=lambda: DOCUMENT_LIKE_TEXT_HINTS,
+    bounded_text=lambda: bounded_text,
+    _image_files=lambda: _image_files,
+    public_output_url_for_existing=lambda: public_output_url_for_existing,
+    auto_optimize_text_mask_requires_document_gate=lambda: auto_optimize_text_mask_requires_document_gate,
+))
+
+
 def auto_optimize_mask_system_prompt() -> str:
-    return "\n".join(
-        [
-            "You are VantaLine's automatic dataset mask generator for production inspection images.",
-            "Your only job is to convert the attached inspection image into a strict RGB segmentation mask for YOLO bbox labeling.",
-            "Return exactly one RGB image with the same aspect ratio as the input image.",
-            "Use only exact black RGB(0,0,0) plus the exact target colors specified in the user task JSON.",
-            "Every non-target pixel must be exact black RGB(0,0,0).",
-            "Do not output natural images, enhanced photos, labels, text, arrows, bounding boxes, outlines, gradients, feathering, shadows, or background colors.",
-            "Never invent a target from its profile. The profile is only identification context for objects actually visible in the current image.",
-            "If a target is absent or uncertain, leave its assigned color unused.",
-            "Each pixel may belong to at most one target color.",
-            "Keep masks tight to the visible physical outer contour of each target.",
-        ]
-    )
+    return _auto_optimization_mask_prompts.auto_optimize_mask_system_prompt()
 
 
 def auto_optimize_mask_owner_user(sample: dict[str, Any]) -> dict[str, Any]:
-    owner_id = str(sample.get("owner_user_id") or LEGACY_OWNER_ID)
-    return {
-        "id": owner_id,
-        "username": str(sample.get("owner_username") or owner_id),
-        "role": "admin",
-    }
+    return _auto_optimization_mask_prompts.auto_optimize_mask_owner_user(sample)
 
 
 def auto_optimize_accessory_lookup_for_sample(sample: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    owner_user = auto_optimize_mask_owner_user(sample)
-    try:
-        config = scope_config_for_user(load_config(), owner_user)
-        return accessory_lookup_by_id(config)
-    except Exception:
-        return accessory_lookup_by_id(load_config())
+    return _auto_optimization_mask_prompts.auto_optimize_accessory_lookup_for_sample(sample)
 
 
 def auto_optimize_mask_target_profile(candidate: dict[str, Any], accessories_by_id: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    accessory_id = str(candidate.get("accessory_id") or "").strip()
-    item = accessories_by_id.get(accessory_id) or {}
-    return build_mask_target_profile(
-        candidate,
-        item,
-        bounded_text=bounded_text,
-        string_list=string_list,
-        accessory_material_type=accessory_material_type,
-    )
+    return _auto_optimization_mask_prompts.auto_optimize_mask_target_profile(candidate, accessories_by_id)
 
 
 AUTO_OPTIMIZE_MASK_PALETTE = [
@@ -5997,34 +5386,7 @@ AUTO_OPTIMIZE_MASK_PALETTE = [
 
 
 def auto_optimize_mask_target_payload(item: dict[str, Any], index: int) -> dict[str, Any]:
-    candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
-    profile = item.get("profile") if isinstance(item.get("profile"), dict) else {}
-    palette = item.get("palette") if isinstance(item.get("palette"), dict) else {}
-    accessory_id = str(candidate.get("accessory_id") or profile.get("accessory_id") or "")
-    label = bounded_text(candidate.get("label") or profile.get("label") or accessory_id or f"target {index}", 120)
-    rgb = palette.get("rgb")
-    if isinstance(rgb, (list, tuple)) and len(rgb) == 3:
-        rgb_payload = [int(max(0, min(255, value))) for value in rgb]
-    else:
-        rgb_payload = []
-    return {
-        "index": index,
-        "accessory_id": accessory_id,
-        "label": label,
-        "assigned_color": {
-            "name": str(palette.get("name") or ""),
-            "hex": str(palette.get("hex") or ""),
-            "rgb": rgb_payload,
-        },
-        "ai_profile": {
-            "material_type": profile.get("material_type") or "unknown",
-            "visual_signature": profile.get("visual_signature") or "",
-            "distinguishing_text": profile.get("distinguishing_text") if isinstance(profile.get("distinguishing_text"), list) else [],
-            "positive_cues": profile.get("positive_cues") if isinstance(profile.get("positive_cues"), list) else [],
-            "negative_cues": profile.get("negative_cues") if isinstance(profile.get("negative_cues"), list) else [],
-        },
-        "mask_scope": profile.get("mask_scope") or "",
-    }
+    return _auto_optimization_mask_prompts.auto_optimize_mask_target_payload(item, index)
 
 
 def auto_optimize_mask_user_prompt(
@@ -6034,106 +5396,15 @@ def auto_optimize_mask_user_prompt(
     input_h: int,
     task_type: str = "multi_class_segmentation_mask",
 ) -> str:
-    targets = [auto_optimize_mask_target_payload(item, index) for index, item in enumerate(assignments, 1)]
-    task = {
-        "task_type": task_type,
-        "purpose": "automatic_yolo_bbox_labeling",
-        "prompt_mode": AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION,
-        "input_image": {
-            "dimensions": f"{int(input_w)}x{int(input_h)}",
-            "return_same_aspect_ratio": True,
-        },
-        "targets": targets,
-        "instance_policy": {
-            "if_multiple_instances": "mask only the clearest complete instance for each target",
-            "if_absent_or_uncertain": "leave that target color unused",
-        },
-        "color_policy": {
-            "background": "#000000",
-            "strict_exact_colors_only": True,
-            "no_color_mixing": True,
-        },
-    }
-    return "\n".join(
-        [
-            "USER_TASK_JSON:",
-            json.dumps(task, ensure_ascii=False, indent=2),
-            "Generate the mask for the attached inspection image using the system rules and this JSON task only.",
-        ]
-    )
+    return _auto_optimization_mask_prompts.auto_optimize_mask_user_prompt(assignments, input_w=input_w, input_h=input_h, task_type=task_type)
 
 
 def auto_optimize_multicolor_mask_prompt(assignments: list[dict[str, Any]], *, input_w: int = 0, input_h: int = 0) -> str:
-    target_lines: list[str] = []
-    for index, item in enumerate(assignments, 1):
-        candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
-        profile = item.get("profile") if isinstance(item.get("profile"), dict) else {}
-        label = bounded_text(str(candidate.get("label") or candidate.get("accessory_id") or f"target {index}"), 120)
-        palette = item.get("palette") if isinstance(item.get("palette"), dict) else {}
-        target_lines.append(f"{index}. {label}: exact {palette.get('name')} {palette.get('hex')}")
-        description = bounded_text(str(profile.get("description") or ""), 260)
-        if description:
-            target_lines.append(f"   description: {description}")
-    return "\n".join(
-        [
-            "Create a strict multi-class segmentation highlight map for the attached production inspection photo.",
-            "This is for automatic YOLO bbox labeling, not creative image generation.",
-            "Preserve the exact input camera framing and aspect ratio.",
-            "Output one RGB image using only black background plus the exact target colors listed below.",
-            "Target color map:",
-            *target_lines,
-            "Rules:",
-            "- pixels belonging to each visible target accessory must use only its assigned exact color;",
-            "- every other pixel must be exact black RGB(0,0,0);",
-            "- do not use gradients, feathering, text, boxes, labels, shadows, or background colors;",
-            "- keep each mask tight to the visible physical outer contour;",
-            "- highlight only the main rigid body of each target accessory;",
-            "- do not highlight movable or detachable parts: straps, lanyards, strings, cords, cables, loose tags, packaging ties, or detachable accessories;",
-            "- if a listed target is absent or uncertain, leave its color unused;",
-            "- if multiple target instances are visible, highlight only the clearest complete instance for that target;",
-            "- avoid color mixing between adjacent accessories; one pixel may belong to only one target color.",
-        ]
-    )
+    return _auto_optimization_mask_prompts.auto_optimize_multicolor_mask_prompt(assignments, input_w=input_w, input_h=input_h)
 
 
 def decode_multicolor_mask(mask_bgr: np.ndarray, assignments: list[dict[str, Any]]) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
-    if mask_bgr is None or mask_bgr.size == 0:
-        return {}, {"ok": False, "reason": "generated_mask_unreadable"}
-    work = mask_bgr.astype(np.float32)
-    color_masks: dict[str, np.ndarray] = {}
-    colors_meta: list[dict[str, Any]] = []
-    tolerance = 84
-    for item in assignments:
-        candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
-        palette = item.get("palette") if isinstance(item.get("palette"), dict) else {}
-        accessory_id = str(candidate.get("accessory_id") or candidate.get("label") or palette.get("name") or "")
-        bgr = np.array(palette.get("bgr") or (0, 255, 0), dtype=np.float32)
-        distance = np.sqrt(np.sum((work - bgr) ** 2, axis=2))
-        mask = (distance <= tolerance).astype(np.uint8) * 255
-        if int(np.count_nonzero(mask)) > 0:
-            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
-            cleaned = np.zeros(mask.shape, dtype=np.uint8)
-            min_area = max(16, int(mask.shape[0] * mask.shape[1] * 0.00003))
-            kept = 0
-            for idx in range(1, num_labels):
-                area = int(stats[idx, cv2.CC_STAT_AREA])
-                if area < min_area:
-                    continue
-                cleaned[labels == idx] = 255
-                kept += 1
-            mask = cleaned
-        color_masks[accessory_id] = mask
-        colors_meta.append(
-            {
-                "accessory_id": accessory_id,
-                "label": str(candidate.get("label") or accessory_id),
-                "color": palette.get("name"),
-                "hex": palette.get("hex"),
-                "area_px": int(np.count_nonzero(mask)),
-            }
-        )
-    total_area = int(sum(item.get("area_px") or 0 for item in colors_meta))
-    return color_masks, {"ok": True, "colors": colors_meta, "total_area_px": total_area}
+    return _auto_optimization_mask_visuals.decode_multicolor_mask(mask_bgr, assignments)
 
 
 def draw_auto_optimize_review_overlay(
@@ -6142,48 +5413,7 @@ def draw_auto_optimize_review_overlay(
     failures: list[dict[str, Any]],
     output_path: Path,
 ) -> tuple[str, dict[str, Any]]:
-    overlay = image_bgr.copy()
-    translucent = overlay.copy()
-    rows: list[dict[str, Any]] = []
-    for passed, item in [(True, label) for label in labels] + [(False, failure) for failure in failures]:
-        bbox = item.get("bbox_xyxy")
-        if not isinstance(bbox, list) or len(bbox) < 4:
-            continue
-        x1, y1, x2, y2 = [int(value) for value in bbox[:4]]
-        x1 = max(0, min(x1, overlay.shape[1] - 1))
-        x2 = max(x1 + 1, min(x2, overlay.shape[1]))
-        y1 = max(0, min(y1, overlay.shape[0] - 1))
-        y2 = max(y1 + 1, min(y2, overlay.shape[0]))
-        color_bgr = item.get("color_bgr") if isinstance(item.get("color_bgr"), (list, tuple)) else (0, 220, 0)
-        color = tuple(int(v) for v in color_bgr[:3])
-        mask_path = item.get("full_mask")
-        if isinstance(mask_path, np.ndarray):
-            translucent[mask_path > 8] = color
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 4, cv2.LINE_AA)
-        status_text = "PASS" if passed else "FAIL"
-        raw_label = bounded_text(str(item.get("label") or item.get("accessory_id") or "target"), 44)
-        label_text = raw_label.encode("ascii", errors="ignore").decode("ascii").strip()
-        if not label_text:
-            label_text = str(item.get("color") or item.get("color_hex") or item.get("accessory_id") or "target")
-        cv2.putText(
-            overlay,
-            f"{status_text} {label_text}"[:72],
-            (x1, max(26, y1 - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.78,
-            color,
-            2,
-            cv2.LINE_AA,
-        )
-        rows.append({"passed": passed, "label": label_text, "bbox_xyxy": [x1, y1, x2, y2], "color": item.get("color_hex")})
-    if rows:
-        overlay = cv2.addWeighted(translucent, 0.22, overlay, 0.78, 0)
-    else:
-        cv2.rectangle(overlay, (0, 0), (overlay.shape[1] - 1, overlay.shape[0] - 1), (32, 60, 230), 8)
-        cv2.putText(overlay, "FAIL no valid AI mask bbox", (32, 54), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (32, 60, 230), 3, cv2.LINE_AA)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    _image_files.imwrite(str(output_path), overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-    return public_output_url_for_existing(output_path), {"boxes": rows, "box_count": len(rows)}
+    return _auto_optimization_mask_visuals.draw_auto_optimize_review_overlay(image_bgr, labels, failures, output_path)
 
 
 DOCUMENT_LIKE_TEXT_HINTS = (
@@ -6202,22 +5432,7 @@ DOCUMENT_LIKE_TEXT_HINTS = (
 
 
 def auto_optimize_text_mask_requires_document_gate(candidate: dict[str, Any], profile: dict[str, Any]) -> bool:
-    material_type = str(profile.get("material_type") or "").strip().lower()
-    if material_type != "text":
-        return False
-    values: list[str] = [
-        str(candidate.get("label") or ""),
-        str(profile.get("label") or ""),
-        str(profile.get("description") or ""),
-        str(profile.get("visual_signature") or ""),
-        str(profile.get("mask_scope") or ""),
-    ]
-    for key in ("distinguishing_text", "positive_cues"):
-        raw = profile.get(key)
-        if isinstance(raw, list):
-            values.extend(str(item or "") for item in raw)
-    blob = " ".join(values).lower()
-    return any(hint in blob for hint in DOCUMENT_LIKE_TEXT_HINTS)
+    return _auto_optimization_mask_visuals.auto_optimize_text_mask_requires_document_gate(candidate, profile)
 
 
 def validate_auto_optimize_text_mask_region(
@@ -6227,41 +5442,7 @@ def validate_auto_optimize_text_mask_region(
     candidate: dict[str, Any],
     profile: dict[str, Any],
 ) -> dict[str, Any]:
-    if not auto_optimize_text_mask_requires_document_gate(candidate, profile):
-        return {"ok": True, "skipped": True}
-    height, width = image_bgr.shape[:2]
-    x1, y1, x2, y2 = [int(value) for value in bbox[:4]]
-    x1 = max(0, min(x1, width - 1))
-    x2 = max(x1 + 1, min(x2, width))
-    y1 = max(0, min(y1, height - 1))
-    y2 = max(y1 + 1, min(y2, height))
-    roi = image_bgr[y1:y2, x1:x2]
-    roi_mask = full_mask[y1:y2, x1:x2] > 8
-    visible_pixels = int(np.count_nonzero(roi_mask))
-    if roi.size == 0 or visible_pixels <= 0:
-        return {"ok": False, "reason": "text_mask_region_empty", "visible_pixels": visible_pixels}
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    saturation = hsv[:, :, 1]
-    value = hsv[:, :, 2]
-    masked_saturation = saturation[roi_mask]
-    masked_value = value[roi_mask]
-    paper_like = (masked_saturation < 90) & (masked_value > 145)
-    light_pixels = masked_value > 145
-    paper_like_ratio = float(np.count_nonzero(paper_like)) / max(1, visible_pixels)
-    light_ratio = float(np.count_nonzero(light_pixels)) / max(1, visible_pixels)
-    metrics = {
-        "visible_pixels": visible_pixels,
-        "bbox_xyxy": [x1, y1, x2, y2],
-        "paper_like_ratio": round(paper_like_ratio, 4),
-        "light_ratio": round(light_ratio, 4),
-    }
-    if paper_like_ratio < 0.18 or light_ratio < 0.22:
-        return {
-            "ok": False,
-            "reason": "text_mask_region_not_document_like",
-            **metrics,
-        }
-    return {"ok": True, **metrics}
+    return _auto_optimization_mask_visuals.validate_auto_optimize_text_mask_region(image_bgr, full_mask, bbox, candidate, profile)
 
 
 MASK_VERIFIER_SYSTEM_PROMPT = """You are VantaLine's mask verifier for production inspection training data.
@@ -6274,256 +5455,52 @@ Return only compact JSON with this shape:
 
 
 def auto_optimize_mask_verifier_overlay(image_bgr: np.ndarray, labels: list[dict[str, Any]]) -> np.ndarray:
-    overlay = image_bgr.copy()
-    translucent = overlay.copy()
-    for label in labels:
-        full_mask = label.get("full_mask")
-        if not isinstance(full_mask, np.ndarray):
-            continue
-        color_bgr = label.get("color_bgr") if isinstance(label.get("color_bgr"), (list, tuple)) else (0, 220, 0)
-        color = tuple(int(value) for value in color_bgr[:3])
-        translucent[full_mask > 8] = color
-        bbox = label.get("bbox_xyxy") if isinstance(label.get("bbox_xyxy"), list) else []
-        if len(bbox) >= 4:
-            x1, y1, x2, y2 = [int(value) for value in bbox[:4]]
-            x1 = max(0, min(x1, overlay.shape[1] - 1))
-            x2 = max(x1 + 1, min(x2, overlay.shape[1]))
-            y1 = max(0, min(y1, overlay.shape[0] - 1))
-            y2 = max(y1 + 1, min(y2, overlay.shape[0]))
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 4, cv2.LINE_AA)
-            cv2.putText(
-                overlay,
-                bounded_text(str(label.get("label") or label.get("accessory_id") or "target"), 40),
-                (x1, max(26, y1 - 10)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.72,
-                color,
-                2,
-                cv2.LINE_AA,
-            )
-    return cv2.addWeighted(translucent, 0.22, overlay, 0.78, 0)
+    return _auto_optimization_mask_visuals.auto_optimize_mask_verifier_overlay(image_bgr, labels)
 
 
 def auto_optimize_mask_verifier_crop(image_bgr: np.ndarray, label: dict[str, Any]) -> np.ndarray | None:
-    bbox = label.get("bbox_xyxy") if isinstance(label.get("bbox_xyxy"), list) else []
-    if len(bbox) < 4:
-        return None
-    x1, y1, x2, y2 = [int(value) for value in bbox[:4]]
-    height, width = image_bgr.shape[:2]
-    x1 = max(0, min(x1, width - 1))
-    x2 = max(x1 + 1, min(x2, width))
-    y1 = max(0, min(y1, height - 1))
-    y2 = max(y1 + 1, min(y2, height))
-    crop = image_bgr[y1:y2, x1:x2].copy()
-    full_mask = label.get("full_mask")
-    if isinstance(full_mask, np.ndarray):
-        mask_crop = full_mask[y1:y2, x1:x2] > 8
-        background = np.zeros_like(crop)
-        crop = np.where(mask_crop[:, :, None], crop, background)
-    return crop
+    return _auto_optimization_mask_visuals.auto_optimize_mask_verifier_crop(image_bgr, label)
 
 
 def clamp_unit_score(value: Any, default: float = 0.0) -> float:
-    try:
-        return max(0.0, min(1.0, float(value)))
-    except (TypeError, ValueError):
-        return default
+    return _auto_optimization_mask_visuals.clamp_unit_score(value, default)
 
 
-def verify_auto_optimize_mask_sample(
-    sample: dict[str, Any],
-    image_bgr: np.ndarray,
-    labels: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    if not labels:
-        return labels, [], {"enabled": True, "status": "skipped_empty"}
-    settings = ai_detection_settings("training_vision")
-    if not settings.get("configured"):
-        failures = [
-            {
-                "accessory_id": label.get("accessory_id"),
-                "label": label.get("label"),
-                "status": "failed",
-                "reason": "mask_verifier_provider_not_configured",
-                "bbox_xyxy": label.get("bbox_xyxy"),
-                "color": label.get("color"),
-                "color_hex": label.get("color_hex"),
-                "color_bgr": label.get("color_bgr"),
-                "full_mask": label.get("full_mask"),
-            }
-            for label in labels
-        ]
-        return [], failures, {"enabled": True, "status": "failed", "reason": "provider_not_configured"}
-    targets_payload: list[dict[str, Any]] = []
-    label_by_id = {str(label.get("accessory_id") or ""): label for label in labels}
-    for label in labels:
-        profile = label.get("profile") if isinstance(label.get("profile"), dict) else {}
-        candidate = label.get("candidate") if isinstance(label.get("candidate"), dict) else {}
-        accessory_id = str(label.get("accessory_id") or "")
-        negative_candidates = [
-            {
-                "accessory_id": str(other.get("accessory_id") or ""),
-                "label": str(other.get("label") or other.get("accessory_id") or ""),
-            }
-            for other in labels
-            if str(other.get("accessory_id") or "") != accessory_id
-        ]
-        targets_payload.append(
-            {
-                "accessory_id": accessory_id,
-                "label": str(label.get("label") or accessory_id),
-                "bbox_xyxy": label.get("bbox_xyxy"),
-                "assigned_color": label.get("color_hex") or label.get("color"),
-                "detection_evidence": bounded_text(candidate.get("evidence") or "", 220),
-                "ai_profile": {
-                    "material_type": profile.get("material_type") or "unknown",
-                    "description": profile.get("description") or "",
-                    "visual_signature": profile.get("visual_signature") or "",
-                    "distinguishing_text": profile.get("distinguishing_text") if isinstance(profile.get("distinguishing_text"), list) else [],
-                    "positive_cues": profile.get("positive_cues") if isinstance(profile.get("positive_cues"), list) else [],
-                    "negative_cues": profile.get("negative_cues") if isinstance(profile.get("negative_cues"), list) else [],
-                    "mask_scope": profile.get("mask_scope") or "",
-                },
-                "negative_candidates": negative_candidates,
-            }
-        )
-    task_payload = {
-        "task_type": "mask_verification",
-        "request_id": sample.get("request_id") or sample.get("sample_id") or "",
-        "acceptance_policy": {
-            "accept": "masked region is the exact intended accessory and tightly localized",
-            "reject": "wrong object, sibling part, handle/cap, background, shadow, or unrelated region",
-            "review": "uncertain identity or partial localization",
-        },
-        "thresholds": {
-            "identity_score": 0.75,
-            "localization_score": 0.70,
-            "negative_match_score": 0.25,
-        },
-        "targets": targets_payload,
-    }
-    user_content: list[dict[str, Any]] = [
-        {"type": "text", "text": "MASK_VERIFIER_TASK_JSON:\n" + json.dumps(task_payload, ensure_ascii=False, indent=2)},
-        {"type": "text", "text": "ORIGINAL_INSPECTION_IMAGE"},
-        {"type": "image_url", "image_url": {"url": image_bgr_data_url(image_bgr, max_side=1280, quality=82), "detail": "high"}},
-        {"type": "text", "text": "MASK_OVERLAY_IMAGE: colored regions and bounding boxes to verify."},
-        {"type": "image_url", "image_url": {"url": image_bgr_data_url(auto_optimize_mask_verifier_overlay(image_bgr, labels), max_side=1280, quality=84), "detail": "high"}},
-    ]
-    for label in labels:
-        crop = auto_optimize_mask_verifier_crop(image_bgr, label)
-        if crop is None:
-            continue
-        user_content.append(
-            {
-                "type": "text",
-                "text": f"MASKED_CROP accessory_id={label.get('accessory_id')} label={label.get('label')} color={label.get('color_hex') or label.get('color')}",
-            }
-        )
-        user_content.append({"type": "image_url", "image_url": {"url": image_bgr_data_url(crop, max_side=768, quality=84), "detail": "high"}})
-    try:
-        parsed, latency_ms, provider_meta = generate_provider_json_with_fallback(
-            settings,
-            MASK_VERIFIER_SYSTEM_PROMPT,
-            user_content,
-            max_tokens=1800,
-            max_attempts=3,
-            overloaded_retry_delay_seconds=3.0,
-            allow_overloaded_model_fallback=False,
-        )
-    except AiProviderError as exc:
-        failures = []
-        for label in labels:
-            failures.append(
-                {
-                    "accessory_id": label.get("accessory_id"),
-                    "label": label.get("label"),
-                    "status": "failed",
-                    "reason": "mask_verifier_provider_failed",
-                    "error": bounded_text(str(exc), 220),
-                    "attempts": getattr(exc, "attempts", None),
-                    "retry_count": getattr(exc, "retry_count", None),
-                    "previous_errors": getattr(exc, "previous_errors", [])[-3:],
-                    "bbox_xyxy": label.get("bbox_xyxy"),
-                    "color": label.get("color"),
-                    "color_hex": label.get("color_hex"),
-                    "color_bgr": label.get("color_bgr"),
-                    "full_mask": label.get("full_mask"),
-                }
-            )
-        return [], failures, {
-            "enabled": True,
-            "status": "failed",
-            "reason": "provider_failed",
-            "error": bounded_text(str(exc), 240),
-            "attempts": getattr(exc, "attempts", None),
-            "retry_count": getattr(exc, "retry_count", None),
-        }
-    raw_targets = parsed.get("targets") if isinstance(parsed.get("targets"), list) else []
-    decision_by_id = {
-        str(item.get("accessory_id") or ""): item
-        for item in raw_targets
-        if isinstance(item, dict)
-    }
-    accepted: list[dict[str, Any]] = []
-    failures: list[dict[str, Any]] = []
-    normalized_targets: list[dict[str, Any]] = []
-    for accessory_id, label in label_by_id.items():
-        raw = decision_by_id.get(accessory_id) or {}
-        identity = clamp_unit_score(raw.get("identity_score"))
-        localization = clamp_unit_score(raw.get("localization_score"))
-        negative = clamp_unit_score(raw.get("negative_match_score"))
-        decision = str(raw.get("decision") or "").strip().lower()
-        matches = bool(raw.get("mask_region_matches_target"))
-        auto_accept = (
-            matches
-            and decision == "accept"
-            and identity >= 0.75
-            and localization >= 0.70
-            and negative <= 0.25
-        )
-        normalized = {
-            "accessory_id": accessory_id,
-            "label": label.get("label"),
-            "mask_region_matches_target": matches,
-            "identity_score": round(identity, 4),
-            "localization_score": round(localization, 4),
-            "negative_match_score": round(negative, 4),
-            "decision": decision or "review",
-            "reason": bounded_text(raw.get("reason") or "", 240),
-            "wrong_object_evidence": string_list(raw.get("wrong_object_evidence"), max_items=5, max_len=160),
-        }
-        normalized_targets.append(normalized)
-        label["mask_verifier"] = normalized
-        if auto_accept:
-            accepted.append(label)
-            continue
-        review_or_reject = "rejected" if decision == "reject" or negative > 0.45 else "review_required"
-        failures.append(
-            {
-                "accessory_id": accessory_id,
-                "label": label.get("label"),
-                "status": review_or_reject,
-                "reason": "mask_verifier_rejected" if review_or_reject == "rejected" else "mask_verifier_review_required",
-                "bbox_xyxy": label.get("bbox_xyxy"),
-                "color": label.get("color"),
-                "color_hex": label.get("color_hex"),
-                "color_bgr": label.get("color_bgr"),
-                "full_mask": label.get("full_mask"),
-                "metrics": normalized,
-            }
-        )
-    overall = "accept" if len(accepted) == len(labels) else ("reject" if any(item.get("status") == "rejected" for item in failures) else "review")
-    return accepted, failures, {
-        "enabled": True,
-        "status": overall,
-        "latency_ms": latency_ms,
-        "provider": settings.get("provider"),
-        "model": settings.get("model"),
-        "attempts": provider_meta.get("attempts"),
-        "retry_count": provider_meta.get("retry_count"),
-        "targets": normalized_targets,
-        "raw_overall_decision": parsed.get("overall_decision") or "",
-    }
+from .training.auto_optimization_mask_verification import AutoOptimizationMaskVerification
+from .training.auto_optimization_mask_verification_ports import AutoOptimizationMaskVerificationPorts
+
+_auto_optimization_mask_verification = AutoOptimizationMaskVerification(AutoOptimizationMaskVerificationPorts(
+    ai_detection_settings=lambda: ai_detection_settings,
+    bounded_text=lambda: bounded_text,
+    string_list=lambda: string_list,
+    image_bgr_data_url=lambda: image_bgr_data_url,
+    auto_optimize_mask_verifier_overlay=lambda: auto_optimize_mask_verifier_overlay,
+    auto_optimize_mask_verifier_crop=lambda: auto_optimize_mask_verifier_crop,
+    generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
+    MASK_VERIFIER_SYSTEM_PROMPT=lambda: MASK_VERIFIER_SYSTEM_PROMPT,
+    AiProviderError=lambda: AiProviderError,
+    clamp_unit_score=lambda: clamp_unit_score,
+))
+
+
+def verify_auto_optimize_mask_sample(sample: dict[str, Any], image_bgr: np.ndarray, labels: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    return _auto_optimization_mask_verification.verify_auto_optimize_mask_sample(sample, image_bgr, labels)
+
+
+from .training.auto_optimization_sprite_publication import AutoOptimizationSpritePublication
+from .training.auto_optimization_sprite_publication_ports import SpritePublication
+
+_auto_optimization_sprite_publication = AutoOptimizationSpritePublication(
+    publication=SpritePublication(
+        safe_record_id=lambda: safe_record_id,
+        _image_files=lambda: _image_files,
+        write_clean_sprite=lambda: write_clean_sprite,
+        resolve_service_path=lambda: resolve_service_path,
+        _business_files=lambda: _business_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+)
 
 
 def auto_optimize_write_sprite_artifact(
@@ -6537,581 +5514,89 @@ def auto_optimize_write_sprite_artifact(
     artifact_dir: Path,
     source_image_path: Path,
 ) -> dict[str, Any]:
-    x1, y1, x2, y2 = [int(value) for value in bbox[:4]]
-    height, width = image_bgr.shape[:2]
-    x1 = max(0, min(x1, width - 1))
-    y1 = max(0, min(y1, height - 1))
-    x2 = max(x1 + 1, min(x2, width))
-    y2 = max(y1 + 1, min(y2, height))
-    roi_bgr = image_bgr[y1:y2, x1:x2].copy()
-    roi_mask = full_mask[y1:y2, x1:x2].copy()
-    safe_accessory_id = safe_record_id(accessory_id or label_name or "target")
-    sprite_dir = artifact_dir / "sprites"
-    sprite_dir.mkdir(parents=True, exist_ok=True)
-    raw_path = sprite_dir / f"{sample_id}_{safe_accessory_id}_sprite_raw.png"
-    normalized_path = sprite_dir / f"{sample_id}_{safe_accessory_id}_sprite.png"
-    bgra = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2BGRA)
-    bgra[:, :, 3] = roi_mask
-    _image_files.imwrite(str(raw_path), bgra)
-    metadata = {
-        "task_id": "auto_optimize",
-        "source_sample_id": sample_id,
-        "accessory_id": accessory_id,
-        "label": label_name,
-        "source_image_path": str(source_image_path),
-        "source_object_bbox_xyxy": [x1, y1, x2, y2],
-        "source_object_size_px": [int(x2 - x1), int(y2 - y1)],
-        "source_pose_family": "real_photo_ai_mask",
-        "pose_family": "real_photo_ai_mask",
-        "source_pose_collection_job_id": "auto_optimize_ai_mask",
-        "object_alpha_material_policy": "ai_mask_visible_object",
-        "transparent_alpha_policy": "ai_mask_alpha",
-    }
-    normalized = write_clean_sprite(normalized_path, roi_bgr, roi_mask, metadata) or {}
-    chosen_path = resolve_service_path(normalized.get("path") or normalized_path)
-    if not _business_files.exists(chosen_path):
-        chosen_path = raw_path
-    return {
-        "accessory_id": accessory_id,
-        "label": label_name,
-        "status": "available" if _business_files.exists(chosen_path) else "failed",
-        "path": str(chosen_path),
-        "url": public_output_url_for_existing(chosen_path),
-        "raw_path": str(raw_path),
-        "raw_url": public_output_url_for_existing(raw_path),
-        "bbox_xyxy": [x1, y1, x2, y2],
-        "width": int(roi_bgr.shape[1]),
-        "height": int(roi_bgr.shape[0]),
-        "source_sample_id": sample_id,
-        "source_image_path": str(source_image_path),
-        "normalized": public_path_sanitized(normalized),
-    }
+    return _auto_optimization_sprite_publication.auto_optimize_write_sprite_artifact(image_bgr=image_bgr, full_mask=full_mask, bbox=bbox, sample_id=sample_id, accessory_id=accessory_id, label_name=label_name, artifact_dir=artifact_dir, source_image_path=source_image_path)
 
 
-def auto_optimize_generate_labels_for_sample(
-    sample: dict[str, Any],
-    provider_settings: dict[str, Any],
-    model: str,
-    artifact_dir: Path,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    image_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-    image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
-    if image_bgr is None:
-        return [], [{"status": "failed", "reason": "source_image_unreadable"}], {}
-    candidates = [item for item in sample.get("candidate_accessories") or [] if isinstance(item, dict)]
-    if not candidates:
-        return [], [{"status": "rejected", "reason": "no_present_single_accessory_candidates"}], {}
-    payload = photo_highlight_input_data_url(image_bgr)
-    if payload is None:
-        return [], [{"status": "failed", "reason": "source_image_encode_failed"}], {}
-    ai_bgr, data_url, scale_x, scale_y = payload
-    input_h, input_w = ai_bgr.shape[:2]
-    orig_h, orig_w = image_bgr.shape[:2]
-    labels: list[dict[str, Any]] = []
-    failures: list[dict[str, Any]] = []
-    combined_mask = np.zeros((orig_h, orig_w, 3), dtype=np.uint8)
-    sample_id = safe_record_id(str(sample.get("sample_id") or "sample"))
-    started = int(time.time())
-    api_calls: list[dict[str, Any]] = []
-    accessories_by_id = auto_optimize_accessory_lookup_for_sample(sample)
-    mask_targets_per_call = max(
-        1,
-        min(
-            len(AUTO_OPTIMIZE_MASK_PALETTE),
-            int(os.environ.get("VANTALINE_AUTO_OPTIMIZE_MASK_TARGETS_PER_CALL", str(len(AUTO_OPTIMIZE_MASK_PALETTE))) or str(len(AUTO_OPTIMIZE_MASK_PALETTE))),
-        ),
-    )
-    mask_generation_attempts = max(1, int(os.environ.get("VANTALINE_AUTO_OPTIMIZE_MASK_GENERATION_ATTEMPTS", "3") or "3"))
-    for chunk_index in range(0, len(candidates), mask_targets_per_call):
-        chunk = candidates[chunk_index : chunk_index + mask_targets_per_call]
-        chunk_number = int(chunk_index // mask_targets_per_call)
-        assignments = [
-            {
-                "candidate": candidate,
-                "palette": AUTO_OPTIMIZE_MASK_PALETTE[offset],
-                "profile": auto_optimize_mask_target_profile(candidate, accessories_by_id),
-            }
-            for offset, candidate in enumerate(chunk)
-        ]
-        prompt = auto_optimize_multicolor_mask_prompt(assignments, input_w=input_w, input_h=input_h)
-        user_content = [
-            {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
-        ]
-        try:
-            result = auto_optimize_generate_image_with_retry(provider_settings, model, prompt, user_content)
-        except AiProviderError as exc:
-            for item in assignments:
-                candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
-                failures.append(
-                    {
-                        "accessory_id": candidate.get("accessory_id"),
-                        "label": candidate.get("label"),
-                        "status": "failed",
-                        "reason": bounded_text(str(exc), 180),
-                        "attempts": getattr(exc, "attempts", None),
-                        "retry_count": getattr(exc, "retry_count", None),
-                        "previous_errors": getattr(exc, "previous_errors", [])[-3:],
-                    }
-                )
-            continue
-        usage_metadata = result.get("usage_metadata") if isinstance(result.get("usage_metadata"), dict) else {}
-        api_calls.append(
-            {
-                "provider": str(provider_settings.get("provider") or "image_generation"),
-                "model": str(model or result.get("model") or ""),
-                "created_at": int(time.time()),
-                "latency_ms": int(result.get("latency_ms") or 0),
-                "attempts": int(result.get("attempts") or 1),
-                "retry_count": int(result.get("retry_count") or 0),
-                "previous_errors": result.get("previous_errors") if isinstance(result.get("previous_errors"), list) else [],
-                "chunk_index": chunk_number,
-                "targets_per_call": mask_targets_per_call,
-                "prompt_mode": AUTO_OPTIMIZE_MASK_PROMPT_MODE,
-                "target_profile_count": len([item for item in assignments if (item.get("profile") or {}).get("visual_signature") or (item.get("profile") or {}).get("positive_cues")]),
-                "usage_metadata": usage_metadata,
-            }
-        )
-        mask_path = artifact_dir / f"{sample_id}_multicolor_mask_{chunk_number + 1}.png"
-        mask_path.parent.mkdir(parents=True, exist_ok=True)
-        _business_files.write_bytes(mask_path, result["bytes"])
-        mask_bgr = _image_files.imread(str(mask_path), cv2.IMREAD_COLOR)
-        if mask_bgr is None:
-            try:
-                _business_files.unlink(mask_path, missing_ok=True)
-            except OSError:
-                pass
-            for item in assignments:
-                candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
-                failures.append(
-                    {
-                        "accessory_id": candidate.get("accessory_id"),
-                        "label": candidate.get("label"),
-                        "status": "failed",
-                        "reason": "generated_mask_unreadable",
-                    }
-                )
-            continue
-        if mask_bgr.shape[1] != input_w or mask_bgr.shape[0] != input_h:
-            mask_bgr = cv2.resize(mask_bgr, (input_w, input_h), interpolation=cv2.INTER_NEAREST)
-        color_masks, mask_meta = decode_multicolor_mask(mask_bgr, assignments)
-        try:
-            _business_files.unlink(mask_path, missing_ok=True)
-        except OSError:
-            pass
-        for item in assignments:
-            candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
-            palette = item.get("palette") if isinstance(item.get("palette"), dict) else {}
-            profile = item.get("profile") if isinstance(item.get("profile"), dict) else {}
-            accessory_id = str(candidate.get("accessory_id") or candidate.get("label") or palette.get("name") or "")
-            ai_mask = color_masks.get(accessory_id)
-            label_name = str(candidate.get("label") or accessory_id or "目标配件")
-            if ai_mask is None or int(np.count_nonzero(ai_mask)) == 0:
-                fallback_failure: dict[str, Any] | None = None
-                if mask_targets_per_call == 1 and mask_generation_attempts > 1:
-                    for retry_index in range(2, mask_generation_attempts + 1):
-                        fallback_label, fallback_failure = auto_optimize_generate_label_for_candidate(
-                            sample,
-                            candidate,
-                            provider_settings,
-                            model,
-                            artifact_dir,
-                        )
-                        if fallback_label:
-                            fallback_label.setdefault("mask_meta", {})["generation_attempt"] = retry_index
-                            fallback_label["mask_meta"]["fallback_reason"] = "retry_after_no_highlight_component"
-                            labels.append(fallback_label)
-                            api_calls.append(
-                                {
-                                    "provider": str(provider_settings.get("provider") or "image_generation"),
-                                    "model": str(model or ""),
-                                    "created_at": int(time.time()),
-                                    "latency_ms": int((fallback_label.get("mask_meta") or {}).get("latency_ms") or 0),
-                                    "attempts": int((fallback_label.get("mask_meta") or {}).get("attempts") or 1),
-                                    "retry_count": int((fallback_label.get("mask_meta") or {}).get("retry_count") or 0),
-                                    "previous_errors": (fallback_label.get("mask_meta") or {}).get("previous_errors") if isinstance(fallback_label.get("mask_meta"), dict) else [],
-                                    "chunk_index": chunk_number,
-                                    "targets_per_call": 1,
-                                    "generation_attempt": retry_index,
-                                    "fallback_reason": "no_highlight_component",
-                                    "prompt_mode": AUTO_OPTIMIZE_MASK_PROMPT_MODE,
-                                }
-                            )
-                            break
-                        if not fallback_failure or fallback_failure.get("reason") not in {"no_highlight_component", "empty_scaled_mask", "generated_mask_unreadable", "mask_decode_failed", "ai_mask_auto_crop_mismatch"}:
-                            break
-                    if fallback_label:
-                        continue
-                if fallback_failure:
-                    fallback_failure = {k: v for k, v in fallback_failure.items() if k != "full_mask"}
-                failures.append(
-                    {
-                        "accessory_id": accessory_id,
-                        "label": label_name,
-                        "status": "rejected",
-                        "reason": "no_highlight_component",
-                        "color": palette.get("name"),
-                        "color_hex": palette.get("hex"),
-                        "fallback_failure": fallback_failure,
-                    }
-                )
-                continue
-            full_mask = cv2.resize(ai_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
-            bbox = alpha_bbox(full_mask, threshold=8)
-            if bbox == [0, 0, 0, 0]:
-                fallback_failure = None
-                if mask_targets_per_call == 1 and mask_generation_attempts > 1:
-                    for retry_index in range(2, mask_generation_attempts + 1):
-                        fallback_label, fallback_failure = auto_optimize_generate_label_for_candidate(
-                            sample,
-                            candidate,
-                            provider_settings,
-                            model,
-                            artifact_dir,
-                        )
-                        if fallback_label:
-                            fallback_label.setdefault("mask_meta", {})["generation_attempt"] = retry_index
-                            fallback_label["mask_meta"]["fallback_reason"] = "retry_after_empty_scaled_mask"
-                            labels.append(fallback_label)
-                            break
-                        if not fallback_failure or fallback_failure.get("reason") not in {"no_highlight_component", "empty_scaled_mask", "generated_mask_unreadable", "mask_decode_failed", "ai_mask_auto_crop_mismatch"}:
-                            break
-                    if fallback_label:
-                        continue
-                if fallback_failure:
-                    fallback_failure = {k: v for k, v in fallback_failure.items() if k != "full_mask"}
-                failures.append(
-                    {
-                        "accessory_id": accessory_id,
-                        "label": label_name,
-                        "status": "rejected",
-                        "reason": "empty_scaled_mask",
-                        "color": palette.get("name"),
-                        "color_hex": palette.get("hex"),
-                        "fallback_failure": fallback_failure,
-                    }
-                )
-                continue
-            x1, y1, x2, y2 = bbox
-            bgr = tuple(int(v) for v in (palette.get("bgr") or (0, 255, 0))[:3])
-            text_gate = validate_auto_optimize_text_mask_region(
-                image_bgr,
-                full_mask,
-                [int(x1), int(y1), int(x2), int(y2)],
-                candidate,
-                profile,
-            )
-            if not text_gate.get("ok"):
-                failures.append(
-                    {
-                        "accessory_id": accessory_id,
-                        "label": label_name,
-                        "status": "rejected",
-                        "reason": text_gate.get("reason") or "text_mask_region_failed_quality_gate",
-                        "color": palette.get("name"),
-                        "color_hex": palette.get("hex"),
-                        "color_bgr": list(bgr),
-                        "bbox_xyxy": [int(x1), int(y1), int(x2), int(y2)],
-                        "full_mask": full_mask,
-                        "metrics": text_gate,
-                    }
-                )
-                continue
-            sprite_artifact = auto_optimize_write_sprite_artifact(
-                image_bgr=image_bgr,
-                full_mask=full_mask,
-                bbox=[int(x1), int(y1), int(x2), int(y2)],
-                sample_id=sample_id,
-                accessory_id=accessory_id,
-                label_name=label_name,
-                artifact_dir=artifact_dir,
-                source_image_path=image_path,
-            )
-            base_meta = {
-                "input_size_px": [int(input_w), int(input_h)],
-                "scale_xy": [round(float(scale_x), 6), round(float(scale_y), 6)],
-                "latency_ms": int(result.get("latency_ms") or 0),
-                "attempts": int(result.get("attempts") or 1),
-                "retry_count": int(result.get("retry_count") or 0),
-                "previous_errors": result.get("previous_errors") if isinstance(result.get("previous_errors"), list) else [],
-                "model": str(model or ""),
-                "multi_color": True,
-                "class_check": "matched",
-                "color": palette.get("name"),
-                "color_hex": palette.get("hex"),
-                "mask_meta": mask_meta,
-                "processing_artifacts": {
-                    "transparent_sprite_url": sprite_artifact.get("url") or "",
-                    "raw_transparent_sprite_url": sprite_artifact.get("raw_url") or "",
-                },
-            }
-            entry = {
-                "accessory_id": accessory_id,
-                "label": label_name,
-                "bbox_xyxy": [int(x1), int(y1), int(x2), int(y2)],
-                "confidence": float(candidate.get("confidence") or 0.0),
-                "sprite": sprite_artifact,
-                "mask_meta": base_meta,
-                "color": palette.get("name"),
-                "color_hex": palette.get("hex"),
-                "color_bgr": list(bgr),
-                "full_mask": full_mask,
-                "profile": profile,
-                "candidate": candidate,
-            }
-            labels.append(entry)
-    pre_verifier_mask = np.zeros((orig_h, orig_w, 3), dtype=np.uint8)
-    for entry in [*labels, *failures]:
-        full_mask = entry.get("full_mask") if isinstance(entry, dict) else None
-        color_bgr = entry.get("color_bgr") if isinstance(entry, dict) else None
-        if isinstance(full_mask, np.ndarray) and isinstance(color_bgr, list) and len(color_bgr) >= 3:
-            pre_verifier_mask[full_mask > 8] = tuple(int(value) for value in color_bgr[:3])
-    pre_verifier_mask_path = artifact_dir / f"{sample_id}_multicolor_mask_all_targets.png"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    _image_files.imwrite(str(pre_verifier_mask_path), pre_verifier_mask)
+from .training.auto_optimization_label_generation import AutoOptimizationLabelGeneration
+from .training.auto_optimization_label_generation_ports import LabelGenerationArtifacts, LabelGenerationPolicy, LabelGenerationModels
 
-    verifier_meta = {"enabled": False, "status": "skipped"}
-    if labels:
-        labels, verifier_failures, verifier_meta = verify_auto_optimize_mask_sample(sample, image_bgr, labels)
-        failures.extend(verifier_failures)
-    combined_mask = np.zeros((orig_h, orig_w, 3), dtype=np.uint8)
-    for label in labels:
-        full_mask = label.get("full_mask")
-        color_bgr = label.get("color_bgr")
-        if isinstance(full_mask, np.ndarray) and isinstance(color_bgr, list) and len(color_bgr) >= 3:
-            combined_mask[full_mask > 8] = tuple(int(value) for value in color_bgr[:3])
-    combined_mask_path = artifact_dir / f"{sample_id}_multicolor_mask_combined.png"
-    review_overlay_path = artifact_dir / f"{sample_id}_ai_mask_review_overlay.jpg"
-    _image_files.imwrite(str(combined_mask_path), combined_mask)
-    review_url, review_meta = draw_auto_optimize_review_overlay(image_bgr, labels, failures, review_overlay_path)
-    for entry in [*labels, *failures]:
-        entry.pop("full_mask", None)
-        entry.pop("profile", None)
-        entry.pop("candidate", None)
-    artifacts = {
-        "multi_color": True,
-        "pre_verifier_mask_url": public_output_url_for_existing(pre_verifier_mask_path),
-        "all_targets_mask_url": public_output_url_for_existing(pre_verifier_mask_path),
-        "color_mask_url": public_output_url_for_existing(combined_mask_path),
-        "review_overlay_url": review_url,
-        "review_meta": review_meta,
-        "class_check": {
-            "expected_count": len(candidates),
-            "matched_count": len(labels),
-            "missing_count": len([item for item in failures if isinstance(item, dict) and item.get("reason") in {"no_highlight_component", "empty_scaled_mask"}]),
-            "status": "matched" if labels and not failures else "needs_review",
-        },
-        "api_calls": api_calls,
-        "verifier": verifier_meta,
-        "started_at": started,
-        "completed_at": int(time.time()),
-    }
-    return labels, failures, artifacts
+_auto_optimization_label_generation = AutoOptimizationLabelGeneration(
+    LabelGenerationArtifacts(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        _business_files=lambda: _business_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        safe_record_id=lambda: safe_record_id,
+        auto_optimize_write_sprite_artifact=lambda: auto_optimize_write_sprite_artifact,
+    ),
+    LabelGenerationPolicy(
+        photo_highlight_input_data_url=lambda: photo_highlight_input_data_url,
+        auto_optimize_accessory_lookup_for_sample=lambda: auto_optimize_accessory_lookup_for_sample,
+        auto_optimize_mask_target_profile=lambda: auto_optimize_mask_target_profile,
+        AUTO_OPTIMIZE_MASK_PALETTE=lambda: AUTO_OPTIMIZE_MASK_PALETTE,
+        AUTO_OPTIMIZE_MASK_PROMPT_MODE=lambda: AUTO_OPTIMIZE_MASK_PROMPT_MODE,
+        auto_optimize_multicolor_mask_prompt=lambda: auto_optimize_multicolor_mask_prompt,
+        bounded_text=lambda: bounded_text,
+        decode_multicolor_mask=lambda: decode_multicolor_mask,
+        alpha_bbox=lambda: alpha_bbox,
+        validate_auto_optimize_text_mask_region=lambda: validate_auto_optimize_text_mask_region,
+        draw_auto_optimize_review_overlay=lambda: draw_auto_optimize_review_overlay,
+        decode_photo_highlight_mask=lambda: decode_photo_highlight_mask,
+        photo_highlight_auto_roi_mask=lambda: photo_highlight_auto_roi_mask,
+        photo_highlight_auto_compare=lambda: photo_highlight_auto_compare,
+    ),
+    LabelGenerationModels(
+        auto_optimize_generate_image_with_retry=lambda: auto_optimize_generate_image_with_retry,
+        AiProviderError=lambda: AiProviderError,
+        auto_optimize_generate_label_for_candidate=lambda: auto_optimize_generate_label_for_candidate,
+        verify_auto_optimize_mask_sample=lambda: verify_auto_optimize_mask_sample,
+    ),
+)
 
 
-def auto_optimize_generate_label_for_candidate(
-    sample: dict[str, Any],
-    candidate: dict[str, Any],
-    provider_settings: dict[str, Any],
-    model: str,
-    artifact_dir: Path,
-) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    image_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-    image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
-    if image_bgr is None:
-        return None, {"status": "failed", "reason": "source_image_unreadable"}
-    payload = photo_highlight_input_data_url(image_bgr)
-    if payload is None:
-        return None, {"status": "failed", "reason": "source_image_encode_failed"}
-    ai_bgr, data_url, scale_x, scale_y = payload
-    input_h, input_w = ai_bgr.shape[:2]
-    accessories_by_id = auto_optimize_accessory_lookup_for_sample(sample)
-    assignments = [
-        {
-            "candidate": candidate,
-            "palette": AUTO_OPTIMIZE_MASK_PALETTE[0],
-            "profile": auto_optimize_mask_target_profile(candidate, accessories_by_id),
-        }
-    ]
-    prompt = auto_optimize_multicolor_mask_prompt(assignments, input_w=input_w, input_h=input_h)
-    user_content = [
-        {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
-    ]
-    try:
-        result = auto_optimize_generate_image_with_retry(
-            provider_settings,
-            model,
-            prompt,
-            user_content,
-        )
-    except AiProviderError as exc:
-        return None, {
-            "status": "failed",
-            "reason": bounded_text(str(exc), 180),
-            "attempts": getattr(exc, "attempts", None),
-            "retry_count": getattr(exc, "retry_count", None),
-            "previous_errors": getattr(exc, "previous_errors", [])[-3:],
-        }
-    mask_path = artifact_dir / f"{safe_record_id(str(sample.get('sample_id') or 'sample'))}_{safe_record_id(str(candidate.get('accessory_id') or 'item'))}.png"
-    mask_path.parent.mkdir(parents=True, exist_ok=True)
-    _business_files.write_bytes(mask_path, result["bytes"])
-    mask_bgr = _image_files.imread(str(mask_path), cv2.IMREAD_COLOR)
-    mask_url = public_output_url_for_existing(mask_path)
-    if mask_bgr is None:
-        return None, {"status": "failed", "reason": "generated_mask_unreadable", "mask_url": mask_url}
-    if mask_bgr.shape[1] != input_w or mask_bgr.shape[0] != input_h:
-        mask_bgr = cv2.resize(mask_bgr, (input_w, input_h), interpolation=cv2.INTER_NEAREST)
-        _image_files.imwrite(str(mask_path), mask_bgr)
-    ai_mask, mask_meta = decode_photo_highlight_mask(mask_bgr)
-    if not mask_meta.get("ok"):
-        return None, {
-            "status": "rejected",
-            "reason": mask_meta.get("reason") or "mask_decode_failed",
-            "mask_url": public_output_url_for_existing(mask_path),
-            "mask_meta": mask_meta,
-        }
-    orig_h, orig_w = image_bgr.shape[:2]
-    full_mask = cv2.resize(ai_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST)
-    bbox = alpha_bbox(full_mask, threshold=8)
-    if bbox == [0, 0, 0, 0]:
-        return None, {
-            "status": "rejected",
-            "reason": "empty_scaled_mask",
-            "mask_url": public_output_url_for_existing(mask_path),
-            "mask_meta": mask_meta,
-        }
-    x1, y1, x2, y2 = bbox
-    profile = assignments[0].get("profile") if isinstance(assignments[0].get("profile"), dict) else {}
-    text_gate = validate_auto_optimize_text_mask_region(
-        image_bgr,
-        full_mask,
-        [int(x1), int(y1), int(x2), int(y2)],
-        candidate,
-        profile,
-    )
-    if not text_gate.get("ok"):
-        return None, {
-            "status": "rejected",
-            "reason": text_gate.get("reason") or "text_mask_region_failed_quality_gate",
-            "bbox_xyxy": [int(x1), int(y1), int(x2), int(y2)],
-            "full_mask": full_mask,
-            "metrics": text_gate,
-            "mask_url": public_output_url_for_existing(mask_path),
-            "mask_meta": mask_meta,
-        }
-    roi_bgr = image_bgr[y1:y2, x1:x2].copy()
-    roi_mask = full_mask[y1:y2, x1:x2].copy()
-    auto_mask, auto_meta = photo_highlight_auto_roi_mask(roi_bgr, roi_mask)
-    compare_meta = photo_highlight_auto_compare(roi_mask, auto_mask)
-    artifact_stem = f"{safe_record_id(str(sample.get('sample_id') or 'sample'))}_{safe_record_id(str(candidate.get('accessory_id') or 'item'))}"
-    box_overlay_path = artifact_dir / f"{artifact_stem}_ai_mask_box_overlay.jpg"
-    roi_path = artifact_dir / f"{artifact_stem}_roi.png"
-    ai_roi_mask_path = artifact_dir / f"{artifact_stem}_ai_roi_mask.png"
-    auto_roi_mask_path = artifact_dir / f"{artifact_stem}_traditional_roi_mask.png"
-    transparent_path = artifact_dir / f"{artifact_stem}_transparent_sprite.png"
-    try:
-        box_overlay = image_bgr.copy()
-        mask_overlay = box_overlay.copy()
-        mask_overlay[full_mask > 8] = (0, 210, 0)
-        box_overlay = cv2.addWeighted(mask_overlay, 0.28, box_overlay, 0.72, 0)
-        cv2.rectangle(box_overlay, (int(x1), int(y1)), (int(x2), int(y2)), (0, 220, 0), 4, cv2.LINE_AA)
-        label_text = bounded_text(candidate.get("label") or candidate.get("accessory_id") or "AI mask box", 48)
-        cv2.putText(
-            box_overlay,
-            label_text,
-            (int(x1), max(24, int(y1) - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (0, 220, 0),
-            2,
-            cv2.LINE_AA,
-        )
-        _image_files.imwrite(str(box_overlay_path), box_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
-        _image_files.imwrite(str(roi_path), roi_bgr)
-        _image_files.imwrite(str(ai_roi_mask_path), roi_mask)
-        if auto_mask is not None:
-            _image_files.imwrite(str(auto_roi_mask_path), auto_mask)
-        bgra = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2BGRA)
-        bgra[:, :, 3] = roi_mask
-        _image_files.imwrite(str(transparent_path), bgra)
-    except Exception:
-        pass
-    sprite_artifact = auto_optimize_write_sprite_artifact(
-        image_bgr=image_bgr,
-        full_mask=full_mask,
-        bbox=[int(x1), int(y1), int(x2), int(y2)],
-        sample_id=safe_record_id(str(sample.get("sample_id") or "sample")),
-        accessory_id=str(candidate.get("accessory_id") or ""),
-        label_name=str(candidate.get("label") or candidate.get("accessory_id") or ""),
-        artifact_dir=artifact_dir,
-        source_image_path=image_path,
-    )
-    processing_artifacts = {
-        "ai_mask_box_overlay_url": public_output_url_for_existing(box_overlay_path),
-        "source_roi_url": public_output_url_for_existing(roi_path),
-        "ai_roi_mask_url": public_output_url_for_existing(ai_roi_mask_path),
-        "traditional_roi_mask_url": public_output_url_for_existing(auto_roi_mask_path),
-        "transparent_sprite_url": sprite_artifact.get("url") or public_output_url_for_existing(transparent_path),
-        "raw_transparent_sprite_url": sprite_artifact.get("raw_url") or "",
-    }
-    palette = AUTO_OPTIMIZE_MASK_PALETTE[0]
-    bgr = tuple(int(v) for v in (palette.get("bgr") or (0, 255, 0))[:3])
-    label = {
-        "accessory_id": str(candidate.get("accessory_id") or ""),
-        "label": str(candidate.get("label") or candidate.get("accessory_id") or ""),
-        "bbox_xyxy": [int(x1), int(y1), int(x2), int(y2)],
-        "confidence": float(candidate.get("confidence") or 0.0),
-        "mask_path": str(mask_path),
-        "mask_url": public_output_url_for_existing(mask_path),
-        "sprite": sprite_artifact,
-        "mask_meta": {
-            **mask_meta,
-            "auto_roi_mask": auto_meta,
-            "auto_compare": compare_meta,
-            "processing_artifacts": processing_artifacts,
-            "input_size_px": [int(input_w), int(input_h)],
-            "scale_xy": [round(float(scale_x), 6), round(float(scale_y), 6)],
-            "latency_ms": int(result.get("latency_ms") or 0),
-            "attempts": int(result.get("attempts") or 1),
-            "retry_count": int(result.get("retry_count") or 0),
-            "previous_errors": result.get("previous_errors") if isinstance(result.get("previous_errors"), list) else [],
-            "model": str(model or ""),
-            "prompt_mode": AUTO_OPTIMIZE_MASK_PROMPT_MODE,
-            "fallback_single_target": True,
-        },
-        "color": palette.get("name"),
-        "color_hex": palette.get("hex"),
-        "color_bgr": list(bgr),
-        "full_mask": full_mask,
-        "profile": profile,
-        "candidate": candidate,
-    }
-    status = "trainable" if compare_meta.get("ok") else "review_required"
-    return label, {
-        "status": status,
-        "reason": "" if compare_meta.get("ok") else compare_meta.get("reason") or "ai_mask_auto_crop_mismatch",
-        "score": compare_meta.get("score") or 0.0,
-        "bbox_xyxy": [int(x1), int(y1), int(x2), int(y2)],
-        "mask_url": public_output_url_for_existing(mask_path),
-        "processing_artifacts": processing_artifacts,
-        "mask_meta": {
-            **mask_meta,
-            "auto_roi_mask": auto_meta,
-            "auto_compare": compare_meta,
-        },
-    }
+def auto_optimize_generate_labels_for_sample(sample: dict[str, Any], provider_settings: dict[str, Any], model: str, artifact_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    return _auto_optimization_label_generation.auto_optimize_generate_labels_for_sample(sample, provider_settings, model, artifact_dir)
+
+
+def auto_optimize_generate_label_for_candidate(sample: dict[str, Any], candidate: dict[str, Any], provider_settings: dict[str, Any], model: str, artifact_dir: Path) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    return _auto_optimization_label_generation.auto_optimize_generate_label_for_candidate(sample, candidate, provider_settings, model, artifact_dir)
+
+
+from .training.auto_optimization_label_processing import AutoOptimizationLabelProcessing
+from .training.auto_optimization_label_processing_ports import ProcessingState, ProcessingArtifacts, ProcessingExecution
+
+_auto_optimization_label_processing = AutoOptimizationLabelProcessing(
+    state=ProcessingState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        _auto_optimize_label_threads=lambda: _auto_optimize_label_threads,
+        auto_optimize_label_worker=lambda: auto_optimize_label_worker,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
+    ),
+    artifacts=ProcessingArtifacts(
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        safe_record_id=lambda: safe_record_id,
+        auto_optimize_generate_labels_for_sample=lambda: auto_optimize_generate_labels_for_sample,
+        bounded_text=lambda: bounded_text,
+        auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
+    ),
+    execution=ProcessingExecution(
+        image_generation_settings=lambda: image_generation_settings,
+        AUTO_OPTIMIZE_MASK_MAX_PARALLEL=lambda: AUTO_OPTIMIZE_MASK_MAX_PARALLEL,
+        ThreadPoolExecutor=lambda: ThreadPoolExecutor,
+        as_completed=lambda: as_completed,
+        auto_optimize_process_label_sample=lambda: auto_optimize_process_label_sample,
+    ),
+)
 
 
 def start_auto_optimize_label_worker(task_id: str) -> None:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        return
-    with _auto_optimize_lock:
-        existing = _auto_optimize_label_threads.get(clean_task_id)
-        if existing and existing.is_alive():
-            return
-        thread = threading.Thread(target=auto_optimize_label_worker, args=(clean_task_id,), name=f"auto-opt-label-{clean_task_id}", daemon=True)
-        _auto_optimize_label_threads[clean_task_id] = thread
-        thread.start()
+    return _auto_optimization_label_processing.start_auto_optimize_label_worker(task_id)
 
 
 def auto_optimize_process_label_sample(
@@ -7120,354 +5605,110 @@ def auto_optimize_process_label_sample(
     provider_settings: dict[str, Any],
     model: str,
 ) -> dict[str, Any]:
-    artifact_dir = output_write_dir_for_owner("auto_optimize_masks", str(pending.get("owner_user_id") or "")) / safe_record_id(task_id)
-    try:
-        labels, failures, label_artifacts = auto_optimize_generate_labels_for_sample(pending, provider_settings, model, artifact_dir)
-    except Exception as exc:  # noqa: BLE001
-        labels, failures, label_artifacts = [], [{"status": "failed", "reason": bounded_text(str(exc), 180)}], {}
-    api_calls = label_artifacts.get("api_calls") if isinstance(label_artifacts, dict) else []
-    api_calls = api_calls if isinstance(api_calls, list) else []
-    return {
-        "sample_id": pending.get("sample_id"),
-        "labels": labels,
-        "failures": failures,
-        "label_artifacts": label_artifacts,
-        "label_attempts": sum(max(1, int((item or {}).get("attempts") or 1)) for item in api_calls if isinstance(item, dict)),
-        "label_retry_count": sum(max(0, int((item or {}).get("retry_count") or 0)) for item in api_calls if isinstance(item, dict)),
-        "completed_at": int(time.time()),
-    }
+    return _auto_optimization_label_processing.auto_optimize_process_label_sample(task_id, pending, provider_settings, model)
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))
 def auto_optimize_label_worker(task_id: str) -> None:
-    try:
-        settings = image_generation_settings()
-        if not settings.get("configured"):
-            return
-        model = str(settings.get("model") or settings.get("image_model") or "")
-        while True:
-            with _auto_optimize_lock:
-                state = load_auto_optimize_state(task_id)
-                completed_model_id = auto_optimize_completed_model_id(state)
-                if completed_model_id:
-                    auto_optimize_stop_capture_for_model_locked(state, completed_model_id, reason="completed_model_ready")
-                    save_auto_optimize_state(state)
-                    return
-                opts = state.get("settings") if isinstance(state.get("settings"), dict) else default_auto_optimize_settings()
-                if not opts.get("enabled"):
-                    return
-                max_parallel = max(1, min(AUTO_OPTIMIZE_MASK_MAX_PARALLEL, int(opts.get("max_label_jobs_per_cycle") or AUTO_OPTIMIZE_MASK_MAX_PARALLEL)))
-                samples = state.get("samples") if isinstance(state.get("samples"), list) else []
-                now = int(time.time())
-                pending_samples = [
-                    dict(sample)
-                    for sample in samples
-                    if isinstance(sample, dict)
-                    and (
-                        sample.get("label_status") == "pending"
-                        or (sample.get("label_status") == "labeling" and now - int(sample.get("label_started_at") or now) > 900)
-                    )
-                ][:max_parallel]
-                if not pending_samples:
-                    maybe_start_auto_optimize_training_locked(state)
-                    return
-                pending_ids = {str(sample.get("sample_id") or "") for sample in pending_samples}
-                for sample in samples:
-                    if not isinstance(sample, dict) or str(sample.get("sample_id") or "") not in pending_ids:
-                        continue
-                    sample["label_status"] = "labeling"
-                    sample["label_started_at"] = now
-                    sample["label_parallel_batch_size"] = len(pending_samples)
-                    sample["label_worker_parallelism"] = max_parallel
-                    sample.pop("label_completed_at", None)
-                    sample.pop("label_reject_reason", None)
-                save_auto_optimize_state(state)
+    return _auto_optimization_label_processing.auto_optimize_label_worker(task_id)
 
-            results: list[dict[str, Any]] = []
-            with ThreadPoolExecutor(max_workers=len(pending_samples), thread_name_prefix=f"auto-opt-mask-{task_id}") as executor:
-                futures = [
-                    executor.submit(auto_optimize_process_label_sample, task_id, pending, dict(settings), model)
-                    for pending in pending_samples
-                ]
-                for future in as_completed(futures):
-                    results.append(future.result())
 
-            with _auto_optimize_lock:
-                state = load_auto_optimize_state(task_id)
-                by_sample_id = {str(result.get("sample_id") or ""): result for result in results}
-                for sample in state.get("samples") or []:
-                    if not isinstance(sample, dict):
-                        continue
-                    result = by_sample_id.get(str(sample.get("sample_id") or ""))
-                    if not result:
-                        continue
-                    labels = result["labels"]
-                    failures = result["failures"]
-                    sample["labels"] = labels
-                    sample["label_failures"] = failures[:8]
-                    sample["label_artifacts"] = result["label_artifacts"]
-                    sample["label_completed_at"] = result["completed_at"]
-                    sample["label_attempts"] = int(result.get("label_attempts") or 0)
-                    sample["label_retry_count"] = int(result.get("label_retry_count") or 0)
-                    if labels and not failures:
-                        sample["label_status"] = "trainable"
-                        sample["label_reject_reason"] = ""
-                        auto_optimize_generate_synthetic_batch_for_sample(task_id, state, sample)
-                    elif labels:
-                        sample["label_status"] = "review_required"
-                        sample["label_reject_reason"] = "ai_detection_ai_mask_class_mismatch"
-                    else:
-                        hard_failed = any((failure or {}).get("status") == "failed" for failure in failures if isinstance(failure, dict))
-                        sample["label_status"] = "failed" if hard_failed else "review_required"
-                        sample["label_reject_reason"] = failures[0].get("reason") if failures else "no_valid_label"
-                save_auto_optimize_state(state)
-                maybe_start_auto_optimize_training_locked(state)
-    except Exception as exc:
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(task_id)
-            state["last_label_error"] = bounded_text(str(exc), 240)
-            save_auto_optimize_state(state)
+from .training.auto_optimization_training_scheduling import AutoOptimizationTrainingScheduling
+from .training.auto_optimization_training_scheduling_ports import SchedulingPolicy, SchedulingSubmission, SchedulingState
+
+_auto_optimization_training_scheduling = AutoOptimizationTrainingScheduling(
+    policy=SchedulingPolicy(
+        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        auto_optimize_training_requirements=lambda: auto_optimize_training_requirements,
+        auto_optimize_samples_per_real_image=lambda: auto_optimize_samples_per_real_image,
+        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
+        auto_optimize_negative_samples_per_real_image=lambda: auto_optimize_negative_samples_per_real_image,
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+        auto_optimize_training_parameters=lambda: auto_optimize_training_parameters,
+    ),
+    submission=SchedulingSubmission(
+        build_auto_optimize_dataset=lambda: build_auto_optimize_dataset,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        _request_user=lambda: _request_user,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        selected_accessories=lambda: selected_accessories,
+        TrainingStartRequest=lambda: TrainingStartRequest,
+        pipeline_ai_task_id=lambda: pipeline_ai_task_id,
+        enqueue_training_task=lambda: enqueue_training_task,
+    ),
+    state=SchedulingState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
+        bounded_text=lambda: bounded_text,
+        auto_optimize_training_check_worker=lambda: auto_optimize_training_check_worker,
+    ),
+)
 
 
 def maybe_start_auto_optimize_training_locked(state: dict[str, Any]) -> None:
-    completed_model_id = auto_optimize_completed_model_id(state)
-    if completed_model_id:
-        auto_optimize_stop_capture_for_model_locked(state, completed_model_id, reason="completed_model_ready")
-        return
-    opts = state.get("settings") if isinstance(state.get("settings"), dict) else default_auto_optimize_settings()
-    if not opts.get("enabled"):
-        return
-    task_id = str(state.get("task_id") or "")
-    trainable = [sample for sample in state.get("samples") or [] if isinstance(sample, dict) and sample.get("label_status") == "trainable"]
-    bbox_only = [sample for sample in state.get("samples") or [] if isinstance(sample, dict) and sample.get("label_status") == "trainable_bbox_only"]
-    negative = [sample for sample in state.get("samples") or [] if isinstance(sample, dict) and sample.get("label_status") == "negative"]
-    real_positive_source_count = len(trainable) + len(bbox_only)
-    requirements = auto_optimize_training_requirements(opts, real_positive_source_count=real_positive_source_count)
-    samples_per_real_image = auto_optimize_samples_per_real_image(opts)
-    positive_derivatives_per_real_image = auto_optimize_positive_derivatives_per_real_image(opts)
-    generated_negative_count = real_positive_source_count * auto_optimize_negative_samples_per_real_image(opts)
-    projected_positive_count = len(trainable) * (positive_derivatives_per_real_image + AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT) + len(bbox_only) * AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT
-    projected_negative_count = len(negative) + generated_negative_count
-    usable_count = projected_positive_count + projected_negative_count
-    if usable_count < requirements["min_trainable_samples"]:
-        return
-    if projected_positive_count < requirements["min_positive_samples"]:
-        return
-    if projected_negative_count < requirements["min_negative_samples"]:
-        return
-    active_candidate = next((item for item in state.get("candidate_models") or [] if isinstance(item, dict) and item.get("status") in {"queued", "running"}), None)
-    if active_candidate:
-        return
-    negative_ratio = max(0.0, min(1.0, float(os.environ.get("VANTALINE_AUTO_OPT_NEGATIVE_RATIO", "0.25"))))
-    max_negative = max(
-        requirements["min_negative_samples"],
-        requirements["min_trainable_samples"] - len(trainable),
-        int(len(trainable) * negative_ratio),
-    )
-    if negative and max_negative <= 0:
-        max_negative = 1
-    dataset_samples = trainable + bbox_only + negative[:max_negative]
-    dataset = build_auto_optimize_dataset(task_id, state, dataset_samples)
-    if not dataset:
-        save_auto_optimize_state(state)
-        return
-    state.setdefault("datasets", []).insert(0, dataset)
-    save_auto_optimize_state(state)
-    owner_user = {
-        "id": str(state.get("owner_user_id") or LEGACY_OWNER_ID),
-        "username": str(state.get("owner_username") or state.get("owner_user_id") or LEGACY_OWNER_ID),
-        "role": "admin",
-    }
-    token = _request_user.set(owner_user)
-    try:
-        config = scope_config_for_user(load_config(), owner_user)
-        selected = selected_accessories(config, dataset.get("selected_accessory_ids") or state.get("selected_accessory_ids") or [])
-    finally:
-        _request_user.reset(token)
-    if not selected:
-        return
-    training_parameters = auto_optimize_training_parameters(opts)
-    request = TrainingStartRequest(
-        selected_accessory_ids=[item["id"] for item in selected],
-        sample_count=int(dataset.get("sample_count") or len(dataset_samples)),
-        train_mode="yolo",
-        dataset_id=dataset["id"],
-        epochs=training_parameters["training_epochs"],
-        image_size=training_parameters["training_image_size"],
-        background_set_id=dataset.get("background_set_id") or None,
-        pipeline_task_id=pipeline_ai_task_id(task_id),
-        pipeline_task_name=str(state.get("task_name") or task_id),
-    )
-    token = _request_user.set(owner_user)
-    try:
-        task = enqueue_training_task(request, selected, "train_model", dataset=dataset)
-    finally:
-        _request_user.reset(token)
-    candidate = {
-        "job_id": task["job_id"],
-        "status": task.get("status") or "queued",
-        "dataset_id": dataset["id"],
-        "model_id": f"trained_{task['job_id']}__yolo",
-        "created_at": int(time.time()),
-        "training_requirements": requirements,
-        "training_parameters": training_parameters,
-    }
-    state.setdefault("candidate_models", []).insert(0, candidate)
-    save_auto_optimize_state(state)
+    return _auto_optimization_training_scheduling.maybe_start_auto_optimize_training_locked(state)
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))
 def auto_optimize_training_check_worker(task_id: str, delay_seconds: float = 0.0) -> None:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        return
-    if delay_seconds > 0:
-        time.sleep(delay_seconds)
-    try:
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(clean_task_id)
-            maybe_start_auto_optimize_training_locked(state)
-            save_auto_optimize_state(state)
-    except Exception as exc:  # noqa: BLE001
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(clean_task_id)
-            state["last_training_check_error"] = bounded_text(str(exc), 240)
-            save_auto_optimize_state(state)
+    return _auto_optimization_training_scheduling.auto_optimize_training_check_worker(task_id, delay_seconds)
 
 
 def start_auto_optimize_training_check_worker(task_id: str, delay_seconds: float = 0.0) -> None:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        return
-    thread = threading.Thread(
-        target=auto_optimize_training_check_worker,
-        args=(clean_task_id, delay_seconds),
-        name=f"auto-opt-training-check-{clean_task_id}",
-        daemon=True,
-    )
-    thread.start()
+    return _auto_optimization_training_scheduling.start_auto_optimize_training_check_worker(task_id, delay_seconds)
+
+
+from .training.auto_optimization_sprites import AutoOptimizationSprites
+from .training.auto_optimization_sprites_ports import SpriteFiles, SpriteGeometry
+
+_auto_optimization_sprites = AutoOptimizationSprites(
+    SpriteFiles(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        OUTPUT_DIR=lambda: OUTPUT_DIR,
+        STATIC_DIR=lambda: STATIC_DIR,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        safe_record_id=lambda: safe_record_id,
+        auto_optimize_write_sprite_artifact=lambda: auto_optimize_write_sprite_artifact,
+        public_path_sanitized=lambda: public_path_sanitized,
+        auto_optimize_resolve_artifact_path=lambda: auto_optimize_resolve_artifact_path,
+    ),
+    SpriteGeometry(
+        alpha_bbox=lambda: alpha_bbox,
+        AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE=lambda: AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE,
+        AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE=lambda: AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE,
+        auto_optimize_sprite_records_for_sample=lambda: auto_optimize_sprite_records_for_sample,
+        auto_optimize_load_sprite=lambda: auto_optimize_load_sprite,
+        auto_optimize_sprite_visible_size=lambda: auto_optimize_sprite_visible_size,
+        auto_optimize_source_to_canvas_scale=lambda: auto_optimize_source_to_canvas_scale,
+    ),
+)
 
 
 def auto_optimize_load_sprite(sprite: dict[str, Any]) -> tuple[np.ndarray, np.ndarray] | None:
-    path = resolve_service_path(sprite.get("path") or sprite.get("raw_path") or "")
-    image = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if image is None or image.size == 0:
-        return None
-    if image.ndim == 3 and image.shape[2] == 4:
-        return image[:, :, :3].copy(), image[:, :, 3].copy()
-    if image.ndim == 3:
-        return image.copy(), np.full(image.shape[:2], 255, dtype=np.uint8)
-    return None
+    return _auto_optimization_sprites.auto_optimize_load_sprite(sprite)
 
 
 def auto_optimize_sprite_records_for_sample(sample: dict[str, Any]) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for label in sample.get("labels") or []:
-        if not isinstance(label, dict):
-            continue
-        sprite = label.get("sprite") if isinstance(label.get("sprite"), dict) else {}
-        if not sprite.get("path") and not sprite.get("raw_path"):
-            continue
-        accessory_id = str(label.get("accessory_id") or sprite.get("accessory_id") or "")
-        if not accessory_id:
-            continue
-        records.append(
-            {
-                **sprite,
-                "accessory_id": accessory_id,
-                "label": label.get("label") or sprite.get("label") or accessory_id,
-                "source_sample_id": sample.get("sample_id"),
-                "source_record_id": sample.get("record_id"),
-                "source_image_path": (sample.get("source_image") or {}).get("path") if isinstance(sample.get("source_image"), dict) else "",
-            }
-        )
-    return records
+    return _auto_optimization_sprites.auto_optimize_sprite_records_for_sample(sample)
 
 
 def auto_optimize_resolve_artifact_path(value: Any) -> Path:
-    raw = str(value or "").strip()
-    if not raw:
-        return Path("")
-    raw = raw.split("?", 1)[0]
-    if raw.startswith("/outputs/"):
-        return (OUTPUT_DIR / PurePosixPath(raw.removeprefix("/outputs/").lstrip("/"))).resolve()
-    if raw.startswith("/static/"):
-        return (STATIC_DIR / PurePosixPath(raw.removeprefix("/static/").lstrip("/"))).resolve()
-    return resolve_service_path(raw)
+    return _auto_optimization_sprites.auto_optimize_resolve_artifact_path(value)
 
 
 def auto_optimize_backfill_missing_sprites_for_sample(task_id: str, state: dict[str, Any], sample: dict[str, Any]) -> int:
-    labels = [label for label in sample.get("labels") or [] if isinstance(label, dict)]
-    missing = [
-        label
-        for label in labels
-        if not ((label.get("sprite") if isinstance(label.get("sprite"), dict) else {}).get("path") or (label.get("sprite") if isinstance(label.get("sprite"), dict) else {}).get("raw_path"))
-    ]
-    if not missing:
-        return 0
-    artifacts = sample.get("label_artifacts") if isinstance(sample.get("label_artifacts"), dict) else {}
-    color_mask_url = artifacts.get("color_mask_url") or artifacts.get("mask_url")
-    source_image = sample.get("source_image") if isinstance(sample.get("source_image"), dict) else {}
-    image_path = auto_optimize_resolve_artifact_path(source_image.get("path") or source_image.get("url") or "")
-    color_mask_path = auto_optimize_resolve_artifact_path(color_mask_url or "")
-    image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
-    mask_bgr = _image_files.imread(str(color_mask_path), cv2.IMREAD_COLOR)
-    if image_bgr is None or mask_bgr is None:
-        return 0
-    height, width = image_bgr.shape[:2]
-    if mask_bgr.shape[:2] != (height, width):
-        mask_bgr = cv2.resize(mask_bgr, (width, height), interpolation=cv2.INTER_NEAREST)
-    owner_id = str(state.get("owner_user_id") or sample.get("owner_user_id") or "")
-    artifact_dir = output_write_dir_for_owner("auto_optimize_masks", owner_id) / safe_record_id(task_id)
-    sample_id = safe_record_id(str(sample.get("sample_id") or "sample"))
-    rebuilt = 0
-    non_black = (np.max(mask_bgr, axis=2) > 8).astype(np.uint8) * 255
-    for label in missing:
-        bbox = label.get("bbox_xyxy")
-        if not isinstance(bbox, list) or len(bbox) < 4:
-            continue
-        x1, y1, x2, y2 = [int(value) for value in bbox[:4]]
-        x1 = max(0, min(x1, width - 1))
-        y1 = max(0, min(y1, height - 1))
-        x2 = max(x1 + 1, min(x2, width))
-        y2 = max(y1 + 1, min(y2, height))
-        full_mask = np.zeros((height, width), dtype=np.uint8)
-        full_mask[y1:y2, x1:x2] = non_black[y1:y2, x1:x2]
-        if int(np.count_nonzero(full_mask)) <= 0:
-            continue
-        accessory_id = str(label.get("accessory_id") or "")
-        label_name = str(label.get("label") or accessory_id or "target")
-        sprite_artifact = auto_optimize_write_sprite_artifact(
-            image_bgr=image_bgr,
-            full_mask=full_mask,
-            bbox=[x1, y1, x2, y2],
-            sample_id=sample_id,
-            accessory_id=accessory_id,
-            label_name=label_name,
-            artifact_dir=artifact_dir,
-            source_image_path=image_path,
-        )
-        label["sprite"] = sprite_artifact
-        label.setdefault("mask_meta", {})
-        if isinstance(label["mask_meta"], dict):
-            label["mask_meta"].setdefault("processing_artifacts", {})
-            if isinstance(label["mask_meta"]["processing_artifacts"], dict):
-                label["mask_meta"]["processing_artifacts"]["transparent_sprite_url"] = sprite_artifact.get("url") or ""
-                label["mask_meta"]["processing_artifacts"]["raw_transparent_sprite_url"] = sprite_artifact.get("raw_url") or ""
-        rebuilt += 1
-    if rebuilt:
-        sample["sprite_backfilled_at"] = int(time.time())
-        sample["sprite_backfill_count"] = int(sample.get("sprite_backfill_count") or 0) + rebuilt
-    return rebuilt
+    return _auto_optimization_sprites.auto_optimize_backfill_missing_sprites_for_sample(task_id, state, sample)
 
 
 def auto_optimize_public_sprite_pool(state: dict[str, Any], limit: int = 80) -> list[dict[str, Any]]:
-    sprites: list[dict[str, Any]] = []
-    for sample in state.get("samples") or []:
-        if not isinstance(sample, dict) or sample.get("label_status") != "trainable":
-            continue
-        sprites.extend(auto_optimize_sprite_records_for_sample(sample))
-    return [public_path_sanitized(sprite) for sprite in sprites[:limit]]
+    return _auto_optimization_sprites.auto_optimize_public_sprite_pool(state, limit)
 
 
 AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY = "canonical_real_mask_bbox_canvas_scale_v3"
@@ -7476,93 +5717,47 @@ AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE = max(1.0, float(os.environ.get("VANTALINE_A
 
 
 def auto_optimize_sprite_visible_size(sprite_mask: np.ndarray) -> tuple[int, int] | None:
-    bbox = alpha_bbox(sprite_mask, threshold=8)
-    width = int(bbox[2] - bbox[0])
-    height = int(bbox[3] - bbox[1])
-    if width <= 0 or height <= 0:
-        return None
-    return max(1, width), max(1, height)
+    return _auto_optimization_sprites.auto_optimize_sprite_visible_size(sprite_mask)
 
 
 def auto_optimize_source_to_canvas_scale(source_path_value: Any, cache: dict[str, float]) -> float:
-    source_path = str(source_path_value or "").strip()
-    if not source_path:
-        return 1.0
-    if source_path in cache:
-        return cache[source_path]
-    path = resolve_service_path(source_path)
-    image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
-    if image is None or image.size == 0:
-        cache[source_path] = 1.0
-        return 1.0
-    source_h, source_w = image.shape[:2]
-    canvas_w, canvas_h = AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE
-    scale = min(float(canvas_w) / max(1, source_w), float(canvas_h) / max(1, source_h))
-    cache[source_path] = max(0.01, min(AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE, scale))
-    return cache[source_path]
+    return _auto_optimization_sprites.auto_optimize_source_to_canvas_scale(source_path_value, cache)
 
 
 def auto_optimize_canonical_sprite_sizes(state: dict[str, Any], extra_sprites: list[dict[str, Any]] | None = None) -> dict[str, dict[str, int]]:
-    grouped: dict[str, list[tuple[int, int]]] = defaultdict(list)
-    source_scale_cache: dict[str, float] = {}
-    records: list[dict[str, Any]] = []
-    for sample in state.get("samples") or []:
-        if not isinstance(sample, dict) or sample.get("label_status") != "trainable":
-            continue
-        records.extend(auto_optimize_sprite_records_for_sample(sample))
-    records.extend(extra_sprites or [])
-    seen: set[tuple[str, str]] = set()
-    for sprite in records:
-        if not isinstance(sprite, dict):
-            continue
-        accessory_id = str(sprite.get("accessory_id") or "")
-        if not accessory_id:
-            continue
-        sprite_key = str(sprite.get("path") or sprite.get("raw_path") or "")
-        seen_key = (accessory_id, sprite_key)
-        if sprite_key and seen_key in seen:
-            continue
-        if sprite_key:
-            seen.add(seen_key)
-        loaded = auto_optimize_load_sprite(sprite)
-        if loaded is None:
-            continue
-        _, sprite_mask = loaded
-        visible_size = auto_optimize_sprite_visible_size(sprite_mask)
-        if not visible_size:
-            continue
-        width, height = visible_size
-        scale = auto_optimize_source_to_canvas_scale(sprite.get("source_image_path"), source_scale_cache)
-        width = max(1, int(round(width * scale)))
-        height = max(1, int(round(height * scale)))
-        grouped[accessory_id].append((max(width, height), min(width, height)))
-    canonical: dict[str, dict[str, int]] = {}
-    for accessory_id, sizes in grouped.items():
-        if not sizes:
-            continue
-        canonical[accessory_id] = {
-            "long": max(18, int(round(float(np.median([item[0] for item in sizes]))))),
-            "short": max(18, int(round(float(np.median([item[1] for item in sizes]))))),
-            "source_count": len(sizes),
-        }
-    return canonical
+    return _auto_optimization_sprites.auto_optimize_canonical_sprite_sizes(state, extra_sprites)
 
 
 def auto_optimize_sprite_target_size(
     sprite_mask: np.ndarray,
     canonical_size: dict[str, int] | None = None,
 ) -> tuple[int, int]:
-    visible_size = auto_optimize_sprite_visible_size(sprite_mask)
-    if not visible_size:
-        return 18, 18
-    source_w, source_h = visible_size
-    if canonical_size:
-        long_side = max(18, int(canonical_size.get("long") or max(source_w, source_h)))
-        short_side = max(18, int(canonical_size.get("short") or min(source_w, source_h)))
-        if source_w >= source_h:
-            return long_side, short_side
-        return short_side, long_side
-    return max(18, source_w), max(18, source_h)
+    return _auto_optimization_sprites.auto_optimize_sprite_target_size(sprite_mask, canonical_size)
+
+
+from .training.auto_optimization_rendering import AutoOptimizationRendering
+from .training.auto_optimization_rendering_ports import SyntheticGeometry, SyntheticPublication
+
+_auto_optimization_rendering = AutoOptimizationRendering(
+    geometry=SyntheticGeometry(
+        auto_optimize_load_sprite=lambda: auto_optimize_load_sprite,
+        auto_optimize_sprite_target_size=lambda: auto_optimize_sprite_target_size,
+        choose_object_center_inside_background=lambda: choose_object_center_inside_background,
+        paste_masked_asset=lambda: paste_masked_asset,
+        alpha_bbox=lambda: alpha_bbox,
+        rotated_rect_tuple=lambda: rotated_rect_tuple,
+        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
+    ),
+    publication=SyntheticPublication(
+        safe_background_set_id=lambda: safe_background_set_id,
+        render_training_background=lambda: render_training_background,
+        _image_files=lambda: _image_files,
+        yolo_detection_label_line=lambda: yolo_detection_label_line,
+        _business_files=lambda: _business_files,
+        write_training_annotation_preview=lambda: write_training_annotation_preview,
+        public_training_output_url=lambda: public_training_output_url,
+    ),
+)
 
 
 def auto_optimize_render_synthetic_sample(
@@ -7578,94 +5773,48 @@ def auto_optimize_render_synthetic_sample(
     canonical_sizes: dict[str, dict[str, int]] | None = None,
     background_set_id: str | None = None,
 ) -> dict[str, Any] | None:
-    requested_background_set_id = safe_background_set_id(background_set_id or "green_conveyor")
-    canvas, background_meta = render_training_background(rng, split, requested_background_set_id)
-    effective_background_set_id = str(background_meta.get("background_set_id") or requested_background_set_id or "green_conveyor")
-    placed_objects: list[dict[str, Any]] = []
-    labels: list[dict[str, Any]] = []
-    for sprite in sprites:
-        accessory_id = str(sprite.get("accessory_id") or "")
-        if accessory_id not in class_index:
-            continue
-        loaded = auto_optimize_load_sprite(sprite)
-        if loaded is None:
-            continue
-        sprite_image, sprite_mask = loaded
-        accessory = accessories_by_id.get(accessory_id) or {"id": accessory_id, "name": sprite.get("label") or accessory_id}
-        target_size = auto_optimize_sprite_target_size(sprite_mask, (canonical_sizes or {}).get(accessory_id))
-        angle = float(rng.uniform(-180.0, 180.0))
-        center, placement_meta = choose_object_center_inside_background(rng, target_size, angle, placed_objects)
-        pasted = paste_masked_asset(
-            canvas,
-            sprite_image,
-            sprite_mask,
-            center,
-            target_size,
-            angle,
-            return_visible_mask=True,
-        )
-        if not isinstance(pasted, tuple):
-            continue
-        canvas, visible_mask = pasted
-        bbox = alpha_bbox(visible_mask, threshold=8)
-        if bbox == [0, 0, 0, 0]:
-            continue
-        placed_objects.append({"id": accessory_id, "rect": rotated_rect_tuple(center, target_size, angle)})
-        labels.append(
-            {
-                "id": accessory_id,
-                "name": str(accessory.get("name") or sprite.get("label") or accessory_id),
-                "amodal_bbox_xyxy": bbox,
-                "bbox_xyxy": bbox,
-                "angle": round(angle, 2),
-                "center_xy": [int(center[0]), int(center[1])],
-                "render_size_px": [int(target_size[0]), int(target_size[1])],
-                "render_size_policy": AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
-                "canonical_render_size": (canonical_sizes or {}).get(accessory_id) or {},
-                "source_sample_id": sprite.get("source_sample_id"),
-                "source_record_id": sprite.get("source_record_id"),
-                "sprite_path": sprite.get("path") or sprite.get("raw_path"),
-                "synthetic_from_real_sprite": True,
-                **placement_meta,
-            }
-        )
-    if not labels:
-        return None
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    label_path.parent.mkdir(parents=True, exist_ok=True)
-    _image_files.imwrite(str(output_path), canvas)
-    height, width = canvas.shape[:2]
-    lines = [
-        line
-        for line in (
-            yolo_detection_label_line(class_index[str(label["id"])], label.get("amodal_bbox_xyxy"), width=width, height=height)
-            for label in labels
-        )
-        if line
-    ]
-    _business_files.write_text(label_path, "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    annotated_url = write_training_annotation_preview(output_path, labels, annotated_path)
-    return {
-        "image": str(output_path),
-        "labels": str(label_path),
-        "annotated_path": str(annotated_path),
-        "url": public_training_output_url(output_path),
-        "annotated_url": annotated_url,
-        "split": split,
-        "is_true": True,
-        "sample_type": "synthetic_positive_from_ai_mask_sprite",
-        "label_count": len(lines),
-        "weak_labels": labels,
-        "background": background_meta,
-        "source_sample_ids": sorted({str(label.get("source_sample_id") or "") for label in labels if label.get("source_sample_id")}),
-        "source_record_ids": sorted({str(label.get("source_record_id") or "") for label in labels if label.get("source_record_id")}),
-        "augmentation": {
-            "source": "real_photo_ai_mask_sprite",
-            "rotation_policy": "uniform_-180_180",
-            "background_set_id": effective_background_set_id,
-            "requested_background_set_id": requested_background_set_id,
-        },
-    }
+    return _auto_optimization_rendering.auto_optimize_render_synthetic_sample(
+        sprites=sprites,
+        class_index=class_index,
+        accessories_by_id=accessories_by_id,
+        output_path=output_path,
+        label_path=label_path,
+        annotated_path=annotated_path,
+        split=split,
+        rng=rng,
+        canonical_sizes=canonical_sizes,
+        background_set_id=background_set_id,
+    )
+
+
+from .training.auto_optimization_synthetic_batch import AutoOptimizationSyntheticBatch
+from .training.auto_optimization_synthetic_batch_ports import (
+    SyntheticBatchConfiguration, SyntheticBatchSprites, SyntheticBatchPublication,
+)
+
+_auto_optimization_synthetic_batch = AutoOptimizationSyntheticBatch(
+    configuration=SyntheticBatchConfiguration(
+        safe_background_set_id=lambda: safe_background_set_id,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
+        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
+        _request_user=lambda: _request_user,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+    ),
+    sprites=SyntheticBatchSprites(
+        auto_optimize_backfill_missing_sprites_for_sample=lambda: auto_optimize_backfill_missing_sprites_for_sample,
+        auto_optimize_sprite_records_for_sample=lambda: auto_optimize_sprite_records_for_sample,
+        auto_optimize_canonical_sprite_sizes=lambda: auto_optimize_canonical_sprite_sizes,
+    ),
+    publication=SyntheticBatchPublication(
+        safe_record_id=lambda: safe_record_id,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        auto_optimize_render_synthetic_sample=lambda: auto_optimize_render_synthetic_sample,
+    ),
+)
 
 
 def auto_optimize_generate_synthetic_batch_for_sample(
@@ -7673,566 +5822,104 @@ def auto_optimize_generate_synthetic_batch_for_sample(
     state: dict[str, Any],
     sample: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    if not isinstance(sample, dict) or sample.get("label_status") != "trainable":
-        return []
-    requested_background_set_id = safe_background_set_id(str(state.get("background_set_id") or "green_conveyor"))
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else default_auto_optimize_settings()
-    sample_count = auto_optimize_positive_derivatives_per_real_image(settings)
-    if sample_count <= 0:
-        sample["synthetic_samples"] = []
-        sample["synthetic_count"] = 0
-        sample["synthetic_status"] = "completed"
-        sample["synthetic_completed_at"] = int(time.time())
-        sample.pop("synthetic_error", None)
-        return []
-    existing = [item for item in sample.get("synthetic_samples") or [] if isinstance(item, dict) and item.get("image") and item.get("labels")]
-    if len(existing) == sample_count and sample.get("synthetic_status") == "completed" and all(
-        item.get("target_size_policy") == AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY
-        and ((item.get("augmentation") if isinstance(item.get("augmentation"), dict) else {}).get("requested_background_set_id") or (item.get("augmentation") if isinstance(item.get("augmentation"), dict) else {}).get("background_set_id") or "green_conveyor") == requested_background_set_id
-        for item in existing
-    ):
-        return existing
-    selected_ids = [str(item) for item in state.get("selected_accessory_ids") or [] if str(item)]
-    if not selected_ids:
-        selected_ids = sorted({str(label.get("accessory_id") or "") for label in sample.get("labels") or [] if isinstance(label, dict) and label.get("accessory_id")})
-    if not selected_ids:
-        sample["synthetic_status"] = "failed"
-        sample["synthetic_error"] = "missing_selected_accessory_ids"
-        return []
-    request_user = _request_user.get() or {
-        "id": str(state.get("owner_user_id") or LEGACY_OWNER_ID),
-        "username": str(state.get("owner_username") or state.get("owner_user_id") or LEGACY_OWNER_ID),
-        "role": "admin",
-    }
-    config = scope_config_for_user(load_config(), request_user)
-    accessories_by_id = accessory_lookup_by_id(config)
-    class_index = {item_id: idx for idx, item_id in enumerate(selected_ids)}
-    auto_optimize_backfill_missing_sprites_for_sample(task_id, state, sample)
-    sprites = auto_optimize_sprite_records_for_sample(sample)
-    if not sprites:
-        sample["synthetic_status"] = "failed"
-        sample["synthetic_error"] = "no_trainable_ai_mask_sprites"
-        return []
-    canonical_sizes = auto_optimize_canonical_sprite_sizes(state, extra_sprites=sprites)
-    owner_id = str(state.get("owner_user_id") or sample.get("owner_user_id") or "")
-    sample_id = safe_record_id(str(sample.get("sample_id") or "sample"))
-    output_dir = output_write_dir_for_owner("auto_optimize_synthetic", owner_id) / safe_record_id(task_id) / sample_id
-    generated: list[dict[str, Any]] = []
-    sample["synthetic_status"] = "running"
-    sample["synthetic_started_at"] = int(time.time())
-    rng = np.random.default_rng(int(time.time() * 1000) ^ abs(hash(sample_id)) % (2**31))
-    for idx in range(sample_count):
-        image_path = output_dir / "images" / f"synthetic_{idx + 1:04d}.png"
-        label_path = output_dir / "labels" / f"synthetic_{idx + 1:04d}.txt"
-        annotated_path = output_dir / "previews" / f"synthetic_{idx + 1:04d}_boxed.jpg"
-        rendered = auto_optimize_render_synthetic_sample(
-            sprites=sprites,
-            class_index=class_index,
-            accessories_by_id=accessories_by_id,
-            output_path=image_path,
-            label_path=label_path,
-            annotated_path=annotated_path,
-            split="train",
-            rng=rng,
-            canonical_sizes=canonical_sizes,
-            background_set_id=requested_background_set_id,
-        )
-        if not rendered:
-            continue
-        rendered.update(
-            {
-                "source_sample_id": sample.get("sample_id"),
-                "source_record_id": sample.get("record_id"),
-                "variant_index": idx,
-                "created_at": int(time.time()),
-                "target_size_policy": AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
-            }
-        )
-        generated.append(rendered)
-        sample["synthetic_count"] = len(generated)
-    sample["synthetic_samples"] = generated
-    sample["synthetic_count"] = len(generated)
-    sample["synthetic_completed_at"] = int(time.time())
-    sample["synthetic_status"] = "completed" if generated else "failed"
-    if not generated:
-        sample["synthetic_error"] = "synthetic_render_failed"
-    else:
-        sample.pop("synthetic_error", None)
-    return generated
+    return _auto_optimization_synthetic_batch.auto_optimize_generate_synthetic_batch_for_sample(task_id, state, sample)
+
+
+from .training.auto_optimization_dataset import AutoOptimizationDataset
+from .training.auto_optimization_dataset_ports import (
+    DatasetConfiguration, DatasetSources, DatasetPublication, DatasetLayout,
+)
+
+_auto_optimization_dataset = AutoOptimizationDataset(
+    configuration=DatasetConfiguration(
+        _request_user=lambda: _request_user,
+        load_config=lambda: load_config,
+        scope_config_for_user=lambda: scope_config_for_user,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        auto_optimize_samples_per_real_image=lambda: auto_optimize_samples_per_real_image,
+        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
+        auto_optimize_negative_samples_per_real_image=lambda: auto_optimize_negative_samples_per_real_image,
+        auto_optimize_training_requirements=lambda: auto_optimize_training_requirements,
+    ),
+    sources=DatasetSources(
+        auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
+        auto_optimize_bbox_training_entries=lambda: auto_optimize_bbox_training_entries,
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+    ),
+    publication=DatasetPublication(
+        safe_record_id=lambda: safe_record_id,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        _business_files=lambda: _business_files,
+    ),
+    layout=DatasetLayout(
+        safe_background_set_id=lambda: safe_background_set_id,
+        split_counts=lambda: split_counts,
+        render_training_background=lambda: render_training_background,
+        yolo_detection_label_line=lambda: yolo_detection_label_line,
+        write_training_annotation_preview=lambda: write_training_annotation_preview,
+        public_training_output_url=lambda: public_training_output_url,
+        write_dataset_yaml=lambda: write_dataset_yaml,
+    ),
+)
 
 
 def auto_optimize_bbox_training_entries(sample: dict[str, Any]) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    manual_review = sample.get("manual_review") if isinstance(sample.get("manual_review"), dict) else {}
-    sources = [
-        *(sample.get("bbox_labels") if isinstance(sample.get("bbox_labels"), list) else []),
-        *(sample.get("labels") if isinstance(sample.get("labels"), list) else []),
-        *(sample.get("label_failures") if isinstance(sample.get("label_failures"), list) else []),
-        *(manual_review.get("previous_label_failures") if isinstance(manual_review.get("previous_label_failures"), list) else []),
-    ]
-    seen: set[tuple[str, tuple[int, int, int, int]]] = set()
-    for item in sources:
-        if not isinstance(item, dict):
-            continue
-        accessory_id = str(item.get("accessory_id") or "").strip()
-        bbox = item.get("bbox_xyxy")
-        if not accessory_id or not isinstance(bbox, list) or len(bbox) < 4:
-            continue
-        try:
-            clean_bbox = tuple(int(round(float(value))) for value in bbox[:4])
-        except (TypeError, ValueError):
-            continue
-        key = (accessory_id, clean_bbox)
-        if key in seen:
-            continue
-        seen.add(key)
-        entries.append(
-            {
-                "accessory_id": accessory_id,
-                "label": item.get("label") or accessory_id,
-                "bbox_xyxy": list(clean_bbox),
-                "color": item.get("color") or item.get("color_hex") or "",
-                "source_status": item.get("status") or sample.get("label_status") or "",
-                "source_reason": item.get("reason") or "",
-            }
-        )
-    return entries
+    return _auto_optimization_dataset.auto_optimize_bbox_training_entries(sample)
 
 
 def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: list[dict[str, Any]]) -> dict[str, Any] | None:
-    selected_ids = [str(item) for item in state.get("selected_accessory_ids") or [] if str(item)]
-    if not selected_ids:
-        selected_ids = sorted({str(label.get("accessory_id") or "") for sample in samples for label in sample.get("labels") or [] if label.get("accessory_id")})
-    if not selected_ids:
-        return None
-    request_user = _request_user.get()
-    config = scope_config_for_user(load_config(), request_user) if request_user else load_config()
-    accessories_by_id = accessory_lookup_by_id(config)
-    class_index = {item_id: idx for idx, item_id in enumerate(selected_ids)}
-    class_names = [str((accessories_by_id.get(item_id) or {}).get("name") or (accessories_by_id.get(item_id) or {}).get("label") or item_id) for item_id in selected_ids]
-    dataset_id = f"autoopt_{safe_record_id(task_id)}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    owner_id = str(state.get("owner_user_id") or (_request_user.get() or {}).get("id") or "")
-    dataset_dir = output_write_dir_for_owner("training_datasets", owner_id) / dataset_id
-    for split in ("train", "val", "test"):
-        (dataset_dir / "images" / split).mkdir(parents=True, exist_ok=True)
-        (dataset_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
-    settings = state.get("settings") if isinstance(state.get("settings"), dict) else default_auto_optimize_settings()
-    samples_per_real_image = auto_optimize_samples_per_real_image(settings)
-    positive_derivatives_per_real_image = auto_optimize_positive_derivatives_per_real_image(settings)
-    negative_samples_per_real_image = auto_optimize_negative_samples_per_real_image(settings)
-    dataset_background_set_id = safe_background_set_id(str(state.get("background_set_id") or "green_conveyor"))
-    positive_samples = [sample for sample in samples if isinstance(sample, dict) and sample.get("label_status") == "trainable"]
-    bbox_only_samples = [sample for sample in samples if isinstance(sample, dict) and sample.get("label_status") == "trainable_bbox_only"]
-    negative_samples = [sample for sample in samples if isinstance(sample, dict) and sample.get("label_status") == "negative"]
-    synthetic_jobs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for sample in positive_samples:
-        generated = auto_optimize_generate_synthetic_batch_for_sample(task_id, state, sample)
-        for rendered in generated:
-            if isinstance(rendered, dict) and rendered.get("image") and rendered.get("labels"):
-                synthetic_jobs.append((sample, rendered))
-    real_bbox_source_samples = positive_samples + bbox_only_samples
-    real_bbox_jobs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for sample in real_bbox_source_samples:
-        if not auto_optimize_bbox_training_entries(sample):
-            continue
-        for copy_index in range(AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT):
-            real_bbox_jobs.append(
-                (
-                    sample,
-                    {
-                        "job_type": "real_bbox_original",
-                        "copy_index": copy_index + 1,
-                        "sample_weight": AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-                    },
-                )
-            )
-    negative_jobs = [(sample, -1) for sample in negative_samples]
-    generated_negative_jobs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    for source_sample in real_bbox_source_samples:
-        for variant_index in range(negative_samples_per_real_image):
-            generated_negative_jobs.append(
-                (
-                    source_sample,
-                    {
-                        "job_type": "synthetic_negative_background",
-                        "variant_index": variant_index + 1,
-                        "source_policy": "per_real_positive_source_empty_background",
-                    },
-                )
-            )
-    render_jobs = synthetic_jobs + real_bbox_jobs + negative_jobs + generated_negative_jobs
-    if not synthetic_jobs and not real_bbox_jobs:
-        state["last_dataset_error"] = "no_trainable_ai_mask_sprites_or_bbox_labels"
-        return None
-    counts = split_counts(len(render_jobs))
-    split_sequence: list[str] = []
-    for split in ("train", "val", "test"):
-        split_sequence.extend([split] * int(counts.get(split, 0)))
-    if len(split_sequence) < len(render_jobs):
-        split_sequence.extend(["train"] * (len(render_jobs) - len(split_sequence)))
-    rng = np.random.default_rng(int(time.time()))
-    order = list(range(len(render_jobs)))
-    rng.shuffle(order)
-    sample_records: list[dict[str, Any]] = []
-    preview_dir = dataset_dir / "previews"
-    for out_idx, sample_idx in enumerate(order):
-        sample, rendered_or_marker = render_jobs[sample_idx]
-        split = split_sequence[out_idx] if out_idx < len(split_sequence) else "train"
-        image_name = f"sample_{out_idx + 1:06d}.png"
-        image_out = dataset_dir / "images" / split / image_name
-        label_out = dataset_dir / "labels" / split / f"{Path(image_name).stem}.txt"
-        if isinstance(rendered_or_marker, dict) and rendered_or_marker.get("job_type") == "real_bbox_original":
-            split = "train"
-            image_out = dataset_dir / "images" / split / image_name
-            label_out = dataset_dir / "labels" / split / f"{Path(image_name).stem}.txt"
-            source_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-            image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
-            if image is None:
-                continue
-            height, width = image.shape[:2]
-            bbox_entries = [
-                entry
-                for entry in auto_optimize_bbox_training_entries(sample)
-                if str(entry.get("accessory_id") or "") in class_index
-            ]
-            if not bbox_entries:
-                continue
-            weak_labels = [
-                {
-                    "id": str(entry.get("accessory_id") or ""),
-                    "name": str((accessories_by_id.get(str(entry.get("accessory_id") or "")) or {}).get("name") or entry.get("label") or entry.get("accessory_id") or ""),
-                    "amodal_bbox_xyxy": entry.get("bbox_xyxy"),
-                    "bbox_xyxy": entry.get("bbox_xyxy"),
-                    "real_bbox_original": True,
-                    "source_sample_id": sample.get("sample_id"),
-                    "source_record_id": sample.get("record_id"),
-                    "source_reason": entry.get("source_reason") or "",
-                }
-                for entry in bbox_entries
-            ]
-            lines = [
-                line
-                for line in (
-                    yolo_detection_label_line(class_index[str(entry["id"])], entry.get("amodal_bbox_xyxy"), width=width, height=height)
-                    for entry in weak_labels
-                    if str(entry.get("id") or "") in class_index
-                )
-                if line
-            ]
-            if not lines:
-                continue
-            _business_files.copy2(source_path, image_out, local_copy=shutil.copy2)
-            _business_files.write_text(label_out, "\n".join(lines) + "\n", encoding="utf-8")
-            annotated_url = write_training_annotation_preview(image_out, weak_labels, preview_dir / split / f"{Path(image_name).stem}_boxed.jpg")
-            is_bbox_only = sample.get("label_status") == "trainable_bbox_only"
-            sample_records.append(
-                {
-                    "image": str(image_out),
-                    "labels": str(label_out),
-                    "url": public_training_output_url(image_out),
-                    "annotated_url": annotated_url,
-                    "source_sample_id": sample.get("sample_id"),
-                    "source_record_id": sample.get("record_id"),
-                    "split": split,
-                    "sample_type": "real_positive_bbox_only" if is_bbox_only else "real_positive_original_bbox",
-                    "label_status": sample.get("label_status") or "",
-                    "label_count": len(lines),
-                    "weak_labels": weak_labels,
-                    "sample_weight": int(rendered_or_marker.get("sample_weight") or AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT),
-                    "weight_index": int(rendered_or_marker.get("copy_index") or 1),
-                }
-            )
-            continue
-        if isinstance(rendered_or_marker, dict) and rendered_or_marker.get("job_type") == "synthetic_negative_background":
-            canvas, background_meta = render_training_background(rng, split, dataset_background_set_id)
-            image_out.parent.mkdir(parents=True, exist_ok=True)
-            label_out.parent.mkdir(parents=True, exist_ok=True)
-            _image_files.imwrite(str(image_out), canvas)
-            _business_files.write_text(label_out, "", encoding="utf-8")
-            annotated_path = preview_dir / split / f"{Path(image_name).stem}_negative.jpg"
-            annotated_path.parent.mkdir(parents=True, exist_ok=True)
-            _image_files.imwrite(str(annotated_path), canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-            sample_records.append(
-                {
-                    "image": str(image_out),
-                    "labels": str(label_out),
-                    "url": public_training_output_url(image_out),
-                    "annotated_url": public_training_output_url(annotated_path),
-                    "source_sample_id": sample.get("sample_id"),
-                    "source_record_id": sample.get("record_id"),
-                    "split": split,
-                    "sample_type": "synthetic_negative_empty_background",
-                    "label_status": "synthetic_negative",
-                    "label_count": 0,
-                    "weak_labels": [],
-                    "background": background_meta,
-                    "negative_policy": rendered_or_marker.get("source_policy") or "",
-                    "negative_variant_index": int(rendered_or_marker.get("variant_index") or 1),
-                }
-            )
-            continue
-        if isinstance(rendered_or_marker, dict):
-            synthetic = dict(rendered_or_marker)
-            source_image = resolve_service_path(synthetic.get("image") or "")
-            source_label = resolve_service_path(synthetic.get("labels") or "")
-            if not _business_files.exists(source_image) or not _business_files.exists(source_label):
-                continue
-            _business_files.copy2(source_image, image_out, local_copy=shutil.copy2)
-            _business_files.copy2(source_label, label_out, local_copy=shutil.copy2)
-            annotated_source = resolve_service_path(synthetic.get("annotated_path") or "")
-            annotated_url = ""
-            if _business_files.exists(annotated_source):
-                annotated_out = preview_dir / split / f"{Path(image_name).stem}_boxed.jpg"
-                annotated_out.parent.mkdir(parents=True, exist_ok=True)
-                _business_files.copy2(annotated_source, annotated_out, local_copy=shutil.copy2)
-                annotated_url = public_training_output_url(annotated_out)
-            else:
-                annotated_url = write_training_annotation_preview(image_out, synthetic.get("weak_labels") or [], preview_dir / split / f"{Path(image_name).stem}_boxed.jpg")
-            synthetic.update(
-                {
-                    "image": str(image_out),
-                    "labels": str(label_out),
-                    "url": public_training_output_url(image_out),
-                    "annotated_url": annotated_url,
-                    "source_sample_id": sample.get("sample_id"),
-                    "source_record_id": sample.get("record_id"),
-                    "label_status": sample.get("label_status") or "",
-                    "split": split,
-                }
-            )
-            sample_records.append(synthetic)
-            continue
-        source_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-        image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
-        if image is None:
-            continue
-        _business_files.copy2(source_path, image_out, local_copy=shutil.copy2)
-        _business_files.write_text(label_out, "", encoding="utf-8")
-        annotated_path = preview_dir / split / f"{Path(image_name).stem}_negative.jpg"
-        annotated_path.parent.mkdir(parents=True, exist_ok=True)
-        _image_files.imwrite(str(annotated_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-        sample_records.append(
-            {
-                "image": str(image_out),
-                "labels": str(label_out),
-                "url": public_training_output_url(image_out),
-                "annotated_url": public_training_output_url(annotated_path),
-                "source_sample_id": sample.get("sample_id"),
-                "source_record_id": sample.get("record_id"),
-                "split": split,
-                "sample_type": "real_negative_empty_label",
-                "label_status": sample.get("label_status") or "",
-                "label_count": 0,
-                "weak_labels": [],
-            }
-        )
-    if not sample_records:
-        return None
-    yaml_path = dataset_dir / "dataset.yaml"
-    write_dataset_yaml(yaml_path, dataset_dir, class_names)
-    manifest = {
-        "id": dataset_id,
-        "task_id": task_id,
-        "created_at": int(time.time()),
-        "display_name": f"自动优化弱标注数据集 · {state.get('task_name') or task_id}",
-        "mode": "yolo",
-        "model_variant": "yolo",
-        "sample_count": len(sample_records),
-        "selected_accessory_ids": selected_ids,
-        "required_accessory_counts": {item_id: 1 for item_id in selected_ids},
-        "accessory_class_map": {str(idx): item_id for item_id, idx in class_index.items()},
-        "class_accessory_map": {item_id: idx for item_id, idx in class_index.items()},
-        "ocr_accessory_ids": [],
-        "class_names": class_names,
-        "dataset_yaml": str(yaml_path),
-        "positive_sample_count": len([item for item in sample_records if int(item.get("label_count") or 0) > 0]),
-        "negative_sample_count": len([item for item in sample_records if int(item.get("label_count") or 0) == 0]),
-        "real_positive_source_count": len(positive_samples) + len(bbox_only_samples),
-        "real_bbox_source_count": len([sample for sample in real_bbox_source_samples if auto_optimize_bbox_training_entries(sample)]),
-        "real_bbox_sample_weight": AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        "real_bbox_only_source_count": len(bbox_only_samples),
-        "real_negative_source_count": len(negative_samples),
-        "negative_samples_per_real_image": negative_samples_per_real_image,
-        "positive_derivatives_per_real_image": positive_derivatives_per_real_image,
-        "generated_negative_sample_count": len([item for item in sample_records if item.get("sample_type") == "synthetic_negative_empty_background"]),
-        "samples_per_real_image": samples_per_real_image,
-        "synthetic_sample_count": len([item for item in sample_records if item.get("sample_type") == "synthetic_positive_from_ai_mask_sprite"]),
-        "real_bbox_sample_count": len([item for item in sample_records if item.get("sample_type") in {"real_positive_original_bbox", "real_positive_bbox_only"}]),
-        "real_original_bbox_sample_count": len([item for item in sample_records if item.get("sample_type") == "real_positive_original_bbox"]),
-        "real_bbox_only_sample_count": len([item for item in sample_records if item.get("sample_type") == "real_positive_bbox_only"]),
-        "training_requirements": auto_optimize_training_requirements(
-            state.get("settings") if isinstance(state.get("settings"), dict) else {},
-            real_positive_source_count=len(positive_samples) + len(bbox_only_samples),
-        ),
-        "pass_fail_rule": "synthetic_from_ai_detection_ai_mask_sprite",
-        "sample_generation_policy": {
-            "source": "real_detection_photo_ai_mask_sprite_augmentation",
-            "primary_detector": "ai_api",
-            "label_shape": "object_bounding_box",
-            "mask_quality_gate": "ai_detection_class_set_matches_ai_mask_color_set",
-            "positive_samples": "ai_mask_sprites_are_pasted_on_green_conveyor_background_with_controlled_rotation",
-            "samples_per_real_image": samples_per_real_image,
-            "positive_derivatives_per_real_image": positive_derivatives_per_real_image,
-            "real_detection_bbox_original_weight": AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-            "real_detection_bbox_originals": "verifier_or_manual_approved_original_detection_images_are_oversampled_in_train_split_as_trusted_bbox_labels",
-            "background_set_id": dataset_background_set_id,
-            "negative_samples": "ai_detection_absent_images_are_kept_as_real_empty_yolo_labels; generated_empty_background_negatives_are_part_of_the_per_real_image_derivative_budget",
-            "negative_samples_per_real_image": negative_samples_per_real_image,
-            "existing_training_pipeline_modified": False,
-        },
-        "samples": sample_records,
-        "owner_user_id": str(state.get("owner_user_id") or ""),
-        "owner_username": str(state.get("owner_username") or ""),
-    }
-    manifest_path = dataset_dir / "manifest.json"
-    _business_files.write_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
-    return {
-        "id": dataset_id,
-        "dataset_dir": str(dataset_dir),
-        "dataset_yaml": str(yaml_path),
-        "manifest_path": str(manifest_path),
-        "sample_count": len(sample_records),
-        "synthetic_sample_count": manifest["synthetic_sample_count"],
-        "real_positive_source_count": len(positive_samples) + len(bbox_only_samples),
-        "real_bbox_sample_count": manifest["real_bbox_sample_count"],
-        "real_bbox_sample_weight": AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        "real_negative_source_count": len(negative_samples),
-        "generated_negative_sample_count": manifest["generated_negative_sample_count"],
-        "negative_samples_per_real_image": negative_samples_per_real_image,
-        "samples_per_real_image": samples_per_real_image,
-        "selected_accessory_ids": selected_ids,
-        "display_name": manifest["display_name"],
-        "background_set_id": dataset_background_set_id,
-        "created_at": manifest["created_at"],
-    }
+    return _auto_optimization_dataset.build_auto_optimize_dataset(task_id, state, samples)
+
+
+from .training.auto_optimization_shadow_evaluation import AutoOptimizationShadowEvaluation
+from .training.auto_optimization_shadow_evaluation_ports import ShadowState, ShadowObservation, ShadowPromotion
+
+_auto_optimization_shadow_evaluation = AutoOptimizationShadowEvaluation(
+    state=ShadowState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        _auto_optimize_shadow_threads=lambda: _auto_optimize_shadow_threads,
+        auto_optimize_shadow_worker=lambda: auto_optimize_shadow_worker,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        bounded_text=lambda: bounded_text,
+    ),
+    observation=ShadowObservation(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        analyze_bgr=lambda: analyze_bgr,
+        safe_record_id=lambda: safe_record_id,
+    ),
+    promotion=ShadowPromotion(
+        maybe_promote_auto_optimize_model_locked=lambda: maybe_promote_auto_optimize_model_locked,
+        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        cleanup_auto_optimize_retired_candidate_locked=lambda: cleanup_auto_optimize_retired_candidate_locked,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        delete_training_task_record=lambda: delete_training_task_record,
+        training_run_roots=lambda: training_run_roots,
+        _business_files=lambda: _business_files,
+    ),
+)
 
 
 def start_auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        return
-    key = f"{clean_task_id}:{sample_id}"
-    with _auto_optimize_lock:
-        existing = _auto_optimize_shadow_threads.get(key)
-        if existing and existing.is_alive():
-            return
-        thread = threading.Thread(target=auto_optimize_shadow_worker, args=(clean_task_id, sample_id), name=f"auto-opt-shadow-{clean_task_id}", daemon=True)
-        _auto_optimize_shadow_threads[key] = thread
-        thread.start()
+    return _auto_optimization_shadow_evaluation.start_auto_optimize_shadow_worker(task_id, sample_id)
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))
 def auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
-    try:
-        time.sleep(0.1)
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(task_id)
-            opts = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-            if not opts.get("enabled"):
-                return
-            candidate = next((item for item in state.get("candidate_models") or [] if isinstance(item, dict) and item.get("model_id")), None)
-            if not candidate:
-                return
-            sample = next((item for item in state.get("samples") or [] if isinstance(item, dict) and item.get("sample_id") == sample_id), None)
-            if not sample:
-                return
-            model_id = str(candidate.get("model_id") or "")
-            image_path = resolve_service_path((sample.get("source_image") or {}).get("path"))
-        image_bgr = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
-        if image_bgr is None:
-            return
-        yolo_result = analyze_bgr(image_bgr, f"shadow_{safe_record_id(sample_id)}", model_id, image_path=image_path)
-        ai_counts = ((sample.get("ai_result") or {}).get("rule") or {}).get("counts") or {}
-        yolo_counts = (yolo_result.get("rule") or {}).get("counts") if isinstance(yolo_result.get("rule"), dict) else {}
-        agreement = 1.0 if {str(k): int(v) for k, v in ai_counts.items()} == {str(k): int(v) for k, v in (yolo_counts or {}).items()} else 0.0
-        shadow = {
-            "sample_id": sample_id,
-            "model_id": model_id,
-            "status": "completed",
-            "agreement": agreement,
-            "ai_counts": ai_counts,
-            "yolo_counts": yolo_counts or {},
-            "created_at": int(time.time()),
-        }
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(task_id)
-            state.setdefault("shadow_runs", []).insert(0, shadow)
-            state["shadow_runs"] = state["shadow_runs"][:5000]
-            maybe_promote_auto_optimize_model_locked(state)
-            save_auto_optimize_state(state)
-    except Exception as exc:
-        with _auto_optimize_lock:
-            state = load_auto_optimize_state(task_id)
-            state["last_shadow_error"] = bounded_text(str(exc), 240)
-            save_auto_optimize_state(state)
+    return _auto_optimization_shadow_evaluation.auto_optimize_shadow_worker(task_id, sample_id)
 
 
 def maybe_promote_auto_optimize_model_locked(state: dict[str, Any]) -> None:
-    opts = state.get("settings") if isinstance(state.get("settings"), dict) else {}
-    if not opts.get("auto_promote"):
-        return
-    runs = [run for run in state.get("shadow_runs") or [] if isinstance(run, dict) and run.get("status") == "completed"]
-    min_samples = int(opts.get("shadow_min_samples") or 80)
-    if len(runs) < min_samples:
-        return
-    recent = runs[:min_samples]
-    agreement = sum(float(run.get("agreement") or 0.0) for run in recent) / max(1, len(recent))
-    if agreement < float(opts.get("shadow_min_agreement") or 0.98):
-        return
-    model_id = str(recent[0].get("model_id") or "")
-    if not model_id:
-        return
-    old_model = str(state.get("active_model_id") or "")
-    if old_model and old_model != model_id:
-        state.setdefault("retired_model_ids", []).append(old_model)
-        cleanup_auto_optimize_retired_candidate_locked(state, old_model, keep_model_id=model_id)
-    state["active_model_id"] = model_id
-    settings = {**default_auto_optimize_settings(), **(state.get("settings") or {})}
-    settings["serving_mode"] = "promoted_yolo"
-    settings["enabled"] = False
-    state["settings"] = settings
-    state["capture_stopped_at"] = int(time.time())
-    state["capture_stop_reason"] = "shadow_promoted_model_ready"
-    state["last_promotion"] = {"model_id": model_id, "agreement": round(float(agreement), 6), "sample_count": len(recent), "promoted_at": int(time.time())}
+    return _auto_optimization_shadow_evaluation.maybe_promote_auto_optimize_model_locked(state)
 
 
 def cleanup_auto_optimize_retired_candidate_locked(state: dict[str, Any], model_id: str, *, keep_model_id: str) -> None:
-    if not model_id or model_id == keep_model_id:
-        return
-    candidates = [item for item in state.get("candidate_models") or [] if isinstance(item, dict)]
-    candidate = next((item for item in candidates if str(item.get("model_id") or "") == model_id), None)
-    if not candidate:
-        return
-    job_id = str(candidate.get("job_id") or "").strip()
-    if not job_id:
-        return
-    dataset_id = str(candidate.get("dataset_id") or "")
-    if dataset_id and not dataset_id.startswith("autoopt_"):
-        return
-    owner_user = {
-        "id": str(state.get("owner_user_id") or LEGACY_OWNER_ID),
-        "username": str(state.get("owner_username") or state.get("owner_user_id") or LEGACY_OWNER_ID),
-        "role": "admin",
-    }
-    try:
-        delete_training_task_record(job_id, owner_user, missing_ok=True)
-    except Exception as exc:
-        candidate["retire_cleanup_error"] = bounded_text(str(exc), 180)
-        return
-    deleted_paths: list[str] = []
-    for root in training_run_roots():
-        run_dir = root / job_id
-        if not _business_files.exists(run_dir) or not _business_files.is_dir(run_dir):
-            continue
-        try:
-            _business_files.rmtree(run_dir)
-            deleted_paths.append(str(run_dir))
-        except OSError as exc:
-            candidate["retire_cleanup_error"] = bounded_text(str(exc), 180)
-            return
-    candidate["status"] = "retired_deleted"
-    candidate["deleted_at"] = int(time.time())
-    candidate["deleted_paths"] = deleted_paths
+    return _auto_optimization_shadow_evaluation.cleanup_auto_optimize_retired_candidate_locked(state, model_id, keep_model_id=keep_model_id)
 
 
 def ai_detection_settings(purpose: str = "pipeline") -> dict[str, Any]:
@@ -14786,90 +12473,55 @@ def delete_ai_detection_task(task_id: str) -> dict[str, Any]:
     return response
 
 
+from .training.auto_optimization_requests import AutoOptimizationRequests
+from .training.auto_optimization_requests_ports import RequestAccess, RequestState, RequestActions
+
+_auto_optimization_requests = AutoOptimizationRequests(
+    access=RequestAccess(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        safe_record_id=lambda: safe_record_id,
+        current_auth_user=lambda: current_auth_user,
+        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
+        require_record_access=lambda: require_record_access,
+        HTTPException=lambda: HTTPException,
+    ),
+    state=RequestState(
+        _auto_optimize_lock=lambda: _auto_optimize_lock,
+        load_auto_optimize_state=lambda: load_auto_optimize_state,
+        save_auto_optimize_state=lambda: save_auto_optimize_state,
+        public_auto_optimize_state=lambda: public_auto_optimize_state,
+        auto_optimize_update_settings=lambda: auto_optimize_update_settings,
+    ),
+    actions=RequestActions(
+        resolve_service_path=lambda: resolve_service_path,
+        _business_files=lambda: _business_files,
+        _image_files=lambda: _image_files,
+        analyze_bgr=lambda: analyze_bgr,
+        AI_DETECTION_TASK_PREFIX=lambda: AI_DETECTION_TASK_PREFIX,
+        auto_optimize_bbox_training_entries=lambda: auto_optimize_bbox_training_entries,
+        start_auto_optimize_training_check_worker=lambda: start_auto_optimize_training_check_worker,
+    ),
+)
+
+
 @app.get("/api/ai/tasks/{task_id}/auto-optimize")
 def get_ai_task_auto_optimize_status(task_id: str) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        raise HTTPException(status_code=404, detail="AI detection task not found")
-    user = current_auth_user()
-    task = next((item for item in load_ai_detection_tasks() if item.get("id") == clean_task_id), None)
-    if task:
-        require_record_access(task, user)
-    return public_auto_optimize_state(clean_task_id, user=user)
+    return _auto_optimization_requests.get_ai_task_auto_optimize_status(task_id)
 
 
 @app.patch("/api/ai/tasks/{task_id}/auto-optimize")
 def update_ai_task_auto_optimize_status(task_id: str, request: AutoOptimizeSettingsRequest) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    if not clean_task_id:
-        raise HTTPException(status_code=404, detail="AI detection task not found")
-    user = current_auth_user()
-    task = next((item for item in load_ai_detection_tasks() if item.get("id") == clean_task_id), None)
-    if task:
-        require_record_access(task, user, write=True)
-    return auto_optimize_update_settings(clean_task_id, request)
+    return _auto_optimization_requests.update_ai_task_auto_optimize_status(task_id, request)
 
 
 @app.delete("/api/ai/tasks/{task_id}/auto-optimize/samples/{sample_id}")
 def delete_ai_task_auto_optimize_sample(task_id: str, sample_id: str) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    clean_sample_id = safe_record_id(sample_id)
-    if not clean_task_id or not clean_sample_id:
-        raise HTTPException(status_code=404, detail="Auto optimize sample not found")
-    user = current_auth_user()
-    task = next((item for item in load_ai_detection_tasks() if item.get("id") == clean_task_id), None)
-    if task:
-        require_record_access(task, user, write=True)
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(clean_task_id)
-        samples = [sample for sample in state.get("samples") or [] if isinstance(sample, dict)]
-        target = next((sample for sample in samples if str(sample.get("sample_id") or "") == clean_sample_id), None)
-        if not target:
-            raise HTTPException(status_code=404, detail="Auto optimize sample not found")
-        require_record_access(target, user, write=True)
-        state["samples"] = [sample for sample in samples if str(sample.get("sample_id") or "") != clean_sample_id]
-        save_auto_optimize_state(state)
-    return public_auto_optimize_state(clean_task_id, user=user)
+    return _auto_optimization_requests.delete_ai_task_auto_optimize_sample(task_id, sample_id)
 
 
 @app.post("/api/ai/tasks/{task_id}/auto-optimize/samples/{sample_id}/retry")
 def retry_ai_task_auto_optimize_sample(task_id: str, sample_id: str) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    clean_sample_id = safe_record_id(sample_id)
-    if not clean_task_id or not clean_sample_id:
-        raise HTTPException(status_code=404, detail="Auto optimize sample not found")
-    user = current_auth_user()
-    task = next((item for item in load_ai_detection_tasks() if item.get("id") == clean_task_id), None)
-    if task:
-        require_record_access(task, user, write=True)
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(clean_task_id)
-        samples = [sample for sample in state.get("samples") or [] if isinstance(sample, dict)]
-        target = next((sample for sample in samples if str(sample.get("sample_id") or "") == clean_sample_id), None)
-        if not target:
-            raise HTTPException(status_code=404, detail="Auto optimize sample not found")
-        require_record_access(target, user, write=True)
-        source_image = target.get("source_image") if isinstance(target.get("source_image"), dict) else {}
-        source_path = resolve_service_path(source_image.get("path") or "")
-        if not _business_files.exists(source_path):
-            raise HTTPException(status_code=404, detail="Source image for retry was not found")
-        target["label_status"] = "retrying"
-        target["retry_requested_at"] = int(time.time())
-        save_auto_optimize_state(state)
-    image_bgr = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
-    if image_bgr is None:
-        raise HTTPException(status_code=400, detail="Could not decode source image for retry")
-    retry_request_id = f"retry_{clean_sample_id}_{int(time.time())}"
-    analyze_bgr(image_bgr, retry_request_id, f"{AI_DETECTION_TASK_PREFIX}{clean_task_id}", image_path=source_path)
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(clean_task_id)
-        for sample in state.get("samples") or []:
-            if isinstance(sample, dict) and str(sample.get("sample_id") or "") == clean_sample_id:
-                sample["label_status"] = "retried"
-                sample["retried_at"] = int(time.time())
-                break
-        save_auto_optimize_state(state)
-    return public_auto_optimize_state(clean_task_id, user=user)
+    return _auto_optimization_requests.retry_ai_task_auto_optimize_sample(task_id, sample_id)
 
 
 @app.post("/api/ai/tasks/{task_id}/auto-optimize/samples/{sample_id}/approve")
@@ -14878,76 +12530,7 @@ def approve_ai_task_auto_optimize_sample(
     sample_id: str,
     request: AutoOptimizeSampleApproveRequest | None = None,
 ) -> dict[str, Any]:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    clean_sample_id = safe_record_id(sample_id)
-    if not clean_task_id or not clean_sample_id:
-        raise HTTPException(status_code=404, detail="Auto optimize sample not found")
-    user = current_auth_user()
-    task = next((item for item in load_ai_detection_tasks() if item.get("id") == clean_task_id), None)
-    if task:
-        require_record_access(task, user, write=True)
-    with _auto_optimize_lock:
-        state = load_auto_optimize_state(clean_task_id)
-        samples = [sample for sample in state.get("samples") or [] if isinstance(sample, dict)]
-        target = next((sample for sample in samples if str(sample.get("sample_id") or "") == clean_sample_id), None)
-        if not target:
-            raise HTTPException(status_code=404, detail="Auto optimize sample not found")
-        require_record_access(target, user, write=True)
-        previous_status = str(target.get("label_status") or "")
-        mode = str((request.mode if request else "") or "sprite").strip().lower()
-        if mode not in {"sprite", "bbox_only", "image_only"}:
-            raise HTTPException(status_code=400, detail="Unknown approval mode")
-        if previous_status in {"trainable", "trainable_bbox_only"}:
-            return public_auto_optimize_state(clean_task_id, user=user)
-        if previous_status not in {"review_required", "rejected", "failed"}:
-            raise HTTPException(status_code=409, detail="Only manual-review samples can be approved")
-        labels = [label for label in target.get("labels") or [] if isinstance(label, dict)]
-        bbox_labels = auto_optimize_bbox_training_entries(target)
-        if mode in {"bbox_only", "image_only"} and not bbox_labels:
-            raise HTTPException(status_code=409, detail="No bbox labels are available to approve")
-        if mode == "sprite" and not labels:
-            raise HTTPException(status_code=409, detail="No AI mask labels are available to approve with sprite")
-        label_artifacts = target.get("label_artifacts") if isinstance(target.get("label_artifacts"), dict) else {}
-        has_sprite = any(
-            isinstance(label.get("sprite"), dict)
-            and ((label.get("sprite") or {}).get("path") or (label.get("sprite") or {}).get("raw_path"))
-            for label in labels
-        )
-        has_mask_artifact = bool(label_artifacts.get("color_mask_url") or label_artifacts.get("mask_url") or label_artifacts.get("review_overlay_url"))
-        if mode == "sprite" and not has_sprite and not has_mask_artifact:
-            raise HTTPException(status_code=409, detail="No AI mask artifact is available to approve")
-        now = int(time.time())
-        previous_failures = copy.deepcopy([failure for failure in target.get("label_failures") or [] if isinstance(failure, dict)])
-        target["manual_review"] = {
-            **(target.get("manual_review") if isinstance(target.get("manual_review"), dict) else {}),
-            "status": "approved",
-            "mode": "bbox_only" if mode in {"bbox_only", "image_only"} else "sprite",
-            "approved_at": now,
-            "approved_by_user_id": user.get("id") or "",
-            "approved_by_username": user.get("username") or user.get("name") or "",
-            "previous_label_status": previous_status,
-            "previous_label_reject_reason": target.get("label_reject_reason") or "",
-            "previous_label_failures": previous_failures,
-        }
-        if mode in {"bbox_only", "image_only"}:
-            target["label_status"] = "trainable_bbox_only"
-            target["bbox_labels"] = bbox_labels
-            target["synthetic_status"] = "skipped"
-            target["synthetic_error"] = "bbox_only_does_not_generate_sprite_samples"
-        else:
-            target["label_status"] = "trainable"
-            target["synthetic_status"] = target.get("synthetic_status") or "pending"
-            target.pop("synthetic_error", None)
-        target["label_reject_reason"] = ""
-        target["label_failures"] = []
-        target["manual_approved_at"] = now
-        target["manual_approved_by"] = user.get("username") or user.get("id") or ""
-        target["label_completed_at"] = target.get("label_completed_at") or now
-        target["updated_at"] = now
-        save_auto_optimize_state(state)
-    response = public_auto_optimize_state(clean_task_id, user=user)
-    start_auto_optimize_training_check_worker(clean_task_id, delay_seconds=2.0)
-    return response
+    return _auto_optimization_requests.approve_ai_task_auto_optimize_sample(task_id, sample_id, request)
 
 
 @app.post("/api/config/rules")
