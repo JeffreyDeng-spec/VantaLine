@@ -6,6 +6,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -26,6 +28,7 @@ install(server)
 # These guards live inside the label endpoints. Every entry is exercised below
 # with real HTTP and a valid request shape, rather than silently exempted.
 LOCAL_LABEL_GUARDS = {
+    ("GET", "/api/label-inspection/runtime"),
     ("GET", "/api/label-inspection/capabilities"),
     ("GET", "/api/label-inspection/tasks"),
     ("POST", "/api/label-inspection/tasks"),
@@ -132,6 +135,41 @@ def assert_local_label_guards() -> None:
                 kwargs.update(files={"file": ("fixture.png", TINY_PNG, "image/png")},
                               data={"request_id": "synthetic-fixture", "revision": "1", "asset_id": "fixture"})
             assert_status(reader.request(method, path, **kwargs), 403, "endpoint-local label guard " + method + " " + path)
+
+
+def assert_label_runtime_admin_guard(admin_client: TestClient) -> None:
+    """Exercise the actual middleware and local admin guard before monitor access."""
+    worker = server.app.state.label_worker
+    monitor = Mock(side_effect=AssertionError("denied account reached runtime monitor"))
+    with patch.object(worker, "runtime_control", SimpleNamespace(monitor=monitor)):
+        with TestClient(server.app, base_url="https://testserver") as reader:
+            path = "/api/label-inspection/runtime"
+            assert_status(reader.get(path), 401, "anonymous runtime status")
+            login(reader, "zero_user", "zero_user-password-1")
+            response = reader.get(path)
+            assert_status(response, 403, "ordinary member runtime status")
+            assert response.json() == {"detail": "Admin role required"}
+            store = server.load_auth_store()
+            member = next(user for user in store["users"] if user["username"] == "zero_user")
+            original_permissions = list(member.get("permissions") or [])
+            # Synthetic persisted over-grant must never substitute for admin role.
+            member["permissions"] = ["inspection", "system_settings"]
+            server.save_auth_store(store)
+            try:
+                response = reader.get(path)
+                assert_status(response, 403, "over-granted member runtime status")
+                assert response.json() == {"detail": "Admin role required"}
+                monitor.assert_not_called()
+            finally:
+                fresh = server.load_auth_store()
+                next(user for user in fresh["users"] if user["username"] == "zero_user")["permissions"] = original_permissions
+                server.save_auth_store(fresh)
+            monitor.side_effect = None
+            monitor.return_value = {"healthy": True}
+            response = admin_client.get(path)
+            assert_status(response, 200, "administrator runtime status")
+            assert response.json() == {"healthy": True}
+            monitor.assert_called_once_with()
 
 
 def assert_timestamp_ui_hooks() -> None:
@@ -607,6 +645,7 @@ def main() -> None:
             raise AssertionError("user_management must not be grantable to normal users")
 
     assert_local_label_guards()
+    assert_label_runtime_admin_guard(client)
     users_payload = client.get("/api/auth/users").json()
     assert_no_password_secrets(users_payload, "admin user list response")
 

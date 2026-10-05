@@ -1,6 +1,7 @@
 """Label control operations shared by embedded and independent consumer processes."""
 from contextlib import contextmanager
 import os
+import logging
 from pathlib import Path
 import re
 import threading
@@ -8,6 +9,7 @@ import time
 import uuid
 
 from ..runtime.control_socket import ControlSocket
+from ..runtime.label_metrics import LabelRuntimeMetrics
 from ..runtime.configuration import ConfigurationSnapshot
 from ..runtime.label_identity import LabelRuntimeIdentity, RuntimeUnavailable
 from ..storage.label_runtime import LabelRuntimeStore
@@ -21,6 +23,7 @@ class LabelRuntimeControl:
                  configuration: ConfigurationSnapshot | None = None):
         self.identity, self.repositories, self.worker = identity, repositories, worker
         self.role = role
+        self.metrics = worker.metrics if worker is not None else LabelRuntimeMetrics()
         self.configuration = configuration
         if configuration is not None and configuration.revision != identity.config_revision:
             raise RuntimeUnavailable("Runtime configuration identity mismatch")
@@ -30,7 +33,7 @@ class LabelRuntimeControl:
         self._lifecycle_lock = threading.Lock()
         self._started = False
         self._failed = False
-        self.socket = ControlSocket(directory, role, self.command, allowed_uid=allowed_uid)
+        self.socket = ControlSocket(directory, role, self.command, allowed_uid=allowed_uid, tick=self.heartbeat)
 
     @contextmanager
     def store(self):
@@ -42,7 +45,7 @@ class LabelRuntimeControl:
             with repository.connection.cursor() as cursor:
                 cursor.execute("SET statement_timeout='1500ms'; SET lock_timeout='1000ms'")
             repository.connection.commit()
-            yield LabelRuntimeStore(repository)
+            yield LabelRuntimeStore(repository, metrics=self.metrics)
         finally:
             self.repositories.clear()
 
@@ -66,6 +69,7 @@ class LabelRuntimeControl:
                 if self.worker is not None:
                     self.worker.runtime_identity = self.identity
                     self.worker.start(paused=state["paused"])
+                self._heartbeat()
                 self.socket.start()
                 self._started = True
             except BaseException as error:
@@ -76,6 +80,22 @@ class LabelRuntimeControl:
                 if isinstance(error, Exception):
                     raise RuntimeUnavailable("Label runtime startup failed") from None
                 raise
+
+    def _heartbeat(self):
+        with self._lock, self.store() as store:
+            runtime = self.worker.runtime_status() if self.worker is not None else {"state": "ready", "active_iterations": 0}
+            store.heartbeat(self.identity, self.role, self.instance, self.pid, runtime, self.metrics.snapshot())
+
+    def heartbeat(self):
+        try:
+            self._heartbeat()
+        except Exception:
+            self.metrics.error("heartbeat_failed")
+            logging.getLogger(__name__).error('{"event":"label_runtime_heartbeat_failed"}')
+
+    def monitor(self):
+        with self.store() as store:
+            return store.monitor(self.identity)
 
     def command(self, value):
         if (not isinstance(value, dict) or value.keys() != {"schema", "command", "revision"}
