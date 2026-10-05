@@ -1208,3 +1208,5 @@ The label list cache reader introduces no setting or worker-mode change. It requ
 Reader startup now verifies the actual business connection and effective PostgreSQL role, including existing libpq environment settings. The installer migration identity alone is insufficient. Manifest v150 additionally includes `label_inspection/readiness.py` (471 actual sources); historical fingerprints are unchanged. No new environment variable, automatic grant or database selection fallback is introduced.
 
 Synthetic lifecycle tests replace the explicit readiness capability rather than disabling it through an environment flag. Production startup always retains the actual database check when a PostgreSQL repository is selected.
+
+Reader benchmark evidence v1 adds no runtime configuration or reduced-repetition switch. Its fixed three A/B repetitions and separate A/A control use only the existing isolated-test PostgreSQL DSN; diagnostic output omits SQL, parameters and credentials.

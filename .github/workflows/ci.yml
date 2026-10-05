@@ -276,6 +276,7 @@ jobs:
           python scripts/verify_backend_boundaries.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
+          python scripts/smoke_label_benchmark_evidence.py
           python scripts/benchmark_label_summary_reads.py
           python scripts/smoke_label_run_summary.py
           python scripts/smoke_label_summary_worker.py

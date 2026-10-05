@@ -723,3 +723,5 @@ Native list histories may use versioned, previously validated compact run fields
 The label summary reader checks its actual database SELECT/schema prerequisites before Web startup becomes ready. Failure aborts candidate startup and uses complete-release rollback; it does not silently fall back on permission errors or alter task/model/call evidence. Missing or unknown projection versions continue using the original list payload.
 
 The retained label lifecycle dependency contract separately checks per-app preflight ordering and independent consumer stops; its fake thread/record setup does not stand in for PostgreSQL permission acceptance.
+
+Label list validation now repeats the complete synthetic cached-reader comparison three times with fresh per-size fixtures and an additional frozen-reader A/A control. Each original pagination, query, latency and memory assertion remains required; failure diagnostics do not alter list behavior or permit a failed repetition to pass.

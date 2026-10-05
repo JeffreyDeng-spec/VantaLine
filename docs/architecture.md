@@ -1637,3 +1637,5 @@ The bounded native list query joins each account-owned authoritative run to its 
 The Web registrar prepends a label-reader prerequisite check to the startup lifecycle, before all previously registered startup callbacks, control readiness and HTTP serving. It obtains the same thread-owned business repository used by label HTTP queries, executes a read-only zero-row source/projection column query, rolls back, and releases the selection. It neither reads customer rows nor repairs grants. A managed runtime without PostgreSQL fails; unmanaged JSON development mode retains its existing absence of this database reader.
 
 Lifecycle registration remains inert. The first reader readiness callback precedes the existing PDF and label startup callbacks; each application passes its own business repository capability to that check.
+
+The label reader's repeated benchmark protocol observes Python CPU/GC outside its original timing window and uses synthetic-session prepared counters after failures. This is validation tooling; application composition, SQL and worker ownership are unchanged.
