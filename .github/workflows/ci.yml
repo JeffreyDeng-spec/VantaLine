@@ -274,6 +274,7 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
+          python scripts/smoke_label_public_projection.py
           python scripts/smoke_label_summary_migration.py
           python scripts/smoke_service_status_requests.py
           python scripts/smoke_app_config_store.py

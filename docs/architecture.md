@@ -1601,3 +1601,5 @@ unchanged. Future publication must validate the actual source row while holding
 its row lock until the summary commits; readers must join the authoritative
 source and use the original payload for missing/unknown summary versions.
 Neither a generic global context nor a second authoritative task store is added.
+
+Label run public projection now lives in the pure `label_inspection/projection.py` module. The API calls the same redaction/field-projection implementation without changing response fields, pagination or storage reads.
