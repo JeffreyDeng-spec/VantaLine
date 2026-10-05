@@ -1321,3 +1321,22 @@ Digest/name relocation changes no file storage selection, upload limit, worker t
 The runtime repository HTTP adapter relocation keeps administrative authorization in the existing endpoint and connection cleanup in the existing thread scope. It introduces no new probe data, connection pool or monitor. Rollback restores the previous complete release without changing database or task evidence.
 
 Protected configuration methods move into AppConfigStore with the existing shared RLock and context-local authorization. Database commit followed by response/load failure retains the original partial-success semantics; do not infer rollback or retry. Restore a complete accepted release if needed, retaining additive schema, source records, snapshots and call evidence.
+
+Native history statistics require the same accepted projection schema, publisher
+and SELECT privileges as the cached reader. Deployment introduces no data rewrite
+or topology switch. Observe first-page latency and memory against the same workload;
+sparse histories may pay aggregation overhead while repeated histories transfer
+fewer rows. Roll back the complete release if the operational baseline regresses;
+retain derived tables and source invalidation, and never replay model calls.
+
+The history query's late JSON projection is a read-only query change in the
+complete release. It adds no schema or operator setting and requires the same
+actual-role startup reader gate. Restore the previous complete package on failure;
+retain projections, source records, snapshots and call evidence. Isolated query
+plans and synthetic benchmarks are not measurements of production capacity.
+
+History result column-name reuse is confined to a single query result. It changes no configuration, schema, API or worker topology; whole-release rollback and snapshot/call evidence retention remain unchanged.
+
+The native history reader combines a same-statement current-proof gate with result-local column-name reuse. A batch with no current owned proof uses the ordered fallback branch without history windows; proven batches retain guarded count/latest aggregation. The gate and both source branches use the original typed owner comparison rather than converting the owner parameter to text. This is a new candidate combining two previously separately measured mechanisms, not a retry or acceptance of earlier failed candidates. Both fixed performance protocols and their original latency, memory and query limits remain mandatory; no universal speedup is claimed.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.

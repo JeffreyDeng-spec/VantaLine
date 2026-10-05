@@ -13,6 +13,7 @@ from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
 from . import model, pdf_import, manual, manual_history
 from .projection import public
+from .history_summary import RunHistorySummary
 from ..storage.label_inspection import LabelRepository, RUN_BATCH_SIZE
 from ..storage.agent_operations import OperationConflict
 from ..storage.label_runtime import LabelMaintenance
@@ -240,6 +241,15 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                 )
         return sorted(runs, key=lambda x: (x["created_at"], x["id"]), reverse=True)
 
+    def list_history(repo, owner, task, native_runs, legacy_records):
+        omitted = 0
+        if isinstance(native_runs, RunHistorySummary):
+            if not task.get("read_only") and task["revision"]:
+                omitted = native_runs.count - 1
+            native_runs = [native_runs.latest]
+        runs = histories(repo, owner, task, native_runs, legacy_records)
+        return len(runs) + omitted, runs[0] if runs else {}
+
     def detail(repo, owner, task):
         return {**public(task), "runs": histories(repo, owner, task)}
 
@@ -287,14 +297,16 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                     task["id"] for task in batch
                     if not task.get("read_only") and task.get("revision") and task.get("id")
                 ]
-                native_runs = repo.list_run_payloads_for_tasks(owner, run_ids) if run_ids else {}
+                legacy_ids = [task.get("id") for task in batch if task.get("legacy_id")]
+                native_runs = repo.list_run_history_for_tasks(
+                    owner, run_ids, summary_task_ids=[identity for identity in run_ids if identity not in legacy_ids],
+                ) if run_ids else {}
                 for task in batch:
-                    runs = histories(
+                    run_count, latest = list_history(
                         repo, owner, task,
                         native_runs.get(task["id"], []) if task.get("id") else None,
                         legacy_records,
                     )
-                    latest = runs[0] if runs else {}
                     rows.append(
                         {
                             "id": task["id"],
@@ -308,7 +320,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                                 task.get("updated_at", 0), latest.get("created_at", 0)
                             ),
                             "standard_count": len(task["assets"]),
-                            "run_count": len(runs),
+                            "run_count": run_count,
                             "decision": latest.get("decision", "REVIEW_REQUIRED"),
                             "status": latest.get("status", task.get("status", "ready")),
                         }

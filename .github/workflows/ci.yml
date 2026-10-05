@@ -280,6 +280,9 @@ jobs:
           python scripts/smoke_service_paths.py
           python scripts/smoke_read_cache_ownership.py
           python scripts/smoke_directory_lifecycle.py
+          python scripts/smoke_label_history_benchmark.py
+          python scripts/smoke_label_history_statistics.py
+          python scripts/benchmark_label_history_statistics.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
           python scripts/smoke_label_benchmark_evidence.py

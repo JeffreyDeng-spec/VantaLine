@@ -160,7 +160,11 @@
         "scripts/smoke_label_read_transactions.py",
         "scripts/smoke_label_legacy_index.py",
         "scripts/benchmark_label_legacy_index.py",
-        "scripts/benchmark_label_run_batch.py"
+        "scripts/benchmark_label_run_batch.py",
+        "scripts/smoke_label_history_statistics.py",
+        "scripts/smoke_label_history_benchmark.py",
+        "scripts/benchmark_label_history_statistics.py",
+        "tests/backend_contract/label_history_tasks_baseline.py"
       ],
       "required_docs": [
         "docs/text-inspection-v2.md",

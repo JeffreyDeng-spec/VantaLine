@@ -208,11 +208,12 @@ class PostgresRuntimeRepository:
         finally:
             cursor.close()
 
-    def _row_to_dict(self, cursor: Any, row: Any) -> dict[str, Any]:
+    def _row_to_dict(self, cursor: Any, row: Any, *, columns: tuple[str, ...] | None = None) -> dict[str, Any]:
         if isinstance(row, Mapping):
             return dict(row)
-        description = getattr(cursor, "description", None) or ()
-        columns = [str(item[0]) for item in description]
+        if columns is None:
+            description = getattr(cursor, "description", None) or ()
+            columns = [str(item[0]) for item in description]
         return dict(zip(columns, row))
 
     def count_rows(self, table_subset: tuple[str, ...] | None = None) -> dict[str, int]:

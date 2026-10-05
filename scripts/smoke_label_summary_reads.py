@@ -119,7 +119,8 @@ class Fixture:
     @contextmanager
     def variant(self,baseline=False):
         if baseline:
-            with patch.object(LabelRepository,'list_run_payloads_for_tasks',baseline_method()):yield
+            with patch.object(LabelRepository,'list_run_payloads_for_tasks',baseline_method()), \
+                 patch.object(LabelRepository,'list_run_history_for_tasks',lambda repo,owner,task_ids,**_:baseline_method()(repo,owner,task_ids)):yield
         else:yield
 
     def page(self,baseline=False,**params):

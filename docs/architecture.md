@@ -1655,3 +1655,45 @@ HTTP-safe runtime repository selection and admin probe projection live in runtim
 AppConfigStore now also owns save_app_config and mutate_app_config_atomically. Protected configuration mutation uses the same supplied reentrant guard and authorization ContextVar as generic configuration persistence. Its internal load/save calls use its own methods, removing these two business bodies and their callbacks through the entry. Root exports remain bound aliases; no new aggregate service or connection state is introduced.
 
 This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+
+## Native label history statistics
+
+The list-only repository method computes count/latest in SQL for a batch of at most
+64 task IDs, only when every native run has a version 1 proof and the caller has
+explicitly permitted that task ID. The API excludes every ID associated with any
+legacy extension in the same batch, including duplicate identities in historical
+raw task JSON. Mixed legacy histories retain all original native rows: historical
+JSON text can contain non-finite times, for which replacing Python's full sort with
+a merge of per-source maxima changes behavior. Partially proven groups likewise
+retain every row and the previous source creation/id order. SQL casts are guarded
+by the proof version inside each expression, independently of the outer filter.
+
+The pure `history_summary.RunHistorySummary` value carries count and latest between
+storage and HTTP composition. No current identity, connection or service state is
+stored there. Full detail and legacy/manual/Beta projection remain unchanged, as do
+fixed 15-minute account/filter-bound snapshots. Manifest v151 includes the actual
+new source; historical fingerprints are not rewritten.
+
+The native history query carries source/proof JSON references through window
+selection and source ordering, then projects the returned payloads. An ordered
+subquery with OFFSET 0 keeps wide fallback JSON construction above its sort.
+Whole-group completeness, version-guarded keys, owner filtering and fallback
+membership are unchanged; all source rows still participate in window counts.
+
+History result decoding now reuses column names only within one fetched result
+set. It obtains metadata lazily for the first non-mapping row, preserving empty
+results and mapping-row behavior; the generic repository decoder still accepts
+all existing callers without supplied columns. Duplicate-column overwrite,
+shallow mapping copies and decode-failure rollback/close remain unchanged. This
+removes repeated psycopg Column construction without changing SQL, transactions,
+query counts, source ordering or proof eligibility. The real PostgreSQL history
+smoke verifies one metadata access across a wide mixed-result batch and retains
+the original sentinel decode-failure check.
+
+Column-name reuse assumes the stable metadata of one psycopg result set. A private decoder override that avoids metadata, or a nonstandard cursor that changes columns between rows, is outside this optimization contract. Default decoder callers retain the original list-based metadata construction.
+
+The native history reader combines a same-statement current-proof gate with result-local column-name reuse. A batch with no current owned proof uses the ordered fallback branch without history windows; proven batches retain guarded count/latest aggregation. The gate and both source branches use the original typed owner comparison rather than converting the owner parameter to text. This is a new candidate combining two previously separately measured mechanisms, not a retry or acceptance of earlier failed candidates. Both fixed performance protocols and their original latency, memory and query limits remain mandatory; no universal speedup is claimed.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.
+
+The current native-history integration retains the accepted foundation and readiness modules. Its bundled manifest is v158 with 480 unique sources. Historical counts above describe earlier isolated slices. The original 47 reader/history cases and both frozen baselines remain required; legacy/manual/Beta SQL aggregation is not completed by this native slice.

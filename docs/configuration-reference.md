@@ -1226,3 +1226,18 @@ Repository access relocation adds no datastore configuration or fallback. Select
 Protected configuration ownership changes no defaults, protected keys or setting. PostgreSQL mutation retains the namespace transaction and a fresh configuration load while the shared local RLock remains held. JSON mutation still rejects unprotected changes before authorizing a protected save and resets the previous ContextVar value in finally. Private root load/save rebinding no longer redirects these internal owner calls; replace actual typed ports for tests. Manifest v158 fingerprints the updated existing modules (479 paths), preserving historical task snapshots.
 
 This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+
+Native label history count/latest is an internal list-read optimization with no
+new setting. It uses the same versioned derived proof and is disabled per task
+when proof coverage is incomplete or any same-batch task identity links to legacy
+history. No model selection, prompt, concurrency, permission or worker mode changes.
+
+Late JSON projection in native history reads introduces no configuration switch,
+operator tuning requirement or model change. Existing reader startup checks and
+worker-mode/maintenance configuration remain authoritative.
+
+History result column-name reuse is confined to a single query result. It changes no configuration, schema, API or worker topology; whole-release rollback and snapshot/call evidence retention remain unchanged.
+
+Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.
+
+The current native-history integration retains the accepted foundation and readiness modules. Its bundled manifest is v158 with 480 unique sources. Historical counts above describe earlier isolated slices. The original 47 reader/history cases and both frozen baselines remain required; legacy/manual/Beta SQL aggregation is not completed by this native slice.
