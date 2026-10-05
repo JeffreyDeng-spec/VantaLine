@@ -223,6 +223,7 @@ def assert_react_pipeline_route() -> None:
     }
     # Source contracts follow the actual class methods, not application adapters.
     implementation_methods = {
+        "shared output visibility": ("auth/account_projections.py", "AccountProjections", "output_path_visible_to_user"),
         "pose asset materialization": ("agent/pose_asset_materialization.py", "PoseAssetMaterialization", "materialize_agent_mcp_pose_assets"),
         "pose tool calls": ("agent/pose_call_registration.py", "PoseCallRegistration", "ensure_agent_mcp_pose_tool_calls"),
         "missing tool state": ("agent/pose_call_registration.py", "PoseCallRegistration", "ensure_agent_mcp_pose_tool_calls"),

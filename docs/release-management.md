@@ -1029,3 +1029,15 @@ Runtime repository HTTP access ships as a structural module move under manifest 
 Protected configuration ownership under manifest v158 requires original config regression, real PostgreSQL concurrency/rollback, source binding guards, full HTTP and PLC contracts. It has no data migration, new setting or topology change. Rollback uses the previous complete accepted Web/worker release.
 
 This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+
+The account/name policy batch integrates two independently checked structural moves and retains their original method behavior. Exact-head CI/review and serial whole-release observation remain required. Source manifest163/488 records actual files; this slice is separate from list-query performance work.
+
+Origin/status projection service and typed capabilities ship with callers under manifest v163. Require original/candidate policy, actual middleware/auth/status and full HTTP checks before exact-head review and whole-release acceptance.
+
+The administrator documentation domain registrar is structural under manifest v163. Require original/candidate guard and HTTP/cache isolation tests, existing auth and whole-app HTTP contracts, exact-head CI and independent release acceptance. API visibility and deployment topology stay unchanged.
+
+Authentication graph composition is structural under manifest v163. Require domain, RBAC, two-application isolation, real PostgreSQL and whole-app HTTP regressions, then exact-head CI, independent review and whole-release acceptance. This does not activate additional workers or change the release topology.
+
+Prompt-source manifest version 163 includes `auth/http_composition.py` and records the new composition source for future task fingerprints (488 source files). Prior task snapshots and secret references remain unchanged; model/provider behavior and release topology are unchanged.
+
+This identity integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v162 with 488 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.

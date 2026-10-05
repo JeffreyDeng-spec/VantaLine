@@ -1321,3 +1321,13 @@ Digest/name relocation changes no file storage selection, upload limit, worker t
 The runtime repository HTTP adapter relocation keeps administrative authorization in the existing endpoint and connection cleanup in the existing thread scope. It introduces no new probe data, connection pool or monitor. Rollback restores the previous complete release without changing database or task evidence.
 
 Protected configuration methods move into AppConfigStore with the existing shared RLock and context-local authorization. Database commit followed by response/load failure retains the original partial-success semantics; do not infer rollback or retry. Restore a complete accepted release if needed, retaining additive schema, source records, snapshots and call evidence.
+
+Account and resource policies ship with all callers in the complete release. This structural slice changes no schema, transaction, model call or process topology and performs no data rename/migration. Restore the previous complete release on failure while retaining records, snapshots and call evidence.
+
+Public network policy relocation preserves configured CORS and public status filtering behavior. There is no new setting, network probe, permission or topology switch. Whole-release rollback restores the previous complete application and worker package.
+
+Documentation composition uses existing authentication/session storage and no new background process or database lifecycle. Duplicate-route preflight rejects an already installed GET route before adding any documentation route. Unexpected failure during later route registration is not transactional; discard a partially built app. Deploy and roll back complete releases preserving runtime data.
+
+Authentication composition changes no session format, permission, database query or worker topology. The repository and user administration share one per-composition RLock; PostgreSQL transaction/coordination boundaries stay unchanged. Independent graphs use isolated test stores; there is no new cross-process JSON-store safety claim. Deploy and roll back complete releases preserving users, sessions and runtime evidence.
+
+Authentication HTTP composition preserves route/middleware order, authentication errors, media access and administrator documentation behavior. It adds no worker, storage migration or startup hook. Deploy and roll back the complete immutable release. Auth-only multi-app tests do not demonstrate full production lifecycle isolation.

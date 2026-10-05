@@ -725,3 +725,5 @@ The label summary reader checks its actual database SELECT/schema prerequisites 
 The retained label lifecycle dependency contract separately checks per-app preflight ordering and independent consumer stops; its fake thread/record setup does not stand in for PostgreSQL permission acceptance.
 
 Label list validation now repeats the complete synthetic cached-reader comparison three times with fresh per-size fixtures and an additional frozen-reader A/A control. Each original pagination, query, latency and memory assertion remains required; failure diagnostics do not alter list behavior or permit a failed repetition to pass.
+
+Manifest version 163 adds actual authentication HTTP composition source to new task fingerprints. This does not rewrite historical model snapshots or change label/text worker admission, concurrency or paid-call settlement.

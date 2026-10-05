@@ -64,7 +64,7 @@
     },
     {
       "name": "Shared record policies",
-      "paths": ["local_inspection_service/records/**", "scripts/smoke_record_ownership.py", "scripts/smoke_record_audit.py", "scripts/smoke_record_access.py"],
+      "paths": ["local_inspection_service/records/**", "scripts/smoke_record_ownership.py", "scripts/smoke_record_audit.py", "scripts/smoke_record_access.py", "scripts/smoke_resource_names.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
@@ -85,7 +85,7 @@
     },
     {
       "name": "API authentication permissions and configuration",
-      "paths": ["local_inspection_service/server.py", "local_inspection_service/auth/**", "scripts/smoke_service_status_requests.py", "scripts/smoke_auth_foundation.py", "scripts/smoke_auth_access.py", "scripts/smoke_auth_api.py", "local_inspection_service/scripts/smoke_auth_rbac.py", "local_inspection_service/config/**", "scripts/smoke_app_config_store.py", "local_inspection_service/schemas/**", "local_inspection_service/runtime/identity.py", "local_inspection_service/runtime/service_paths.py", "local_inspection_service/runtime/service_path_ports.py", "scripts/smoke_service_paths.py", "local_inspection_service/runtime/directories.py", "scripts/smoke_directory_lifecycle.py", "scripts/smoke_foundation_policies.py", "scripts/smoke_artifact_file_policies.py", "local_inspection_service/runtime/repository_access.py", "scripts/smoke_runtime_repository_access.py", "scripts/smoke_protected_config_ownership.py"],
+      "paths": ["local_inspection_service/server.py", "local_inspection_service/auth/**", "scripts/smoke_service_status_requests.py", "scripts/smoke_auth_foundation.py", "scripts/smoke_auth_access.py", "scripts/smoke_auth_api.py", "local_inspection_service/scripts/smoke_auth_rbac.py", "local_inspection_service/config/**", "scripts/smoke_app_config_store.py", "local_inspection_service/schemas/**", "local_inspection_service/runtime/identity.py", "local_inspection_service/runtime/service_paths.py", "local_inspection_service/runtime/service_path_ports.py", "scripts/smoke_service_paths.py", "local_inspection_service/runtime/directories.py", "scripts/smoke_directory_lifecycle.py", "scripts/smoke_foundation_policies.py", "scripts/smoke_artifact_file_policies.py", "local_inspection_service/runtime/repository_access.py", "scripts/smoke_runtime_repository_access.py", "scripts/smoke_protected_config_ownership.py", "scripts/smoke_account_projections.py", "scripts/smoke_public_network_policy.py", "scripts/smoke_admin_documentation_composition.py", "scripts/smoke_authentication_composition.py"],
       "server_diff_regex": "(?i)@app\\.|permission|authorize|authenticate|config|BaseModel",
       "required_any": ["docs/architecture.md", "docs/configuration-reference.md"]
     },
