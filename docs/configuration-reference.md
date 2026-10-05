@@ -1195,3 +1195,10 @@ Accessory image workflow extraction adds no configuration, provider default, wor
 Configuration/status extraction changes no setting, permission, provider selection, model default or worker mode. App-config missing primary still uses defaults, while exhausted transient reads can use backup. Ordinary JSON saves retain current PLC-protected fields; the existing ContextVar-authorized path can change them. PostgreSQL preserves protected keys in its existing transaction. Missing local model-config files return a shallow defaults copy before normalization; recognized-key save and chmod/replace behavior are unchanged. Source manifest v147 adds nine actual files (467 entries); historical snapshots and secret references remain unchanged.
 
 Pure label projection extraction changes no settings or model binding. Source manifest v148 appends the actual projection source (468 entries); historical snapshots are not rewritten.
+
+The optional post-settlement summary publisher adds no environment setting. Its
+fixed proof bounds are compatibility constraints, not user tuning knobs.
+`summary_publication_failed` is a fixed operational error code; it contains no
+exception text, row identifiers, credentials or paths. Manifest v149 includes
+470 actual sources, including the proof and row-lock publisher. Historical model
+references/fingerprints and provider/prompt selection remain unchanged.

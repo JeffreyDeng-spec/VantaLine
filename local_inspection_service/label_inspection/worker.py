@@ -12,6 +12,7 @@ from .dependencies import RepositoryLifecycle, ModelProvider, require_models
 import time
 from . import model, quality, manual
 from ..storage.label_inspection import LabelRepository
+from ..storage.label_run_projection import LabelRunProjection
 from ..runtime.label_metrics import LabelRuntimeMetrics
 from ..codex_compare.media import MediaStore
 
@@ -422,7 +423,20 @@ class LabelWorker:
             process(repo, MediaStore(self.data_directory() / "label_inspection" / "media"),
                     run, resolved["api_key"] if resolved else "", resolved=resolved,
                     record_call=require_models(self.models).record_call)
+            self._publish_summary(raw_repo, run)
         except Exception:
             self.metrics.error("worker_iteration_failed")
             logging.getLogger(__name__).error('{"event":"label_worker_iteration_failed"}')
         return run
+
+    def _publish_summary(self, repository, run):
+        # Business settlement has already returned/committed. Optional derived
+        # work remains part of this admitted iteration, including its cleanup.
+        with self._lock:
+            if self._paused or self._stop.is_set() or self.stopping():
+                return
+        try:
+            LabelRunProjection(repository).publish(run["owner_user_id"], run["id"])
+        except Exception:
+            self.metrics.error("summary_publication_failed")
+            logging.getLogger(__name__).warning('{"event":"summary_publication_failed"}')

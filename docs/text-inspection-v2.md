@@ -710,3 +710,10 @@ preserves task/call evidence.
 Label task/run detail reads now use the last committed version without acquiring the global write advisory lock. Owner/kind filtering and response projection are unchanged; edits and submissions still validate their state inside the existing write transaction.
 
 Label task/run public projection uses `label_inspection/projection.py` with the same field filtering. This source relocation does not alter task detail/history response contracts or enable derived-summary reads.
+
+Completed label consumer iterations may prepare a compact derived run summary
+after the existing business transaction finishes. Failure or an unprovable row
+leaves the original result and original list/detail reads in place; no retry of
+a paid stage or source edit is performed. Active/queued runs and historical
+backfill are excluded. This is preparation for later cached list queries, not
+a change to visible task/history or frozen 15-minute cursor behavior.

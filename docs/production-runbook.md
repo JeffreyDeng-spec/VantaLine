@@ -1288,3 +1288,16 @@ evidence of full list performance or production acceptance.
 Before admitting the summary preparation, the generated-schema and import real-engine checks must accept complete trigger definitions and retain their SQL-error rejection. These temporary single-user databases open no listening sockets and do not touch production state. The production migration and complete-release rollback procedure are unchanged.
 
 The pure label projection helper ships in the complete release. It changes no database reader, cache publisher or worker topology; retain derived storage and evidence on whole-release rollback.
+
+## Optional post-settlement summary preparation
+
+The publisher requires the additive projection migration and uses the existing
+consumer threads after business settlement. Confirm the service database role
+can read the source and insert/update derived state during acceptance; older
+source-only writers remain compatible with the invalidation trigger. A missing
+permission or unavailable cache produces a fixed `summary_publication_failed`
+operational event and leaves the completed business result intact. No cached
+HTTP read is enabled by this slice. Rollback restores the complete previous
+release and retains derived objects; do not reverse the migration or replay
+unknown calls. Optional publication is included in drain, and stop/pause skips
+work that has not begun. Local SQL limits are not a guaranteed network deadline.
