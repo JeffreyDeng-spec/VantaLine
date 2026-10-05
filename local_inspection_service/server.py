@@ -1739,171 +1739,51 @@ MANUAL_TYPE_KEYWORDS: dict[str, list[tuple[str, int]]] = {
 }
 
 
-class PlcConfigRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    enabled: StrictBool | None = None
-    protocol: StrictStr | None = None
-    checksum_mode: StrictStr | None = None
-    serial_port: StrictStr | None = None
-    baudrate: StrictInt | None = None
-    parity: StrictStr | None = None
-    data_bits: StrictInt | None = None
-    stop_bits: StrictInt | None = None
-    result_register: StrictStr | None = None
-    output_control_point: StrictStr | None = None
-    capture_trigger_enabled: StrictBool | None = None
-    capture_input_register: StrictStr | None = None
-    capture_trigger_value: StrictInt | None = None
-    # Rolling-deploy input compatibility only. Canonical responses never expose these fields.
-    d206_address: StrictStr | None = None
-    y04_address: StrictStr | None = None
-    write_y04: StrictBool | None = None
-    timeout: StrictFloat | StrictInt | None = None
-    retries: StrictInt | None = None
+from .schemas.plc import (
+    PlcConfigRequest,
+    PlcCaptureSessionRequest,
+    PlcCaptureSessionHeartbeatRequest,
+    PlcWebSerialConfigRequest,
+    PlcWorkstationPairRequest,
+    PlcWorkstationVerifyRequest,
+    PlcWorkstationLeaseRequest,
+    PlcWorkstationLeaseActivateRequest,
+    PlcWorkstationLeaseHeartbeatRequest,
+    PlcWorkstationLeaseRebindRequest,
+    PlcWebSerialAttemptRequest,
+    PlcWebSerialDiagnosticReceiptRequest,
+    PlcWebSerialDiagnosticConfirmRequest,
+    PlcWebSerialReceiptOperation,
+    PlcWebSerialReceiptRequest,
+)
 
 
-class PlcCaptureSessionRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    model_id: StrictStr | None = None
-    camera_ready: StrictBool
 
 
-class PlcCaptureSessionHeartbeatRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
 
 
-class PlcWebSerialConfigRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    schema_version: StrictInt = WEB_SERIAL_SCHEMA_VERSION
-    transport_mode: StrictStr = "web_serial"
-    profile_id: StrictStr = WEB_SERIAL_PROFILE_ID
-    enabled: StrictBool = False
-    protocol: StrictStr = PLC_PROTOCOL_ID
-    checksum_mode: StrictStr = "include_etx"
-    baudrate: StrictInt = 9600
-    parity: StrictStr = "E"
-    data_bits: StrictInt = 7
-    stop_bits: StrictInt = 1
-    result_register: StrictStr = "D206"
-    output_control_point: StrictStr = ""
-    capture_trigger_enabled: StrictBool = False
-    capture_input_register: StrictStr = "D205"
-    capture_trigger_value: StrictInt = 1
-    capture_poll_interval_ms: StrictInt = 200
-    ack_timeout_ms: StrictInt = 500
-    retries: StrictInt = 0
 
 
-class PlcWorkstationPairRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    name: StrictStr
-    station_id: StrictStr | None = None
 
 
-class PlcWorkstationVerifyRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    verified: StrictBool
 
 
-class PlcWorkstationLeaseRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    client_instance_id: StrictStr
-    model_id: StrictStr
-    bundle_version: StrictStr
 
 
-class PlcWorkstationLeaseActivateRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
-    usb_vendor_id: StrictInt | None = None
-    usb_product_id: StrictInt | None = None
 
 
-class PlcWorkstationLeaseHeartbeatRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
 
 
-class PlcWorkstationLeaseRebindRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
-    model_id: StrictStr
 
 
-class PlcWebSerialAttemptRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
-    config_generation: StrictInt
 
 
-class PlcWebSerialDiagnosticReceiptRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
-    diagnostic_id: StrictStr
-    attempt_token: StrictStr
-    outcome: StrictStr
 
 
-class PlcWebSerialDiagnosticConfirmRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
-    diagnostic_id: StrictStr
-    attempt_token: StrictStr
 
 
-class PlcWebSerialReceiptOperation(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    target: StrictStr
-    frame_sha256: StrictStr
-    status: StrictStr
-    response_hex: StrictStr
-    completed_at: StrictInt
 
 
-class PlcWebSerialReceiptRequest(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    session_id: StrictStr
-    lease_epoch: StrictInt
-    attempt_token: StrictStr
-    outcome: StrictStr
-    operations: list[PlcWebSerialReceiptOperation]
 
 
 STANDARD_PAPER_SIZES_MM = {
@@ -2108,109 +1988,74 @@ PLC_PROTECTED_CONFIG_KEYS = (
     PLC_CAPTURE_RESULTS_KEY,
 )
 PLC_IO_CONFIG_FIELDS = frozenset(DEFAULT_PLC_CONFIG)
-PLC_LEGACY_IO_CONFIG_FIELDS = frozenset(
-    {
-        "enabled", "protocol", "checksum_mode", "serial_port", "baudrate", "parity",
-        "data_bits", "stop_bits", "d206_address", "y04_address", "write_y04", "timeout", "retries",
-    }
+from .plc.persisted_validation import (
+    PLC_LEGACY_IO_CONFIG_FIELDS,
+    PLC_PERSISTED_DISPATCH_FIELDS,
+    PLC_SUPPORTED_RECORD_VERSIONS,
+    build_plc_dispatch_plan,
+    build_plc_v1_dispatch_plan,
+    normalize_plc_v1_snapshot,
+    verify_persisted_plc_dispatch,
 )
 _plc_namespace_write_authorized: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "plc_namespace_write_authorized", default=False
 )
 
 
+from .plc.workstation_repository import PlcWorkstationRepository
+from .plc.workstation_repository_ports import WorkstationRepositoryFiles, WorkstationRepositoryPolicy, WorkstationRepositoryStorage
+
+_plc_workstation_repository = PlcWorkstationRepository(
+    files=WorkstationRepositoryFiles(
+        _business_files=lambda: _business_files,
+        DATA_DIR=lambda: DATA_DIR,
+        PLC_WEB_SERIAL_STATE_PATH=lambda: PLC_WEB_SERIAL_STATE_PATH,
+    ),
+    policy=WorkstationRepositoryPolicy(
+        PLC_WEB_SERIAL_JSON_TEST_ENV=lambda: PLC_WEB_SERIAL_JSON_TEST_ENV,
+        PlcConfigError=lambda: PlcConfigError,
+        SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
+    ),
+    storage=WorkstationRepositoryStorage(
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        _config_io_lock=lambda: _config_io_lock,
+        _plc_web_serial_empty_state=lambda: _plc_web_serial_empty_state,
+        _plc_web_serial_load_local=lambda: _plc_web_serial_load_local,
+        _plc_web_serial_save_local=lambda: _plc_web_serial_save_local,
+    ),
+)
+
+
 def _plc_web_serial_empty_state() -> dict[str, dict[str, Any]]:
-    return {"workstations": {}, "leases": {}, "dispatches": {}}
+    return _plc_workstation_repository._plc_web_serial_empty_state()
 
 
 def _plc_web_serial_load_local() -> dict[str, dict[str, Any]]:
-    try:
-        raw = json.loads(_business_files.read_text(PLC_WEB_SERIAL_STATE_PATH, encoding="utf-8"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
-        return _plc_web_serial_empty_state()
-    state = _plc_web_serial_empty_state()
-    if isinstance(raw, dict):
-        for key in state:
-            value = raw.get(key)
-            if isinstance(value, dict):
-                state[key] = {str(item_id): dict(item) for item_id, item in value.items() if isinstance(item, dict)}
-    return state
+    return _plc_workstation_repository._plc_web_serial_load_local()
 
 
 def _plc_web_serial_save_local(state: dict[str, dict[str, Any]]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = PLC_WEB_SERIAL_STATE_PATH.with_suffix(".tmp")
-    _business_files.write_text(temporary, json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(temporary, PLC_WEB_SERIAL_STATE_PATH)
+    return _plc_workstation_repository._plc_web_serial_save_local(state)
 
 
 def _plc_web_serial_record(row: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not isinstance(row, dict):
-        return None
-    raw = row.get("raw_json")
-    return dict(raw) if isinstance(raw, dict) else dict(row)
+    return _plc_workstation_repository._plc_web_serial_record(row)
 
 
 def _plc_workstation_row(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": record["id"],
-        "token_hash": record["token_hash"],
-        "name": record["name"],
-        "status": record.get("status") or "commissioning",
-        "config_generation": int(record.get("config_generation") or 0),
-        "profile_verified": bool(record.get("profile_verified")),
-        "created_by_user_id": record.get("created_by_user_id") or SYSTEM_OWNER_ID,
-        "created_at": int(record.get("created_at") or 0),
-        "updated_at": int(record.get("updated_at") or 0),
-        "raw_json": record,
-    }
+    return _plc_workstation_repository._plc_workstation_row(record)
 
 
 def _plc_workstation_lease_row(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "station_id": record["station_id"],
-        "session_id": record["session_id"],
-        "state": record["state"],
-        "lease_epoch": int(record["lease_epoch"]),
-        "owner_user_id": record["owner_user_id"],
-        "model_id": record.get("model_id") or "",
-        "client_instance_id": record["client_instance_id"],
-        "bundle_version": record["bundle_version"],
-        "config_generation": int(record["config_generation"]),
-        "heartbeat_at": int(record["heartbeat_at"]),
-        "expires_at": int(record["expires_at"]),
-        "raw_json": record,
-    }
+    return _plc_workstation_repository._plc_workstation_lease_row(record)
 
 
 def _plc_web_serial_dispatch_row(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": record["dispatch_id"],
-        "station_id": record["station_id"],
-        "detection_request_id": record["detection_request_id"],
-        "session_id": record["session_id"],
-        "lease_epoch": int(record["lease_epoch"]),
-        "config_generation": int(record["config_generation"]),
-        "status": record["status"],
-        "passed": bool(record.get("passed")),
-        "deadline_at": int(record.get("deadline_at") or 0),
-        "created_at": int(record["created_at"]),
-        "updated_at": int(record["updated_at"]),
-        "raw_json": record,
-    }
+    return _plc_workstation_repository._plc_web_serial_dispatch_row(record)
 
 
 def _plc_web_serial_upsert_row(table_name: str, row: dict[str, Any], local_key: str, row_id: str) -> None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        repository.upsert_row(table_name, row)
-        return
-    if str(os.environ.get(PLC_WEB_SERIAL_JSON_TEST_ENV, "")).strip().lower() not in {"1", "true", "yes"}:
-        raise PlcConfigError("plc_web_serial_postgres_coordination_unavailable")
-    with _config_io_lock:
-        state = _plc_web_serial_load_local()
-        state[local_key][row_id] = row
-        _plc_web_serial_save_local(state)
+    return _plc_workstation_repository._plc_web_serial_upsert_row(table_name, row, local_key, row_id)
 
 
 def _plc_web_serial_mutate(
@@ -2218,369 +2063,102 @@ def _plc_web_serial_mutate(
     dispatch_id: str | None,
     mutator: Callable[[dict[str, dict[str, Any] | None]], None],
 ) -> dict[str, dict[str, Any] | None]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return repository.mutate_plc_web_serial_rows(station_id, dispatch_id, mutator)
-    if str(os.environ.get(PLC_WEB_SERIAL_JSON_TEST_ENV, "")).strip().lower() not in {"1", "true", "yes"}:
-        raise PlcConfigError("plc_web_serial_postgres_coordination_unavailable")
-    with _config_io_lock:
-        local = _plc_web_serial_load_local()
-        state: dict[str, dict[str, Any] | None] = {
-            "station": copy.deepcopy(local["workstations"].get(station_id)),
-            "lease": copy.deepcopy(local["leases"].get(station_id)),
-            "clock": {"now": int(time.time())},
-        }
-        if dispatch_id:
-            state["dispatch"] = copy.deepcopy(local["dispatches"].get(dispatch_id))
-        mutator(state)
-        if state.get("station") is not None:
-            local["workstations"][station_id] = dict(state["station"] or {})
-        if state.get("lease") is not None:
-            local["leases"][station_id] = dict(state["lease"] or {})
-        if dispatch_id and state.get("dispatch") is not None:
-            local["dispatches"][dispatch_id] = dict(state["dispatch"] or {})
-        _plc_web_serial_save_local(local)
-        return state
+    return _plc_workstation_repository._plc_web_serial_mutate(station_id, dispatch_id, mutator)
+
+
+from .plc.station_service import PlcStationService
+from .plc.station_ports import StationStorage, StationIdentity, StationPolicy, StationProjection
+
+_plc_station_service = PlcStationService(
+    storage=StationStorage(
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        _config_io_lock=lambda: _config_io_lock,
+        _plc_web_serial_load_local=lambda: _plc_web_serial_load_local,
+        _plc_web_serial_record=lambda: _plc_web_serial_record,
+        _plc_web_serial_mutate=lambda: _plc_web_serial_mutate,
+        _plc_web_serial_upsert_row=lambda: _plc_web_serial_upsert_row,
+        _plc_workstation_row=lambda: _plc_workstation_row,
+        _plc_workstation_lease_row=lambda: _plc_workstation_lease_row,
+        _plc_web_serial_dispatch_row=lambda: _plc_web_serial_dispatch_row,
+    ),
+    identity=StationIdentity(
+        PLC_WORKSTATION_COOKIE=lambda: PLC_WORKSTATION_COOKIE,
+        PLC_WORKSTATION_COOKIE_TTL_SECONDS=lambda: PLC_WORKSTATION_COOKIE_TTL_SECONDS,
+        SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
+        _plc_web_serial_token_hash=lambda: _plc_web_serial_token_hash,
+        current_auth_user=lambda: current_auth_user,
+        request_is_https=lambda: request_is_https,
+        plc_web_serial_station_from_request=lambda: plc_web_serial_station_from_request,
+    ),
+    policy=StationPolicy(
+        PlcConfigError=lambda: PlcConfigError,
+        HTTPException=lambda: HTTPException,
+        DEFAULT_WEB_SERIAL_CONFIG=lambda: DEFAULT_WEB_SERIAL_CONFIG,
+        WEB_SERIAL_ACTIVE_LEASE_SECONDS=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
+        WEB_SERIAL_HEARTBEAT_SECONDS=lambda: WEB_SERIAL_HEARTBEAT_SECONDS,
+        WEB_SERIAL_PROTOCOL_VERSION=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        migrate_web_serial_config=lambda: migrate_web_serial_config,
+        normalize_web_serial_config=lambda: normalize_web_serial_config,
+        web_serial_profile_fingerprint=lambda: web_serial_profile_fingerprint,
+    ),
+    projection=StationProjection(
+        current_release_version=lambda: current_release_version,
+        build_web_serial_capture_read_plan=lambda: build_web_serial_capture_read_plan,
+        web_serial_resolved_addresses=lambda: web_serial_resolved_addresses,
+        plc_web_serial_current_lease=lambda: plc_web_serial_current_lease,
+        plc_web_serial_recent_dispatches=lambda: plc_web_serial_recent_dispatches,
+        plc_web_serial_ensure_current_station_contract=lambda: plc_web_serial_ensure_current_station_contract,
+        plc_web_serial_station_payload=lambda: plc_web_serial_station_payload,
+    ),
+)
 
 
 def _plc_web_serial_token_hash(token: str) -> str:
-    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+    return _plc_station_service._plc_web_serial_token_hash(token)
 
 
 def plc_web_serial_station_from_request(request: Request) -> dict[str, Any] | None:
-    token = str(request.cookies.get(PLC_WORKSTATION_COOKIE) or "").strip()
-    if not token:
-        return None
-    token_hash = _plc_web_serial_token_hash(token)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return _plc_web_serial_record(
-            repository.fetch_one_by_columns("plc_workstations", {"token_hash": token_hash})
-        )
-    with _config_io_lock:
-        for row in _plc_web_serial_load_local()["workstations"].values():
-            record = _plc_web_serial_record(row)
-            if record and hmac.compare_digest(str(record.get("token_hash") or ""), token_hash):
-                return record
-    return None
+    return _plc_station_service.plc_web_serial_station_from_request(request)
 
 
 def require_plc_web_serial_station(request: Request) -> dict[str, Any]:
-    station = plc_web_serial_station_from_request(request)
-    if not station:
-        raise HTTPException(status_code=409, detail="plc_workstation_not_paired")
-    return station
+    return _plc_station_service.require_plc_web_serial_station(request)
 
 
 def plc_web_serial_current_lease(station_id: str) -> dict[str, Any] | None:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        return _plc_web_serial_record(
-            repository.fetch_by_primary_key("plc_workstation_leases", {"station_id": station_id})
-        )
-    with _config_io_lock:
-        return _plc_web_serial_record(_plc_web_serial_load_local()["leases"].get(station_id))
+    return _plc_station_service.plc_web_serial_current_lease(station_id)
 
 
 def plc_web_serial_recent_dispatches(station_id: str, limit: int = 20) -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        rows = repository.fetch_all("plc_web_serial_dispatches")
-    else:
-        with _config_io_lock:
-            rows = list(_plc_web_serial_load_local()["dispatches"].values())
-    records = [record for record in (_plc_web_serial_record(row) for row in rows) if record and record.get("station_id") == station_id]
-    now = int(time.time())
-    for record in records:
-        if record.get("status") != "browser_attempt_declared" or int(record.get("deadline_at") or 0) > now:
-            continue
-
-        def expire_attempt(state: dict[str, dict[str, Any] | None]) -> None:
-            current = _plc_web_serial_record(state.get("dispatch"))
-            database_now = int((state.get("clock") or {}).get("now") or time.time())
-            if current and current.get("status") == "browser_attempt_declared" and int(current.get("deadline_at") or 0) <= database_now:
-                current["status"] = "uncertain"
-                current["outcome"] = "uncertain"
-                current["error_code"] = "browser_receipt_missing_after_deadline"
-                current["updated_at"] = database_now
-                state["dispatch"] = _plc_web_serial_dispatch_row(current)
-                lease = _plc_web_serial_record(state.get("lease"))
-                if lease and lease.get("in_flight_dispatch_id") == current.get("dispatch_id"):
-                    lease.pop("in_flight_dispatch_id", None)
-                    lease.pop("in_flight_deadline_at", None)
-                    if lease.get("state") == "draining":
-                        lease["state"] = "released"
-                        lease["expires_at"] = database_now
-                    state["lease"] = _plc_workstation_lease_row(lease)
-
-        reconciled = _plc_web_serial_mutate(station_id, str(record["dispatch_id"]), expire_attempt)
-        updated = _plc_web_serial_record(reconciled.get("dispatch"))
-        if updated:
-            record.clear()
-            record.update(updated)
-    return sorted(records, key=lambda item: int(item.get("updated_at") or 0), reverse=True)[:limit]
+    return _plc_station_service.plc_web_serial_recent_dispatches(station_id, limit)
 
 
 def plc_web_serial_ensure_current_station_contract(station: dict[str, Any]) -> dict[str, Any]:
-    raw_config = station.get("config") if isinstance(station.get("config"), dict) else {}
-    try:
-        normalize_web_serial_config(raw_config)
-        return station
-    except PlcConfigError:
-        migrated = migrate_web_serial_config(raw_config)
-
-    station_id = str(station.get("id") or "")
-    if not station_id:
-        raise PlcConfigError("plc_workstation_not_found")
-
-    def upgrade(state: dict[str, dict[str, Any] | None]) -> None:
-        current = _plc_web_serial_record(state.get("station"))
-        if not current:
-            raise PlcConfigError("plc_workstation_not_found")
-        current_raw = current.get("config") if isinstance(current.get("config"), dict) else {}
-        try:
-            normalize_web_serial_config(current_raw)
-            return
-        except PlcConfigError:
-            current_migrated = migrate_web_serial_config(current_raw)
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        current["config"] = current_migrated
-        current["config_generation"] = int(current.get("config_generation") or 0) + 1
-        current["profile_verified"] = False
-        current["profile_verified_fingerprint"] = ""
-        current["status"] = "commissioning"
-        current["updated_at"] = now
-        state["station"] = _plc_workstation_row(current)
-        lease = _plc_web_serial_record(state.get("lease"))
-        if lease and lease.get("state") in {"connecting", "active", "draining"}:
-            in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-            lease["state"] = "draining" if in_flight_deadline > now else "revoked_protocol_upgraded"
-            lease["expires_at"] = max(now, in_flight_deadline)
-            lease["heartbeat_at"] = now
-            state["lease"] = _plc_workstation_lease_row(lease)
-
-    upgraded = _plc_web_serial_mutate(station_id, None, upgrade)
-    return _plc_web_serial_record(upgraded.get("station")) or {**station, "config": migrated}
+    return _plc_station_service.plc_web_serial_ensure_current_station_contract(station)
 
 
 def plc_web_serial_station_payload(station: dict[str, Any]) -> dict[str, Any]:
-    station = plc_web_serial_ensure_current_station_contract(station)
-    config = normalize_web_serial_config(station.get("config") if isinstance(station.get("config"), dict) else {})
-    profile_verified = bool(
-        station.get("profile_verified")
-        and hmac.compare_digest(
-            str(station.get("profile_verified_fingerprint") or ""),
-            web_serial_profile_fingerprint(config),
-        )
-    )
-    lease = plc_web_serial_current_lease(str(station["id"]))
-    now = int(time.time())
-    lease_active = bool(
-        lease
-        and lease.get("state") == "active"
-        and int(lease.get("expires_at") or 0) > now
-        and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
-        and lease.get("bundle_version") == WEB_SERIAL_PROTOCOL_VERSION
-    )
-    release_consistent = bool(current_release_version()["consistent"])
-    config_generation = int(station.get("config_generation") or 0)
-    return {
-        "paired": True,
-        "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
-        "station": {
-            "id": station["id"],
-            "name": station["name"],
-            "status": station.get("status") or "commissioning",
-            "profile_verified": profile_verified,
-        },
-        "config": config,
-        "config_generation": config_generation,
-        "resolved_addresses": web_serial_resolved_addresses(config),
-        "capture_read_plan": build_web_serial_capture_read_plan(config, config_generation),
-        "lease": lease if lease_active else None,
-        "effective_enabled": bool(config["enabled"] and lease_active and release_consistent),
-        "production_ready": bool(config["enabled"] and lease_active and profile_verified and release_consistent),
-        "release_consistent": release_consistent,
-        "heartbeat_seconds": WEB_SERIAL_HEARTBEAT_SECONDS,
-        "lease_ttl_seconds": WEB_SERIAL_ACTIVE_LEASE_SECONDS,
-        "recent_dispatches": plc_web_serial_recent_dispatches(str(station["id"])),
-    }
+    return _plc_station_service.plc_web_serial_station_payload(station)
 
 
 def plc_web_serial_unpaired_payload() -> dict[str, Any]:
-    return {
-        "paired": False,
-        "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
-        "station": None,
-        "config": None,
-        "config_generation": 0,
-        "resolved_addresses": {"result_register": "", "output_control_point": "", "capture_input_register": ""},
-        "capture_read_plan": None,
-        "lease": None,
-        "effective_enabled": False,
-        "production_ready": False,
-        "release_consistent": bool(current_release_version()["consistent"]),
-        "heartbeat_seconds": WEB_SERIAL_HEARTBEAT_SECONDS,
-        "lease_ttl_seconds": WEB_SERIAL_ACTIVE_LEASE_SECONDS,
-        "recent_dispatches": [],
-    }
+    return _plc_station_service.plc_web_serial_unpaired_payload()
 
 
 def plc_web_serial_list_workstations() -> list[dict[str, Any]]:
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        rows = repository.fetch_all("plc_workstations")
-    else:
-        with _config_io_lock:
-            rows = list(_plc_web_serial_load_local()["workstations"].values())
-    records = [
-        plc_web_serial_ensure_current_station_contract(record)
-        for record in (_plc_web_serial_record(row) for row in rows)
-        if record
-    ]
-    return [
-        {
-            "id": record["id"],
-            "name": record["name"],
-            "status": record.get("status") or "commissioning",
-            "profile_verified": bool(record.get("profile_verified")),
-            "updated_at": int(record.get("updated_at") or 0),
-        }
-        for record in sorted(records, key=lambda item: str(item.get("name") or "").casefold())
-    ]
+    return _plc_station_service.plc_web_serial_list_workstations()
 
 
 def plc_web_serial_pair(request: Request, response: Response, name: str, station_id: str | None = None) -> dict[str, Any]:
-    clean_name = " ".join(str(name or "").split())
-    if not 1 <= len(clean_name) <= 80:
-        raise PlcConfigError("workstation name must contain 1 through 80 characters")
-    user = current_auth_user()
-    now = int(time.time())
-    current = plc_web_serial_station_from_request(request)
-    requested_station_id = str(station_id or "").strip()
-    if requested_station_id and (not current or current.get("id") != requested_station_id):
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            current = _plc_web_serial_record(
-                repository.fetch_by_primary_key("plc_workstations", {"id": requested_station_id})
-            )
-        else:
-            with _config_io_lock:
-                current = _plc_web_serial_record(
-                    _plc_web_serial_load_local()["workstations"].get(requested_station_id)
-                )
-        if not current:
-            raise PlcConfigError("plc_workstation_not_found")
-    token = secrets.token_urlsafe(32)
-    if current:
-        record = {**current, "token_hash": _plc_web_serial_token_hash(token), "name": clean_name, "updated_at": now}
-    else:
-        station_id = f"plcws_{uuid.uuid4().hex}"
-        record = {
-            "id": station_id,
-            "token_hash": _plc_web_serial_token_hash(token),
-            "name": clean_name,
-            "status": "commissioning",
-            "config_generation": 0,
-            "profile_verified": False,
-            "config": dict(DEFAULT_WEB_SERIAL_CONFIG),
-            "created_by_user_id": str(user.get("id") or SYSTEM_OWNER_ID),
-            "created_at": now,
-            "updated_at": now,
-        }
-    if current:
-        def rebind(state: dict[str, dict[str, Any] | None]) -> None:
-            existing = _plc_web_serial_record(state.get("station"))
-            if not existing:
-                raise PlcConfigError("plc_workstation_not_found")
-            existing.update({"token_hash": record["token_hash"], "name": clean_name, "updated_at": now})
-            state["station"] = _plc_workstation_row(existing)
-            lease = _plc_web_serial_record(state.get("lease"))
-            if lease and lease.get("state") in {"connecting", "active", "draining"}:
-                in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-                lease.update({
-                    "state": "draining" if in_flight_deadline > now else "revoked_browser_rebound",
-                    "expires_at": max(now, in_flight_deadline),
-                    "heartbeat_at": now,
-                })
-                state["lease"] = _plc_workstation_lease_row(lease)
-
-        rebound = _plc_web_serial_mutate(str(record["id"]), None, rebind)
-        record = _plc_web_serial_record(rebound.get("station")) or record
-    else:
-        _plc_web_serial_upsert_row("plc_workstations", _plc_workstation_row(record), "workstations", record["id"])
-    response.set_cookie(
-        PLC_WORKSTATION_COOKIE,
-        token,
-        max_age=PLC_WORKSTATION_COOKIE_TTL_SECONDS,
-        httponly=True,
-        secure=request_is_https(request),
-        samesite="lax",
-        path="/",
-    )
-    return plc_web_serial_station_payload(record)
+    return _plc_station_service.plc_web_serial_pair(request, response, name, station_id)
 
 
 def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
-    normalized = normalize_web_serial_config(candidate)
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        station = _plc_web_serial_record(state.get("station"))
-        if not station:
-            raise PlcConfigError("plc_workstation_not_found")
-        current_raw = station.get("config") if isinstance(station.get("config"), dict) else {}
-        try:
-            current = normalize_web_serial_config(current_raw)
-            protocol_upgraded = False
-        except PlcConfigError:
-            current = migrate_web_serial_config(current_raw)
-            protocol_upgraded = True
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        if protocol_upgraded or current != normalized:
-            station["config_generation"] = int(station.get("config_generation") or 0) + 1
-            if protocol_upgraded or web_serial_profile_fingerprint(current) != web_serial_profile_fingerprint(normalized):
-                station["profile_verified"] = False
-                station["profile_verified_fingerprint"] = ""
-                station["status"] = "commissioning"
-        station["config"] = normalized
-        station["updated_at"] = now
-        state["station"] = _plc_workstation_row(station)
-        lease = _plc_web_serial_record(state.get("lease"))
-        if lease and lease.get("state") in {"connecting", "active", "draining"}:
-            in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-            lease["state"] = "draining" if in_flight_deadline > now else "revoked_config_changed"
-            lease["expires_at"] = max(now, in_flight_deadline)
-            lease["heartbeat_at"] = now
-            state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, None, mutate)
-    record = _plc_web_serial_record(state.get("station"))
-    if not record:
-        raise PlcConfigError("plc_workstation_not_found")
-    return plc_web_serial_station_payload(record)
+    return _plc_station_service.plc_web_serial_update_config(station_id, candidate)
 
 
 def plc_web_serial_set_verified(station_id: str, verified: bool) -> dict[str, Any]:
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        station = _plc_web_serial_record(state.get("station"))
-        if not station:
-            raise PlcConfigError("plc_workstation_not_found")
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        station["profile_verified"] = bool(verified)
-        station["profile_verified_fingerprint"] = web_serial_profile_fingerprint(
-            migrate_web_serial_config(station.get("config") or {})
-        ) if verified else ""
-        station["status"] = "production" if verified else "commissioning"
-        station["verified_at"] = now if verified else 0
-        station["verified_by_user_id"] = str((current_auth_user() or {}).get("id") or "") if verified else ""
-        station["updated_at"] = now
-        state["station"] = _plc_workstation_row(station)
-
-    state = _plc_web_serial_mutate(station_id, None, mutate)
-    record = _plc_web_serial_record(state.get("station"))
-    if not record:
-        raise PlcConfigError("plc_workstation_not_found")
-    return plc_web_serial_station_payload(record)
+    return _plc_station_service.plc_web_serial_set_verified(station_id, verified)
 
 
 from .plc.lease_acquisition import LeaseAcquisition as _LeaseAcquisition
@@ -2715,6 +2293,42 @@ def plc_web_serial_finish_diagnostic(
     return _plc_diagnostic_state.finish(station_id, request)
 
 
+from .plc.browser_dispatch import PlcBrowserDispatchService
+from .plc.browser_dispatch_ports import BrowserDispatchStorage, BrowserDispatchIdentity, BrowserDispatchPolicy, BrowserDispatchProjection
+
+_plc_browser_dispatch = PlcBrowserDispatchService(
+    storage=BrowserDispatchStorage(
+        _plc_web_serial_record=lambda: _plc_web_serial_record,
+        _plc_web_serial_mutate=lambda: _plc_web_serial_mutate,
+        _plc_web_serial_dispatch_row=lambda: _plc_web_serial_dispatch_row,
+        _plc_workstation_lease_row=lambda: _plc_workstation_lease_row,
+    ),
+    identity=BrowserDispatchIdentity(
+        _plc_web_serial_require_active_lease=lambda: _plc_web_serial_require_active_lease,
+        _plc_web_serial_token_hash=lambda: _plc_web_serial_token_hash,
+    ),
+    policy=BrowserDispatchPolicy(
+        PlcConfigError=lambda: PlcConfigError,
+        LEGACY_WEB_SERIAL_PROTOCOL_VERSION=lambda: LEGACY_WEB_SERIAL_PROTOCOL_VERSION,
+        WEB_SERIAL_PROTOCOL_VERSION=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        WEB_SERIAL_PLAN_DEADLINE_SECONDS=lambda: WEB_SERIAL_PLAN_DEADLINE_SECONDS,
+        PLC_PROTOCOL_ID=lambda: PLC_PROTOCOL_ID,
+        build_legacy_web_serial_plan=lambda: build_legacy_web_serial_plan,
+        build_web_serial_plan=lambda: build_web_serial_plan,
+        normalize_legacy_web_serial_config=lambda: normalize_legacy_web_serial_config,
+        normalize_web_serial_config=lambda: normalize_web_serial_config,
+        migrate_web_serial_config=lambda: migrate_web_serial_config,
+        legacy_web_serial_config_fingerprint=lambda: legacy_web_serial_config_fingerprint,
+        web_serial_config_fingerprint=lambda: web_serial_config_fingerprint,
+    ),
+    projection=BrowserDispatchProjection(
+        verify_plc_web_serial_dispatch=lambda: verify_plc_web_serial_dispatch,
+        _plc_web_serial_receipt_outcome=lambda: _plc_web_serial_receipt_outcome,
+        plc_web_serial_dispatch_public=lambda: plc_web_serial_dispatch_public,
+    ),
+)
+
+
 def plc_web_serial_begin_camera_detection(
     station_id: str,
     session_id: str,
@@ -2722,66 +2336,7 @@ def plc_web_serial_begin_camera_detection(
     model_id: str,
     fingerprint: str,
 ) -> tuple[dict[str, Any], bool]:
-    clean_request_id = str(camera_request_id or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", clean_request_id):
-        raise PlcConfigError("invalid_camera_request_id")
-    dispatch_id = "plcweb_" + hashlib.sha256(f"{station_id}:{clean_request_id}".encode("utf-8")).hexdigest()[:32]
-    created = False
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        nonlocal created
-        station, lease, now = _plc_web_serial_require_active_lease(state, session_id)
-        in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
-        in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-        if in_flight_id and in_flight_id != dispatch_id and in_flight_deadline > now:
-            raise PlcConfigError("plc_workstation_attempt_in_flight")
-        if str(lease.get("model_id") or "") != str(model_id or ""):
-            raise PlcConfigError("plc_workstation_model_changed")
-        existing = _plc_web_serial_record(state.get("dispatch"))
-        if existing:
-            verify_plc_web_serial_dispatch(
-                existing,
-                station,
-                require_frames=existing.get("status") != "detecting",
-                require_current_config=False,
-            )
-            if existing.get("fingerprint") != fingerprint or existing.get("model_id") != model_id:
-                raise PlcConfigError("plc_camera_request_payload_conflict")
-            return
-        config_snapshot = migrate_web_serial_config(station.get("config") or {})
-        record = {
-            "dispatch_id": dispatch_id,
-            "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
-            "station_id": station_id,
-            "detection_request_id": clean_request_id,
-            "session_id": session_id,
-            "lease_epoch": int(lease["lease_epoch"]),
-            "config_generation": int(station.get("config_generation") or 0),
-            "config_snapshot": config_snapshot,
-            "config_fingerprint": web_serial_config_fingerprint(config_snapshot),
-            "model_id": model_id,
-            "fingerprint": fingerprint,
-            "source": "camera",
-            "status": "detecting",
-            "passed": False,
-            "frames": [],
-            "deadline_at": 0,
-            "created_at": now,
-            "updated_at": now,
-            "result": None,
-            "evidence_source": "browser_workstation",
-        }
-        state["dispatch"] = _plc_web_serial_dispatch_row(record)
-        lease["in_flight_dispatch_id"] = dispatch_id
-        lease["in_flight_deadline_at"] = int(lease.get("expires_at") or now)
-        state["lease"] = _plc_workstation_lease_row(lease)
-        created = True
-
-    state = _plc_web_serial_mutate(station_id, dispatch_id, mutate)
-    record = _plc_web_serial_record(state.get("dispatch"))
-    if not record:
-        raise PlcConfigError("plc_dispatch_persist_failed")
-    return record, created
+    return _plc_browser_dispatch.plc_web_serial_begin_camera_detection(station_id, session_id, camera_request_id, model_id, fingerprint)
 
 
 def plc_web_serial_finish_camera_detection(
@@ -2791,63 +2346,11 @@ def plc_web_serial_finish_camera_detection(
     result: dict[str, Any] | None,
     error: str = "",
 ) -> dict[str, Any]:
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        station, _, now = _plc_web_serial_require_active_lease(state, session_id)
-        record = _plc_web_serial_record(state.get("dispatch"))
-        if not record or record.get("session_id") != session_id:
-            raise PlcConfigError("plc_dispatch_not_owned")
-        verify_plc_web_serial_dispatch(record, station, require_frames=False)
-        if record.get("status") != "detecting":
-            return
-        if error or not isinstance(result, dict):
-            record["status"] = "detection_failed"
-            record["error_code"] = str(error or "detection_failed")[:120]
-            if lease := _plc_web_serial_record(state.get("lease")):
-                if lease.get("in_flight_dispatch_id") == dispatch_id:
-                    lease.pop("in_flight_dispatch_id", None)
-                    lease.pop("in_flight_deadline_at", None)
-                    state["lease"] = _plc_workstation_lease_row(lease)
-        else:
-            passed = bool(result.get("passed"))
-            frames = build_web_serial_plan(record.get("config_snapshot") or {}, passed)
-            record.update(
-                {
-                    "status": "planned",
-                    "passed": passed,
-                    "frames": frames,
-                    "targets": [item["target"] for item in frames],
-                    "result": copy.deepcopy(result),
-                }
-            )
-        record["updated_at"] = now
-        state["dispatch"] = _plc_web_serial_dispatch_row(record)
-
-    state = _plc_web_serial_mutate(station_id, dispatch_id, mutate)
-    record = _plc_web_serial_record(state.get("dispatch"))
-    if not record:
-        raise PlcConfigError("plc_dispatch_not_found")
-    return record
+    return _plc_browser_dispatch.plc_web_serial_finish_camera_detection(station_id, dispatch_id, session_id, result, error)
 
 
 def plc_web_serial_dispatch_public(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "dispatch_id": record["dispatch_id"],
-        "source": "camera",
-        "passed": bool(record.get("passed")),
-        "enabled": True,
-        "attempted": record.get("status") not in {"detecting", "planned"},
-        "protocol": PLC_PROTOCOL_ID,
-        "transport_mode": "web_serial",
-        "protocol_version": str(record.get("protocol_version") or LEGACY_WEB_SERIAL_PROTOCOL_VERSION),
-        "status": record.get("status") or "planned",
-        "outcome": record.get("outcome") or "",
-        "targets": list(record.get("targets") or []),
-        "operations": copy.deepcopy(record.get("operations") or []),
-        "evidence_source": "browser_workstation",
-        "config_generation": int(record.get("config_generation") or 0),
-        "lease_epoch": int(record.get("lease_epoch") or 0),
-        "updated_at": int(record.get("updated_at") or 0),
-    }
+    return _plc_browser_dispatch.plc_web_serial_dispatch_public(record)
 
 
 def verify_plc_web_serial_dispatch(
@@ -2857,51 +2360,7 @@ def verify_plc_web_serial_dispatch(
     require_frames: bool = True,
     require_current_config: bool = True,
 ) -> None:
-    station_id = str(station.get("id") or "")
-    request_id = str(record.get("detection_request_id") or "")
-    expected_id = "plcweb_" + hashlib.sha256(f"{station_id}:{request_id}".encode("utf-8")).hexdigest()[:32]
-    if record.get("dispatch_id") != expected_id or record.get("station_id") != station_id:
-        raise PlcConfigError("plc_dispatch_identity_invalid")
-    if record.get("source") != "camera" or record.get("evidence_source") != "browser_workstation":
-        raise PlcConfigError("plc_dispatch_source_invalid")
-    if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", request_id):
-        raise PlcConfigError("plc_dispatch_request_id_invalid")
-    if require_current_config and int(record.get("config_generation") or -1) != int(station.get("config_generation") or 0):
-        raise PlcConfigError("plc_dispatch_generation_invalid")
-    snapshot = record.get("config_snapshot")
-    if not isinstance(snapshot, dict):
-        raise PlcConfigError("plc_dispatch_config_snapshot_missing")
-    protocol_version = str(record.get("protocol_version") or LEGACY_WEB_SERIAL_PROTOCOL_VERSION)
-    if protocol_version == WEB_SERIAL_PROTOCOL_VERSION:
-        config = normalize_web_serial_config(snapshot)
-        config_fingerprint = web_serial_config_fingerprint(config)
-        expected_frames_builder = build_web_serial_plan
-    elif protocol_version == LEGACY_WEB_SERIAL_PROTOCOL_VERSION:
-        config = normalize_legacy_web_serial_config(snapshot)
-        config_fingerprint = legacy_web_serial_config_fingerprint(config)
-        expected_frames_builder = build_legacy_web_serial_plan
-    else:
-        raise PlcConfigError("plc_dispatch_protocol_version_invalid")
-    if not hmac.compare_digest(str(record.get("config_fingerprint") or ""), config_fingerprint):
-        raise PlcConfigError("plc_dispatch_config_fingerprint_invalid")
-    if require_current_config:
-        if protocol_version != WEB_SERIAL_PROTOCOL_VERSION:
-            raise PlcConfigError("plc_dispatch_protocol_obsolete")
-        current = migrate_web_serial_config(station.get("config") if isinstance(station.get("config"), dict) else {})
-        if not hmac.compare_digest(web_serial_config_fingerprint(current), web_serial_config_fingerprint(config)):
-            raise PlcConfigError("plc_dispatch_config_changed")
-    if require_frames:
-        if type(record.get("passed")) is not bool:
-            raise PlcConfigError("plc_dispatch_passed_invalid")
-        result = record.get("result")
-        if not isinstance(result, dict) or type(result.get("passed")) is not bool or result.get("passed") is not record.get("passed"):
-            raise PlcConfigError("plc_dispatch_result_mismatch")
-        expected_frames = expected_frames_builder(config, bool(record.get("passed")))
-        actual_frames = record.get("frames")
-        if not isinstance(actual_frames, list) or json.dumps(actual_frames, sort_keys=True, separators=(",", ":")) != json.dumps(expected_frames, sort_keys=True, separators=(",", ":")):
-            raise PlcConfigError("plc_dispatch_frames_invalid")
-        if record.get("targets") != [item["target"] for item in expected_frames]:
-            raise PlcConfigError("plc_dispatch_targets_invalid")
+    return _plc_browser_dispatch.verify_plc_web_serial_dispatch(record, station, require_frames=require_frames, require_current_config=require_current_config)
 
 
 def plc_web_serial_declare_attempt(
@@ -2909,96 +2368,11 @@ def plc_web_serial_declare_attempt(
     dispatch_id: str,
     request: PlcWebSerialAttemptRequest,
 ) -> dict[str, Any]:
-    attempt_token = secrets.token_urlsafe(32)
-
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        station, lease, now = _plc_web_serial_require_active_lease(state, request.session_id, request.lease_epoch)
-        record = _plc_web_serial_record(state.get("dispatch"))
-        if not record or record.get("station_id") != station_id:
-            raise PlcConfigError("plc_dispatch_not_found")
-        verify_plc_web_serial_dispatch(record, station)
-        if record.get("status") != "planned":
-            raise PlcConfigError("plc_dispatch_already_declared")
-        in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
-        in_flight_deadline = int(lease.get("in_flight_deadline_at") or 0)
-        if in_flight_id and in_flight_id != dispatch_id and in_flight_deadline > now:
-            raise PlcConfigError("plc_workstation_attempt_in_flight")
-        if int(request.config_generation) != int(station.get("config_generation") or 0) or int(record.get("config_generation") or -1) != int(request.config_generation):
-            raise PlcConfigError("plc_workstation_generation_changed")
-        if record.get("session_id") != request.session_id or int(record.get("lease_epoch") or -1) != int(lease.get("lease_epoch") or -2):
-            raise PlcConfigError("plc_dispatch_not_owned")
-        record["status"] = "browser_attempt_declared"
-        record["attempt_token_hash"] = _plc_web_serial_token_hash(attempt_token)
-        record["deadline_at"] = now + max(1, int(math.ceil(WEB_SERIAL_PLAN_DEADLINE_SECONDS)))
-        record["updated_at"] = now
-        state["dispatch"] = _plc_web_serial_dispatch_row(record)
-        lease["in_flight_dispatch_id"] = dispatch_id
-        lease["in_flight_deadline_at"] = record["deadline_at"]
-        state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, dispatch_id, mutate)
-    record = _plc_web_serial_record(state.get("dispatch"))
-    if not record:
-        raise PlcConfigError("plc_dispatch_not_found")
-    return {
-        **plc_web_serial_dispatch_public(record),
-        "attempt_token": attempt_token,
-        "deadline_at": int(record["deadline_at"]),
-        "execution_window_ms": int(WEB_SERIAL_PLAN_DEADLINE_SECONDS * 1000),
-        "ack_timeout_ms": int((station_config := migrate_web_serial_config((_plc_web_serial_record(state.get("station")) or {}).get("config") or {}))["ack_timeout_ms"]),
-        "frames": copy.deepcopy(record.get("frames") or []),
-        "serial_options": {
-            "baudRate": station_config["baudrate"],
-            "dataBits": station_config["data_bits"],
-            "stopBits": station_config["stop_bits"],
-            "parity": "even",
-            "flowControl": "none",
-        },
-    }
+    return _plc_browser_dispatch.plc_web_serial_declare_attempt(station_id, dispatch_id, request)
 
 
 def _plc_web_serial_receipt_outcome(frames: list[dict[str, Any]], operations: list[dict[str, Any]]) -> str:
-    allowed_statuses = {"acknowledged", "nak", "timeout", "serial_error", "unexpected_response"}
-    if not operations:
-        return "uncertain"
-    if len(operations) > len(frames):
-        raise PlcConfigError("plc_receipt_has_extra_operations")
-    normalized: list[dict[str, Any]] = []
-    for index, operation in enumerate(operations):
-        if not isinstance(operation, dict):
-            raise PlcConfigError("plc_receipt_operation_invalid")
-        expected = frames[index]
-        status = str(operation.get("status") or "")
-        response_hex = str(operation.get("response_hex") or "").upper()
-        if status not in allowed_statuses:
-            raise PlcConfigError("plc_receipt_status_invalid")
-        if operation.get("target") != expected.get("target") or operation.get("frame_sha256") != expected.get("frame_sha256"):
-            raise PlcConfigError("plc_receipt_frame_mismatch")
-        if status == "acknowledged" and response_hex != "06":
-            raise PlcConfigError("plc_receipt_ack_evidence_invalid")
-        if status == "nak" and response_hex != "15":
-            raise PlcConfigError("plc_receipt_nak_evidence_invalid")
-        if status in {"timeout", "serial_error"} and response_hex:
-            raise PlcConfigError("plc_receipt_empty_response_required")
-        normalized.append({**operation, "response_hex": response_hex})
-    operations[:] = normalized
-    first = operations[0]["status"]
-    if len(operations) > 1 and first != "acknowledged":
-        raise PlcConfigError("plc_receipt_y_without_d_ack")
-    if first == "nak":
-        return "rejected"
-    if first != "acknowledged":
-        return "uncertain"
-    if len(frames) == 1:
-        return "acknowledged"
-    if len(operations) < len(frames):
-        return "uncertain"
-    second = operations[1]["status"]
-    if second == "acknowledged":
-        return "acknowledged"
-    if second == "nak":
-        return "partial_success"
-    return "uncertain"
+    return _plc_browser_dispatch._plc_web_serial_receipt_outcome(frames, operations)
 
 
 def plc_web_serial_record_receipt(
@@ -3006,58 +2380,7 @@ def plc_web_serial_record_receipt(
     dispatch_id: str,
     request: PlcWebSerialReceiptRequest,
 ) -> dict[str, Any]:
-    def mutate(state: dict[str, dict[str, Any] | None]) -> None:
-        record = _plc_web_serial_record(state.get("dispatch"))
-        if not record:
-            raise PlcConfigError("plc_dispatch_not_receivable")
-        station = _plc_web_serial_record(state.get("station"))
-        if not station:
-            raise PlcConfigError("plc_workstation_not_found")
-        verify_plc_web_serial_dispatch(record, station, require_current_config=False)
-        if not hmac.compare_digest(str(record.get("attempt_token_hash") or ""), _plc_web_serial_token_hash(request.attempt_token)):
-            raise PlcConfigError("plc_attempt_token_invalid")
-        if record.get("session_id") != request.session_id or int(record.get("lease_epoch") or -1) != int(request.lease_epoch):
-            raise PlcConfigError("plc_dispatch_not_owned")
-        operations = [item.model_dump() for item in request.operations]
-        outcome = _plc_web_serial_receipt_outcome(list(record.get("frames") or []), operations)
-        declared_outcome = str(request.outcome or "")
-        if declared_outcome and declared_outcome != outcome:
-            raise PlcConfigError("plc_receipt_outcome_mismatch")
-        receipt_fingerprint = hashlib.sha256(
-            json.dumps(
-                {"outcome": outcome, "operations": operations},
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        if record.get("status") in {"acknowledged", "rejected", "partial_success", "uncertain"}:
-            if hmac.compare_digest(str(record.get("receipt_fingerprint") or ""), receipt_fingerprint):
-                return
-            raise PlcConfigError("plc_receipt_conflict")
-        if record.get("status") != "browser_attempt_declared":
-            raise PlcConfigError("plc_dispatch_not_receivable")
-        now = int((state.get("clock") or {}).get("now") or time.time())
-        record["operations"] = operations
-        record["outcome"] = outcome
-        record["status"] = outcome
-        record["receipt_fingerprint"] = receipt_fingerprint
-        record["evidence_source"] = "browser_workstation"
-        record["updated_at"] = now
-        state["dispatch"] = _plc_web_serial_dispatch_row(record)
-        lease = _plc_web_serial_record(state.get("lease"))
-        if lease and lease.get("in_flight_dispatch_id") == dispatch_id:
-            lease.pop("in_flight_dispatch_id", None)
-            lease.pop("in_flight_deadline_at", None)
-            if lease.get("state") == "draining":
-                lease["state"] = "released"
-                lease["expires_at"] = now
-            state["lease"] = _plc_workstation_lease_row(lease)
-
-    state = _plc_web_serial_mutate(station_id, dispatch_id, mutate)
-    record = _plc_web_serial_record(state.get("dispatch"))
-    if not record:
-        raise PlcConfigError("plc_dispatch_not_found")
-    return plc_web_serial_dispatch_public(record)
+    return _plc_browser_dispatch.plc_web_serial_record_receipt(station_id, dispatch_id, request)
 
 
 def _read_config_file() -> dict[str, Any] | None:
@@ -3353,301 +2676,75 @@ def plc_current_process_owns_io(epoch: int | None = None) -> bool:
     )
 
 
+from .plc.plc_capture_state import PlcCaptureState
+from .plc.plc_capture_state_ports import CaptureStateTransactions, CaptureStatePolicy
+
+_plc_capture_state = PlcCaptureState(
+    transactions=CaptureStateTransactions(
+        load_config=lambda: load_config,
+        mutate_app_config_atomically=lambda: mutate_app_config_atomically,
+        mutate_plc_runtime_coordination=lambda: mutate_plc_runtime_coordination,
+        plc_completed_capture_receipt=lambda: plc_completed_capture_receipt,
+    ),
+    policy=CaptureStatePolicy(
+        _plc_capture_runtime=lambda: _plc_capture_runtime,
+        _plc_expire_capture_state=lambda: _plc_expire_capture_state,
+        _plc_canonical=lambda: _plc_canonical,
+        PlcConfigError=lambda: PlcConfigError,
+        PLC_CAPTURE_EVENT_TTL_SECONDS=lambda: PLC_CAPTURE_EVENT_TTL_SECONDS,
+        PLC_CAPTURE_PROCESSING_TTL_SECONDS=lambda: PLC_CAPTURE_PROCESSING_TTL_SECONDS,
+        PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY,
+        PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY,
+        PLC_RUNTIME_COORDINATION_KEY=lambda: PLC_RUNTIME_COORDINATION_KEY,
+        PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS,
+    ),
+)
+
+
 def _plc_capture_runtime(state: dict[str, Any]) -> dict[str, Any]:
-    capture = state.get("capture")
-    if not isinstance(capture, dict):
-        capture = {"sequence": 0, "armed": False, "events": []}
-        state["capture"] = capture
-    if not isinstance(capture.get("events"), list):
-        capture["events"] = []
-    return capture
+    return _plc_capture_state._plc_capture_runtime(state)
 
 
 def _plc_expire_capture_state(capture: dict[str, Any], now: float) -> None:
-    session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-    if session is not None and float(session.get("expires_at") or 0.0) <= now:
-        capture.pop("session", None)
-    events = [dict(item) for item in capture.get("events", []) if isinstance(item, dict)]
-    for event in events:
-        status = str(event.get("status") or "")
-        if status == "claimed":
-            deadline = float(event.get("submission_expires_at") or 0.0)
-        elif status == "processing":
-            deadline = float(event.get("processing_expires_at") or 0.0)
-        elif status == "dispatching":
-            deadline = float(event.get("dispatch_expires_at") or 0.0)
-        else:
-            deadline = float(event.get("expires_at") or 0.0)
-        if status in {"pending", "claimed", "processing", "dispatching"} and deadline <= now:
-            event["status"] = "expired"
-            event["finished_at"] = now
-            active_session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-            if active_session is not None and active_session.get("session_id") == event.get("session_id"):
-                active_session["busy"] = False
-    capture["events"] = events[-100:]
+    return _plc_capture_state._plc_expire_capture_state(capture, now)
 
 
 def plc_claim_capture_session(user_id: str, model_id: str) -> dict[str, Any]:
-    now = time.time()
-    claimed: dict[str, Any] = {}
-    generation = int(load_config().get(PLC_CONTROL_GENERATION_KEY) or 0)
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal claimed
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        current = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        if current is not None:
-            raise PlcConfigError("plc_capture_session_in_use")
-        session_id = uuid.uuid4().hex
-        claimed = {
-            "session_id": session_id,
-            "user_id": user_id,
-            "model_id": model_id,
-            "generation": generation,
-            "busy": False,
-            "heartbeat_at": now,
-            "expires_at": now + 6.0,
-        }
-        capture["session"] = copy.deepcopy(claimed)
-    mutate_plc_runtime_coordination(mutate)
-    return claimed
+    return _plc_capture_state.plc_claim_capture_session(user_id, model_id)
 
 
 def plc_heartbeat_capture_session(session_id: str, user_id: str) -> dict[str, Any]:
-    now = time.time()
-    generation = int(load_config().get(PLC_CONTROL_GENERATION_KEY) or 0)
-    renewed: dict[str, Any] = {}
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal renewed
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        if session is None or session.get("session_id") != session_id or session.get("user_id") != user_id:
-            raise PlcConfigError("plc_capture_session_not_owned")
-        if int(session.get("generation") or -1) != generation:
-            raise PlcConfigError("plc_capture_session_generation_changed")
-        session["heartbeat_at"] = now
-        session["expires_at"] = now + 6.0
-        renewed = copy.deepcopy(session)
-    mutate_plc_runtime_coordination(mutate)
-    return renewed
+    return _plc_capture_state.plc_heartbeat_capture_session(session_id, user_id)
 
 
 def plc_release_capture_session(session_id: str, user_id: str) -> None:
-    def mutate(state: dict[str, Any]) -> None:
-        capture = _plc_capture_runtime(state)
-        session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        if session is not None and session.get("session_id") == session_id and session.get("user_id") == user_id:
-            capture.pop("session", None)
-    mutate_plc_runtime_coordination(mutate)
+    return _plc_capture_state.plc_release_capture_session(session_id, user_id)
 
 
 def plc_capture_disarm(reason: str) -> None:
-    def mutate(state: dict[str, Any]) -> None:
-        capture = _plc_capture_runtime(state)
-        capture["armed"] = False
-        capture["last_value"] = None
-        capture["disarmed_reason"] = reason
-        capture["updated_at"] = time.time()
-    mutate_plc_runtime_coordination(mutate)
+    return _plc_capture_state.plc_capture_disarm(reason)
 
 
 def plc_apply_capture_observation(value: int, *, generation: int, owner_epoch: int, trigger_value: int) -> dict[str, Any] | None:
-    """Persist one read observation and atomically create at most one edge event."""
-    now = time.time()
-    created: dict[str, Any] | None = None
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal created
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        binding_changed = (
-            int(capture.get("generation") or -1) != generation
-            or int(capture.get("owner_epoch") or -1) != owner_epoch
-        )
-        if binding_changed:
-            capture["generation"] = generation
-            capture["owner_epoch"] = owner_epoch
-            capture["armed"] = False
-            capture["last_value"] = None
-        armed = bool(capture.get("armed"))
-        if value != trigger_value:
-            capture["armed"] = True
-        elif armed:
-            sequence = int(capture.get("sequence") or 0) + 1
-            capture["sequence"] = sequence
-            trigger_id = hashlib.sha256(f"{generation}:{owner_epoch}:{sequence}".encode("ascii")).hexdigest()[:24]
-            session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-            session_valid = bool(
-                session
-                and float(session.get("expires_at") or 0.0) > now
-                and int(session.get("generation") or -1) == generation
-                and not bool(session.get("busy"))
-            )
-            created = {
-                "trigger_id": trigger_id,
-                "generation": generation,
-                "owner_epoch": owner_epoch,
-                "sequence": sequence,
-                "value": value,
-                "created_at": now,
-                "expires_at": now + PLC_CAPTURE_EVENT_TTL_SECONDS,
-                "status": "pending" if session_valid else "missed",
-                "reason": "" if session_valid else "no_ready_capture_session",
-                "session_id": str(session.get("session_id") or "") if session_valid else "",
-                "user_id": str(session.get("user_id") or "") if session_valid else "",
-                "model_id": str(session.get("model_id") or "") if session_valid else "",
-            }
-            capture["events"].append(copy.deepcopy(created))
-            capture["armed"] = False
-        capture["last_value"] = value
-        capture["last_read_at"] = now
-        capture["disarmed_reason"] = ""
-    mutate_plc_runtime_coordination(mutate)
-    return created
+    'Persist one read observation and atomically create at most one edge event.'
+    return _plc_capture_state.plc_apply_capture_observation(value, generation=generation, owner_epoch=owner_epoch, trigger_value=trigger_value)
 
 
 def plc_claim_next_capture_event(session_id: str, user_id: str) -> dict[str, Any] | None:
-    now = time.time()
-    claimed: dict[str, Any] | None = None
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal claimed
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        if session is None or session.get("session_id") != session_id or session.get("user_id") != user_id:
-            raise PlcConfigError("plc_capture_session_not_owned")
-        if bool(session.get("busy")):
-            return
-        for event in capture.get("events", []):
-            if not isinstance(event, dict) or event.get("status") != "pending":
-                continue
-            if event.get("session_id") != session_id or event.get("user_id") != user_id:
-                continue
-            event["status"] = "claimed"
-            event["claimed_at"] = now
-            event["submission_expires_at"] = now + 10.0
-            session["busy"] = True
-            claimed = copy.deepcopy(event)
-            return
-    mutate_plc_runtime_coordination(mutate)
-    return claimed
+    return _plc_capture_state.plc_claim_next_capture_event(session_id, user_id)
 
 
 def plc_begin_triggered_analysis(trigger_id: str, session_id: str, user_id: str, model_id: str, fingerprint: str) -> dict[str, Any] | None:
-    now = time.time()
-    durable_receipt = plc_completed_capture_receipt(trigger_id)
-    if durable_receipt is not None:
-        if (
-            durable_receipt.get("session_id") != session_id
-            or durable_receipt.get("user_id") != user_id
-            or durable_receipt.get("model_id") != model_id
-        ):
-            raise PlcConfigError("plc_capture_event_not_owned")
-        if durable_receipt.get("fingerprint") != fingerprint:
-            raise PlcConfigError("plc_capture_event_payload_conflict")
-        stored_result = durable_receipt.get("result")
-        return copy.deepcopy(stored_result) if isinstance(stored_result, dict) else {}
-    duplicate_result: dict[str, Any] | None = None
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal duplicate_result
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        if session is None or session.get("session_id") != session_id or session.get("user_id") != user_id:
-            raise PlcConfigError("plc_capture_session_not_owned")
-        event = next((item for item in capture.get("events", []) if isinstance(item, dict) and item.get("trigger_id") == trigger_id), None)
-        if event is None or event.get("session_id") != session_id or event.get("user_id") != user_id:
-            raise PlcConfigError("plc_capture_event_not_owned")
-        if str(event.get("model_id") or "") != model_id:
-            raise PlcConfigError("plc_capture_event_model_mismatch")
-        if event.get("status") == "completed":
-            if event.get("fingerprint") != fingerprint:
-                raise PlcConfigError("plc_capture_event_payload_conflict")
-            duplicate_result = copy.deepcopy(event.get("result")) if isinstance(event.get("result"), dict) else {}
-            return
-        if event.get("status") != "claimed" or float(event.get("submission_expires_at") or 0.0) <= now:
-            raise PlcConfigError("plc_capture_event_not_claimable")
-        event["status"] = "processing"
-        event["fingerprint"] = fingerprint
-        event["processing_at"] = now
-        event["processing_expires_at"] = now + PLC_CAPTURE_PROCESSING_TTL_SECONDS
-    mutate_plc_runtime_coordination(mutate)
-    return duplicate_result
+    return _plc_capture_state.plc_begin_triggered_analysis(trigger_id, session_id, user_id, model_id, fingerprint)
 
 
 def plc_prepare_triggered_dispatch(trigger_id: str, session_id: str, user_id: str) -> None:
-    """Atomically prove a fresh session/event immediately before any PLC dispatch."""
-    now = time.time()
-    generation = int(load_config().get(PLC_CONTROL_GENERATION_KEY) or 0)
-    def mutate(state: dict[str, Any]) -> None:
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        event = next(
-            (item for item in capture.get("events", []) if isinstance(item, dict) and item.get("trigger_id") == trigger_id),
-            None,
-        )
-        if (
-            session is None
-            or session.get("session_id") != session_id
-            or session.get("user_id") != user_id
-            or float(session.get("expires_at") or 0.0) <= now
-        ):
-            raise PlcConfigError("plc_capture_session_not_owned")
-        if (
-            event is None
-            or event.get("status") != "processing"
-            or event.get("session_id") != session_id
-            or event.get("user_id") != user_id
-            or int(event.get("generation") or -1) != generation
-        ):
-            raise PlcConfigError("plc_capture_event_not_dispatchable")
-        event["status"] = "dispatching"
-        event["dispatching_at"] = now
-        event["dispatch_expires_at"] = now + PLC_WORKER_TOTAL_TIMEOUT_SECONDS + 5.0
-    mutate_plc_runtime_coordination(mutate)
+    'Atomically prove a fresh session/event immediately before any PLC dispatch.'
+    return _plc_capture_state.plc_prepare_triggered_dispatch(trigger_id, session_id, user_id)
 
 
 def plc_finish_triggered_analysis(trigger_id: str, session_id: str, user_id: str, result: dict[str, Any] | None, error: str = "") -> None:
-    now = time.time()
-    def mutate(config: dict[str, Any]) -> None:
-        current_state = config.get(PLC_RUNTIME_COORDINATION_KEY)
-        state = copy.deepcopy(current_state) if isinstance(current_state, dict) else {}
-        capture = _plc_capture_runtime(state)
-        _plc_expire_capture_state(capture, now)
-        config[PLC_RUNTIME_COORDINATION_KEY] = state
-        session = capture.get("session") if isinstance(capture.get("session"), dict) else None
-        event = next((item for item in capture.get("events", []) if isinstance(item, dict) and item.get("trigger_id") == trigger_id), None)
-        if event is None or event.get("session_id") != session_id or event.get("user_id") != user_id:
-            return
-        allowed_statuses = {"processing", "dispatching"} if result is not None else {"claimed", "processing", "dispatching"}
-        if event.get("status") not in allowed_statuses:
-            return
-        event["status"] = "completed" if result is not None else "failed"
-        event["finished_at"] = now
-        if result is not None:
-            event["result"] = copy.deepcopy(result)
-            receipt = {
-                "trigger_id": trigger_id,
-                "session_id": session_id,
-                "user_id": user_id,
-                "model_id": str(event.get("model_id") or ""),
-                "fingerprint": str(event.get("fingerprint") or ""),
-                "result": copy.deepcopy(result),
-                "completed_at": now,
-            }
-            current_receipts = config.get(PLC_CAPTURE_RESULTS_KEY)
-            receipts = copy.deepcopy(current_receipts) if isinstance(current_receipts, dict) else {}
-            existing_receipt = receipts.get(trigger_id)
-            if isinstance(existing_receipt, dict) and _plc_canonical(existing_receipt) != _plc_canonical(receipt):
-                raise PlcConfigError("plc_capture_result_receipt_conflict")
-            receipts[trigger_id] = receipt
-            config[PLC_CAPTURE_RESULTS_KEY] = receipts
-        else:
-            event["error"] = str(error or "analysis_failed")[:240]
-        if session is not None and session.get("session_id") == session_id:
-            session["busy"] = False
-    mutate_app_config_atomically(mutate)
+    return _plc_capture_state.plc_finish_triggered_analysis(trigger_id, session_id, user_id, result, error)
 
 
 _plc_capture_poller_lock = threading.Lock()
@@ -3867,1129 +2964,61 @@ def mutate_app_config_atomically(mutator: Callable[[dict[str, Any]], None]) -> d
         return config
 
 
-class PlcDispatchStateConflict(RuntimeError):
-    def __init__(self, reason: str, authoritative: dict[str, Any] | None = None) -> None:
-        super().__init__(reason)
-        self.reason = reason
-        self.authoritative = dict(authoritative or {})
-
-
-PLC_DISPATCH_STATE_ORDER = {"queued": 1, "attempting": 2, "sent": 3}
-PLC_DISPATCH_FINAL_STATES = frozenset({"acknowledged", "failed", "disabled"})
-PLC_MONOTONIC_LIST_FIELDS = ("targets", "acknowledged_targets", "frames", "attempt_ids", "events")
-PLC_IMMUTABLE_BINDING_FIELDS = (
-    "record_schema_version",
-    "protocol_contract_version",
-    "dispatch_id",
-    "source",
-    "request_id",
-    "passed",
-    "detection_identity",
-    "control_generation",
-    "dispatch_deadline_at_ms",
-    "config_snapshot",
-    "protocol",
-    "checksum_mode",
-    "planned_targets",
-    "planned_frames",
-)
-PLC_DISPATCH_KNOWN_FIELDS = frozenset(
-    {
-        "record_schema_version", "dispatch_id", "source", "request_id", "passed", "enabled",
-        "protocol_contract_version",
-        "effective_enabled", "protocol", "checksum_mode", "planned_targets", "planned_frames",
-        "detection_identity", "created_at", "attempted", "duplicate", "updated_at", "status",
-        "dispatch_deadline_at_ms",
-        "history", "message", "physical_status", "outcome", "audit_status", "error_code",
-        "diagnostic_source", "target", "bytes_written", "frame_bytes", "attempts", "targets",
-        "acknowledged_targets", "failed_target", "frames", "failed_operation", "operations",
-        "attempt_ids", "events", "cancelled_after_disable", "cancelled_after_config_change", "deadline_exceeded",
-        "no_automatic_retry", "control_generation", "config_snapshot", "state_version", "worker_done",
-        "worker_continues", "worker_cleanup_pending", "active_attempts", "provisional",
-        "control_state_unavailable", "namespace_present", "namespace_valid", "value_type",
-    }
-)
-PLC_DISPATCH_IMMUTABLE_ONCE_BOUND_FIELDS = frozenset(
-    {
-        *PLC_IMMUTABLE_BINDING_FIELDS,
-        "enabled",
-        "effective_enabled",
-        "created_at",
-        "duplicate",
-        "namespace_present",
-        "namespace_valid",
-        "value_type",
-        "state_version",
-    }
-)
-PLC_DISPATCH_TRANSITION_MUTABLE_FIELDS = frozenset(
-    {
-        "updated_at",
-        "status",
-        "history",
-        "message",
-        "attempted",
-        "physical_status",
-        "outcome",
-        "audit_status",
-        "error_code",
-        "diagnostic_source",
-        "target",
-        "bytes_written",
-        "frame_bytes",
-        "attempts",
-        "targets",
-        "acknowledged_targets",
-        "failed_target",
-        "frames",
-        "failed_operation",
-        "operations",
-        "attempt_ids",
-        "events",
-        "cancelled_after_disable",
-        "cancelled_after_config_change",
-        "deadline_exceeded",
-        "no_automatic_retry",
-        "worker_done",
-        "worker_continues",
-        "worker_cleanup_pending",
-        "active_attempts",
-        "provisional",
-        "control_state_unavailable",
-    }
-)
-PLC_DISPATCH_PHYSICAL_PROJECTION_FIELDS = frozenset(
-    {
-        "status", "history", "attempted", "physical_status", "outcome", "error_code",
-        "diagnostic_source", "target", "bytes_written", "frame_bytes", "attempts", "targets",
-        "acknowledged_targets", "failed_target", "frames", "failed_operation", "operations",
-        "attempt_ids", "events", "cancelled_after_disable", "cancelled_after_config_change",
-        "deadline_exceeded", "no_automatic_retry", "provisional", "active_attempts",
-        "control_state_unavailable",
-    }
+from .plc.errors import PlcDispatchStateConflict
+from .plc.event_projection import (
+    PLC_REDUCER_DERIVED_FIELDS,
+    PLC_FINALIZE_REASONS,
+    project_plc_dispatch_events,
 )
 
 
-class PlcDispatchTransitionKind(str, Enum):
-    RECORD_UPDATE = "record_update"
-    DISPATCH_TRANSITION = "dispatch_transition"
-    START_ATTEMPT = "start_attempt"
-    ADVANCE_ATTEMPT = "advance_attempt"
-    FINISH_ATTEMPT = "finish_attempt"
-    FINALIZE = "finalize"
-    AUDIT_FAILURE_FINALIZE = "audit_failure_finalize"
-    DEADLINE = "deadline"
-    RECOVERY_FINALIZE = "recovery_finalize"
-    CONTROL_FAILURE_FINALIZE = "control_failure_finalize"
-    WORKER_FINALIZE = "worker_finalize"
-
-
-PLC_TRANSITION_PROJECTION_ALLOWLIST = {
-    PlcDispatchTransitionKind.RECORD_UPDATE: frozenset(),
-    PlcDispatchTransitionKind.DISPATCH_TRANSITION: frozenset({"status", "history", "physical_status", "events"}),
-    PlcDispatchTransitionKind.START_ATTEMPT: frozenset({"operations", "attempt_ids", "events"}),
-    PlcDispatchTransitionKind.ADVANCE_ATTEMPT: frozenset(
-        {"status", "history", "attempted", "physical_status", "outcome", "target", "bytes_written", "frame_bytes", "operations", "events"}
-    ),
-    PlcDispatchTransitionKind.FINISH_ATTEMPT: frozenset({"operations", "events"}),
-    PlcDispatchTransitionKind.FINALIZE: PLC_DISPATCH_PHYSICAL_PROJECTION_FIELDS - {"active_attempts"},
-    PlcDispatchTransitionKind.AUDIT_FAILURE_FINALIZE: PLC_DISPATCH_PHYSICAL_PROJECTION_FIELDS - {"active_attempts"},
-    PlcDispatchTransitionKind.DEADLINE: frozenset(
-        {"status", "attempted", "physical_status", "outcome", "error_code", "deadline_exceeded", "provisional", "active_attempts", "events"}
-    ),
-    PlcDispatchTransitionKind.RECOVERY_FINALIZE: frozenset(
-        {"status", "outcome", "error_code", "provisional", "deadline_exceeded"}
-    ),
-    PlcDispatchTransitionKind.CONTROL_FAILURE_FINALIZE: frozenset(
-        {"status", "attempted", "physical_status", "outcome", "error_code", "active_attempts", "control_state_unavailable"}
-    ),
-    PlcDispatchTransitionKind.WORKER_FINALIZE: frozenset({"provisional"}),
-}
-
-
-def _plc_canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-
-
-def _plc_evidence_list_contains(existing: list[Any], candidate: list[Any]) -> bool:
-    for old in existing:
-        if isinstance(old, dict):
-            matches = [new for new in candidate if isinstance(new, dict) and all(new.get(key) == value for key, value in old.items())]
-            if not matches:
-                return False
-        elif old not in candidate:
-            return False
-    return True
-
-
-PLC_OPERATION_STATUS_ALLOWED = {
-    "not_attempted": {"not_attempted", "write_call_started"},
-    "write_call_started": {"write_call_started", "not_written", "partial_write", "full_frame_written"},
-    "not_written": {"not_written"},
-    "partial_write": {"partial_write"},
-    "full_frame_written": {"full_frame_written", "acknowledged", "rejected"},
-    "acknowledged": {"acknowledged"},
-    "rejected": {"rejected"},
-}
-PLC_OPERATION_OUTCOME_ALLOWED = {
-    "not_attempted": {"not_attempted", "write_outcome_uncertain"},
-    "write_outcome_uncertain": {"write_outcome_uncertain", "not_written", "outcome_uncertain", "awaiting_acknowledgement"},
-    "not_written": {"not_written"},
-    "awaiting_acknowledgement": {"awaiting_acknowledgement", "acknowledged", "rejected", "outcome_uncertain"},
-    "outcome_uncertain": {"outcome_uncertain"},
-    "acknowledged": {"acknowledged"},
-    "rejected": {"rejected"},
-}
-PLC_OPERATION_KNOWN_FIELDS = frozenset(
-    {
-        "attempt_id",
-        "target",
-        "attempt",
-        "frame_hex",
-        "frame_bytes",
-        "bytes_written",
-        "write_count_known",
-        "reported_write_count",
-        "physical_status",
-        "outcome",
-        "result_code",
-        "result_phase",
-        "diagnostic_source",
-        "started_at",
-        "finished_at",
-    }
+from .plc.transition_policy import (
+    PLC_DISPATCH_STATE_ORDER,
+    PLC_DISPATCH_FINAL_STATES,
+    PLC_MONOTONIC_LIST_FIELDS,
+    PLC_IMMUTABLE_BINDING_FIELDS,
+    PLC_DISPATCH_KNOWN_FIELDS,
+    PLC_DISPATCH_IMMUTABLE_ONCE_BOUND_FIELDS,
+    PLC_DISPATCH_TRANSITION_MUTABLE_FIELDS,
+    PLC_DISPATCH_PHYSICAL_PROJECTION_FIELDS,
+    PlcDispatchTransitionKind,
+    PLC_TRANSITION_PROJECTION_ALLOWLIST,
+    _plc_canonical,
+    _plc_evidence_list_contains,
+    PLC_OPERATION_STATUS_ALLOWED,
+    PLC_OPERATION_OUTCOME_ALLOWED,
+    PLC_OPERATION_KNOWN_FIELDS,
+    validate_plc_operation_evidence,
+    validate_plc_attempt_start,
+    validate_plc_dispatch_transition,
 )
-
-
-def validate_plc_operation_evidence(existing: dict[str, Any], candidate: dict[str, Any]) -> None:
-    if set(candidate) - PLC_OPERATION_KNOWN_FIELDS:
-        raise PlcDispatchStateConflict("operation_unknown_field")
-    for field in ("attempt_id", "target", "attempt", "frame_hex", "frame_bytes", "started_at"):
-        if _plc_canonical(candidate.get(field)) != _plc_canonical(existing.get(field)):
-            raise PlcDispatchStateConflict(f"operation_identity_conflict:{field}")
-    old_bytes = int(existing.get("bytes_written") or 0)
-    new_bytes = int(candidate.get("bytes_written") or 0)
-    frame_bytes = int(existing.get("frame_bytes") or 0)
-    if new_bytes < old_bytes or new_bytes > frame_bytes:
-        raise PlcDispatchStateConflict("operation_bytes_written_invalid")
-    old_status = str(existing.get("physical_status") or "not_attempted")
-    new_status = str(candidate.get("physical_status") or "not_attempted")
-    if new_status not in PLC_OPERATION_STATUS_ALLOWED.get(old_status, {old_status}):
-        raise PlcDispatchStateConflict("operation_physical_status_regression")
-    old_outcome = str(existing.get("outcome") or "not_attempted")
-    new_outcome = str(candidate.get("outcome") or "not_attempted")
-    if new_outcome not in PLC_OPERATION_OUTCOME_ALLOWED.get(old_outcome, {old_outcome}):
-        raise PlcDispatchStateConflict("operation_outcome_regression")
-    for field in ("result_code", "result_phase", "diagnostic_source"):
-        if existing.get(field) not in (None, "") and candidate.get(field) != existing.get(field):
-            raise PlcDispatchStateConflict(f"operation_{field}_cannot_be_changed")
-    if existing.get("finished_at") is not None and candidate.get("finished_at") != existing.get("finished_at"):
-        raise PlcDispatchStateConflict("operation_finished_at_cannot_be_changed")
-
-
-def validate_plc_attempt_start(existing: dict[str, Any], candidate: dict[str, Any], operation: dict[str, Any]) -> None:
-    if set(operation) - PLC_OPERATION_KNOWN_FIELDS:
-        raise PlcDispatchStateConflict("operation_unknown_field", existing)
-    if str(existing.get("status") or "") in PLC_DISPATCH_FINAL_STATES:
-        raise PlcDispatchStateConflict("terminal_dispatch_cannot_start_attempt", existing)
-    required = {
-        "attempt_id", "target", "attempt", "frame_hex", "frame_bytes", "bytes_written",
-        "write_count_known", "reported_write_count", "physical_status", "outcome", "started_at",
-    }
-    if not required.issubset(operation) or set(operation) - required:
-        raise PlcDispatchStateConflict("attempt_start_schema_invalid", existing)
-    planned_targets = existing.get("planned_targets") if isinstance(existing.get("planned_targets"), list) else []
-    planned_frames = existing.get("planned_frames") if isinstance(existing.get("planned_frames"), list) else []
-    target = str(operation.get("target") or "")
-    acknowledged = existing.get("acknowledged_targets") if isinstance(existing.get("acknowledged_targets"), list) else []
-    expected_target = next((str(item) for item in planned_targets if str(item) not in acknowledged), "")
-    if not target or target != expected_target:
-        raise PlcDispatchStateConflict("attempt_target_out_of_plan_or_order", existing)
-    planned = next((item for item in planned_frames if isinstance(item, dict) and item.get("target") == target), None)
-    if not isinstance(planned, dict) or str(operation.get("frame_hex") or "") != str(planned.get("frame_hex") or ""):
-        raise PlcDispatchStateConflict("attempt_frame_does_not_match_plan", existing)
-    old_operations = existing.get("operations") if isinstance(existing.get("operations"), list) else []
-    prior_for_target = [item for item in old_operations if isinstance(item, dict) and item.get("target") == target]
-    expected_attempt = len(prior_for_target) + 1
-    if int(operation.get("attempt") or 0) != expected_attempt:
-        raise PlcDispatchStateConflict("attempt_sequence_invalid", existing)
-    expected_id = f"{existing.get('dispatch_id')}:{target}:{expected_attempt}"
-    if str(operation.get("attempt_id") or "") != expected_id:
-        raise PlcDispatchStateConflict("attempt_id_not_repository_derived", existing)
-    retries = int((existing.get("config_snapshot") or {}).get("retries") or 0) if isinstance(existing.get("config_snapshot"), dict) else 0
-    if expected_attempt > retries + 1:
-        raise PlcDispatchStateConflict("attempt_retry_budget_exceeded", existing)
-    if prior_for_target and prior_for_target[-1].get("finished_at") is None:
-        raise PlcDispatchStateConflict("previous_attempt_not_finished", existing)
-    if prior_for_target and prior_for_target[-1].get("outcome") == "acknowledged":
-        raise PlcDispatchStateConflict("acknowledged_target_cannot_retry", existing)
-    if prior_for_target and not plc_terminal_result_is_retryable(
-        prior_for_target[-1].get("result_code"), prior_for_target[-1].get("result_phase")
-    ):
-        raise PlcDispatchStateConflict("previous_attempt_result_is_not_retryable", existing)
-    if (
-        int(operation.get("frame_bytes") or 0) * 2 != len(str(operation.get("frame_hex") or ""))
-        or int(operation.get("bytes_written") or 0) != 0
-        or operation.get("write_count_known") is not False
-        or operation.get("reported_write_count") is not None
-        or operation.get("physical_status") != "not_attempted"
-        or operation.get("outcome") != "not_attempted"
-        or not isinstance(operation.get("started_at"), int)
-    ):
-        raise PlcDispatchStateConflict("attempt_start_evidence_invalid", existing)
-
-
-def validate_plc_dispatch_transition(
-    existing: dict[str, Any], candidate: dict[str, Any], *, transition_kind: PlcDispatchTransitionKind
-) -> None:
-    if not existing:
-        return
-    for field in set(candidate) - PLC_DISPATCH_KNOWN_FIELDS:
-        if field not in existing:
-            raise PlcDispatchStateConflict(f"unknown_field_addition:{field}", existing)
-    for field in set(existing) - PLC_DISPATCH_KNOWN_FIELDS:
-        if field not in candidate or _plc_canonical(candidate.get(field)) != _plc_canonical(existing.get(field)):
-            raise PlcDispatchStateConflict(f"legacy_unknown_field_is_immutable:{field}", existing)
-    for field in PLC_DISPATCH_KNOWN_FIELDS:
-        old_present = field in existing
-        new_present = field in candidate
-        if old_present == new_present and (
-            not old_present or _plc_canonical(candidate.get(field)) == _plc_canonical(existing.get(field))
-        ):
-            continue
-        if old_present and not new_present:
-            raise PlcDispatchStateConflict(f"known_field_cannot_be_deleted:{field}", existing)
-        if field in PLC_DISPATCH_IMMUTABLE_ONCE_BOUND_FIELDS:
-            reason = "immutable_identity_conflict" if field in PLC_IMMUTABLE_BINDING_FIELDS else "immutable_bound_field_conflict"
-            raise PlcDispatchStateConflict(f"{reason}:{field}", existing)
-        if field not in PLC_DISPATCH_TRANSITION_MUTABLE_FIELDS:
-            raise PlcDispatchStateConflict(f"field_not_transition_mutable:{field}", existing)
-    for field in PLC_IMMUTABLE_BINDING_FIELDS:
-        if field in existing and _plc_canonical(candidate.get(field)) != _plc_canonical(existing.get(field)):
-            raise PlcDispatchStateConflict(f"immutable_identity_conflict:{field}", existing)
-    changed_projection_fields = {
-        field
-        for field in PLC_DISPATCH_PHYSICAL_PROJECTION_FIELDS
-        if (field in existing) != (field in candidate)
-        or _plc_canonical(existing.get(field)) != _plc_canonical(candidate.get(field))
-    }
-    allowed_projection_fields = PLC_TRANSITION_PROJECTION_ALLOWLIST.get(transition_kind)
-    if allowed_projection_fields is None:
-        raise PlcDispatchStateConflict("unknown_transition_kind", existing)
-    disallowed_projection_fields = changed_projection_fields - allowed_projection_fields
-    if disallowed_projection_fields:
-        raise PlcDispatchStateConflict(
-            f"transition_projection_field_not_allowed:{sorted(disallowed_projection_fields)[0]}",
-            existing,
-        )
-    old_status = str(existing.get("status") or "")
-    new_status = str(candidate.get("status") or "")
-    old_provisional = bool(existing.get("provisional"))
-    if old_status in PLC_DISPATCH_FINAL_STATES and not old_provisional:
-        if new_status != old_status:
-            raise PlcDispatchStateConflict("terminal_state_is_immutable", existing)
-        if changed_projection_fields:
-            raise PlcDispatchStateConflict(
-                f"terminal_physical_projection_is_immutable:{sorted(changed_projection_fields)[0]}",
-                existing,
-            )
-        for field in ("outcome", "error_code", "physical_status"):
-            if existing.get(field) not in (None, "") and candidate.get(field) != existing.get(field):
-                raise PlcDispatchStateConflict(f"terminal_{field}_is_immutable", existing)
-    elif old_status in PLC_DISPATCH_STATE_ORDER and new_status in PLC_DISPATCH_STATE_ORDER:
-        if PLC_DISPATCH_STATE_ORDER[new_status] < PLC_DISPATCH_STATE_ORDER[old_status]:
-            raise PlcDispatchStateConflict("nonterminal_state_regression", existing)
-    elif old_provisional:
-        if bool(candidate.get("provisional")) and new_status != old_status:
-            raise PlcDispatchStateConflict("provisional_state_changed_before_finalization", existing)
-
-    old_history = existing.get("history") if isinstance(existing.get("history"), list) else []
-    new_history = candidate.get("history") if isinstance(candidate.get("history"), list) else []
-    if old_status in PLC_DISPATCH_FINAL_STATES and not old_provisional and _plc_canonical(new_history) != _plc_canonical(old_history):
-        raise PlcDispatchStateConflict("terminal_history_is_immutable", existing)
-    if old_history:
-        if len(new_history) < len(old_history) or any(
-            _plc_canonical(new_history[index]) != _plc_canonical(item)
-            for index, item in enumerate(old_history)
-        ):
-            raise PlcDispatchStateConflict("history_evidence_cannot_be_deleted_or_changed", existing)
-    appended_history = new_history[len(old_history):]
-    expected_appended_statuses = (
-        ["acknowledged", "failed"]
-        if transition_kind is PlcDispatchTransitionKind.AUDIT_FAILURE_FINALIZE
-        else ([new_status] if appended_history else [])
-    )
-    if len(appended_history) != len(expected_appended_statuses):
-        raise PlcDispatchStateConflict("history_transition_append_count_invalid", existing)
-    for entry, expected_history_status in zip(appended_history, expected_appended_statuses):
-        if (
-            not isinstance(entry, dict)
-            or set(entry) - {"status", "at", "target"}
-            or str(entry.get("status") or "") != expected_history_status
-            or not isinstance(entry.get("at"), int)
-        ):
-            raise PlcDispatchStateConflict("history_transition_entry_invalid", existing)
-
-    active_attempts_changed = _plc_canonical(candidate.get("active_attempts")) != _plc_canonical(existing.get("active_attempts"))
-    if active_attempts_changed:
-        timeout_snapshot = (
-            bool(candidate.get("provisional"))
-            and bool(candidate.get("deadline_exceeded"))
-            and candidate.get("error_code") == "plc_worker_total_timeout"
-        )
-        control_failure_snapshot = (
-            new_status == "failed" and bool(candidate.get("control_state_unavailable"))
-        )
-        if not (timeout_snapshot or control_failure_snapshot):
-            raise PlcDispatchStateConflict("active_attempts_is_runtime_derived", existing)
-    if not bool(existing.get("provisional")) and bool(candidate.get("provisional")):
-        if not (
-            new_status == "failed"
-            and bool(candidate.get("deadline_exceeded"))
-            and candidate.get("error_code") == "plc_worker_total_timeout"
-        ):
-            raise PlcDispatchStateConflict("provisional_state_requires_timeout_snapshot", existing)
-
-    if existing.get("attempted") is True and candidate.get("attempted") is not True:
-        raise PlcDispatchStateConflict("attempted_evidence_cannot_regress", existing)
-    if existing.get("worker_done") is True and candidate.get("worker_done") is not True:
-        raise PlcDispatchStateConflict("worker_done_cannot_regress", existing)
-    if int(candidate.get("bytes_written") or 0) < int(existing.get("bytes_written") or 0):
-        raise PlcDispatchStateConflict("bytes_written_cannot_regress", existing)
-    for field in PLC_MONOTONIC_LIST_FIELDS:
-        old_items = existing.get(field) if isinstance(existing.get(field), list) else []
-        new_items = candidate.get(field) if isinstance(candidate.get(field), list) else []
-        if old_items and not _plc_evidence_list_contains(old_items, new_items):
-            raise PlcDispatchStateConflict(f"{field}_evidence_cannot_be_deleted_or_changed", existing)
-    old_operations = existing.get("operations") if isinstance(existing.get("operations"), list) else []
-    new_operations = candidate.get("operations") if isinstance(candidate.get("operations"), list) else []
-    operations_by_id = {
-        str(item.get("attempt_id") or ""): item for item in new_operations if isinstance(item, dict)
-    }
-    if len(operations_by_id) != len(new_operations):
-        raise PlcDispatchStateConflict("operation_attempt_id_missing_or_duplicate", existing)
-    old_operation_ids = {
-        str(item.get("attempt_id") or "") for item in old_operations if isinstance(item, dict)
-    }
-    added_operations = [
-        item for item in new_operations
-        if isinstance(item, dict) and str(item.get("attempt_id") or "") not in old_operation_ids
-    ]
-    if added_operations:
-        if transition_kind is not PlcDispatchTransitionKind.START_ATTEMPT or len(added_operations) != 1:
-            raise PlcDispatchStateConflict("operation_can_only_be_created_by_start_attempt", existing)
-        validate_plc_attempt_start(existing, candidate, added_operations[0])
-    elif transition_kind is PlcDispatchTransitionKind.START_ATTEMPT:
-        raise PlcDispatchStateConflict("start_attempt_did_not_create_operation", existing)
-    for old_operation in old_operations:
-        if not isinstance(old_operation, dict):
-            continue
-        attempt_id = str(old_operation.get("attempt_id") or "")
-        new_operation = operations_by_id.get(attempt_id)
-        if not isinstance(new_operation, dict):
-            raise PlcDispatchStateConflict("operation_evidence_cannot_be_deleted", existing)
-        changed = _plc_canonical(new_operation) != _plc_canonical(old_operation)
-        if changed and transition_kind not in {
-            PlcDispatchTransitionKind.ADVANCE_ATTEMPT,
-            PlcDispatchTransitionKind.FINISH_ATTEMPT,
-        }:
-            raise PlcDispatchStateConflict("operation_can_only_change_via_attempt_transition", existing)
-        try:
-            validate_plc_operation_evidence(old_operation, new_operation)
-        except PlcDispatchStateConflict as exc:
-            raise PlcDispatchStateConflict(exc.reason, existing) from exc
-        if changed and transition_kind is PlcDispatchTransitionKind.ADVANCE_ATTEMPT and new_operation.get("finished_at") is not None:
-            raise PlcDispatchStateConflict("advance_attempt_cannot_finish_operation", existing)
-        if changed and transition_kind is PlcDispatchTransitionKind.FINISH_ATTEMPT:
-            if old_operation.get("finished_at") is not None:
-                raise PlcDispatchStateConflict("finished_attempt_is_immutable", existing)
-            if (
-                new_operation.get("finished_at") is None
-                or new_operation.get("result_code") in (None, "")
-            ):
-                raise PlcDispatchStateConflict("finish_attempt_evidence_incomplete", existing)
-    if existing.get("failed_target") not in (None, "") and candidate.get("failed_target") != existing.get("failed_target"):
-        raise PlcDispatchStateConflict("failed_target_evidence_cannot_be_deleted_or_changed", existing)
-    old_failure = existing.get("failed_operation") if isinstance(existing.get("failed_operation"), dict) else {}
-    new_failure = candidate.get("failed_operation") if isinstance(candidate.get("failed_operation"), dict) else {}
-    if old_failure and not new_failure:
-        raise PlcDispatchStateConflict("failed_operation_evidence_cannot_be_deleted", existing)
-    for field, old_value in old_failure.items():
-        if field == "bytes_written":
-            if int(new_failure.get(field) or 0) < int(old_value or 0):
-                raise PlcDispatchStateConflict(f"failed_operation_{field}_cannot_regress", existing)
-        elif field not in new_failure or _plc_canonical(new_failure.get(field)) != _plc_canonical(old_value):
-            raise PlcDispatchStateConflict(f"failed_operation_{field}_cannot_be_deleted_or_changed", existing)
-    if new_failure.get("attempt_id"):
-        operation = operations_by_id.get(str(new_failure.get("attempt_id") or ""))
-        if not isinstance(operation, dict):
-            raise PlcDispatchStateConflict("failed_operation_missing_canonical_operation", existing)
-        for field in (
-            "target", "frame_hex", "frame_bytes", "write_count_known",
-            "reported_write_count", "diagnostic_source", "physical_status", "outcome",
-        ):
-            if _plc_canonical(new_failure.get(field)) != _plc_canonical(operation.get(field)):
-                raise PlcDispatchStateConflict(f"failed_operation_canonical_mismatch:{field}", existing)
-        if int(new_failure.get("bytes_written") or 0) > int(operation.get("bytes_written") or 0):
-            raise PlcDispatchStateConflict("failed_operation_bytes_exceed_canonical_operation", existing)
 
 
 PLC_RECORD_SCHEMA_VERSION = 2
 PLC_PROTOCOL_CONTRACT_VERSION = 2
-PLC_SUPPORTED_RECORD_VERSIONS = frozenset({1, 2})
 
 
-def normalize_plc_v1_snapshot(raw: Any) -> dict[str, Any]:
-    """Freeze the canonical Phase-1 snapshot shape for historical verification only."""
-    if not isinstance(raw, dict):
-        raise PlcConfigError("legacy PLC snapshot must be an object")
-    if set(raw) != set(PLC_LEGACY_IO_CONFIG_FIELDS):
-        raise PlcConfigError("legacy PLC snapshot fields are not canonical")
-    common_probe = {
-        key: raw[key]
-        for key in (
-            "enabled", "protocol", "checksum_mode", "serial_port", "baudrate",
-            "parity", "data_bits", "stop_bits", "timeout", "retries",
-        )
-    }
-    migrated = normalize_plc_config(
-        {
-            **DEFAULT_PLC_CONFIG,
-            **common_probe,
-            "result_register": "D206",
-            "output_control_point": "",
-            "capture_trigger_enabled": False,
-            "capture_input_register": "",
-            "capture_trigger_value": 1,
-        }
-    )
-    d_address = str(raw.get("d206_address") or "").strip().upper()
-    y_address = str(raw.get("y04_address") or "").strip().upper()
-    if not re.fullmatch(r"[0-9A-F]{4}", d_address):
-        raise PlcConfigError("legacy D address must contain four hexadecimal characters")
-    if not re.fullmatch(r"[0-9A-F]{4}", y_address):
-        raise PlcConfigError("legacy Y address must contain four hexadecimal characters")
-    if type(raw.get("write_y04")) is not bool:
-        raise PlcConfigError("legacy write_y04 must be a boolean")
-    return {
-        "enabled": migrated["enabled"],
-        "protocol": migrated["protocol"],
-        "checksum_mode": migrated["checksum_mode"],
-        "serial_port": migrated["serial_port"],
-        "baudrate": migrated["baudrate"],
-        "parity": migrated["parity"],
-        "data_bits": migrated["data_bits"],
-        "stop_bits": migrated["stop_bits"],
-        "d206_address": d_address,
-        "y04_address": y_address,
-        "write_y04": bool(raw["write_y04"]),
-        "timeout": migrated["timeout"],
-        "retries": migrated["retries"],
-    }
 
 
-def build_plc_v1_dispatch_plan(snapshot: dict[str, Any], passed: bool) -> tuple[list[str], list[dict[str, str]]]:
-    targets = ["D206", "Y04"] if snapshot["write_y04"] else ["D206"]
-    frames = [
-        {
-            "target": "D206",
-            "frame_hex": build_d206_frame(
-                snapshot["d206_address"], passed, snapshot["checksum_mode"]
-            ).hex().upper(),
-        }
-    ]
-    if snapshot["write_y04"]:
-        frames.append(
-            {
-                "target": "Y04",
-                "frame_hex": build_y04_frame(
-                    snapshot["y04_address"], passed, snapshot["checksum_mode"]
-                ).hex().upper(),
-            }
-        )
-    return targets, frames
 
 
-def build_plc_dispatch_plan(snapshot: dict[str, Any], passed: bool) -> tuple[list[str], list[dict[str, str]]]:
-    result_register = snapshot["result_register"]
-    output_control_point = snapshot["output_control_point"]
-    targets = [result_register, *([output_control_point] if output_control_point else [])]
-    frames = [
-        {
-            "target": result_register,
-            "frame_hex": build_d206_frame(
-                logical_device_address(result_register), passed, snapshot["checksum_mode"]
-            ).hex().upper(),
-        }
-    ]
-    if output_control_point:
-        frames.append(
-            {
-                "target": output_control_point,
-                "frame_hex": build_y04_frame(
-                    logical_device_address(output_control_point), passed, snapshot["checksum_mode"]
-                ).hex().upper(),
-            }
-        )
-    return targets, frames
 
 
-PLC_REDUCER_DERIVED_FIELDS = frozenset(
-    {
-        "status", "history", "attempted", "physical_status", "outcome", "audit_status",
-        "error_code", "diagnostic_source", "target", "bytes_written", "frame_bytes",
-        "attempts", "targets", "acknowledged_targets", "failed_target", "frames",
-        "failed_operation", "operations", "attempt_ids", "cancelled_after_disable",
-        "cancelled_after_config_change", "deadline_exceeded", "no_automatic_retry",
-        "worker_done", "worker_continues", "worker_cleanup_pending", "provisional",
-        "control_state_unavailable", "active_attempts", "events", "updated_at",
-    }
+from .plc.event_commands import (
+    _PLC_TYPED_EVENT_DERIVERS,
+    _PLC_TYPED_EVENT_FIELDS,
+    _derive_plc_advance_attempt,
+    _derive_plc_attempting,
+    _derive_plc_deadline,
+    _derive_plc_finalize,
+    _derive_plc_finish_attempt,
+    _derive_plc_start_attempt,
+    append_plc_typed_event,
 )
-PLC_PERSISTED_DISPATCH_FIELDS = frozenset(
-    {
-        *PLC_IMMUTABLE_BINDING_FIELDS,
-        *PLC_REDUCER_DERIVED_FIELDS,
-        "enabled", "created_at", "duplicate", "message", "state_version",
-    }
-)
-def append_plc_typed_event(record: dict[str, Any], kind: str, **payload: Any) -> list[dict[str, Any]]:
-    events = [dict(item) for item in record.get("events", []) if isinstance(item, dict)]
-    return [
-        *events,
-        {"seq": len(events) + 1, "kind": kind, "at": int(time.time()), **payload},
-    ]
 
 
-def project_plc_dispatch_events(record: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Pure versioned reducer from immutable binding + strict typed event stream."""
-    base = {key: copy.deepcopy(value) for key, value in record.items() if key not in PLC_REDUCER_DERIVED_FIELDS}
-    planned_targets = [str(item) for item in base.get("planned_targets", [])]
-    planned_frames = base.get("planned_frames") if isinstance(base.get("planned_frames"), list) else []
-    planned_by_target = {
-        str(item.get("target") or ""): str(item.get("frame_hex") or "")
-        for item in planned_frames if isinstance(item, dict)
-    }
-    retries = int((base.get("config_snapshot") or {}).get("retries") or 0)
-    if not events or not isinstance(events[0], dict) or events[0].get("kind") != "create":
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:create_event_missing", record)
-    create_at = events[0].get("at")
-    if (
-        events[0] != {"seq": 1, "kind": "create", "at": create_at}
-        or type(events[0].get("seq")) is not int
-        or type(create_at) is not int
-        or int(create_at) < 0
-    ):
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:create_event_invalid", record)
-    projected: dict[str, Any] = {
-        **base,
-        "events": copy.deepcopy(events),
-        "status": "queued",
-        "history": [{"status": "queued", "at": create_at}],
-        "attempted": False,
-        "duplicate": False,
-        "worker_done": False,
-        "worker_continues": False,
-        "worker_cleanup_pending": False,
-        "deadline_exceeded": False,
-        "updated_at": create_at,
-    }
-    operations: list[dict[str, Any]] = []
-    attempt_ids: list[str] = []
-    acknowledged_targets: list[str] = []
-    terminal_seen = False
-    previous_event_at = int(create_at)
-
-    for index, event in enumerate(events[1:], start=2):
-        if (
-            not isinstance(event, dict)
-            or type(event.get("seq")) is not int
-            or event.get("seq") != index
-            or type(event.get("at")) is not int
-            or int(event.get("at")) < 0
-        ):
-            raise PlcDispatchStateConflict("corrupt_persisted_dispatch:event_sequence_invalid", record)
-        if int(event["at"]) < previous_event_at:
-            raise PlcDispatchStateConflict("corrupt_persisted_dispatch:event_time_regression", record)
-        if terminal_seen:
-            raise PlcDispatchStateConflict("corrupt_persisted_dispatch:event_after_terminal", record)
-        kind = event.get("kind")
-        at = int(event["at"])
-        previous_event_at = at
-        projected["updated_at"] = at
-        if kind == "attempting":
-            if set(event) != {"seq", "kind", "at"} or projected["status"] != "queued":
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:attempting_event_invalid", record)
-            projected["status"] = "attempting"
-            projected["physical_status"] = "not_attempted"
-            projected["history"].append({"status": "attempting", "at": at})
-        elif kind == "start_attempt":
-            if set(event) != {"seq", "kind", "at", "target", "attempt_id"}:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:start_event_schema_invalid", record)
-            if projected["status"] not in {"attempting", "sent"} or projected.get("provisional"):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:start_event_state_invalid", record)
-            if not isinstance(event.get("target"), str) or not isinstance(event.get("attempt_id"), str):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:start_event_schema_invalid", record)
-            target = event["target"]
-            expected_target = next((item for item in planned_targets if item not in acknowledged_targets), "")
-            if target != expected_target:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:attempt_target_order_invalid", record)
-            prior = [item for item in operations if item["target"] == target]
-            attempt = len(prior) + 1
-            expected_id = f"{base.get('dispatch_id')}:{target}:{attempt}"
-            if event.get("attempt_id") != expected_id or attempt > retries + 1:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:attempt_sequence_invalid", record)
-            if prior and (
-                prior[-1].get("finished_at") is None
-                or prior[-1].get("outcome") == "acknowledged"
-                or not plc_terminal_result_is_retryable(
-                    prior[-1].get("result_code"), prior[-1].get("result_phase")
-                )
-            ):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:retry_chain_invalid", record)
-            frame_hex = planned_by_target.get(target, "")
-            operation = {
-                "attempt_id": expected_id,
-                "target": target,
-                "attempt": attempt,
-                "frame_hex": frame_hex,
-                "frame_bytes": len(bytes.fromhex(frame_hex)),
-                "bytes_written": 0,
-                "write_count_known": False,
-                "reported_write_count": None,
-                "physical_status": "not_attempted",
-                "outcome": "not_attempted",
-                "started_at": at,
-            }
-            operations.append(operation)
-            attempt_ids.append(expected_id)
-        elif kind == "advance_attempt":
-            expected_keys = {
-                "seq", "kind", "at", "attempt_id", "bytes_written", "physical_status", "outcome"
-            }
-            if set(event) != expected_keys:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:advance_event_schema_invalid", record)
-            operation = next((item for item in operations if item["attempt_id"] == event.get("attempt_id")), None)
-            if operation is None or operation.get("finished_at") is not None:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:advance_without_start", record)
-            bytes_written = event.get("bytes_written")
-            physical_status = event.get("physical_status")
-            outcome = event.get("outcome")
-            frame_bytes = int(operation["frame_bytes"])
-            previous_physical = str(operation.get("physical_status") or "not_attempted")
-            allowed_next_physical = {
-                "not_attempted": {"write_call_started"},
-                "write_call_started": {"not_written", "partial_write", "full_frame_written"},
-            }
-            valid = (
-                (physical_status == "write_call_started" and bytes_written == 0 and outcome == "write_outcome_uncertain")
-                or (physical_status == "not_written" and bytes_written == 0 and outcome == "not_written")
-                or (
-                    physical_status == "partial_write" and type(bytes_written) is int
-                    and 0 < bytes_written < frame_bytes and outcome == "outcome_uncertain"
-                )
-                or (
-                    physical_status == "full_frame_written" and bytes_written == frame_bytes
-                    and outcome == "awaiting_acknowledgement"
-                )
-            )
-            if (
-                not valid
-                or physical_status not in allowed_next_physical.get(previous_physical, set())
-                or int(bytes_written) < int(operation["bytes_written"])
-            ):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:advance_evidence_invalid", record)
-            operation.update(
-                bytes_written=int(bytes_written),
-                write_count_known=physical_status != "write_call_started",
-                reported_write_count=(None if physical_status == "write_call_started" else int(bytes_written)),
-                physical_status=physical_status,
-                outcome=outcome,
-            )
-            if not projected.get("provisional"):
-                projected["attempted"] = True
-                projected["physical_status"] = physical_status
-                projected["outcome"] = outcome
-                projected["target"] = operation["target"]
-                projected["bytes_written"] = max(int(projected.get("bytes_written") or 0), int(bytes_written))
-                projected["frame_bytes"] = frame_bytes
-                if physical_status == "full_frame_written" and projected["status"] != "sent":
-                    projected["status"] = "sent"
-                    projected["history"].append({"status": "sent", "at": at, "target": operation["target"]})
-        elif kind == "finish_attempt":
-            expected_keys = {
-                "seq", "kind", "at", "attempt_id", "result_code", "result_phase",
-                "bytes_written", "diagnostic_source",
-            }
-            if set(event) != expected_keys:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:finish_event_schema_invalid", record)
-            operation = next((item for item in operations if item["attempt_id"] == event.get("attempt_id")), None)
-            if operation is None or operation.get("finished_at") is not None:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:finish_without_start", record)
-            if at < int(operation["started_at"]):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:finish_before_start", record)
-            try:
-                code = PlcTerminalResultCode(event.get("result_code"))
-                phase = PlcTransportPhase(event.get("result_phase"))
-            except (TypeError, ValueError) as exc:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:terminal_result_invalid", record) from exc
-            bytes_written = event.get("bytes_written")
-            if (
-                type(bytes_written) is not int
-                or bytes_written != operation["bytes_written"]
-                or phase not in PLC_TERMINAL_ALLOWED_PHASES[code]
-                or event.get("diagnostic_source") not in PLC_TERMINAL_DIAGNOSTIC_SOURCES[code]
-            ):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:terminal_result_invalid", record)
-            frame_bytes = int(operation["frame_bytes"])
-            operation_physical = str(operation.get("physical_status") or "not_attempted")
-            expected_physical = operation["physical_status"]
-            expected_outcome = operation["outcome"]
-            if code is PlcTerminalResultCode.ACKNOWLEDGED:
-                if (
-                    phase is not PlcTransportPhase.RESPONSE
-                    or bytes_written != frame_bytes
-                    or operation_physical != "full_frame_written"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:ack_evidence_invalid", record)
-                expected_physical, expected_outcome = "acknowledged", "acknowledged"
-            elif code is PlcTerminalResultCode.NAK:
-                if (
-                    phase is not PlcTransportPhase.RESPONSE
-                    or bytes_written != frame_bytes
-                    or operation_physical != "full_frame_written"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:nak_evidence_invalid", record)
-                expected_physical, expected_outcome = "rejected", "rejected"
-            elif code in {PlcTerminalResultCode.SHORT_RESPONSE, PlcTerminalResultCode.UNEXPECTED_RESPONSE}:
-                if (
-                    phase is not PlcTransportPhase.RESPONSE
-                    or bytes_written != frame_bytes
-                    or operation_physical != "full_frame_written"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:response_evidence_invalid", record)
-                expected_physical, expected_outcome = "full_frame_written", "outcome_uncertain"
-            elif code is PlcTerminalResultCode.TIMEOUT:
-                if phase in {PlcTransportPhase.READ, PlcTransportPhase.FLUSH} and (
-                    bytes_written != frame_bytes or operation_physical != "full_frame_written"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:timeout_evidence_invalid", record)
-                if phase is PlcTransportPhase.WRITE and (
-                    bytes_written != 0 or operation_physical != "write_call_started"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:timeout_evidence_invalid", record)
-                expected_outcome = "outcome_uncertain" if bytes_written > 0 or phase is PlcTransportPhase.WRITE else expected_outcome
-            elif code is PlcTerminalResultCode.SHORT_WRITE:
-                if (
-                    phase is not PlcTransportPhase.WRITE
-                    or not 0 <= bytes_written < frame_bytes
-                    or operation_physical not in {"not_written", "partial_write"}
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:short_write_evidence_invalid", record)
-            elif code is PlcTerminalResultCode.WRITE_RESULT_UNKNOWN:
-                if (
-                    phase is not PlcTransportPhase.WRITE
-                    or bytes_written != 0
-                    or operation_physical != "write_call_started"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:write_unknown_evidence_invalid", record)
-            elif code is PlcTerminalResultCode.SERIAL_IO_FAILED:
-                if phase is PlcTransportPhase.READ and (
-                    bytes_written != frame_bytes or operation_physical != "full_frame_written"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:serial_io_evidence_invalid", record)
-                if phase is PlcTransportPhase.WRITE and (
-                    bytes_written != 0 or operation_physical != "write_call_started"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:serial_io_evidence_invalid", record)
-                if bytes_written > 0:
-                    expected_outcome = "outcome_uncertain"
-            elif code is PlcTerminalResultCode.FLUSH_FAILED:
-                if (
-                    phase is not PlcTransportPhase.FLUSH
-                    or bytes_written != frame_bytes
-                    or operation_physical != "full_frame_written"
-                ):
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:flush_evidence_invalid", record)
-                expected_outcome = "outcome_uncertain"
-            elif code in {
-                PlcTerminalResultCode.SERIAL_OPEN_FAILED,
-                PlcTerminalResultCode.SERIAL_DEPENDENCY_MISSING,
-            }:
-                if phase is not PlcTransportPhase.OPEN or bytes_written != 0 or operation["physical_status"] != "not_attempted":
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:open_evidence_invalid", record)
-            elif code is PlcTerminalResultCode.INTERNAL_TRANSITION_ERROR:
-                if phase is not PlcTransportPhase.INTERNAL:
-                    raise PlcDispatchStateConflict("corrupt_persisted_dispatch:internal_result_invalid", record)
-                if operation_physical == "write_call_started":
-                    expected_outcome = "write_outcome_uncertain"
-                elif operation_physical in {"partial_write", "full_frame_written"}:
-                    expected_outcome = "outcome_uncertain"
-                elif operation_physical == "not_attempted":
-                    expected_outcome = "not_attempted"
-                elif operation_physical == "not_written":
-                    expected_outcome = "not_written"
-                else:
-                    raise PlcDispatchStateConflict(
-                        "corrupt_persisted_dispatch:internal_physical_state_invalid", record
-                    )
-            operation.update(
-                physical_status=expected_physical,
-                outcome=expected_outcome,
-                result_code=code.value,
-                result_phase=phase.value,
-                diagnostic_source=event["diagnostic_source"],
-                finished_at=at,
-            )
-            if code is PlcTerminalResultCode.ACKNOWLEDGED:
-                acknowledged_targets.append(operation["target"])
-        elif kind == "deadline":
-            if set(event) != {"seq", "kind", "at"} or projected.get("worker_done"):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:deadline_event_invalid", record)
-            attempted = bool(projected.get("attempted")) or any(
-                item["physical_status"] not in {"not_attempted", ""} for item in operations
-            )
-            projected.update(
-                status="failed", attempted=attempted,
-                physical_status=str(projected.get("physical_status") or ("write_outcome_uncertain" if attempted else "not_attempted")),
-                outcome="outcome_uncertain" if attempted else "deadline_exceeded",
-                error_code="plc_worker_total_timeout", deadline_exceeded=True,
-                provisional=True, worker_done=False, worker_continues=attempted,
-            )
-        elif kind == "finalize":
-            if set(event) != {"seq", "kind", "at", "reason"}:
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:finalize_event_schema_invalid", record)
-            if not isinstance(event.get("reason"), str):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:finalize_event_schema_invalid", record)
-            reason = event["reason"]
-            if reason not in PLC_FINALIZE_REASONS or any(item.get("finished_at") is None for item in operations):
-                raise PlcDispatchStateConflict("corrupt_persisted_dispatch:finalize_event_invalid", record)
-            acknowledged_ops = {
-                item["target"]: item for item in operations if item.get("outcome") == "acknowledged"
-            }
-            ack_targets = [target for target in planned_targets if target in acknowledged_ops]
-            frames = [
-                {"target": target, "frame_hex": acknowledged_ops[target]["frame_hex"], "attempts": acknowledged_ops[target]["attempt"]}
-                for target in ack_targets
-            ]
-            failed_operation = next(
-                (item for item in reversed(operations) if item.get("outcome") != "acknowledged"), None
-            )
-            failed_target = str((failed_operation or {}).get("target") or "") or next(
-                (target for target in planned_targets if target not in ack_targets), ""
-            )
-            all_ack = bool(planned_targets) and ack_targets == planned_targets
-            if not reason and not all_ack and failed_operation is None:
-                raise PlcDispatchStateConflict(
-                    "corrupt_persisted_dispatch:finalize_without_terminal_evidence", record
-                )
-            if not reason and failed_operation is not None:
-                result_code = str(failed_operation.get("result_code") or "")
-                result_phase = str(failed_operation.get("result_phase") or "")
-                attempts_for_failed_target = sum(
-                    1 for item in operations if item.get("target") == failed_operation.get("target")
-                )
-                if (
-                    plc_terminal_result_is_retryable(result_code, result_phase)
-                    and attempts_for_failed_target < retries + 1
-                ):
-                    raise PlcDispatchStateConflict(
-                        "corrupt_persisted_dispatch:retry_budget_not_exhausted", record
-                    )
-            status = "disabled" if reason in {"disabled", "cancelled_after_disable"} and not operations else (
-                "acknowledged" if not reason and all_ack else "failed"
-            )
-            error_code = reason or (str((failed_operation or {}).get("result_code") or "") if status == "failed" else "")
-            attempted = any(
-                int(item.get("bytes_written") or 0) > 0
-                or item.get("physical_status") not in {None, "", "not_attempted"}
-                for item in operations
-            )
-            last = operations[-1] if operations else {}
-            if status == "acknowledged":
-                physical_status, outcome = "acknowledged", "acknowledged"
-            elif reason == "audit_persist_failed_after_ack" and all_ack:
-                physical_status, outcome = "acknowledged", "acknowledged_audit_unpersisted"
-            elif ack_targets and failed_target:
-                physical_status, outcome = "partial_success", "partial_failure"
-            elif last:
-                physical_status = str(last.get("physical_status") or "not_attempted")
-                outcome = str(last.get("outcome") or "not_attempted")
-            else:
-                physical_status = "not_attempted"
-                outcome = (
-                    "cancelled_before_attempt" if reason.startswith("cancelled_")
-                    else "queue_timeout" if reason == "plc_dispatch_queue_timeout"
-                    else "activation_blocked" if reason == "plc_pg_coordination_unavailable"
-                    else "not_attempted"
-                )
-            history = projected["history"]
-            if reason == "audit_persist_failed_after_ack" and all_ack:
-                history.append({"status": "acknowledged", "at": at})
-            history.append({"status": status, "at": at})
-            projected.update(
-                status=status, history=history, attempted=attempted,
-                physical_status=physical_status, outcome=outcome, error_code=error_code,
-                attempts=(int((failed_operation or {}).get("attempt") or 0) if failed_target else sum(int(item["attempt"]) for item in acknowledged_ops.values())),
-                acknowledged_targets=ack_targets, targets=ack_targets, frames=frames,
-                failed_target=failed_target, target=str(last.get("target") or failed_target),
-                bytes_written=max([int(item.get("bytes_written") or 0) for item in operations] or [0]),
-                frame_bytes=int(last.get("frame_bytes") or 0),
-                cancelled_after_disable=reason == "cancelled_after_disable",
-                cancelled_after_config_change=reason == "cancelled_after_config_change",
-                deadline_exceeded=reason == "deadline_exceeded" or bool(projected.get("deadline_exceeded")),
-                no_automatic_retry=bool(ack_targets and status == "failed"),
-                provisional=False, worker_done=True, worker_continues=False,
-                worker_cleanup_pending=False,
-            )
-            if reason == "audit_persist_failed_after_ack":
-                projected["audit_status"] = "persist_failed"
-            if failed_operation:
-                projected["diagnostic_source"] = failed_operation.get("diagnostic_source", "")
-                projected["failed_operation"] = {
-                    "attempt_id": failed_operation["attempt_id"],
-                    "target": failed_operation["target"],
-                    "frame_hex": failed_operation["frame_hex"],
-                    "frame_bytes": failed_operation["frame_bytes"],
-                    "bytes_written": failed_operation["bytes_written"],
-                    "write_count_known": failed_operation["write_count_known"],
-                    "reported_write_count": failed_operation["reported_write_count"],
-                    "physical_status": failed_operation["physical_status"],
-                    "outcome": failed_operation["outcome"],
-                    "result_phase": failed_operation.get("result_phase", ""),
-                    "diagnostic_source": failed_operation.get("diagnostic_source", ""),
-                    "attempts": failed_operation["attempt"],
-                    "error_code": error_code,
-                }
-            terminal_seen = True
-        else:
-            raise PlcDispatchStateConflict("corrupt_persisted_dispatch:unknown_event_kind", record)
-        projected["operations"] = copy.deepcopy(operations)
-        projected["attempt_ids"] = list(attempt_ids)
-
-    if not operations:
-        projected.pop("operations", None)
-        projected.pop("attempt_ids", None)
-    return projected
 
 
-def verify_persisted_plc_dispatch(record: dict[str, Any]) -> dict[str, Any]:
-    """Verify a stored record without rewriting or reinterpreting historical protocol versions."""
-    authoritative = dict(record)
-    schema_version = authoritative.get("record_schema_version")
-    contract_version = authoritative.get("protocol_contract_version")
-    if (
-        type(schema_version) is not int
-        or type(contract_version) is not int
-        or schema_version not in PLC_SUPPORTED_RECORD_VERSIONS
-        or contract_version != schema_version
-    ):
-        raise PlcDispatchStateConflict("dispatch_migration_required", authoritative)
-    unknown = set(authoritative) - PLC_DISPATCH_KNOWN_FIELDS
-    if unknown:
-        raise PlcDispatchStateConflict(
-            f"corrupt_persisted_dispatch:unknown_field:{sorted(unknown)[0]}", authoritative
-        )
-    response_only = set(authoritative) - PLC_PERSISTED_DISPATCH_FIELDS
-    if response_only:
-        raise PlcDispatchStateConflict(
-            f"corrupt_persisted_dispatch:response_only_field:{sorted(response_only)[0]}",
-            authoritative,
-        )
-    required = {
-        "dispatch_id", "source", "request_id", "passed", "detection_identity",
-        "control_generation", "config_snapshot", "protocol", "checksum_mode",
-        "planned_targets", "planned_frames", "attempted", "status", "history",
-        "worker_done", "state_version",
-    }
-    if not required.issubset(authoritative):
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:required_field_missing", authoritative)
-    if type(authoritative.get("passed")) is not bool:
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:passed_invalid", authoritative)
-    if (
-        not isinstance(authoritative.get("dispatch_id"), str)
-        or not isinstance(authoritative.get("source"), str)
-        or not authoritative.get("source")
-        or authoritative.get("source") != authoritative.get("source").strip()
-        or not isinstance(authoritative.get("request_id"), str)
-        or not isinstance(authoritative.get("detection_identity"), str)
-        or not authoritative.get("detection_identity")
-    ):
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:identity_type_invalid", authoritative)
-    if authoritative.get("enabled") is not True:
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:enabled_binding_invalid", authoritative)
-    if type(authoritative.get("control_generation")) is not int or int(authoritative["control_generation"]) < 0:
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:generation_invalid", authoritative)
-    if type(authoritative.get("state_version")) is not int or int(authoritative["state_version"]) < 1:
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:state_version_invalid", authoritative)
-    if "dispatch_deadline_at_ms" in authoritative and (
-        type(authoritative.get("dispatch_deadline_at_ms")) is not int
-        or int(authoritative["dispatch_deadline_at_ms"]) < int(authoritative.get("created_at") or 0) * 1000
-    ):
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:dispatch_deadline_invalid", authoritative)
-    try:
-        snapshot = (
-            normalize_plc_v1_snapshot(authoritative.get("config_snapshot"))
-            if contract_version == 1
-            else normalize_plc_config(authoritative.get("config_snapshot"))
-        )
-    except PlcConfigError as exc:
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:snapshot_invalid", authoritative) from exc
-    if not snapshot["enabled"] or _plc_canonical(snapshot) != _plc_canonical(authoritative["config_snapshot"]):
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:snapshot_not_canonical", authoritative)
-    expected_targets, expected_frames = (
-        build_plc_v1_dispatch_plan(snapshot, bool(authoritative["passed"]))
-        if contract_version == 1
-        else build_plc_dispatch_plan(snapshot, bool(authoritative["passed"]))
-    )
-    if (
-        authoritative.get("protocol") != snapshot["protocol"]
-        or authoritative.get("checksum_mode") != snapshot["checksum_mode"]
-        or _plc_canonical(authoritative.get("planned_targets")) != _plc_canonical(expected_targets)
-        or _plc_canonical(authoritative.get("planned_frames")) != _plc_canonical(expected_frames)
-    ):
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:plan_binding_invalid", authoritative)
-    material = json.dumps(
-        {
-            "source": str(authoritative.get("source") or ""),
-            "request_id": str(authoritative.get("request_id") or ""),
-            "fingerprint": str(authoritative.get("detection_identity") or ""),
-        },
-        sort_keys=True,
-        ensure_ascii=True,
-    )
-    expected_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
-    if not authoritative.get("detection_identity") or authoritative.get("dispatch_id") != expected_id:
-        raise PlcDispatchStateConflict("corrupt_persisted_dispatch:identity_binding_invalid", authoritative)
-
-    events = authoritative.get("events")
-    if not isinstance(events, list):
-        raise PlcDispatchStateConflict("dispatch_migration_required", authoritative)
-    try:
-        projected = project_plc_dispatch_events(authoritative, copy.deepcopy(events))
-    except PlcDispatchStateConflict as exc:
-        if exc.reason.startswith("corrupt_persisted_dispatch:"):
-            raise PlcDispatchStateConflict(exc.reason, authoritative) from exc
-        raise
-    if int(authoritative["state_version"]) != len(events):
-        raise PlcDispatchStateConflict(
-            "corrupt_persisted_dispatch:state_version_event_count_mismatch", authoritative
-        )
-    if authoritative.get("duplicate") is not False:
-        raise PlcDispatchStateConflict(
-            "corrupt_persisted_dispatch:persisted_duplicate_flag_invalid", authoritative
-        )
-    if authoritative.get("created_at") != events[0].get("at"):
-        raise PlcDispatchStateConflict(
-            "corrupt_persisted_dispatch:created_at_event_mismatch", authoritative
-        )
-    for field in sorted(PLC_REDUCER_DERIVED_FIELDS):
-        if (field in authoritative) != (field in projected) or _plc_canonical(
-            authoritative.get(field)
-        ) != _plc_canonical(projected.get(field)):
-            raise PlcDispatchStateConflict(
-                f"corrupt_persisted_dispatch:projection_mismatch:{field}", authoritative
-            )
-    return authoritative
 
 
 def get_validated_idempotent_dispatch(
@@ -5043,6 +3072,52 @@ def plc_dispatch_conflict_response(
     }
 
 
+from .plc.dispatch_mutations import PlcDispatchMutations
+from .plc.dispatch_mutation_ports import DispatchMutationStorage, DispatchMutationPolicy, DispatchMutationEvents, DispatchMutationEvidence
+
+_plc_dispatch_mutations = PlcDispatchMutations(
+    storage=DispatchMutationStorage(
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        mutate_app_config_atomically=lambda: mutate_app_config_atomically,
+        plc_dispatch_audit_records=lambda: plc_dispatch_audit_records,
+        verify_persisted_plc_dispatch=lambda: verify_persisted_plc_dispatch,
+        raw_plc_namespace=lambda: raw_plc_namespace,
+        plc_pg_coordination_available=lambda: plc_pg_coordination_available,
+        public_path_sanitized=lambda: public_path_sanitized,
+        plc_dispatch_existing=lambda: plc_dispatch_existing,
+    ),
+    policy=DispatchMutationPolicy(
+        PlcDispatchStateConflict=lambda: PlcDispatchStateConflict,
+        PLC_CONFIG_ABSENT=lambda: PLC_CONFIG_ABSENT,
+        normalize_plc_config=lambda: normalize_plc_config,
+        PlcConfigError=lambda: PlcConfigError,
+        PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY,
+        build_plc_dispatch_plan=lambda: build_plc_dispatch_plan,
+        PLC_RECORD_SCHEMA_VERSION=lambda: PLC_RECORD_SCHEMA_VERSION,
+        PLC_PROTOCOL_CONTRACT_VERSION=lambda: PLC_PROTOCOL_CONTRACT_VERSION,
+        PLC_QUEUE_WAIT_SECONDS=lambda: PLC_QUEUE_WAIT_SECONDS,
+        PLC_FINALIZE_REASONS=lambda: PLC_FINALIZE_REASONS,
+    ),
+    events=DispatchMutationEvents(
+        project_plc_dispatch_events=lambda: project_plc_dispatch_events,
+        PlcDispatchTransitionKind=lambda: PlcDispatchTransitionKind,
+        _PLC_TYPED_EVENT_DERIVERS=lambda: _PLC_TYPED_EVENT_DERIVERS,
+        _PLC_TYPED_EVENT_FIELDS=lambda: _PLC_TYPED_EVENT_FIELDS,
+        validate_plc_dispatch_transition=lambda: validate_plc_dispatch_transition,
+        _apply_plc_dispatch_event=lambda: _apply_plc_dispatch_event,
+        plc_finalize_dispatch=lambda: plc_finalize_dispatch,
+    ),
+    evidence=DispatchMutationEvidence(
+        PlcAttemptTerminalResult=lambda: PlcAttemptTerminalResult,
+        PlcTerminalResultCode=lambda: PlcTerminalResultCode,
+        PLC_TERMINAL_RESULT_CODES=lambda: PLC_TERMINAL_RESULT_CODES,
+        PlcTransportPhase=lambda: PlcTransportPhase,
+        PLC_TERMINAL_ALLOWED_PHASES=lambda: PLC_TERMINAL_ALLOWED_PHASES,
+        PLC_TERMINAL_DIAGNOSTIC_SOURCES=lambda: PLC_TERMINAL_DIAGNOSTIC_SOURCES,
+    ),
+)
+
+
 def create_plc_dispatch(
     *,
     source: str,
@@ -5051,92 +3126,8 @@ def create_plc_dispatch(
     fingerprint: str,
     expected_generation: int | None = None,
 ) -> dict[str, Any]:
-    """Atomically derive a queued v1 record from the authoritative PLC namespace."""
-    if not isinstance(source, str) or not source.strip():
-        raise PlcDispatchStateConflict("create_source_required")
-    if not isinstance(request_id, str):
-        raise PlcDispatchStateConflict("create_request_id_must_be_string")
-    if type(passed) is not bool:
-        raise PlcDispatchStateConflict("create_passed_must_be_boolean")
-    if not isinstance(fingerprint, str) or not fingerprint:
-        raise PlcDispatchStateConflict("create_fingerprint_required")
-    if expected_generation is not None and (
-        type(expected_generation) is not int or expected_generation < 0
-    ):
-        raise PlcDispatchStateConflict("create_expected_generation_invalid")
-    material = json.dumps(
-        {"source": source.strip(), "request_id": request_id, "fingerprint": fingerprint},
-        sort_keys=True,
-        ensure_ascii=True,
-    )
-    dispatch_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
-    persisted: dict[str, Any] = {}
-    repository_active = runtime_postgres_repository_or_none() is not None
-
-    def insert_canonical_initial(config_values: dict[str, Any]) -> None:
-        nonlocal persisted
-        records = plc_dispatch_audit_records(config_values)
-        existing = next(
-            (dict(item) for item in reversed(records) if str(item.get("dispatch_id") or "") == dispatch_id),
-            None,
-        )
-        if existing is not None:
-            existing = verify_persisted_plc_dispatch(existing)
-            identity_matches = (
-                existing.get("source") == source.strip()
-                and existing.get("request_id") == request_id
-                and existing.get("passed") is passed
-                and existing.get("detection_identity") == fingerprint
-            )
-            if identity_matches:
-                persisted = existing
-                return
-            raise PlcDispatchStateConflict("create_dispatch_identity_conflict", existing)
-        raw_namespace = raw_plc_namespace(config_values)
-        if raw_namespace is PLC_CONFIG_ABSENT:
-            raise PlcDispatchStateConflict("create_plc_namespace_absent")
-        try:
-            normalized = normalize_plc_config(raw_namespace)
-        except PlcConfigError as exc:
-            raise PlcDispatchStateConflict("create_plc_namespace_invalid") from exc
-        if not normalized["enabled"]:
-            raise PlcDispatchStateConflict("create_plc_disabled")
-        current_generation = int(config_values.get(PLC_CONTROL_GENERATION_KEY) or 0)
-        if expected_generation is not None and expected_generation != current_generation:
-            raise PlcDispatchStateConflict("create_generation_mismatch")
-        if repository_active and not plc_pg_coordination_available():
-            raise PlcDispatchStateConflict("plc_pg_coordination_unavailable")
-        planned_targets, planned_frames = build_plc_dispatch_plan(normalized, passed)
-        created_at = int(time.time())
-        immutable_record = {
-            "record_schema_version": PLC_RECORD_SCHEMA_VERSION,
-            "protocol_contract_version": PLC_PROTOCOL_CONTRACT_VERSION,
-            "dispatch_id": dispatch_id,
-            "source": source.strip(),
-            "request_id": request_id,
-            "passed": passed,
-            "detection_identity": fingerprint,
-            "enabled": True,
-            "protocol": normalized["protocol"],
-            "checksum_mode": normalized["checksum_mode"],
-            "planned_targets": planned_targets,
-            "planned_frames": planned_frames,
-            "duplicate": False,
-            "created_at": created_at,
-            "control_generation": current_generation,
-            "dispatch_deadline_at_ms": int(time.time() * 1000) + int(PLC_QUEUE_WAIT_SECONDS * 1000),
-            "config_snapshot": public_path_sanitized(dict(normalized)),
-            "message": "PLC dispatch queued from authoritative configuration",
-        }
-        record = project_plc_dispatch_events(
-            immutable_record,
-            [{"seq": 1, "kind": "create", "at": created_at}],
-        )
-        persisted = public_path_sanitized({**record, "state_version": 1})
-        config_values["plc_dispatches"] = [*records, persisted]
-
-    mutate_app_config_atomically(insert_canonical_initial)
-    return persisted
+    'Atomically derive a queued v1 record from the authoritative PLC namespace.'
+    return _plc_dispatch_mutations.create_plc_dispatch(source=source, request_id=request_id, passed=passed, fingerprint=fingerprint, expected_generation=expected_generation)
 
 
 def _apply_plc_dispatch_event(
@@ -5146,155 +3137,21 @@ def _apply_plc_dispatch_event(
     transition_kind: PlcDispatchTransitionKind,
     event_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    try:
-        kind = PlcDispatchTransitionKind(transition_kind)
-    except (TypeError, ValueError) as exc:
-        raise PlcDispatchStateConflict("unknown_transition_kind") from exc
-    deriver = _PLC_TYPED_EVENT_DERIVERS.get(kind)
-    expected_fields = _PLC_TYPED_EVENT_FIELDS.get(kind)
-    if deriver is None or expected_fields is None:
-        raise PlcDispatchStateConflict("transition_kind_has_no_typed_handler")
-    extra_fields = set(event_payload) - expected_fields
-    missing_fields = expected_fields - set(event_payload)
-    if extra_fields:
-        raise PlcDispatchStateConflict(f"transition_payload_extra_field:{sorted(extra_fields)[0]}")
-    if missing_fields:
-        raise PlcDispatchStateConflict(f"transition_payload_missing_field:{sorted(missing_fields)[0]}")
-    persisted: dict[str, Any] = {}
-
-    def mutate(config: dict[str, Any]) -> None:
-        nonlocal persisted
-        records = plc_dispatch_audit_records(config)
-        existing = next(
-            (dict(item) for item in reversed(records) if str(item.get("dispatch_id") or "") == dispatch_id),
-            None,
-        )
-        if existing is None:
-            raise PlcDispatchStateConflict("transition_requires_existing_dispatch")
-        current_version = int(existing.get("state_version") or 0)
-        if current_version != expected_version:
-            raise PlcDispatchStateConflict(
-                f"state_version_mismatch: expected {expected_version}, found {current_version}", existing
-            )
-        existing = verify_persisted_plc_dispatch(existing)
-        candidate = deriver(dict(existing), dict(event_payload))
-        validate_plc_dispatch_transition(existing, candidate, transition_kind=kind)
-        persisted = public_path_sanitized({**candidate, "state_version": current_version + 1})
-        remaining = [item for item in records if str(item.get("dispatch_id") or "") != dispatch_id]
-        config["plc_dispatches"] = [*remaining, persisted]
-
-    mutate_app_config_atomically(mutate)
-    return persisted
+    return _plc_dispatch_mutations._apply_plc_dispatch_event(dispatch_id, expected_version=expected_version, transition_kind=transition_kind, event_payload=event_payload)
 
 
-def _derive_plc_attempting(existing: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    if existing.get("status") != "queued":
-        raise PlcDispatchStateConflict("attempting_requires_queued", existing)
-    candidate = project_plc_dispatch_events(
-        existing, append_plc_typed_event(existing, "attempting")
-    )
-    candidate["message"] = "Preparing to open the configured serial port and write a PLC frame"
-    return candidate
 
 
 def plc_transition_attempting(dispatch_id: str, *, expected_version: int) -> dict[str, Any]:
-    return _apply_plc_dispatch_event(
-        dispatch_id,
-        expected_version=expected_version,
-        transition_kind=PlcDispatchTransitionKind.DISPATCH_TRANSITION,
-        event_payload={},
-    )
+    return _plc_dispatch_mutations.plc_transition_attempting(dispatch_id, expected_version=expected_version)
 
 
-def _derive_plc_start_attempt(existing: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    dispatch_id = str(existing.get("dispatch_id") or "")
-    target = payload["target"]
-    planned_targets = existing.get("planned_targets") if isinstance(existing.get("planned_targets"), list) else []
-    acknowledged = existing.get("acknowledged_targets") if isinstance(existing.get("acknowledged_targets"), list) else []
-    expected_target = next((str(item) for item in planned_targets if str(item) not in acknowledged), "")
-    if target != expected_target:
-        raise PlcDispatchStateConflict("attempt_target_out_of_plan_or_order", existing)
-    planned_frames = existing.get("planned_frames") if isinstance(existing.get("planned_frames"), list) else []
-    planned = next((item for item in planned_frames if isinstance(item, dict) and item.get("target") == target), None)
-    if not isinstance(planned, dict):
-        raise PlcDispatchStateConflict("attempt_frame_does_not_match_plan", existing)
-    operations = [dict(item) for item in existing.get("operations", []) if isinstance(item, dict)] if isinstance(existing.get("operations"), list) else []
-    prior = [item for item in operations if item.get("target") == target]
-    attempt = len(prior) + 1
-    retries = int((existing.get("config_snapshot") or {}).get("retries") or 0)
-    if attempt > retries + 1:
-        raise PlcDispatchStateConflict("attempt_retry_budget_exceeded", existing)
-    if prior and prior[-1].get("finished_at") is None:
-        raise PlcDispatchStateConflict("previous_attempt_not_finished", existing)
-    if prior and prior[-1].get("outcome") == "acknowledged":
-        raise PlcDispatchStateConflict("acknowledged_target_cannot_retry", existing)
-    if prior and not plc_terminal_result_is_retryable(
-        prior[-1].get("result_code"), prior[-1].get("result_phase")
-    ):
-        raise PlcDispatchStateConflict("previous_attempt_result_is_not_retryable", existing)
-    attempt_id = f"{dispatch_id}:{target}:{attempt}"
-    candidate = project_plc_dispatch_events(
-        existing,
-        append_plc_typed_event(
-            existing, "start_attempt", target=target, attempt_id=attempt_id
-        ),
-    )
-    candidate["message"] = "PLC attempt created from the immutable dispatch plan"
-    return candidate
 
 
 def plc_start_attempt(dispatch_id: str, *, expected_version: int, target: str) -> dict[str, Any]:
-    if not isinstance(target, str):
-        raise PlcDispatchStateConflict("start_attempt_target_invalid")
-    return _apply_plc_dispatch_event(
-        dispatch_id,
-        expected_version=expected_version,
-        transition_kind=PlcDispatchTransitionKind.START_ATTEMPT,
-        event_payload={"target": target},
-    )
+    return _plc_dispatch_mutations.plc_start_attempt(dispatch_id, expected_version=expected_version, target=target)
 
 
-def _derive_plc_advance_attempt(existing: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    attempt_id = payload["attempt_id"]
-    bytes_written = payload["bytes_written"]
-    physical_status = payload["physical_status"]
-    outcome = payload["outcome"]
-    operations = [dict(item) for item in existing.get("operations", []) if isinstance(item, dict)] if isinstance(existing.get("operations"), list) else []
-    operation = next((item for item in operations if item.get("attempt_id") == attempt_id), None)
-    if not isinstance(operation, dict) or operation.get("finished_at") is not None:
-        raise PlcDispatchStateConflict("advance_attempt_requires_started_operation", existing)
-    frame_bytes = int(operation.get("frame_bytes") or 0)
-    if type(bytes_written) is not int or not 0 <= bytes_written <= frame_bytes:
-        raise PlcDispatchStateConflict("advance_attempt_bytes_written_invalid", existing)
-    valid_evidence = (
-        (physical_status == "write_call_started" and bytes_written == 0 and outcome == "write_outcome_uncertain")
-        or (physical_status == "not_written" and bytes_written == 0 and outcome == "not_written")
-        or (
-            physical_status == "partial_write"
-            and 0 < bytes_written < frame_bytes
-            and outcome == "outcome_uncertain"
-        )
-        or (
-            physical_status == "full_frame_written"
-            and bytes_written == frame_bytes
-            and outcome == "awaiting_acknowledgement"
-        )
-    )
-    if not valid_evidence:
-        raise PlcDispatchStateConflict("advance_attempt_evidence_combination_invalid", existing)
-    candidate = project_plc_dispatch_events(
-        existing,
-        append_plc_typed_event(
-            existing,
-            "advance_attempt",
-            attempt_id=attempt_id,
-            bytes_written=bytes_written,
-            physical_status=physical_status,
-            outcome=outcome,
-        ),
-    )
-    candidate["message"] = "Serial transport evidence advanced through the typed attempt handler"
-    return candidate
 
 
 def plc_advance_attempt(
@@ -5306,52 +3163,9 @@ def plc_advance_attempt(
     physical_status: str,
     outcome: str,
 ) -> dict[str, Any]:
-    if not isinstance(attempt_id, str) or not attempt_id:
-        raise PlcDispatchStateConflict("advance_attempt_id_invalid")
-    if physical_status not in {"write_call_started", "not_written", "partial_write", "full_frame_written"}:
-        raise PlcDispatchStateConflict("advance_attempt_physical_status_invalid")
-    if outcome not in {"write_outcome_uncertain", "not_written", "outcome_uncertain", "awaiting_acknowledgement"}:
-        raise PlcDispatchStateConflict("advance_attempt_outcome_invalid")
-
-    return _apply_plc_dispatch_event(
-        dispatch_id,
-        expected_version=expected_version,
-        transition_kind=PlcDispatchTransitionKind.ADVANCE_ATTEMPT,
-        event_payload={
-            "attempt_id": attempt_id,
-            "bytes_written": bytes_written,
-            "physical_status": physical_status,
-            "outcome": outcome,
-        },
-    )
+    return _plc_dispatch_mutations.plc_advance_attempt(dispatch_id, expected_version=expected_version, attempt_id=attempt_id, bytes_written=bytes_written, physical_status=physical_status, outcome=outcome)
 
 
-def _derive_plc_finish_attempt(existing: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    attempt_id = payload["attempt_id"]
-    terminal_code = payload["result_code"]
-    result_phase = payload["result_phase"]
-    reported_bytes_written = payload["bytes_written"]
-    diagnostic_source = payload["diagnostic_source"]
-    operations = [dict(item) for item in existing.get("operations", []) if isinstance(item, dict)] if isinstance(existing.get("operations"), list) else []
-    operation = next((item for item in operations if item.get("attempt_id") == attempt_id), None)
-    if not isinstance(operation, dict) or operation.get("finished_at") is not None:
-        raise PlcDispatchStateConflict("finish_attempt_requires_started_operation", existing)
-    if int(operation.get("bytes_written") or 0) != reported_bytes_written:
-        raise PlcDispatchStateConflict("finish_attempt_bytes_do_not_match_authoritative_operation", existing)
-    candidate = project_plc_dispatch_events(
-        existing,
-        append_plc_typed_event(
-            existing,
-            "finish_attempt",
-            attempt_id=attempt_id,
-            result_code=terminal_code,
-            result_phase=result_phase,
-            bytes_written=reported_bytes_written,
-            diagnostic_source=diagnostic_source,
-        ),
-    )
-    candidate["message"] = "Terminal transport evidence finalized through the typed attempt handler"
-    return candidate
 
 
 def plc_finish_attempt(
@@ -5361,242 +3175,84 @@ def plc_finish_attempt(
     attempt_id: str,
     terminal_result: PlcAttemptTerminalResult,
 ) -> dict[str, Any]:
-    if not isinstance(attempt_id, str) or not attempt_id:
-        raise PlcDispatchStateConflict("finish_attempt_id_invalid")
-    if type(terminal_result) is not PlcAttemptTerminalResult:
-        raise PlcDispatchStateConflict("finish_attempt_result_type_invalid")
-    result_code = terminal_result.code
-    if not isinstance(result_code, PlcTerminalResultCode) or result_code not in PLC_TERMINAL_RESULT_CODES:
-        raise PlcDispatchStateConflict("finish_attempt_result_code_invalid")
-    if not isinstance(terminal_result.phase, PlcTransportPhase):
-        raise PlcDispatchStateConflict("finish_attempt_result_phase_invalid")
-    if terminal_result.phase not in PLC_TERMINAL_ALLOWED_PHASES[result_code]:
-        raise PlcDispatchStateConflict("finish_attempt_result_phase_not_allowed")
-    if type(terminal_result.bytes_written) is not int or terminal_result.bytes_written < 0:
-        raise PlcDispatchStateConflict("finish_attempt_result_bytes_invalid")
-    if not isinstance(terminal_result.diagnostic_source, str):
-        raise PlcDispatchStateConflict("finish_attempt_diagnostic_source_invalid")
-    if terminal_result.diagnostic_source not in PLC_TERMINAL_DIAGNOSTIC_SOURCES[result_code]:
-        raise PlcDispatchStateConflict("finish_attempt_diagnostic_source_not_allowed")
-
-    return _apply_plc_dispatch_event(
-        dispatch_id,
-        expected_version=expected_version,
-        transition_kind=PlcDispatchTransitionKind.FINISH_ATTEMPT,
-        event_payload={
-            "attempt_id": attempt_id,
-            "result_code": result_code.value,
-            "result_phase": terminal_result.phase.value,
-            "bytes_written": terminal_result.bytes_written,
-            "diagnostic_source": terminal_result.diagnostic_source,
-        },
-    )
+    return _plc_dispatch_mutations.plc_finish_attempt(dispatch_id, expected_version=expected_version, attempt_id=attempt_id, terminal_result=terminal_result)
 
 
-def _derive_plc_deadline(existing: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    candidate = project_plc_dispatch_events(
-        existing, append_plc_typed_event(existing, "deadline")
-    )
-    candidate["message"] = "The request deadline expired; typed attempt events remain authoritative until worker finalization"
-    return candidate
 
 
 def plc_mark_deadline(dispatch_id: str, *, expected_version: int) -> dict[str, Any]:
-    return _apply_plc_dispatch_event(
-        dispatch_id,
-        expected_version=expected_version,
-        transition_kind=PlcDispatchTransitionKind.DEADLINE,
-        event_payload={},
-    )
+    return _plc_dispatch_mutations.plc_mark_deadline(dispatch_id, expected_version=expected_version)
 
 
-PLC_FINALIZE_REASONS = frozenset(
-    {
-        "", "cancelled_after_disable", "cancelled_after_config_change", "deadline_exceeded",
-        "control_state_check_failed_after_ack", "control_state_check_failed_after_partial_ack",
-        "control_state_check_failed_before_io", "plc_pg_coordination_unavailable",
-        "audit_persist_failed_after_ack", "restart_recovery_required", "plc_dispatch_queue_timeout",
-        "invalid_config", "disabled",
-    }
-)
 
 
-def _derive_plc_finalize(existing: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    reason = payload["reason"]
-    candidate = project_plc_dispatch_events(
-        existing, append_plc_typed_event(existing, "finalize", reason=reason)
-    )
-    candidate["message"] = "PLC dispatch projection finalized from authoritative typed attempt events"
-    return candidate
 
 
-_PLC_TYPED_EVENT_DERIVERS: dict[
-    PlcDispatchTransitionKind, Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
-] = {
-    PlcDispatchTransitionKind.DISPATCH_TRANSITION: _derive_plc_attempting,
-    PlcDispatchTransitionKind.START_ATTEMPT: _derive_plc_start_attempt,
-    PlcDispatchTransitionKind.ADVANCE_ATTEMPT: _derive_plc_advance_attempt,
-    PlcDispatchTransitionKind.FINISH_ATTEMPT: _derive_plc_finish_attempt,
-    PlcDispatchTransitionKind.DEADLINE: _derive_plc_deadline,
-    PlcDispatchTransitionKind.FINALIZE: _derive_plc_finalize,
-    PlcDispatchTransitionKind.AUDIT_FAILURE_FINALIZE: _derive_plc_finalize,
-}
-_PLC_TYPED_EVENT_FIELDS: dict[PlcDispatchTransitionKind, frozenset[str]] = {
-    PlcDispatchTransitionKind.DISPATCH_TRANSITION: frozenset(),
-    PlcDispatchTransitionKind.START_ATTEMPT: frozenset({"target"}),
-    PlcDispatchTransitionKind.ADVANCE_ATTEMPT: frozenset(
-        {"attempt_id", "bytes_written", "physical_status", "outcome"}
-    ),
-    PlcDispatchTransitionKind.FINISH_ATTEMPT: frozenset(
-        {"attempt_id", "result_code", "result_phase", "bytes_written", "diagnostic_source"}
-    ),
-    PlcDispatchTransitionKind.DEADLINE: frozenset(),
-    PlcDispatchTransitionKind.FINALIZE: frozenset({"reason"}),
-    PlcDispatchTransitionKind.AUDIT_FAILURE_FINALIZE: frozenset({"reason"}),
-}
 
 
 def plc_finalize_dispatch(
     dispatch_id: str, *, expected_version: int, reason: str = ""
 ) -> dict[str, Any]:
-    if reason not in PLC_FINALIZE_REASONS:
-        raise PlcDispatchStateConflict("finalize_reason_invalid")
-
-    kind = (
-        PlcDispatchTransitionKind.AUDIT_FAILURE_FINALIZE
-        if reason == "audit_persist_failed_after_ack"
-        else PlcDispatchTransitionKind.FINALIZE
-    )
-    return _apply_plc_dispatch_event(
-        dispatch_id,
-        expected_version=expected_version,
-        transition_kind=kind,
-        event_payload={"reason": reason},
-    )
+    return _plc_dispatch_mutations.plc_finalize_dispatch(dispatch_id, expected_version=expected_version, reason=reason)
 
 
 def plc_cancel_dispatch(
     dispatch_id: str, *, expected_version: int, reason: str
 ) -> dict[str, Any]:
-    if reason not in {"cancelled_after_disable", "cancelled_after_config_change"}:
-        raise PlcDispatchStateConflict("cancel_reason_invalid")
-    return plc_finalize_dispatch(
-        dispatch_id,
-        expected_version=expected_version,
-        reason=reason,
-    )
+    return _plc_dispatch_mutations.plc_cancel_dispatch(dispatch_id, expected_version=expected_version, reason=reason)
 
 
 def persist_plc_dispatch_record(
     record: dict[str, Any], *, expected_version: int | None = None, transition_kind: Any = None
 ) -> dict[str, Any]:
-    """Retired raw compatibility shim; all creates and mutations use typed handlers."""
-    reason = (
-        "public_raw_transition_kind_not_allowed"
-        if transition_kind is not None
-        else "public_raw_dispatch_persistence_not_allowed"
-    )
-    raise PlcDispatchStateConflict(
-        reason,
-        plc_dispatch_existing(str(record.get("dispatch_id") or "")),
-    )
+    'Retired raw compatibility shim; all creates and mutations use typed handlers.'
+    return _plc_dispatch_mutations.persist_plc_dispatch_record(record, expected_version=expected_version, transition_kind=transition_kind)
+
+
+from .plc.dispatch_runtime_state import PlcDispatchRuntimeState
+from .plc.dispatch_runtime_state_ports import DispatchRuntimeState, DispatchRuntimeRecords, DispatchRuntimePolicy
+
+_plc_dispatch_runtime_state = PlcDispatchRuntimeState(
+    state=DispatchRuntimeState(
+        _plc_dispatch_runtime=lambda: _plc_dispatch_runtime,
+        _PLC_RUNTIME_LIMIT=lambda: _PLC_RUNTIME_LIMIT,
+        _config_io_lock=lambda: _config_io_lock,
+        _plc_active_attempts=lambda: _plc_active_attempts,
+        _plc_runtime_entry=lambda: _plc_runtime_entry,
+        _hydrate_plc_runtime_entry=lambda: _hydrate_plc_runtime_entry,
+    ),
+    records=DispatchRuntimeRecords(
+        load_config=lambda: load_config,
+        plc_dispatch_audit_records=lambda: plc_dispatch_audit_records,
+        plc_mark_deadline=lambda: plc_mark_deadline,
+    ),
+    policy=DispatchRuntimePolicy(
+        plc_dispatch_is_pristine_queue=lambda: plc_dispatch_is_pristine_queue,
+        _plc_canonical=lambda: _plc_canonical,
+    ),
+)
 
 
 def _plc_runtime_entry(dispatch_id: str) -> dict[str, Any]:
-    entry = _plc_dispatch_runtime.setdefault(
-        dispatch_id,
-        {
-            "dispatch_id": dispatch_id,
-            "state_version": 0,
-            "deadline_exceeded": False,
-            "worker_started": False,
-            "worker_done": False,
-            "latest": {},
-            "hydrated": False,
-        },
-    )
-    if len(_plc_dispatch_runtime) > _PLC_RUNTIME_LIMIT:
-        for key, candidate in list(_plc_dispatch_runtime.items()):
-            if key != dispatch_id and candidate.get("worker_done"):
-                _plc_dispatch_runtime.pop(key, None)
-                if len(_plc_dispatch_runtime) <= _PLC_RUNTIME_LIMIT:
-                    break
-    return entry
+    return _plc_dispatch_runtime_state._plc_runtime_entry(dispatch_id)
 
 
 def _hydrate_plc_runtime_entry(dispatch_id: str) -> dict[str, Any]:
-    entry = _plc_runtime_entry(dispatch_id)
-    if entry.get("hydrated"):
-        return entry
-    config = load_config()
-    existing = next(
-        (
-            dict(item)
-            for item in reversed(plc_dispatch_audit_records(config))
-            if str(item.get("dispatch_id") or "") == dispatch_id
-        ),
-        None,
-    )
-    if existing:
-        entry["state_version"] = int(existing.get("state_version") or 0)
-        entry["latest"] = existing
-        entry["worker_done"] = bool(existing.get("worker_done"))
-    entry["hydrated"] = True
-    return entry
+    return _plc_dispatch_runtime_state._hydrate_plc_runtime_entry(dispatch_id)
 
 
 def _register_plc_dispatch_runtime(dispatch_id: str) -> None:
-    with _config_io_lock:
-        _hydrate_plc_runtime_entry(dispatch_id)
+    return _plc_dispatch_runtime_state._register_plc_dispatch_runtime(dispatch_id)
 
 
 def _plc_deadline_snapshot(
     *, dispatch_id: str, source: str, request_id: str, passed: bool
 ) -> dict[str, Any]:
-    with _config_io_lock:
-        entry = _plc_runtime_entry(dispatch_id)
-        entry["deadline_exceeded"] = True
-        entry["deadline_exceeded_at"] = int(time.time())
-        active = [
-            item for item in _plc_active_attempts.values() if str(item.get("dispatch_id") or "") == dispatch_id
-        ]
-        latest = dict(entry.get("latest") or {})
-        attempted = bool(active) or bool(latest.get("attempted"))
-        physical_status = (
-            str(latest.get("physical_status") or "write_outcome_uncertain")
-            if attempted
-            else "not_attempted"
-        )
-        worker_continues = bool(active)
-        worker_cleanup_pending = bool(entry.get("worker_started")) and not worker_continues and not bool(entry.get("worker_done"))
-        expected_version = int(entry.get("state_version") or latest.get("state_version") or 0)
-        try:
-            persisted = plc_mark_deadline(dispatch_id, expected_version=expected_version)
-            entry["state_version"] = int(persisted["state_version"])
-            entry["latest"] = dict(persisted)
-            return {
-                **persisted,
-                "active_attempts": [dict(item) for item in active],
-                "worker_continues": worker_continues,
-                "worker_cleanup_pending": worker_cleanup_pending,
-            }
-        except Exception:
-            return {
-                **latest,
-                "attempted": attempted,
-                "physical_status": physical_status,
-                "outcome": "outcome_uncertain" if attempted else "deadline_exceeded",
-                "error_code": "plc_worker_total_timeout",
-                "deadline_exceeded": True,
-                "provisional": True,
-                "active_attempts": [dict(item) for item in active],
-                "audit_status": "persist_failed",
-            }
+    return _plc_dispatch_runtime_state._plc_deadline_snapshot(dispatch_id=dispatch_id, source=source, request_id=request_id, passed=passed)
 
 
 def _plc_active_attempts_snapshot() -> list[dict[str, Any]]:
-    with _config_io_lock:
-        return [dict(item) for item in _plc_active_attempts.values()]
+    return _plc_dispatch_runtime_state._plc_active_attempts_snapshot()
 
 
 def plc_config_response(config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -5604,35 +3260,16 @@ def plc_config_response(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def plc_dispatch_identity(result: dict[str, Any], *, source: str, fingerprint: str) -> tuple[str, str, bool]:
-    request_id = str(result.get("request_id") or "")
-    passed = bool(result.get("passed"))
-    material = json.dumps(
-        {"source": source, "request_id": request_id, "fingerprint": fingerprint},
-        sort_keys=True,
-        ensure_ascii=True,
-    )
-    dispatch_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
-    return dispatch_id, request_id, passed
+    return _plc_dispatch_runtime_state.plc_dispatch_identity(result, source=source, fingerprint=fingerprint)
 
 
 def plc_dispatch_record_is_terminal(record: dict[str, Any]) -> bool:
-    return str(record.get("status") or "") in {"acknowledged", "failed", "disabled"} and not bool(
-        record.get("provisional")
-    )
+    return _plc_dispatch_runtime_state.plc_dispatch_record_is_terminal(record)
 
 
 def plc_dispatch_is_pristine_queue(record: dict[str, Any]) -> bool:
-    """Only a dispatch with proof that physical I/O never began may change owners."""
-    events = record.get("events") if isinstance(record.get("events"), list) else []
-    operations = record.get("operations") if isinstance(record.get("operations"), list) else []
-    return bool(
-        record.get("status") == "queued"
-        and record.get("attempted") is False
-        and not operations
-        and len(events) == 1
-        and isinstance(events[0], dict)
-        and events[0].get("kind") == "create"
-    )
+    'Only a dispatch with proof that physical I/O never began may change owners.'
+    return _plc_dispatch_runtime_state.plc_dispatch_is_pristine_queue(record)
 
 
 def plc_dispatch_adoption_blocker(
@@ -5642,21 +3279,66 @@ def plc_dispatch_adoption_blocker(
     generation: int,
     now_ms: int | None = None,
 ) -> str:
-    """Return a no-I/O reason when a queued record is unsafe or stale to adopt."""
-    if not plc_dispatch_is_pristine_queue(record):
-        return "not_pristine"
-    if record.get("record_schema_version") != 2 or record.get("protocol_contract_version") != 2:
-        return "version_not_adoptable"
-    if int(record.get("control_generation") or -1) != generation:
-        return "generation_changed"
-    if _plc_canonical(record.get("config_snapshot")) != _plc_canonical(settings):
-        return "config_changed"
-    deadline = record.get("dispatch_deadline_at_ms")
-    if type(deadline) is not int:
-        return "deadline_missing"
-    if int(deadline) <= (int(time.time() * 1000) if now_ms is None else now_ms):
-        return "deadline_expired"
-    return ""
+    'Return a no-I/O reason when a queued record is unsafe or stale to adopt.'
+    return _plc_dispatch_runtime_state.plc_dispatch_adoption_blocker(record, settings=settings, generation=generation, now_ms=now_ms)
+
+
+from .plc.legacy_dispatch import LegacyDispatch
+from .plc.legacy_dispatch_ports import LegacyDispatchPolicy, LegacyDispatchConfiguration, LegacyDispatchRecords, LegacyDispatchExecution
+
+_plc_legacy_dispatch = LegacyDispatch(
+    policy=LegacyDispatchPolicy(
+        PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY,
+        PLC_FINALIZE_REASONS=lambda: PLC_FINALIZE_REASONS,
+        PLC_QUEUE_WAIT_SECONDS=lambda: PLC_QUEUE_WAIT_SECONDS,
+        PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS,
+        PLC_TERMINAL_ALLOWED_PHASES=lambda: PLC_TERMINAL_ALLOWED_PHASES,
+        PLC_TERMINAL_DIAGNOSTIC_SOURCES=lambda: PLC_TERMINAL_DIAGNOSTIC_SOURCES,
+        PlcAttemptTerminalResult=lambda: PlcAttemptTerminalResult,
+        PlcConfigError=lambda: PlcConfigError,
+        PlcDispatchStateConflict=lambda: PlcDispatchStateConflict,
+        PlcTerminalResultCode=lambda: PlcTerminalResultCode,
+        PlcTransportError=lambda: PlcTransportError,
+        PlcTransportPhase=lambda: PlcTransportPhase,
+    ),
+    configuration=LegacyDispatchConfiguration(
+        load_config=lambda: load_config,
+        normalize_plc_config=lambda: normalize_plc_config,
+        raw_plc_namespace=lambda: raw_plc_namespace,
+        plc_activation_errors=lambda: plc_activation_errors,
+        plc_config_audit_snapshot=lambda: plc_config_audit_snapshot,
+        plc_claim_or_renew_io_owner=lambda: plc_claim_or_renew_io_owner,
+        plc_current_process_owns_io=lambda: plc_current_process_owns_io,
+    ),
+    records=LegacyDispatchRecords(
+        plc_dispatch_identity=lambda: plc_dispatch_identity,
+        get_validated_idempotent_dispatch=lambda: get_validated_idempotent_dispatch,
+        plc_dispatch_record_is_terminal=lambda: plc_dispatch_record_is_terminal,
+        plc_dispatch_is_pristine_queue=lambda: plc_dispatch_is_pristine_queue,
+        plc_dispatch_adoption_blocker=lambda: plc_dispatch_adoption_blocker,
+        create_plc_dispatch=lambda: create_plc_dispatch,
+        plc_transition_attempting=lambda: plc_transition_attempting,
+        plc_advance_attempt=lambda: plc_advance_attempt,
+        plc_finalize_dispatch=lambda: plc_finalize_dispatch,
+        plc_start_attempt=lambda: plc_start_attempt,
+        plc_finish_attempt=lambda: plc_finish_attempt,
+        plc_dispatch_conflict_response=lambda: plc_dispatch_conflict_response,
+    ),
+    execution=LegacyDispatchExecution(
+        _config_io_lock=lambda: _config_io_lock,
+        _plc_active_attempts=lambda: _plc_active_attempts,
+        _plc_runtime_entry=lambda: _plc_runtime_entry,
+        _register_plc_dispatch_runtime=lambda: _register_plc_dispatch_runtime,
+        _plc_deadline_snapshot=lambda: _plc_deadline_snapshot,
+        _plc_dispatch_slots=lambda: _plc_dispatch_slots,
+        _plc_write_pending=lambda: _plc_write_pending,
+        _plc_io_executor=lambda: _plc_io_executor,
+        _plc_transport_factory=lambda: _plc_transport_factory,
+        dispatch_fx_plc_detection_result=lambda: dispatch_fx_plc_detection_result,
+        dispatch_plc_for_detection=lambda: dispatch_plc_for_detection,
+        _run_queued_plc_dispatch=lambda: _run_queued_plc_dispatch,
+    ),
+)
 
 
 def dispatch_plc_for_detection(
@@ -5666,602 +3348,19 @@ def dispatch_plc_for_detection(
     fingerprint: str,
     expected_generation: int | None = None,
 ) -> dict[str, Any]:
-    """Attach PLC sync status without changing or invalidating the detection result."""
-    dispatch_id, request_id, passed = plc_dispatch_identity(result, source=source, fingerprint=fingerprint)
-    enabled_hint = False
-    try:
-        with _config_io_lock:
-            config = load_config()
-            generation = (
-                int(expected_generation)
-                if expected_generation is not None
-                else int(config.get(PLC_CONTROL_GENERATION_KEY) or 0)
-            )
-            entry = _plc_runtime_entry(dispatch_id)
-            entry["worker_started"] = True
-            entry["generation"] = generation
-            existing = get_validated_idempotent_dispatch(
-                source=source,
-                request_id=request_id,
-                passed=passed,
-                fingerprint=fingerprint,
-            )
-            current_worker_create = bool(entry.pop("created_by_current_worker", False))
-            if isinstance(existing, dict) and existing.get("protocol_contract_version") == 1:
-                entry["hydrated"] = True
-                entry["state_version"] = int(existing.get("state_version") or 0)
-                entry["latest"] = dict(existing)
-                entry["worker_done"] = True
-                result["plc_sync"] = {
-                    **existing,
-                    "duplicate": True,
-                    "worker_done": True,
-                    "worker_continues": False,
-                    **(
-                        {}
-                        if plc_dispatch_record_is_terminal(existing)
-                        else {
-                            "error_code": "dispatch_migration_required",
-                            "message": "旧版非终态记录仅可审计，禁止追加事件或执行物理 I/O",
-                        }
-                    ),
-                }
-                return result
-            if isinstance(existing, dict) and current_worker_create and entry.get("deadline_exceeded"):
-                finalized = plc_finalize_dispatch(
-                    dispatch_id,
-                    expected_version=int(existing.get("state_version") or 0),
-                    reason="deadline_exceeded",
-                )
-                entry["worker_done"] = True
-                entry["state_version"] = int(finalized["state_version"])
-                entry["latest"] = dict(finalized)
-                result["plc_sync"] = finalized
-                return result
-            adoptable_existing = bool(
-                isinstance(existing, dict)
-                and not current_worker_create
-                and plc_dispatch_is_pristine_queue(existing)
-            )
-            if isinstance(existing, dict) and not current_worker_create and not adoptable_existing:
-                entry["hydrated"] = True
-                entry["state_version"] = int(existing.get("state_version") or 0)
-                entry["latest"] = dict(existing)
-                if plc_dispatch_record_is_terminal(existing):
-                    entry["worker_done"] = True
-                    result["plc_sync"] = {**existing, "duplicate": True}
-                    return result
-                try:
-                    result["plc_sync"] = plc_finalize_dispatch(
-                        dispatch_id,
-                        expected_version=int(existing.get("state_version") or 0),
-                        reason=(
-                            "deadline_exceeded"
-                            if existing.get("deadline_exceeded")
-                            else "restart_recovery_required"
-                        ),
-                    )
-                except Exception:
-                    result["plc_sync"] = {**existing, "duplicate": True, "audit_status": "state_conflict"}
-                return result
-        raw_plc = raw_plc_namespace(config)
-        enabled_hint = bool(raw_plc.get("enabled")) if isinstance(raw_plc, dict) else False
-        try:
-            effective_plc = normalize_plc_config(raw_plc_namespace(config))
-        except PlcConfigError:
-            effective_plc = None
-        capability_errors = plc_activation_errors(effective_plc) if effective_plc is not None else []
-        if effective_plc is not None and effective_plc["enabled"] and capability_errors:
-            first_error = capability_errors[0]
-            result["plc_sync"] = {
-                "dispatch_id": dispatch_id,
-                "source": source,
-                "request_id": request_id,
-                "passed": passed,
-                "enabled": True,
-                "attempted": False,
-                "status": "failed",
-                "physical_status": "not_attempted",
-                "outcome": "activation_blocked",
-                "error_code": first_error["code"],
-                "worker_done": True,
-                "message": first_error["message"],
-                "updated_at": int(time.time()),
-            }
-            return result
-        if isinstance(existing, dict) and adoptable_existing:
-            adoption_blocker = (
-                plc_dispatch_adoption_blocker(
-                    existing,
-                    settings=effective_plc,
-                    generation=generation,
-                )
-                if effective_plc is not None
-                else "config_changed"
-            )
-            if adoption_blocker:
-                if adoption_blocker == "version_not_adoptable":
-                    result["plc_sync"] = {
-                        **existing,
-                        "duplicate": True,
-                        "worker_done": True,
-                        "worker_continues": False,
-                        "error_code": "dispatch_migration_required",
-                        "message": "旧版 queued 记录仅可审计，不允许跨 owner 执行",
-                    }
-                    return result
-                reason = (
-                    "plc_dispatch_queue_timeout"
-                    if adoption_blocker in {"deadline_missing", "deadline_expired"}
-                    else "cancelled_after_config_change"
-                )
-                result["plc_sync"] = plc_finalize_dispatch(
-                    dispatch_id,
-                    expected_version=int(existing.get("state_version") or 0),
-                    reason=reason,
-                )
-                return result
-        if effective_plc is not None and effective_plc["enabled"]:
-            io_owner = plc_claim_or_renew_io_owner()
-            if io_owner is None:
-                queued = (
-                    dict(existing)
-                    if isinstance(existing, dict) and plc_dispatch_is_pristine_queue(existing)
-                    else {
-                        "dispatch_id": dispatch_id,
-                        "source": source,
-                        "request_id": request_id,
-                        "passed": passed,
-                        "enabled": True,
-                        "attempted": False,
-                        "status": "queued",
-                    }
-                )
-                result["plc_sync"] = {
-                    **queued,
-                    "physical_status": "not_attempted",
-                    "outcome": "queued_for_io_owner",
-                    "error_code": "plc_io_owner_pending",
-                    "worker_done": True,
-                    "worker_continues": False,
-                    "message": "结果已持久排队，等待当前 PLC 串口所有者处理",
-                    "updated_at": int(time.time()),
-                }
-                return result
-            io_owner_epoch = int(io_owner["epoch"])
-            created = (
-                dict(existing)
-                if isinstance(existing, dict) and plc_dispatch_is_pristine_queue(existing)
-                else create_plc_dispatch(
-                    source=source,
-                    request_id=request_id,
-                    passed=passed,
-                    fingerprint=fingerprint,
-                    expected_generation=generation,
-                )
-            )
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                entry["hydrated"] = True
-                entry["state_version"] = int(created["state_version"])
-                entry["latest"] = dict(created)
-        def attempt_key(target: str, attempt: int) -> str:
-            return f"{dispatch_id}:{target}:{attempt}"
-
-        def before_attempt(target: str, attempt: int) -> bool | str:
-            key = attempt_key(target, attempt)
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                if entry.get("deadline_exceeded"):
-                    return "deadline_exceeded"
-                current = load_config()
-                current_generation = int(current.get(PLC_CONTROL_GENERATION_KEY) or 0)
-                try:
-                    current_plc = normalize_plc_config(raw_plc_namespace(current))
-                except PlcConfigError:
-                    return "cancelled_after_config_change"
-                if not current_plc["enabled"]:
-                    return "cancelled_after_disable"
-                if current_generation != generation:
-                    return "cancelled_after_config_change"
-                if not plc_current_process_owns_io(io_owner_epoch):
-                    return "cancelled_after_config_change"
-                return True
-
-        def after_attempt(target: str, attempt: int) -> None:
-            with _config_io_lock:
-                _plc_active_attempts.pop(attempt_key(target, attempt), None)
-
-        def dispatch_cancel_reason() -> str:
-            with _config_io_lock:
-                if _plc_runtime_entry(dispatch_id).get("deadline_exceeded"):
-                    return "deadline_exceeded"
-                current = load_config()
-                try:
-                    current_plc = normalize_plc_config(raw_plc_namespace(current))
-                except PlcConfigError:
-                    return "cancelled_after_config_change"
-                if not current_plc["enabled"]:
-                    return "cancelled_after_disable"
-                if int(current.get(PLC_CONTROL_GENERATION_KEY) or 0) != generation:
-                    return "cancelled_after_config_change"
-                if not plc_current_process_owns_io(io_owner_epoch):
-                    return "cancelled_after_config_change"
-                return ""
-
-        def persist_runtime(record: dict[str, Any], transition_kind: str = "record_update") -> None:
-            with _config_io_lock:
-                persist_runtime_locked(record, transition_kind)
-
-        def persist_runtime_locked(record: dict[str, Any], transition_kind: str = "record_update") -> None:
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                latest = dict(entry.get("latest") or {})
-                expected_version = int(entry.get("state_version") or latest.get("state_version") or 0)
-            if transition_kind == "record_update" and record.get("status") == "queued":
-                persisted = latest
-            elif transition_kind == "dispatch_transition":
-                persisted = plc_transition_attempting(dispatch_id, expected_version=expected_version)
-            elif transition_kind == "advance_attempt":
-                operations = record.get("operations") if isinstance(record.get("operations"), list) else []
-                operation = operations[-1] if operations and isinstance(operations[-1], dict) else {}
-                persisted = plc_advance_attempt(
-                    dispatch_id,
-                    expected_version=expected_version,
-                    attempt_id=str(operation.get("attempt_id") or ""),
-                    bytes_written=int(operation.get("bytes_written") or 0),
-                    physical_status=str(operation.get("physical_status") or "not_attempted"),
-                    outcome=str(operation.get("outcome") or "not_attempted"),
-                )
-                if operation.get("physical_status") == "write_call_started":
-                    target = str(operation.get("target") or "")
-                    attempt = int(operation.get("attempt") or 0)
-                    key = attempt_key(target, attempt)
-                    declared = dict(_plc_active_attempts.get(key) or {})
-                    _plc_active_attempts[key] = {
-                        **declared,
-                        "dispatch_id": dispatch_id,
-                        "target": target,
-                        "attempt": attempt,
-                        "generation": generation,
-                        "started_at": int(time.time()),
-                        "write_call_started": True,
-                        "disable_revokes_started_io": False,
-                    }
-            elif transition_kind in {"finalize", "audit_failure_finalize"}:
-                raw_reason = str(record.get("error_code") or "")
-                reason = raw_reason if raw_reason in PLC_FINALIZE_REASONS else ""
-                persisted = plc_finalize_dispatch(
-                    dispatch_id, expected_version=expected_version, reason=reason
-                )
-            else:
-                raise PlcDispatchStateConflict("runtime_transition_kind_not_supported", latest)
-            record.clear()
-            record.update(dict(persisted))
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                entry["state_version"] = int(persisted.get("state_version") or expected_version)
-                entry["latest"] = dict(persisted)
-
-        def start_attempt(target: str, attempt: int, frame: bytes) -> dict[str, Any]:
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                if entry.get("deadline_exceeded"):
-                    raise PlcTransportError(
-                        "deadline_exceeded",
-                        "PLC synchronization deadline expired before attempt declaration",
-                        attempts=attempt - 1,
-                    )
-                current = load_config()
-                current_generation = int(current.get(PLC_CONTROL_GENERATION_KEY) or 0)
-                try:
-                    current_plc = normalize_plc_config(raw_plc_namespace(current))
-                except PlcConfigError as exc:
-                    raise PlcTransportError(
-                        "cancelled_after_config_change",
-                        "PLC configuration became invalid before attempt declaration",
-                        attempts=attempt - 1,
-                    ) from exc
-                if not current_plc["enabled"]:
-                    raise PlcTransportError(
-                        "cancelled_after_disable",
-                        "PLC synchronization was disabled before attempt declaration",
-                        attempts=attempt - 1,
-                    )
-                if current_generation != generation:
-                    raise PlcTransportError(
-                        "cancelled_after_config_change",
-                        "PLC configuration generation changed before attempt declaration",
-                        attempts=attempt - 1,
-                    )
-                if not plc_current_process_owns_io(io_owner_epoch):
-                    raise PlcTransportError(
-                        "cancelled_after_config_change",
-                        "PLC I/O owner lease was lost before attempt declaration",
-                        attempts=attempt - 1,
-                    )
-                expected_version = int(entry.get("state_version") or 0)
-                persisted = plc_start_attempt(
-                    dispatch_id, expected_version=expected_version, target=target
-                )
-                operation = dict(persisted["operations"][-1])
-                if operation.get("attempt") != attempt or operation.get("frame_hex") != frame.hex().upper():
-                    raise PlcDispatchStateConflict("runtime_start_attempt_binding_mismatch", persisted)
-                entry = _plc_runtime_entry(dispatch_id)
-                entry["state_version"] = int(persisted["state_version"])
-                entry["latest"] = dict(persisted)
-                _plc_active_attempts[attempt_key(target, attempt)] = {
-                    "dispatch_id": dispatch_id,
-                    "target": target,
-                    "attempt": attempt,
-                    "generation": generation,
-                    "declared_at": int(time.time()),
-                    "write_call_started": False,
-                    "disable_revokes_started_io": False,
-                }
-                return operation
-
-        def finish_attempt(operation: dict[str, Any]) -> None:
-            with _config_io_lock:
-                finish_attempt_locked(operation)
-
-        def finish_attempt_locked(operation: dict[str, Any]) -> None:
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                expected_version = int(entry.get("state_version") or 0)
-            raw_code = operation.get("result_code")
-            raw_phase = operation.get("result_phase")
-            raw_diagnostic = str(operation.get("diagnostic_source") or "")
-            try:
-                terminal_code = PlcTerminalResultCode(raw_code)
-                terminal_phase = PlcTransportPhase(raw_phase)
-            except (TypeError, ValueError):
-                terminal_code = PlcTerminalResultCode.INTERNAL_TRANSITION_ERROR
-                terminal_phase = PlcTransportPhase.INTERNAL
-                raw_diagnostic = "unknown_client_terminal_code"
-            if (
-                terminal_phase not in PLC_TERMINAL_ALLOWED_PHASES[terminal_code]
-                or raw_diagnostic not in PLC_TERMINAL_DIAGNOSTIC_SOURCES[terminal_code]
-            ):
-                terminal_code = PlcTerminalResultCode.INTERNAL_TRANSITION_ERROR
-                terminal_phase = PlcTransportPhase.INTERNAL
-                raw_diagnostic = "terminal_diagnostic_contract_violation"
-            persisted = plc_finish_attempt(
-                dispatch_id,
-                expected_version=expected_version,
-                attempt_id=str(operation.get("attempt_id") or ""),
-                terminal_result=PlcAttemptTerminalResult(
-                    code=terminal_code,
-                    phase=terminal_phase,
-                    bytes_written=int(operation.get("bytes_written") or 0),
-                    diagnostic_source=raw_diagnostic,
-                ),
-            )
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                entry["state_version"] = int(persisted["state_version"])
-                entry["latest"] = dict(persisted)
-
-        sync = dispatch_fx_plc_detection_result(
-            dispatch_id=dispatch_id,
-            source=source,
-            request_id=request_id,
-            passed=passed,
-            config=raw_plc_namespace(config),
-            transport_factory=_plc_transport_factory,
-            load_existing=lambda _dispatch_id: None,
-            persist=persist_runtime,
-            before_attempt=before_attempt,
-            after_attempt=after_attempt,
-            on_attempt_started=start_attempt,
-            on_attempt_finished=finish_attempt,
-            dispatch_cancel_reason=dispatch_cancel_reason,
-        )
-    except PlcDispatchStateConflict as exc:
-        sync = plc_dispatch_conflict_response(
-            exc,
-            dispatch_id=dispatch_id,
-            source=source,
-            request_id=request_id,
-            passed=passed,
-        )
-    except Exception:
-        with _config_io_lock:
-            entry = _plc_runtime_entry(dispatch_id)
-            latest = dict(entry.get("latest") or {})
-            active = [
-                item for item in _plc_active_attempts.values() if str(item.get("dispatch_id") or "") == dispatch_id
-            ]
-        attempted = bool(latest.get("attempted")) or bool(active)
-        sync = {
-            **latest,
-            "dispatch_id": dispatch_id,
-            "source": source,
-            "request_id": request_id,
-            "passed": passed,
-            "enabled": enabled_hint,
-            "attempted": attempted,
-            "status": "failed",
-            "physical_status": str(latest.get("physical_status") or ("write_outcome_uncertain" if active else "not_attempted")),
-            "outcome": str(latest.get("outcome") or ("outcome_uncertain" if attempted else "not_attempted")),
-            "error_code": "dispatcher_internal_error",
-            "control_state_unavailable": True,
-            "active_attempts": [dict(item) for item in active],
-            "message": "PLC synchronization control/audit finalization failed; known physical evidence was preserved",
-            "updated_at": int(time.time()),
-        }
-    if sync.get("duplicate") and plc_dispatch_record_is_terminal(sync):
-        with _config_io_lock:
-            _plc_runtime_entry(dispatch_id)["worker_done"] = True
-        result["plc_sync"] = sync
-        return result
-    sync.setdefault("control_generation", locals().get("generation", 0))
-    if "config" in locals():
-        sync.setdefault("config_snapshot", plc_config_audit_snapshot(config))
-    if "created" in locals():
-        try:
-            with _config_io_lock:
-                entry = _plc_runtime_entry(dispatch_id)
-                latest = dict(entry.get("latest") or {})
-                version = int(entry.get("state_version") or latest.get("state_version") or 0)
-            if sync.get("status") == "disabled" and not plc_dispatch_record_is_terminal(latest):
-                latest = plc_finalize_dispatch(
-                    dispatch_id, expected_version=version, reason="disabled"
-                )
-            if plc_dispatch_record_is_terminal(latest):
-                sync = latest
-            else:
-                sync = {**latest, "worker_done": True, "audit_status": "persist_failed"}
-        except Exception:
-            sync = {**sync, "worker_done": True, "worker_continues": False, "audit_status": "persist_failed"}
-    else:
-        sync = {**sync, "worker_done": True, "worker_continues": False}
-    with _config_io_lock:
-        entry = _plc_runtime_entry(dispatch_id)
-        entry["worker_done"] = True
-        entry["latest"] = dict(sync)
-    result["plc_sync"] = sync
-    return result
+    'Attach PLC sync status without changing or invalidating the detection result.'
+    return _plc_legacy_dispatch.dispatch_plc_for_detection(result, source=source, fingerprint=fingerprint, expected_generation=expected_generation)
 
 
 def _run_queued_plc_dispatch(result: dict[str, Any], *, source: str, fingerprint: str) -> dict[str, Any]:
-    dispatch_id, request_id, passed = plc_dispatch_identity(result, source=source, fingerprint=fingerprint)
-    with _config_io_lock:
-        entry = _plc_runtime_entry(dispatch_id)
-        initial_config = load_config()
-        initial_generation = int(initial_config.get(PLC_CONTROL_GENERATION_KEY) or 0)
-        entry["generation"] = initial_generation
-        if entry.get("deadline_exceeded"):
-            final = {**dict(entry.get("latest") or {}), "worker_cleanup_pending": False, "worker_continues": False}
-            if final.get("state_version"):
-                try:
-                    result["plc_sync"] = plc_finalize_dispatch(
-                        dispatch_id,
-                        expected_version=int(final["state_version"]),
-                        reason="deadline_exceeded",
-                    )
-                except Exception:
-                    result["plc_sync"] = {**final, "worker_done": True, "audit_status": "persist_failed"}
-            else:
-                result["plc_sync"] = {**final, "worker_done": True, "deadline_exceeded": True}
-            return result
-    try:
-        initial_plc = normalize_plc_config(raw_plc_namespace(initial_config))
-    except PlcConfigError:
-        initial_plc = None
-    try:
-        validated_existing = get_validated_idempotent_dispatch(
-            source=source,
-            request_id=request_id,
-            passed=passed,
-            fingerprint=fingerprint,
-        )
-    except PlcDispatchStateConflict as exc:
-        result["plc_sync"] = plc_dispatch_conflict_response(
-            exc,
-            dispatch_id=dispatch_id,
-            source=source,
-            request_id=request_id,
-            passed=passed,
-        )
-        return result
-    if (
-        initial_plc is not None
-        and initial_plc["enabled"]
-        and validated_existing is None
-        and not plc_activation_errors(initial_plc)
-    ):
-        created = create_plc_dispatch(
-            source=source,
-            request_id=request_id,
-            passed=passed,
-            fingerprint=fingerprint,
-            expected_generation=initial_generation,
-        )
-        with _config_io_lock:
-            entry = _plc_runtime_entry(dispatch_id)
-            entry["hydrated"] = True
-            entry["state_version"] = int(created["state_version"])
-            entry["latest"] = dict(created)
-            entry["created_by_current_worker"] = True
-    _plc_write_pending.set()
-    acquired = _plc_dispatch_slots.acquire(timeout=PLC_QUEUE_WAIT_SECONDS)
-    if not acquired:
-        _plc_write_pending.clear()
-        with _config_io_lock:
-            current = load_config()
-            try:
-                current_plc = normalize_plc_config(raw_plc_namespace(current))
-                enabled = bool(current_plc["enabled"])
-            except PlcConfigError:
-                enabled = False
-            generation_changed = int(current.get(PLC_CONTROL_GENERATION_KEY) or 0) != initial_generation
-        cancelled = not enabled or generation_changed
-        with _config_io_lock:
-            entry = _plc_runtime_entry(dispatch_id)
-            latest = dict(entry.get("latest") or {})
-            version = int(entry.get("state_version") or latest.get("state_version") or 0)
-        try:
-            result["plc_sync"] = plc_finalize_dispatch(
-                dispatch_id,
-                expected_version=version,
-                reason="cancelled_after_disable" if cancelled else "plc_dispatch_queue_timeout",
-            )
-        except Exception:
-            result["plc_sync"] = {**latest, "worker_done": True, "audit_status": "persist_failed"}
-        return result
-    try:
-        _plc_write_pending.clear()
-        with _config_io_lock:
-            entry = _plc_runtime_entry(dispatch_id)
-            if entry.get("deadline_exceeded"):
-                final = {**dict(entry.get("latest") or {}), "worker_cleanup_pending": False, "worker_continues": False}
-                try:
-                    result["plc_sync"] = plc_finalize_dispatch(
-                        dispatch_id,
-                        expected_version=int(final.get("state_version") or 0),
-                        reason="deadline_exceeded",
-                    )
-                except Exception:
-                    result["plc_sync"] = {**final, "worker_done": True, "audit_status": "persist_failed"}
-                return result
-        return dispatch_plc_for_detection(
-            result,
-            source=source,
-            fingerprint=fingerprint,
-            expected_generation=initial_generation,
-        )
-    finally:
-        _plc_write_pending.clear()
-        _plc_dispatch_slots.release()
+    return _plc_legacy_dispatch._run_queued_plc_dispatch(result, source=source, fingerprint=fingerprint)
 
 
 async def dispatch_plc_for_detection_async(
     result: dict[str, Any], *, source: str, fingerprint: str, inline_fake_transport: bool = False
 ) -> dict[str, Any]:
-    """Run bounded synchronous serial work off the ASGI event loop."""
-    worker_result = copy.deepcopy(result)
-    dispatch_id, request_id, passed = plc_dispatch_identity(result, source=source, fingerprint=fingerprint)
-    _register_plc_dispatch_runtime(dispatch_id)
-    if _plc_transport_factory is not None and inline_fake_transport:
-        return _run_queued_plc_dispatch(worker_result, source=source, fingerprint=fingerprint)
-    loop = asyncio.get_running_loop()
-    worker = loop.run_in_executor(
-        _plc_io_executor,
-        lambda: _run_queued_plc_dispatch(worker_result, source=source, fingerprint=fingerprint),
-    )
-    deadline = loop.time() + PLC_WORKER_TOTAL_TIMEOUT_SECONDS
-    while not worker.done() and loop.time() < deadline:
-        await asyncio.sleep(0.01)
-    if worker.done():
-        return worker.result()
-    result["plc_sync"] = _plc_deadline_snapshot(
-        dispatch_id=dispatch_id,
-        source=source,
-        request_id=request_id,
-        passed=passed,
-    )
-    return result
+    'Run bounded synchronous serial work off the ASGI event loop.'
+    return await _plc_legacy_dispatch.dispatch_plc_for_detection_async(result, source=source, fingerprint=fingerprint, inline_fake_transport=inline_fake_transport)
 
 
 from .accessories import policy as _accessory_policy

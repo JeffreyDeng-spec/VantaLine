@@ -454,3 +454,5 @@ reads remain short unlocked sampled transactions. Keep runtime state, heartbeat,
 task/call evidence and configuration/secret versions through whole-release rollback.
 
 Label detail reads return the last committed task/run while a writer is in progress. Owner/kind predicates and connection cleanup are unchanged. Submission, task editing, expiry, claim, stage calls, page snapshot writes and bound-request lookup retain their original advisory transactions.
+
+PLC domain modules receive existing repository and atomic mutation capabilities. The extraction does not change transaction scopes, advisory fences, SQL, migration versions or PostgreSQL-versus-JSON authority. Synthetic store probes supplement the existing real-PostgreSQL CI contracts; they do not replace concurrency evidence.

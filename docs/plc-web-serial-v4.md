@@ -110,3 +110,7 @@ The move does not alter browser-owned serial I/O, real-ACK verification, capture
 provenance, leases, addresses or uncertain-write/no-retry behavior.
 
 The opt-in COS file adapter changes camera image persistence only: it must succeed before image analysis can continue. PLC authorization, lease epochs, planned frames, browser-only serial I/O and the ban on retrying uncertain physical writes remain unchanged. Storage tests use synthetic images and perform no PLC I/O.
+
+### Backend module ownership
+
+Request schemas live in `schemas/plc.py`. `plc/browser_dispatch.py` and `plc/dispatch_mutations.py` retain declaration-before-I/O, workstation/browser ownership and durable receipt handling. Workstation service/repository interfaces retain existing leases and atomic writes. Historical projection, transition, validation, capture and legacy-dispatch modules preserve readable evidence without reviving server serial I/O. Unknown outcomes remain non-retryable and a late completed callback cannot turn an expired analysis into a pass.

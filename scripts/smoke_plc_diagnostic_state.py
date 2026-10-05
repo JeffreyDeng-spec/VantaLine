@@ -28,11 +28,11 @@ def load_target(source, baseline):
         if isinstance(node, ast.FunctionDef) and node.name in names:
             nodes.append(node)
         elif not baseline and isinstance(node, ast.ImportFrom) and node.module in {
-            "plc.diagnostic_state", "plc.diagnostic_state_ports"
+            "plc.diagnostic_state", "plc.diagnostic_state_ports", "plc.station_service", "plc.station_ports"
         }:
             nodes.append(node)
         elif not baseline and isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_plc_diagnostic_state"
+            isinstance(target, ast.Name) and target.id in {"_plc_diagnostic_state", "_plc_station_service"}
             for target in node.targets
         ):
             nodes.append(node)

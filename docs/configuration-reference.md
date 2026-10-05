@@ -1183,3 +1183,5 @@ that configuration and build before detection admission is restored. Existing mo
 secret references and unset/empty environment distinctions are preserved.
 
 The label detail-read optimization adds no configuration. Model-binding request lookup remains fenced; only the pure get-by-owner/id/kind path becomes an unlocked committed read.
+
+PLC domain extraction introduces no setting or API default. Workstation configuration and request identities still use their existing call-time dependencies; no shared database connection or current-user value is stored in the new services. Strict request schemas retain defaults, extra-field rejection and field validation.
