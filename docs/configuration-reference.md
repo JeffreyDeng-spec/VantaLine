@@ -1181,3 +1181,5 @@ private authenticated control socket; the installed controller publishes its pri
 version and provisions the worker credential/mount dependencies. The worker must match
 that configuration and build before detection admission is restored. Existing model
 secret references and unset/empty environment distinctions are preserved.
+
+The label detail-read optimization adds no configuration. Model-binding request lookup remains fenced; only the pure get-by-owner/id/kind path becomes an unlocked committed read.

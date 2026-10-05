@@ -1,4 +1,4 @@
-"""Isolated PostgreSQL contract for unlocked label list reads and fenced writes."""
+"""Isolated PostgreSQL contract for unlocked label details/lists and fenced writes."""
 import json
 import os
 from pathlib import Path
@@ -97,20 +97,26 @@ def main():
                 repo.list("alice", "task"),
                 repo.runs_for_tasks("alice", ["task"]),
                 repo.legacy("alice", "standards"),
+                repo.get("alice", "task", "task"),
+                repo.get("bob", "task", "task"),
+                repo.get("alice", "task", "run"),
             ))
             try:
-                tasks, runs, standards = future.result(timeout=5)
+                tasks, runs, standards, detail, other_owner, other_kind = future.result(timeout=5)
             except TimeoutError:
                 reader_connection.cancel()
                 raise AssertionError("pure list read waited for the write advisory lock")
         finally:
             writer.commit()
             pool.shutdown(wait=False, cancel_futures=True)
+        assert detail["name"] == "old"
+        assert other_owner is None and other_kind is None
         assert tasks[0]["name"] == "old"
         assert runs["task"][0]["status"] == "queued"
         assert standards[0]["name"] == "old"
         idle(reader_connection)
         writer.commit()
+        assert repo.get("alice", "task", "task")["name"] == "new"
         assert repo.list("alice", "task")[0]["name"] == "new"
         assert repo.runs_for_tasks("alice", ["task"])["task"][0]["status"] == "succeeded"
         assert repo.legacy("alice", "standards")[0]["name"] == "old"  # per-repo cache
@@ -160,7 +166,7 @@ def main():
         idle(reader_connection)
 
         # A second connection may take the advisory lock inside a read result
-        # handler: none of these three reads acquires it implicitly.
+        # handler: none of these detail/list reads acquires it implicitly.
         original_decode = PostgresRuntimeRepository._row_to_dict
         calls = []
         def unlocked(instance, cursor, row):
@@ -171,6 +177,7 @@ def main():
             calls.append(1)
             return original_decode(instance, cursor, row)
         read_actions = (
+            ("detail", lambda: repo.get("alice", "task", "task")),
             ("list", lambda: repo.list("alice", "task")),
             ("batch", lambda: repo.runs_for_tasks("alice", ["task"])),
             ("legacy", lambda: LabelRepository(raw).legacy("alice", "standards")),
@@ -203,7 +210,7 @@ def main():
             assert c.fetchone()[0]
         probe.commit()
         idle(probe)
-        print("PASS unlocked list/batch/legacy reads, committed view, rollback/IDLE and write advisory fence")
+        print("PASS unlocked detail/list/batch/legacy reads, committed view, rollback/IDLE and write advisory fence")
     finally:
         active_error = sys.exc_info()[0] is not None
         cleanup_error = None
