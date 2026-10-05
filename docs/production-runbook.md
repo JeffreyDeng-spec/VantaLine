@@ -1301,3 +1301,5 @@ HTTP read is enabled by this slice. Rollback restores the complete previous
 release and retains derived objects; do not reverse the migration or replay
 unknown calls. Optional publication is included in drain, and stop/pause skips
 work that has not begun. Local SQL limits are not a guaranteed network deadline.
+
+The list cache reader must follow the accepted empty-table/invalidation and publisher releases. Confirm the actual runtime role can SELECT the projection table before deployment. A missing/unknown cache version safely uses original list data; a missing table or missing SELECT grant is a release prerequisite failure, not a reason to silently skip database errors. Whole-release rollback retains the compatible table and source invalidation trigger. No historical backfill is run.

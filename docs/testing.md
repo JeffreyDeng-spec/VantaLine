@@ -2132,3 +2132,9 @@ nearest-rank P95, raw timings and optional worker occupancy separately, with a
 exclusively. These synthetic sizes do not assert production payload distribution
 or paid processing latency. The new storage module participates in dependency
 cycle/entry-point checks.
+
+`scripts/smoke_label_summary_reads.py` uses an isolated real PostgreSQL schema and the unchanged API registrar with a frozen c798ac8 parent reader. It covers cached/uncached mixed native/legacy/manual/Beta lists, fractional/tied timestamps, SQL owner scope, unknown-version fallback, old cursor reuse across task insertion/rename/completion, account/filter binding and fixed expiry, old-writer snapshot consistency, decode rollback/IDLE/cursor release, malformed nonlatest data and HTTP permissions. It does not use real PLCs or inference.
+
+`scripts/benchmark_label_summary_reads.py` measures actual list endpoint first-page SQL, cross-source projection and persisted snapshot at 1,000/10,000 tasks with synthetic 8 KiB quality strings and 0/50/100% run-cache coverage. It excludes HTTP transport/serialization and does not model production distributions. Four warmups precede 31 alternating samples; P95 is nearest rank. Separate balanced memory passes avoid tracing distortion. Candidate limits are max(parent P95 * 1.25, parent + 10 ms) and max(parent peak * 1.25, parent + 1 MiB). It checks full traversal equality and at most ceil(tasks/64)+12 SQL statements, retaining raw samples on failure.
+
+The frozen label reader oracle hashes canonical LF bytes so a Windows CRLF checkout has the same pinned source identity. Only CRLF-to-LF normalization is allowed; any source-token change still fails the recorded SHA check.

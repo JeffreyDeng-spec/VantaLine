@@ -519,3 +519,7 @@ integer digits, finite floats and depth 64; unsafe shapes remain uncached.
 Any future change to this proof, public projection semantics or consumed list
 fields requires a new projection version and fallback tests. Historical source
 records are neither rewritten nor scanned for backfill.
+
+## Cached list read transaction
+
+A single source-driven LEFT JOIN reads source/cache under one PostgreSQL statement snapshot. Source SQL owner/kind/task filters and creation/id order are unchanged; a committed old-writer update invalidates the projection atomically and forces fallback. An uncommitted source/cache change exposes the old consistent committed view. Ordinary cache reads use the existing short read transaction, with no advisory or row lock and no cache write. Page creation/cleanup and all mutations still use the write fence. Orphan cache entries never produce rows. Do not disable the invalidation trigger or manually repopulate derived state.

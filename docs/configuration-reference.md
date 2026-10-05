@@ -1202,3 +1202,5 @@ fixed proof bounds are compatibility constraints, not user tuning knobs.
 exception text, row identifiers, credentials or paths. Manifest v149 includes
 470 actual sources, including the proof and row-lock publisher. Historical model
 references/fingerprints and provider/prompt selection remain unchanged.
+
+The label list cache reader introduces no setting or worker-mode change. It requires the additive projection table/invalidation migration and source-first publisher from earlier accepted releases. It recognizes projection version 1 only; unknown or missing versions fall back without rewriting records. Prompt-source manifest v150 retains the same 470 actual files and records the changed repository source for new tasks; historical task snapshots are unchanged.

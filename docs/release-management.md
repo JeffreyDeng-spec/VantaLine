@@ -1007,3 +1007,5 @@ repository/paid-stage logic unchanged. CI adds pure proof, worker failure/drain
 and real PostgreSQL publication checks. The complete release carries manifest
 v149/470 and the previous additive cache migration; no cache read or backfill
 is enabled. Exact-head CI and preceding release acceptance remain mandatory.
+
+The derived-label list reader preserves the predecessor release topology. CI compares the actual full list endpoint and real PostgreSQL paging to the frozen pre-reader method, then measures 1,000/10,000 synthetic tasks with 0/50/100% cache hits. Exact-head review/CI and preceding complete-release acceptance remain necessary; local candidate evidence cannot authorize bypassing release gates.

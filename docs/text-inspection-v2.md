@@ -717,3 +717,5 @@ leaves the original result and original list/detail reads in place; no retry of
 a paid stage or source edit is performed. Active/queued runs and historical
 backfill are excluded. This is preparation for later cached list queries, not
 a change to visible task/history or frozen 15-minute cursor behavior.
+
+Native list histories may use versioned, previously validated compact run fields. Source ownership and membership always come from the original record. Unsafe, missing or unknown projections use the original list payload, including existing errors from nonlatest records. The combined legacy/manual/Beta list, defaults, filters, stable ordering and account/filter-bound fixed 15-minute cursor remain unchanged. Full histories and diagnostics still use source JSON.
