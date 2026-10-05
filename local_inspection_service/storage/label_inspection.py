@@ -7,6 +7,7 @@ import uuid
 from contextlib import contextmanager
 from ..codex_compare.contracts import digest, encode
 from .agent_operations import OperationConflict
+from ..label_inspection.run_summary import VERSION as RUN_SUMMARY_VERSION
 
 TABLE = "label_inspection_objects"
 ACTIVE = {"queued", "running"}
@@ -366,7 +367,7 @@ class LabelRepository:
             return grouped
 
     def list_run_payloads_for_tasks(self, owner, task_ids):
-        """Return bounded list-only run payloads without fields public() discards."""
+        """Read source-owned summaries or original list payloads in one SQL snapshot."""
         if not task_ids:
             return {}
         if len(task_ids) > RUN_BATCH_SIZE:
@@ -374,12 +375,14 @@ class LabelRepository:
         discarded = ("model", "prompt_hash", "layout", "transformations", "profile_snapshot")
         with self.read_tx() as c:
             c.execute(
-                f"SELECT task_id, CASE WHEN jsonb_typeof(raw_json)='object' "
-                "AND raw_json->>'kind'='run' THEN raw_json - %s::text[] "
-                f"ELSE raw_json END AS raw_json FROM {self.table} "
-                "WHERE owner_user_id=%s AND kind='run' AND task_id=ANY(%s::text[]) "
-                "ORDER BY created_at DESC,id DESC",
-                (list(discarded), owner, list(task_ids)),
+                "SELECT source.task_id, CASE WHEN proof.projection_version=%s THEN proof.raw_json "
+                "ELSE CASE WHEN jsonb_typeof(source.raw_json)='object' "
+                "AND source.raw_json->>'kind'='run' THEN source.raw_json - %s::text[] "
+                f"ELSE source.raw_json END END AS raw_json FROM {self.table} source "
+                f"LEFT JOIN {self.repository._qualified_table('label_run_projection')} proof ON proof.id=source.id "
+                "WHERE source.owner_user_id=%s AND source.kind='run' AND source.task_id=ANY(%s::text[]) "
+                "ORDER BY source.created_at DESC,source.id DESC",
+                (RUN_SUMMARY_VERSION, list(discarded), owner, list(task_ids)),
             )
             grouped = {task_id: [] for task_id in task_ids}
             for row in c.fetchall():

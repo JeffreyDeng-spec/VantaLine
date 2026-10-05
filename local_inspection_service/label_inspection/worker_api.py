@@ -8,6 +8,7 @@ from ..runtime.label_identity import LabelRuntimeIdentity, read_identity
 from ..runtime.control_connections import create_control_factory
 from ..runtime.configuration import ConfigurationSnapshot
 from .runtime_control import LabelRuntimeControl
+from .readiness import verify_summary_reads
 from collections.abc import Callable
 from pathlib import Path
 import threading
@@ -68,6 +69,11 @@ def register(app: FastAPI, repositories: RepositoryLifecycle,
             if control is not None:
                 control.close()
 
+        def verify_label_list_database():
+            verify_summary_reads(repositories, required=identity is not None)
+
+        # Before startup side effects, consumer/control readiness, or HTTP serving.
+        app.router.on_startup.insert(0, verify_label_list_database)
         app.on_event("startup")(start)
         app.on_event("shutdown")(stop)
         return handle

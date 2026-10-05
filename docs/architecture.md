@@ -1612,7 +1612,7 @@ a separate transaction after business settlement, never inside the global
 label advisory lock. A single owned terminal run is selected `FOR UPDATE SKIP
 LOCKED`; the actual returned payload is validated by the pure `run_summary`
 policy before a compact projection is committed under that same row lock.
-Web lists/details still use their existing payload queries. No new thread,
+Web list queries can use validated derived fields; details retain their original payload query. No new thread,
 process, scheduler or read-triggered backfill is introduced.
 
 The publisher declines active or autocommit connections and never commits a
@@ -1629,3 +1629,11 @@ graph alongside its pure label policy; reverse imports into Web composition and
 cycles are rejected. Row locking still permits indirect contention when another
 writer holds the global fence while waiting for the projected row. Tests preserve
 this counterexample; optional work is not described as contention-free.
+
+## Source-driven label list cache reads
+
+The bounded native list query joins each account-owned authoritative run to its derived projection in one statement snapshot. Matching version 1 returns only the proven list fields; missing/unknown versions return the previous trimmed payload. The source controls ownership, membership, SQL task grouping and original row order. Existing Python history validation, raw JSON fractional timestamp sorting, mixed legacy/manual/Beta projection and paging are retained. Detail/diagnostic reads still load the original full JSON. There is no read-time repair, backfill or cache-derived authoritative task. This slice reduces payload transfer; per-task SQL latest/count aggregation remains separate work.
+
+The Web registrar prepends a label-reader prerequisite check to the startup lifecycle, before all previously registered startup callbacks, control readiness and HTTP serving. It obtains the same thread-owned business repository used by label HTTP queries, executes a read-only zero-row source/projection column query, rolls back, and releases the selection. It neither reads customer rows nor repairs grants. A managed runtime without PostgreSQL fails; unmanaged JSON development mode retains its existing absence of this database reader.
+
+Lifecycle registration remains inert. The first reader readiness callback precedes the existing PDF and label startup callbacks; each application passes its own business repository capability to that check.

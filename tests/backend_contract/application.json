@@ -16079,6 +16079,7 @@
     "stop"
   ],
   "startup": [
+    "verify_label_list_database",
     "start_plc_runtime_workers",
     "start_ai_mcp_warmup",
     "start_worker_training_watcher",

@@ -164,13 +164,20 @@ class LabelDependencyContracts(unittest.TestCase):
 
     def test_registration_order_no_eager_dependencies_and_independent_stops(self):
         fake=fake_threads()
-        with patch.object(worker,'threading',fake),patch.object(pdf_import,'threading',fake):
+        with patch.object(worker,'threading',fake),patch.object(pdf_import,'threading',fake), \
+             patch.object(worker_api,'verify_summary_reads') as readiness:
             first,second=self.fixture('one'),self.fixture('two')
             self.assertEqual(fake.threads,[])
             self.assertEqual(first.opens+second.opens,[])
             self.assertEqual(first.models.calls+second.models.calls,[])
+            readiness.assert_not_called()
             for state in [first,second]:
-                for callback in state.app.router.on_startup:callback()
+                self.assertEqual(state.app.router.on_startup[0].__name__,'verify_label_list_database')
+                state.app.router.on_startup[0]()
+                readiness.assert_called_with(state.app.state.label_worker.repositories,required=False)
+                self.assertEqual(len(fake.threads),0 if state is first else 3)
+                for callback in state.app.router.on_startup[1:]:callback()
+            self.assertEqual(readiness.call_count,2)
             self.assertEqual([thread.name for thread in fake.threads],
                 ['pdf-import','label-inspection-0','label-inspection-1']*2)
             self.assertTrue(all(thread.daemon for thread in fake.threads))
