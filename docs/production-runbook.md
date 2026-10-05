@@ -1266,3 +1266,23 @@ Pipeline structural services ship with Web and the declared label worker in one 
 Accessory image services ship with the same complete Web/label-worker release. No new process service or migration is introduced. Retain model evidence and mutable records during whole-release rollback. Candidate cleanup refuses shared references but preserves existing partial deletion and check-then-delete behavior.
 
 Configuration services retain original partial-failure behavior: primary-file replacement is atomic, backup OSError is best effort and may leave a temporary file, and local model-config replacement failure may leave its pending temp file. No stronger concurrent-writer or backup guarantee is introduced. MCP stdio errors retain the existing close-before-one-local-fallback behavior; this is not a new uncertain-call retry guarantee. Label durable stage admission and unknown-result rules remain unchanged.
+
+## Derived label summary state preparation
+
+Install the additive `2026_10_04_label_run_projection` migration only through the
+normal complete release. It creates empty derived state and an atomic row-change
+invalidation trigger, without enabling cached reads or rewriting history. The
+migration owner must own the label source and new objects; existing application
+writers need only their original source DML privileges. A five-second DDL lock
+timeout leaves the migration unapplied; inspect workload/lock ownership and retry
+through the normal release flow, never remove the trigger to force progress.
+
+Whole-release rollback retains this side table, function and trigger. Old writers
+continue invalidating the cache without extra grants. Administrative imports or
+restores that disable triggers can bypass this invariant: before any future
+cache-reading release is admitted, discard only derived projections in the
+controlled maintenance procedure and verify source/trigger integrity. This
+preparation introduces no cache reader, backfill or topology switch and is not
+evidence of full list performance or production acceptance.
+
+Before admitting the summary preparation, the generated-schema and import real-engine checks must accept complete trigger definitions and retain their SQL-error rejection. These temporary single-user databases open no listening sockets and do not touch production state. The production migration and complete-release rollback procedure are unchanged.

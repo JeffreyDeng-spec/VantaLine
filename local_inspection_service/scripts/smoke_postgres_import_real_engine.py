@@ -25,7 +25,7 @@ if str(REPO_ROOT) not in sys.path:
 from local_inspection_service.scripts.smoke_postgres_migration_packet import run_packet  # noqa: E402
 from local_inspection_service.scripts.smoke_postgres_schema_real_engine import (  # noqa: E402
     assert_clean_process,
-    compact_generated_ddl,
+    single_user_input,
     run_command,
 )
 from local_inspection_service.scripts.smoke_data_layer_migration import build_source  # noqa: E402
@@ -123,7 +123,7 @@ def main() -> int:
         init_result = run_command([str(initdb), "-D", str(data_dir), "-A", "trust", "-U", "postgres"], env=env)
         assert_clean_process(init_result, "initdb")
 
-        statements = [compact_generated_ddl(ddl_path.read_text(encoding="utf-8")), f"SET search_path TO {quote_ident(schema_name)}, public;"]
+        statements = [ddl_path.read_text(encoding="utf-8"), f"SET search_path TO {quote_ident(schema_name)}, public;"]
         for table in TABLES:
             if table.name == "schema_migrations":
                 continue
@@ -136,12 +136,11 @@ def main() -> int:
             statements.append(copy_statement(table.name, csv_path))
         for table in TABLES:
             statements.append(count_statement(table.name))
-        statements.append("")
 
         import_result = run_command(
-            [str(postgres), "--single", "-D", str(data_dir), "postgres"],
+            [str(postgres), "--single", "-j", "-D", str(data_dir), "postgres"],
             env=env,
-            input_text="\n".join(statements),
+            input_text=single_user_input(statements),
         )
         assert_clean_process(import_result, "postgres import single-user smoke")
 
