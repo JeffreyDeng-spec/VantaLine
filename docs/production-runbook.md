@@ -1262,3 +1262,5 @@ PLC structural modules are packaged together with Web and the release-declared l
 The auto-optimization structural batch is included in the complete release with Web and the declared label worker. No database migration or service topology change is required. Roll back the complete prior release and its declared topology; preserve task records and model evidence.
 
 Pipeline structural services ship with Web and the declared label worker in one complete release. There is no new migration or service topology. Roll back the whole previous release while preserving mutable task records and model evidence.
+
+Accessory image services ship with the same complete Web/label-worker release. No new process service or migration is introduced. Retain model evidence and mutable records during whole-release rollback. Candidate cleanup refuses shared references but preserves existing partial deletion and check-then-delete behavior.

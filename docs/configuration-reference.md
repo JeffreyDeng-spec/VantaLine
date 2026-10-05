@@ -1189,3 +1189,5 @@ PLC domain extraction introduces no setting or API default. Workstation configur
 Auto-optimization extraction adds no setting, model default, permission or worker mode. Source manifest v144 appends the 37 actual new training source files (424 entries). New task fingerprints use these sources; existing task snapshots, bound model versions and secret references are not rewritten.
 
 Pipeline workflow extraction adds no configuration, permission, model default or worker mode. Source manifest v145 appends the twelve actual new pipeline source files (436 entries). New task fingerprints identify these sources; old snapshots, model bindings and secret references remain unchanged.
+
+Accessory image workflow extraction adds no configuration, provider default, worker mode or permission. Source manifest v146 appends the twenty-two actual new source files (458 entries). New task fingerprints follow these files; historical snapshots, model versions and secret references are unchanged.

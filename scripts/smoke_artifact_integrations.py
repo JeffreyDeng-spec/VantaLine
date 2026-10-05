@@ -172,10 +172,11 @@ class IntegrationTests(unittest.TestCase):
     def test_uncertain_cursor_write_does_not_submit_fallback(self):
         # Exercise the assembled worker function without model initialization or
         # external calls. The provider succeeds; persistence then fails.
-        from unittest.mock import Mock
+        from unittest.mock import Mock, patch
+        from dataclasses import fields
         from local_inspection_service.storage.artifacts.files import BusinessFiles
-        source = ast.parse((Path(__file__).resolve().parents[1] / "local_inspection_service/server.py").read_text())
-        function = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == "run_cursor_image2_job")
+        from local_inspection_service.accessories import image_job_execution
+        from local_inspection_service.accessories.image_job_execution_ports import ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders
         import time
         output = self.root / "outputs/result.png"
         files = BusinessFiles(runtime_provider=self.runtime)
@@ -200,8 +201,11 @@ class IntegrationTests(unittest.TestCase):
                 raise ArtifactUnavailable("synthetic upload failure")
             return original(path, data)
         files.write_bytes = write
-        exec(compile(ast.Module(body=[function], type_ignores=[]), "actual_cursor_worker", "exec"), scope)
-        scope["run_cursor_image2_job"](self.root / "candidate", {}, {"input_files": [str(input_path)]})
+        def ports(cls):
+            return cls(**{field.name: lambda name=field.name: scope[name] for field in fields(cls)})
+        worker = image_job_execution.ImageJobExecution(ports(ImageExecutionFiles), ports(ImageExecutionEvidence), ports(ImageExecutionProviders))
+        with patch.object(image_job_execution, "requests", scope["requests"]):
+            worker.run_cursor_image2_job(self.root / "candidate", {}, {"input_files": [str(input_path)]})
         scope["requests"].post.assert_called_once()
         fallback.assert_not_called()
         self.assertEqual(status.call_args.kwargs["status"], "failed")

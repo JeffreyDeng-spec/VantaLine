@@ -1,5 +1,5 @@
 {
-  "version": 145,
+  "version": 146,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -436,6 +436,28 @@
     "pipeline/task_mutations.py",
     "pipeline/task_mutations_ports.py",
     "pipeline/ai_activation.py",
-    "pipeline/ai_activation_ports.py"
+    "pipeline/ai_activation_ports.py",
+    "accessories/text_preparation.py",
+    "accessories/text_preparation_ports.py",
+    "accessories/pose_collection_prompts.py",
+    "accessories/pose_collection_prompt_ports.py",
+    "accessories/image_worker_diagnostics.py",
+    "accessories/image_worker_diagnostic_ports.py",
+    "accessories/pose_collection_jobs.py",
+    "accessories/pose_collection_job_ports.py",
+    "accessories/reference_media.py",
+    "accessories/reference_media_ports.py",
+    "accessories/image_job_queue.py",
+    "accessories/image_job_queue_ports.py",
+    "training/training_asset_preparation.py",
+    "training/training_asset_preparation_ports.py",
+    "model_providers/image_provider_configuration.py",
+    "model_providers/image_provider_configuration_ports.py",
+    "accessories/image_job_execution.py",
+    "accessories/image_job_execution_ports.py",
+    "accessories/image_job_management.py",
+    "accessories/image_job_management_ports.py",
+    "accessories/candidate_artifacts.py",
+    "accessories/candidate_artifact_ports.py"
   ]
 }

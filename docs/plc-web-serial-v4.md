@@ -118,3 +118,5 @@ Request schemas live in `schemas/plc.py`. `plc/browser_dispatch.py` and `plc/dis
 Auto-optimization capture extraction retains its existing source and state collaborators. It does not grant the backend serial ownership or add physical output. Browser leases, actual ACK requirements and uncertain-write non-retry behavior are unchanged.
 
 Pipeline workflow relocation does not grant physical PLC capability or alter camera provenance. Browser station leases, actual ACK evidence and uncertain-write non-retry behavior stay unchanged.
+
+Accessory image extraction and training asset preparation do not produce physical PLC writes. Camera provenance, leased browser serial ownership and actual ACK requirements remain unchanged; uncertain writes remain non-retryable.

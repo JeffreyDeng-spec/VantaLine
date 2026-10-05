@@ -274,6 +274,17 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
+          python scripts/smoke_accessory_text_preparation.py
+          python scripts/smoke_pose_collection_prompts.py
+          python scripts/smoke_image_worker_diagnostics.py
+          python scripts/smoke_pose_collection_jobs.py
+          python scripts/smoke_accessory_reference_media.py
+          python scripts/smoke_image_job_queue.py
+          python scripts/smoke_training_asset_preparation.py
+          python scripts/smoke_image_provider_configuration.py
+          python scripts/smoke_image_job_execution.py
+          python scripts/smoke_image_job_management.py
+          python scripts/smoke_candidate_artifacts.py
           python scripts/smoke_pipeline_auto_optimization_links.py
           python scripts/smoke_pipeline_task_projection.py
           python scripts/smoke_pipeline_candidate_flow.py
