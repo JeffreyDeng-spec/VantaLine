@@ -1264,3 +1264,5 @@ The auto-optimization structural batch is included in the complete release with 
 Pipeline structural services ship with Web and the declared label worker in one complete release. There is no new migration or service topology. Roll back the whole previous release while preserving mutable task records and model evidence.
 
 Accessory image services ship with the same complete Web/label-worker release. No new process service or migration is introduced. Retain model evidence and mutable records during whole-release rollback. Candidate cleanup refuses shared references but preserves existing partial deletion and check-then-delete behavior.
+
+Configuration services retain original partial-failure behavior: primary-file replacement is atomic, backup OSError is best effort and may leave a temporary file, and local model-config replacement failure may leave its pending temp file. No stronger concurrent-writer or backup guarantee is introduced. MCP stdio errors retain the existing close-before-one-local-fallback behavior; this is not a new uncertain-call retry guarantee. Label durable stage admission and unknown-result rules remain unchanged.

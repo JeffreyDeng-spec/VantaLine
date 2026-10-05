@@ -1585,3 +1585,9 @@ Pipeline auto-optimization links, task projection, candidate flow, metadata, mut
 Accessory text preparation, pose prompts/jobs, reference media, image diagnostics, queue execution/management and candidate artifact ownership now have focused services under `accessories/`. `model_providers/image_provider_configuration.py` owns the existing image provider setup and response interpretation; `training/training_asset_preparation.py` owns the accessory-derived asset preparation used by training. Each boundary receives typed dependencies; the entry retains temporary caller adapters and shared process state.
 
 This is structural relocation of one accessory image workflow family. Prompt text, provider/retry selection, queue timing, owner visibility, media authorization, subprocess behavior, save-before-start order and deletion partial effects remain unchanged. Training and image jobs retain their existing process topology.
+
+### Configuration and service-status boundaries
+
+`config/app_store.py` owns application configuration persistence with explicit file, repository-row and protected-namespace interfaces. `model_providers/local_model_config.py` owns legacy provider configuration normalization and saving; `model_providers/tool_dispatch.py` owns JSON tool result/error projection and existing MCP dispatch. `auth/status_requests.py` owns the permission-aware service status request workflows. Each boundary has narrowly scoped typed dependencies; the application composes them and retains caller adapters.
+
+Existing call-time identity, protected PLC namespaces, PostgreSQL authority, atomic primary-file replacement, model snapshot binding and selected callback timing are preserved. No module stores a global request user or database connection. Dependency checks now include the config package, and source-location checks follow the actual configuration store without lowering required coverage.

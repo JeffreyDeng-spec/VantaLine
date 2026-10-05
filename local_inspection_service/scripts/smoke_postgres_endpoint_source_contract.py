@@ -271,6 +271,30 @@ def main() -> None:
                       "functions_with_runtime_repository_entry"):
         getattr(contract, attribute).update(getattr(candidates, attribute))
     contract.runtime_repository_entry_call_count += candidates.runtime_repository_entry_call_count
+    config_path = ROOT / "local_inspection_service" / "config" / "app_store.py"
+    require(any(isinstance(node, ast.ImportFrom) and node.module == "config.app_store"
+                and any(alias.name == "AppConfigStore" for alias in node.names)
+                for node in tree.body), "server.py missing AppConfigStore composition import")
+    config_store = SourceContract(injected_repository=True,
+                                  repository_expression="self.rows.runtime_postgres_repository_or_none()")
+    config_store.visit(ast.parse(config_path.read_text(encoding="utf-8")))
+    require({"load_config", "save_config"} <= config_store.functions_with_runtime_repository_entry,
+            "config load/save must use the explicit repository factory")
+    require({"app_config", "accessories"} <= config_store.string_literals,
+            "config store must retain actual config/accessory table access")
+    require("replace_app_config_preserving_keys" in config_store.called_attributes,
+            "config save must retain protected-key replacement")
+    for name, arguments in {"_read_config_file": "", "load_config": "", "save_config": "config"}.items():
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        body = function.body[1:] if ast.get_docstring(function, clean=False) is not None else function.body
+        expected = ast.parse("_app_config_store." + name + "(" + arguments + ")", mode="eval").body
+        require(len(body) == 1 and isinstance(body[0], ast.Return)
+                and ast.dump(body[0].value) == ast.dump(expected), "config helper must bind actual store: " + name)
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(config_store, attribute))
+    contract.runtime_repository_entry_call_count += config_store.runtime_repository_entry_call_count
+
     text_path = ROOT / "local_inspection_service" / "text_inspection" / "record_store.py"
     require(any(isinstance(node, ast.ImportFrom) and node.module == "local_inspection_service.text_inspection.record_store"
                 and any(alias.name == "TextRecordStore" for alias in node.names)

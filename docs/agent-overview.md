@@ -60,3 +60,5 @@ Auto-optimization application workflows now live in `local_inspection_service/tr
 The remaining pipeline link/projection/candidate/metadata/mutation/AI-activation workflows are under `local_inspection_service/pipeline/`. Follow each focused service and its typed ports instead of placing new business logic in application-entry forwarders.
 
 Accessory image workflow code is grouped under `accessories/` with explicit file, record, policy, access and execution interfaces. Image provider configuration and training asset preparation remain in their respective domain packages. The entry composes these boundaries; no new aggregate business context is introduced.
+
+Application-config persistence lives under `config/`; model local configuration and tool dispatch live under `model_providers/`; status request projection remains an auth-domain service. Tests replace explicit capabilities and source guards inspect those actual modules instead of removing requirements.
