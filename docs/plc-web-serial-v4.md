@@ -120,3 +120,5 @@ Auto-optimization capture extraction retains its existing source and state colla
 Pipeline workflow relocation does not grant physical PLC capability or alter camera provenance. Browser station leases, actual ACK evidence and uncertain-write non-retry behavior stay unchanged.
 
 Accessory image extraction and training asset preparation do not produce physical PLC writes. Camera provenance, leased browser serial ownership and actual ACK requirements remain unchanged; uncertain writes remain non-retryable.
+
+Configuration extraction preserves protected PLC namespace policy and existing transaction authority. It does not grant server serial access or alter browser leases, actual ACK validation or uncertain-write non-retry behavior.

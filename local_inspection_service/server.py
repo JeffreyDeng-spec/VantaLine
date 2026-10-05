@@ -2386,99 +2386,45 @@ def plc_web_serial_record_receipt(
     return _plc_browser_dispatch.plc_web_serial_record_receipt(station_id, dispatch_id, request)
 
 
-def _read_config_file() -> dict[str, Any] | None:
-    """Read config.json, retrying briefly on transient partial/empty reads.
+from .config.app_store import AppConfigStore
+from .config.app_store_ports import AppConfigFiles, AppConfigRows, AppConfigPolicy
 
-    Returns the parsed dict, an empty dict when the file legitimately does not
-    exist, or ``None`` when the file is present but could not be parsed cleanly
-    (e.g. mid-write). Callers must NOT treat ``None`` as "no accessories" — doing
-    so would silently drop every persisted record whenever a concurrent writer
-    is in the middle of replacing the file.
-    """
-    for attempt in range(6):
-        try:
-            text = _business_files.read_text(CONFIG_PATH, encoding="utf-8")
-        except FileNotFoundError:
-            return {}
-        except OSError:
-            time.sleep(0.05)
-            continue
-        if not text.strip():
-            # Empty/zero-byte read can happen during a non-atomic legacy write;
-            # give the writer a moment and retry rather than wiping state.
-            time.sleep(0.05)
-            continue
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            time.sleep(0.05)
-    return None
+_app_config_store = AppConfigStore(
+    files=AppConfigFiles(
+        _business_files=lambda: _business_files,
+        CONFIG_PATH=lambda: CONFIG_PATH,
+        CONFIG_BACKUP_PATH=lambda: CONFIG_BACKUP_PATH,
+        DATA_DIR=lambda: DATA_DIR,
+        _config_io_lock=lambda: _config_io_lock,
+        ensure_dirs=lambda: ensure_dirs,
+        _read_config_file=lambda: _read_config_file,
+    ),
+    rows=AppConfigRows(
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        config_from_rows=lambda: config_from_rows,
+        app_config_rows=lambda: app_config_rows,
+        accessory_rows=lambda: accessory_rows,
+    ),
+    policy=AppConfigPolicy(
+        DEFAULT_CONFIG=lambda: DEFAULT_CONFIG,
+        PLC_PROTECTED_CONFIG_KEYS=lambda: PLC_PROTECTED_CONFIG_KEYS,
+        _plc_namespace_write_authorized=lambda: _plc_namespace_write_authorized,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+)
+
+
+def _read_config_file() -> dict[str, Any] | None:
+    'Read config.json, retrying briefly on transient partial/empty reads.\n\n    Returns the parsed dict, an empty dict when the file legitimately does not\n    exist, or ``None`` when the file is present but could not be parsed cleanly\n    (e.g. mid-write). Callers must NOT treat ``None`` as "no accessories" — doing\n    so would silently drop every persisted record whenever a concurrent writer\n    is in the middle of replacing the file.\n    '
+    return _app_config_store._read_config_file()
 
 
 def load_config() -> dict[str, Any]:
-    ensure_dirs()
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        current = config_from_rows(repository.fetch_all("app_config"), repository.fetch_all("accessories"))
-    else:
-        current = _read_config_file()
-        if current is None:
-            # The primary file exists but is unreadable right now. Fall back to the
-            # last-good snapshot instead of DEFAULT_CONFIG so we never report that
-            # user accessories/models suddenly vanished due to a write race.
-            try:
-                backup_text = _business_files.read_text(CONFIG_BACKUP_PATH, encoding="utf-8")
-                current = json.loads(backup_text)
-            except (FileNotFoundError, OSError, json.JSONDecodeError):
-                current = {}
-    merged = json.loads(json.dumps(DEFAULT_CONFIG))
-    for key, value in current.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key].update(value)
-        else:
-            merged[key] = value
-    return public_path_sanitized(merged)
+    return _app_config_store.load_config()
 
 
 def save_config(config: dict[str, Any]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        now = int(time.time())
-        with _config_io_lock:
-            repository.replace_app_config_preserving_keys(
-                app_config_rows(config, updated_at=now),
-                PLC_PROTECTED_CONFIG_KEYS,
-                additional_tables={"accessories": accessory_rows(config)},
-            )
-        return
-    with _config_io_lock:
-        saved = copy.deepcopy(config)
-        if not _plc_namespace_write_authorized.get():
-            current = _read_config_file()
-            current = current if isinstance(current, dict) else {}
-            for key in PLC_PROTECTED_CONFIG_KEYS:
-                if key in current:
-                    saved[key] = copy.deepcopy(current[key])
-                else:
-                    saved.pop(key, None)
-        payload = json.dumps(saved, indent=2)
-        tmp_path = CONFIG_PATH.with_name(f"{CONFIG_PATH.name}.tmp.{uuid.uuid4().hex}")
-        try:
-            _business_files.write_text(tmp_path, payload, encoding="utf-8")
-            os.replace(tmp_path, CONFIG_PATH)
-        finally:
-            try:
-                _business_files.unlink(tmp_path)
-            except OSError:
-                pass
-        # Best-effort last-good snapshot for disaster recovery.
-        try:
-            backup_tmp = CONFIG_BACKUP_PATH.with_name(f"{CONFIG_BACKUP_PATH.name}.tmp.{uuid.uuid4().hex}")
-            _business_files.write_text(backup_tmp, payload, encoding="utf-8")
-            os.replace(backup_tmp, CONFIG_BACKUP_PATH)
-        except OSError:
-            pass
+    return _app_config_store.save_config(config)
 
 
 def save_app_config(config: dict[str, Any]) -> None:
@@ -4443,92 +4389,54 @@ def validate_ai_key_env(value: Any) -> str:
     return _provider_configuration_validation.validate_ai_key_env(value)
 
 
+from .model_providers.local_model_config import LocalModelConfig
+from .model_providers.local_model_config_ports import LocalModelConfigFiles, LocalJsonModelPolicy, LocalImageModelPolicy
+
+_local_model_config = LocalModelConfig(
+    files=LocalModelConfigFiles(
+        ensure_dirs=lambda: ensure_dirs,
+        _business_files=lambda: _business_files,
+        AI_LOCAL_CONFIG_PATH=lambda: AI_LOCAL_CONFIG_PATH,
+        DATA_DIR=lambda: DATA_DIR,
+        ai_local_config_temp_path=lambda: ai_local_config_temp_path,
+        DEFAULT_AI_CONFIG=lambda: DEFAULT_AI_CONFIG,
+        HTTPException=lambda: HTTPException,
+    ),
+    json_policy=LocalJsonModelPolicy(
+        AI_DEFAULT_PROVIDER=lambda: AI_DEFAULT_PROVIDER,
+        AI_SUPPORTED_PROVIDERS=lambda: AI_SUPPORTED_PROVIDERS,
+        AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS,
+        default_ai_model=lambda: default_ai_model,
+        default_ai_base_url=lambda: default_ai_base_url,
+        validate_ai_proxy_url=lambda: validate_ai_proxy_url,
+        validate_ai_timeout=lambda: validate_ai_timeout,
+        normalize_ai_key_items=lambda: normalize_ai_key_items,
+        ai_keys_for_provider=lambda: ai_keys_for_provider,
+    ),
+    image_policy=LocalImageModelPolicy(
+        IMAGE_GENERATION_DEFAULT_PROVIDER=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER,
+        IMAGE_GENERATION_SUPPORTED_PROVIDERS=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS,
+        IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS,
+        default_image_generation_model=lambda: default_image_generation_model,
+        default_image_generation_base_url=lambda: default_image_generation_base_url,
+        validate_ai_base_url=lambda: validate_ai_base_url,
+        validate_image_generation_timeout=lambda: validate_image_generation_timeout,
+        normalize_image_key_items=lambda: normalize_image_key_items,
+        image_keys_for_provider=lambda: image_keys_for_provider,
+    ),
+)
+
+
 def load_ai_local_config() -> dict[str, Any]:
-    ensure_dirs()
-    if not _business_files.exists(AI_LOCAL_CONFIG_PATH):
-        return dict(DEFAULT_AI_CONFIG)
-    try:
-        raw = json.loads(_business_files.read_text(AI_LOCAL_CONFIG_PATH, encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        raw = {}
-    if not isinstance(raw, dict):
-        raw = {}
-    config = dict(DEFAULT_AI_CONFIG)
-    for key in DEFAULT_AI_CONFIG:
-        if key in raw:
-            config[key] = raw[key]
-    raw_provider = str(config.get("provider") or AI_DEFAULT_PROVIDER).strip().lower()
-    provider = raw_provider
-    legacy_provider = provider in {"openai", "openai_compatible"} or provider not in AI_SUPPORTED_PROVIDERS
-    if provider == "openai_compatible" and "generativelanguage.googleapis.com" in str(config.get("base_url") or ""):
-        provider = "gemini"
-    if provider not in AI_SUPPORTED_PROVIDERS:
-        provider = AI_DEFAULT_PROVIDER
-    config["provider"] = provider
-    config["model"] = str((default_ai_model(provider) if legacy_provider else config.get("model")) or default_ai_model(provider)).strip() or default_ai_model(provider)
-    config["base_url"] = str((default_ai_base_url(provider) if legacy_provider else config.get("base_url")) or default_ai_base_url(provider)).strip() or default_ai_base_url(provider)
-    if provider == "gemini" and "/openai/" in config["base_url"]:
-        config["base_url"] = default_ai_base_url(provider)
-    try:
-        config["proxy_url"] = validate_ai_proxy_url(config.get("proxy_url"))
-    except HTTPException:
-        config["proxy_url"] = ""
-    config["auto_local_proxy"] = bool(config.get("auto_local_proxy", True))
-    try:
-        config["timeout_seconds"] = validate_ai_timeout(config.get("timeout_seconds"))
-    except HTTPException:
-        config["timeout_seconds"] = AI_DEFAULT_TIMEOUT_SECONDS
-    config["api_key_env"] = str(config.get("api_key_env") or "").strip()
-    config["api_keys"] = normalize_ai_key_items(config, provider)
-    active_key_id = str(config.get("active_key_id") or "").strip()
-    current_ai_keys = ai_keys_for_provider(config["api_keys"], provider)
-    if active_key_id and not any(item["id"] == active_key_id for item in current_ai_keys):
-        active_key_id = ""
-    config["active_key_id"] = active_key_id or (current_ai_keys[0]["id"] if current_ai_keys else "")
-    config["api_key"] = ""
-    image_provider = str(config.get("image_provider") or IMAGE_GENERATION_DEFAULT_PROVIDER).strip().lower()
-    if image_provider not in IMAGE_GENERATION_SUPPORTED_PROVIDERS:
-        image_provider = IMAGE_GENERATION_DEFAULT_PROVIDER
-    config["image_provider"] = image_provider
-    config["image_model"] = str(config.get("image_model") or default_image_generation_model(image_provider)).strip() or default_image_generation_model(image_provider)
-    config["image_base_url"] = str(config.get("image_base_url") or default_image_generation_base_url(image_provider)).strip() or default_image_generation_base_url(image_provider)
-    try:
-        config["image_base_url"] = validate_ai_base_url(config["image_base_url"])
-    except HTTPException:
-        config["image_base_url"] = default_image_generation_base_url(image_provider)
-    try:
-        config["image_timeout_seconds"] = validate_image_generation_timeout(config.get("image_timeout_seconds"))
-    except HTTPException:
-        config["image_timeout_seconds"] = IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS
-    config["image_api_key_env"] = str(config.get("image_api_key_env") or "").strip()
-    config["image_api_keys"] = normalize_image_key_items(config, image_provider)
-    image_active_key_id = str(config.get("image_active_key_id") or "").strip()
-    current_image_keys = image_keys_for_provider(config["image_api_keys"], image_provider)
-    if image_active_key_id and not any(item["id"] == image_active_key_id for item in current_image_keys):
-        image_active_key_id = ""
-    config["image_active_key_id"] = image_active_key_id or (current_image_keys[0]["id"] if current_image_keys else "")
-    config["image_api_key"] = ""
-    return config
+    return _local_model_config.load_ai_local_config()
 
 
 def ai_local_config_temp_path() -> Path:
-    return AI_LOCAL_CONFIG_PATH.with_name(f"{AI_LOCAL_CONFIG_PATH.name}.tmp")
+    return _local_model_config.ai_local_config_temp_path()
 
 
 def save_ai_local_config(config: dict[str, Any]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {key: config.get(key, DEFAULT_AI_CONFIG[key]) for key in DEFAULT_AI_CONFIG}
-    tmp_path = ai_local_config_temp_path()
-    _business_files.write_text(tmp_path, json.dumps(payload, indent=2), encoding="utf-8")
-    try:
-        os.chmod(tmp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp_path, AI_LOCAL_CONFIG_PATH)
-    try:
-        os.chmod(AI_LOCAL_CONFIG_PATH, 0o600)
-    except OSError:
-        pass
+    return _local_model_config.save_ai_local_config(config)
 
 
 
@@ -6242,6 +6150,35 @@ def resolve_required_accessory_refs(required_refs: list[Any]) -> list[dict[str, 
     return _accessory_profile_payloads.resolve_required_accessory_refs(required_refs)
 
 
+from .model_providers.tool_dispatch import ModelToolDispatch
+from .model_providers.tool_dispatch_ports import ToolErrorPolicy, JsonToolExecution, McpToolTransport
+
+_model_tool_dispatch = ModelToolDispatch(
+    errors=ToolErrorPolicy(
+        bounded_text=lambda: bounded_text,
+        _text_v2_diagnostic_value=lambda: _text_v2_diagnostic_value,
+        AiProviderError=lambda: AiProviderError,
+        AiProviderTimeout=lambda: AiProviderTimeout,
+        AiProviderOverloaded=lambda: AiProviderOverloaded,
+        AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS,
+    ),
+    execution=JsonToolExecution(
+        ai_detection_settings=lambda: ai_detection_settings,
+        ai_tool_provider_meta=lambda: ai_tool_provider_meta,
+        provider_generate_json_error_payload=lambda: provider_generate_json_error_payload,
+        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
+    ),
+    transport=McpToolTransport(
+        ai_mcp_runtime=lambda: ai_mcp_runtime,
+        AI_MCP_RUNTIME_STDIO=lambda: AI_MCP_RUNTIME_STDIO,
+        AI_MCP_RUNTIME_IN_PROCESS=lambda: AI_MCP_RUNTIME_IN_PROCESS,
+        _ai_mcp_client=lambda: _ai_mcp_client,
+        prepare_ai_mcp_payload=lambda: prepare_ai_mcp_payload,
+        AI_MCP_TOOL_HANDLERS=lambda: AI_MCP_TOOL_HANDLERS,
+    ),
+)
+
+
 def provider_generate_json_error_payload(
     settings: dict[str, Any],
     meta: dict[str, Any],
@@ -6251,103 +6188,11 @@ def provider_generate_json_error_payload(
     overloaded: bool = False,
     latency_ms: int = 0,
 ) -> dict[str, Any]:
-    error_text = bounded_text(str(exc) or exc.__class__.__name__, 240)
-    error_type = "not_configured" if isinstance(exc, str) else bounded_text(exc.__class__.__name__, 80)
-    provider_failure_meta: dict[str, Any] = {}
-    if not isinstance(exc, str):
-        usage_metadata = getattr(exc, "usage_metadata", None)
-        failed_usage_metadata = getattr(exc, "failed_usage_metadata", None)
-        attempts = getattr(exc, "attempts", None)
-        retry_count = getattr(exc, "retry_count", None)
-        previous_errors = getattr(exc, "previous_errors", None)
-        http_status = getattr(exc, "http_status", None)
-        fallback_model = getattr(exc, "fallback_model", "")
-        fallback_reason = getattr(exc, "fallback_reason", "")
-        response_sha256 = getattr(exc, "response_sha256", "")
-        response_preview = getattr(exc, "response_preview", "")
-        if isinstance(usage_metadata, dict) and usage_metadata:
-            provider_failure_meta["usage_metadata"] = usage_metadata
-        if isinstance(failed_usage_metadata, list) and failed_usage_metadata:
-            provider_failure_meta["failed_usage_metadata"] = failed_usage_metadata
-        if isinstance(attempts, int):
-            provider_failure_meta["attempts"] = attempts
-        if isinstance(retry_count, int):
-            provider_failure_meta["retry_count"] = retry_count
-        if isinstance(previous_errors, list) and previous_errors:
-            provider_failure_meta["previous_errors"] = previous_errors[-2:]
-        if isinstance(http_status, int):
-            provider_failure_meta["http_status"] = http_status
-        if fallback_model:
-            provider_failure_meta["fallback_model"] = str(fallback_model)
-        if fallback_reason:
-            provider_failure_meta["fallback_reason"] = str(fallback_reason)
-        if response_sha256:
-            provider_failure_meta["response_sha256"] = str(response_sha256)
-        if response_preview:
-            provider_failure_meta["response_preview"] = _text_v2_diagnostic_value(str(response_preview))
-    error_meta = {**meta, "error_type": error_type, "overloaded": overloaded, **provider_failure_meta}
-    return {
-        "tool": "provider.gemini.generate_json",
-        "ok": False,
-        "parsed": {},
-        "latency_ms": latency_ms,
-        "timed_out": timed_out,
-        "overloaded": overloaded,
-        "provider_failure": True,
-        "error": error_text,
-        "error_type": error_type,
-        "meta": error_meta,
-        **meta,
-        **provider_failure_meta,
-    }
+    return _model_tool_dispatch.provider_generate_json_error_payload(settings, meta, exc, timed_out=timed_out, overloaded=overloaded, latency_ms=latency_ms)
 
 
 def tool_provider_gemini_generate_json(payload: dict[str, Any]) -> dict[str, Any]:
-    settings = dict(payload.get("provider_config") or ai_detection_settings())
-    meta = ai_tool_provider_meta(settings)
-    if not settings.get("configured"):
-        return provider_generate_json_error_payload(settings, meta, settings.get("message") or "AI provider is not configured")
-    max_attempts: int | None = None
-    if payload.get("max_attempts") is not None:
-        try:
-            max_attempts = max(1, int(payload.get("max_attempts")))
-        except (TypeError, ValueError):
-            max_attempts = None
-    try:
-        parsed, latency_ms, provider_meta = generate_provider_json_with_fallback(
-            settings,
-            str(payload.get("system_prompt") or ""),
-            payload.get("user_content") if isinstance(payload.get("user_content"), list) else [],
-            max_tokens=int(payload.get("max_tokens") or 1400),
-            cached_content=str(payload.get("cached_content") or ""),
-            max_attempts=max_attempts,
-        )
-        return {
-            "tool": "provider.gemini.generate_json",
-            "ok": True,
-            "parsed": parsed,
-            "latency_ms": latency_ms,
-            "timed_out": False,
-            "error": "",
-            "provider_failure": False,
-            "meta": {**meta, **provider_meta},
-            **meta,
-            **provider_meta,
-        }
-    except AiProviderTimeout as exc:
-        return provider_generate_json_error_payload(
-            settings,
-            meta,
-            exc,
-            timed_out=True,
-            latency_ms=int(float(settings.get("timeout_seconds") or AI_DEFAULT_TIMEOUT_SECONDS) * 1000),
-        )
-    except AiProviderOverloaded as exc:
-        return provider_generate_json_error_payload(settings, meta, exc, overloaded=True)
-    except AiProviderError as exc:
-        return provider_generate_json_error_payload(settings, meta, exc)
-    except Exception as exc:
-        return provider_generate_json_error_payload(settings, meta, exc)
+    return _model_tool_dispatch.tool_provider_gemini_generate_json(payload)
 
 
 def tool_accessory_reference_collect(payload: dict[str, Any]) -> dict[str, Any]:
@@ -6551,34 +6396,7 @@ def prepare_ai_mcp_payload(tool_name: str, payload: dict[str, Any]) -> dict[str,
 
 def call_ai_mcp_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     # Extraction point for out-of-process MCP: default is an O(1) in-process tool dispatch.
-    dispatch_start = time.monotonic()
-    arguments = payload if isinstance(payload, dict) else {}
-    runtime = ai_mcp_runtime()
-    fallback_error = ""
-    if runtime == AI_MCP_RUNTIME_STDIO:
-        try:
-            result = _ai_mcp_client.call_tool(tool_name, prepare_ai_mcp_payload(tool_name, arguments))
-            result.setdefault("mcp_transport", "stdio")
-            result.setdefault("mcp_runtime", AI_MCP_RUNTIME_STDIO)
-            result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
-            return result
-        except Exception as exc:
-            fallback_error = bounded_text(str(exc) or exc.__class__.__name__, 180)
-            _ai_mcp_client.close()
-    handler = AI_MCP_TOOL_HANDLERS.get(tool_name)
-    if handler is None:
-        raise AiProviderError(f"Unknown AI MCP tool: {tool_name}")
-    result = handler(arguments)
-    if not isinstance(result, dict):
-        raise AiProviderError(f"AI MCP tool returned non-object result: {tool_name}")
-    result.setdefault("tool", tool_name)
-    result.setdefault("mcp_transport", "in_process")
-    result.setdefault("mcp_runtime", AI_MCP_RUNTIME_IN_PROCESS)
-    result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
-    if fallback_error:
-        result.setdefault("mcp_fallback_from", AI_MCP_RUNTIME_STDIO)
-        result.setdefault("mcp_fallback_error", fallback_error)
-    return result
+    return _model_tool_dispatch.call_ai_mcp_tool(tool_name, payload)
 
 
 def warm_ai_mcp_client() -> None:
@@ -9758,140 +9576,47 @@ def react_preview(request: Request, preview_path: str = "") -> RedirectResponse:
     return RedirectResponse(url=destination, status_code=307)
 
 
+from .auth.status_requests import ServiceStatusRequests
+from .auth.status_requests_ports import StatusRequestAccess, StatusRequestCatalog, StatusRequestRuntime
+
+_service_status_requests = ServiceStatusRequests(
+    access=StatusRequestAccess(
+        current_auth_user=lambda: current_auth_user,
+        user_is_admin=lambda: user_is_admin,
+        scope_config_for_user=lambda: scope_config_for_user,
+        record_visible_to_user=lambda: record_visible_to_user,
+        user_has_permission=lambda: user_has_permission,
+        redact_status_payload_for_user=lambda: redact_status_payload_for_user,
+        redact_config_summary_for_user=lambda: redact_config_summary_for_user,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+    catalog=StatusRequestCatalog(
+        load_config=lambda: load_config,
+        selected_model_spec=lambda: selected_model_spec,
+        accessory_uid=lambda: accessory_uid,
+        list_training_tasks=lambda: list_training_tasks,
+        list_trained_model_specs=lambda: list_trained_model_specs,
+        legacy_model_specs=lambda: legacy_model_specs,
+        list_ai_detection_specialized_model_specs=lambda: list_ai_detection_specialized_model_specs,
+        ai_detection_tasks_response=lambda: ai_detection_tasks_response,
+        _business_files=lambda: _business_files,
+    ),
+    runtime=StatusRequestRuntime(
+        public_ai_detection_status=lambda: public_ai_detection_status,
+        record_owner_username=lambda: record_owner_username,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        training_execution_status=lambda: training_execution_status,
+        public_cursor_image2_status=lambda: public_cursor_image2_status,
+        public_yolo_warmup_status=lambda: public_yolo_warmup_status,
+        CLASS_LABELS=lambda: CLASS_LABELS,
+        CLASS_NAMES=lambda: CLASS_NAMES,
+    ),
+)
+
+
 @app.get("/api/status")
 def status(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    config = scope_config_for_user(load_config(), user, target_user_id)
-    active_spec = selected_model_spec(None, config)
-    active_path = Path(active_spec["path"]) if active_spec.get("path") else None
-    accessory_names_by_id = {
-        str(item.get("id") or accessory_uid(item)): str(item.get("name") or item.get("label") or accessory_uid(item))
-        for item in config.get("accessories", [])
-    }
-    training_tasks = list_training_tasks(user=user, target_user_id=target_user_id)
-    trained_specs = [spec for spec in list_trained_model_specs() if record_visible_to_user(spec, user, target_user_id)]
-    ai_detection_status = public_ai_detection_status()
-
-    def task_accessory_names(task: dict[str, Any]) -> list[str]:
-        names = [accessory_names_by_id.get(str(item_id), str(item_id)) for item_id in task.get("selected_accessory_ids") or []]
-        return [name for name in names if name]
-
-    available_models = []
-    for spec in legacy_model_specs():
-        path = Path(spec["path"]) if spec.get("path") else None
-        exists = bool(spec.get("is_ai_detection")) or bool(path and _business_files.exists(path))
-        available_models.append(
-            {
-                "id": spec["id"],
-                "label": spec["label"],
-                "description": spec["description"],
-                "variant": spec.get("variant"),
-                "uses_ocr": bool(spec.get("uses_ocr", False)),
-                "is_legacy": bool(spec.get("is_legacy", False)),
-                "is_ai_detection": bool(spec.get("is_ai_detection", False)),
-                "provider_status": ai_detection_status if spec.get("is_ai_detection") else None,
-                "path": str(path or ""),
-                "exists": exists,
-            }
-        )
-    specialized_specs = [*trained_specs, *list_ai_detection_specialized_model_specs(config, trained_specs, target_user_id)]
-    specialized_models = [
-        {
-            "id": spec["id"],
-            "run_id": spec["run_id"],
-            "task_id": spec["task_id"],
-            "task_label": spec.get("task_label") or "",
-            "task_source": spec.get("task_source") or "",
-            "variant": spec["variant"],
-            "label": spec["label"],
-            "description": spec["description"],
-            "uses_ocr": bool(spec.get("uses_ocr", False)),
-            "is_ai_detection": bool(spec.get("is_ai_detection", False)),
-            "provider_status": ai_detection_status if spec.get("is_ai_detection") else None,
-            "confidence_threshold": spec.get("confidence_threshold", config.get("confidence_threshold")),
-            "required_accessory_counts": spec.get("required_accessory_counts") or {},
-            "accessory_labels": spec.get("accessory_labels") or {},
-            "accessory_class_map": spec.get("accessory_class_map") or {},
-            "ocr_accessory_ids": spec.get("ocr_accessory_ids") or [],
-            "artifact_path": str(spec.get("artifact_path") or spec["path"]),
-            "metadata_path": str(spec.get("metadata_path") or ""),
-            "path": str(spec["path"]),
-            "exists": bool(spec.get("is_ai_detection")) or _business_files.exists(Path(spec["path"])),
-            "accessory_names": spec.get("accessory_names") or [],
-            "selected_accessory_ids": spec.get("selected_accessory_ids") or [],
-            "missing_accessory_ids": spec.get("missing_accessory_ids") or [],
-            "created_at": spec.get("created_at") or 0,
-            "updated_at": spec.get("updated_at") or spec.get("created_at") or 0,
-            "owner_user_id": spec.get("owner_user_id") or LEGACY_OWNER_ID,
-            "owner_username": spec.get("owner_username") or record_owner_username(spec),
-        }
-        for spec in specialized_specs
-    ]
-    task_labels = {
-        str(task.get("job_id")): str(task.get("label") or task.get("candidate_name") or task.get("job_id"))
-        for task in training_tasks
-    }
-    task_accessories = {
-        str(task.get("job_id")): task_accessory_names(task)
-        for task in training_tasks
-    }
-    specialized_model_tasks: dict[str, dict[str, Any]] = {}
-    for spec in specialized_models:
-        if spec.get("task_source") == "ai_detection_task_config":
-            continue
-        task_id = str(spec.get("task_id") or spec.get("run_id"))
-        accessory_names = task_accessories.get(task_id) or spec.get("accessory_names") or []
-        task = specialized_model_tasks.setdefault(
-            task_id,
-            {
-                "task_id": task_id,
-                "label": " + ".join(accessory_names) if accessory_names else task_labels.get(task_id, task_id),
-                "accessory_names": accessory_names,
-                "accessory_labels": spec.get("accessory_labels") or {},
-                "required_accessory_counts": spec.get("required_accessory_counts") or {},
-                "confidence_threshold": spec.get("confidence_threshold", config.get("confidence_threshold")),
-                "models": [],
-            },
-        )
-        if accessory_names and not task.get("accessory_names"):
-            task["accessory_names"] = accessory_names
-            task["label"] = " + ".join(accessory_names)
-        if spec.get("accessory_labels") and not task.get("accessory_labels"):
-            task["accessory_labels"] = spec.get("accessory_labels") or {}
-        if spec.get("required_accessory_counts") and not task.get("required_accessory_counts"):
-            task["required_accessory_counts"] = spec.get("required_accessory_counts") or {}
-        if spec.get("confidence_threshold") is not None:
-            task["confidence_threshold"] = spec.get("confidence_threshold")
-        task["models"].append(spec)
-    training_execution = training_execution_status(include_worker_probe=False)
-    cursor_image2 = public_cursor_image2_status()
-    if not user_has_permission(user, "worker_settings"):
-        training_execution = {"status": "restricted", "executor": ""}
-    if not user_has_permission(user, "ai_config"):
-        cursor_image2 = {"status": "restricted", "configured": False}
-    payload = {
-        "service": "running",
-        "model_exists": bool(active_spec.get("is_ai_detection")) or bool(active_path and _business_files.exists(active_path)),
-        "model_path": str(active_spec.get("path") or ""),
-        "active_model_id": active_spec["id"],
-        "available_models": available_models,
-        "specialized_models": specialized_models,
-        "specialized_model_tasks": list(specialized_model_tasks.values()),
-        "ai_detection_tasks": ai_detection_tasks_response(config, user=user, target_user_id=target_user_id)["tasks"],
-        "ai_detection": ai_detection_status,
-        "yolo_warmup": public_yolo_warmup_status(config),
-        "training_execution": training_execution,
-        "cursor_image2": cursor_image2,
-        "classes": [{"class_id": k, "name": v, "label": CLASS_LABELS[k]} for k, v in CLASS_NAMES.items()],
-        "rule": {
-            "confidence_threshold": config["confidence_threshold"],
-            "required_classes": config["required_classes"],
-            "min_counts": config["min_counts"],
-        },
-        "ocr": config.get("ocr", {}),
-    }
-    return redact_status_payload_for_user(payload, user)
+    return _service_status_requests.status(user_id)
 
 
 @app.post("/api/models/warmup")
@@ -9921,21 +9646,7 @@ def get_config() -> dict[str, Any]:
 
 @app.get("/api/config/summary")
 def get_config_summary(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user, user_id if user_is_admin(user) else None)
-    payload = public_path_sanitized(
-        {
-            "confidence_threshold": config["confidence_threshold"],
-            "required_classes": config["required_classes"],
-            "min_counts": config["min_counts"],
-            "task_rules": config.get("task_rules", {}),
-            "training": config.get("training", {}),
-            "video": config.get("video", {}),
-            "stream": config.get("stream", {}),
-            "ocr": config.get("ocr", {}),
-        }
-    )
-    return redact_config_summary_for_user(payload, user)
+    return _service_status_requests.get_config_summary(user_id)
 
 
 def get_plc_config() -> dict[str, Any]:

@@ -1,5 +1,5 @@
 {
-  "version": 146,
+  "version": 147,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -458,6 +458,15 @@
     "accessories/image_job_management.py",
     "accessories/image_job_management_ports.py",
     "accessories/candidate_artifacts.py",
-    "accessories/candidate_artifact_ports.py"
+    "accessories/candidate_artifact_ports.py",
+    "auth/status_requests.py",
+    "auth/status_requests_ports.py",
+    "config/app_store.py",
+    "config/app_store_ports.py",
+    "config/__init__.py",
+    "model_providers/local_model_config.py",
+    "model_providers/local_model_config_ports.py",
+    "model_providers/tool_dispatch.py",
+    "model_providers/tool_dispatch_ports.py"
   ]
 }

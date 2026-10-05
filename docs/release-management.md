@@ -990,3 +990,5 @@ The auto-optimization structural batch combines previously reviewed same-domain 
 The pipeline structural batch integrates six previously reviewed workflow boundaries, registers six CI smoke commands and appends twelve actual source files under manifest v145. Exact-head CI/review and whole-release artifact validation remain necessary.
 
 The accessory image workflow structural batch integrates reviewed domain services, registers eleven smoke commands and appends twenty-two actual source files under manifest v146. Complete CI, independent exact-head review and whole-release artifact validation remain mandatory.
+
+Configuration and status source modules ship in the complete release with Web and the declared label worker. Four focused CI contracts and the existing source/HTTP/model guards are retained. Source manifest v147 contains the nine added files; rollback restores a previous complete release and preserves runtime/model evidence.
