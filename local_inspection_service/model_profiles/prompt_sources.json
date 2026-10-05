@@ -1,5 +1,5 @@
 {
-  "version": 158,
+  "version": 163,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -480,6 +480,15 @@
     "config/environment.py",
     "detection/image_geometry.py",
     "runtime/repository_access.py",
-    "label_inspection/history_summary.py"
+    "label_inspection/history_summary.py",
+    "auth/account_projections.py",
+    "auth/account_projection_ports.py",
+    "records/resource_names.py",
+    "records/resource_name_ports.py",
+    "auth/public_network.py",
+    "auth/public_network_ports.py",
+    "auth/docs_api.py",
+    "auth/composition.py",
+    "auth/http_composition.py"
   ]
 }

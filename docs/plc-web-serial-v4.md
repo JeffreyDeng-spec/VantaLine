@@ -124,3 +124,5 @@ Accessory image extraction and training asset preparation do not produce physica
 Configuration extraction preserves protected PLC namespace policy and existing transaction authority. It does not grant server serial access or alter browser leases, actual ACK validation or uncertain-write non-retry behavior.
 
 The two generic/protected app-configuration write entry helpers now delegate to AppConfigStore. Existing protected PLC keys, namespace transaction, shared reentrant guard and authorization-token reset remain unchanged. This move does not enable legacy workers, open serial ports, create dispatch attempts, change browser leases or retry uncertain physical writes.
+
+The existing camera/lease callers now obtain model permission and account configuration through the explicit auth projection boundary. Permission order and scoped model lookup remain unchanged, as do browser serial ownership, lease/ACK and uncertain-write rules.

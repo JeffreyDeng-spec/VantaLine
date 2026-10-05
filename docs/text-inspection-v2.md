@@ -741,3 +741,5 @@ existing errors. Snapshot pagination and task detail behavior remain unchanged.
 History result column-name reuse is confined to a single query result. It changes no configuration, schema, API or worker topology; whole-release rollback and snapshot/call evidence retention remain unchanged.
 
 Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.
+
+Manifest version 163 adds actual authentication HTTP composition source to new task fingerprints. This does not rewrite historical model snapshots or change label/text worker admission, concurrency or paid-call settlement.

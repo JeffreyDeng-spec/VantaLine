@@ -1041,3 +1041,17 @@ The native history reader combines a same-statement current-proof gate with resu
 Native list-history fallback now compacts a nonempty `quality` object only when every immediate value is a JSON string, boolean or null. This matches the existing public checked marker while avoiding unnecessary evidence transfer. Numeric and nested values stay intact so JSON decoding errors remain visible; other fields, ordering, detail payloads and old snapshots are unchanged. PostgreSQL/HTTP regressions cover flat Unicode/string/bool/null, empty and other shapes, and bounded-decoder failures. The original complete performance protocols and thresholds remain mandatory; private diagnostics are not acceptance.
 
 The current native-history integration retains the accepted foundation and readiness modules. Its bundled manifest is v158 with 480 unique sources. Historical counts above describe earlier isolated slices. The original 47 reader/history cases and both frozen baselines remain required; legacy/manual/Beta SQL aggregation is not completed by this native slice.
+
+The account/name policy batch integrates two independently checked structural moves and retains their original method behavior. Exact-head CI/review and serial whole-release observation remain required. Source manifest163/488 records actual files; this slice is separate from list-query performance work.
+
+Origin/status projection service and typed capabilities ship with callers under manifest v163. Require original/candidate policy, actual middleware/auth/status and full HTTP checks before exact-head review and whole-release acceptance.
+
+The administrator documentation domain registrar is structural under manifest v163. Require original/candidate guard and HTTP/cache isolation tests, existing auth and whole-app HTTP contracts, exact-head CI and independent release acceptance. API visibility and deployment topology stay unchanged.
+
+Authentication graph composition is structural under manifest v163. Require domain, RBAC, two-application isolation, real PostgreSQL and whole-app HTTP regressions, then exact-head CI, independent review and whole-release acceptance. This does not activate additional workers or change the release topology.
+
+Prompt-source manifest version 163 includes `auth/http_composition.py` and records the new composition source for future task fingerprints (488 source files). Prior task snapshots and secret references remain unchanged; model/provider behavior and release topology are unchanged.
+
+The earlier identity-only candidate used manifest v162/488 on fac841. Its PR265 latency failure remains a recorded NoGo; those results do not approve this new integration.
+
+This identity integration is rebuilt on main734e5e0 after PR266. It retains native-history SQL, readiness and all47 fixed reader/history cases byte-for-byte from that main. The complete manifest is v163 with489 unique sources; earlier slice counts are historical. This changed prerequisite requires fresh integration, hostedCI and release acceptance and does not explain or waive PR265 performance failure.

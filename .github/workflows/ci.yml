@@ -283,6 +283,11 @@ jobs:
           python scripts/smoke_label_history_benchmark.py
           python scripts/smoke_label_history_statistics.py
           python scripts/benchmark_label_history_statistics.py
+          python scripts/smoke_account_projections.py
+          python scripts/smoke_public_network_policy.py
+          python scripts/smoke_admin_documentation_composition.py
+          python scripts/smoke_authentication_composition.py --postgres
+          python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
           python scripts/smoke_label_benchmark_evidence.py
