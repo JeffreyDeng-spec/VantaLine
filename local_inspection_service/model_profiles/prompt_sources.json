@@ -1,5 +1,5 @@
 {
-  "version": 150,
+  "version": 157,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -471,6 +471,14 @@
     "model_providers/tool_dispatch_ports.py",
     "label_inspection/projection.py",
     "label_inspection/run_summary.py",
-    "storage/label_run_projection.py"
+    "storage/label_run_projection.py",
+    "runtime/service_paths.py",
+    "runtime/service_path_ports.py",
+    "runtime/read_caches.py",
+    "runtime/directories.py",
+    "runtime/text_policy.py",
+    "config/environment.py",
+    "detection/image_geometry.py",
+    "runtime/repository_access.py"
   ]
 }

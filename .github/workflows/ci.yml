@@ -274,6 +274,12 @@ jobs:
           python scripts/verify_backend_contract.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
+          python scripts/smoke_foundation_policies.py
+          python scripts/smoke_artifact_file_policies.py
+          python scripts/smoke_runtime_repository_access.py
+          python scripts/smoke_service_paths.py
+          python scripts/smoke_read_cache_ownership.py
+          python scripts/smoke_directory_lifecycle.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
           python scripts/smoke_label_benchmark_evidence.py
@@ -286,6 +292,7 @@ jobs:
           python scripts/smoke_label_summary_migration.py
           python scripts/smoke_service_status_requests.py
           python scripts/smoke_app_config_store.py
+          python scripts/smoke_protected_config_ownership.py
           python scripts/smoke_local_model_config.py
           python scripts/smoke_model_tool_dispatch.py
           python scripts/smoke_accessory_text_preparation.py

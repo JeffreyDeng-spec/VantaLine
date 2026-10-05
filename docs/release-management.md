@@ -1013,3 +1013,19 @@ The derived-label list reader preserves the predecessor release topology. CI com
 Reader activation includes a first-startup prerequisite on the actual Web repository connection. Failed verification prevents candidate control readiness and separate-worker startup; the existing installed controller follows whole-release rollback. It runs after the ordinary switch and may extend a failed restart window. No new root-executed candidate validator or installer bridge is introduced. CI includes restricted-role startup rejection and controller rollback, and the HTTP contract baseline changes only by the explicit new first startup callback.
 
 The reader evidence revision changes benchmark/CI diagnostics only, with three mandatory complete A/B repetitions and a separate A/A control. Existing latency/memory/query gates remain unchanged. A failure blocks release; an earlier failed main run must not be described as accepted. New passing CI remains empirical evidence, not proof that the original tail-latency failure was environmental. Whole-release rollback remains the recovery unit.
+
+Package `runtime/service_paths.py` and its typed ports with callers and the updated prompt-source manifest. Require both-platform original/candidate path checks and neighboring media/auth/HTTP/model contracts, followed by exact-head review and managed complete-release validation. No independent file deployment is supported.
+
+Read-cache ownership changes only cache composition and state placement. Original/candidate behavior and actual analytics/artifact/state/task/HTTP checks must pass, followed by exact-head CI and independent release verification. No performance or stronger consistency claim follows from this relocation.
+
+Directory lifecycle owners and callers ship in the same complete package. Construction is side-effect free; existing initialization behavior runs only when invoked. Require original/candidate lifecycle concurrency/failure contracts and neighboring runtime/HTTP checks before exact-head CI, independent review and release acceptance.
+
+Direct foundation policy imports ship with existing consumers and source manifest v158. Require original/candidate and consumer contracts, full exact-head CI and complete-release validation.
+
+File digest and naming policies move into already fingerprinted modules under manifest v158. Require original/candidate streams and neighboring artifact/training contracts before exact-head CI and whole-release acceptance.
+
+Runtime repository HTTP access ships as a structural module move under manifest v158. Require original/candidate error and identity contracts, endpoint source/probe guards and actual PostgreSQL lifecycle checks, then exact-head CI and whole-release acceptance.
+
+Protected configuration ownership under manifest v158 requires original config regression, real PostgreSQL concurrency/rollback, source binding guards, full HTTP and PLC contracts. It has no data migration, new setting or topology change. Rollback uses the previous complete accepted Web/worker release.
+
+This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.

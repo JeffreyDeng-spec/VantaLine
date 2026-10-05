@@ -43,3 +43,17 @@ def bbox_overlap_ratio(a: tuple[float, float, float, float], b: tuple[float, flo
     area_a = max((ax2 - ax1) * (ay2 - ay1), 1)
     area_b = max((bx2 - bx1) * (by2 - by1), 1)
     return float(inter / min(area_a, area_b))
+
+
+def bbox_iou_xyxy(a: list[int], b: list[int]) -> float:
+    if len(a) < 4 or len(b) < 4:
+        return 0.0
+    ax1, ay1, ax2, ay2 = [int(value) for value in a[:4]]
+    bx1, by1, bx2, by2 = [int(value) for value in b[:4]]
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+    area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+    area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
+    union = area_a + area_b - inter
+    return float(inter) / float(union) if union > 0 else 0.0

@@ -122,3 +122,5 @@ Pipeline workflow relocation does not grant physical PLC capability or alter cam
 Accessory image extraction and training asset preparation do not produce physical PLC writes. Camera provenance, leased browser serial ownership and actual ACK requirements remain unchanged; uncertain writes remain non-retryable.
 
 Configuration extraction preserves protected PLC namespace policy and existing transaction authority. It does not grant server serial access or alter browser leases, actual ACK validation or uncertain-write non-retry behavior.
+
+The two generic/protected app-configuration write entry helpers now delegate to AppConfigStore. Existing protected PLC keys, namespace transaction, shared reentrant guard and authorization-token reset remain unchanged. This move does not enable legacy workers, open serial ports, create dispatch attempts, change browser leases or retry uncertain physical writes.

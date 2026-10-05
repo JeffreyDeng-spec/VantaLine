@@ -1,5 +1,6 @@
 """Application configuration persistence with unchanged protected namespaces."""
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass
 import json
 import os
@@ -100,3 +101,44 @@ class AppConfigStore:
                 os.replace(backup_tmp, self.files.CONFIG_BACKUP_PATH())
             except OSError:
                 pass
+
+    def save_app_config(self, config: dict[str, Any]) -> None:
+        repository = self.rows.runtime_postgres_repository_or_none()()
+        if repository is not None:
+            with self.files._config_io_lock():
+                repository.replace_app_config_preserving_keys(
+                    self.rows.app_config_rows()(config, updated_at=int(time.time())),
+                    self.policy.PLC_PROTECTED_CONFIG_KEYS(),
+                )
+            return
+        self.save_config(config)
+
+
+    def mutate_app_config_atomically(self, mutator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        'Atomically mutate only the protected PLC app-config namespace.\n\n    JSON is single-process/thread safe. PostgreSQL additionally uses a\n    transaction-scoped advisory lock so independent repository instances share\n    the same namespace linearization point.\n    '
+        with self.files._config_io_lock():
+            repository = self.rows.runtime_postgres_repository_or_none()()
+            if repository is not None:
+
+                def mutate_protected(values: dict[str, Any]) -> None:
+                    mutator(values)
+                    unexpected = set(values) - set(self.policy.PLC_PROTECTED_CONFIG_KEYS())
+                    if unexpected:
+                        raise ValueError(f'PLC namespace mutator wrote unprotected keys: {sorted(unexpected)}')
+                repository.mutate_app_config_namespace(
+                    self.policy.PLC_PROTECTED_CONFIG_KEYS(), mutate_protected,
+                    updated_at=int(time.time()),
+                )
+                return self.load_config()
+            config = self.load_config()
+            unprotected_before = {key: copy.deepcopy(value) for key, value in config.items() if key not in self.policy.PLC_PROTECTED_CONFIG_KEYS()}
+            mutator(config)
+            unprotected_after = {key: value for key, value in config.items() if key not in self.policy.PLC_PROTECTED_CONFIG_KEYS()}
+            if unprotected_after != unprotected_before:
+                raise ValueError('PLC namespace mutator changed unprotected app-config keys')
+            token = self.policy._plc_namespace_write_authorized().set(True)
+            try:
+                self.save_app_config(config)
+            finally:
+                self.policy._plc_namespace_write_authorized().reset(token)
+            return config

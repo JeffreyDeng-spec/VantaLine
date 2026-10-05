@@ -1639,3 +1639,19 @@ The Web registrar prepends a label-reader prerequisite check to the startup life
 Lifecycle registration remains inert. The first reader readiness callback precedes the existing PDF and label startup callbacks; each application passes its own business repository capability to that check.
 
 The label reader's repeated benchmark protocol observes Python CPU/GC outside its original timing window and uses synthetic-session prepared counters after failures. This is validation tooling; application composition, SQL and worker ownership are unchanged.
+
+Service path rebasing, public path projection, JSON path migration and output placement live in `runtime/service_paths.py`. Focused typed settings, policy, file, identity and sibling-call interfaces preserve late resolution without retaining a request user or connection. Existing root forwarders remain temporary composition adapters; migration scheduling and its lock remain unchanged.
+
+Read-cache state is owned by three explicit instances in `runtime/read_caches.py`: request ContextVar memoization, short-lived store values, and JSON metadata-validated values. Each instance owns its locks/state; application composition supplies only the store TTL/clock and file-facade factory. No current user or database connection is retained. Existing request consumers temporarily share the same ContextVar alias; callables are bound directly to cache instances.
+
+`runtime/directories.py` owns directory preparation and the one-time local-path migration lock/completion state. Each application composition creates one `ServiceDirectories` and one `LocalPathMigration`; construction performs no filesystem operation. Existing output/config/migration capabilities are supplied explicitly, with the same directory order and double-checked migration gate.
+
+Four remaining stateless policies are direct domain imports: `runtime/text_policy.py` owns text bounding, `config/environment.py` owns affirmative environment flags, and detection geometry modules own box IoU and maximum-side image scaling. They have no application dependency or state container; entry exports preserve existing callers.
+
+FileDigest in storage/artifacts/files.py owns streamed SHA-256 calculation through a read-only byte-stream capability. Generated upload names live beside path policies in runtime/service_paths.py. The entry retains a digest adapter and directly imports the naming function; neither adds request or database state.
+
+HTTP-safe runtime repository selection and admin probe projection live in runtime/repository_access.py. RuntimeRepositoryAccess receives a thread repository factory and per-call selection/fingerprint/store-kind capabilities; it never retains a database connection. ThreadRepositoryFactory remains the sole connection lifecycle owner. The entry retains three adapters and directly exports the process-local fingerprint helper.
+
+AppConfigStore now also owns save_app_config and mutate_app_config_atomically. Protected configuration mutation uses the same supplied reentrant guard and authorization ContextVar as generic configuration persistence. Its internal load/save calls use its own methods, removing these two business bodies and their callbacks through the entry. Root exports remain bound aliases; no new aggregate service or connection state is introduced.
+
+This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.

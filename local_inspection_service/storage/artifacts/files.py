@@ -1,5 +1,8 @@
 """Explicit business-file operations; configuration and packaged files stay local."""
-from contextlib import contextmanager
+from collections.abc import Callable
+from contextlib import contextmanager, AbstractContextManager
+from typing import BinaryIO, Protocol
+import hashlib
 import os
 import fnmatch
 import shutil
@@ -288,3 +291,22 @@ class BusinessFiles:
                         yield named
                 return
         yield path
+
+
+class DigestFiles(Protocol):
+    def open_read(self, path: Path) -> AbstractContextManager[BinaryIO]: ...
+
+
+class FileDigest:
+    def __init__(self, files: Callable[[], DigestFiles]) -> None:
+        self.files = files
+
+    def file_sha256(self, path: Path) -> str | None:
+        try:
+            digest = hashlib.sha256()
+            with self.files().open_read(path) as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+        except OSError:
+            return None

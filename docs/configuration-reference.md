@@ -1210,3 +1210,19 @@ Reader startup now verifies the actual business connection and effective Postgre
 Synthetic lifecycle tests replace the explicit readiness capability rather than disabling it through an environment flag. Production startup always retains the actual database check when a PostgreSQL repository is selected.
 
 Reader benchmark evidence v1 adds no runtime configuration or reduced-repetition switch. Its fixed three A/B repetitions and separate A/A control use only the existing isolated-test PostgreSQL DSN; diagnostic output omits SQL, parameters and credentials.
+
+Service-path extraction adds no setting. Manifest v158 includes both actual runtime source files (479 sources). Existing stale-prefix handling, output layout and legacy/system/admin shared placement remain unchanged. Owner values retain the existing trusted-caller contract; this is not a new untrusted-path validation API.
+
+Read-cache ownership preserves the existing five-second store TTL and file generation/size or mtime/size keys; it adds no setting. Returned payloads remain shared read-only-by-contract values. Manifest v158 appends the actual cache module (479 sources); historical model snapshots remain unchanged.
+
+Directory lifecycle ownership adds no setting or data migration. It preserves the existing startup/on-demand path migration and default-config behavior. Manifest v158 includes the actual lifecycle source (479 files); historical model snapshots remain unchanged.
+
+Foundation policy relocation retains flag vocabulary, arbitrary defaults, text slicing, box integer coercion and image rounding. Manifest v158 includes 479 actual sources; task snapshots and secret bindings are not rewritten. The permissive provider proxy flag policy is separate and unchanged.
+
+File digest and name relocation adds no settings. Digest reads remain 1 MiB chunks with OSError mapped to None; naming retains its existing clock, UUID prefix, stem truncation and suffix fallback. Manifest v158 retains 479 actual sources and leaves historical snapshots unchanged.
+
+Repository access relocation adds no datastore configuration or fallback. Selector failures retain the existing 503 codes and messages; count-probe failures expose only the exception class. The existing 16-character connection fingerprint remains process/thread scoped. Manifest v158 records the real module (479 sources); historical snapshots stay intact.
+
+Protected configuration ownership changes no defaults, protected keys or setting. PostgreSQL mutation retains the namespace transaction and a fresh configuration load while the shared local RLock remains held. JSON mutation still rejects unprotected changes before authorizing a protected save and resets the previous ContextVar value in finally. Private root load/save rebinding no longer redirects these internal owner calls; replace actual typed ports for tests. Manifest v158 fingerprints the updated existing modules (479 paths), preserving historical task snapshots.
+
+This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
