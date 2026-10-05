@@ -1028,7 +1028,7 @@ Runtime repository HTTP access ships as a structural module move under manifest 
 
 Protected configuration ownership under manifest v158 requires original config regression, real PostgreSQL concurrency/rollback, source binding guards, full HTTP and PLC contracts. It has no data migration, new setting or topology change. Rollback uses the previous complete accepted Web/worker release.
 
-This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+Historical integration record (before PR266; not the current bundled architecture): That foundation integration followed the accepted reader-readiness source manifest and retained its prerequisite. Its bundled manifest was v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remained mandatory; that historical candidate did not include native-history aggregation. The current integration retains the native-history implementation accepted in PR266.
 
 CI also checks native count/latest against the frozen pre-change list endpoint on
 real isolated PostgreSQL, including mixed historical ordering and original plus

@@ -1654,7 +1654,7 @@ HTTP-safe runtime repository selection and admin probe projection live in runtim
 
 AppConfigStore now also owns save_app_config and mutate_app_config_atomically. Protected configuration mutation uses the same supplied reentrant guard and authorization ContextVar as generic configuration persistence. Its internal load/save calls use its own methods, removing these two business bodies and their callbacks through the entry. Root exports remain bound aliases; no new aggregate service or connection state is introduced.
 
-This foundation integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+Historical integration record (before PR266; not the current bundled architecture): That foundation integration followed the accepted reader-readiness source manifest and retained its prerequisite. Its bundled manifest was v157 with 479 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remained mandatory; that historical candidate did not include native-history aggregation. The current integration retains the native-history implementation accepted in PR266.
 
 ## Native label history statistics
 
