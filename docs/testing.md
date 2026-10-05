@@ -2095,3 +2095,40 @@ target/schema, missing WHERE, dynamic SQL, and surrounding executable SQL.
 The generated-schema and CSV-import real-engine smokes send complete SQL blocks to `postgres --single -j`, preserving semicolons inside quoted trigger bodies. Embedded single-user input delimiters are rejected explicitly. The schema smoke verifies the installed trigger and a quoted semicolon, and proves that an intentional SQL error is rejected even when the backend process exits successfully.
 
 `python scripts/smoke_label_public_projection.py` verifies the original public run projection against the extracted pure module, including private-field omission, error and quality truthiness, shallow nested identity, import allowlists and invalid-input errors. Existing HTTP, owner isolation and pagination contracts remain required.
+
+## Post-settlement summary publisher
+
+`smoke_label_run_summary.py` covers complete-payload validation, integer/float/
+depth/size bounds, malformed import values, source identity and absent-versus-null
+fields. `smoke_label_run_projection.py` uses isolated real PostgreSQL to exercise
+terminal-only ownership, wrong/missing/busy source skips, transaction ownership,
+source-first publication, actual unrelated claim progress while a projection is
+held, old-writer invalidation, rollback/reuse and cache lock timeout reset.
+`smoke_label_summary_worker.py` verifies that projection failure follows business
+processing without replay or exception disclosure; pause/stop skip optional work;
+and admitted publication/cleanup prevents a false drain acknowledgement.
+
+The synchronous-in-business-transaction prototype failed the prior write-cost
+guard (100 synthetic 8 KiB updates, P95 about 16 ms to 35 ms) and was not adopted.
+The selected publisher leaves business repository/paid processing statements
+unchanged and generates derived state after settlement. This slice enables no
+cache reader and does not complete full-API/mixed-history performance acceptance.
+
+The projection smoke also observes the actual three-party PostgreSQL wait chain:
+a held projection row lock blocks a writer that already owns the global advisory
+fence, which then blocks an unrelated claim. Releasing the proof lets the writer
+invalidate the cache and the claim proceed. This retained counterexample prevents
+treating the absence of an advisory acquisition as absence of indirect contention.
+The fixture closes partially opened connections and preserves original errors if
+cleanup also fails; proof failure retains the original exception and closes its
+cursor before IDLE/reuse verification.
+
+`benchmark_label_projection.py` records 31 alternating post-warmup samples for
+actual `update_run` settlement, optional publication and competing write/claim
+latency at 256 B, 8 KiB and 200 KiB synthetic quality payloads. It reports
+nearest-rank P95, raw timings and optional worker occupancy separately, with a
+50 ms publication budget and unchanged per-case claim/settlement guard of
+`max(before * 1.25, before + 5 ms)`. An optional `--report` path is created
+exclusively. These synthetic sizes do not assert production payload distribution
+or paid processing latency. The new storage module participates in dependency
+cycle/entry-point checks.

@@ -1603,3 +1603,29 @@ source and use the original payload for missing/unknown summary versions.
 Neither a generic global context nor a second authoritative task store is added.
 
 Label run public projection now lives in the pure `label_inspection/projection.py` module. The API calls the same redaction/field-projection implementation without changing response fields, pagination or storage reads.
+
+## Optional post-settlement label summaries
+
+After the existing label `process` returns, its admitted consumer iteration may
+publish derived state through `storage/label_run_projection.py`. This occurs in
+a separate transaction after business settlement, never inside the global
+label advisory lock. A single owned terminal run is selected `FOR UPDATE SKIP
+LOCKED`; the actual returned payload is validated by the pure `run_summary`
+policy before a compact projection is committed under that same row lock.
+Web lists/details still use their existing payload queries. No new thread,
+process, scheduler or read-triggered backfill is introduced.
+
+The publisher declines active or autocommit connections and never commits a
+caller's transaction. It uses local 100 ms lock and 500 ms statement limits;
+these do not bound network I/O or total Python execution. It skips a busy source,
+missing/wrong-owner run, nonterminal status, or unprovable payload. Business writes
+continue invalidating existing cache in their source transaction. Optional
+publication failure records a fixed error code, without settling/requeuing the
+run or repeating a model call. Pause/stop skips work not yet admitted to the
+publisher; in-progress publication and connection cleanup remain inside drain.
+
+The projection storage module is explicitly included in the static dependency
+graph alongside its pure label policy; reverse imports into Web composition and
+cycles are rejected. Row locking still permits indirect contention when another
+writer holds the global fence while waiting for the projected row. Tests preserve
+this counterexample; optional work is not described as contention-free.

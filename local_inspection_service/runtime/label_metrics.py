@@ -3,7 +3,7 @@ import math
 import threading
 import time
 
-ERRORS = frozenset(("worker_iteration_failed", "worker_cleanup_failed", "heartbeat_failed"))
+ERRORS = frozenset(("worker_iteration_failed", "worker_cleanup_failed", "heartbeat_failed", "summary_publication_failed"))
 STATES = frozenset(("ready", "drained", "draining", "failed", "timed_out"))
 
 

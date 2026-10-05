@@ -497,3 +497,25 @@ single ledger entry. A five-second lock timeout aborts migration atomically if
 the short source-table DDL lock cannot be obtained.
 
 The isolated generated-schema and import validators use complete multiline single-user SQL input, including PL/pgSQL bodies. They do not split SQL on semicolons. The schema validator checks trigger presence and rejects database error output; this validation change does not alter generated or deployed migration SQL.
+
+## Post-settlement projection transaction
+
+The optional publisher requires an idle, non-autocommit thread-owned connection.
+It owns one new transaction, selects a single owned terminal source row with
+`FOR UPDATE SKIP LOCKED`, validates its actual stored trimmed JSON, and upserts
+derived state while holding the source row lock through commit. Lock order is
+source then cache. It obtains no global label advisory lock and does not change
+`LabelRepository.put`, claims, call registration or business settlement. The
+existing source trigger invalidates its proof when any old/new writer changes
+that source. A cache error rolls back only this separate transaction.
+
+A concurrent write to this same source can wait for the short projection lock;
+other run claims can proceed unless a separate writer holds the global fence.
+100 ms lock/500 ms SQL statement timeouts and a 256 KiB payload bound reduce this
+exposure but are not an end-to-end network deadline. Projection version 1 admits
+only validated ID/time/optional status/decision fields. The complete trimmed
+payload is parsed (including unknown fields and `import`), with at most 512
+integer digits, finite floats and depth 64; unsafe shapes remain uncached.
+Any future change to this proof, public projection semantics or consumed list
+fields requires a new projection version and fallback tests. Historical source
+records are neither rewritten nor scanned for backfill.

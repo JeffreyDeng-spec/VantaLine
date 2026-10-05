@@ -1001,3 +1001,9 @@ DDL lock failure aborts transactionally rather than partially installing the
 trigger. Local synthetic verification does not satisfy production ReleaseGo.
 
 The pure label projection structural slice is separate from summary publication and performance changes. One actual source is added under manifest v148 and its pure contract is registered in CI.
+
+Post-settlement summary preparation preserves the predecessor topology and leaves all business
+repository/paid-stage logic unchanged. CI adds pure proof, worker failure/drain
+and real PostgreSQL publication checks. The complete release carries manifest
+v149/470 and the previous additive cache migration; no cache read or backfill
+is enabled. Exact-head CI and preceding release acceptance remain mandatory.

@@ -1,5 +1,5 @@
 {
-  "version": 148,
+  "version": 149,
   "sources": [
     "server.py",
     "plc/__init__.py",
@@ -468,6 +468,8 @@
     "model_providers/local_model_config_ports.py",
     "model_providers/tool_dispatch.py",
     "model_providers/tool_dispatch_ports.py",
-    "label_inspection/projection.py"
+    "label_inspection/projection.py",
+    "label_inspection/run_summary.py",
+    "storage/label_run_projection.py"
   ]
 }
