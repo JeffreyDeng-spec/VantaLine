@@ -2078,3 +2078,16 @@ Six focused CI commands cover `smoke_pipeline_auto_optimization_links.py`, `smok
 Eleven smoke commands cover accessory text preparation, pose prompts/jobs, worker diagnostics, reference media, image queue, training asset preparation, image provider configuration, image execution/management and candidate artifacts. Existing artifact integration assertions now use the actual moved execution dependency. Original baseline selectors, exact prompt snapshots and adverse ordering contracts remain. Routine checks use synthetic files/providers/processes, preserve two-account async thread identity coverage and do not invoke paid models or physical PLC. Candidate deletion tests use strictly scoped private files; Linux tests include a symlink escape. The retired Windows execution path performs no external process or network I/O but retains its original directory creation and failure persistence.
 
 The four added contracts are `smoke_service_status_requests.py`, `smoke_app_config_store.py`, `smoke_local_model_config.py` and `smoke_model_tool_dispatch.py`. They retain original behavior selectors and check permissions, protected configuration, default/recovery boundaries, atomic file replacement and partial failures, provider normalization, metadata precedence, timeout/overload handling and selected-callable/late-handler timing. App-config tests use real isolated PostgreSQL when the existing test DSN is present; all model and transport calls use substitutes. The source guard follows the real store and keeps its original minimum/required sets. The pre-existing local-fake-postgres cutover failure on unsupported advisory SQL remains documented and is not counted as passing.
+
+## Derived label summary migration
+
+`scripts/smoke_label_summary_migration.py` runs against disposable PostgreSQL
+schemas and a temporary restricted role. It compares generated/incremental DDL,
+empty state and retained source evidence; exercises all source-column updates,
+COPY/upsert, ID rename/reuse, transaction/savepoint rollback and the source-first
+publication lock; checks old source-only writer permissions, hostile search_path
+and foreign-trigger attachment; and injects a real DDL lock timeout and a
+mid-migration error to prove atomic rollback and reentry. No application cache
+read or paid/PLC call occurs. Migration guard tests retain all previous negative
+cases and reject changes to the exact audited exception, including another
+target/schema, missing WHERE, dynamic SQL, and surrounding executable SQL.

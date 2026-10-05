@@ -125,6 +125,10 @@ class TableSchema:
 
 TABLES = (
     TableSchema(
+        "label_run_projection", ("id", "projection_version", "raw_json"),
+        "CREATE TABLE IF NOT EXISTS label_run_projection (id TEXT PRIMARY KEY, projection_version INTEGER NOT NULL, raw_json TEXT NOT NULL)",
+    ),
+    TableSchema(
         "label_runtime_state", ("id", "updated_at", "raw_json"),
         "CREATE TABLE IF NOT EXISTS label_runtime_state (id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL, raw_json TEXT NOT NULL)",
     ),

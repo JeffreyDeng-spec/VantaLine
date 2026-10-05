@@ -1591,3 +1591,13 @@ This is structural relocation of one accessory image workflow family. Prompt tex
 `config/app_store.py` owns application configuration persistence with explicit file, repository-row and protected-namespace interfaces. `model_providers/local_model_config.py` owns legacy provider configuration normalization and saving; `model_providers/tool_dispatch.py` owns JSON tool result/error projection and existing MCP dispatch. `auth/status_requests.py` owns the permission-aware service status request workflows. Each boundary has narrowly scoped typed dependencies; the application composes them and retains caller adapters.
 
 Existing call-time identity, protected PLC namespaces, PostgreSQL authority, atomic primary-file replacement, model snapshot binding and selected callback timing are preserved. No module stores a global request user or database connection. Dependency checks now include the config package, and source-location checks follow the actual configuration store without lowering required coverage.
+
+## Derived label summary preparation
+
+Storage owns the optional `label_run_projection` side table and its exact
+source-change invalidation DDL. This slice creates only empty compatible state;
+HTTP list/detail paths, business repositories and task/model evidence are
+unchanged. Future publication must validate the actual source row while holding
+its row lock until the summary commits; readers must join the authoritative
+source and use the original payload for missing/unknown summary versions.
+Neither a generic global context nor a second authoritative task store is added.

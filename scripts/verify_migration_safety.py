@@ -2,11 +2,21 @@
 from __future__ import annotations
 import re
 from pathlib import Path
+import sys
 root=Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root))
+from local_inspection_service.storage.label_summary_schema import migration_sql
+
 migrations=sorted((root/"local_inspection_service/storage/migrations").glob("*.sql"))
 forbidden=re.compile(r"\b(DROP|TRUNCATE|ALTER|REVOKE|GRANT|CALL|EXECUTE|UPDATE)\b|\bDO\s+\$|\bDELETE\s+FROM\b|\bCREATE\s+OR\s+REPLACE\b",re.I|re.S)
 
 def validate_sql(sql: str, label: str) -> None:
+    # Only this complete canonical migration may invalidate derived cache rows.
+    # Do not strip a matching block: a copy inside a string/comment must not
+    # grant an exception to surrounding executable SQL. Any mutation falls
+    # through to the unchanged fail-closed additive guard.
+    if sql == migration_sql():
+        return
     compact=sql.strip().upper()
     executable=re.sub(r"--[^\n]*", "", sql)
     executable=re.sub(r"'(?:''|[^'])*'", "''", executable)

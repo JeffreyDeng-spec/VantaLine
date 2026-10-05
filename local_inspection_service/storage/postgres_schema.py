@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+from .label_summary_schema import invalidation_ddl
 from .schema import SCHEMA_VERSION, TABLES, TableSchema
 
 
@@ -23,9 +24,10 @@ JSONB_COLUMNS = frozenset(
 
 BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passed"})
 
-INTEGER_COLUMNS = frozenset({"sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
+INTEGER_COLUMNS = frozenset({"projection_version", "sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "label_run_projection": ("id",),
     "label_runtime_state": ("id",),
     "model_profile_objects": ("id",),
     "label_inspection_objects": ("id",),
@@ -136,6 +138,7 @@ def postgres_ddl(schema_name: str = "vantaline") -> str:
     for table in TABLES:
         statements.append(create_table_statement(table))
         statements.extend(index_statement(index) for index in table.indexes)
+    statements.append(invalidation_ddl(schema_name))
     statements.extend(
         [
             "INSERT INTO schema_migrations (version, applied_at, metadata_json)",

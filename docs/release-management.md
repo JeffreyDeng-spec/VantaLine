@@ -992,3 +992,10 @@ The pipeline structural batch integrates six previously reviewed workflow bounda
 The accessory image workflow structural batch integrates reviewed domain services, registers eleven smoke commands and appends twenty-two actual source files under manifest v146. Complete CI, independent exact-head review and whole-release artifact validation remain mandatory.
 
 Configuration and status source modules ship in the complete release with Web and the declared label worker. Four focused CI contracts and the existing source/HTTP/model guards are retained. Source manifest v147 contains the nine added files; rollback restores a previous complete release and preserves runtime/model evidence.
+
+The summary-state preparation adds a real PostgreSQL migration gate to backend
+CI. Its additive table and invalidation trigger ship together in one immutable
+release; no application cache reader or standalone-worker activation ships in
+this slice. Retain the derived objects during whole-release rollback. A bounded
+DDL lock failure aborts transactionally rather than partially installing the
+trigger. Local synthetic verification does not satisfy production ReleaseGo.
