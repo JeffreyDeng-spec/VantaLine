@@ -460,3 +460,5 @@ PLC domain modules receive existing repository and atomic mutation capabilities.
 Auto-optimization state storage is supplied its existing runtime repository, account and clock capabilities. PostgreSQL stays authoritative when selected, without JSON fallback on database failure. Transaction scopes, locking, key selection and rollback behavior are unchanged; the real PostgreSQL state-store contract remains in CI.
 
 Pipeline workflow extraction uses the existing task stores and atomic operations through explicit interfaces. It does not change SQL, account filters, transactions or lock ownership. Focused synthetic probes supplement the existing real PostgreSQL contracts rather than replacing them.
+
+Accessory image workflows keep current repository authority, transactions and lock ownership. A non-None PostgreSQL repository, including a falsey test double, remains authoritative; database errors do not silently select JSON. Artifact deletion and process side effects retain their original nontransactional behavior.

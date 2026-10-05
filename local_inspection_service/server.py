@@ -3661,142 +3661,65 @@ def output_url(path: Path) -> str:
         return ""
 
 
+from .accessories.text_preparation import AccessoryTextPreparation
+from .accessories.text_preparation_ports import TextGeometry, TextSources, TextMedia
+
+_accessory_text_preparation = AccessoryTextPreparation(
+    geometry=TextGeometry(
+        order_points=lambda: order_points,
+        ratio_close=lambda: ratio_close,
+        quad_is_axis_aligned=lambda: quad_is_axis_aligned,
+        best_document_quad=lambda: best_document_quad,
+        target_paper_pixel_size=lambda: target_paper_pixel_size,
+        detect_document_quad=lambda: detect_document_quad,
+        document_quad_mean_size=lambda: document_quad_mean_size,
+        resize_document_to_paper=lambda: resize_document_to_paper,
+    ),
+    sources=TextSources(
+        is_text_rectified_path=lambda: is_text_rectified_path,
+        stable_text_crop_stem=lambda: stable_text_crop_stem,
+        text_raw_crop_prefix=lambda: text_raw_crop_prefix,
+        text_image_paths_for_upload_limit=lambda: text_image_paths_for_upload_limit,
+        IMAGE_REFERENCE_SUFFIXES=lambda: IMAGE_REFERENCE_SUFFIXES,
+        MAX_TEXT_ACCESSORY_IMAGES=lambda: MAX_TEXT_ACCESSORY_IMAGES,
+        HTTPException=lambda: HTTPException,
+    ),
+    media=TextMedia(
+        optional_float=lambda: optional_float,
+        STANDARD_PAPER_SIZES_MM=lambda: STANDARD_PAPER_SIZES_MM,
+        _image_files=lambda: _image_files,
+    ),
+)
+
+
 def order_points(points: np.ndarray) -> np.ndarray:
-    pts = points.reshape(4, 2).astype("float32")
-    s = pts.sum(axis=1)
-    diff = np.diff(pts, axis=1)
-    ordered = np.zeros((4, 2), dtype="float32")
-    ordered[0] = pts[np.argmin(s)]
-    ordered[2] = pts[np.argmax(s)]
-    ordered[1] = pts[np.argmin(diff)]
-    ordered[3] = pts[np.argmax(diff)]
-    return ordered
+    return _accessory_text_preparation.order_points(points)
 
 
 def target_paper_pixel_size(physical_size: dict[str, Any] | None) -> tuple[int, int]:
-    size = physical_size or {}
-    width_mm = optional_float(size.get("width_mm")) or STANDARD_PAPER_SIZES_MM["A4"][0]
-    height_mm = optional_float(size.get("height_mm")) or STANDARD_PAPER_SIZES_MM["A4"][1]
-    if width_mm > height_mm:
-        long_px = 1200
-        return long_px, max(1, int(round(long_px * height_mm / width_mm)))
-    long_px = 1200
-    return max(1, int(round(long_px * width_mm / height_mm))), long_px
+    return _accessory_text_preparation.target_paper_pixel_size(physical_size)
 
 
 def ratio_close(value: float, target: float, tolerance: float = 0.08) -> bool:
-    if value <= 0 or target <= 0:
-        return False
-    return abs(value - target) / target <= tolerance
+    return _accessory_text_preparation.ratio_close(value, target, tolerance)
 
 
 def quad_is_axis_aligned(rect: np.ndarray, image_shape: tuple[int, ...]) -> bool:
-    h, w = image_shape[:2]
-    horizontal_tilt = max(abs(float(rect[0][1] - rect[1][1])), abs(float(rect[2][1] - rect[3][1]))) / max(1, h)
-    vertical_tilt = max(abs(float(rect[1][0] - rect[2][0])), abs(float(rect[0][0] - rect[3][0]))) / max(1, w)
-    return horizontal_tilt < 0.02 and vertical_tilt < 0.02
+    return _accessory_text_preparation.quad_is_axis_aligned(rect, image_shape)
 
 
 def best_document_quad(image: np.ndarray, target_aspect: float | None = None) -> np.ndarray | None:
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blur, 50, 160)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    image_area = image.shape[0] * image.shape[1]
-    image_aspect = image.shape[1] / max(1, image.shape[0])
-    image_already_paper_ratio = bool(target_aspect and ratio_close(image_aspect, target_aspect))
-    best: tuple[float, np.ndarray] | None = None
-    for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:16]:
-        area = float(cv2.contourArea(contour))
-        if area < image_area * 0.05:
-            continue
-        peri = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
-        used_rect_fallback = len(approx) != 4
-        if used_rect_fallback:
-            if area < image_area * 0.20:
-                continue
-            rect = cv2.boxPoints(cv2.minAreaRect(contour)).reshape(4, 1, 2)
-            approx = rect.astype(np.float32)
-        rect = order_points(approx)
-        quad_area = float(cv2.contourArea(rect.astype(np.float32)))
-        if quad_area <= 0:
-            continue
-        quad_area_ratio = quad_area / max(1, image_area)
-        if image_already_paper_ratio and quad_area_ratio < 0.82 and quad_is_axis_aligned(rect, image.shape):
-            continue
-        fill = area / quad_area
-        min_fill = 0.82 if used_rect_fallback else 0.65
-        if fill < min_fill:
-            continue
-        if used_rect_fallback:
-            x, y, w, h = cv2.boundingRect(rect.astype(np.float32))
-            touches_frame = x <= 2 or y <= 2 or x + w >= image.shape[1] - 2 or y + h >= image.shape[0] - 2
-            if touches_frame:
-                continue
-        score = quad_area * min(fill, 1.0)
-        if best is None or score > best[0]:
-            best = (score, rect)
-    return best[1] if best else None
+    return _accessory_text_preparation.best_document_quad(image, target_aspect)
 
 
 def document_quad_mean_size(quad: np.ndarray) -> tuple[float, float]:
-    """Mean width / height (px) of an ordered tl,tr,br,bl quad — used to recover
-    the document's true (deskewed) proportions."""
-    pts = quad.reshape(4, 2).astype("float32")
-    tl, tr, br, bl = pts[0], pts[1], pts[2], pts[3]
-    top = float(np.linalg.norm(tr - tl))
-    bottom = float(np.linalg.norm(br - bl))
-    left = float(np.linalg.norm(bl - tl))
-    right = float(np.linalg.norm(br - tr))
-    return (top + bottom) / 2.0, (left + right) / 2.0
+    "Mean width / height (px) of an ordered tl,tr,br,bl quad — used to recover\n    the document's true (deskewed) proportions."
+    return _accessory_text_preparation.document_quad_mean_size(quad)
 
 
 def detect_document_quad(image: np.ndarray, target_aspect: float | None = None) -> np.ndarray | None:
-    """Robustly auto-crop the document/manual body. Tries edge contours first, then
-    bright-paper (Otsu) and low-saturation paper segmentation, so a manual shot on
-    a darker tabletop is still found even when its edges are weak. Returns an
-    ordered tl,tr,br,bl quad or None."""
-    h, w = image.shape[:2]
-    area = max(1, h * w)
-    candidates: list[np.ndarray] = []
-    edge_quad = best_document_quad(image, target_aspect)
-    if edge_quad is not None:
-        candidates.append(edge_quad)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (7, 7), 0)
-    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    if float((otsu > 0).mean()) < 0.5:
-        otsu = cv2.bitwise_not(otsu)  # keep the bright paper as foreground
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    sat, val = hsv[:, :, 1], hsv[:, :, 2]
-    paper = ((sat < 70) & (val > 110)).astype(np.uint8) * 255
-    for mask in (otsu, paper):
-        closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8), iterations=2)
-        opened = cv2.morphologyEx(closed, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
-        cnts, _ = cv2.findContours(opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not cnts:
-            continue
-        contour = max(cnts, key=cv2.contourArea)
-        if float(cv2.contourArea(contour)) < area * 0.12:
-            continue
-        peri = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
-        if len(approx) == 4:
-            candidates.append(order_points(approx.astype(np.float32)))
-        else:
-            box = cv2.boxPoints(cv2.minAreaRect(contour)).reshape(4, 1, 2).astype(np.float32)
-            candidates.append(order_points(box))
-    best: tuple[float, np.ndarray] | None = None
-    for quad in candidates:
-        quad_area = float(cv2.contourArea(quad.astype(np.float32)))
-        if quad_area < area * 0.10 or quad_area > area * 0.999:
-            continue
-        if best is None or quad_area > best[0]:
-            best = (quad_area, quad)
-    return best[1] if best else None
+    'Robustly auto-crop the document/manual body. Tries edge contours first, then\n    bright-paper (Otsu) and low-saturation paper segmentation, so a manual shot on\n    a darker tabletop is still found even when its edges are weak. Returns an\n    ordered tl,tr,br,bl quad or None.'
+    return _accessory_text_preparation.detect_document_quad(image, target_aspect)
 
 
 def letterbox_document_onto_paper(
@@ -3805,139 +3728,46 @@ def letterbox_document_onto_paper(
     target_h: int,
     pad_value: tuple[int, int, int] = (255, 255, 255),
 ) -> np.ndarray:
-    """Place a document image onto a clean paper-sized canvas preserving aspect
-    (white letterbox). Never stretches the content non-uniformly."""
-    target_w = max(1, int(target_w))
-    target_h = max(1, int(target_h))
-    h, w = image.shape[:2]
-    scale = min(target_w / max(1, w), target_h / max(1, h))
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-    resized = cv2.resize(
-        image,
-        (new_w, new_h),
-        interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
-    )
-    canvas = np.full((target_h, target_w, 3), pad_value, dtype=np.uint8)
-    x0 = (target_w - new_w) // 2
-    y0 = (target_h - new_h) // 2
-    canvas[y0 : y0 + new_h, x0 : x0 + new_w] = resized
-    return canvas
+    'Place a document image onto a clean paper-sized canvas preserving aspect\n    (white letterbox). Never stretches the content non-uniformly.'
+    return _accessory_text_preparation.letterbox_document_onto_paper(image, target_w, target_h, pad_value)
 
 
 def resize_document_to_paper(image: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
-    """Resize a document image directly to the chosen paper pixel size."""
-    target_w = max(1, int(target_w))
-    target_h = max(1, int(target_h))
-    h, w = image.shape[:2]
-    scale = max(target_w / max(1, w), target_h / max(1, h))
-    return cv2.resize(
-        image,
-        (target_w, target_h),
-        interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
-    )
+    'Resize a document image directly to the chosen paper pixel size.'
+    return _accessory_text_preparation.resize_document_to_paper(image, target_w, target_h)
 
 
 def is_text_rectified_path(path: Path | str) -> bool:
-    stem = Path(str(path)).stem.lower()
-    return stem.endswith("_rectified") or "_rectified_" in stem or "_manual_rectified" in stem
+    return _accessory_text_preparation.is_text_rectified_path(path)
 
 
 def stable_text_crop_stem(path: Path | str) -> str:
-    stem = Path(str(path)).stem.replace(" ", "_")[:80] or "document"
-    stem = re.sub(r"[^a-zA-Z0-9_.-]+", "_", stem).strip("._-")
-    return stem or "document"
+    return _accessory_text_preparation.stable_text_crop_stem(path)
 
 
 def text_raw_crop_prefix(path: Path | str) -> str:
-    return f"{stable_text_crop_stem(path).lower()}_manual_rectified"
+    return _accessory_text_preparation.text_raw_crop_prefix(path)
 
 
 def text_raw_has_rectified(raw_path: Path | str, rectified_sources: list[Path]) -> bool:
-    raw_stem = stable_text_crop_stem(raw_path).lower()
-    prefix = text_raw_crop_prefix(raw_path)
-    for rectified in rectified_sources:
-        stem = rectified.stem.lower()
-        if stem == prefix or stem.startswith(f"{prefix}_"):
-            return True
-        if stem.endswith(f"_{raw_stem}.bin_manual_rectified") or stem.startswith(f"{raw_stem}.bin_manual_rectified_"):
-            return True
-    return False
+    return _accessory_text_preparation.text_raw_has_rectified(raw_path, rectified_sources)
 
 
 def text_image_paths_for_upload_limit(item: dict[str, Any]) -> list[Path]:
-    original = item.get("original_source_files") if isinstance(item.get("original_source_files"), list) else []
-    source = item.get("source_files") if isinstance(item.get("source_files"), list) else []
-    paths = [Path(str(path)) for path in (original or source)]
-    images = [path for path in paths if path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES]
-    if original:
-        return images
-    raw_images = [path for path in images if not is_text_rectified_path(path)]
-    return raw_images or images
+    return _accessory_text_preparation.text_image_paths_for_upload_limit(item)
 
 
 def text_accessory_source_count(item: dict[str, Any]) -> int:
-    return len(text_image_paths_for_upload_limit(item))
+    return _accessory_text_preparation.text_accessory_source_count(item)
 
 
 def validate_text_accessory_uploads(files: list[UploadFile], *, existing_count: int = 0) -> None:
-    image_count = 0
-    for upload in files:
-        suffix = Path(upload.filename or "").suffix.lower()
-        if suffix not in IMAGE_REFERENCE_SUFFIXES:
-            raise HTTPException(status_code=400, detail="文字类配件只能上传图片，不能上传视频或其它文件")
-        image_count += 1
-    if existing_count + image_count > MAX_TEXT_ACCESSORY_IMAGES:
-        raise HTTPException(status_code=400, detail=f"文字类配件最多上传 {MAX_TEXT_ACCESSORY_IMAGES} 张图片")
+    return _accessory_text_preparation.validate_text_accessory_uploads(files, existing_count=existing_count)
 
 
 def normalize_text_image(src: Path, target_dir: Path, physical_size: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    """Lightweight document pipeline (no image generation): auto-crop the document
-    body, deskew/perspective-correct any tilt, then normalize onto the chosen paper
-    page (A4/A5/...). The output is always exactly the paper pixel size."""
-    image = _image_files.imread(str(src))
-    if image is None:
-        return None
-    is_manual_rectified = is_text_rectified_path(src)
-    target_w, target_h = target_paper_pixel_size(physical_size)
-    target_aspect = target_w / max(1, target_h)
-    quad = None if is_manual_rectified else detect_document_quad(image, target_aspect)
-    if quad is not None:
-        mean_w, mean_h = document_quad_mean_size(quad)
-        quad_aspect = mean_w / max(1.0, mean_h)
-        if ratio_close(quad_aspect, target_aspect, tolerance=0.18):
-            # Cropped document already matches the chosen paper proportions: deskew
-            # straight onto the page (fills the page, correct proportions).
-            dst = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
-            warped = cv2.warpPerspective(image, cv2.getPerspectiveTransform(quad.astype("float32"), dst), (target_w, target_h))
-            method = "paper_quad_perspective"
-        else:
-            # Deskew to the document's own true aspect, then resize to the page so
-            # custom paper targets do not introduce white letterbox borders.
-            rect_w = max(1, int(round(mean_w)))
-            rect_h = max(1, int(round(mean_h)))
-            dst = np.array([[0, 0], [rect_w - 1, 0], [rect_w - 1, rect_h - 1], [0, rect_h - 1]], dtype="float32")
-            deskewed = cv2.warpPerspective(image, cv2.getPerspectiveTransform(quad.astype("float32"), dst), (rect_w, rect_h))
-            warped = resize_document_to_paper(deskewed, target_w, target_h)
-            method = "paper_quad_deskew_resize"
-    else:
-        if not is_manual_rectified:
-            return None
-        # Already-rectified manual crop: stretch the whole crop to the requested
-        # paper size instead of adding letterbox borders.
-        warped = resize_document_to_paper(image, target_w, target_h)
-        method = "manual_rectified_resize"
-    out = target_dir / f"{src.stem}_canonical.png"
-    _image_files.imwrite(str(out), warped)
-    return {
-        "kind": "canonical_text_image",
-        "path": str(out),
-        "method": method,
-        "paper_size": physical_size or {},
-        "width": int(warped.shape[1]),
-        "height": int(warped.shape[0]),
-        "workflow": ["auto_crop", "deskew_perspective_correction", "paper_size_normalize"],
-    }
+    'Lightweight document pipeline (no image generation): auto-crop the document\n    body, deskew/perspective-correct any tilt, then normalize onto the chosen paper\n    page (A4/A5/...). The output is always exactly the paper pixel size.'
+    return _accessory_text_preparation.normalize_text_image(src, target_dir, physical_size)
 
 
 from .accessories.preparation import (
@@ -7515,100 +7345,27 @@ def defer_accessory_normalization(item: dict[str, Any]) -> None:
     return _preparation_defer(item)
 
 
+from .accessories.reference_media import AccessoryReferenceMedia
+from .accessories.reference_media_ports import ReferenceMediaDependencies
+
+_accessory_reference_media = AccessoryReferenceMedia(ReferenceMediaDependencies(
+    frame_detail_score=lambda: frame_detail_score,
+    frame_histogram=lambda: frame_histogram,
+    _image_files=lambda: _image_files,
+    public_output_url=lambda: public_output_url,
+))
+
+
 def frame_detail_score(frame: np.ndarray) -> float:
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-    hist = cv2.calcHist([gray], [0], None, [64], [0, 256]).reshape(-1)
-    hist = hist / max(float(hist.sum()), 1.0)
-    entropy = float(-(hist * np.log2(hist + 1e-9)).sum())
-    mean = float(gray.mean())
-    exposure_penalty = abs(mean - 135.0) * 2.0
-    return blur_score + entropy * 80.0 - exposure_penalty
+    return _accessory_reference_media.frame_detail_score(frame)
 
 
 def frame_histogram(frame: np.ndarray) -> np.ndarray:
-    hsv = cv2.cvtColor(cv2.resize(frame, (160, 120), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2HSV)
-    hist = cv2.calcHist([hsv], [0, 1], None, [24, 24], [0, 180, 0, 256]).reshape(-1)
-    hist = hist / max(float(hist.sum()), 1.0)
-    return hist.astype(np.float32)
+    return _accessory_reference_media.frame_histogram(frame)
 
 
 def extract_video_reference_frames(video_path: Path, output_dir: Path, max_frames: int = MAX_VIDEO_REFERENCE_FRAMES) -> list[dict[str, Any]]:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        return []
-    try:
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        duration = frame_count / fps if frame_count > 0 and fps > 0 else 0.0
-        target_samples = 72
-        stride = max(1, frame_count // target_samples) if frame_count > 0 else max(1, int(fps // 2) or 1)
-        candidates: list[dict[str, Any]] = []
-        idx = 0
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            if idx % stride == 0:
-                score = frame_detail_score(frame)
-                hist = frame_histogram(frame)
-                candidates.append(
-                    {
-                        "frame_index": idx,
-                        "time_seconds": idx / fps if fps > 0 else 0.0,
-                        "score": score,
-                        "hist": hist,
-                        "frame": frame.copy(),
-                    }
-                )
-            idx += 1
-            if frame_count <= 0 and idx > 1800:
-                break
-        if not candidates:
-            return []
-
-        candidates.sort(key=lambda item: item["score"], reverse=True)
-        pool = candidates[: min(len(candidates), 36)]
-        selected: list[dict[str, Any]] = []
-        min_time_gap = max(duration / (max_frames * 2), 0.35) if duration else 0.35
-        while pool and len(selected) < max_frames:
-            best_item = None
-            best_value = -1e18
-            for item in pool:
-                if not selected:
-                    value = float(item["score"])
-                else:
-                    time_gap = min(abs(float(item["time_seconds"]) - float(other["time_seconds"])) for other in selected)
-                    if time_gap < min_time_gap and len(pool) > max_frames:
-                        continue
-                    hist_gap = min(float(cv2.compareHist(item["hist"], other["hist"], cv2.HISTCMP_BHATTACHARYYA)) for other in selected)
-                    value = float(item["score"]) + hist_gap * 550.0 + time_gap * 12.0
-                if value > best_value:
-                    best_item = item
-                    best_value = value
-            if best_item is None:
-                best_item = pool[0]
-            selected.append(best_item)
-            pool = [item for item in pool if item is not best_item]
-
-        selected.sort(key=lambda item: int(item["frame_index"]))
-        extracted = []
-        for out_idx, item in enumerate(selected, start=1):
-            out_path = output_dir / f"{video_path.stem}_reference_frame_{out_idx:02d}.jpg"
-            _image_files.imwrite(str(out_path), item["frame"], [int(cv2.IMWRITE_JPEG_QUALITY), 94])
-            extracted.append(
-                {
-                    "path": str(out_path),
-                    "source_video": str(video_path),
-                    "frame_index": int(item["frame_index"]),
-                    "time_seconds": round(float(item["time_seconds"]), 3),
-                    "detail_score": round(float(item["score"]), 3),
-                }
-            )
-        return extracted
-    finally:
-        cap.release()
+    return _accessory_reference_media.extract_video_reference_frames(video_path, output_dir, max_frames)
 
 
 def expand_accessory_reference_sources(candidate_id: str, source_files: list[str]) -> tuple[list[str], list[dict[str, Any]]]:
@@ -7616,160 +7373,45 @@ def expand_accessory_reference_sources(candidate_id: str, source_files: list[str
 
 
 def write_thumbnail(image: np.ndarray, out_path: Path, angle: float = 0.0, size: int = 360) -> dict[str, Any]:
-    h, w = image.shape[:2]
-    scale = min(size / max(h, w), 1.0)
-    resized = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
-    rh, rw = resized.shape[:2]
-    canvas = np.full((size, size, 3), (238, 240, 242), dtype=np.uint8)
-    patch = np.full((size, size, 3), (238, 240, 242), dtype=np.uint8)
-    x = (size - rw) // 2
-    y = (size - rh) // 2
-    patch[y : y + rh, x : x + rw] = resized
-    matrix = cv2.getRotationMatrix2D((size / 2, size / 2), angle, 1.0)
-    rotated = cv2.warpAffine(patch, matrix, (size, size), flags=cv2.INTER_LINEAR, borderValue=(238, 240, 242))
-    canvas[:] = rotated
-    _image_files.imwrite(str(out_path), canvas)
-    return {"url": public_output_url(out_path), "angle": angle, "width": size, "height": size}
+    return _accessory_reference_media.write_thumbnail(image, out_path, angle, size)
+
+
+from .accessories.pose_collection_prompts import PoseCollectionPrompts
+from .accessories.pose_collection_prompt_ports import PoseCollectionPromptDependencies
+
+_pose_collection_prompts = PoseCollectionPrompts(PoseCollectionPromptDependencies(
+    tabletop_scene_text=lambda: tabletop_scene_text,
+    pose_collection_camera_grid_text=lambda: pose_collection_camera_grid_text,
+    pose_collection_position_specs=lambda: pose_collection_position_specs,
+    POSE_COLLECTION_BATCHES=lambda: POSE_COLLECTION_BATCHES,
+    pose_collection_dimension_text=lambda: pose_collection_dimension_text,
+    pose_collection_camera_batch_text=lambda: pose_collection_camera_batch_text,
+    upright_spatial_relation_text=lambda: upright_spatial_relation_text,
+))
 
 
 def pose_collection_dimension_text(item: dict[str, Any]) -> str:
-    physical = item.get("physical_size") or {}
-    length = physical.get("length_mm")
-    width = physical.get("width_mm")
-    height = physical.get("height_mm")
-    long_short_rule = (
-        "Durable dimension rule: in every source/reference image, the visible longer side of the object is its physical "
-        "length, and the visible shorter side is its physical width. Preserve that source long:short aspect ratio; never "
-        "swap length/width and never squash or stretch an elongated object to fill a square or anchor footprint. "
-    )
-    if length and width and height:
-        return (
-            f"{long_short_rule}"
-            "Use these physical dimensions to infer the 3D form and perspective without overriding the source aspect: "
-            f"length {length} mm, width {width} mm, height {height} mm. "
-        )
-    return f"{long_short_rule}Infer the object's approximate 3D form and proportions from the reference image. "
+    return _pose_collection_prompts.pose_collection_dimension_text(item)
 
 
 def tabletop_scene_text(surface_mode: str = "white") -> str:
-    if surface_mode == "reference":
-        return (
-            "Render the scene as one overhead photograph of nine real objects physically placed on the same tabletop/background "
-            "material visible in the reference images. Preserve that reference table material, color, lighting, texture, and "
-            "surface context, for example a green tabletop if the reference image uses a green tabletop. "
-        )
-    if surface_mode == "pure_white":
-        return (
-            "Render the scene as one overhead photograph of nine real objects physically placed on a 100% pure white tabletop. "
-            "The tabletop must be flat, uniform white, textureless, shadow-free, and free of stains, gradients, color casts, or "
-            "material patterns. "
-        )
-    return "Render the scene as one overhead photograph of nine real objects physically placed on a clean white tabletop. "
+    return _pose_collection_prompts.tabletop_scene_text(surface_mode)
 
 
 def pose_collection_camera_grid_text(item: dict[str, Any], surface_mode: str = "white") -> str:
-    physical = item.get("physical_size") or {}
-    length = float(physical.get("length_mm") or 170.0)
-    grid_pitch = max(40.0, length)
-    camera_height = max(300.0, length * 5.0)
-    axis_tilt = math.degrees(math.atan(grid_pitch / camera_height))
-    corner_tilt = math.degrees(math.atan((grid_pitch * math.sqrt(2)) / camera_height))
-    return (
-        "Use this fixed camera geometry and write it visually into the 3x3 grid. "
-        f"{tabletop_scene_text(surface_mode)}"
-        "The nine objects form a regular 3x3 square grid with equal X spacing and equal Y spacing, like a neat tic-tac-toe/田字 layout. "
-        f"Assume the real inspection camera is mounted {camera_height:.0f} mm above the conveyor/table plane. "
-        f"The nine object positions are spaced {grid_pitch:.0f} mm apart in X/Y around the center. "
-        "Use one physically consistent object scale across all nine positions; apparent size changes may come only from "
-        "the specified camera perspective and must not be arbitrary resizing. "
-        "The camera is above the 3x3 arrangement and looks downward. Use exactly two view-axis angles, not three object "
-        "rotation angles: azimuth_xy is the direction angle in the horizontal X/Y plane, and tilt_from_z is the small "
-        "angle between the camera ray and the vertical Z axis. These are camera/view-axis parameters, not bottle rotation. "
-        "The bottle yaw/object orientation is fixed and identical in every cell; do not rotate the bottles themselves. "
-        "Use this mandatory 3D view table: "
-        f"top-left: azimuth_xy=135 deg, tilt_from_z={corner_tilt:.1f} deg; "
-        f"top-center: azimuth_xy=90 deg, tilt_from_z={axis_tilt:.1f} deg; "
-        f"top-right: azimuth_xy=45 deg, tilt_from_z={corner_tilt:.1f} deg; "
-        f"middle-left: azimuth_xy=180 deg, tilt_from_z={axis_tilt:.1f} deg; "
-        "center: azimuth_xy=none, tilt_from_z=0.0 deg, perfectly vertical optical-axis view; "
-        f"middle-right: azimuth_xy=0 deg, tilt_from_z={axis_tilt:.1f} deg; "
-        f"bottom-left: azimuth_xy=-135 deg, tilt_from_z={corner_tilt:.1f} deg; "
-        f"bottom-center: azimuth_xy=-90 deg, tilt_from_z={axis_tilt:.1f} deg; "
-        f"bottom-right: azimuth_xy=-45 deg, tilt_from_z={corner_tilt:.1f} deg. "
-        "Because the camera is high, all non-center tilt_from_z values are intentionally small. These angle values are "
-        "mandatory; do not invent a different camera layout and do not rotate the bottles."
-    )
+    return _pose_collection_prompts.pose_collection_camera_grid_text(item, surface_mode)
 
 
 def pose_collection_position_specs(item: dict[str, Any]) -> dict[str, str]:
-    physical = item.get("physical_size") or {}
-    length = float(physical.get("length_mm") or 170.0)
-    grid_pitch = max(40.0, length)
-    camera_height = max(300.0, length * 5.0)
-    axis_tilt = math.degrees(math.atan(grid_pitch / camera_height))
-    corner_tilt = math.degrees(math.atan((grid_pitch * math.sqrt(2)) / camera_height))
-    return {
-        "top-left": f"top-left: azimuth_xy=135 deg, tilt_from_z={corner_tilt:.1f} deg, camera shifted top/back + left, looking diagonally inward",
-        "top-center": f"top-center: azimuth_xy=90 deg, tilt_from_z={axis_tilt:.1f} deg, camera shifted top/back, looking diagonally inward",
-        "top-right": f"top-right: azimuth_xy=45 deg, tilt_from_z={corner_tilt:.1f} deg, camera shifted top/back + right, looking diagonally inward",
-        "middle-left": f"middle-left: azimuth_xy=180 deg, tilt_from_z={axis_tilt:.1f} deg, camera shifted left, looking diagonally inward",
-        "center": "center: azimuth_xy=none, tilt_from_z=0.0 deg, perfectly vertical optical-axis view with no perspective bias",
-        "middle-right": f"middle-right: azimuth_xy=0 deg, tilt_from_z={axis_tilt:.1f} deg, camera shifted right, looking diagonally inward",
-        "bottom-left": f"bottom-left: azimuth_xy=-135 deg, tilt_from_z={corner_tilt:.1f} deg, camera shifted bottom/front + left, looking diagonally inward",
-        "bottom-center": f"bottom-center: azimuth_xy=-90 deg, tilt_from_z={axis_tilt:.1f} deg, camera shifted bottom/front, looking diagonally inward",
-        "bottom-right": f"bottom-right: azimuth_xy=-45 deg, tilt_from_z={corner_tilt:.1f} deg, camera shifted bottom/front + right, looking diagonally inward",
-    }
+    return _pose_collection_prompts.pose_collection_position_specs(item)
 
 
 def pose_collection_camera_batch_text(item: dict[str, Any], batch_key: str | None, surface_mode: str = "white") -> str:
-    if not batch_key:
-        return pose_collection_camera_grid_text(item, surface_mode)
-    batch = next((entry for entry in POSE_COLLECTION_BATCHES if entry[0] == batch_key), None)
-    if not batch:
-        return pose_collection_camera_grid_text(item, surface_mode)
-    _, batch_label, positions = batch
-    physical = item.get("physical_size") or {}
-    length = float(physical.get("length_mm") or 170.0)
-    grid_pitch = max(40.0, length)
-    camera_height = max(300.0, length * 5.0)
-    specs = pose_collection_position_specs(item)
-    spec_text = "; ".join(specs[position] for position in positions)
-    return (
-        f"This image is only the {batch_label} batch of the original 3x3 camera grid. "
-        "Generate exactly three separated object cutouts, arranged left-to-right in this exact order: "
-        f"{', '.join(positions)}. Do not generate the other six positions in this file. "
-        f"Assume the real inspection camera is mounted {camera_height:.0f} mm above the conveyor/table plane. "
-        f"{tabletop_scene_text(surface_mode)}"
-        f"The nine original object positions are spaced {grid_pitch:.0f} mm apart in X/Y around the center; this file "
-        "contains only the three listed positions from that grid. Use exactly two view-axis angles, not object rotation "
-        "angles. Use one physically consistent object scale across all requested positions; apparent size changes may "
-        "come only from the specified camera perspective and must not be arbitrary resizing. "
-        "azimuth_xy is the direction angle in the horizontal X/Y plane, and tilt_from_z is the small angle between "
-        "the camera ray and the vertical Z axis. These are camera/view-axis parameters, not bottle rotation. The bottle "
-        "yaw/object orientation is fixed and identical in all three cutouts; do not rotate the bottles themselves. "
-        f"Mandatory camera/view parameters for this file: {spec_text}. "
-        "Because the camera is high, all non-center tilt_from_z values are intentionally small. These angle values are "
-        "mandatory; do not invent a different camera layout and do not rotate the bottles."
-    )
+    return _pose_collection_prompts.pose_collection_camera_batch_text(item, batch_key, surface_mode)
 
 
 def upright_spatial_relation_text() -> str:
-    return (
-        "Mandatory upright spatial-occlusion rule: imagine all nine upright bottles are physically standing on one flat "
-        "table, evenly spaced, and one real camera is mounted above the center cell looking downward. The center bottle is "
-        "directly under the optical axis, so it must show only the top/cap/nozzle and a nearly symmetrical bottle rim; it "
-        "must not show a side-biased bottle body. For all surrounding bottles, the visible body must appear on the side "
-        "toward the optical-axis center of the 3x3 grid, because the cap/rim occludes the far side. This is a parallax/"
-        "occlusion relationship, not bottle rotation. Use this mandatory visual table: top-left bottle = body visible "
-        "mostly down-right from the cap; top-center bottle = body visible mostly downward from the cap; top-right bottle = "
-        "body visible mostly down-left from the cap; middle-left bottle = body visible mostly right of the cap; center "
-        "bottle = top-only cap/nozzle/rim, no side bias; middle-right bottle = body visible mostly left of the cap; "
-        "bottom-left bottle = body visible mostly up-right from the cap; bottom-center bottle = body visible mostly "
-        "upward/front-side from the cap; bottom-right bottle = body visible mostly up-left from the cap. The black cap and "
-        "red nozzle remain centered on the top of each bottle; only the visible bottle body/rim shifts according to the "
-        "camera parallax. Do not make all nine bottles share the same side-body direction, and do not rotate the nozzle/"
-        "cap mark to fake the effect."
-    )
+    return _pose_collection_prompts.upright_spatial_relation_text()
 
 
 def build_pose_collection_prompt(
@@ -7778,337 +7420,90 @@ def build_pose_collection_prompt(
     batch_key: str | None = None,
     surface_mode: str = "reference",
 ) -> str:
-    dimension_text = pose_collection_dimension_text(item)
-    camera_grid_text = pose_collection_camera_batch_text(item, batch_key, surface_mode)
-    batch = next((entry for entry in POSE_COLLECTION_BATCHES if entry[0] == batch_key), None)
-    batch_label = batch[1] if batch else "完整九视角"
-    positions = batch[2] if batch else ["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
-    position_count = len(positions)
-    arrangement_text = (
-        f"Create exactly {position_count} separated object cutouts in this single image, arranged left-to-right as: "
-        f"{', '.join(positions)}. "
-        if batch
-        else "Create exactly nine separated object cutouts in a 3x3 collection sheet: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right. "
-    )
-    source_summary = (
-        "Use all attached reference images together. Some attached images may be frames automatically extracted from an "
-        "uploaded rotation/flip video; treat them as multi-view evidence of the same physical object. Fuse visible details "
-        "from every reference image to infer the object's 3D structure: front/back, left/right sides, top/bottom, cap/nozzle "
-        "shape, transparent wall thickness, ridges, seams, and material highlights. Do not copy one reference frame blindly; "
-        "use the full reference set to reconstruct a consistent object identity. "
-    )
-    surface_sentence = (
-        "All requested objects must be visibly resting on the same reference tabletop/background from the input images, "
-        "with equal spacing and a stable regular grid arrangement. The reference tabletop/background is intentional in "
-        "this Step 1 image; it will be replaced in Step 2. "
-        if surface_mode == "reference"
-        else "All requested objects must be visibly resting on the same clean pure-white tabletop, with equal spacing and a stable regular grid arrangement. "
-    )
-    background_sentence = (
-        "Use only the reference tabletop/background material from the input images as the scene background. Do not add unrelated "
-        "props, labels, arrows, captions, borders, measurement marks, or decorative graphics. Natural lighting and contact shadows "
-        "from the reference tabletop are acceptable in this Step 1 image. "
-        if surface_mode == "reference"
-        else "Use only a 100% pure white tabletop as the background. Do not add conveyor, floor, props, colored backing, green-screen, "
-        "black matte, labels, arrows, captions, borders, measurement marks, decorative graphics, shadows, texture, stains, gradients, "
-        "or color casts. "
-    )
-    if pose_family == "lying":
-        title = (
-            f"Generate LYING-FLAT Pose Collection batch '{batch_label}'"
-            if batch
-            else "Generate LYING-FLAT Pose Collection"
-        )
-        return (
-            f"{title} for accessory '{item.get('name', 'accessory')}'. "
-            "This prompt is complete and self-contained; do not borrow requirements from another prompt. "
-            f"{source_summary}"
-            "This is an image-to-image photorealistic product cutout task, not an illustration task. "
-            "The attached real reference images are the visual source of truth. "
-            "The object must look like the same real "
-            "photographed item from the reference, with the same transparent glass/plastic body, cap ridges, red nozzle "
-            "geometry, black collar, edge softness, refraction, specular highlights, surface noise, seams, dirt, and "
-            f"manufacturing imperfections. {dimension_text}"
-            "The pose in this file is LYING-FLAT ONLY: the object is lying flat on its side on an imaginary table. "
-            "Do not include any upright, standing, front-elevation, or tall-side-view pose in this image. "
-            f"{arrangement_text}"
-            f"{surface_sentence}"
-            "All requested objects have the same physical pose and the same world yaw/orientation: the cap/nozzle points in "
-            "the same world direction in every requested cutout, and the bottle itself is not rotated between cutouts. "
-            "The only thing that changes between cutouts is the camera/view-axis direction. "
-            f"{camera_grid_text} "
-            "If this batch contains the center cutout, render it as a true straight-down overhead view of the lying bottle "
-            "with zero perspective bias. For non-center cutouts, render natural top-down camera-offset views: left cells look from "
-            "the left, right cells look from the right, top cells look from the top/back, bottom cells look from the "
-            "bottom/front, and corner cells combine both offsets. The non-center cutouts must visibly differ through "
-            "real perspective distortion, foreshortening, ellipse/rim changes, and side-edge visibility, but they must "
-            "not become different object rotations. Do not copy-paste the same sprite across the cutouts. "
-            f"{background_sentence}"
-            "Because the object is transparent, preserve "
-            "clean glass/plastic highlights and contours without green/cyan spill, matte halos, or colored background residue. "
-            "Keep each object fully visible, sharply bounded, separated from the others, and easy to segment later."
-        )
-    elif pose_family == "upright":
-        title = (
-            f"Generate UPRIGHT/STANDING Pose Collection batch '{batch_label}'"
-            if batch
-            else "Generate UPRIGHT/STANDING Pose Collection"
-        )
-        return (
-            f"{title} for accessory '{item.get('name', 'accessory')}'. "
-            "This prompt is complete and self-contained; do not borrow requirements from another prompt. "
-            f"{source_summary}"
-            "This is an image-to-image photorealistic product cutout task, not an illustration task. "
-            "The attached real reference images are the visual source of truth. "
-            "The object must look like the same real "
-            "photographed item from the reference, with the same transparent glass/plastic body, cap ridges, red nozzle "
-            "geometry, black collar, edge softness, refraction, specular highlights, surface noise, seams, dirt, and "
-            f"manufacturing imperfections. {dimension_text}"
-            "The pose in this file is UPRIGHT/STANDING ONLY: the object is vertical, standing on its base on an imaginary "
-            "table, while the camera is mounted above the 3x3 arrangement and looks downward. Do not include any lying-flat "
-            "pose in this image. This must be an overhead/top-down standing view, not a front elevation and not a tall "
-            "side view of the whole bottle. The dominant visible feature should be the cap/nozzle/top opening, with only "
-            "a partial rim/edge of the bottle body visible around it. "
-            f"{arrangement_text}"
-            f"{surface_sentence}"
-            "All requested objects have the same physical pose and the same world yaw/orientation: the nozzle/cap mark points "
-            "in the same world direction in every requested cutout, and the bottle itself is not rotated between cutouts. "
-            "The only thing that changes between cutouts is the camera/view-axis direction. "
-            f"{camera_grid_text} "
-            f"{upright_spatial_relation_text()} "
-            "If this batch contains the center cutout, render it as a true straight-down optical-axis view of the upright "
-            "bottle: mostly cap/nozzle/top opening, symmetrical rim, no side bias, no front elevation. For non-center cutouts, render "
-            "natural overhead camera-offset views: left cells look from the left, right cells look from the right, top "
-            "cells look from the top/back, bottom cells look from the bottom/front, and corner cells combine both offsets. "
-            "The non-center cutouts must visibly differ through cap ellipse changes, rim perspective, side-edge visibility, "
-            "and foreshortening, but they must not become different object rotations. Do not copy-paste the same sprite "
-            "across the cutouts. "
-            f"{background_sentence}"
-            "Because the object is transparent, preserve "
-            "clean glass/plastic highlights and contours without green/cyan spill, matte halos, or colored background residue. "
-            "Keep each object fully visible, sharply bounded, separated from the others, and easy to segment later."
-        )
-    else:
-        return (
-            f"Create one object-only Pose Collection image for the accessory '{item.get('name', 'accessory')}' "
-            "using the uploaded reference photo as the visual source of truth. Generate both physical pose families: "
-            "lying flat on the side and upright standing on the base. Cover meaningfully different camera positions, "
-            "not only planar rotations."
-        )
+    return _pose_collection_prompts.build_pose_collection_prompt(item, pose_family, batch_key, surface_mode)
 
 
 def build_white_table_replacement_prompt(item: dict[str, Any], pose_family: str) -> str:
-    pose_text = "UPRIGHT/STANDING" if pose_family == "upright" else "LYING-FLAT"
-    return (
-        f"Step 2 cleanup for the {pose_text} Pose Collection of accessory '{item.get('name', 'accessory')}'. "
-        "Use the attached Step 1 pose-collection image as the main source. Keep every object exactly the same: same nine "
-        "object identities, same positions, same 3x3 spacing, same perspective/parallax, same object size, same cap/nozzle "
-        "orientation, same transparent material details, same edges, and same visible body/rim geometry. Do not redraw, "
-        "rotate, move, resize, replace, simplify, or stylize any object. "
-        "Only replace the tabletop/background material. Convert the entire table/background into a 100% pure white surface "
-        "with RGB #FFFFFF appearance: no texture, no grain, no green tint, no stains, no gradients, no shadows, no contact "
-        "shadows, no reflection, no color spill, and no checkerboard/alpha pattern. The final image should look like the "
-        "same overhead photograph after the table material was changed to perfectly clean flat white. "
-        "Preserve clean segmentation-friendly object boundaries. Do not add labels, arrows, captions, borders, extra props, "
-        "or any unrelated scene elements."
-    )
+    return _pose_collection_prompts.build_white_table_replacement_prompt(item, pose_family)
 
 
 def build_anchor_replacement_pose_prompt(item: dict[str, Any], pose_family: str) -> str:
-    long_short_rule = (
-        "Mandatory size rule: infer the replacement object's length from the longer visible side of the attached "
-            "reference object, and infer its width from the shorter visible side. Preserve the reference long:short aspect "
-            "ratio exactly. Map the source long edge to the anchor/bar long direction and the source short edge to the "
-            "anchor/bar short direction. Do not swap length and width, and do not non-uniformly stretch, squash, or compress "
-            "a long object just to fill the anchor footprint. For watch-like or other non-cylindrical accessories, the strap/"
-            "body long axis must remain visibly long. "
-    )
-    if pose_family == "upright":
-        return (
-            "Priority camera-facing rule: the object's top must face the camera, and the visible top is the part we "
-            "should see. "
-            f"{long_short_rule}"
-            "The first attached image is the anchor image. It contains nine metal bars. The second attached image is a "
-            "circular end-face target guide for the same 3x3 layout; use it to preserve round/cylindrical top footprints "
-            "and do not omit it when the object has a circular cap, nozzle, bottle mouth, lens, wheel, washer, or other round end. "
-            "Replace each metal bar with the "
-            "object from the other attached reference image(s). For every replacement, copy the matched bar's center "
-            "position, long-axis direction, end-face direction, and perspective. The object's "
-            "main axis must follow the bar's main axis, and the object's end-facing part must sit where that bar's "
-            "square end face appears. "
-            "Keep the anchor image's 3x3 layout, spacing, tabletop, background, camera angle, and framing unchanged. "
-            "Remove all metal bars from the final image. Do not add anything else."
-        )
-    return (
-        "Priority camera-facing rule: the object's side must face the camera, and the visible side surface is the part "
-        "we should see. "
-        f"{long_short_rule}"
-        "The first attached image is the anchor image. It contains nine horizontal metal bars. Replace each metal bar "
-        "with the object from the other attached reference image(s). A horizontal metal bar means the replacement object "
-        "must also be horizontal. Keep each replacement object's position, long-axis direction, and perspective matched "
-        "to the metal bar it replaces while preserving the source object's own long:short aspect. "
-        "Keep the anchor image's 3x3 layout, spacing, tabletop, background, camera angle, and framing unchanged. "
-        "Remove all metal bars from the final image. Do not add anything else."
-    )
+    return _pose_collection_prompts.build_anchor_replacement_pose_prompt(item, pose_family)
+
+
+from .accessories.pose_collection_jobs import PoseCollectionJobs
+from .accessories.pose_collection_job_ports import PoseJobIdentity, PoseJobMedia, PoseJobWorkflow
+
+_pose_collection_jobs = PoseCollectionJobs(
+    identity=PoseJobIdentity(
+        record_owner_id=lambda: record_owner_id,
+        safe_record_id=lambda: safe_record_id,
+        accessory_uid=lambda: accessory_uid,
+        deterministic_task_id=lambda: deterministic_task_id,
+        record_audit_fields=lambda: record_audit_fields,
+        accessory_material_type=lambda: accessory_material_type,
+    ),
+    media=PoseJobMedia(
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        POSE_ANCHOR_IMAGES=lambda: POSE_ANCHOR_IMAGES,
+        _business_files=lambda: _business_files,
+        existing_source_image_paths=lambda: existing_source_image_paths,
+        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
+        pose_collection_output_dir=lambda: pose_collection_output_dir,
+        pose_collection_output_name=lambda: pose_collection_output_name,
+        public_output_url=lambda: public_output_url,
+        source_reference_inputs_for_pose_job=lambda: source_reference_inputs_for_pose_job,
+        image_job_output_path=lambda: image_job_output_path,
+    ),
+    workflow=PoseJobWorkflow(
+        pose_collection_job_id=lambda: pose_collection_job_id,
+        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+        build_anchor_replacement_pose_prompt=lambda: build_anchor_replacement_pose_prompt,
+        ensure_image_job_task_id=lambda: ensure_image_job_task_id,
+        ensure_anchor_image_provenance=lambda: ensure_anchor_image_provenance,
+        ensure_image_job_target_guides=lambda: ensure_image_job_target_guides,
+        POSE_COLLECTION_GRID_ENABLED=lambda: POSE_COLLECTION_GRID_ENABLED,
+        candidate_image_jobs=lambda: candidate_image_jobs,
+        make_pose_collection_job=lambda: make_pose_collection_job,
+    ),
+)
 
 
 def safe_record_id(value: Any) -> str:
-    return re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value or "record")).strip("._") or "record"
+    return _pose_collection_jobs.safe_record_id(value)
 
 
 def pose_collection_output_dir(item: dict[str, Any]) -> Path:
-    owner = record_owner_id(item)
-    return output_write_dir_for_owner("accessory_pose_collections", owner) / safe_record_id(accessory_uid(item) or str(uuid.uuid4()))
+    return _pose_collection_jobs.pose_collection_output_dir(item)
 
 
 def pose_collection_output_name(pose_family: str) -> str:
-    return "pose_collection_endface.png" if pose_family == "upright" else "pose_collection_flat.png"
+    return _pose_collection_jobs.pose_collection_output_name(pose_family)
 
 
 def pose_collection_job_id(item: dict[str, Any], pose_family: str) -> str:
-    return f"imgjob_{safe_record_id(accessory_uid(item))}_{pose_family}_anchor_replacement"
+    return _pose_collection_jobs.pose_collection_job_id(item, pose_family)
 
 
 def source_reference_inputs_for_pose_job(item: dict[str, Any], pose_family: str) -> list[str]:
-    inputs: list[str] = []
-    anchor = POSE_ANCHOR_IMAGES.get(pose_family)
-    if anchor and _business_files.exists(anchor):
-        inputs.append(str(anchor))
-    for path in existing_source_image_paths(item):
-        text = str(path)
-        if text not in inputs:
-            inputs.append(text)
-    return inputs[:MAX_IMAGE_WORKER_INPUTS]
+    return _pose_collection_jobs.source_reference_inputs_for_pose_job(item, pose_family)
 
 
 def make_pose_collection_job(item: dict[str, Any], pose_family: str) -> dict[str, Any]:
-    output_path = pose_collection_output_dir(item) / pose_collection_output_name(pose_family)
-    anchor_path = POSE_ANCHOR_IMAGES.get(pose_family)
-    job = {
-        "job_id": pose_collection_job_id(item, pose_family),
-        "task_id": deterministic_task_id(item, {"pose_family": pose_family, "output_path": str(output_path)}),
-        "candidate_id": accessory_uid(item),
-        "candidate_name": item.get("name") or accessory_uid(item),
-        "label": "正立多角度图" if pose_family == "upright" else "平躺多角度图",
-        "queue_kind": "image_generation",
-        "status": "completed" if _business_files.exists(output_path) else CODEX_IMAGE_WORKER_QUEUE_STATUS,
-        "progress": 100 if _business_files.exists(output_path) else 0,
-        "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-        "generation_method": "codex_exec_image_worker",
-        "generation_step": "anchor_replacement",
-        "pose_family": pose_family,
-        "prompt": build_anchor_replacement_pose_prompt(item, pose_family),
-        "input_files": source_reference_inputs_for_pose_job(item, pose_family),
-        "anchor_image_path": str(anchor_path) if anchor_path else "",
-        "output_path": str(output_path),
-        "output_url": public_output_url(output_path),
-        "created_at": int(time.time()),
-        **record_audit_fields(item),
-    }
-    if _business_files.exists(output_path):
-        job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
-    ensure_image_job_task_id(item, job)
-    ensure_anchor_image_provenance(job)
-    ensure_image_job_target_guides(job)
-    return job
+    return _pose_collection_jobs.make_pose_collection_job(item, pose_family)
 
 
 def ensure_pose_collection_image_jobs(item: dict[str, Any]) -> bool:
-    if accessory_material_type(item) == "text":
-        return False
-    # Legacy anchor/grid pose-collection generation is retired. Object standard
-    # images are now produced inside the training pipeline as single-object
-    # top-down photos (agent_mcp pose images) and segmented into clean sprites;
-    # no anchor grids are generated at accessory creation anymore.
-    if not POSE_COLLECTION_GRID_ENABLED:
-        return False
-    jobs = candidate_image_jobs(item)
-    changed = False
-    for job in jobs:
-        changed = ensure_image_job_task_id(item, job) or changed
-        changed = ensure_anchor_image_provenance(job) or changed
-        changed = ensure_image_job_target_guides(job) or changed
-        if str(job.get("generation_step") or "") == "anchor_replacement":
-            if job.get("provider") != LOCAL_CODEX_IMAGE_PROVIDER:
-                job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
-                changed = True
-            if job.get("generation_method") != "codex_exec_image_worker":
-                job["generation_method"] = "codex_exec_image_worker"
-                changed = True
-            if job.get("queue_kind") != "image_generation":
-                job["queue_kind"] = "image_generation"
-                changed = True
-            output_path = image_job_output_path(job, for_write=True)
-            if _business_files.exists(output_path) and job.get("status") != "completed":
-                job["status"] = "completed"
-                job["progress"] = 100
-                job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
-                job["output_url"] = public_output_url(output_path)
-                changed = True
-            elif job.get("status") == "completed" and not _business_files.exists(output_path):
-                job["status"] = CODEX_IMAGE_WORKER_QUEUE_STATUS
-                job["progress"] = 0
-                job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
-                job["generation_method"] = "codex_exec_image_worker"
-                job["error"] = f"Missing target PNG: {output_path}. Requeued for Windows CodexImageWorker."
-                job.pop("completed_at", None)
-                changed = True
-    for pose_family in ("upright", "lying"):
-        expected_name = pose_collection_output_name(pose_family)
-        existing = next(
-            (
-                job
-                for job in jobs
-                if str(job.get("generation_step") or "") == "anchor_replacement"
-                and str(job.get("pose_family") or "") == pose_family
-                and Path(str(job.get("output_path") or "")).name == expected_name
-            ),
-            None,
-        )
-        if existing is None:
-            jobs.append(make_pose_collection_job(item, pose_family))
-            changed = True
-    if changed or jobs:
-        item["codex_image_jobs"] = jobs
-        item["codex_image_job"] = jobs[0] if jobs else None
-        item["ai_generation_required"] = True
-        item["pose_collection_prompts"] = {
-            "upright": build_anchor_replacement_pose_prompt(item, "upright"),
-            "lying": build_anchor_replacement_pose_prompt(item, "lying"),
-        }
-        item["pose_collection_prompt"] = item["pose_collection_prompts"]["lying"]
-        item["status"] = "image_tool_plan_ready" if item.get("status") in {"candidate_review", "reference_uploaded", "active"} else item.get("status", "image_tool_plan_ready")
-    return changed
+    return _pose_collection_jobs.ensure_pose_collection_image_jobs(item)
 
 
 def pending_pose_collection_jobs(item: dict[str, Any]) -> list[dict[str, Any]]:
-    pending: list[dict[str, Any]] = []
-    for job in candidate_image_jobs(item):
-        if str(job.get("generation_step") or "") != "anchor_replacement":
-            continue
-        output_path = image_job_output_path(job, for_write=True)
-        if str(job.get("status") or "") != "completed" or not _business_files.exists(output_path):
-            copy = dict(job)
-            copy["missing_output_path"] = str(output_path)
-            pending.append(copy)
-    return pending
+    return _pose_collection_jobs.pending_pose_collection_jobs(item)
 
 
 def pose_collection_pending_detail(item: dict[str, Any], pending: list[dict[str, Any]]) -> str:
-    details = []
-    for job in pending[:4]:
-        status = str(job.get("status") or "missing")
-        pose = str(job.get("pose_family") or "pose")
-        error = str(job.get("error") or "").strip()
-        missing = str(job.get("missing_output_path") or job.get("output_path") or "")
-        parts = [pose, status]
-        if missing:
-            parts.append(f"target={missing}")
-        if error:
-            parts.append(error)
-        details.append(" / ".join(parts))
-    suffix = "；..." if len(pending) > 4 else ""
-    return f"配件 {item.get('name') or accessory_uid(item)} 的 Windows CodexImageWorker 多角度图还未完成：{'；'.join(details)}{suffix}。请等待生成任务完成，或重试失败任务后再生成训练样本。"
+    return _pose_collection_jobs.pose_collection_pending_detail(item, pending)
 
 
 def create_accessory_candidate(
@@ -8146,109 +7541,27 @@ def delete_accessory_candidate(candidate_id: str, path: Path | None = None) -> b
     return _candidate_repository.delete_accessory_candidate(candidate_id, path)
 
 
+from .accessories.candidate_artifacts import CandidateArtifacts
+from .accessories.candidate_artifact_ports import CandidateArtifactFiles, CandidateArtifactRecords
+
+_candidate_artifacts = CandidateArtifacts(
+    files=CandidateArtifactFiles(
+        _business_files=lambda: _business_files,
+        UPLOAD_DIR=lambda: UPLOAD_DIR,
+        output_write_dir=lambda: output_write_dir,
+        IMAGE_REFERENCE_SUFFIXES=lambda: IMAGE_REFERENCE_SUFFIXES,
+    ),
+    records=CandidateArtifactRecords(
+        safe_record_id=lambda: safe_record_id,
+        load_config=lambda: load_config,
+        list_accessory_candidate_records=lambda: list_accessory_candidate_records,
+    ),
+)
+
+
 def cleanup_accessory_candidate_artifacts(candidate: dict[str, Any]) -> list[str]:
-    """Remove only directories that are unambiguously owned by a pending candidate."""
-    raw_candidate_id = str(candidate.get("id") or candidate.get("candidate_id") or "").strip()
-    if not raw_candidate_id:
-        return []
-    if str(candidate.get("confirmed_accessory_id") or "").strip() or str(candidate.get("status") or "").lower() == "confirmed":
-        return []
-    candidate_id = safe_record_id(raw_candidate_id)
-
-    upload_root = (UPLOAD_DIR / "accessory_candidates").resolve()
-    output_root = output_write_dir("accessory_candidates").resolve()
-    owned_directories: set[Path] = set()
-    referenced_upload_files: set[Path] = set()
-
-    for key in ("source_files", "original_source_files", "video_reference_frames"):
-        values = candidate.get(key)
-        if not isinstance(values, list):
-            continue
-        for raw_value in values:
-            raw_path = raw_value.get("path") if isinstance(raw_value, dict) else raw_value
-            if not isinstance(raw_path, str) or not raw_path.strip():
-                continue
-            source_path = Path(raw_path).resolve()
-            try:
-                relative = source_path.relative_to(upload_root)
-            except ValueError:
-                continue
-            referenced_upload_files.add(source_path)
-            if not relative.parts:
-                continue
-            owner_dir = upload_root / relative.parts[0]
-            if owner_dir.name == candidate_id or owner_dir.name.startswith("src_"):
-                owned_directories.add(owner_dir)
-
-    candidate_upload_dir = upload_root / candidate_id
-    if _business_files.exists(candidate_upload_dir):
-        owned_directories.add(candidate_upload_dir)
-    candidate_output_dir = output_root / candidate_id
-    if _business_files.exists(candidate_output_dir):
-        owned_directories.add(candidate_output_dir)
-
-    def referenced_paths(record: dict[str, Any]) -> set[Path]:
-        paths: set[Path] = set()
-
-        def collect(value: Any) -> None:
-            if isinstance(value, str):
-                path = Path(value)
-                if path.is_absolute():
-                    paths.add(path.resolve())
-            elif isinstance(value, list):
-                for item in value:
-                    collect(item)
-            elif isinstance(value, dict):
-                for item in value.values():
-                    collect(item)
-
-        for key in (
-            "source_files",
-            "original_source_files",
-            "video_reference_frames",
-            "thumbnails",
-            "normalized_assets",
-            "ai_profile_reference_files",
-            "codex_image_jobs",
-            "codex_image_job",
-        ):
-            collect(record.get(key))
-        return paths
-
-    protected_records = [item for item in load_config().get("accessories", []) if isinstance(item, dict)]
-    for _, other_candidate in list_accessory_candidate_records(reverse=False):
-        other_id = str(other_candidate.get("id") or other_candidate.get("candidate_id") or "").strip()
-        if other_id and other_id != raw_candidate_id:
-            protected_records.append(other_candidate)
-    protected_paths = set().union(*(referenced_paths(record) for record in protected_records)) if protected_records else set()
-
-    for directory in owned_directories:
-        resolved_directory = directory.resolve()
-        for protected_path in protected_paths:
-            try:
-                protected_path.relative_to(resolved_directory)
-            except ValueError:
-                continue
-            raise OSError(f"Refusing to delete candidate artifacts still referenced by another record: {resolved_directory}")
-
-    deleted: list[str] = []
-    for directory in sorted(owned_directories, key=str):
-        resolved = directory.resolve()
-        allowed_parent = upload_root if resolved.parent == upload_root else output_root
-        if resolved.parent != allowed_parent:
-            raise OSError(f"Refusing to delete non-candidate artifact directory: {resolved}")
-        if allowed_parent == upload_root and not (resolved.name == candidate_id or resolved.name.startswith("src_")):
-            raise OSError(f"Refusing to delete ambiguous upload directory: {resolved}")
-        if allowed_parent == upload_root and resolved.name.startswith("src_"):
-            contained_files = {path.resolve() for path in _business_files.glob(resolved, "*", recursive=True) if _business_files.is_file(path)}
-            if not contained_files.issubset(referenced_upload_files):
-                raise OSError(f"Refusing to delete upload directory containing unreferenced files: {resolved}")
-        if allowed_parent == output_root and resolved.name != candidate_id:
-            raise OSError(f"Refusing to delete ambiguous output directory: {resolved}")
-        if _business_files.exists(resolved):
-            _business_files.rmtree(resolved)
-            deleted.append(str(resolved))
-    return deleted
+    'Remove only directories that are unambiguously owned by a pending candidate.'
+    return _candidate_artifacts.cleanup_accessory_candidate_artifacts(candidate)
 
 
 def accessory_candidate_record_path(candidate: dict[str, Any], fallback_id: str = "candidate") -> Path:
@@ -8263,6 +7576,46 @@ def write_accessory_candidate_file(path: Path, candidate: dict[str, Any]) -> Non
     return _candidate_repository.write_accessory_candidate_file(path, candidate)
 
 
+from .accessories.image_job_queue import ImageJobQueue
+from .accessories.image_job_queue_ports import ImageQueueStorage, ImageQueueMetadata, ImageQueueExecution
+
+_image_job_queue = ImageJobQueue(
+    storage=ImageQueueStorage(
+        _candidate_store_lock=lambda: _candidate_store_lock,
+        CONFIG_PATH=lambda: CONFIG_PATH,
+        load_config=lambda: load_config,
+        save_config=lambda: save_config,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        load_accessory_candidate=lambda: load_accessory_candidate,
+        save_accessory_candidate=lambda: save_accessory_candidate,
+        list_accessory_candidate_records=lambda: list_accessory_candidate_records,
+        _business_files=lambda: _business_files,
+        HTTPException=lambda: HTTPException,
+    ),
+    metadata=ImageQueueMetadata(
+        ensure_image_job_task_id=lambda: ensure_image_job_task_id,
+        ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids,
+        candidate_image_jobs=lambda: candidate_image_jobs,
+        store_candidate_image_job=lambda: store_candidate_image_job,
+        accessory_uid=lambda: accessory_uid,
+        file_stem_identifier=lambda: file_stem_identifier,
+        accessory_material_type=lambda: accessory_material_type,
+        ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs,
+        image_job_output_path=lambda: image_job_output_path,
+        public_output_url=lambda: public_output_url,
+        resolve_service_path=lambda: resolve_service_path,
+        preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
+    ),
+    execution=ImageQueueExecution(
+        IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
+        MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
+        next_queued_image_job=lambda: next_queued_image_job,
+        update_image_worker_status=lambda: update_image_worker_status,
+        run_image_generation_job=lambda: run_image_generation_job,
+    ),
+)
+
+
 def mutate_candidate_image_job(
     path: Path,
     candidate: dict[str, Any],
@@ -8271,292 +7624,122 @@ def mutate_candidate_image_job(
     *,
     preprocess_clean_sprites: bool = False,
 ) -> dict[str, Any]:
-    ensure_image_job_task_id(candidate, job)
-    job_id = str(job.get("job_id", ""))
-    with _candidate_store_lock:
-        if path == CONFIG_PATH:
-            latest_config = load_config()
-            latest = next(
-                (
-                    item
-                    for item in latest_config.get("accessories", [])
-                    if isinstance(item, dict) and accessory_uid(item) == accessory_uid(candidate)
-                ),
-                None,
-            )
-            if latest is None:
-                return job
-            ensure_candidate_image_job_task_ids(latest)
-            latest_job = next(
-                (item for item in candidate_image_jobs(latest) if str(item.get("job_id", "")) == job_id),
-                dict(job),
-            )
-            if latest_job.get("status") == "stopped" and updates.get("status") != "stopped":
-                return latest_job
-            latest_job.update(updates)
-            store_candidate_image_job(latest, latest_job)
-            if preprocess_clean_sprites:
-                preprocess_object_clean_sprites(latest, allow_ai_cutout=True)
-            save_config(latest_config)
-            return latest_job
-        repository = runtime_postgres_repository_or_none()
-        if repository is not None:
-            try:
-                latest = load_accessory_candidate(str(candidate.get("id") or file_stem_identifier(path)))
-            except HTTPException as exc:
-                if exc.status_code != 404:
-                    raise
-                latest = candidate
-        else:
-            if not _business_files.exists(path):
-                return job
-            try:
-                latest = json.loads(_business_files.read_text(path, encoding="utf-8"))
-            except json.JSONDecodeError:
-                latest = candidate
-        ensure_candidate_image_job_task_ids(latest)
-        latest_job = next(
-            (item for item in candidate_image_jobs(latest) if str(item.get("job_id", "")) == job_id),
-            dict(job),
-        )
-        if latest_job.get("status") == "stopped" and updates.get("status") != "stopped":
-            return latest_job
-        latest_job.update(updates)
-        store_candidate_image_job(latest, latest_job)
-        if preprocess_clean_sprites:
-            preprocess_object_clean_sprites(latest, allow_ai_cutout=True)
-        save_accessory_candidate(path, latest)
-        return latest_job
+    return _image_job_queue.mutate_candidate_image_job(path, candidate, job, updates, preprocess_clean_sprites=preprocess_clean_sprites)
 
 
 def candidate_has_active_image_jobs(candidate: dict[str, Any]) -> bool:
     return any(str(job.get("status", "")) in IMAGE_JOB_ACTIVE_STATUSES for job in candidate_image_jobs(candidate))
 
 
+from .model_providers.image_provider_configuration import ImageProviderConfiguration
+from .model_providers.image_provider_configuration_ports import ImageProviderSelection, ImageProviderSettings, ImageProviderPayload
+
+_image_provider_configuration = ImageProviderConfiguration(
+    selection=ImageProviderSelection(
+        CURSOR_IMAGE_MODEL_PRIORITY=lambda: CURSOR_IMAGE_MODEL_PRIORITY,
+        CURSOR_IMAGE_MODEL_KEYWORDS=lambda: CURSOR_IMAGE_MODEL_KEYWORDS,
+        normalize_agent_model_options=lambda: normalize_agent_model_options,
+        cursor_image_model_score=lambda: cursor_image_model_score,
+        normalize_agent_provider=lambda: normalize_agent_provider,
+        AGENT_PROVIDER_CURSOR=lambda: AGENT_PROVIDER_CURSOR,
+        agent_connected=lambda: agent_connected,
+    ),
+    settings=ImageProviderSettings(
+        load_agent_config=lambda: load_agent_config,
+        inspect_cursor_image_models=lambda: inspect_cursor_image_models,
+        CURSOR_IMAGE2_BASE_URL_ENV=lambda: CURSOR_IMAGE2_BASE_URL_ENV,
+        AGENT_CURSOR_DEFAULT_BASE_URL=lambda: AGENT_CURSOR_DEFAULT_BASE_URL,
+        CURSOR_IMAGE2_ENDPOINT_ENV=lambda: CURSOR_IMAGE2_ENDPOINT_ENV,
+        CURSOR_IMAGE2_API_KEY_ENV=lambda: CURSOR_IMAGE2_API_KEY_ENV,
+        CURSOR_IMAGE2_MODEL_ENV=lambda: CURSOR_IMAGE2_MODEL_ENV,
+        CURSOR_IMAGE2_DEFAULT_MODEL=lambda: CURSOR_IMAGE2_DEFAULT_MODEL,
+        masked_url_for_status=lambda: masked_url_for_status,
+        cursor_image2_settings=lambda: cursor_image2_settings,
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+        CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
+    ),
+    payload=ImageProviderPayload(
+        image_job_prompt=lambda: image_job_prompt,
+        image_file_payload=lambda: image_file_payload,
+        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
+        cursor_image2_response_candidates=lambda: cursor_image2_response_candidates,
+        decode_b64_image=lambda: decode_b64_image,
+    ),
+)
+
+
 def image_job_prompt(job: dict[str, Any]) -> str:
-    output_path = str(job.get("output_path", ""))
-    pose_family = str(job.get("pose_family") or "combined")
-    generation_step = str(job.get("generation_step") or "")
-    input_count = len(job.get("input_files", []) or [])
-    video_frame_count = len(job.get("video_reference_frames", []) or [])
-    mode_hint = (
-        "The first attached image is a hidden backend anchor image. Use it only for layout, pose, scale, camera, and table/background."
-        if generation_step == "anchor_replacement"
-        else "Follow the core prompt exactly."
-    )
-    pose_hint = {
-        "upright": "Final image must contain exactly nine replacement objects matched to the nine anchor bars.",
-        "lying": "Final image must contain exactly nine horizontal replacement objects.",
-    }.get(pose_family, "Final image must follow the requested pose collection.")
-    return f"""
-You are the ImageWorker for the local assembly-line inspection service.
+    return _image_provider_configuration.image_job_prompt(job)
 
-Use all {input_count} attached images. {video_frame_count} may be frames extracted from a user video.
-{mode_hint}
 
-Core prompt:
-{job.get("prompt", "")}
+from .accessories.image_worker_diagnostics import ImageWorkerDiagnostics
+from .accessories.image_worker_diagnostic_ports import ImageDiagnosticMedia, ImageDiagnosticRuntime, ImageDiagnosticPolicy
 
-- Generate a realistic PNG with AI image generation; do not satisfy this with local drawing or script-only image editing.
-- {pose_hint}
-- Save the final PNG exactly here:
-  {output_path}
-""".strip()
+_image_worker_diagnostics = ImageWorkerDiagnostics(
+    media=ImageDiagnosticMedia(
+        _business_files=lambda: _business_files,
+        resolve_service_path=lambda: resolve_service_path,
+        safe_name=lambda: safe_name,
+        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
+        read_image_worker_log_tail=lambda: read_image_worker_log_tail,
+    ),
+    runtime=ImageDiagnosticRuntime(
+        _image_worker_processes=lambda: _image_worker_processes,
+        image_worker_process_alive=lambda: image_worker_process_alive,
+        codex_process_has_log_open=lambda: codex_process_has_log_open,
+        image_job_has_live_worker=lambda: image_job_has_live_worker,
+    ),
+    policy=ImageDiagnosticPolicy(
+        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+        IMAGE_WORKER_LOG_TAIL_BYTES=lambda: IMAGE_WORKER_LOG_TAIL_BYTES,
+        IMAGE_WORKER_STALE_SECONDS=lambda: IMAGE_WORKER_STALE_SECONDS,
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+    ),
+)
 
 
 def image_job_is_active(status: str) -> bool:
-    return status in IMAGE_JOB_ACTIVE_STATUSES
+    return _image_worker_diagnostics.image_job_is_active(status)
 
 
 def codex_log_has_generated_image(log_path: Path) -> bool:
-    if not _business_files.exists(log_path):
-        return False
-    try:
-        text = _business_files.read_text(log_path, encoding="utf-8", errors="ignore")
-    except OSError:
-        return False
-    return "/.codex/generated_images/" in text or "/home/dministrator/.codex/generated_images/" in text
+    return _image_worker_diagnostics.codex_log_has_generated_image(log_path)
 
 
 def image_job_output_path(job: dict[str, Any], *, for_write: bool = False) -> Path:
-    return resolve_service_path(job.get("output_path", ""), for_write=for_write)
+    return _image_worker_diagnostics.image_job_output_path(job, for_write=for_write)
 
 
 def image_job_log_path(job: dict[str, Any]) -> Path:
-    raw_path = str(job.get("log_path") or "").strip()
-    if raw_path:
-        return resolve_service_path(raw_path)
-    job_id = str(job.get("job_id") or job.get("task_id") or "image_worker")
-    return IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
+    return _image_worker_diagnostics.image_job_log_path(job)
 
 
 def read_image_worker_log_tail(log_path: Path) -> str:
-    if not _business_files.exists(log_path):
-        return ""
-    try:
-        with _business_files.open_read(log_path) as handle:
-            handle.seek(0, os.SEEK_END)
-            size = handle.tell()
-            handle.seek(max(0, size - IMAGE_WORKER_LOG_TAIL_BYTES))
-            return handle.read().decode("utf-8", errors="ignore")
-    except OSError:
-        return ""
+    return _image_worker_diagnostics.read_image_worker_log_tail(log_path)
 
 
 def classify_image_worker_failure(log_path: Path, return_code: int | None, output_path: Path, *, stale: bool = False) -> str:
-    text = read_image_worker_log_tail(log_path)
-    lower = text.lower()
-    causes: list[str] = []
-    if "toomanyrequests" in lower or "too many requests" in lower or "rate limit" in lower or "429" in lower:
-        causes.append("图像生成供应商限流（TooManyRequests/429）")
-    if "forbidden" in lower:
-        causes.append("备用图像连接器被拒绝（FORBIDDEN）")
-    if "fallback" in lower and ("approval" in lower or "approve" in lower or "explicit" in lower or "openai_api_key" in lower):
-        causes.append("CLI fallback 需要显式配置或批准")
-    if stale:
-        causes.append("任务标记为 running，但当前服务没有发现仍在写日志的 Image Worker 进程")
-    if return_code is not None:
-        if return_code == 0:
-            causes.append("Codex CLI 退出码 0，但没有写出目标 PNG")
-        else:
-            causes.append(f"Codex CLI 退出码 {return_code}")
-    if not _business_files.exists(output_path):
-        causes.append(f"未生成目标 PNG：{output_path}")
-    if not causes:
-        causes.append("图像生成结束但未产出可用图片")
-    return "；".join(causes) + "。请稍后重试，或配置并批准可用的 Image Worker fallback 后重新排队。"
+    return _image_worker_diagnostics.classify_image_worker_failure(log_path, return_code, output_path, stale=stale)
 
 
 def image_worker_process_alive(job_id: str) -> bool:
-    process = _image_worker_processes.get(job_id)
-    return bool(process and process.poll() is None)
+    return _image_worker_diagnostics.image_worker_process_alive(job_id)
 
 
 def codex_process_has_log_open(log_path: Path) -> bool:
-    if not _business_files.exists(log_path) or not _business_files.exists(Path("/proc")):
-        return False
-    target = str(log_path.resolve())
-    for pid_dir in _business_files.iterdir(Path("/proc")):
-        if not pid_dir.name.isdigit():
-            continue
-        try:
-            cmdline = _business_files.read_bytes(pid_dir / "cmdline").decode("utf-8", errors="ignore").replace("\x00", " ")
-        except OSError:
-            continue
-        if "codex" not in cmdline:
-            continue
-        fd_dir = pid_dir / "fd"
-        try:
-            for fd in _business_files.iterdir(fd_dir):
-                try:
-                    linked = os.readlink(fd)
-                except OSError:
-                    continue
-                if linked.removesuffix(" (deleted)") == target:
-                    return True
-        except OSError:
-            continue
-    return False
+    return _image_worker_diagnostics.codex_process_has_log_open(log_path)
 
 
 def image_job_has_live_worker(job: dict[str, Any], log_path: Path) -> bool:
-    job_id = str(job.get("job_id") or "")
-    return image_worker_process_alive(job_id) or codex_process_has_log_open(log_path)
+    return _image_worker_diagnostics.image_job_has_live_worker(job, log_path)
 
 
 def running_image_job_is_stale(job: dict[str, Any], log_path: Path) -> bool:
-    if image_job_has_live_worker(job, log_path):
-        return False
-    now = int(time.time())
-    try:
-        age = now - int(_business_files.stat(log_path).st_mtime) if _business_files.exists(log_path) else now - int(job.get("started_at") or job.get("created_at") or now)
-    except (OSError, ValueError, TypeError):
-        age = 0
-    provider = str(job.get("provider") or "")
-    generation_method = str(job.get("generation_method") or "")
-    if generation_method == "codex_exec_image_worker" and provider == LOCAL_CODEX_IMAGE_PROVIDER:
-        return age >= IMAGE_WORKER_STALE_SECONDS
-    return age >= IMAGE_WORKER_STALE_SECONDS
+    return _image_worker_diagnostics.running_image_job_is_stale(job, log_path)
 
 
 def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | None:
-    for path, candidate in list_accessory_candidate_records(reverse=False):
-        with _candidate_store_lock:
-            for job in candidate_image_jobs(candidate):
-                changed = ensure_image_job_task_id(candidate, job)
-                if changed:
-                    store_candidate_image_job(candidate, job)
-                status = str(job.get("status", ""))
-                if status not in IMAGE_JOB_QUEUED_STATUSES:
-                    if changed:
-                        save_accessory_candidate(path, candidate)
-                    continue
-                depends_on_output = str(job.get("depends_on_output_path") or "")
-                if depends_on_output and not _business_files.exists(resolve_service_path(depends_on_output)):
-                    if changed:
-                        save_accessory_candidate(path, candidate)
-                    continue
-                output_path = image_job_output_path(job, for_write=True)
-                if str(output_path) and str(output_path) != str(job.get("output_path", "")):
-                    job["output_path"] = str(output_path)
-                    job["output_url"] = public_output_url(output_path)
-                    changed = True
-                if _business_files.exists(output_path):
-                    job["status"] = "completed"
-                    job["progress"] = 100
-                    job["output_url"] = public_output_url(output_path)
-                    job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
-                    store_candidate_image_job(candidate, job)
-                    preprocess_object_clean_sprites(candidate, allow_ai_cutout=True)
-                    save_accessory_candidate(path, candidate)
-                    continue
-                if changed:
-                    save_accessory_candidate(path, candidate)
-                return path, candidate, job
-    with _candidate_store_lock:
-        config = load_config()
-        config_changed = False
-        for candidate in config.get("accessories", []):
-            if not isinstance(candidate, dict):
-                continue
-            if accessory_material_type(candidate) == "text":
-                continue
-            if ensure_pose_collection_image_jobs(candidate):
-                config_changed = True
-            for job in candidate_image_jobs(candidate):
-                changed = ensure_image_job_task_id(candidate, job)
-                if changed:
-                    store_candidate_image_job(candidate, job)
-                    config_changed = True
-                status = str(job.get("status", ""))
-                if status not in IMAGE_JOB_QUEUED_STATUSES:
-                    continue
-                depends_on_output = str(job.get("depends_on_output_path") or "")
-                if depends_on_output and not _business_files.exists(resolve_service_path(depends_on_output)):
-                    continue
-                output_path = image_job_output_path(job, for_write=True)
-                if str(output_path) and str(output_path) != str(job.get("output_path", "")):
-                    job["output_path"] = str(output_path)
-                    job["output_url"] = public_output_url(output_path)
-                    changed = True
-                if _business_files.exists(output_path):
-                    job["status"] = "completed"
-                    job["progress"] = 100
-                    job["output_url"] = public_output_url(output_path)
-                    job["completed_at"] = int(_business_files.stat(output_path).st_mtime)
-                    store_candidate_image_job(candidate, job)
-                    preprocess_object_clean_sprites(candidate, allow_ai_cutout=True)
-                    config_changed = True
-                    continue
-                if changed:
-                    store_candidate_image_job(candidate, job)
-                    config_changed = True
-                if config_changed:
-                    save_config(config)
-                return CONFIG_PATH, candidate, job
-        if config_changed:
-            save_config(config)
-    return None
+    return _image_job_queue.next_queued_image_job()
 
 
 def update_image_worker_status(path: Path, candidate: dict[str, Any], job: dict[str, Any], **fields: Any) -> None:
@@ -8565,111 +7748,19 @@ def update_image_worker_status(path: Path, candidate: dict[str, Any], job: dict[
 
 
 def cursor_image_model_score(model_id: str) -> tuple[int, int]:
-    lowered = str(model_id or "").lower()
-    for index, marker in enumerate(CURSOR_IMAGE_MODEL_PRIORITY):
-        if marker in lowered:
-            return (100 - index, len(lowered))
-    if any(marker in lowered for marker in CURSOR_IMAGE_MODEL_KEYWORDS):
-        return (10, len(lowered))
-    return (0, len(lowered))
+    return _image_provider_configuration.cursor_image_model_score(model_id)
 
 
 def inspect_cursor_image_models(agent_config: dict[str, Any]) -> dict[str, Any]:
-    options = normalize_agent_model_options(agent_config.get("model_options"))
-    image_options = [
-        option
-        for option in options
-        if cursor_image_model_score(str(option.get("id") or option.get("label") or ""))[0] > 0
-    ]
-    image_options.sort(key=lambda item: cursor_image_model_score(str(item.get("id") or item.get("label") or "")), reverse=True)
-    recommended_model = str(image_options[0]["id"]) if image_options else ""
-    connected = normalize_agent_provider(agent_config.get("provider"), agent_config.get("base_url", "")) == AGENT_PROVIDER_CURSOR and agent_connected(agent_config)
-    if recommended_model:
-        status = "image_model_available"
-        message = f"Cursor model list includes image-capable candidate {recommended_model}."
-    elif connected and options:
-        status = "no_image_model"
-        message = "Cursor /v1/models is reachable, but the returned model list does not expose an image-generation-capable model."
-    elif connected:
-        status = "no_model_list"
-        message = "Cursor is connected, but no cached model list is available; run Agent config test to refresh /v1/models."
-    else:
-        status = "not_connected"
-        message = "Cursor Agent credentials are not connected; cannot inspect /v1/models for image-capable models."
-    return {
-        "status": status,
-        "connected": bool(connected),
-        "model_count": len(options),
-        "image_model_count": len(image_options),
-        "image_models": image_options[:12],
-        "recommended_model": recommended_model,
-        "message": message,
-    }
+    return _image_provider_configuration.inspect_cursor_image_models(agent_config)
 
 
 def cursor_image2_settings() -> dict[str, Any]:
-    agent_config = load_agent_config()
-    agent_is_cursor = normalize_agent_provider(agent_config.get("provider"), agent_config.get("base_url", "")) == AGENT_PROVIDER_CURSOR
-    model_inspection = inspect_cursor_image_models(agent_config)
-    base_url = (
-        os.environ.get(CURSOR_IMAGE2_BASE_URL_ENV, "").strip().rstrip("/")
-        or (str(agent_config.get("base_url") or "").strip().rstrip("/") if agent_is_cursor else "")
-        or AGENT_CURSOR_DEFAULT_BASE_URL
-    )
-    endpoint = os.environ.get(CURSOR_IMAGE2_ENDPOINT_ENV, "").strip().rstrip("/")
-    api_key = os.environ.get(CURSOR_IMAGE2_API_KEY_ENV, "").strip() or (str(agent_config.get("api_key") or "").strip() if agent_is_cursor else "")
-    model = os.environ.get(CURSOR_IMAGE2_MODEL_ENV, "").strip() or model_inspection.get("recommended_model") or CURSOR_IMAGE2_DEFAULT_MODEL
-    missing: list[str] = []
-    if not endpoint:
-        missing.append(CURSOR_IMAGE2_ENDPOINT_ENV)
-    if not api_key:
-        missing.append(CURSOR_IMAGE2_API_KEY_ENV)
-    if not model:
-        missing.append(CURSOR_IMAGE2_MODEL_ENV)
-    return {
-        "configured": not missing,
-        "base_url": base_url,
-        "endpoint": endpoint,
-        "endpoint_public": masked_url_for_status(endpoint),
-        "api_key": api_key,
-        "has_api_key": bool(api_key),
-        "model": model,
-        "missing": missing,
-        "status": "ready" if not missing else "missing_config",
-        "message": (
-            "Cursor Image2 endpoint is configured."
-            if not missing
-            else f"{model_inspection['message']} Cursor image generation requires an explicit image-generation endpoint/protocol or private relay. "
-            + f"Set {CURSOR_IMAGE2_ENDPOINT_ENV}; use {CURSOR_IMAGE2_API_KEY_ENV} if the existing Cursor Agent key should not be reused."
-        ),
-        "model_inspection": model_inspection,
-        "timeout_seconds": max(10.0, min(900.0, float(agent_config.get("timeout_seconds") or 120.0))),
-    }
+    return _image_provider_configuration.cursor_image2_settings()
 
 
 def public_cursor_image2_status() -> dict[str, Any]:
-    settings = cursor_image2_settings()
-    local_codex_available = bool(shutil.which("codex"))
-    fallback = {
-        "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-        "configured": local_codex_available,
-        "endpoint": "local-codex-cli" if local_codex_available else "",
-        "route": "codex exec",
-        "status": "available" if local_codex_available else "missing_config",
-        "message": "Local Codex image fallback is available." if local_codex_available else "codex CLI is not available on this host.",
-    }
-    return {
-        "provider": CURSOR_IMAGE2_PROVIDER,
-        "configured": bool(settings.get("configured")),
-        "endpoint": settings.get("endpoint_public") or "",
-        "model": settings.get("model") or "",
-        "has_api_key": bool(settings.get("has_api_key")),
-        "status": settings.get("status") or "",
-        "message": settings.get("message") or "",
-        "missing": settings.get("missing") or [],
-        "model_inspection": settings.get("model_inspection") or {},
-        "fallback": fallback,
-    }
+    return _image_provider_configuration.public_cursor_image2_status()
 
 
 def image_file_payload(path: Path) -> dict[str, str]:
@@ -8682,14 +7773,7 @@ def image_file_payload(path: Path) -> dict[str, str]:
 
 
 def cursor_image2_payload(job: dict[str, Any], input_files: list[str], settings: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "model": settings["model"],
-        "prompt": image_job_prompt(job),
-        "n": 1,
-        "size": os.environ.get("INSPECTION_CURSOR_IMAGE2_SIZE", "1024x1024").strip() or "1024x1024",
-        "response_format": "b64_json",
-        "input_images": [image_file_payload(Path(path)) for path in input_files[:MAX_IMAGE_WORKER_INPUTS]],
-    }
+    return _image_provider_configuration.cursor_image2_payload(job, input_files, settings)
 
 
 def decode_b64_image(value: Any) -> bytes | None:
@@ -8705,36 +7789,11 @@ def decode_b64_image(value: Any) -> bytes | None:
 
 
 def cursor_image2_response_candidates(payload: Any) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
-    if isinstance(payload, dict):
-        for key in ("data", "images", "output", "result"):
-            value = payload.get(key)
-            if isinstance(value, list):
-                candidates.extend(item for item in value if isinstance(item, dict))
-            elif isinstance(value, dict):
-                candidates.append(value)
-        if any(key in payload for key in ("b64_json", "base64", "image_base64", "url")):
-            candidates.append(payload)
-    elif isinstance(payload, list):
-        candidates.extend(item for item in payload if isinstance(item, dict))
-    return candidates
+    return _image_provider_configuration.cursor_image2_response_candidates(payload)
 
 
 def extract_cursor_image2_bytes(payload: dict[str, Any], settings: dict[str, Any]) -> bytes:
-    for item in cursor_image2_response_candidates(payload):
-        for key in ("b64_json", "base64", "image_base64"):
-            image_bytes = decode_b64_image(item.get(key))
-            if image_bytes:
-                return image_bytes
-        url = str(item.get("url") or "").strip()
-        if url:
-            response = requests.get(url, timeout=float(settings["timeout_seconds"]))
-            response.raise_for_status()
-            return response.content
-    raise RuntimeError(
-        "Cursor Image2 response did not include image bytes. Expected data[0].b64_json/base64/image_base64 or data[0].url; "
-        f"set {CURSOR_IMAGE2_ENDPOINT_ENV} if this Cursor Image2 endpoint uses a different response shape."
-    )
+    return _image_provider_configuration.extract_cursor_image2_bytes(payload, settings)
 
 
 def windows_worker_image_response_bytes(payload: dict[str, Any]) -> bytes:
@@ -8750,610 +7809,74 @@ def windows_worker_image_response_bytes(payload: dict[str, Any]) -> bytes:
     raise RuntimeError("Windows Worker image fallback response did not include base64 PNG bytes.")
 
 
+from .accessories.image_job_execution import ImageJobExecution
+from .accessories.image_job_execution_ports import ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders
+
+_image_job_execution = ImageJobExecution(
+    files=ImageExecutionFiles(
+        _business_files=lambda: _business_files,
+        _image_files=lambda: _image_files,
+        image_job_output_path=lambda: image_job_output_path,
+        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
+        ROOT=lambda: ROOT,
+        safe_name=lambda: safe_name,
+        resolve_service_path=lambda: resolve_service_path,
+        public_output_url=lambda: public_output_url,
+    ),
+    evidence=ImageExecutionEvidence(
+        mutate_candidate_image_job=lambda: mutate_candidate_image_job,
+        update_image_worker_status=lambda: update_image_worker_status,
+        _image_worker_processes=lambda: _image_worker_processes,
+        image_job_prompt=lambda: image_job_prompt,
+        codex_log_has_generated_image=lambda: codex_log_has_generated_image,
+        classify_image_worker_failure=lambda: classify_image_worker_failure,
+        bounded_text=lambda: bounded_text,
+    ),
+    providers=ImageExecutionProviders(
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+        CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
+        CURSOR_IMAGE2_QUEUE_STATUS=lambda: CURSOR_IMAGE2_QUEUE_STATUS,
+        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
+        cursor_image2_settings=lambda: cursor_image2_settings,
+        cursor_image2_payload=lambda: cursor_image2_payload,
+        cursor_auth_headers=lambda: cursor_auth_headers,
+        extract_cursor_image2_bytes=lambda: extract_cursor_image2_bytes,
+        run_codex_image_job=lambda: run_codex_image_job,
+        run_cursor_image2_job=lambda: run_cursor_image2_job,
+        run_cos_codex_image_job=lambda: run_cos_codex_image_job,
+        windows_worker_base_url=lambda: windows_worker_base_url,
+        windows_worker_headers=lambda: windows_worker_headers,
+        windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds,
+        windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes,
+        masked_url_for_status=lambda: masked_url_for_status,
+    ),
+)
+
+
 def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any], *, reason: str) -> bool:
-    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
-    output_path = image_job_output_path(job, for_write=True)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.windows_worker_image.log"
-    mutate_candidate_image_job(
-        path,
-        candidate,
-        job,
-        {
-            "status": "failed",
-            "progress": 100,
-            "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-            "generation_method": "codex_exec_image_worker",
-            "failed_at": int(time.time()),
-            "error": "Windows-worker image fallback is retired. Configure Cursor Image2 or local Codex image generation.",
-            "output_path": str(output_path),
-            "output_url": public_output_url(output_path),
-            "log_path": str(log_path),
-        },
-    )
-    return False
-    input_files: list[Path] = []
-    missing_input_files: list[str] = []
-    for item in job.get("input_files", []) or []:
-        input_path = resolve_service_path(item)
-        if _business_files.exists(input_path):
-            input_files.append(input_path)
-        else:
-            missing_input_files.append(str(item))
-    if missing_input_files:
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "failed",
-                "progress": 100,
-                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-                "generation_method": "codex_exec_image_worker",
-                "failed_at": int(time.time()),
-                "error": "Windows Codex image worker cannot run because input files are missing: "
-                + "；".join(missing_input_files[:4])
-                + ("；..." if len(missing_input_files) > 4 else ""),
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "log_path": str(log_path),
-            },
-        )
-        return False
-    if not input_files:
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "failed",
-                "progress": 100,
-                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-                "generation_method": "codex_exec_image_worker",
-                "failed_at": int(time.time()),
-                "error": "Windows Codex image worker cannot run because no input image files were found.",
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "log_path": str(log_path),
-            },
-        )
-        return False
-
-    try:
-        endpoint = windows_worker_base_url()
-    except Exception as exc:
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "failed",
-                "progress": 100,
-                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-                "generation_method": "codex_exec_image_worker",
-                "failed_at": int(time.time()),
-                "error": f"{reason}; Windows Codex image worker is not configured: {exc}",
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "log_path": str(log_path),
-            },
-        )
-        return False
-
-    update_image_worker_status(
-        path,
-        candidate,
-        job,
-        status="running",
-        progress=max(int(job.get("progress", 0) or 0), 18),
-        started_at=int(time.time()),
-        provider=LOCAL_CODEX_IMAGE_PROVIDER,
-        generation_method="codex_exec_image_worker",
-        output_path=str(output_path),
-        output_url=public_output_url(output_path),
-        log_path=str(log_path),
-        note="系统正在通过 Windows 本地 CodexImageWorker 生成默认多角度图片。",
-    )
-    file_handles: list[Any] = []
-    try:
-        files = []
-        for ref_path in input_files[:MAX_IMAGE_WORKER_INPUTS]:
-            handle = ref_path.open("rb")
-            file_handles.append(handle)
-            files.append(
-                (
-                    "reference_images",
-                    (
-                        ref_path.name,
-                        handle,
-                        mimetypes.guess_type(ref_path.name)[0] or "image/png",
-                    ),
-                )
-            )
-        data = {
-            "pose_family": str(job.get("pose_family") or "lying"),
-            "output_name": output_path.name,
-            "prompt": str(job.get("prompt") or ""),
-            "generation_step": str(job.get("generation_step") or ""),
-        }
-        _business_files.write_text(log_path, json.dumps(
-                {
-                    "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-                    "endpoint": masked_url_for_status(endpoint),
-                    "route": "/images/codex-default-crops",
-                    "reason": reason,
-                    "pose_family": data["pose_family"],
-                    "input_count": len(files),
-                    "input_files": [item.name for item in input_files[:MAX_IMAGE_WORKER_INPUTS]],
-                    "output_path": str(output_path),
-                    "requested_at": int(time.time()),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ), encoding="utf-8")
-        response = requests.post(
-            f"{endpoint}/images/codex-default-crops",
-            data=data,
-            files=files,
-            headers=windows_worker_headers(),
-            timeout=windows_worker_image_timeout_seconds(),
-        )
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise RuntimeError(f"Windows Codex image worker returned non-JSON response: {response.text[:240]}") from exc
-        if response.status_code >= 400:
-            detail = payload.get("detail") if isinstance(payload, dict) else payload
-            raise RuntimeError(f"Windows Codex image worker failed: HTTP {response.status_code} {bounded_text(detail, 180)}")
-        if not isinstance(payload, dict):
-            raise RuntimeError("Windows Codex image worker response was not a JSON object")
-        _business_files.write_bytes(output_path, windows_worker_image_response_bytes(payload))
-        image = _image_files.imread(str(output_path), cv2.IMREAD_UNCHANGED)
-        if image is None:
-            raise RuntimeError("Windows Codex image worker wrote bytes, but the saved output is not a readable image")
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "completed",
-                "progress": 100,
-                "provider": str(payload.get("provider") or LOCAL_CODEX_IMAGE_PROVIDER),
-                "generation_method": str(payload.get("method") or "codex_exec_image_worker"),
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "completed_at": int(time.time()),
-                "log_path": str(log_path),
-                "note": "Windows 本地 CodexImageWorker 生成任务已完成。",
-            },
-            preprocess_clean_sprites=True,
-        )
-        return True
-    except Exception as exc:
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "failed",
-                "progress": 100,
-                "provider": LOCAL_CODEX_IMAGE_PROVIDER,
-                "generation_method": "codex_exec_image_worker",
-                "failed_at": int(time.time()),
-                "error": f"{reason}; {bounded_text(str(exc), 240)}",
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "log_path": str(log_path),
-            },
-        )
-        return False
-    finally:
-        for handle in file_handles:
-            try:
-                handle.close()
-            except OSError:
-                pass
+    return _image_job_execution.run_windows_worker_image_job(path, candidate, job, reason=reason)
 
 
 def run_cursor_image2_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
-    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
-    output_path = image_job_output_path(job, for_write=True)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.cursor_image2.log"
-    input_files: list[str] = []
-    missing_input_files: list[str] = []
-    for item in job.get("input_files", []) or []:
-        input_path = resolve_service_path(item)
-        if _business_files.exists(input_path):
-            input_files.append(str(input_path))
-        else:
-            missing_input_files.append(str(item))
-
-    settings = cursor_image2_settings()
-    if not settings["configured"]:
-        run_codex_image_job(path, candidate, job)
-        return
-    if missing_input_files:
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error="部分输入图片路径不存在，且无法按当前服务根迁移：" + "；".join(missing_input_files[:4]) + ("；..." if len(missing_input_files) > 4 else ""),
-            provider=CURSOR_IMAGE2_PROVIDER,
-            output_path=str(output_path),
-            output_url=public_output_url(output_path),
-            log_path=str(log_path),
-        )
-        return
-    if not input_files:
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error="没有找到可用于 Cursor Image2 生成的有效输入图片。",
-            provider=CURSOR_IMAGE2_PROVIDER,
-            output_path=str(output_path),
-            output_url=public_output_url(output_path),
-            log_path=str(log_path),
-        )
-        return
-
-    update_image_worker_status(
-        path,
-        candidate,
-        job,
-        status="running",
-        progress=max(int(job.get("progress", 0) or 0), 12),
-        started_at=int(time.time()),
-        provider=CURSOR_IMAGE2_PROVIDER,
-        output_path=str(output_path),
-        output_url=public_output_url(output_path),
-        log_path=str(log_path),
-        note="系统正在通过 Cursor Image2 API 生成默认图片。",
-    )
-
-    try:
-        payload = cursor_image2_payload(job, input_files, settings)
-        _business_files.write_text(log_path, json.dumps(
-                {
-                    "provider": CURSOR_IMAGE2_PROVIDER,
-                    "endpoint": settings["endpoint_public"],
-                    "model": settings["model"],
-                    "input_count": len(input_files),
-                    "output_path": str(output_path),
-                    "requested_at": int(time.time()),
-                },
-                ensure_ascii=False,
-                indent=2,
-            ), encoding="utf-8")
-        response = requests.post(
-            settings["endpoint"],
-            json=payload,
-            headers={**cursor_auth_headers(settings["api_key"]), "Content-Type": "application/json"},
-            timeout=float(settings["timeout_seconds"]),
-        )
-        response.raise_for_status()
-        response_payload = response.json()
-        if not isinstance(response_payload, dict):
-            raise RuntimeError("Cursor Image2 response was not a JSON object")
-        image_bytes = extract_cursor_image2_bytes(response_payload, settings)
-        _business_files.write_bytes(output_path, image_bytes)
-        image = _image_files.imread(str(output_path), cv2.IMREAD_UNCHANGED)
-        if image is None:
-            raise RuntimeError("Cursor Image2 returned bytes, but the saved output is not a readable image")
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "completed",
-                "progress": 100,
-                "provider": CURSOR_IMAGE2_PROVIDER,
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "completed_at": int(time.time()),
-                "log_path": str(log_path),
-                "note": "Cursor Image2 API 生成任务已完成。",
-            },
-            preprocess_clean_sprites=True,
-        )
-    except Exception:
-        if _business_files.runtime(output_path) is not None:
-            # Provider acceptance may already have happened. A timeout, storage
-            # failure or database failure must never submit a second paid job.
-            update_image_worker_status(
-                path, candidate, job, status="failed", progress=100,
-                failed_at=int(time.time()), provider=CURSOR_IMAGE2_PROVIDER,
-                error="生成或持久保存未确认成功；未自动重试付费调用，请先核对原任务。",
-                output_path=str(output_path), log_path=str(log_path),
-            )
-            return
-        run_codex_image_job(path, candidate, job)
+    return _image_job_execution.run_cursor_image2_job(path, candidate, job)
 
 
 def run_cos_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any], runtime) -> None:
-    from .storage.artifacts.native import image_job
-    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
-    output_path = image_job_output_path(job, for_write=True)
-    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
-    def process_changed(process):
-        if process is None:
-            _image_worker_processes.pop(job_id, None)
-        else:
-            _image_worker_processes[job_id] = process
-    try:
-        inputs = [resolve_service_path(value) for value in (job.get("input_files") or [])[:MAX_IMAGE_WORKER_INPUTS]]
-        if not inputs or not all(_business_files.is_file(value) for value in inputs):
-            raise RuntimeError("missing image input")
-        generations = {}
-        for destination in (output_path, log_path):
-            key = runtime.key(destination)
-            row = runtime.store.locations.get(key)
-            generations[key] = row.generation if row else 0
-        update_image_worker_status(path, candidate, job, status="running", progress=12,
-                                   started_at=int(time.time()), output_path=str(output_path), log_path=str(log_path))
-        prompt = lambda output: image_job_prompt({**job, "output_path": output}) + "\n"
-        with image_job(runtime, inputs, prompt, on_process=process_changed) as (output, log, code):
-            runtime.store.put(runtime.key(log_path), log, expected_generation=generations[runtime.key(log_path)])
-            if code != 0 or not output.is_file() or not codex_log_has_generated_image(log_path):
-                raise RuntimeError("native image generation was not confirmed")
-            if _image_files.imread(str(output), cv2.IMREAD_UNCHANGED) is None:
-                raise RuntimeError("native image output is invalid")
-            runtime.store.put(runtime.key(output_path), output, expected_generation=generations[runtime.key(output_path)])
-        mutate_candidate_image_job(path, candidate, job, {
-            "status": "completed", "progress": 100, "completed_at": int(time.time()),
-            "output_path": str(output_path), "output_url": public_output_url(output_path),
-            "log_path": str(log_path), "note": "图像已生成并持久保存。",
-        }, preprocess_clean_sprites=True)
-    except Exception:
-        update_image_worker_status(path, candidate, job, status="failed", progress=100,
-                                   failed_at=int(time.time()), log_path=str(log_path),
-                                   error="图像生成或持久保存未确认成功；未自动重试付费调用。")
+    return _image_job_execution.run_cos_codex_image_job(path, candidate, job, runtime)
 
 
 def run_codex_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
-    runtime = _business_files.runtime(image_job_output_path(job, for_write=True))
-    if runtime is not None:
-        return run_cos_codex_image_job(path, candidate, job, runtime)
-    job_id = str(job.get("job_id") or f"imgjob_{candidate.get('id')}")
-    output_path = image_job_output_path(job, for_write=True)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    IMAGE_WORKER_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = IMAGE_WORKER_LOG_DIR / f"{safe_name(job_id)}.log"
-    input_files: list[str] = []
-    missing_input_files: list[str] = []
-    for item in job.get("input_files", []) or []:
-        input_path = resolve_service_path(item)
-        if _business_files.exists(input_path):
-            input_files.append(str(input_path))
-        else:
-            missing_input_files.append(str(item))
-
-    if not shutil.which("codex"):
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error="codex CLI was not found on PATH.",
-            output_path=str(output_path),
-            output_url=public_output_url(output_path),
-            log_path=str(log_path),
-        )
-        return
-    if missing_input_files:
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error="部分输入图片路径不存在，且无法按当前服务根迁移："
-            + "；".join(missing_input_files[:4])
-            + ("；..." if len(missing_input_files) > 4 else ""),
-            output_path=str(output_path),
-            output_url=public_output_url(output_path),
-            log_path=str(log_path),
-        )
-        return
-    if not input_files:
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error="没有找到可用于生成的有效输入图片。",
-            output_path=str(output_path),
-            output_url=public_output_url(output_path),
-            log_path=str(log_path),
-        )
-        return
-
-    command = [
-        "codex",
-        "exec",
-        "--sandbox",
-        "workspace-write",
-        "-C",
-        str(ROOT),
-    ]
-    for input_file in input_files[:MAX_IMAGE_WORKER_INPUTS]:
-        command.extend(["-i", input_file])
-    command.append("-")
-
-    update_image_worker_status(
-        path,
-        candidate,
-        job,
-        status="running",
-        progress=max(int(job.get("progress", 0) or 0), 12),
-        started_at=int(time.time()),
-        output_path=str(output_path),
-        output_url=public_output_url(output_path),
-        log_path=str(log_path),
-        note="系统正在处理这个图像生成任务。",
-    )
-
-    process: subprocess.Popen | None = None
-    try:
-        with log_path.open("w", encoding="utf-8", errors="replace") as log:
-            log.write(f"$ {' '.join(command)}\n\n")
-            log.flush()
-            process = subprocess.Popen(
-                command,
-                cwd=str(ROOT),
-                stdin=subprocess.PIPE,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                text=True,
-                start_new_session=True,
-            )
-            _image_worker_processes[job_id] = process
-            process.communicate(image_job_prompt(job) + "\n", timeout=900)
-            return_code = process.returncode
-    except subprocess.TimeoutExpired:
-        if process:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait(timeout=10)
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error="图像生成超过 900 秒未完成。",
-            log_path=str(log_path),
-        )
-        return
-    except Exception as exc:
-        update_image_worker_status(
-            path,
-            candidate,
-            job,
-            status="failed",
-            progress=100,
-            failed_at=int(time.time()),
-            error=str(exc),
-            log_path=str(log_path),
-        )
-        return
-    finally:
-        _image_worker_processes.pop(job_id, None)
-
-    if return_code == 0 and _business_files.exists(output_path) and not codex_log_has_generated_image(log_path):
-        updated_job = mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "failed",
-                "progress": 100,
-                "failed_at": int(time.time()),
-                "error": "生成结束但日志中没有可用的 AI 图像结果；已拒绝非生成输出。",
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "log_path": str(log_path),
-            },
-        )
-        if updated_job.get("status") == "failed":
-            try:
-                _business_files.unlink(output_path)
-            except OSError:
-                pass
-    elif return_code == 0 and _business_files.exists(output_path):
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "completed",
-                "progress": 100,
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "completed_at": int(time.time()),
-                "log_path": str(log_path),
-                "note": "本地生成任务已完成。",
-            },
-            preprocess_clean_sprites=True,
-        )
-    else:
-        mutate_candidate_image_job(
-            path,
-            candidate,
-            job,
-            {
-                "status": "failed",
-                "progress": 100,
-                "failed_at": int(time.time()),
-                "error": classify_image_worker_failure(log_path, return_code, output_path),
-                "output_path": str(output_path),
-                "output_url": public_output_url(output_path),
-                "log_path": str(log_path),
-            },
-        )
+    return _image_job_execution.run_codex_image_job(path, candidate, job)
 
 
 @pinned_model_profiles(resolve_model_profiles, argument=2)
 def run_image_generation_job(path: Path, candidate: dict[str, Any], job: dict[str, Any]) -> None:
-    provider = str(job.get("provider") or "").strip()
-    status = str(job.get("status") or "").strip()
-    if provider == CURSOR_IMAGE2_PROVIDER or status == CURSOR_IMAGE2_QUEUE_STATUS:
-        run_cursor_image2_job(path, candidate, job)
-        return
-    if provider == LOCAL_CODEX_IMAGE_PROVIDER or status == CODEX_IMAGE_WORKER_QUEUE_STATUS:
-        run_codex_image_job(path, candidate, job)
-        return
-    run_codex_image_job(path, candidate, job)
+    return _image_job_execution.run_image_generation_job(path, candidate, job)
 
 
 def image_worker_loop() -> None:
-    workers: list[threading.Thread] = []
-    while True:
-        workers = [worker for worker in workers if worker.is_alive()]
-        launched = False
-        while len(workers) < MAX_PARALLEL_IMAGE_WORKERS:
-            queued = next_queued_image_job()
-            if not queued:
-                break
-            path, candidate, job = queued
-            update_image_worker_status(
-                path,
-                candidate,
-                job,
-                status="running",
-                progress=max(int(job.get("progress", 0) or 0), 12),
-                started_at=int(time.time()),
-                note="系统正在处理这个图像生成任务。",
-            )
-            worker = threading.Thread(
-                target=run_image_generation_job,
-                args=(path, candidate, job),
-                name=f"image-generation-worker-{job.get('job_id', 'job')}",
-                daemon=True,
-            )
-            worker.start()
-            workers.append(worker)
-            launched = True
-        if not workers and not launched:
-            return
-        time.sleep(2)
+    return _image_job_queue.image_worker_loop()
 
 
 def start_image_worker() -> bool:
@@ -9366,47 +7889,71 @@ def start_image_worker() -> bool:
         return True
 
 
+from .accessories.image_job_management import ImageJobManagement
+from .accessories.image_job_management_ports import ImageJobStorage, ImageJobAccess, ImageJobMetadata, ImageJobActions
+
+_image_job_management = ImageJobManagement(
+    storage=ImageJobStorage(
+        _business_files=lambda: _business_files,
+        _candidate_store_lock=lambda: _candidate_store_lock,
+        ACCESSORY_CANDIDATES_DIR=lambda: ACCESSORY_CANDIDATES_DIR,
+        list_accessory_candidate_records=lambda: list_accessory_candidate_records,
+        load_accessory_candidate=lambda: load_accessory_candidate,
+        save_accessory_candidate=lambda: save_accessory_candidate,
+        delete_accessory_candidate=lambda: delete_accessory_candidate,
+        cleanup_accessory_candidate_artifacts=lambda: cleanup_accessory_candidate_artifacts,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        load_config=lambda: load_config,
+        save_config=lambda: save_config,
+    ),
+    access=ImageJobAccess(
+        _request_user=lambda: _request_user,
+        record_visible_to_user=lambda: record_visible_to_user,
+        record_mutable_by_user=lambda: record_mutable_by_user,
+        require_record_access=lambda: require_record_access,
+    ),
+    metadata=ImageJobMetadata(
+        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+        WINDOWS_WORKER_IMAGE_PROVIDER=lambda: WINDOWS_WORKER_IMAGE_PROVIDER,
+        CODEX_IMAGE_JOB_PERSISTED_KEYS=lambda: CODEX_IMAGE_JOB_PERSISTED_KEYS,
+        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        image_job_output_path=lambda: image_job_output_path,
+        image_job_log_path=lambda: image_job_log_path,
+        public_output_url=lambda: public_output_url,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        classify_image_worker_failure=lambda: classify_image_worker_failure,
+        running_image_job_is_stale=lambda: running_image_job_is_stale,
+        public_text=lambda: public_text,
+        accessory_uid=lambda: accessory_uid,
+        accessory_material_type=lambda: accessory_material_type,
+        candidate_image_jobs=lambda: candidate_image_jobs,
+        deterministic_task_id=lambda: deterministic_task_id,
+        ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids,
+        ensure_image_job_task_id=lambda: ensure_image_job_task_id,
+        ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs,
+        store_candidate_image_job=lambda: store_candidate_image_job,
+        image_job_matches=lambda: image_job_matches,
+        record_created_at=lambda: record_created_at,
+        record_updated_at=lambda: record_updated_at,
+        record_owner_id=lambda: record_owner_id,
+        record_owner_username=lambda: record_owner_username,
+        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
+    ),
+    actions=ImageJobActions(
+        _image_worker_processes=lambda: _image_worker_processes,
+        start_image_worker=lambda: start_image_worker,
+        refresh_codex_image_job=lambda: refresh_codex_image_job,
+        public_image_job=lambda: public_image_job,
+        refreshed_public_codex_jobs_for_record=lambda: refreshed_public_codex_jobs_for_record,
+        apply_codex_image_job_action=lambda: apply_codex_image_job_action,
+        stop_candidate_image_task=lambda: stop_candidate_image_task,
+    ),
+)
+
+
 def refresh_codex_image_job(job: dict[str, Any]) -> dict[str, Any]:
-    copy = dict(job)
-    if str(copy.get("generation_method") or "") == "codex_exec_image_worker" and str(copy.get("provider") or "") == WINDOWS_WORKER_IMAGE_PROVIDER:
-        copy["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
-    output_path = image_job_output_path(copy, for_write=str(copy.get("status")) in IMAGE_JOB_ACTIVE_STATUSES)
-    log_path = image_job_log_path(copy)
-    status = str(copy.get("status"))
-    if status in IMAGE_JOB_ACTIVE_STATUSES and str(output_path) != str(copy.get("output_path", "")):
-        copy["output_path"] = str(output_path)
-    if status in {"failed", "stopped"}:
-        copy["progress"] = int(copy.get("progress", 100))
-        copy.setdefault("output_url", public_output_url_for_existing(output_path))
-        if status == "failed" and not _business_files.exists(output_path):
-            classified_error = classify_image_worker_failure(log_path, None, output_path)
-            if any(marker in classified_error for marker in ("TooManyRequests", "FORBIDDEN", "fallback")) and classified_error != copy.get("error"):
-                copy["error"] = classified_error
-                copy["log_path"] = str(log_path)
-    elif _business_files.exists(output_path):
-        copy["status"] = "completed"
-        copy["progress"] = 100
-        copy["output_url"] = public_output_url(output_path)
-        copy["completed_at"] = int(_business_files.stat(output_path).st_mtime)
-        if str(copy.get("generation_method") or "") == "codex_exec_image_worker":
-            copy["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
-            copy["note"] = "本地图像生成任务已完成。"
-    elif status == "running":
-        if running_image_job_is_stale(copy, log_path):
-            copy["status"] = "failed"
-            copy["progress"] = 100
-            copy["failed_at"] = int(time.time())
-            copy["error"] = classify_image_worker_failure(log_path, None, output_path, stale=True)
-            copy["log_path"] = str(log_path)
-        else:
-            started_at = int(copy.get("started_at") or copy.get("created_at") or time.time())
-            elapsed = max(0, int(time.time()) - started_at)
-            copy["progress"] = min(95, max(int(copy.get("progress", 0)), 18 + elapsed // 8))
-        copy.setdefault("output_url", public_output_url(output_path))
-    else:
-        copy["progress"] = int(copy.get("progress", 0))
-        copy.setdefault("output_url", public_output_url(output_path))
-    return copy
+    return _image_job_management.refresh_codex_image_job(job)
 
 
 def public_text(value: Any) -> str:
@@ -9421,17 +7968,7 @@ def public_text(value: Any) -> str:
 
 
 def public_image_job(job: dict[str, Any]) -> dict[str, Any]:
-    from .model_profiles.snapshots import public_record
-    copy = public_record(job)
-    note = str(copy.get("note") or "")
-    if "processing this image-to-image task" in note:
-        copy["note"] = "系统正在处理这个图像生成任务。"
-    elif "Generated by local" in note:
-        copy["note"] = "本地生成任务已完成。"
-    for key in ("label", "note", "error"):
-        if copy.get(key):
-            copy[key] = public_text(copy[key])
-    return copy
+    return _image_job_management.public_image_job(job)
 
 
 from .accessories.gallery import AccessoryGallery
@@ -9491,59 +8028,11 @@ def refreshed_public_codex_jobs_for_record(
     fallback_path: Path | None = None,
     job_store: str = "candidate",
 ) -> tuple[list[dict[str, Any]], bool]:
-    changed = ensure_candidate_image_job_task_ids(record)
-    public_jobs: list[dict[str, Any]] = []
-    record_id = str(record.get("id") or accessory_uid(record) or "")
-    for job in candidate_image_jobs(record):
-        changed = ensure_image_job_task_id(record, job) or changed
-        refreshed = refresh_codex_image_job(job)
-        refreshed["candidate_name"] = record.get("name", "Accessory")
-        refreshed["candidate_id"] = record_id or refreshed.get("candidate_id")
-        refreshed["job_id"] = refreshed.get("job_id") or f"imgjob_{refreshed['candidate_id']}"
-        refreshed["task_id"] = refreshed.get("task_id") or deterministic_task_id(record, refreshed)
-        refreshed["created_at"] = record_created_at(refreshed, fallback_path) or record_created_at(record, fallback_path)
-        refreshed["updated_at"] = record_updated_at(refreshed, fallback_path) or record_updated_at(record, fallback_path)
-        refreshed["owner_user_id"] = record_owner_id(record)
-        refreshed["owner_username"] = record_owner_username(record)
-        refreshed["job_store"] = job_store
-        refreshed["open_kind"] = "accessory" if job_store == "config" else "candidate"
-        if any(refreshed.get(key) != job.get(key) for key in CODEX_IMAGE_JOB_PERSISTED_KEYS):
-            store_candidate_image_job(record, refreshed)
-            changed = True
-        public_jobs.append(public_image_job(refreshed))
-    return public_jobs, changed
+    return _image_job_management.refreshed_public_codex_jobs_for_record(record, fallback_path=fallback_path, job_store=job_store)
 
 
 def list_codex_image_jobs(user: dict[str, Any] | None = None, target_user_id: str | None = None) -> list[dict[str, Any]]:
-    jobs = []
-    for path, candidate in list_accessory_candidate_records(reverse=True):
-        with _candidate_store_lock:
-            candidate = enrich_record_audit_fields(candidate, path)
-            if user and not record_visible_to_user(candidate, user, target_user_id):
-                continue
-            public_jobs, changed = refreshed_public_codex_jobs_for_record(candidate, fallback_path=path, job_store="candidate")
-            jobs.extend(public_jobs)
-            if changed:
-                save_accessory_candidate(path, candidate)
-    with _candidate_store_lock:
-        config = load_config()
-        config_changed = False
-        for item in config.get("accessories", []):
-            if not isinstance(item, dict):
-                continue
-            if user and not record_visible_to_user(item, user, target_user_id):
-                continue
-            has_jobs = bool(candidate_image_jobs(item))
-            if has_jobs or item.get("ai_generation_required"):
-                config_changed = ensure_pose_collection_image_jobs(item) or config_changed
-            if not candidate_image_jobs(item):
-                continue
-            public_jobs, changed = refreshed_public_codex_jobs_for_record(item, job_store="config")
-            config_changed = changed or config_changed
-            jobs.extend(public_jobs)
-        if config_changed:
-            save_config(config)
-    return jobs
+    return _image_job_management.list_codex_image_jobs(user, target_user_id)
 
 
 from .training.task_identity import training_task_identity_values, training_task_matches_identifier, training_task_sort_key
@@ -9648,223 +8137,19 @@ def delete_training_task_record(job_id: str, user: dict[str, Any], *, missing_ok
 
 
 def apply_codex_image_job_action(record: dict[str, Any], job: dict[str, Any], lookup_id: str, action: str) -> dict[str, Any]:
-    record_id = str(record.get("id") or accessory_uid(record) or job.get("candidate_id") or "")
-    candidate_job_id = str(job.get("job_id") or f"imgjob_{record_id}")
-    if action == "stop":
-        process = _image_worker_processes.get(candidate_job_id)
-        if process and process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-        job["job_id"] = candidate_job_id
-        job["status"] = "stopped"
-        job["progress"] = 100
-        job["stopped_at"] = int(time.time())
-        job["note"] = "Stopped by user from local service queue."
-        store_candidate_image_job(record, job)
-    elif action == "delete":
-        remaining = [item for item in candidate_image_jobs(record) if not image_job_matches(record, item, lookup_id)]
-        record["codex_image_jobs"] = remaining
-        record["codex_image_job"] = remaining[0] if remaining else None
-        if not remaining:
-            record["ai_generation_required"] = False
-    elif action == "retry":
-        refreshed_job = refresh_codex_image_job(job)
-        if str(refreshed_job.get("status") or "") in IMAGE_JOB_ACTIVE_STATUSES:
-            raise HTTPException(status_code=409, detail="Image job is still active; stop it or wait for it to become stale before retrying")
-        job.update(refreshed_job)
-        output_path = image_job_output_path(job, for_write=True)
-        if _business_files.exists(output_path):
-            try:
-                _business_files.unlink(output_path)
-            except OSError:
-                pass
-        for key in (
-            "error",
-            "failed_at",
-            "completed_at",
-            "stopped_at",
-            "started_at",
-            "return_code",
-        ):
-            job.pop(key, None)
-        job["job_id"] = candidate_job_id
-        job["status"] = CODEX_IMAGE_WORKER_QUEUE_STATUS
-        job["provider"] = LOCAL_CODEX_IMAGE_PROVIDER
-        job["generation_method"] = "codex_exec_image_worker"
-        job["generation_step"] = job.get("generation_step") or "anchor_replacement"
-        job["queue_kind"] = "image_generation"
-        job["progress"] = 0
-        job["note"] = "已重新排队；将通过 Windows 本地 CodexImageWorker 生成。"
-        store_candidate_image_job(record, job)
-    else:
-        raise HTTPException(status_code=400, detail="Unknown job action")
-    return {"status": action, "job_id": candidate_job_id, "task_id": job.get("task_id"), "candidate_id": record_id}
+    return _image_job_management.apply_codex_image_job_action(record, job, lookup_id, action)
 
 
 def update_codex_image_job(job_id: str, action: str) -> dict[str, Any]:
-    user = _request_user.get()
-    for path, candidate in list_accessory_candidate_records(reverse=True):
-        with _candidate_store_lock:
-            if user and not record_mutable_by_user(candidate, user):
-                continue
-            changed = ensure_candidate_image_job_task_ids(candidate)
-            jobs = candidate_image_jobs(candidate)
-            for item in jobs:
-                changed = ensure_image_job_task_id(candidate, item) or changed
-            job = next((item for item in jobs if image_job_matches(candidate, item, job_id)), None)
-            if changed and job is None:
-                save_accessory_candidate(path, candidate)
-            if job is None:
-                continue
-            result = apply_codex_image_job_action(candidate, job, job_id, action)
-            save_accessory_candidate(path, candidate)
-            if action == "retry":
-                start_image_worker()
-            return result
-    with _candidate_store_lock:
-        config = load_config()
-        config_changed = False
-        for item in config.get("accessories", []):
-            if not isinstance(item, dict):
-                continue
-            if user and not record_mutable_by_user(item, user):
-                continue
-            jobs = candidate_image_jobs(item)
-            if jobs and accessory_material_type(item) != "text":
-                config_changed = ensure_pose_collection_image_jobs(item) or config_changed
-                jobs = candidate_image_jobs(item)
-            for candidate_job in jobs:
-                config_changed = ensure_image_job_task_id(item, candidate_job) or config_changed
-            job = next((candidate_job for candidate_job in jobs if image_job_matches(item, candidate_job, job_id)), None)
-            if job is None:
-                continue
-            result = apply_codex_image_job_action(item, job, job_id, action)
-            save_config(config)
-            if action == "retry":
-                start_image_worker()
-            return result
-        if config_changed:
-            save_config(config)
-    raise HTTPException(status_code=404, detail="Image job not found")
+    return _image_job_management.update_codex_image_job(job_id, action)
 
 
 def stop_candidate_image_task(candidate: dict[str, Any]) -> int:
-    stopped = 0
-    for job in candidate_image_jobs(candidate):
-        ensure_image_job_task_id(candidate, job)
-        job_id = str(job.get("job_id") or "")
-        process = _image_worker_processes.get(job_id)
-        if process and process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-                stopped += 1
-            except ProcessLookupError:
-                pass
-        if str(job.get("status", "")) in IMAGE_JOB_ACTIVE_STATUSES:
-            job["status"] = "stopped"
-            job["progress"] = 100
-            job["stopped_at"] = int(time.time())
-            job["note"] = "Stopped as part of deleting the whole image task."
-            stopped += 1
-    return stopped
+    return _image_job_management.stop_candidate_image_task(candidate)
 
 
 def update_codex_image_candidate(candidate_id: str, action: str) -> dict[str, Any]:
-    user = _request_user.get()
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        path = ACCESSORY_CANDIDATES_DIR / f"{candidate_id}.json"
-        with _candidate_store_lock:
-            try:
-                candidate = load_accessory_candidate(candidate_id)
-            except HTTPException as exc:
-                if exc.status_code != 404:
-                    raise
-                candidate = None
-            if candidate:
-                if user:
-                    require_record_access(candidate, user, write=True)
-                if action == "stop":
-                    stopped = stop_candidate_image_task(candidate)
-                    save_accessory_candidate(path, candidate)
-                    return {"status": "stopped", "candidate_id": candidate_id, "stopped": stopped}
-                if action == "delete":
-                    stopped = stop_candidate_image_task(candidate)
-                    if not delete_accessory_candidate(candidate_id, path):
-                        raise HTTPException(status_code=404, detail="Image task not found")
-                    try:
-                        deleted_artifacts = cleanup_accessory_candidate_artifacts(candidate)
-                        cleanup_error = ""
-                    except OSError as exc:
-                        deleted_artifacts = []
-                        cleanup_error = str(exc)
-                    return {
-                        "status": "deleted",
-                        "candidate_id": candidate_id,
-                        "stopped": stopped,
-                        "deleted_artifacts": deleted_artifacts,
-                        "artifact_cleanup_error": cleanup_error,
-                    }
-                raise HTTPException(status_code=400, detail="Unknown candidate action")
-    if repository is None:
-        for path in _business_files.glob(ACCESSORY_CANDIDATES_DIR, "*.json"):
-            with _candidate_store_lock:
-                try:
-                    candidate = json.loads(_business_files.read_text(path, encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                if str(candidate.get("id", "")) != candidate_id:
-                    continue
-                if user:
-                    require_record_access(candidate, user, write=True)
-                if action == "stop":
-                    stopped = stop_candidate_image_task(candidate)
-                    save_accessory_candidate(path, candidate)
-                    return {"status": "stopped", "candidate_id": candidate_id, "stopped": stopped}
-                if action == "delete":
-                    stopped = stop_candidate_image_task(candidate)
-                    try:
-                        deleted = delete_accessory_candidate(candidate_id, path)
-                    except OSError as exc:
-                        raise HTTPException(status_code=500, detail=f"Failed to delete image task: {exc}") from exc
-                    if not deleted:
-                        raise HTTPException(status_code=404, detail="Image task not found")
-                    try:
-                        deleted_artifacts = cleanup_accessory_candidate_artifacts(candidate)
-                        cleanup_error = ""
-                    except OSError as exc:
-                        deleted_artifacts = []
-                        cleanup_error = str(exc)
-                    return {
-                        "status": "deleted",
-                        "candidate_id": candidate_id,
-                        "stopped": stopped,
-                        "deleted_artifacts": deleted_artifacts,
-                        "artifact_cleanup_error": cleanup_error,
-                    }
-                raise HTTPException(status_code=400, detail="Unknown candidate action")
-    with _candidate_store_lock:
-        config = load_config()
-        for item in config.get("accessories", []):
-            if not isinstance(item, dict) or accessory_uid(item) != candidate_id:
-                continue
-            if user:
-                require_record_access(item, user, write=True)
-            if action == "stop":
-                stopped = stop_candidate_image_task(item)
-                save_config(config)
-                return {"status": "stopped", "candidate_id": candidate_id, "stopped": stopped}
-            if action == "delete":
-                stopped = stop_candidate_image_task(item)
-                item["codex_image_jobs"] = []
-                item["codex_image_job"] = None
-                item["ai_generation_required"] = False
-                save_config(config)
-                return {"status": "deleted", "candidate_id": candidate_id, "stopped": stopped}
-            raise HTTPException(status_code=400, detail="Unknown candidate action")
-    raise HTTPException(status_code=404, detail="Image task not found")
+    return _image_job_management.update_codex_image_candidate(candidate_id, action)
 
 
 def write_gallery_preview(src: Path, out_path: Path, max_side: int = 1200) -> dict[str, Any] | None:
@@ -9872,17 +8157,7 @@ def write_gallery_preview(src: Path, out_path: Path, max_side: int = 1200) -> di
 
 
 def existing_source_image_paths(item: dict[str, Any]) -> list[Path]:
-    paths: list[Path] = []
-    seen: set[str] = set()
-    for path_str in item.get("source_files", []) or []:
-        path = Path(str(path_str))
-        key = str(path)
-        if key in seen:
-            continue
-        if _business_files.exists(path) and path.suffix.lower() in IMAGE_REFERENCE_SUFFIXES:
-            paths.append(path)
-            seen.add(key)
-    return paths
+    return _candidate_artifacts.existing_source_image_paths(item)
 
 
 def first_source_ai_reference_path(item: dict[str, Any]) -> Path | None:
@@ -9910,70 +8185,41 @@ def selected_accessories(config: dict[str, Any], ids: list[str]) -> list[dict[st
     return selected
 
 
+from .training.training_asset_preparation import TrainingAssetPreparation
+from .training.training_asset_preparation_ports import TrainingAssetPolicy, TrainingAssetPersistence
+
+_training_asset_preparation = TrainingAssetPreparation(
+    policy=TrainingAssetPolicy(
+        accessory_uid=lambda: accessory_uid,
+        accessory_material_type=lambda: accessory_material_type,
+        clean_sprite_assets=lambda: clean_sprite_assets,
+        candidate_image_jobs=lambda: candidate_image_jobs,
+        _business_files=lambda: _business_files,
+        POSE_COLLECTION_GRID_POSITIONS=lambda: POSE_COLLECTION_GRID_POSITIONS,
+        clean_sprites_policy_complete=lambda: clean_sprites_policy_complete,
+        preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
+        canonical_text_assets=lambda: canonical_text_assets,
+        canonical_text_assets_complete=lambda: canonical_text_assets_complete,
+        normalize_accessory_assets=lambda: normalize_accessory_assets,
+        object_photo_highlight_source_paths=lambda: object_photo_highlight_source_paths,
+        photo_highlight_clean_sprites_ready=lambda: photo_highlight_clean_sprites_ready,
+        PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES,
+        HTTPException=lambda: HTTPException,
+    ),
+    persistence=TrainingAssetPersistence(
+        ensure_training_normalized_assets_for_selection=lambda: ensure_training_normalized_assets_for_selection,
+        merge_scoped_accessory_updates=lambda: merge_scoped_accessory_updates,
+        save_config=lambda: save_config,
+    ),
+)
+
+
 def ensure_object_clean_sprites_for_selection(config: dict[str, Any], ids: list[str]) -> bool:
-    wanted = set(ids)
-    changed = False
-    for item in config.get("accessories", []):
-        uid = accessory_uid(item)
-        if wanted and uid not in wanted:
-            continue
-        if accessory_material_type(item) == "text":
-            continue
-        sprites = clean_sprite_assets(item)
-        pose_jobs = [
-            job
-            for job in candidate_image_jobs(item)
-            if _business_files.exists(Path(str(job.get("output_path", "")))) and not job.get("intermediate")
-        ]
-        expected_count = min(18, len(pose_jobs) * len(POSE_COLLECTION_GRID_POSITIONS)) if pose_jobs else len(sprites)
-        if sprites and len(sprites) >= expected_count and clean_sprites_policy_complete(item, sprites):
-            continue
-        changed = preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=bool(sprites and pose_jobs)) or changed
-    return changed
+    return _training_asset_preparation.ensure_object_clean_sprites_for_selection(config, ids)
 
 
 def ensure_training_normalized_assets_for_selection(config: dict[str, Any], ids: list[str]) -> bool:
-    wanted = set(ids)
-    if not wanted:
-        raise HTTPException(status_code=400, detail="流水线任务还没有选择配件")
-    changed = False
-    found: set[str] = set()
-    for item in config.get("accessories", []):
-        uid = accessory_uid(item)
-        if uid not in wanted:
-            continue
-        found.add(uid)
-        if accessory_material_type(item) == "text":
-            text_assets = canonical_text_assets(item)
-            if item.get("normalization_deferred") or not canonical_text_assets_complete(item, text_assets):
-                item.update(normalize_accessory_assets(item))
-                changed = True
-            if not canonical_text_assets_complete(item):
-                raise HTTPException(status_code=409, detail=f"配件 {item.get('name') or uid} 的文字规范化文件生成失败")
-        else:
-            photo_sources = object_photo_highlight_source_paths(item)
-            photo_sprites_ready = photo_highlight_clean_sprites_ready(item, photo_sources)
-            if not photo_sprites_ready:
-                if len(photo_sources) < PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            f"配件 {item.get('name') or uid} 至少需要 "
-                            f"{PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES} 张不同角度实拍图"
-                        ),
-                    )
-                raise HTTPException(status_code=409, detail=f"配件 {item.get('name') or uid} 的实拍高亮抠图素材尚未生成")
-            sprites = clean_sprite_assets(item)
-            if not sprites:
-                raise HTTPException(status_code=409, detail=f"配件 {item.get('name') or uid} 的物品规范化文件生成失败")
-        if item.get("normalization_deferred"):
-            item["normalization_deferred"] = False
-            changed = True
-        item["normalized_for_training_at"] = int(time.time())
-    missing = wanted - found
-    if missing:
-        raise HTTPException(status_code=404, detail=f"配件不存在: {', '.join(sorted(missing))}")
-    return changed
+    return _training_asset_preparation.ensure_training_normalized_assets_for_selection(config, ids)
 
 
 def ensure_training_assets_for_request(
@@ -9982,16 +8228,7 @@ def ensure_training_assets_for_request(
     user: dict[str, Any],
     ids: list[str],
 ) -> bool:
-    try:
-        changed = ensure_training_normalized_assets_for_selection(scoped_config, ids)
-    except HTTPException:
-        merge_scoped_accessory_updates(full_config, scoped_config, user)
-        save_config(full_config)
-        raise
-    if changed:
-        merge_scoped_accessory_updates(full_config, scoped_config, user)
-        save_config(full_config)
-    return changed
+    return _training_asset_preparation.ensure_training_assets_for_request(full_config, scoped_config, user, ids)
 
 
 def physical_render_size_px(item: dict[str, Any], material_type: str) -> tuple[int, int]:

@@ -1,0 +1,2996 @@
+{
+  "base": "789b83d52706eb112b621676223134d1ad122c32",
+  "source_sha256": "7eb3eac90a1e88d28c6a5eebe53e9df4941ac65855dbe32e7ea4afd0b6ad0006",
+  "cases": [
+    {
+      "name": "pose_collection_dimension_text",
+      "args": [
+        {}
+      ],
+      "bytes": 410,
+      "sha256": "642889b24485fe3f370ec4778843774eae43ebadb641ffb876c4a91948a75df8"
+    },
+    {
+      "name": "pose_collection_position_specs",
+      "args": [
+        {}
+      ],
+      "bytes": 1124,
+      "sha256": "b7a219cb8d6763a215538f828de5d1953fa58bf79a9f82e9d5551c479ba88c7c"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {},
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        null,
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "top_row",
+        "white"
+      ],
+      "bytes": 1743,
+      "sha256": "18925ac50ef5383bf3aa0bb5f8ac24786500a825b4be0267d68c833c82420513"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "middle_row",
+        "white"
+      ],
+      "bytes": 1732,
+      "sha256": "187aff42417778f167105fde586b984cb098215ee3816e7ec7930545c1126556"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "bottom_row",
+        "white"
+      ],
+      "bytes": 1776,
+      "sha256": "f67ecad7376f20981bd9764f09c0ac17a28fd85f7595944e06e6539dc4251fb1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "unknown",
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {},
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        null,
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "top_row",
+        "reference"
+      ],
+      "bytes": 1952,
+      "sha256": "a9abeea6216a4846bd5b20efada9118af7b391c6f68cd6d281f734a9863f9aec"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 1941,
+      "sha256": "6c7aa55fb07fae958838e829b43dc7775e65092c7a513be26ee09e30b4814ed1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 1985,
+      "sha256": "1adb906c547de4b4d0d4c06d832c4e5cbc13941d9c02541defeebf517e3b24c0"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "unknown",
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {},
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        null,
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 1881,
+      "sha256": "274c8c72466d4e5ca81dbfc68b951b011a4c12a4d03b7d3c01961a5d48c831c9"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 1870,
+      "sha256": "25a6c39f4864160e60495589672a8f5a7baa70944b50c5d14d16d47d62f8f74b"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 1914,
+      "sha256": "fe90c890d5514b0d245fa366336ab755f2e3e3b14294d0a33fe4b87ce69416c0"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "unknown",
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {},
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        null,
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "top_row",
+        "unknown"
+      ],
+      "bytes": 1743,
+      "sha256": "18925ac50ef5383bf3aa0bb5f8ac24786500a825b4be0267d68c833c82420513"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "middle_row",
+        "unknown"
+      ],
+      "bytes": 1732,
+      "sha256": "187aff42417778f167105fde586b984cb098215ee3816e7ec7930545c1126556"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "bottom_row",
+        "unknown"
+      ],
+      "bytes": 1776,
+      "sha256": "f67ecad7376f20981bd9764f09c0ac17a28fd85f7595944e06e6539dc4251fb1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {},
+        "unknown",
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {},
+        "combined"
+      ],
+      "bytes": 1059,
+      "sha256": "a8ca713a09b4b10eab3bd1f4a2602bc1680655c318ce1182ba421b56bdfd814a"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {},
+        "combined"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        null,
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        null,
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "combined",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {},
+        "lying"
+      ],
+      "bytes": 1059,
+      "sha256": "a8ca713a09b4b10eab3bd1f4a2602bc1680655c318ce1182ba421b56bdfd814a"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {},
+        "lying"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        null,
+        "reference"
+      ],
+      "bytes": 5724,
+      "sha256": "61ac3b142875b472064768c535ae4118a2c8d7742bb49c5687a0ef5c2970414c"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        null,
+        "pure_white"
+      ],
+      "bytes": 5480,
+      "sha256": "b562e96f166caac15be493a11c131f67d811503f1262ebeea45586bee2299d1f"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 5592,
+      "sha256": "38ebad430e6d877c2fd828d71cc6891810e1834dc98c78b9cf8d12dffeb47aa4"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 5348,
+      "sha256": "d313ae5695f60ff1444a1100c3c7070f5eb4e249401f5c932acc1d0010a9ee96"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 5583,
+      "sha256": "c325387728d4f99472385ed49eb820f9e5a16e703f00cc331f724890d0fdcfce"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 5339,
+      "sha256": "9325851c79e5cacca07529dc1d62ccf216ab0a50529c78460f11fe66c83f2293"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 5634,
+      "sha256": "04c09f5957f1683e933d107d93c483c916a907ee41f6623ef1f7ebb9a29e58ba"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "lying",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 5390,
+      "sha256": "5daa0ff2b173b04f238af481a5e5034098725b1d73b43ad19c82069ff1c61256"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {},
+        "upright"
+      ],
+      "bytes": 1065,
+      "sha256": "e587a3d7d9d2437d0e1c50d420de8c242a57a1ce9018c460fa51279bf568485f"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {},
+        "upright"
+      ],
+      "bytes": 1551,
+      "sha256": "c2e80d86c356178b7445f7129ad3f049af7583121939242a88ce6f9472b20acb"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        null,
+        "reference"
+      ],
+      "bytes": 7551,
+      "sha256": "9747d117a89433297fac619c420a66aaff6560359461a4de1c1cf2b4e1928faf"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        null,
+        "pure_white"
+      ],
+      "bytes": 7307,
+      "sha256": "c68f27ca9d2cea38b96dbeb3d1279f6e578cfbd524040d2833a2749506a0c279"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 7419,
+      "sha256": "35947f50161518891121abd5a6bd010082d5c02046bffa1447bf10c19781c6f5"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 7175,
+      "sha256": "7ebf3eb598d521d39a7b7cb2692b7fad5a344239c9a9b13c20ed5b095e775d3c"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 7410,
+      "sha256": "5dc8d09b1e7e11586e82a968da7f2b8d229ce4c800fb5d35b751235cd28c5d5f"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 7166,
+      "sha256": "195a9518da3cbed2bea77663ac4d0e6459baaa2c064c46e00a02103ce48ac0f1"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 7461,
+      "sha256": "cabd48188f08733dedcf8eeec2e69cc54f6ff6ad98e123377f9c2b56be722f45"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "upright",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 7217,
+      "sha256": "1a6a60221a7a97ca41e32f7f428f4b1dc48ce7faa8f0dbaf45b5f812d8828ff1"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {},
+        "unknown"
+      ],
+      "bytes": 1059,
+      "sha256": "a8ca713a09b4b10eab3bd1f4a2602bc1680655c318ce1182ba421b56bdfd814a"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {},
+        "unknown"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        null,
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        null,
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {},
+        "unknown",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 311,
+      "sha256": "7e9eef656a47b8ebb253ea5b86240a07e15ffa598dcd8f2254985f8312bac32a"
+    },
+    {
+      "name": "pose_collection_dimension_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        }
+      ],
+      "bytes": 476,
+      "sha256": "ec70d85211e00136f6022f1ccb92b3e70257746f417af95e66b43264218cb15d"
+    },
+    {
+      "name": "pose_collection_position_specs",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        }
+      ],
+      "bytes": 1124,
+      "sha256": "b7a219cb8d6763a215538f828de5d1953fa58bf79a9f82e9d5551c479ba88c7c"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        null,
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "top_row",
+        "white"
+      ],
+      "bytes": 1743,
+      "sha256": "18925ac50ef5383bf3aa0bb5f8ac24786500a825b4be0267d68c833c82420513"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "middle_row",
+        "white"
+      ],
+      "bytes": 1732,
+      "sha256": "187aff42417778f167105fde586b984cb098215ee3816e7ec7930545c1126556"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "bottom_row",
+        "white"
+      ],
+      "bytes": 1776,
+      "sha256": "f67ecad7376f20981bd9764f09c0ac17a28fd85f7595944e06e6539dc4251fb1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        null,
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "top_row",
+        "reference"
+      ],
+      "bytes": 1952,
+      "sha256": "a9abeea6216a4846bd5b20efada9118af7b391c6f68cd6d281f734a9863f9aec"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 1941,
+      "sha256": "6c7aa55fb07fae958838e829b43dc7775e65092c7a513be26ee09e30b4814ed1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 1985,
+      "sha256": "1adb906c547de4b4d0d4c06d832c4e5cbc13941d9c02541defeebf517e3b24c0"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        null,
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 1881,
+      "sha256": "274c8c72466d4e5ca81dbfc68b951b011a4c12a4d03b7d3c01961a5d48c831c9"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 1870,
+      "sha256": "25a6c39f4864160e60495589672a8f5a7baa70944b50c5d14d16d47d62f8f74b"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 1914,
+      "sha256": "fe90c890d5514b0d245fa366336ab755f2e3e3b14294d0a33fe4b87ce69416c0"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        null,
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "top_row",
+        "unknown"
+      ],
+      "bytes": 1743,
+      "sha256": "18925ac50ef5383bf3aa0bb5f8ac24786500a825b4be0267d68c833c82420513"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "middle_row",
+        "unknown"
+      ],
+      "bytes": 1732,
+      "sha256": "187aff42417778f167105fde586b984cb098215ee3816e7ec7930545c1126556"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "bottom_row",
+        "unknown"
+      ],
+      "bytes": 1776,
+      "sha256": "f67ecad7376f20981bd9764f09c0ac17a28fd85f7595944e06e6539dc4251fb1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined"
+      ],
+      "bytes": 1064,
+      "sha256": "b6208ee88c98215ad758d7c693bfcb4c0a67244e31b7ad4bbdf5b8e42f38a458"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        null,
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        null,
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "combined",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying"
+      ],
+      "bytes": 1064,
+      "sha256": "b6208ee88c98215ad758d7c693bfcb4c0a67244e31b7ad4bbdf5b8e42f38a458"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        null,
+        "reference"
+      ],
+      "bytes": 5795,
+      "sha256": "c8ead8796e970d8881bb6fd5df99745e653069ee9edcc375f0f221b4d510dca0"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        null,
+        "pure_white"
+      ],
+      "bytes": 5551,
+      "sha256": "5b53fdf85afc2e5d96a3433dc42ca118fe75c374ec023ea629208fa26cbce114"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 5663,
+      "sha256": "8f31d13dd45147ef4144351e0a448203e6a5c2c81c0a6cfe941ae0707a9f2d87"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 5419,
+      "sha256": "1f78b56b1bd52e6867065cf0f15b5373ad23aba642b44868cae2c13c34cfb8cf"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 5654,
+      "sha256": "e25ce4eb9d7f36da213d7b16166192a199cff52e30d9eace091d53a83d7ba1c6"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 5410,
+      "sha256": "4845fafbd5cb81111c425b7da69de35ff15add66b84cadec2e6e108e76f2212c"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 5705,
+      "sha256": "1a422dcc06969975f6584534a38c7bfb678418850690f26dbd828ec8dfb419c4"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "lying",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 5461,
+      "sha256": "bdb7a95306df1e12591cb97a254e548b322d89144203b9ae7599e6cfd12b78bf"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright"
+      ],
+      "bytes": 1070,
+      "sha256": "0d704778252a3a9e20faa19865ae6510f9f34315e15e205d48f76e1e32172cbb"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright"
+      ],
+      "bytes": 1551,
+      "sha256": "c2e80d86c356178b7445f7129ad3f049af7583121939242a88ce6f9472b20acb"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        null,
+        "reference"
+      ],
+      "bytes": 7622,
+      "sha256": "72a74157d0c7ab4fb54ebf73bdda7c5c41743a1fea4570a835853def8b535ba8"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        null,
+        "pure_white"
+      ],
+      "bytes": 7378,
+      "sha256": "e42fe8395573b08222d13dd5d082a87ee25119174a8934bc14e99342bee6855a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 7490,
+      "sha256": "10f51dadd9a681fd8c17a5a63d19258f656c01c2d482eeeed8998e8a8d642344"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 7246,
+      "sha256": "4747e717e2ff27db6d2a120ae4915fb030aa253dfa950a86f9a8d825fbc434ff"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 7481,
+      "sha256": "bb784f0a2542a5df8303347baf1a38b787df37504ee8bfe30b3ddf386cec4f18"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 7237,
+      "sha256": "66d685607a2608ba9d5648b59ff20ca56678b1eb3beedee876ac909020772435"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 7532,
+      "sha256": "1e802606e89cbe4bd6e62fe51bbfa985a1bf0f1fb7d591ba43fda224792905c5"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "upright",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 7288,
+      "sha256": "b452c2cb3ff5874590b16150e54ee41e558471e27716dfcd98d6da1ce882f00b"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown"
+      ],
+      "bytes": 1064,
+      "sha256": "b6208ee88c98215ad758d7c693bfcb4c0a67244e31b7ad4bbdf5b8e42f38a458"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        null,
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        null,
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "合成配件α",
+          "physical_size": {
+            "length_mm": 170,
+            "width_mm": 40,
+            "height_mm": 10
+          }
+        },
+        "unknown",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 316,
+      "sha256": "2bc9b711c7ca5d40f16201e42420820bb484b43de36490c50a09aeb89e48aa62"
+    },
+    {
+      "name": "pose_collection_dimension_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        }
+      ],
+      "bytes": 410,
+      "sha256": "642889b24485fe3f370ec4778843774eae43ebadb641ffb876c4a91948a75df8"
+    },
+    {
+      "name": "pose_collection_position_specs",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        }
+      ],
+      "bytes": 1124,
+      "sha256": "b7a219cb8d6763a215538f828de5d1953fa58bf79a9f82e9d5551c479ba88c7c"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        null,
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "top_row",
+        "white"
+      ],
+      "bytes": 1743,
+      "sha256": "18925ac50ef5383bf3aa0bb5f8ac24786500a825b4be0267d68c833c82420513"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "middle_row",
+        "white"
+      ],
+      "bytes": 1732,
+      "sha256": "187aff42417778f167105fde586b984cb098215ee3816e7ec7930545c1126556"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "bottom_row",
+        "white"
+      ],
+      "bytes": 1776,
+      "sha256": "f67ecad7376f20981bd9764f09c0ac17a28fd85f7595944e06e6539dc4251fb1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "white"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        null,
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "top_row",
+        "reference"
+      ],
+      "bytes": 1952,
+      "sha256": "a9abeea6216a4846bd5b20efada9118af7b391c6f68cd6d281f734a9863f9aec"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 1941,
+      "sha256": "6c7aa55fb07fae958838e829b43dc7775e65092c7a513be26ee09e30b4814ed1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 1985,
+      "sha256": "1adb906c547de4b4d0d4c06d832c4e5cbc13941d9c02541defeebf517e3b24c0"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "reference"
+      ],
+      "bytes": 2050,
+      "sha256": "a3b02ee1d4e709cee1a536e4a691225819ce1c10bae0b7ed435b07ab7f4ae1ee"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        null,
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 1881,
+      "sha256": "274c8c72466d4e5ca81dbfc68b951b011a4c12a4d03b7d3c01961a5d48c831c9"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 1870,
+      "sha256": "25a6c39f4864160e60495589672a8f5a7baa70944b50c5d14d16d47d62f8f74b"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 1914,
+      "sha256": "fe90c890d5514b0d245fa366336ab755f2e3e3b14294d0a33fe4b87ce69416c0"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "pure_white"
+      ],
+      "bytes": 1979,
+      "sha256": "f3d4da49063daa12ecac6edde074bd236b58d3508149c2e17f664a4d767ae604"
+    },
+    {
+      "name": "pose_collection_camera_grid_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        null,
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "top_row",
+        "unknown"
+      ],
+      "bytes": 1743,
+      "sha256": "18925ac50ef5383bf3aa0bb5f8ac24786500a825b4be0267d68c833c82420513"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "middle_row",
+        "unknown"
+      ],
+      "bytes": 1732,
+      "sha256": "187aff42417778f167105fde586b984cb098215ee3816e7ec7930545c1126556"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "bottom_row",
+        "unknown"
+      ],
+      "bytes": 1776,
+      "sha256": "f67ecad7376f20981bd9764f09c0ac17a28fd85f7595944e06e6539dc4251fb1"
+    },
+    {
+      "name": "pose_collection_camera_batch_text",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "unknown"
+      ],
+      "bytes": 1841,
+      "sha256": "f27c761f77656f21c6322d81a20920895845dc47bc177f240237f909b33530a5"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined"
+      ],
+      "bytes": 1054,
+      "sha256": "e6e23b20e3f8d853b9e668b14a0860362fb582e5d566f1d23743f00183fc901e"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        null,
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        null,
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "combined",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying"
+      ],
+      "bytes": 1054,
+      "sha256": "e6e23b20e3f8d853b9e668b14a0860362fb582e5d566f1d23743f00183fc901e"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        null,
+        "reference"
+      ],
+      "bytes": 5719,
+      "sha256": "46d902dd4cf58ab97b2e53bccb74473b6eb6da731d375fba3fb06b42169bb3f6"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        null,
+        "pure_white"
+      ],
+      "bytes": 5475,
+      "sha256": "49daea853cd03a8bd4822490f64e290bf084498777a2855c4959fbf402965b12"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 5587,
+      "sha256": "47e46727b0235812152c99398928ae66dd02c3bdafe8078f5f6cee548c58ce55"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 5343,
+      "sha256": "ed16b09258446b8ff23ce863283595842a340358d78cca645402fca56bf50894"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 5578,
+      "sha256": "81355b33e8697399c93e9ef914081ec69279c50caaabd3a83d0a3908cad8c697"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 5334,
+      "sha256": "896aa9622c9781dc23d074d3d9de328079ee7977031600c88291b7e61dedbd4c"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 5629,
+      "sha256": "9d8aaf5005b5cc136acf408ea2d7af1fc73808d274e829383350b227ab5a8d62"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "lying",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 5385,
+      "sha256": "4028d3e702f81ce1e14af759a2042b9e1f8bb8a5a7ed7dfa98b47c0850f56de1"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright"
+      ],
+      "bytes": 1060,
+      "sha256": "925836946adaefe95124a77efdd26d3224ac367a581376b7d4fe21a6f5674f5c"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright"
+      ],
+      "bytes": 1551,
+      "sha256": "c2e80d86c356178b7445f7129ad3f049af7583121939242a88ce6f9472b20acb"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        null,
+        "reference"
+      ],
+      "bytes": 7546,
+      "sha256": "d5e17e8969736356d58d9740de9d7de7c72bca1508f496118e7653c557652bc0"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        null,
+        "pure_white"
+      ],
+      "bytes": 7302,
+      "sha256": "9399a9585ca44416ab89124d597f515c0e3816ac977daaeb7f7bb4a6ff92e504"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 7414,
+      "sha256": "4d6ea9786992aff1f4c3e0be9667518c1ed26163c353111bc8d5d6b9e327c89a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 7170,
+      "sha256": "a2da806ef4ba3f20446fd4e51adf9869e1415b4bc72c8c30b38ae8baf969d25a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 7405,
+      "sha256": "11134473bef81c5c25714036c3547c9cf3051eb8ba24956c9025dd042b44cb2a"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 7161,
+      "sha256": "623093cfc2b7392e309829b604ba0e010ea853b60e63adba9c647d79f3d91e24"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 7456,
+      "sha256": "e7fd17ccb9b749340a4e5f71a92c012bedc3229478f71e25b37a95b95994a4f6"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "upright",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 7212,
+      "sha256": "2046f6722c6b54b5cd0abf52afb82b1f28597cd8b2815a9c0afec03f04c10670"
+    },
+    {
+      "name": "build_white_table_replacement_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown"
+      ],
+      "bytes": 1054,
+      "sha256": "e6e23b20e3f8d853b9e668b14a0860362fb582e5d566f1d23743f00183fc901e"
+    },
+    {
+      "name": "build_anchor_replacement_pose_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown"
+      ],
+      "bytes": 1306,
+      "sha256": "d0f39a84d6edeaf96d193640583d9fd91978c2c76b57f985de71b7e272c5b3b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        null,
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        null,
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "top_row",
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "top_row",
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "middle_row",
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "middle_row",
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "bottom_row",
+        "reference"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "build_pose_collection_prompt",
+      "args": [
+        {
+          "name": "zero",
+          "physical_size": {
+            "length_mm": 0,
+            "width_mm": 0,
+            "height_mm": 0
+          }
+        },
+        "unknown",
+        "bottom_row",
+        "pure_white"
+      ],
+      "bytes": 306,
+      "sha256": "d8780e09ee155933ffc841e468a2dc22588db8a5eda3757933dccd30174395b9"
+    },
+    {
+      "name": "tabletop_scene_text",
+      "args": [
+        "white"
+      ],
+      "bytes": 112,
+      "sha256": "46b857b32e97596af2ff14072eb1e97d7ad2bc23bbdab027e5e62a9ef3a63042"
+    },
+    {
+      "name": "tabletop_scene_text",
+      "args": [
+        "reference"
+      ],
+      "bytes": 321,
+      "sha256": "e104ccdc9729e968aa3d9414336dacb58f7c6210373df09a471be6658d7a659e"
+    },
+    {
+      "name": "tabletop_scene_text",
+      "args": [
+        "pure_white"
+      ],
+      "bytes": 250,
+      "sha256": "5014eeddef98f62fce6c0ad50427e68c70ec06f3de59ee325afe91bcda235817"
+    },
+    {
+      "name": "tabletop_scene_text",
+      "args": [
+        "unknown"
+      ],
+      "bytes": 112,
+      "sha256": "46b857b32e97596af2ff14072eb1e97d7ad2bc23bbdab027e5e62a9ef3a63042"
+    },
+    {
+      "name": "upright_spatial_relation_text",
+      "args": [],
+      "bytes": 1472,
+      "sha256": "824a8802864c269ce824c3fb68840971019307d1da8a777d2c70dc47790ddc24"
+    }
+  ]
+}

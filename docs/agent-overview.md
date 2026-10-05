@@ -58,3 +58,5 @@ PLC backend policy and workflows are organized under `local_inspection_service/p
 Auto-optimization application workflows now live in `local_inspection_service/training/auto_optimization_*`. Each workflow has its own policy, state or execution boundary and narrow dependencies. Temporary entry forwarders preserve callers while composition cleanup is pending; the existing training/image task process topology is unchanged.
 
 The remaining pipeline link/projection/candidate/metadata/mutation/AI-activation workflows are under `local_inspection_service/pipeline/`. Follow each focused service and its typed ports instead of placing new business logic in application-entry forwarders.
+
+Accessory image workflow code is grouped under `accessories/` with explicit file, record, policy, access and execution interfaces. Image provider configuration and training asset preparation remain in their respective domain packages. The entry composes these boundaries; no new aggregate business context is introduced.

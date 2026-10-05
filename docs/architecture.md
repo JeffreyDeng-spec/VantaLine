@@ -1579,3 +1579,9 @@ This is structural relocation of existing workflows. Prompt text, callback selec
 ### Pipeline workflow boundaries
 
 Pipeline auto-optimization links, task projection, candidate flow, metadata, mutations and AI activation now live in focused `pipeline/` modules. Each receives its own typed record, access, model or execution capabilities. The application entry assembles them and temporarily forwards existing call sites. Shared task locks, saved state, partial mutations, model binding and scheduling order remain with their original owners; this batch changes no workflow algorithm.
+
+### Accessory image workflow boundaries
+
+Accessory text preparation, pose prompts/jobs, reference media, image diagnostics, queue execution/management and candidate artifact ownership now have focused services under `accessories/`. `model_providers/image_provider_configuration.py` owns the existing image provider setup and response interpretation; `training/training_asset_preparation.py` owns the accessory-derived asset preparation used by training. Each boundary receives typed dependencies; the entry retains temporary caller adapters and shared process state.
+
+This is structural relocation of one accessory image workflow family. Prompt text, provider/retry selection, queue timing, owner visibility, media authorization, subprocess behavior, save-before-start order and deletion partial effects remain unchanged. Training and image jobs retain their existing process topology.
