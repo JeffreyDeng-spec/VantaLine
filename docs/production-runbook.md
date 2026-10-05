@@ -1286,3 +1286,5 @@ preparation introduces no cache reader, backfill or topology switch and is not
 evidence of full list performance or production acceptance.
 
 Before admitting the summary preparation, the generated-schema and import real-engine checks must accept complete trigger definitions and retain their SQL-error rejection. These temporary single-user databases open no listening sockets and do not touch production state. The production migration and complete-release rollback procedure are unchanged.
+
+The pure label projection helper ships in the complete release. It changes no database reader, cache publisher or worker topology; retain derived storage and evidence on whole-release rollback.

@@ -999,3 +999,5 @@ release; no application cache reader or standalone-worker activation ships in
 this slice. Retain the derived objects during whole-release rollback. A bounded
 DDL lock failure aborts transactionally rather than partially installing the
 trigger. Local synthetic verification does not satisfy production ReleaseGo.
+
+The pure label projection structural slice is separate from summary publication and performance changes. One actual source is added under manifest v148 and its pure contract is registered in CI.

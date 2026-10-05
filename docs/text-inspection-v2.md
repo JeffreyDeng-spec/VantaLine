@@ -708,3 +708,5 @@ queue stays paused. Normal rollback restores the entire previous managed release
 preserves task/call evidence.
 
 Label task/run detail reads now use the last committed version without acquiring the global write advisory lock. Owner/kind filtering and response projection are unchanged; edits and submissions still validate their state inside the existing write transaction.
+
+Label task/run public projection uses `label_inspection/projection.py` with the same field filtering. This source relocation does not alter task detail/history response contracts or enable derived-summary reads.
