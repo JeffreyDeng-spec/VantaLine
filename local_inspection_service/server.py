@@ -10980,13 +10980,14 @@ from .agent.pipeline_background_publication import PipelineBackgroundPublication
 
 from .agent.pipeline_background_publication_ports import BackgroundPublicationTasks as _BackgroundPublicationTasks, BackgroundPublicationPaths as _BackgroundPublicationPaths, BackgroundPublicationSelection as _BackgroundPublicationSelection, BackgroundPublicationProviders as _BackgroundPublicationProviders, BackgroundPublicationCatalog as _BackgroundPublicationCatalog, BackgroundPublicationProjection as _BackgroundPublicationProjection
 
+_agent_pil_images = ImageFiles(pil_provider=lambda: Image, files=_business_files)
 _pipeline_background_publication = _PipelineBackgroundPublication(
     _BackgroundPublicationTasks(state=lambda: agent_mcp_orchestration, ids=lambda: canonical_pipeline_accessory_ids, lookup=lambda: accessory_lookup_by_id),
     _BackgroundPublicationPaths(output=lambda: output_write_dir_for_owner, record_id=lambda: safe_record_id, set_id=lambda: safe_background_set_id, resolve=lambda: resolve_service_path, sets_directory=lambda: BACKGROUND_SETS_DIR),
     _BackgroundPublicationSelection(prompt=lambda: pipeline_background_plate_prompt, match=lambda: match_background_library_plate, derive=lambda: derive_background_plate_from_accessory),
     _BackgroundPublicationProviders(config=lambda: agent_mcp_gemini_image_config, references=lambda: agent_mcp_pose_reference_content, settings=lambda: image_generation_settings, create=lambda: image_generation_provider_from_settings, error_type=lambda: AiProviderError),
     _BackgroundPublicationCatalog(images=lambda: image_file_list, variants=lambda: create_background_variants_from_source, manifest=lambda: load_background_sets_manifest, publish=lambda: write_background_sets_manifest),
-    _BackgroundPublicationProjection(bounded=lambda: bounded_text, url=lambda: public_output_url_for_existing, digest=lambda: file_sha256, now=lambda: agent_mcp_now, legacy_owner=lambda: LEGACY_OWNER_ID),
+    _BackgroundPublicationProjection(bounded=lambda: bounded_text, url=lambda: public_output_url_for_existing, digest=lambda: file_sha256, now=lambda: agent_mcp_now, legacy_owner=lambda: LEGACY_OWNER_ID), files=_business_files, images=_agent_pil_images
 )
 
 def pipeline_background_plate_prompt(item: dict[str, Any]) -> str:

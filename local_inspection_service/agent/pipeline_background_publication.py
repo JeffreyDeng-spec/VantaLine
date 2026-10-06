@@ -4,8 +4,7 @@ from pathlib import Path
 import shutil
 import time
 from PIL import Image
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(pil_provider=lambda: Image)
+from .file_ports import BackgroundPublicationFiles, AgentPILImages
 from .pipeline_background_publication_ports import BackgroundPublicationTasks, BackgroundPublicationPaths, BackgroundPublicationSelection, BackgroundPublicationProviders, BackgroundPublicationCatalog, BackgroundPublicationProjection
 
 def pipeline_background_plate_prompt(item: dict[str, Any]) -> str:
@@ -22,7 +21,13 @@ def pipeline_background_plate_prompt(item: dict[str, Any]) -> str:
     )
 
 class PipelineBackgroundPublication:
-    def __init__(self, tasks: BackgroundPublicationTasks, paths: BackgroundPublicationPaths, selection: BackgroundPublicationSelection, providers: BackgroundPublicationProviders, catalog: BackgroundPublicationCatalog, projection: BackgroundPublicationProjection) -> None:
+    def __init__(self, tasks: BackgroundPublicationTasks, paths: BackgroundPublicationPaths, selection: BackgroundPublicationSelection, providers: BackgroundPublicationProviders, catalog: BackgroundPublicationCatalog, projection: BackgroundPublicationProjection, *, files: BackgroundPublicationFiles, images: AgentPILImages) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        if images is None:
+            raise TypeError('images is required')
+        self.files = files
+        self.images = images
         self._tasks = tasks
         self._paths = paths
         self._selection = selection
@@ -59,11 +64,11 @@ class PipelineBackgroundPublication:
         matched = self._selection.match()(item, owner_id)
         if matched:
             matched_path = self._paths.resolve()(matched.get("image_path"))
-            if _image_files.files.exists(matched_path):
+            if self.files.exists(matched_path):
                 plate_path = plate_dir / "plate.png"
                 try:
-                    with _image_files.open(matched_path) as handle:
-                        _image_files.save(handle.convert("RGB"), plate_path, format="PNG")
+                    with self.images.open(matched_path) as handle:
+                        self.images.save(handle.convert("RGB"), plate_path, format="PNG")
                     plate_method = "background_library_match"
                     background_match = matched
                     orchestration["background_plate_error"] = ""
@@ -97,7 +102,7 @@ class PipelineBackgroundPublication:
             if payload:
                 extension = ".jpg" if "jpeg" in mime_type.lower() else ".png"
                 plate_path = plate_dir / f"plate{extension}"
-                _image_files.files.write_bytes(plate_path, payload)
+                self.files.write_bytes(plate_path, payload)
                 plate_method = f"agent_{str(tool_config.get('provider_name') or 'image')}_empty_surface"
                 orchestration["background_plate_error"] = ""
         # 3) LAST LOCAL FALLBACK: only if API generation is unavailable/failed, try a
@@ -110,18 +115,18 @@ class PipelineBackgroundPublication:
                 plate_path = derived
                 plate_method = "accessory_photo_surface_local_fallback"
                 orchestration["background_plate_error"] = ""
-        if plate_path is None or not _image_files.files.exists(plate_path):
+        if plate_path is None or not self.files.exists(plate_path):
             if not orchestration.get("background_plate_error"):
                 orchestration["background_plate_error"] = "无法从首个配件环境生成背景底板。"
             return None
         set_id = self._paths.set_id()(f"task_plate_{self._paths.record_id()(str(task.get('id') or 'task'))}")
         set_dir = self._paths.sets_directory() / set_id
-        if _image_files.files.exists(set_dir):
-            _image_files.files.rmtree(set_dir, ignore_errors=True)
+        if self.files.exists(set_dir):
+            self.files.rmtree(set_dir, ignore_errors=True)
         set_dir.mkdir(parents=True, exist_ok=True)
         try:
-            with _image_files.open(plate_path) as handle:
-                _image_files.save(handle.convert("RGB"), set_dir / "plate.png", format="PNG")
+            with self.images.open(plate_path) as handle:
+                self.images.save(handle.convert("RGB"), set_dir / "plate.png", format="PNG")
         except (OSError, ValueError):
             pass
         self._catalog.variants()(plate_path, set_dir, count=6)
