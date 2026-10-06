@@ -12345,7 +12345,7 @@ register_label_inspection(
     _label_repository_lifecycle,
     _label_imports,
     models=lambda: resolve_model_profiles(),
-    configuration=lambda: label_inspection_model.settings(lambda: resolve_model_profiles()),
+    configuration=lambda: label_inspection_model.settings(lambda: resolve_model_profiles()), runtime_provider=_business_files.runtime_provider
 )
 
 

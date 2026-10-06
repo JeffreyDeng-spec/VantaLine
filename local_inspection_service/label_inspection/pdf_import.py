@@ -3,6 +3,7 @@
 import io
 import math
 import threading
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from pathlib import Path
 from fastapi import FastAPI
@@ -156,7 +157,10 @@ class PdfImportRuntime:
         return self._threads.close(timeout)
 
 
-def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Callable[[], Path]):
+def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Callable[[], Path], *,
+             runtime_provider: Callable[[], ArtifactRuntime | None]):
+    if runtime_provider is None:
+        raise TypeError("runtime_provider is required")
     runtime = PdfImportRuntime()
     stop = runtime.stop
 
@@ -172,7 +176,7 @@ def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Ca
                     if task:
                         process(
                             repo,
-                            MediaStore(data_directory() / "label_inspection" / "media"),
+                            MediaStore(data_directory() / "label_inspection" / "media", runtime_provider=runtime_provider),
                             task,
                             token,
                         )

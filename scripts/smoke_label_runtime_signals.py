@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.label_inspection.runtime import LabelProcess
 from local_inspection_service.label_inspection.dependencies import RepositoryLifecycle
 from local_inspection_service.runtime.configuration import ConfigurationSnapshot
@@ -25,7 +26,7 @@ def child(checkpoint, signum):
         repositories = RepositoryLifecycle(lambda: None, lambda: events.append("clear"))
         models = SimpleNamespace(initialize=lambda: events.append("initialize"))
         process = LabelProcess(identity, snapshot, root, repositories, repositories,
-            models=models, control_directory=root / "control", allowed_uid=os.getuid())
+            models=models, control_directory=root / "control", allowed_uid=os.getuid(), runtime_provider=get_runtime)
         for number in (signal.SIGTERM, signal.SIGINT):
             signal.signal(number, process.request_stop)
         process.worker._iteration = lambda: events.append("iteration") or False

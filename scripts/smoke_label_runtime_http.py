@@ -11,6 +11,7 @@ from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -75,7 +76,7 @@ def main():
                 api.register(app, LabelAccess(require, require_admin, lambda: (account.get(), account.get())),
                              repositories, LabelImports(lambda: root, lambda *_: ([], []), lambda *_: ([], []),
                                                        lambda *_: b"", lambda *_: b""),
-                             lambda: models, lambda: {"enabled": True})
+                             lambda: models, lambda: {"enabled": True}, runtime_provider=get_runtime)
             output = io.BytesIO()
             Image.new("RGB", (20, 20), "white").save(output, format="PNG")
             with TestClient(app) as client:

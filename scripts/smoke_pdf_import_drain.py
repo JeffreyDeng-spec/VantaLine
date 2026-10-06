@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI
 from local_inspection_service.label_inspection import pdf_import as pdf
 from local_inspection_service.label_inspection.dependencies import RepositoryLifecycle
@@ -16,7 +17,7 @@ REAL_THREAD = threading.Thread
 class PdfDrain(unittest.TestCase):
     def test_repeated_startup_owns_one_thread_and_closed_owner_rejects_restart(self):
         app = FastAPI(); threads = []; cleared = threading.Event()
-        owner = pdf.register(app, RepositoryLifecycle(lambda: None, cleared.set), lambda: Path('.'))
+        owner = pdf.register(app, RepositoryLifecycle(lambda: None, cleared.set), lambda: Path('.'), runtime_provider=get_runtime)
         def factory(**kwargs):
             thread = REAL_THREAD(**kwargs); threads.append(thread); return thread
         with patch.object(pdf.threading, 'Thread', factory):
@@ -36,7 +37,7 @@ class PdfDrain(unittest.TestCase):
             self.assertIs(selected, task); self.assertEqual(token, calls[0])
             processing.set(); processed.wait(3)
         def clear(): ids.append(threading.get_ident()); clearing.set(); cleared.wait(3)
-        owner = pdf.register(app, RepositoryLifecycle(lambda: SimpleNamespace(claim_pdf=claim), clear), lambda: Path('.'))
+        owner = pdf.register(app, RepositoryLifecycle(lambda: SimpleNamespace(claim_pdf=claim), clear), lambda: Path('.'), runtime_provider=get_runtime)
         with patch.object(pdf, 'LabelRepository', side_effect=lambda raw: raw), patch.object(pdf, 'process', process), \
              patch.object(pdf, 'MediaStore', return_value=object()):
             app.router.on_startup[0]()
@@ -51,7 +52,7 @@ class PdfDrain(unittest.TestCase):
     def test_pending_constructor_observes_stop_and_cannot_escape_join(self):
         app = FastAPI(); entered, release = threading.Event(), threading.Event(); errors = []; threads = []
         repository = Mock(); clear = Mock()
-        owner = pdf.register(app, RepositoryLifecycle(repository, clear), lambda: Path('.'))
+        owner = pdf.register(app, RepositoryLifecycle(repository, clear), lambda: Path('.'), runtime_provider=get_runtime)
         def factory(**kwargs):
             entered.set(); release.wait(3); thread = REAL_THREAD(**kwargs); threads.append(thread); return thread
         def caller():

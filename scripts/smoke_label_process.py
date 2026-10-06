@@ -13,6 +13,7 @@ from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from release_runtime_client import request
 from release_runtime_contract import WEB, LABEL
 from local_inspection_service.runtime.configuration import ConfigurationSnapshot
@@ -40,7 +41,7 @@ def repositories(dsn, schema):
 def child(dsn, schema, root, configuration, identity):
     root = Path(root)
     process = LabelProcess(identity, configuration, root, repositories(dsn, schema), repositories(dsn, schema),
-                           control_directory=root/'control', allowed_uid=os.getuid())
+                           control_directory=root/'control', allowed_uid=os.getuid(), runtime_provider=get_runtime)
     signal.signal(signal.SIGTERM, process.request_stop)
     signal.signal(signal.SIGINT, process.request_stop)
     process.run()
@@ -106,7 +107,7 @@ def main():
             resumed=request(LABEL,'resume','b'*32,uid=os.getuid(),pid=process.pid,directory=root/'control')
             assert resumed['state']=='ready'
             duplicate = LabelProcess(identity, configuration, root, repositories(dsn,schema), repositories(dsn,schema),
-                control_directory=root/'control',allowed_uid=os.getuid())
+                control_directory=root/'control',allowed_uid=os.getuid(), runtime_provider=get_runtime)
             try: duplicate.start()
             except RuntimeUnavailable: pass
             else: raise AssertionError('duplicate consumer role was accepted')
@@ -131,8 +132,8 @@ def main():
                     patch.object(worker_api,'LabelRuntimeControl',side_effect=build_control):
                 directory=lambda:root
                 provider=lambda:models
-                handle=worker_api.register(app,connections,directory,provider)
-                assert worker_api.register(app,connections,directory,provider) is handle
+                handle=worker_api.register(app,connections,directory,provider, runtime_provider=get_runtime)
+                assert worker_api.register(app,connections,directory,provider, runtime_provider=get_runtime) is handle
                 for hook in app.router.on_startup: hook()
                 assert handle.runtime_control.worker is None
                 for hook in app.router.on_shutdown: hook()

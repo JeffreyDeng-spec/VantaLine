@@ -419,6 +419,7 @@ jobs:
           python scripts/smoke_accessory_preparation.py
           python scripts/smoke_accessory_routing.py
           python scripts/smoke_label_dependencies.py
+          python scripts/smoke_label_media_runtime_ports.py
           python scripts/smoke_pdf_import_drain.py
           python scripts/smoke_label_worker_lifecycle.py
           python scripts/smoke_label_runtime_identity.py

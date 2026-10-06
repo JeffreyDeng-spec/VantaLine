@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from PIL import Image
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from .dependencies import LabelAccess, RepositoryLifecycle, LabelImports, ModelProvider, Record, require_models
 from fastapi.responses import Response, JSONResponse
@@ -72,8 +73,11 @@ def asset(media, owner, data, identity, ordinal, metadata=None):
 
 
 def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycle,
-             imports: LabelImports, models: ModelProvider, configuration: Callable[[], Record]):
-    pdf_import.register(app, repositories, imports.data_directory)
+             imports: LabelImports, models: ModelProvider, configuration: Callable[[], Record], *,
+             runtime_provider: Callable[[], ArtifactRuntime | None]):
+    if runtime_provider is None:
+        raise TypeError("runtime_provider is required")
+    pdf_import.register(app, repositories, imports.data_directory, runtime_provider=runtime_provider)
 
     def context():
         access.require_permission("inspection")
@@ -85,7 +89,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             owner,
             (LabelRepository(raw, runtime_identity=label_worker.runtime_identity, metrics=label_worker.runtime_control.metrics)
              if label_worker.runtime_identity is not None else LabelRepository(raw)),
-            MediaStore(imports.data_directory() / "label_inspection" / "media"),
+            MediaStore(imports.data_directory() / "label_inspection" / "media", runtime_provider=runtime_provider),
         )
 
     @app.get(PREFIX + "/runtime")
@@ -792,4 +796,4 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
 
     from .worker_api import register as register_worker
 
-    label_worker = register_worker(app, repositories, imports.data_directory, models)
+    label_worker = register_worker(app, repositories, imports.data_directory, models, runtime_provider=runtime_provider)

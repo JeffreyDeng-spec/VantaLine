@@ -12,6 +12,7 @@ import uuid
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.runtime.connections import ThreadRepositoryFactory
 from local_inspection_service.runtime.label_identity import LabelRuntimeIdentity, RuntimeUnavailable
 from local_inspection_service.runtime.configuration import ConfigurationSnapshot
@@ -54,7 +55,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="label-control-") as temporary:
             directory = Path(temporary) / "control"
             def launch(selected=identity, allowed_uid=None, configuration=None, tick_seconds=5):
-                worker = LabelWorker(repositories, lambda: Path(temporary), lambda: None)
+                worker = LabelWorker(repositories, lambda: Path(temporary), lambda: None, runtime_provider=get_runtime)
                 worker._iteration = lambda: False
                 control = LabelRuntimeControl(selected, repositories, worker, directory=directory,
                     allowed_uid=os.getuid() if allowed_uid is None else allowed_uid, configuration=configuration)
