@@ -1,5 +1,5 @@
 {
-  "version": 204,
+  "version": 205,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -523,6 +523,7 @@
     "text_inspection/job_admission.py",
     "runtime/http_application.py",
     "runtime/deadline_tasks.py",
-    "text_inspection/comparison_runtime.py"
+    "text_inspection/comparison_runtime.py",
+    "runtime/shutdown.py"
   ]
 }

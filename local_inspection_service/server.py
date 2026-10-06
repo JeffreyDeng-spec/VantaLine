@@ -12753,4 +12753,27 @@ def enforce_incoming_text_image_retention() -> None:
         print(f"[incoming-text.retention] skipped: {type(exc).__name__}", flush=True)
 
 
+from .runtime.shutdown import ShutdownStep, register_web_shutdown
+
+_web_shutdown = register_web_shutdown(app, (
+    ShutdownStep("pdf-import", app.state.label_pdf_import.close),
+    ShutdownStep("pipeline-auto-agent", _pipeline_auto_agent_runtime.close),
+    ShutdownStep("pipeline-advance", _pipeline_advance_runtime.close),
+    ShutdownStep("pipeline-recommendation", _pipeline_recommendation_runtime.close),
+    ShutdownStep("auto-label", _auto_optimization_label_processing.close),
+    ShutdownStep("auto-shadow", _auto_optimization_shadow_evaluation.close),
+    ShutdownStep("auto-training-check", _auto_optimization_training_scheduling.close),
+    ShutdownStep("training", _training_task_runtime.close),
+    ShutdownStep("background-codex", _background_codex_thread.close),
+    ShutdownStep("image-worker", _image_worker_runtime.close),
+    ShutdownStep("document-import", document_import_jobs.close),
+    ShutdownStep("prepared-comparison", _prepared_comparison_runtime.close),
+    ShutdownStep("standard-preparation", standard_preparation_jobs.close),
+    ShutdownStep("text-extraction", _text_extraction_runtime.close),
+    ShutdownStep("transfer-progress", _transfer_progress.close),
+    ShutdownStep("yolo-warmup", _yolo_warmup_runtime.close),
+    ShutdownStep("model-mcp", _ai_mcp_client.shutdown),
+))
+
+
 ensure_dirs()
