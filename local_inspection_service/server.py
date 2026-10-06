@@ -7470,6 +7470,7 @@ from .training.preview_ports import (PreviewAssets, PreviewLayout, PreviewPoses,
                                      PreviewSurface, PreviewThresholds)
 from .training.preview_renderer import PreviewRenderer
 
+_training_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _training_preview_renderer = PreviewRenderer(
     material=lambda item: accessory_material_type(item),
     surface=PreviewSurface(
@@ -7510,7 +7511,7 @@ _training_preview_renderer = PreviewRenderer(
         polygon=lambda mask: visible_polygon_from_mask(mask),
         max_distance=lambda polygon: polygon_max_pair_distance_px(polygon),
     ),
-    thresholds=PreviewThresholds(lambda: DETECTION_MIN_VISIBLE_AREA_PX, lambda: DETECTION_MAX_OCCLUSION_FRACTION),
+    thresholds=PreviewThresholds(lambda: DETECTION_MIN_VISIBLE_AREA_PX, lambda: DETECTION_MAX_OCCLUSION_FRACTION), images=_training_image_io
 )
 
 
@@ -7527,15 +7528,19 @@ def draw_training_preview(
 
 from .training.estimates import training_estimate
 from .training.annotations import (
-    AnnotationMedia, AnnotationPreview, TrainingOutputLinks, yolo_label_line, yolo_detection_label_line, write_dataset_yaml,
+    AnnotationMedia, AnnotationPreview, TrainingOutputLinks, yolo_label_line, yolo_detection_label_line, write_dataset_yaml as _write_dataset_yaml,
 )
 from .training.sample_plan import SamplePlanner, split_counts, missing_count_for_false_sample
 from .training.dataset_generation import DatasetGenerator, DatasetRecords, DatasetPlanning, DatasetRendering
 
+def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
+    return _write_dataset_yaml(path, dataset_dir, names, files=_business_files)
+
+
 _training_output_links = TrainingOutputLinks(AnnotationMedia(
     output_root=lambda: OUTPUT_DIR, public_url=lambda path: public_output_url(path),
 ))
-_training_annotation_preview = AnnotationPreview(public_url=lambda path: public_training_output_url(path))
+_training_annotation_preview = AnnotationPreview(public_url=lambda path: public_training_output_url(path), images=_training_image_io)
 _training_sample_planner = SamplePlanner(
     split=lambda count: split_counts(count),
     missing=lambda count, rng: missing_count_for_false_sample(count, rng),

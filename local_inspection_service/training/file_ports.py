@@ -1,6 +1,6 @@
 """File capabilities used by training inputs, generation and preview metadata."""
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class TrainingInputFiles(Protocol):
@@ -21,3 +21,11 @@ class TrainingFileStat(Protocol):
 
 class TrainingStatFiles(Protocol):
     def stat(self, path: Path) -> TrainingFileStat: ...
+
+
+class TrainingImageWriter(Protocol):
+    def imwrite(self, filename: str, image: Any, params: list[int] = ...) -> bool: ...
+
+
+class TrainingImageIO(TrainingImageWriter, Protocol):
+    def imread(self, filename: str, flags: int) -> Any: ...
