@@ -430,6 +430,7 @@ jobs:
           python scripts/smoke_release_runtime_configuration.py
           python scripts/smoke_label_runtime_pause.py
           python scripts/smoke_codex_dependencies.py
+          python scripts/smoke_codex_api_runtime_port.py
           python scripts/smoke_history_dependencies.py
           python scripts/smoke_document_job_dependencies.py
           python scripts/smoke_agent_dependencies.py

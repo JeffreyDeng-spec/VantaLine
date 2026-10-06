@@ -10,6 +10,7 @@ from pathlib import Path
 import psycopg
 from psycopg.pq import TransactionStatus
 import pytest
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -108,7 +109,7 @@ def test_api_isolation_snapshot_and_media(storage,tmp_path,monkeypatch):
     def unused(*args, **kwargs):raise AssertionError('single-image fixture must not use batch import capabilities')
     api.register(app,ComparisonAccess(permission,lambda:(current['owner'],'test')),
                  lambda:storage().repository,StandardLibrary(owned,unused,unused),
-                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused))
+                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused), runtime_provider=get_runtime)
     client=TestClient(app)
     form={'standard_asset_id':'asset','request_id':'request-123','expected_revision':'rev-1'}
     def create():return client.post(api.PREFIX+'/tasks',data=form,files={'captured_file':('a.png',data,'image/png')})

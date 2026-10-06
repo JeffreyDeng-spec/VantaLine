@@ -292,3 +292,7 @@ never resurrects a tombstoned local file. Default local media behavior is retain
 this adapter alone does not authorize a production storage switch.
 
 In opt-in COS mode, comparison execution uses the shared exclusive work reservation on the kernel-limited system-disk temporary volume. Input media still passes the owner-scoped media adapter; the child retains its existing bubblewrap isolation and cannot access object-store credentials or original data roots. An unavailable work reservation settles the claimed task as failed before launch. The existing local-mode worker and terminal-state contracts remain unchanged.
+
+The Web API receives a required artifact-runtime provider and passes it into each request MediaStore. Existing content hashes, owner checks, CAS publication and evidence permissions remain unchanged. The worker and shared MediaStore default are not migrated by this HTTP-only change.
+
+This offline Codex HTTP replay follows transport candidate 0beaefc. Owned source/test blobs and ordered entry match reviewed 42fcded. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v233 selects 528 sources. Authorization, media exception mapping and partial publication ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, isolated PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.

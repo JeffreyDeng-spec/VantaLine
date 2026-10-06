@@ -12318,7 +12318,7 @@ register_codex_compare(
     documents=DocumentImports(
         docx=lambda data: extract_docx_candidates(data),
         doc=lambda data: extract_doc_images(data),
-    ),
+    ), runtime_provider=_business_files.runtime_provider
 )
 
 from .label_inspection.api import register as register_label_inspection
