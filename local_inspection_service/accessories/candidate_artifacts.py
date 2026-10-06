@@ -126,3 +126,8 @@ class CandidateArtifacts:
                 paths.append(path)
                 seen.add(key)
         return paths
+
+
+    def first_source_ai_reference_path(self, item: dict[str, Any]) -> Path | None:
+        paths = self.existing_source_image_paths(item)
+        return paths[0] if paths else None

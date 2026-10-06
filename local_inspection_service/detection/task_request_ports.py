@@ -23,6 +23,9 @@ class TaskRequestAccess:
     require_record_access: Callable[[], Callable[..., Any]]
 @dataclass(frozen=True)
 class TaskRequestPolicy:
+    accessory_lookup_by_id: Callable[[], Callable[[Record], dict[str, Record]]]
+    DASHBOARD_AI_TASK_NAME: Callable[[], str]
+    PIPELINE_DASHBOARD_AI_TASK_SOURCE: Callable[[], str]
     assert_unique_task_name: Callable[[], Callable[..., None]]
     sanitize_ai_detection_task_id: Callable[[], Callable[[str], str]]
     ai_detection_task_payload_from_request: Callable[[], Callable[[AiDetectionTaskRequest, Record], Record]]

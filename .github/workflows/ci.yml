@@ -293,6 +293,8 @@ jobs:
           python scripts/smoke_image_payload_codec.py
           python scripts/smoke_detection_rule_composition.py
           python scripts/smoke_analysis_composition.py --postgres
+          python scripts/smoke_accessory_selection_dimensions.py
+          python scripts/smoke_accessory_workflow_ownership.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
@@ -488,6 +490,7 @@ jobs:
           python scripts/smoke_detection_task_store.py --postgres
           python scripts/smoke_detection_task_catalog.py
           python scripts/smoke_detection_task_requests.py
+          python scripts/smoke_dashboard_task_ownership.py
           python scripts/smoke_detection_rules.py
           python scripts/smoke_local_model_runtime.py
           python scripts/smoke_local_model_selection.py

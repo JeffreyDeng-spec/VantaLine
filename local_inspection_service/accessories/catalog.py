@@ -45,3 +45,27 @@ class AccessoryCatalog:
                 # existing task normalization / agent-MCP pose workflows.
                 return self.dependencies.detail(item)
         raise HTTPException(status_code=404, detail="Accessory not found")
+
+@dataclass(frozen=True)
+class AccessorySelectionDependencies:
+    accessory_uid: Callable[[], Callable[[Record], str]]
+    serialize_accessory: Callable[[], Callable[[Record], Record]]
+    accessory_lookup_by_id: Callable[[], Callable[[Record], dict[str, Record]]]
+
+class AccessorySelection:
+    def __init__(self, values: AccessorySelectionDependencies) -> None:
+        self.values = values
+
+    def selected_accessories(self, config: dict[str, Any], ids: list[str]) -> list[dict[str, Any]]:
+        indexed = {self.values.accessory_uid()(item): self.values.serialize_accessory()(item) for item in config.get("accessories", [])}
+        selected = [indexed[item_id] for item_id in ids if item_id in indexed]
+        if not selected:
+            selected = [self.values.serialize_accessory()(item) for item in config.get("accessories", [])]
+        return selected
+
+
+    def resolve_accessory_id(self, config: dict[str, Any], accessory_id: str) -> tuple[str, dict[str, Any]] | None:
+        item = self.values.accessory_lookup_by_id()(config).get(str(accessory_id or "").strip())
+        if not item:
+            return None
+        return self.values.accessory_uid()(item), item

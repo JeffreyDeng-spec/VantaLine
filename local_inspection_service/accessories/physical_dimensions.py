@@ -85,3 +85,46 @@ class AccessoryDimensions:
             return False
         item["physical_size"] = new_size
         return True
+
+from .physical_dimension_ports import ReferenceDimensionValues
+
+class ReferenceDimensions:
+    def __init__(self, values: ReferenceDimensionValues) -> None:
+        self.values = values
+
+    def normalize_size_reference(self, value: Any) -> str:
+        key = str(value or "").strip().lower()
+        if key in {"", "none", "no", "无", "null"}:
+            return ""
+        if key in self.values.SIZE_REFERENCE_OBJECTS():
+            return key
+        aliases = {"尺子": "ruler", "直尺": "ruler", "卷尺": "ruler", "rule": "ruler",
+                   "a4纸": "a4", "a5纸": "a5", "b5纸": "b5"}
+        return aliases.get(key, "")
+
+
+    def size_reference_payload(self, reference_key: str) -> dict[str, Any] | None:
+        key = self.values.normalize_size_reference()(reference_key)
+        if not key:
+            return None
+        spec = self.values.SIZE_REFERENCE_OBJECTS().get(key)
+        return dict(spec) if spec else None
+
+
+    def physical_render_size_px(self, item: dict[str, Any], material_type: str) -> tuple[int, int]:
+        size = item.get("physical_size") or {}
+        if material_type == "text":
+            width_mm = float(size.get("width_mm") or 210.0)
+            height_mm = float(size.get("height_mm") or 297.0)
+            return (
+                max(70, int(round(width_mm * self.values.MM_TO_PREVIEW_PX()))),
+                max(90, int(round(height_mm * self.values.MM_TO_PREVIEW_PX()))),
+            )
+        length_mm = float(size.get("length_mm") or self.values.DEFAULT_OBJECT_SIZE_MM()["length_mm"])
+        width_mm = float(size.get("width_mm") or self.values.DEFAULT_OBJECT_SIZE_MM()["width_mm"])
+        height_mm = float(size.get("height_mm") or self.values.DEFAULT_OBJECT_SIZE_MM()["height_mm"])
+        visible_width_mm = max(width_mm, height_mm * 0.72)
+        return (
+            max(34, int(round(length_mm * self.values.MM_TO_PREVIEW_PX()))),
+            max(16, int(round(visible_width_mm * self.values.MM_TO_PREVIEW_PX()))),
+        )

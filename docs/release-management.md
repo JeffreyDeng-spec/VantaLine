@@ -1085,3 +1085,11 @@ This detection integration retains the native-history and reader-readiness imple
 The analysis graph composition is structural under manifest v174. Require existing and composed analysis behavior, real PostgreSQL, full HTTP/source checks and exact-head CI plus independent release acceptance. No query optimization or worker topology change is included.
 
 This analysis candidate retains the native-history/readiness implementation and accepted model composition from main bea11ce. It is prepared after detection candidate af8d242 in PR269; actual-main rebind and detection release acceptance must precede publication. Analysis production/tests and the ordered entry match reviewed59db3d3. The bundled manifest is v174 with503 unique sources. The original history28 and reader19 benchmark protocols remain mandatory; recorded prior performance failures are retained.
+
+Dashboard shortcut task ownership requires exact-head backend/HTTP/model/PLC regression, independent review and complete release acceptance under source manifest v175. No model, prompt content, schema or frontend behavior changes are included.
+
+Accessory policies extend existing catalog/physical-dimension modules under manifest v175. Require original/candidate and neighboring catalog/rendering contracts, exact-head CI and whole-release acceptance; no algorithm or performance change is claimed.
+
+Manifest v175 tracks four accessory workflow additions to already registered source modules. Require original/candidate boundary tests and existing domain regressions, exact-head CI and independent release acceptance; no algorithm or performance change is included.
+
+This accessory candidate retains the native-history/readiness implementation and detection composition from actual main dcb4805, and follows analysis candidate bb3afa6. Actual-main rebind and analysis release acceptance must precede publication. Accessory production/tests and the ordered entry match reviewed c43118e. The bundled manifest is v175 with 504 unique sources. Original history28 and reader19 benchmark protocols remain mandatory; prior recorded performance failures are retained.

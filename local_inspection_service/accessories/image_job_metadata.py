@@ -153,3 +153,8 @@ class ImageJobMetadata:
             next_jobs.append(updated_job)
         candidate["codex_image_jobs"] = next_jobs
         candidate["codex_image_job"] = next_jobs[0] if next_jobs else None
+
+
+def image_job_matches(candidate: dict[str, Any], job: dict[str, Any], lookup_id: str) -> bool:
+    ensure_image_job_task_id(candidate, job)
+    return lookup_id in {str(job.get("job_id") or ""), str(job.get("task_id") or "")}
