@@ -10893,6 +10893,7 @@ def photo_highlight_auto_compare(ai_roi_mask: np.ndarray, auto_roi_mask: np.ndar
 
 from .agent.photo_highlight_builder import PhotoHighlightSpriteBuilder as _PhotoHighlightSpriteBuilder
 from .agent.photo_highlight_builder_ports import PhotoBuildPolicy as _PhotoBuildPolicy, PhotoBuildRuntime as _PhotoBuildRuntime, PhotoBuildMasks as _PhotoBuildMasks, PhotoBuildModelPolicy as _PhotoBuildModelPolicy, PhotoBuildPublication as _PhotoBuildPublication, PhotoBuildArtifacts as _PhotoBuildArtifacts, PoseSpriteMetadata as _PoseSpriteMetadata
+_agent_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _photo_highlight_sprite_builder = _PhotoHighlightSpriteBuilder(
     _PhotoBuildPolicy(material=lambda: accessory_material_type, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready, alpha=lambda: object_alpha_material_policy, complete=lambda: clean_sprites_policy_complete, minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES),
     _PhotoBuildRuntime(identifier=lambda: accessory_uid, root=lambda: NORMALIZED_DIR, output=lambda: output_write_dir_for_owner, safe_id=lambda: safe_record_id, now=lambda: time.time, bounded=lambda: bounded_text),
@@ -10900,7 +10901,7 @@ _photo_highlight_sprite_builder = _PhotoHighlightSpriteBuilder(
     _PhotoBuildModelPolicy(attempts=lambda: PHOTO_HIGHLIGHT_MASK_MAX_ATTEMPTS, error=lambda: AiProviderError, pose_version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, photo_version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
     _PhotoBuildPublication(sanitize=lambda: sanitize_data_analysis_record_id, item=lambda: image_processing_item, publish=lambda: upsert_data_analysis_image_processing_record),
     _PhotoBuildArtifacts(write=lambda: write_clean_sprite, public_url=lambda: public_output_url_for_existing),
-    _PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints),
+    _PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints), files=_business_files, images=_agent_image_io
 )
 
 def build_clean_sprites_from_photo_highlight_masks(
