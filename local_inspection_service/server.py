@@ -1401,7 +1401,7 @@ _yolo_warmup_runtime = YoloWarmup(WarmupOperations(
     candidates=lambda config: yolo_warmup_configured_model_ids(config),
     warm=lambda model_id, config: warm_yolo_model_once(model_id, config),
     loaded_ids=lambda config: yolo_loaded_model_ids(config), error_text=lambda: bounded_text,
-))
+), scope=_runtime_repositories.thread_scope)
 _yolo_warmup_lock = _yolo_warmup_runtime.lock
 _yolo_warmup_state = _yolo_warmup_runtime.state
 _incoming_text_store_lock = threading.RLock()

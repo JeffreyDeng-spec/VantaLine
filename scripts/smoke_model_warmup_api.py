@@ -176,9 +176,11 @@ class RequestContracts(unittest.TestCase):
         first.operations=replace(first.operations,enabled=enabled)
         with patch.object(module.threading,'Thread') as thread:
             bind_warmup_start(first)('selection',['one'])
-        self.assertEqual(events,['enabled']);self.assertIs(thread.call_args.kwargs['target'],selected)
+        self.assertEqual(events,['enabled'])
         self.assertEqual(thread.call_args.kwargs['args'],('selection',['one']))
         thread.return_value.start.assert_called_once_with();selected.assert_not_called()
+        thread.call_args.kwargs['target'](*thread.call_args.kwargs['args'])
+        selected.assert_called_once_with('selection',['one'])
 
     @unittest.skipIf(BASELINE,'new root composition and complete HTTP contract')
     def test_root_exact_contract_and_actual_service_bindings(self):
