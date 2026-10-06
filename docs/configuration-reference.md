@@ -1617,3 +1617,14 @@ Beta history SQL counts add no setting. Only object/array counts are supplied; z
 
 
 Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+The historical baseline-only prerequisite added no runtime setting, source fingerprint, migration or read optimization. Existing fixed 15-minute account/filter-bound cursor behavior remains the contract, including cursors created by the frozen endpoint and consumed by the candidate.
+
+Manual benchmark configuration is fixed in source: one1000-group A/A case and three repetitions of1000/10000-group A/B cases. No production setting or prompt-source manifest changes are introduced by this test-only protocol.
+
+The internal manual rows indexed keyword is enabled only by the list endpoint and adds no public API parameter or setting. One or zero groups skip index construction. The fast path requires the actual per-request LabelRepository legacy cache; it may read cached assets fewer times but preserves database query behavior. Manifest v239 retains531 paths and records changed code for new task fingerprints; historical snapshots remain unchanged.
+
+The manual-history index retains equal-ordinal assets in their input order. PostgreSQL fixtures derive that order from the actual cached repository source; separate synthetic fixtures verify both forward and reversed ties. This test hardening changes no production, sorting or benchmark policy.
+
+
+The final read batch combines the guarded manual index and Beta SQL consumer on business composition 2b6e9ce; source manifest v252 selects 547 files. Full legacy SQL aggregation and independent application construction remain unfinished.

@@ -1403,3 +1403,14 @@ The Beta count slice uses manifest v238 with the same 531 files. It must indepen
 
 
 Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Manual-history baseline tests add an isolated PostgreSQL CI command and a frozen test helper only. Existing native reader/history and Beta performance protocols remain unchanged; passing this baseline is not acceptance of a future optimization. Use the normal complete-release build and rollback process.
+
+The manual-history-performance CI job pins dependencies with the existing production lock and uploads all recorded benchmark groups even after failure. Passing all seven new cases supplements the existing63 reader/history/Beta cases when shipping subsequent manual-index changes; it does not waive them or approve a release on its own.
+
+The manual index is a performance-only child of the frozen test protocol. Require source/behavior review, all seven manual cases and inherited63 reader/history/Beta cases without threshold or sample changes, then all nine hosted jobs and complete-release acceptance. A local functional pass is not performance or deployment approval.
+
+Manual-index functional acceptance now includes the actual PostgreSQL multi-group indexed branch before the fixed performance protocol; a single-group fixture alone does not exercise index construction.
+
+
+The final read batch combines the guarded manual index and Beta SQL consumer on business composition 2b6e9ce; source manifest v252 selects 547 files. Full legacy SQL aggregation and independent application construction remain unfinished.

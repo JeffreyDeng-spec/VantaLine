@@ -330,7 +330,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         }
                     )
                 del native_runs
-            for task in manual_history.rows(repo, owner):
+            for task in manual_history.rows(repo, owner, indexed=True):
                 history = task["manual_history"]
                 records = history["pages"]
                 latest = max(records, key=lambda v: v.get("created_at", 0), default={})

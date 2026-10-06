@@ -818,3 +818,14 @@ Beta list public fields and failure order remain the same when counts come from 
 
 
 Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Legacy manual history retains its original read-only detail projection and grouping in this test-only slice. New differential fixtures bind a frozen complete helper to the frozen endpoint instead of sharing the live candidate module. This prepares later optimization without changing historical decisions, error behavior or task data.
+
+The fixed manual-history performance fixture contains one standard, session, page and asset per synthetic group at1000/10000 groups. These homogeneous cost cases supplement adversarial duplicate/orphan/malformed behavior checks; they do not replace those checks or describe production data distributions.
+
+Only manual-history list grouping selects the proven indexed path. Detail projection, media flags, ordinal ordering, page/session fields, decision selection and fixed snapshot cursors keep their existing behavior. Unknown/malformed shapes retain original errors; the optimization does not sanitize or rewrite old records. This avoids repeated in-memory scans and does not yet replace full legacy JSON reads with SQL summaries.
+
+The manual-history index retains equal-ordinal assets in their input order. PostgreSQL fixtures derive that order from the actual cached repository source; separate synthetic fixtures verify both forward and reversed ties. This test hardening changes no production, sorting or benchmark policy.
+
+
+The final read batch combines the guarded manual index and Beta SQL consumer on business composition 2b6e9ce; source manifest v252 selects 547 files. Full legacy SQL aggregation and independent application construction remain unfinished.

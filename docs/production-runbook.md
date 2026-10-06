@@ -1644,3 +1644,14 @@ Beta count aggregation leaves detailed records, pagination snapshots and worker 
 
 
 Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Manual-history baseline work is test-only and requires isolated synthetic PostgreSQL data. It introduces no runtime query, migration or deployment topology change; no production records are copied into its fixtures.
+
+Manual-history performance verification uses an isolated synthetic PostgreSQL service and does not access production records or external inference. It times full first-page processing and snapshot persistence but excludes HTTP transport. Synthetic benchmark acceptance is not sustained production-capacity evidence.
+
+The manual index is ephemeral within one list request and uses the existing account-scoped repository cache. No table, migration, lock policy, history cleanup or data movement is introduced. Read/write consistency and15-minute snapshot creation remain in their existing transactions; rollback uses the previous complete release.
+
+Manual-index SQL/raw-JSON mismatch and tie fixtures are synthetic compatibility tests only. They do not mutate production data or imply malformed production records were found.
+
+
+The final read batch combines the guarded manual index and Beta SQL consumer on business composition 2b6e9ce; source manifest v252 selects 547 files. Full legacy SQL aggregation and independent application construction remain unfinished.

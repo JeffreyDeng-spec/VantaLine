@@ -2087,3 +2087,16 @@ Beta list reads return an internal BetaHistoryRead containing the decoded compac
 
 
 Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Historical baseline-only prerequisite: manual history read optimization was not active in that commit. Its original helper is frozen independently for tests: the baseline endpoint receives a separately loaded module containing the complete original rows/resolve implementation, so later candidate helper changes cannot silently change the oracle. Production grouping, detail materialization and database reads are unchanged.
+
+The manual-history benchmark measures the complete first-page endpoint with original fixed snapshots against separately frozen tasks and manual-helper sources. That protocol-only prerequisite did not alter production grouping or activate an index. Its performance claim is limited to synthetic manual populations; existing reader/history/Beta protocols remain independent requirements.
+
+Manual history list projection now opts into request-local indexes for multiple groups with proven ordinary decoded rows. Original key discovery/set iteration and full row projection stay unchanged. Session IDs map to every selected group even when duplicate IDs make the separate discovery map last-wins; each page is appended once to both matching-session groups and its fallback group in original page-before-record order. Unsupported references, timestamps or assets use the original scans and error behavior. Default rows/resolve detail calls keep the original path. This is an intermediate in-memory read optimization, not SQL aggregation.
+
+The indexed path still scales with actual memberships: many duplicate session IDs can attach each page to many groups. It does not promise globally linear output size or universal memory bounds; homogeneous performance cases are complemented by explicit overlap/fallback tests.
+
+The manual-history index retains equal-ordinal assets in their input order. PostgreSQL fixtures derive that order from the actual cached repository source; separate synthetic fixtures verify both forward and reversed ties. This test hardening changes no production, sorting or benchmark policy.
+
+
+The final read batch combines the guarded manual index and Beta SQL consumer on business composition 2b6e9ce; source manifest v252 selects 547 files. Full legacy SQL aggregation and independent application construction remain unfinished.
