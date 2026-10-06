@@ -12112,7 +12112,7 @@ _standard_edits = StandardEdits(
     StandardPreparation(start=lambda standard, owner: standard_preparation_jobs.start(standard, owner),
                         enabled=lambda owner: _standard_preparation_policy.enabled(owner)),
     prepare_image=lambda contents: _text_v2_prepare_image(contents),
-    bounded_text=lambda: bounded_text,
+    bounded_text=lambda: bounded_text, files=_business_files
 )
 _standard_routes = register_text_standards(app, _standard_imports, _standard_library, _standard_edits)
 import_text_inspection_standard = _standard_routes.import_text_inspection_standard
@@ -12282,7 +12282,7 @@ resolve_label_extraction = register_label_extraction(
     ),
     _extraction_records, _extraction_media, _extraction_models,
     clear_repository=lambda: clear_thread_runtime_repository_selection(),
-    runtime=_text_extraction_runtime,
+    runtime=_text_extraction_runtime, files=_business_files
 )
 from .agent.dependencies import AgentAccess, AgentAccounts
 register_agent_api(
