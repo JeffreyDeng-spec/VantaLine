@@ -1094,12 +1094,26 @@ Manifest v175 tracks four accessory workflow additions to already registered sou
 
 This accessory candidate retains the native-history/readiness implementation and detection composition from actual main dcb4805, and follows analysis candidate bb3afa6. Actual-main rebind and analysis release acceptance must precede publication. Accessory production/tests and the ordered entry match reviewed c43118e. The bundled manifest is v175 with 504 unique sources. Original history28 and reader19 benchmark protocols remain mandatory; prior recorded performance failures are retained.
 
-Image worker runtime ownership ships with original callers and manifest v181. Require concurrent-start and job-management contracts, exact-head hosted CI and full-release acceptance. The structural move does not demonstrate production workload drainage.
+Image worker runtime ownership ships with original callers and manifest v176. Require concurrent-start and job-management contracts, exact-head hosted CI and full-release acceptance. The structural move does not demonstrate production workload drainage.
 
-Pipeline runtime ownership ships with existing orchestration and source manifest v181. Require full list/advance/registry regressions, exact CI and whole-release acceptance. No production concurrency or recovery improvement is inferred solely from moving state.
+Pipeline runtime ownership ships with existing orchestration and source manifest v176. Require full list/advance/registry regressions, exact CI and whole-release acceptance. No production concurrency or recovery improvement is inferred solely from moving state.
 
-Auto-optimization owner and all consumers ship together under manifest v181. Require runtime/consumer regression, real PostgreSQL state-store checks, exact-head CI and independent whole-release acceptance.
+Auto-optimization owner and all consumers ship together under manifest v176. Require runtime/consumer regression, real PostgreSQL state-store checks, exact-head CI and independent whole-release acceptance.
 
-The v181 source-manifest change removes temporary settings indirection without changing algorithms. Require direct-port composition tests, downstream behavior/identity and PostgreSQL regression, full exact-head CI, independent review and whole-release verification. Python entry-alias rebinding is deliberately no longer a consumer configuration mechanism.
+The v176 source-manifest change removes temporary settings indirection without changing algorithms. Require direct-port composition tests, downstream behavior/identity and PostgreSQL regression, full exact-head CI, independent review and whole-release verification. Python entry-alias rebinding is deliberately no longer a consumer configuration mechanism.
 
-This background ownership integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v180 with 506 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.
+This background candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows accessory candidate f397a31. Actual-main rebind and accessory release acceptance must precede publication. Production/tests and the ordered entry match reviewed 5a44e61. The bundled manifest is v176 with 507 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained.
+
+Manifest v177 records the retained legacy PLC worker owner. Require fake-thread/state regression plus current PLC v4, browser/source, lease, full HTTP and release checks, followed by exact-head CI and independent complete-release acceptance. No server serial process may be started by this change.
+
+The station active-lease ownership change is a structural release under manifest v177. Require exact-head CI, independent review and complete release acceptance; existing PLC contracts and actual PostgreSQL rebind/diagnostic cases must pass before merge.
+
+The six legacy PLC readiness helpers ship under source manifest v177 with the existing topology and disabled server-serial startup. Exact-head CI, independent review and full release acceptance remain required; the readiness import stub is not a physical-device test.
+
+The PLC runtime coordination ownership slice is structure-only. Prompt source manifest 177 adds plc/legacy_coordination.py truthfully for new tasks; existing model snapshots keep their previous version and fingerprint. Publish and roll back the complete package, preserving the current external label-worker topology.
+
+PLC dispatch record logic now has its own source entry in prompt manifest 177 (512 paths). New tasks record the actual source manifest; historical snapshots remain unchanged. Deploy and roll back the complete immutable package with its existing runtime topology.
+
+Prompt manifest 177 includes plc/legacy_operations.py as the actual source of the retained workflows (512 paths). Historical task snapshots are unchanged. This ownership-only slice retains the existing installer, services and full-package rollback.
+
+This PLC candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows the reviewed background ownership candidate. Actual-main rebind and predecessor release acceptance must precede publication. Production/tests and the ordered entry match reviewed a139e03. The bundled manifest is v177 with 512 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained. Browser-only physical IO, uncertain-write no-retry and inert retained startup remain unchanged.

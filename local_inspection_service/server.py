@@ -1945,6 +1945,7 @@ _plc_station_service = PlcStationService(
         plc_web_serial_station_from_request=lambda: plc_web_serial_station_from_request,
     ),
     policy=StationPolicy(
+        clock=lambda: time.time,
         PlcConfigError=lambda: PlcConfigError,
         HTTPException=lambda: HTTPException,
         DEFAULT_WEB_SERIAL_CONFIG=lambda: DEFAULT_WEB_SERIAL_CONFIG,
@@ -2075,33 +2076,7 @@ def plc_web_serial_release_lease(station_id: str, request: PlcWorkstationLeaseHe
     return _plc_lease_maintenance.release(station_id, request)
 
 
-def _plc_web_serial_require_active_lease(
-    state: dict[str, dict[str, Any] | None],
-    session_id: str,
-    lease_epoch: int | None = None,
-) -> tuple[dict[str, Any], dict[str, Any], int]:
-    station = _plc_web_serial_record(state.get("station"))
-    lease = _plc_web_serial_record(state.get("lease"))
-    now = int((state.get("clock") or {}).get("now") or time.time())
-    user_id = str((current_auth_user() or {}).get("id") or "")
-    if not station or not lease:
-        raise PlcConfigError("plc_workstation_lease_missing")
-    valid = (
-        lease.get("session_id") == session_id
-        and lease.get("owner_user_id") == user_id
-        and lease.get("state") == "active"
-        and int(lease.get("expires_at") or 0) > now
-        and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
-        and lease.get("bundle_version") == WEB_SERIAL_PROTOCOL_VERSION
-    )
-    if lease_epoch is not None:
-        valid = valid and int(lease.get("lease_epoch") or -1) == int(lease_epoch)
-    if not valid:
-        raise PlcConfigError("plc_workstation_lease_fenced")
-    config = migrate_web_serial_config(station.get("config") if isinstance(station.get("config"), dict) else {})
-    if not config["enabled"]:
-        raise PlcConfigError("plc_workstation_disabled")
-    return station, lease, now
+_plc_web_serial_require_active_lease = _plc_station_service._plc_web_serial_require_active_lease
 
 
 from .plc.diagnostic_state import DiagnosticState as _PlcDiagnosticState
@@ -2299,172 +2274,99 @@ PLC_CAPTURE_POLL_SECONDS = 0.2
 PLC_CAPTURE_EVENT_TTL_SECONDS = 1.0
 PLC_CAPTURE_PROCESSING_TTL_SECONDS = max(180.0, PLC_WORKER_TOTAL_TIMEOUT_SECONDS + 60.0)
 _plc_process_owner_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex}"
-_plc_owner_heartbeat_lock = threading.Lock()
-_plc_owner_heartbeat_thread: threading.Thread | None = None
+from .plc.legacy_workers import LegacyPlcWorkers, LegacyHeartbeatCapabilities, LegacyLoopCapabilities
+
+_legacy_plc_workers = LegacyPlcWorkers(
+    heartbeat=LegacyHeartbeatCapabilities(
+        repository=lambda: runtime_postgres_repository_or_none,
+        config=lambda: load_config,
+        namespace=lambda: raw_plc_namespace,
+        renew=lambda: plc_claim_or_renew_io_owner,
+        seconds=lambda: PLC_IO_OWNER_HEARTBEAT_SECONDS,
+    ),
+    loops=LegacyLoopCapabilities(
+        reconcile=lambda: plc_reconcile_pending_dispatches_once,
+        poll=lambda: plc_capture_poll_once,
+        seconds=lambda: PLC_CAPTURE_POLL_SECONDS,
+    ),
+)
 
 
-def plc_pg_coordination_available() -> bool:
-    repository = runtime_postgres_repository_or_none()
-    # Generic namespace CAS is not enough to fence physical I/O across hosts.
-    # Production stays closed until the repository supplies a DB-clock, atomic
-    # owner+attempt transition primitive reviewed against the real deployment.
-    return repository is not None and callable(
-        getattr(repository, "mutate_plc_fenced_attempt_with_db_time", None)
-    )
+from .plc.legacy_activation import LegacyActivationPolicy, LegacyActivationSources, LegacyActivationChecks
+
+_legacy_plc_activation = LegacyActivationPolicy(
+    sources=LegacyActivationSources(
+        repository=lambda: runtime_postgres_repository_or_none,
+        transport=lambda: _plc_transport_factory,
+        identity=lambda: _request_user,
+        getenv=lambda: os.getenv,
+        canonical=lambda: _plc_canonical,
+    ),
+    checks=LegacyActivationChecks(
+        coordination=lambda: plc_pg_coordination_available,
+        fingerprint=lambda: plc_profile_fingerprint,
+        device=lambda: plc_device_profile_verified,
+        read=lambda: plc_read_profile_verified,
+        serial=lambda: plc_serial_dependency_available,
+    ),
+)
+
+plc_pg_coordination_available = _legacy_plc_activation.plc_pg_coordination_available
 
 
-def plc_profile_fingerprint(settings: dict[str, Any], *, include_read: bool) -> str:
-    fields = [
-        "protocol", "checksum_mode", "serial_port", "baudrate", "parity",
-        "data_bits", "stop_bits", "result_register", "output_control_point",
-    ]
-    if include_read:
-        fields.extend(["capture_input_register", "capture_trigger_value"])
-    material = {field: settings.get(field) for field in fields}
-    return hashlib.sha256(_plc_canonical(material).encode("ascii")).hexdigest()
+plc_profile_fingerprint = _legacy_plc_activation.plc_profile_fingerprint
 
 
-def plc_device_profile_verified(settings: dict[str, Any] | None = None) -> bool:
-    if _plc_transport_factory is not None:
-        return True
-    expected = str(os.getenv("VANTALINE_PLC_DEVICE_PROFILE_FINGERPRINT") or "").strip().lower()
-    return bool(settings is not None and expected and hmac.compare_digest(expected, plc_profile_fingerprint(settings, include_read=False)))
+plc_device_profile_verified = _legacy_plc_activation.plc_device_profile_verified
 
 
-def plc_read_profile_verified(settings: dict[str, Any] | None = None) -> bool:
-    if _plc_transport_factory is not None:
-        return True
-    expected = str(os.getenv("VANTALINE_PLC_READ_PROFILE_FINGERPRINT") or "").strip().lower()
-    return bool(settings is not None and expected and hmac.compare_digest(expected, plc_profile_fingerprint(settings, include_read=True)))
+plc_read_profile_verified = _legacy_plc_activation.plc_read_profile_verified
 
 
-def plc_serial_dependency_available() -> bool:
-    if _plc_transport_factory is not None and _request_user.get() is not None:
-        return True
-    try:
-        import serial  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError:
-        return False
-    return True
+plc_serial_dependency_available = _legacy_plc_activation.plc_serial_dependency_available
 
 
-def plc_activation_errors(settings: dict[str, Any]) -> list[dict[str, str]]:
-    if not settings.get("enabled"):
-        return []
-    errors: list[dict[str, str]] = []
-    if not plc_pg_coordination_available():
-        errors.append({"code": "plc_pg_coordination_unavailable", "message": "PostgreSQL PLC 多实例协调不可用"})
-    if not plc_serial_dependency_available():
-        errors.append({"code": "plc_serial_dependency_missing", "message": "生产部署未安装锁定版本的 pyserial"})
-    if not plc_device_profile_verified(settings):
-        errors.append({"code": "plc_device_profile_unverified", "message": "现场 PLC 型号、地址范围和写协议尚未验证"})
-    if settings.get("capture_trigger_enabled") and not plc_read_profile_verified(settings):
-        errors.append({"code": "plc_read_profile_unverified", "message": "现场 PLC 输入寄存器读取帧和字节序尚未验证"})
-    return errors
+plc_activation_errors = _legacy_plc_activation.plc_activation_errors
 
 
-def mutate_plc_runtime_coordination(mutator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
-    """Mutate only the small PLC runtime row; never rewrite the dispatch audit list on heartbeats."""
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        values = repository.mutate_app_config_namespace(
-            (PLC_RUNTIME_COORDINATION_KEY,),
-            lambda rows: _mutate_plc_runtime_rows(rows, mutator),
-            updated_at=int(time.time()),
-        )
-        value = values.get(PLC_RUNTIME_COORDINATION_KEY)
-        return copy.deepcopy(value) if isinstance(value, dict) else {}
+from .plc.legacy_coordination import LegacyRuntimeCoordination, LegacyCoordinationStorage, LegacyCoordinationPolicy
 
-    result: dict[str, Any] = {}
-    def mutate(config: dict[str, Any]) -> None:
-        nonlocal result
-        current = config.get(PLC_RUNTIME_COORDINATION_KEY)
-        state = copy.deepcopy(current) if isinstance(current, dict) else {}
-        mutator(state)
-        config[PLC_RUNTIME_COORDINATION_KEY] = state
-        result = copy.deepcopy(state)
-    mutate_app_config_atomically(mutate)
-    return result
+_legacy_plc_coordination = LegacyRuntimeCoordination(
+    storage=LegacyCoordinationStorage(
+        repository=lambda: runtime_postgres_repository_or_none,
+        mutate_config=lambda: mutate_app_config_atomically,
+        load_config=lambda: load_config,
+        mutate_rows=lambda: _mutate_plc_runtime_rows,
+        mutate_runtime=lambda: mutate_plc_runtime_coordination,
+        start_heartbeat=lambda: plc_start_owner_heartbeat,
+    ),
+    policy=LegacyCoordinationPolicy(
+        runtime_key=lambda: PLC_RUNTIME_COORDINATION_KEY,
+        receipts_key=lambda: PLC_CAPTURE_RESULTS_KEY,
+        process_id=lambda: _plc_process_owner_id,
+        lease_seconds=lambda: PLC_IO_OWNER_LEASE_SECONDS,
+        quarantine_seconds=lambda: PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS,
+        clock=lambda: time.time,
+    ),
+)
 
 
-def plc_completed_capture_receipt(trigger_id: str) -> dict[str, Any] | None:
-    receipts = load_config().get(PLC_CAPTURE_RESULTS_KEY)
-    receipt = receipts.get(trigger_id) if isinstance(receipts, dict) else None
-    return copy.deepcopy(receipt) if isinstance(receipt, dict) else None
+mutate_plc_runtime_coordination = _legacy_plc_coordination.mutate_plc_runtime_coordination
 
 
-def _mutate_plc_runtime_rows(rows: dict[str, Any], mutator: Callable[[dict[str, Any]], None]) -> None:
-    current = rows.get(PLC_RUNTIME_COORDINATION_KEY)
-    state = copy.deepcopy(current) if isinstance(current, dict) else {}
-    mutator(state)
-    rows[PLC_RUNTIME_COORDINATION_KEY] = state
+plc_completed_capture_receipt = _legacy_plc_coordination.plc_completed_capture_receipt
 
 
-def plc_claim_or_renew_io_owner() -> dict[str, Any] | None:
-    now = time.time()
-    claimed: dict[str, Any] | None = None
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal claimed
-        owner = state.get("io_owner") if isinstance(state.get("io_owner"), dict) else {}
-        owner_id = str(owner.get("owner_id") or "")
-        expires_at = float(owner.get("expires_at") or 0.0)
-        quarantine_until = float(owner.get("quarantine_until") or 0.0)
-        if owner_id == _plc_process_owner_id:
-            epoch = int(owner.get("epoch") or 1)
-        elif expires_at <= now and quarantine_until <= now:
-            epoch = int(owner.get("epoch") or 0) + 1
-        else:
-            return
-        claimed = {
-            "owner_id": _plc_process_owner_id,
-            "epoch": epoch,
-            "heartbeat_at": now,
-            "expires_at": now + PLC_IO_OWNER_LEASE_SECONDS,
-            "quarantine_until": now + PLC_IO_OWNER_LEASE_SECONDS + PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS,
-        }
-        state["io_owner"] = copy.deepcopy(claimed)
-    mutate_plc_runtime_coordination(mutate)
-    if claimed is not None and runtime_postgres_repository_or_none() is not None:
-        plc_start_owner_heartbeat(int(claimed["epoch"]))
-    return claimed
+_mutate_plc_runtime_rows = _legacy_plc_coordination._mutate_plc_runtime_rows
 
 
-def plc_start_owner_heartbeat(epoch: int) -> None:
-    global _plc_owner_heartbeat_thread
-    with _plc_owner_heartbeat_lock:
-        if _plc_owner_heartbeat_thread is not None and _plc_owner_heartbeat_thread.is_alive():
-            return
-        def heartbeat() -> None:
-            while True:
-                time.sleep(PLC_IO_OWNER_HEARTBEAT_SECONDS)
-                try:
-                    if runtime_postgres_repository_or_none() is None:
-                        return
-                    current = load_config()
-                    raw = raw_plc_namespace(current)
-                    if not isinstance(raw, dict) or not bool(raw.get("enabled")):
-                        return
-                    renewed = plc_claim_or_renew_io_owner()
-                    if renewed is None or int(renewed.get("epoch") or 0) != epoch:
-                        return
-                except Exception:
-                    return
-        _plc_owner_heartbeat_thread = threading.Thread(
-            target=heartbeat,
-            name="plc-io-owner-heartbeat",
-            daemon=True,
-        )
-        _plc_owner_heartbeat_thread.start()
+plc_claim_or_renew_io_owner = _legacy_plc_coordination.plc_claim_or_renew_io_owner
 
 
-def plc_current_process_owns_io(epoch: int | None = None) -> bool:
-    current = load_config().get(PLC_RUNTIME_COORDINATION_KEY)
-    owner = current.get("io_owner") if isinstance(current, dict) and isinstance(current.get("io_owner"), dict) else {}
-    return bool(
-        owner.get("owner_id") == _plc_process_owner_id
-        and float(owner.get("expires_at") or 0.0) > time.time()
-        and (epoch is None or int(owner.get("epoch") or 0) == epoch)
-    )
+plc_start_owner_heartbeat = _legacy_plc_workers.plc_start_owner_heartbeat
+
+
+plc_current_process_owns_io = _legacy_plc_coordination.plc_current_process_owns_io
 
 
 from .plc.plc_capture_state import PlcCaptureState
@@ -2538,143 +2440,56 @@ def plc_finish_triggered_analysis(trigger_id: str, session_id: str, user_id: str
     return _plc_capture_state.plc_finish_triggered_analysis(trigger_id, session_id, user_id, result, error)
 
 
-_plc_capture_poller_lock = threading.Lock()
-_plc_capture_poller_thread: threading.Thread | None = None
-_plc_dispatch_reconciler_lock = threading.Lock()
-_plc_dispatch_reconciler_thread: threading.Thread | None = None
 
 
-def plc_reconcile_pending_dispatches_once() -> dict[str, Any] | None:
-    """Let the fenced I/O owner adopt one durable dispatch that provably never wrote."""
-    config = load_config()
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(config))
-    except PlcConfigError:
-        return None
-    if not settings["enabled"] or plc_activation_errors(settings):
-        return None
-    owner = plc_claim_or_renew_io_owner()
-    if owner is None:
-        return None
-    for raw_record in plc_dispatch_audit_records(config):
-        try:
-            record = verify_persisted_plc_dispatch(raw_record)
-        except PlcDispatchStateConflict:
-            continue
-        if not plc_dispatch_is_pristine_queue(record):
-            continue
-        blocker = plc_dispatch_adoption_blocker(
-            record,
-            settings=settings,
-            generation=int(config.get(PLC_CONTROL_GENERATION_KEY) or 0),
-        )
-        if blocker:
-            if blocker == "version_not_adoptable":
-                continue
-            reason = (
-                "plc_dispatch_queue_timeout"
-                if blocker in {"deadline_missing", "deadline_expired"}
-                else "cancelled_after_config_change"
-            )
-            return plc_finalize_dispatch(
-                str(record.get("dispatch_id") or ""),
-                expected_version=int(record.get("state_version") or 0),
-                reason=reason,
-            )
-        result = {
-            "request_id": str(record.get("request_id") or ""),
-            "passed": bool(record.get("passed")),
-        }
-        return _run_queued_plc_dispatch(
-            result,
-            source=str(record.get("source") or ""),
-            fingerprint=str(record.get("detection_identity") or ""),
-        ).get("plc_sync")
-    return None
+from .plc.legacy_operations import (
+    LegacyPlcOperations, LegacyOperationConfiguration, LegacyOperationOwnership,
+    LegacyDispatchIteration, LegacyCaptureIteration,
+)
+
+_legacy_plc_operations = LegacyPlcOperations(
+    configuration=LegacyOperationConfiguration(
+        load=lambda: load_config,
+        normalize=lambda: normalize_plc_config,
+        namespace=lambda: raw_plc_namespace,
+        error=lambda: PlcConfigError,
+        activation=lambda: plc_activation_errors,
+        generation_key=lambda: PLC_CONTROL_GENERATION_KEY,
+    ),
+    ownership=LegacyOperationOwnership(
+        claim=lambda: plc_claim_or_renew_io_owner,
+        owns=lambda: plc_current_process_owns_io,
+    ),
+    dispatch=LegacyDispatchIteration(
+        records=lambda: plc_dispatch_audit_records,
+        verify=lambda: verify_persisted_plc_dispatch,
+        conflict=lambda: PlcDispatchStateConflict,
+        pristine=lambda: plc_dispatch_is_pristine_queue,
+        blocker=lambda: plc_dispatch_adoption_blocker,
+        finalize=lambda: plc_finalize_dispatch,
+        run=lambda: _run_queued_plc_dispatch,
+    ),
+    capture=LegacyCaptureIteration(
+        pending=lambda: _plc_write_pending,
+        slots=lambda: _plc_dispatch_slots,
+        read=lambda: read_d_register_value,
+        transport=lambda: _plc_transport_factory,
+        disarm=lambda: plc_capture_disarm,
+        observe=lambda: plc_apply_capture_observation,
+    ),
+)
 
 
-def start_plc_dispatch_reconciler() -> None:
-    global _plc_dispatch_reconciler_thread
-    with _plc_dispatch_reconciler_lock:
-        if _plc_dispatch_reconciler_thread is not None and _plc_dispatch_reconciler_thread.is_alive():
-            return
-        def reconcile() -> None:
-            while True:
-                try:
-                    plc_reconcile_pending_dispatches_once()
-                except Exception:
-                    pass
-                time.sleep(PLC_CAPTURE_POLL_SECONDS)
-        _plc_dispatch_reconciler_thread = threading.Thread(
-            target=reconcile,
-            name="plc-dispatch-reconciler",
-            daemon=True,
-        )
-        _plc_dispatch_reconciler_thread.start()
+plc_reconcile_pending_dispatches_once = _legacy_plc_operations.plc_reconcile_pending_dispatches_once
 
 
-def plc_capture_poll_once() -> dict[str, Any] | None:
-    config = load_config()
-    generation = int(config.get(PLC_CONTROL_GENERATION_KEY) or 0)
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(config))
-    except PlcConfigError:
-        return None
-    if not settings["enabled"] or not settings["capture_trigger_enabled"] or plc_activation_errors(settings):
-        return None
-    owner = plc_claim_or_renew_io_owner()
-    if owner is None:
-        return None
-    owner_epoch = int(owner["epoch"])
-    if _plc_write_pending.is_set() or not _plc_dispatch_slots.acquire(blocking=False):
-        return None
-    try:
-        if _plc_write_pending.is_set() or not plc_current_process_owns_io(owner_epoch):
-            return None
-        read_settings = {**settings, "timeout": min(float(settings["timeout"]), 0.15)}
-        value = read_d_register_value(
-            read_settings,
-            settings["capture_input_register"],
-            transport_factory=_plc_transport_factory,
-        )
-    except Exception as exc:
-        plc_capture_disarm(f"read_failed:{type(exc).__name__}")
-        return None
-    finally:
-        _plc_dispatch_slots.release()
-    current = load_config()
-    if (
-        int(current.get(PLC_CONTROL_GENERATION_KEY) or 0) != generation
-        or not plc_current_process_owns_io(owner_epoch)
-    ):
-        plc_capture_disarm("stale_read_discarded")
-        return None
-    return plc_apply_capture_observation(
-        value,
-        generation=generation,
-        owner_epoch=owner_epoch,
-        trigger_value=int(settings["capture_trigger_value"]),
-    )
+start_plc_dispatch_reconciler = _legacy_plc_workers.start_plc_dispatch_reconciler
 
 
-def start_plc_capture_poller() -> None:
-    global _plc_capture_poller_thread
-    with _plc_capture_poller_lock:
-        if _plc_capture_poller_thread is not None and _plc_capture_poller_thread.is_alive():
-            return
-        def poll() -> None:
-            while True:
-                try:
-                    plc_capture_poll_once()
-                except Exception:
-                    pass
-                time.sleep(PLC_CAPTURE_POLL_SECONDS)
-        _plc_capture_poller_thread = threading.Thread(
-            target=poll,
-            name="plc-capture-input-poller",
-            daemon=True,
-        )
-        _plc_capture_poller_thread.start()
+plc_capture_poll_once = _legacy_plc_operations.plc_capture_poll_once
+
+
+start_plc_capture_poller = _legacy_plc_workers.start_plc_capture_poller
 
 
 @app.on_event("startup")
@@ -2691,30 +2506,36 @@ def plc_config_request_payload(request: PlcConfigRequest) -> dict[str, Any]:
     return request.dict(exclude_none=True)
 
 
-def plc_dispatch_audit_records(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    current = config if isinstance(config, dict) else load_config()
-    records = current.get("plc_dispatches") if isinstance(current.get("plc_dispatches"), list) else []
-    return [dict(item) for item in records if isinstance(item, dict)]
+from .plc.legacy_records import LegacyDispatchRecords, DispatchRecordSources, DispatchRecordPolicy
+
+_legacy_plc_records = LegacyDispatchRecords(
+    sources=DispatchRecordSources(
+        config=lambda: load_config,
+        namespace=lambda: raw_plc_namespace,
+        sanitize=lambda: public_path_sanitized,
+        records=lambda: plc_dispatch_audit_records,
+        existing=lambda: plc_dispatch_existing,
+        verify=lambda: verify_persisted_plc_dispatch,
+    ),
+    policy=DispatchRecordPolicy(
+        absent=lambda: PLC_CONFIG_ABSENT,
+        guard=lambda: _config_io_lock,
+        conflict=lambda: PlcDispatchStateConflict,
+        clock=lambda: time.time,
+    ),
+)
 
 
-def raw_plc_namespace(config: dict[str, Any]) -> Any:
-    return config["plc"] if "plc" in config else PLC_CONFIG_ABSENT
+plc_dispatch_audit_records = _legacy_plc_records.plc_dispatch_audit_records
 
 
-def plc_config_audit_snapshot(config: dict[str, Any]) -> dict[str, Any]:
-    raw = raw_plc_namespace(config)
-    if isinstance(raw, dict):
-        return public_path_sanitized(dict(raw))
-    if raw is PLC_CONFIG_ABSENT:
-        return {"namespace_present": False, "enabled": False}
-    return {"namespace_present": True, "namespace_valid": False, "value_type": type(raw).__name__}
+raw_plc_namespace = _legacy_plc_records.raw_plc_namespace
 
 
-def plc_dispatch_existing(dispatch_id: str) -> dict[str, Any] | None:
-    for record in reversed(plc_dispatch_audit_records()):
-        if str(record.get("dispatch_id") or "") == dispatch_id:
-            return record
-    return None
+plc_config_audit_snapshot = _legacy_plc_records.plc_config_audit_snapshot
+
+
+plc_dispatch_existing = _legacy_plc_records.plc_dispatch_existing
 
 
 mutate_app_config_atomically = _app_config_store.mutate_app_config_atomically
@@ -2777,55 +2598,10 @@ from .plc.event_commands import (
 
 
 
-def get_validated_idempotent_dispatch(
-    *, source: str, request_id: str, passed: bool, fingerprint: str
-) -> dict[str, Any] | None:
-    material = json.dumps(
-        {"source": source.strip(), "request_id": request_id, "fingerprint": fingerprint},
-        sort_keys=True,
-        ensure_ascii=True,
-    )
-    dispatch_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
-    with _config_io_lock:
-        existing = plc_dispatch_existing(dispatch_id)
-    if existing is None:
-        return None
-    verified = verify_persisted_plc_dispatch(existing)
-    if not (
-        verified.get("source") == source.strip()
-        and verified.get("request_id") == request_id
-        and verified.get("passed") is passed
-        and verified.get("detection_identity") == fingerprint
-    ):
-        raise PlcDispatchStateConflict("create_dispatch_identity_conflict", verified)
-    return verified
+get_validated_idempotent_dispatch = _legacy_plc_records.get_validated_idempotent_dispatch
 
 
-def plc_dispatch_conflict_response(
-    conflict: PlcDispatchStateConflict,
-    *,
-    dispatch_id: str,
-    source: str,
-    request_id: str,
-    passed: bool,
-) -> dict[str, Any]:
-    authoritative = dict(conflict.authoritative)
-    return {
-        **authoritative,
-        "dispatch_id": dispatch_id,
-        "source": source,
-        "request_id": request_id,
-        "passed": passed,
-        "duplicate": False,
-        "status": "failed",
-        "error_code": conflict.reason,
-        "audit_status": "state_conflict",
-        "attempted": bool(authoritative.get("attempted")),
-        "worker_done": True,
-        "worker_continues": False,
-        "message": "Stored PLC dispatch requires migration or manual corruption review; no I/O was attempted",
-        "updated_at": int(time.time()),
-    }
+plc_dispatch_conflict_response = _legacy_plc_records.plc_dispatch_conflict_response
 
 
 from .plc.dispatch_mutations import PlcDispatchMutations

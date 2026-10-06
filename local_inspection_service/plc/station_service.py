@@ -354,3 +354,32 @@ class PlcStationService:
         if not record:
             raise self.policy.PlcConfigError()("plc_workstation_not_found")
         return self.projection.plc_web_serial_station_payload()(record)
+
+    def _plc_web_serial_require_active_lease(
+        self,
+        state: dict[str, dict[str, Any] | None],
+        session_id: str,
+        lease_epoch: int | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any], int]:
+        station = self.storage._plc_web_serial_record()(state.get("station"))
+        lease = self.storage._plc_web_serial_record()(state.get("lease"))
+        now = int((state.get("clock") or {}).get("now") or self.policy.clock()())
+        user_id = str((self.identity.current_auth_user()() or {}).get("id") or "")
+        if not station or not lease:
+            raise self.policy.PlcConfigError()("plc_workstation_lease_missing")
+        valid = (
+            lease.get("session_id") == session_id
+            and lease.get("owner_user_id") == user_id
+            and lease.get("state") == "active"
+            and int(lease.get("expires_at") or 0) > now
+            and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
+            and lease.get("bundle_version") == self.policy.WEB_SERIAL_PROTOCOL_VERSION()
+        )
+        if lease_epoch is not None:
+            valid = valid and int(lease.get("lease_epoch") or -1) == int(lease_epoch)
+        if not valid:
+            raise self.policy.PlcConfigError()("plc_workstation_lease_fenced")
+        config = self.policy.migrate_web_serial_config()(station.get("config") if isinstance(station.get("config"), dict) else {})
+        if not config["enabled"]:
+            raise self.policy.PlcConfigError()("plc_workstation_disabled")
+        return station, lease, now
