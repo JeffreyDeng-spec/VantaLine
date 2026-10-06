@@ -45,8 +45,10 @@ import requests
 from PIL import Image, ImageOps
 from .storage.artifacts.images import ImageFiles
 from .storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
-_image_files = ImageFiles(lambda: cv2, lambda: Image)
+from .storage.artifacts.composition import create_artifact_composition
+_artifact_composition = create_artifact_composition(lambda: os.environ, lambda: cv2, lambda: Image)
+_business_files = _artifact_composition.files
+_image_files = _artifact_composition.images
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware

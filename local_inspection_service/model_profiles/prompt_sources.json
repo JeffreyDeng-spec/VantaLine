@@ -1,5 +1,5 @@
 {
-  "version": 235,
+  "version": 236,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -528,6 +528,7 @@
     "training/background_file_ports.py",
     "training/file_ports.py",
     "agent/file_ports.py",
-    "text_inspection/file_ports.py"
+    "text_inspection/file_ports.py",
+    "storage/artifacts/composition.py"
   ]
 }
