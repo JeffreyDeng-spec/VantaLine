@@ -1093,3 +1093,13 @@ Accessory policies extend existing catalog/physical-dimension modules under mani
 Manifest v175 tracks four accessory workflow additions to already registered source modules. Require original/candidate boundary tests and existing domain regressions, exact-head CI and independent release acceptance; no algorithm or performance change is included.
 
 This accessory candidate retains the native-history/readiness implementation and detection composition from actual main dcb4805, and follows analysis candidate bb3afa6. Actual-main rebind and analysis release acceptance must precede publication. Accessory production/tests and the ordered entry match reviewed c43118e. The bundled manifest is v175 with 504 unique sources. Original history28 and reader19 benchmark protocols remain mandatory; prior recorded performance failures are retained.
+
+Image worker runtime ownership ships with original callers and manifest v181. Require concurrent-start and job-management contracts, exact-head hosted CI and full-release acceptance. The structural move does not demonstrate production workload drainage.
+
+Pipeline runtime ownership ships with existing orchestration and source manifest v181. Require full list/advance/registry regressions, exact CI and whole-release acceptance. No production concurrency or recovery improvement is inferred solely from moving state.
+
+Auto-optimization owner and all consumers ship together under manifest v181. Require runtime/consumer regression, real PostgreSQL state-store checks, exact-head CI and independent whole-release acceptance.
+
+The v181 source-manifest change removes temporary settings indirection without changing algorithms. Require direct-port composition tests, downstream behavior/identity and PostgreSQL regression, full exact-head CI, independent review and whole-release verification. Python entry-alias rebinding is deliberately no longer a consumer configuration mechanism.
+
+This background ownership integration follows the accepted reader-readiness source manifest and retains its prerequisite. The complete bundled manifest is v180 with 506 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remains mandatory; unpublished native-history aggregation is not included.

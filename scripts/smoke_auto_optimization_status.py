@@ -1,7 +1,7 @@
 """Original/candidate status projection and settings mutation contracts."""
 import ast
 from collections import Counter
-from dataclasses import fields
+from dataclasses import fields, replace
 import os
 from pathlib import Path
 import sys
@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get("VANTALINE_AUTO_STATUS_BASELINE_SOURCE")
 NAMES={"public_auto_optimize_state","auto_optimize_update_settings"}
 def create(bindings):
@@ -18,7 +19,7 @@ def create(bindings):
         return SimpleNamespace(**{n:ns[n] for n in NAMES}),lambda n,v:ns.__setitem__(n,v)
     from local_inspection_service.training.auto_optimization_status import AutoOptimizationStatus
     from local_inspection_service.training.auto_optimization_status_ports import AutoOptimizationStatusState,AutoOptimizationStatusPolicy
-    def ports(kind):return kind(**{f.name:(lambda name=f.name:bindings[name]) for f in fields(kind)})
+    def ports(kind):return kind(**{f.name:test_capability(bindings, f.name) for f in fields(kind)})
     service=AutoOptimizationStatus(ports(AutoOptimizationStatusState),ports(AutoOptimizationStatusPolicy))
     bindings["public_auto_optimize_state"]=service.public_auto_optimize_state
     return service,lambda n,v:bindings.__setitem__(n,v)
@@ -122,7 +123,7 @@ class StatusContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_status
         for port in (service.state,service.policy):
-            for field in fields(port):self.assertIs(getattr(port,field.name)(),getattr(server,field.name))
+            for field in fields(port):assert_capability_owner(self, port, field.name, server)
         for name,args,kw in [("public_auto_optimize_state",("t",),{"user":{"id":"a"}}),("auto_optimize_update_settings",("t",{}),{})]:
             expected=object();method=Mock(return_value=expected)
             with patch.object(server,"_auto_optimization_status",SimpleNamespace(**{name:method})):
@@ -135,7 +136,7 @@ class StatusContract(unittest.TestCase):
         async def request(user):
             with server._request_user.bind({"id":user}):return await run_in_threadpool(server.auto_optimize_update_settings,user,{})
         async def both():return await asyncio.gather(request("alpha"),request("beta"))
-        with patch.object(server,"load_auto_optimize_state",side_effect=load),patch.object(server,"save_auto_optimize_state",side_effect=save),patch.object(server,"default_auto_optimize_settings",return_value={"enabled":False}),patch.object(server,"auto_optimize_completed_model_id",return_value=""),patch.object(server,"current_auth_user",side_effect=lambda:server._request_user.get()),patch.object(server,"public_auto_optimize_state",side_effect=public):results=asyncio.run(both())
+        with patch.object(server,"load_auto_optimize_state",side_effect=load),patch.object(server,"save_auto_optimize_state",side_effect=save),patch.object(server,"_auto_optimization_status",replace(server._auto_optimization_status, policy=replace(server._auto_optimization_status.policy, default_auto_optimize_settings=lambda:{"enabled":False}))),patch.object(server,"auto_optimize_completed_model_id",return_value=""),patch.object(server,"current_auth_user",side_effect=lambda:server._request_user.get()),patch.object(server,"public_auto_optimize_state",side_effect=public):results=asyncio.run(both())
         self.assertEqual(results,[{"owner":"alpha"},{"owner":"beta"}]);self.assertCountEqual(saved,["alpha","beta"]);self.assertIsNone(server._request_user.get())
 
     @unittest.skipIf(BASELINE,"candidate-only import")

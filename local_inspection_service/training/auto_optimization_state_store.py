@@ -37,7 +37,7 @@ class AutoOptimizationStateStore:
                 state = {}
         if not isinstance(state, dict):
             state = {}
-        settings = {**self.policy.default_auto_optimize_settings()(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
+        settings = {**self.policy.default_auto_optimize_settings(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
         state.setdefault("task_id", clean_task_id)
         state.setdefault("created_at", int(time.time()))
         state.setdefault("updated_at", int(time.time()))

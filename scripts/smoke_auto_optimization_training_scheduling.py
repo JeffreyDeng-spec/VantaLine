@@ -13,6 +13,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock, patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_TRAINING_SCHEDULING_BASELINE_SOURCE')
 NAMES=('maybe_start_auto_optimize_training_locked','auto_optimize_training_check_worker','start_auto_optimize_training_check_worker')
 
@@ -25,7 +26,7 @@ def create(bindings):
         return SimpleNamespace(**{n:ns[n] for n in NAMES}),ns
     from local_inspection_service.training.auto_optimization_training_scheduling import AutoOptimizationTrainingScheduling
     from local_inspection_service.training.auto_optimization_training_scheduling_ports import SchedulingPolicy,SchedulingSubmission,SchedulingState
-    def ports(cls):return cls(**{f.name:lambda name=f.name:bindings[name] for f in fields(cls)})
+    def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
     service=AutoOptimizationTrainingScheduling(ports(SchedulingPolicy),ports(SchedulingSubmission),ports(SchedulingState))
     bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
 
@@ -128,7 +129,7 @@ class SchedulingContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_training_scheduling
         for group in (service.policy,service.submission,service.state):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            for f in fields(group):assert_capability_owner(self, group, f.name, server)
         for name,args in zip(NAMES,(({},),('t',2.0),('t',3.0))):
             mock=Mock(return_value=object());fn=getattr(server,name)
             if hasattr(fn,'__wrapped__'):fn=fn.__wrapped__

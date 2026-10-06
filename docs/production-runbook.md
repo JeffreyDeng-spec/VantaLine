@@ -1380,3 +1380,11 @@ Dashboard task ownership is a structural move without a new lock, task transitio
 Accessory selection and dimension relocation changes no storage, worker topology, provider or PLC behavior. Deploy and roll back complete releases, preserving task/model snapshots and existing accessory records.
 
 Accessory readiness/status/reference ownership changes no queue admission, subprocess or worker topology, retry policy, filesystem storage, model binding or PLC behavior. Existing partial mutation/save failure behavior is preserved. Deploy and roll back complete releases while retaining data and call evidence.
+
+Image worker state ownership does not split a process or introduce a shutdown/retry policy. Its thread and child-process bookkeeping remain process-local under the existing Web service control group. Deploy and rollback complete Web/label-worker releases with persistent job evidence intact.
+
+Pipeline registries remain process-local and reset under the existing Web restart/recovery policy. State ownership introduces no worker process, persistent schema or cancellation/retry policy. Restore full releases while retaining task/call evidence.
+
+Auto-optimization locks and thread registries remain local to the Web process with the existing restart behavior. This ownership change does not split training or image work, alter scheduling or introduce recovery retries. Restore only complete releases while retaining task/call evidence.
+
+Auto-optimization settings composition freezes only the chosen policy instance and its method capabilities; it does not freeze computed settings, user identity or database connections. There is no worker, thread, model or PLC topology change. Deploy and roll back complete releases preserving data and task evidence.

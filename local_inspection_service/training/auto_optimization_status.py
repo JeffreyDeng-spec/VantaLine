@@ -31,7 +31,7 @@ class AutoOptimizationStatus:
         shadow_runs = [run for run in state.get("shadow_runs") or [] if isinstance(run, dict)]
         agreements = [float(run.get("agreement") or 0.0) for run in shadow_runs if run.get("status") == "completed"]
         latest_dataset = next((item for item in state.get("datasets") or [] if isinstance(item, dict)), None)
-        settings = state.get("settings") if isinstance(state.get("settings"), dict) else self.policy.default_auto_optimize_settings()()
+        settings = state.get("settings") if isinstance(state.get("settings"), dict) else self.policy.default_auto_optimize_settings()
         sprite_pool = self.policy.auto_optimize_public_sprite_pool()(state)
         background_set_id = str(state.get("background_set_id") or "")
         environment_background = state.get("environment_background") if isinstance(state.get("environment_background"), dict) else {}
@@ -39,7 +39,7 @@ class AutoOptimizationStatus:
         dataset_synthetic_samples = sum(int((dataset or {}).get("synthetic_sample_count") or 0) for dataset in state.get("datasets") or [] if isinstance(dataset, dict))
         generated_synthetic_samples = sum(int((sample or {}).get("synthetic_count") or 0) for sample in samples if isinstance(sample, dict))
         synthetic_samples = max(dataset_synthetic_samples, generated_synthetic_samples)
-        samples_per_real_image = self.policy.auto_optimize_samples_per_real_image()(settings)
+        samples_per_real_image = self.policy.auto_optimize_samples_per_real_image(settings)
         for candidate in state.get("candidate_models") or []:
             if not isinstance(candidate, dict):
                 continue
@@ -49,14 +49,14 @@ class AutoOptimizationStatus:
                 candidate["progress"] = task.get("progress") or candidate.get("progress") or 0
                 candidate["note"] = task.get("note") or candidate.get("note") or ""
         latest_candidate = next((item for item in state.get("candidate_models") or [] if isinstance(item, dict)), None)
-        training_parameters = self.policy.auto_optimize_training_parameters()(settings)
+        training_parameters = self.policy.auto_optimize_training_parameters(settings)
         positive_samples = label_counts.get("trainable", 0)
         bbox_only_samples = label_counts.get("trainable_bbox_only", 0)
         negative_samples = label_counts.get("negative", 0)
         real_positive_source_count = positive_samples + bbox_only_samples
-        training_requirements = self.policy.auto_optimize_training_requirements()(settings, real_positive_source_count=real_positive_source_count)
-        negative_samples_per_real_image = self.policy.auto_optimize_negative_samples_per_real_image()(settings)
-        positive_derivatives_per_real_image = self.policy.auto_optimize_positive_derivatives_per_real_image()(settings)
+        training_requirements = self.policy.auto_optimize_training_requirements(settings, real_positive_source_count=real_positive_source_count)
+        negative_samples_per_real_image = self.policy.auto_optimize_negative_samples_per_real_image(settings)
+        positive_derivatives_per_real_image = self.policy.auto_optimize_positive_derivatives_per_real_image(settings)
         generated_negative_samples = real_positive_source_count * negative_samples_per_real_image
         projected_negative_training_samples = negative_samples + generated_negative_samples
         projected_real_bbox_training_samples = (positive_samples + bbox_only_samples) * self.policy.AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT()
@@ -110,7 +110,7 @@ class AutoOptimizationStatus:
     def auto_optimize_update_settings(self, task_id: str, request: Any) -> dict[str, Any]:
         with self.state._auto_optimize_lock():
             state = self.state.load_auto_optimize_state()(task_id)
-            settings = {**self.policy.default_auto_optimize_settings()(), **(state.get("settings") or {})}
+            settings = {**self.policy.default_auto_optimize_settings(), **(state.get("settings") or {})}
             payload = request.dict(exclude_unset=True) if hasattr(request, "dict") else dict(request or {})
             for key in ("enabled", "auto_promote"):
                 if key in payload and payload[key] is not None:

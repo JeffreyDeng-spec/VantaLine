@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_SYNTHETIC_BATCH_BASELINE_SOURCE')
 NAME='auto_optimize_generate_synthetic_batch_for_sample'
 
@@ -24,7 +25,7 @@ def create(bindings):
         return ns[NAME],ns
     from local_inspection_service.training.auto_optimization_synthetic_batch import AutoOptimizationSyntheticBatch
     from local_inspection_service.training.auto_optimization_synthetic_batch_ports import SyntheticBatchConfiguration,SyntheticBatchSprites,SyntheticBatchPublication
-    def ports(cls):return cls(**{f.name:lambda name=f.name:bindings[name] for f in fields(cls)})
+    def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
     return getattr(AutoOptimizationSyntheticBatch(ports(SyntheticBatchConfiguration),ports(SyntheticBatchSprites),ports(SyntheticBatchPublication)),NAME),bindings
 
 class BatchContract(unittest.TestCase):
@@ -111,7 +112,7 @@ class BatchContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_synthetic_batch
         for group in (service.configuration,service.sprites,service.publication):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            for f in fields(group):assert_capability_owner(self, group, f.name, server)
         mock=Mock(return_value=object());args=('task',{}, {})
         with patch.object(server,'_auto_optimization_synthetic_batch',SimpleNamespace(**{NAME:mock})):self.assertIs(getattr(server,NAME)(*args),mock.return_value)
         mock.assert_called_once_with(*args)

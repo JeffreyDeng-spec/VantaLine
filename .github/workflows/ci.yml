@@ -295,6 +295,10 @@ jobs:
           python scripts/smoke_analysis_composition.py --postgres
           python scripts/smoke_accessory_selection_dimensions.py
           python scripts/smoke_accessory_workflow_ownership.py
+          python scripts/smoke_image_worker_ownership.py
+          python scripts/smoke_pipeline_runtime_ownership.py
+          python scripts/smoke_auto_optimization_runtime_ownership.py
+          python scripts/smoke_auto_optimization_settings_composition.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py

@@ -21,8 +21,8 @@ class RenderSample(Protocol):
 @dataclass(frozen=True)
 class SyntheticBatchConfiguration:
     safe_background_set_id: Callable[[], Callable[[str], str]]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
-    auto_optimize_positive_derivatives_per_real_image: Callable[[], Callable[[Record], int]]
+    default_auto_optimize_settings: Callable[[], Record]
+    auto_optimize_positive_derivatives_per_real_image: Callable[[Record], int]
     AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY: Callable[[], str]
     _request_user: Callable[[], ContextVar[Record | None]]
     LEGACY_OWNER_ID: Callable[[], str]

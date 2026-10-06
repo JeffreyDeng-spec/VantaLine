@@ -85,7 +85,7 @@ class AutoOptimizationReadiness:
     def auto_optimize_stop_capture_for_model_locked(self, state: dict[str, Any], model_id: str, *, reason: str) -> bool:
         if not model_id:
             return False
-        settings = {**self.ports.default_auto_optimize_settings()(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
+        settings = {**self.ports.default_auto_optimize_settings(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
         changed = False
         if state.get("active_model_id") != model_id and settings.get("auto_promote", True):
             state["active_model_id"] = model_id

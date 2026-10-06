@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_SHADOW_EVALUATION_BASELINE_SOURCE')
 NAMES=('start_auto_optimize_shadow_worker','auto_optimize_shadow_worker','maybe_promote_auto_optimize_model_locked','cleanup_auto_optimize_retired_candidate_locked')
 
@@ -25,7 +26,7 @@ def create(bindings):
         return SimpleNamespace(**{n:ns[n] for n in NAMES}),ns
     from local_inspection_service.training.auto_optimization_shadow_evaluation import AutoOptimizationShadowEvaluation
     from local_inspection_service.training.auto_optimization_shadow_evaluation_ports import ShadowState,ShadowObservation,ShadowPromotion
-    def ports(cls):return cls(**{f.name:lambda name=f.name:bindings[name] for f in fields(cls)})
+    def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
     service=AutoOptimizationShadowEvaluation(ports(ShadowState),ports(ShadowObservation),ports(ShadowPromotion));bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
 
 class ShadowContract(unittest.TestCase):
@@ -116,7 +117,7 @@ class ShadowContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_shadow_evaluation
         for group in (service.state,service.observation,service.promotion):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            for f in fields(group):assert_capability_owner(self, group, f.name, server)
         for name,args,kwargs in zip(NAMES,(('t','s'),('t','s'),({},),({},'old')),({},{},{},{'keep_model_id':'new'})):
             mock=Mock(return_value=object());fn=getattr(server,name)
             if hasattr(fn,'__wrapped__'):fn=fn.__wrapped__

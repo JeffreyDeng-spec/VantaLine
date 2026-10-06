@@ -1,5 +1,5 @@
 {
-  "version": 175,
+  "version": 176,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -504,6 +504,9 @@
     "detection/camera_request_ports.py",
     "detection/rule_api.py",
     "analytics/analysis_composition.py",
-    "accessories/catalog.py"
+    "accessories/catalog.py",
+    "runtime/image_worker.py",
+    "pipeline/runtime_state.py",
+    "training/auto_optimization_runtime_state.py"
   ]
 }
