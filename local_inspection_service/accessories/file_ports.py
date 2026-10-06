@@ -74,3 +74,15 @@ class AccessoryProvenanceFiles(ExistingAccessoryFiles, Protocol):
 
 class AccessoryUploadFiles(Protocol):
     def copy_stream(self, destination: Path, source: BinaryIO, local_copy: Callable[..., Any]) -> Any: ...
+
+
+class AccessoryImageReader(Protocol):
+    def imread(self, filename: str, flags: int) -> Any: ...
+
+
+class AccessoryImageIO(AccessoryImageReader, Protocol):
+    def imwrite(self, filename: str, image: Any) -> bool: ...
+
+
+class ReferenceEvidenceFiles(ExistingAccessoryFiles, Protocol):
+    def read_bytes(self, path: Path) -> bytes: ...

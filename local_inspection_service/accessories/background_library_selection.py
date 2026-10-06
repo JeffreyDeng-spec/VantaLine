@@ -2,12 +2,14 @@
 from typing import Any, Callable
 from pathlib import Path
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import AccessoryImageReader, ExistingAccessoryFiles
 from .background_library_selection_ports import BackgroundOwnership, BackgroundCatalogSources, BackgroundCatalogPolicy, BackgroundMatchSources, BackgroundMatchFeatures
 
 class BackgroundCandidateCatalog:
-    def __init__(self, ownership: BackgroundOwnership, sources: BackgroundCatalogSources, policy: BackgroundCatalogPolicy) -> None:
+    def __init__(self, ownership: BackgroundOwnership, sources: BackgroundCatalogSources, policy: BackgroundCatalogPolicy, *, files: ExistingAccessoryFiles) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self._ownership = ownership
         self._sources = sources
         self._policy = policy
@@ -31,7 +33,7 @@ class BackgroundCandidateCatalog:
                 continue
             images = self._sources.images()(self._policy.directory() / clean_id)
             source = self._sources.resolve()(meta.get("source"))
-            if _image_files.files.exists(source) and source.suffix.lower() in self._policy.suffixes():
+            if self.files.exists(source) and source.suffix.lower() in self._policy.suffixes():
                 images = [source] + [path for path in images if path.resolve() != source.resolve()]
             for image_path in images[:8]:
                 candidates.append((clean_id, image_path, meta))
@@ -40,7 +42,10 @@ class BackgroundCandidateCatalog:
         return candidates
 
 class BackgroundLibraryMatcher:
-    def __init__(self, sources: BackgroundMatchSources, features: BackgroundMatchFeatures, threshold: Callable[[], float]) -> None:
+    def __init__(self, sources: BackgroundMatchSources, features: BackgroundMatchFeatures, threshold: Callable[[], float], *, images: AccessoryImageReader) -> None:
+        if images is None:
+            raise TypeError('images is required')
+        self.images = images
         self._sources = sources
         self._features = features
         self._threshold = threshold
@@ -51,7 +56,7 @@ class BackgroundLibraryMatcher:
             return None
         best: dict[str, Any] | None = None
         for set_id, image_path, meta in self._sources.candidates()(owner_id):
-            image = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
+            image = self.images.imread(str(image_path), cv2.IMREAD_COLOR)
             if image is None:
                 continue
             height, width = image.shape[:2]

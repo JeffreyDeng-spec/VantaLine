@@ -3179,10 +3179,11 @@ def build_object_view_plan(name: str) -> list[dict[str, Any]]:
 from .accessories.preview_assets import select_document_image_candidate as _select_document_image_candidate_impl
 from .accessories.preview_assets import PreviewAssetLoader as _PreviewAssetLoader
 from .accessories.preview_asset_ports import PreviewAssetPolicy as _PreviewAssetPolicy, PreviewAssetPaths as _PreviewAssetPaths, PreviewAssetOperations as _PreviewAssetOperations
+_accessory_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _preview_asset_loader = _PreviewAssetLoader(
     _PreviewAssetPolicy(root=lambda: ROOT, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PreviewAssetPaths(resolve=lambda: resolve_service_path),
-    _PreviewAssetOperations(default=lambda: default_asset_for_accessory, candidate=lambda: load_document_image_candidate, select=lambda: select_document_image_candidate, preview=lambda: load_preview_asset_with_metadata),
+    _PreviewAssetOperations(default=lambda: default_asset_for_accessory, candidate=lambda: load_document_image_candidate, select=lambda: select_document_image_candidate, preview=lambda: load_preview_asset_with_metadata), files=_business_files, images=_accessory_image_io
 )
 
 def default_asset_for_accessory(item: dict[str, Any]) -> Path | None:
@@ -3332,7 +3333,7 @@ _reference_evidence = _ReferenceEvidence(
     _ReferencePolicy(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, screens=lambda: CHROMA_SCREEN_OPTIONS),
     _ReferencePaths(resolve=lambda: resolve_service_path, jobs=lambda: candidate_image_jobs, default=lambda: default_asset_for_accessory, preferred=lambda: ai_profile_reference_paths, first_source=lambda: first_source_ai_reference_path, inventory=lambda: accessory_image_paths),
     _ReferenceContexts(uid=lambda: accessory_uid, bounded=lambda: bounded_text, context=lambda: image_reference_context, references=lambda: accessory_reference_image_contexts),
-    _ReferenceChroma(normalize=lambda: normalize_chroma_screen, mask=lambda: saturated_chroma_mask),
+    _ReferenceChroma(normalize=lambda: normalize_chroma_screen, mask=lambda: saturated_chroma_mask), files=_business_files, images=_accessory_image_io
 )
 
 def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
@@ -11001,12 +11002,13 @@ _background_plate_derivation = _BackgroundPlateDerivation(
     _PlateSources(pose_assets=lambda: agent_mcp_pose_reference_assets, contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PlatePolicy(time_budget=lambda: PIPELINE_BG_PLATE_TIME_BUDGET_S, max_side=lambda: PIPELINE_BG_PLATE_MAX_SIDE, max_radius=lambda: PIPELINE_BG_PLATE_MAX_INPAINT_RADIUS, mask_fraction=lambda: PIPELINE_BG_PLATE_INPAINT_MAX_MASK_FRAC),
     _BackgroundMasks(foreground=lambda: foreground_mask),
+    files=_business_files, images=_accessory_image_io,
 )
 _background_reference_signatures = _BackgroundReferenceSignatures(
     _SignatureSources(paths=lambda: object_photo_highlight_source_paths, limit=lambda: PHOTO_HIGHLIGHT_MAX_REFERENCE_IMAGES),
     _SignaturePolicy(max_patches=lambda: PIPELINE_BG_MATCH_MAX_SOURCE_PATCHES),
     _BackgroundMasks(foreground=lambda: foreground_mask),
-    _SignatureProjections(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature),
+    _SignatureProjections(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature), images=_accessory_image_io
 )
 
 def derive_background_plate_from_accessory(item: dict[str, Any], out_path: Path) -> Path | None:
@@ -11036,12 +11038,12 @@ from .accessories.background_library_selection_ports import BackgroundOwnership 
 _background_candidate_catalog = _BackgroundCandidateCatalog(
     _BackgroundOwnership(system=lambda: SYSTEM_OWNER_ID, legacy=lambda: LEGACY_OWNER_ID),
     _BackgroundCatalogSources(manifest=lambda: load_background_sets_manifest, directories=lambda: background_set_dirs, sanitize=lambda: safe_background_set_id, visible=lambda: background_set_visible_for_owner, images=lambda: image_file_list, resolve=lambda: resolve_service_path),
-    _BackgroundCatalogPolicy(directory=lambda: BACKGROUND_SETS_DIR, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, limit=lambda: PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES),
+    _BackgroundCatalogPolicy(directory=lambda: BACKGROUND_SETS_DIR, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, limit=lambda: PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES), files=_business_files
 )
 _background_library_matcher = _BackgroundLibraryMatcher(
     _BackgroundMatchSources(references=lambda: background_reference_signatures_from_accessory, candidates=lambda: background_library_image_candidates),
     _BackgroundMatchFeatures(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature, distance=lambda: background_signature_distance),
-    lambda: PIPELINE_BG_MATCH_DISTANCE_THRESHOLD,
+    lambda: PIPELINE_BG_MATCH_DISTANCE_THRESHOLD, images=_accessory_image_io
 )
 
 def background_set_visible_for_owner(meta: dict[str, Any], owner_id: str) -> bool:
