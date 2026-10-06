@@ -182,3 +182,5 @@ The shared training thread lifecycle now also owns the separately launched Codex
 Periodic transfer progress threads now have explicit admission, stop signals and bounded join ownership. Closing reporting does not terminate or replay RunPod/network work. The transfer caller continues to own its upload/download and final task state; the application shutdown hook is not enabled in this slice.
 
 Auto-optimization label, shadow and delayed-check Python threads now have explicit admission and drain ownership. Their algorithms, task guards and RunPod transport remain unchanged. Closing these owners waits for local thread/scope completion and is not a remote-job completion or cancellation signal.
+
+Automatic-mask executor tasks release local repository selections on the executor thread. This change retains the existing executor ContextVar behavior, mask batch limits and remote training behavior; local cleanup is not a remote completion guarantee.

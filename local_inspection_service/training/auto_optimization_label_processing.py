@@ -1,6 +1,7 @@
 """Automatic optimization label batch processing and worker startup."""
 from dataclasses import dataclass, field
 from typing import Any
+from collections.abc import Callable
 import threading
 from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 import time
@@ -100,7 +101,7 @@ class AutoOptimizationLabelProcessing:
                 results: list[dict[str, Any]] = []
                 with self.execution.ThreadPoolExecutor()(max_workers=len(pending_samples), thread_name_prefix=f"auto-opt-mask-{task_id}") as executor:
                     futures = [
-                        executor.submit(self.execution.auto_optimize_process_label_sample(), task_id, pending, dict(settings), model)
+                        executor.submit(self._scoped_sample(self.execution.auto_optimize_process_label_sample()), task_id, pending, dict(settings), model)
                         for pending in pending_samples
                     ]
                     for future in self.execution.as_completed()(futures):
@@ -141,6 +142,14 @@ class AutoOptimizationLabelProcessing:
                 state = self.state.load_auto_optimize_state()(task_id)
                 state["last_label_error"] = self.artifacts.bounded_text()(str(exc), 240)
                 self.state.save_auto_optimize_state()(state)
+
+    def _scoped_sample(self, selected: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+        # Connections are released on the executor thread before completion.
+        # Preserve the executor's existing ContextVar behavior.
+        def run(*args, **kwargs):
+            with self.runtime.scope():
+                return selected(*args, **kwargs)
+        return run
 
     def close(self, timeout: float) -> bool:
         return self.runtime.close(timeout)

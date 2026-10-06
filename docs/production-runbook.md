@@ -1444,3 +1444,5 @@ TransferProgress.close(timeout) may return false while an update callback, const
 Auto-optimization starter close results certify local Python thread and repository-scope exit only. They do not cancel or settle training subprocesses or remote calls. Future shutdown integration must drain upstream callers before these owners and their dependencies; that application hook is not enabled by this change.
 
 The foundational graph builder is inert. Existing server import-time directory creation and actual lifecycle callbacks remain in their prior positions, so this step does not enable a second production app or a second worker role. It changes no connection cleanup policy or deployment topology.
+
+Automatic-mask Futures now finish after their repository scope exits. This closes the child-executor cleanup gap within the existing joined parent workflow; it does not prove remote model settlement, model-context propagation or application-wide shutdown. Repository close retains its established best-effort error handling.
