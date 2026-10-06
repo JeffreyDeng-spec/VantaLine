@@ -1372,3 +1372,5 @@ Camera orchestration extraction changes no dispatch transaction, browser lease, 
 Detection rule domain composition does not change worker topology, authorization, database lifecycle or transactions. Config and identity providers are called per request. A duplicate domain installation fails before either rule route is added. Independent test apps prove this domain boundary only; the complete Web app still has remaining global assembly. Deploy and roll back whole releases, preserving records and model snapshots.
 
 Duplicate-route preflight is not a transaction around arbitrary FastAPI registration failures. If application construction fails during route installation, discard that partially built application. No retry or cleanup guarantee is added.
+
+Analysis graph composition preserves all local RLock scopes, PostgreSQL writes/transactions, list projections, publication ordering and partial failures. It adds no cross-process guard, cache invalidation or stronger consistency. Deploy and roll back complete releases; retain data, task snapshots and call evidence.

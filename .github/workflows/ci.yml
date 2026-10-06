@@ -292,6 +292,7 @@ jobs:
           python scripts/smoke_mcp_runtime_policy.py
           python scripts/smoke_image_payload_codec.py
           python scripts/smoke_detection_rule_composition.py
+          python scripts/smoke_analysis_composition.py --postgres
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
