@@ -249,18 +249,18 @@ class IntegrationTests(unittest.TestCase):
         outputs = self.root / "outputs"
         outputs.mkdir(exist_ok=True)
         app = FastAPI()
-        # Execute the actual application's small ownership predicate, avoiding
-        # importing its unrelated model/worker startup in this HTTP contract.
-        source = ast.parse((Path(__file__).resolve().parents[1] / "local_inspection_service/server.py").read_text())
-        function = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == "output_path_visible_to_user")
-        scope = {"OUTPUT_DIR": outputs, "PurePosixPath": PurePosixPath,
-                 "Any": object, "user_is_admin": lambda u: u.get("role") == "admin"}
-        exec(compile(ast.Module(body=[function], type_ignores=[]), "actual_output_ownership", "exec"), scope)
+        from local_inspection_service.auth.account_projections import AccountProjections
+        from local_inspection_service.auth.account_projection_ports import AccountAccess, AccountConfig, AccountModels, AccountMedia
+        from dataclasses import fields
+        bindings = {"OUTPUT_DIR": outputs, "user_is_admin": lambda u: u.get("role") == "admin"}
+        def ports(cls):
+            return cls(**{field.name: lambda name=field.name: bindings[name] for field in fields(cls)})
+        ownership = AccountProjections(ports(AccountAccess), ports(AccountConfig), ports(AccountModels), ports(AccountMedia))
         def authenticate(request, **kwargs):
             owner = request.headers.get("x-test-owner")
             return ({"id": owner, "role": "user"} if owner else None, {"users": True}, False)
         register_security_middleware(app, SecurityDependencies(
-            authenticate, lambda store: True, RequestIdentity(), scope["output_path_visible_to_user"],
+            authenticate, lambda store: True, RequestIdentity(), ownership.output_path_visible_to_user,
             lambda *args: True, lambda *args: False))
         app.mount("/outputs", ArtifactStaticFiles(directory=outputs, runtime_provider=self.runtime))
         return TestClient(app)

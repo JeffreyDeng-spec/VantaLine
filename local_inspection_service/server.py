@@ -838,14 +838,26 @@ from .auth.repository import (
     auth_session_key_candidates, auth_session_from_store, auth_session_row_for_session,
 )
 
-_password_hasher = PasswordHasher(lambda: PASSWORD_HASH_ITERATIONS)
+from .auth.composition import AuthenticationServices, AuthenticationStorage, AuthenticationSettings
+from .auth.sessions import SessionSettings
+from .auth.login_limits import LoginLimitSettings
+
+_authentication = AuthenticationServices(
+    storage=AuthenticationStorage(
+        directory=lambda: DATA_DIR, path=lambda: AUTH_PATH,
+        repository=lambda: runtime_postgres_repository_or_none(),
+    ),
+    settings=AuthenticationSettings(
+        password_iterations=lambda: PASSWORD_HASH_ITERATIONS,
+        sessions=lambda: SessionSettings(AUTH_SESSION_COOKIE, AUTH_SESSION_TTL_SECONDS, AUTH_SESSION_PERSIST_INTERVAL_SECONDS),
+        login_limits=lambda: LoginLimitSettings(LOGIN_RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS, LOGIN_RATE_LIMIT_LOCKOUT_SECONDS),
+        legacy_owner=lambda: LEGACY_OWNER_ID,
+    ),
+    identity=_request_user,
+)
+_password_hasher = _authentication.hasher
 password_hash = _password_hasher.password_hash
-_auth_store_write_lock = threading.RLock()
-_auth_repository = AuthRepository(AuthStoreDependencies(
-    data_directory=lambda: DATA_DIR, auth_path=lambda: AUTH_PATH,
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    write_lock=lambda: _auth_store_write_lock,
-))
+_auth_repository = _authentication.repository
 load_auth_store = _auth_repository.load_auth_store
 save_auth_store = _auth_repository.save_auth_store
 save_auth_user = _auth_repository.save_auth_user
@@ -894,37 +906,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from .auth.public_network import PublicNetworkPolicy
+from .auth.public_network_ports import OriginPolicy, PublicEndpointPolicy, RuntimeDetailAccess
+
+_public_network_policy = PublicNetworkPolicy(
+    origins=OriginPolicy(
+        normalize_origin=lambda: normalize_origin,
+        CORS_ORIGINS=lambda: CORS_ORIGINS,
+        CORS_ORIGIN_REGEX=lambda: CORS_ORIGIN_REGEX,
+    ),
+    endpoints=PublicEndpointPolicy(
+        is_private_or_local_host=lambda: is_private_or_local_host,
+        masked_url_for_status=lambda: masked_url_for_status,
+    ),
+    access=RuntimeDetailAccess(
+        user_is_admin=lambda: user_is_admin,
+        user_has_permission=lambda: user_has_permission,
+    ),
+)
+
+
 def normalize_origin(value: str) -> str:
-    parsed = urlsplit(value)
-    if not parsed.scheme or not parsed.netloc:
-        return ""
-    scheme = parsed.scheme.lower()
-    hostname = (parsed.hostname or "").lower()
-    if not hostname:
-        return ""
-    port = parsed.port
-    default_port = 443 if scheme == "https" else 80
-    netloc = hostname if port in (None, default_port) else f"{hostname}:{port}"
-    return f"{scheme}://{netloc}"
+    return _public_network_policy.normalize_origin(value)
 
 
 def same_origin(origin: str, host: str) -> bool:
-    parsed_origin = urlsplit(origin)
-    if not parsed_origin.scheme or not parsed_origin.netloc:
-        return False
-    parsed_host = urlsplit(f"{parsed_origin.scheme}://{host}")
-    return (parsed_origin.hostname or "").lower() == (parsed_host.hostname or "").lower() and (
-        parsed_origin.port or (443 if parsed_origin.scheme == "https" else 80)
-    ) == (parsed_host.port or (443 if parsed_origin.scheme == "https" else 80))
+    return _public_network_policy.same_origin(origin, host)
 
 
 def cors_origin_allowed(origin: str) -> bool:
-    normalized = normalize_origin(origin)
-    if not normalized:
-        return False
-    if normalized in {normalize_origin(item) for item in CORS_ORIGINS}:
-        return True
-    return re.match(CORS_ORIGIN_REGEX, normalized) is not None
+    return _public_network_policy.cors_origin_allowed(origin)
 
 
 from .auth.accounts import AccountDependencies, AccountService
@@ -934,23 +945,10 @@ from .auth.sessions import (
 )
 from .auth.access import AccessControl
 from .auth.route_permissions import route_required_permission, route_allowed_permissions
-from .auth.middleware import SecurityDependencies, register_security_middleware
 
-_account_service = AccountService(AccountDependencies(
-    load_store=lambda: load_auth_store(), save_store=lambda store: save_auth_store(store),
-    hash_password=lambda value: password_hash(value),
-))
-_session_service = SessionService(
-    settings=lambda: SessionSettings(AUTH_SESSION_COOKIE, AUTH_SESSION_TTL_SECONDS, AUTH_SESSION_PERSIST_INTERVAL_SECONDS),
-    dependencies=SessionDependencies(
-        runtime_repository=lambda: runtime_postgres_repository_or_none(),
-        load_store=lambda: load_auth_store(),
-        bootstrap_admin=lambda store: bootstrap_admin_from_env(store),
-        save_touch_or_prune=lambda store, session_id, session, *, prune_expired:
-            save_auth_session_touch_or_prune(store, session_id, session, prune_expired=prune_expired),
-    ),
-)
-_access_control = AccessControl(_request_user)
+_account_service = _authentication.accounts
+_session_service = _authentication.sessions
+_access_control = _authentication.access
 
 users_exist = _account_service.users_exist
 
@@ -1149,31 +1147,46 @@ def record_mutable_by_user(record: dict[str, Any], user: dict[str, Any]) -> bool
     return _record_ownership.record_mutable_by_user(record, user)
 
 
+from .records.resource_names import ResourceNames
+from .records.resource_name_ports import NamePolicy, NameCatalogs
+
+_resource_names = ResourceNames(
+    policy=NamePolicy(
+        resource_name_key=lambda: resource_name_key,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        accessory_uid=lambda: accessory_uid,
+        record_owner_id=lambda: record_owner_id,
+        duplicate_name_error=lambda: duplicate_name_error,
+        task_matches_excluded_identity=lambda: task_matches_excluded_identity,
+        task_record_name=lambda: task_record_name,
+    ),
+    catalogs=NameCatalogs(
+        load_pipeline_tasks=lambda: load_pipeline_tasks,
+        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
+        training_resources_payload=lambda: training_resources_payload,
+        list_trained_model_specs=lambda: list_trained_model_specs,
+    ),
+)
+
+
 def resource_name_key(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+    return _resource_names.resource_name_key(value)
 
 
 def resource_owner_id_for_new_record(user: dict[str, Any]) -> str:
-    return str(user.get("id") or LEGACY_OWNER_ID)
+    return _resource_names.resource_owner_id_for_new_record(user)
 
 
 def duplicate_name_error(resource_label: str) -> None:
-    raise HTTPException(status_code=409, detail=f"{resource_label}名称已存在，请换一个名称")
+    return _resource_names.duplicate_name_error(resource_label)
 
 
 def assert_unique_accessory_name(config: dict[str, Any], name: Any, owner_user_id: str, *, exclude_id: str = "") -> None:
-    key = resource_name_key(name)
-    if not key:
-        return
-    for item in config.get("accessories", []):
-        if exclude_id and accessory_uid(item) == exclude_id:
-            continue
-        if record_owner_id(item) == owner_user_id and resource_name_key(item.get("name") or item.get("label")) == key:
-            duplicate_name_error("配件")
+    return _resource_names.assert_unique_accessory_name(config, name, owner_user_id, exclude_id=exclude_id)
 
 
 def task_record_name(record: dict[str, Any]) -> str:
-    return str(record.get("name") or record.get("label") or record.get("candidate_name") or record.get("id") or "")
+    return _resource_names.task_record_name(record)
 
 
 def task_matches_excluded_identity(
@@ -1182,13 +1195,7 @@ def task_matches_excluded_identity(
     excluded_pipeline_task_ids: set[str],
     excluded_ai_task_ids: set[str],
 ) -> bool:
-    task_id = str(task.get("id") or "")
-    if task_id in excluded_pipeline_task_ids:
-        return True
-    ai_task_id = str(task.get("ai_task_id") or "")
-    if ai_task_id and ai_task_id in excluded_ai_task_ids:
-        return True
-    return False
+    return _resource_names.task_matches_excluded_identity(task, excluded_pipeline_task_ids=excluded_pipeline_task_ids, excluded_ai_task_ids=excluded_ai_task_ids)
 
 
 def assert_unique_task_name(
@@ -1198,59 +1205,15 @@ def assert_unique_task_name(
     exclude_pipeline_task_id: str = "",
     exclude_ai_task_id: str = "",
 ) -> None:
-    key = resource_name_key(name)
-    if not key:
-        return
-    pipeline_tasks = load_pipeline_tasks()
-    excluded_pipeline_task_ids = {exclude_pipeline_task_id} if exclude_pipeline_task_id else set()
-    excluded_ai_task_ids = {exclude_ai_task_id} if exclude_ai_task_id else set()
-    for task in pipeline_tasks:
-        if exclude_pipeline_task_id and str(task.get("id") or "") == exclude_pipeline_task_id:
-            linked_ai_task_id = str(task.get("ai_task_id") or "")
-            if linked_ai_task_id:
-                excluded_ai_task_ids.add(linked_ai_task_id)
-            break
-    for task in pipeline_tasks:
-        if task_matches_excluded_identity(
-            task,
-            excluded_pipeline_task_ids=excluded_pipeline_task_ids,
-            excluded_ai_task_ids=excluded_ai_task_ids,
-        ):
-            continue
-        if record_owner_id(task) == owner_user_id and resource_name_key(task_record_name(task)) == key:
-            duplicate_name_error("任务")
-    for task in load_ai_detection_tasks():
-        if str(task.get("id") or "") in excluded_ai_task_ids:
-            continue
-        if record_owner_id(task) == owner_user_id and resource_name_key(task_record_name(task)) == key:
-            duplicate_name_error("任务")
+    return _resource_names.assert_unique_task_name(name, owner_user_id, exclude_pipeline_task_id=exclude_pipeline_task_id, exclude_ai_task_id=exclude_ai_task_id)
 
 
 def assert_unique_dataset_name(name: Any, owner_user_id: str, user: dict[str, Any], *, exclude_dataset_id: str = "") -> None:
-    key = resource_name_key(name)
-    if not key:
-        return
-    for dataset in training_resources_payload(user=user).get("datasets", []):
-        if exclude_dataset_id and str(dataset.get("id") or "") == exclude_dataset_id:
-            continue
-        if record_owner_id(dataset) == owner_user_id and resource_name_key(dataset.get("display_name") or dataset.get("id")) == key:
-            duplicate_name_error("样本集")
+    return _resource_names.assert_unique_dataset_name(name, owner_user_id, user, exclude_dataset_id=exclude_dataset_id)
 
 
 def assert_unique_model_name(name: Any, owner_user_id: str, *, exclude_run_id: str = "") -> None:
-    key = resource_name_key(name)
-    if not key:
-        return
-    seen_run_ids: set[str] = set()
-    for spec in list_trained_model_specs():
-        run_id = str(spec.get("run_id") or "")
-        if not run_id or run_id in seen_run_ids:
-            continue
-        seen_run_ids.add(run_id)
-        if exclude_run_id and run_id == exclude_run_id:
-            continue
-        if record_owner_id(spec) == owner_user_id and resource_name_key(spec.get("label") or run_id) == key:
-            duplicate_name_error("模型")
+    return _resource_names.assert_unique_model_name(name, owner_user_id, exclude_run_id=exclude_run_id)
 
 
 from .training.user_state import TrainingUserState, TrainingStateAccess, TrainingStateStorage, clear_training_private_state
@@ -1345,41 +1308,41 @@ def sync_pipeline_training_state_from_task(task: dict[str, Any]) -> None:
     return _pipeline_training_sync.sync_pipeline_training_state_from_task(task)
 
 
+from .auth.account_projections import AccountProjections
+from .auth.account_projection_ports import AccountAccess, AccountConfig, AccountModels, AccountMedia
+
+_account_projections = AccountProjections(
+    access=AccountAccess(
+        current_auth_user=lambda: current_auth_user,
+        user_is_admin=lambda: user_is_admin,
+        user_has_permission=lambda: user_has_permission,
+        include_internal_runtime_details=lambda: include_internal_runtime_details,
+        record_mutable_by_user=lambda: record_mutable_by_user,
+        record_visible_to_user=lambda: record_visible_to_user,
+    ),
+    config=AccountConfig(
+        accessory_uid=lambda: accessory_uid,
+        training_state_for_user=lambda: training_state_for_user,
+        PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+    ),
+    models=AccountModels(
+        selected_model_spec=lambda: selected_model_spec,
+        public_ai_detection_status_for_user=lambda: public_ai_detection_status_for_user,
+    ),
+    media=AccountMedia(
+        OUTPUT_DIR=lambda: OUTPUT_DIR,
+    ),
+)
+
+
 def merge_scoped_accessory_updates(full_config: dict[str, Any], scoped_config: dict[str, Any], user: dict[str, Any]) -> None:
-    scoped_by_id = {
-        accessory_uid(item): item
-        for item in scoped_config.get("accessories", [])
-        if isinstance(item, dict)
-    }
-    merged = []
-    for item in full_config.get("accessories", []):
-        if not isinstance(item, dict):
-            merged.append(item)
-            continue
-        uid = accessory_uid(item)
-        if uid in scoped_by_id and record_mutable_by_user(item, user):
-            merged.append(scoped_by_id[uid])
-        else:
-            merged.append(item)
-    full_config["accessories"] = merged
+    return _account_projections.merge_scoped_accessory_updates(full_config, scoped_config, user)
 
 
 def scope_config_for_user(config: dict[str, Any], user: dict[str, Any] | None = None, target_user_id: str | None = None) -> dict[str, Any]:
-    user = user or current_auth_user()
-    scoped = json.loads(json.dumps(config))
-    scoped.pop("plc_runtime_coordination", None)
-    scoped.pop(PLC_CAPTURE_RESULTS_KEY, None)
-    scoped["accessories"] = [
-        item
-        for item in scoped.get("accessories", [])
-        if isinstance(item, dict) and record_visible_to_user(item, user, target_user_id)
-    ]
-    selected_ids = {accessory_uid(item) for item in scoped.get("accessories", [])}
-    training = training_state_for_user(scoped, user, selected_ids, target_user_id)
-    if isinstance(training.get("selected_accessory_ids"), list):
-        training["selected_accessory_ids"] = [item_id for item_id in training["selected_accessory_ids"] if str(item_id) in selected_ids]
-    scoped["training"] = training
-    return scoped
+    return _account_projections.scope_config_for_user(config, user, target_user_id)
 
 
 def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = None, *, write: bool = False) -> None:
@@ -1390,39 +1353,15 @@ require_permission = _access_control.require_permission
 
 
 def require_analyze_model_permission(model_id: str | None) -> None:
-    user = current_auth_user()
-    if user_has_permission(user, "inspection"):
-        return
-    if user_has_permission(user, "ai_detection"):
-        spec = selected_model_spec(model_id, scope_config_for_user(load_config(), user))
-        if spec.get("is_ai_detection"):
-            return
-    raise HTTPException(status_code=403, detail="Inspection permission required for non-AI detection models")
+    return _account_projections.require_analyze_model_permission(model_id)
 
 
 def output_path_visible_to_user(request_path: str, user: dict[str, Any]) -> bool:
-    if user_is_admin(user):
-        return True
-    relative = request_path.removeprefix("/outputs/").lstrip("/")
-    candidate = (OUTPUT_DIR / PurePosixPath(relative)).resolve()
-    try:
-        rel_parts = candidate.relative_to(OUTPUT_DIR.resolve()).parts
-    except ValueError:
-        return False
-    # Per-user subtree (outputs/users/<id>/...) is private to its owner.
-    if len(rel_parts) >= 2 and rel_parts[0] == "users":
-        return rel_parts[1] == str(user["id"])
-    # Shared/legacy outputs written to the OUTPUT_DIR root are visible to any
-    # authenticated user (the /api permission gate already protects who can
-    # create pipeline artifacts); this keeps pose/sample images loadable when a
-    # task was owned by a legacy/empty owner instead of a per-user subtree.
-    return True
+    return _account_projections.output_path_visible_to_user(request_path, user)
 
 
 from .auth.login_limits import LoginLimitSettings, LoginRateLimiter, request_client_ip, login_rate_limit_keys
-_login_limiter = LoginRateLimiter(lambda: LoginLimitSettings(
-    LOGIN_RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS, LOGIN_RATE_LIMIT_LOCKOUT_SECONDS,
-))
+_login_limiter = _authentication.limits
 _login_rate_limit_lock = _login_limiter.lock
 _login_failures = _login_limiter.failures
 _login_blocked_until = _login_limiter.blocked_until
@@ -1440,69 +1379,37 @@ record_failed_login_attempt = _login_limiter.record_failed_login_attempt
 clear_failed_login_attempts = _login_limiter.clear_failed_login_attempts
 
 
-def require_docs_admin(request: Request) -> dict[str, Any]:
-    user, store, _ = authenticate_request(request)
-    if not users_exist(store) or not user or not user_is_admin(user):
-        raise HTTPException(status_code=404, detail="Not found")
-    return user
+from .auth.http_composition import AuthenticationHttp, AuthenticationHttpPolicy
+
+_authentication_http = AuthenticationHttp(
+    _authentication, _request_user,
+    AuthenticationHttpPolicy(
+        output_visible=lambda path, user: output_path_visible_to_user(path, user),
+        same_origin=_public_network_policy.same_origin,
+        cors_origin_allowed=_public_network_policy.cors_origin_allowed,
+    ),
+)
+_documentation_access = _authentication_http.documentation
+require_docs_admin = _documentation_access.require_docs_admin
 
 
 def is_private_or_local_host(hostname: str) -> bool:
-    host = str(hostname or "").strip().lower()
-    if not host:
-        return False
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    try:
-        ip_value = ipaddress.ip_address(host)
-    except ValueError:
-        return host.endswith(".local")
-    return any(
-        (
-            ip_value.is_private,
-            ip_value.is_loopback,
-            ip_value.is_link_local,
-            ip_value.is_reserved,
-        )
-    )
+    return _public_network_policy.is_private_or_local_host(hostname)
 
 
 def sanitize_url_for_public_user(value: Any) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return ""
-    parsed = urlsplit(raw)
-    if not parsed.scheme or not parsed.netloc:
-        return ""
-    if is_private_or_local_host(parsed.hostname or ""):
-        return ""
-    return masked_url_for_status(raw)
+    return _public_network_policy.sanitize_url_for_public_user(value)
 
 
 def sanitize_path_for_public_user(value: Any) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return ""
-    if raw.startswith("/"):
-        return ""
-    normalized = raw.replace("\\", "/")
-    if re.match(r"^[A-Za-z]:/", normalized):
-        return ""
-    return raw
+    return _public_network_policy.sanitize_path_for_public_user(value)
 
 
 def include_internal_runtime_details(user: dict[str, Any] | None) -> bool:
-    viewer = user or {}
-    return user_is_admin(viewer) or user_has_permission(viewer, "system_settings")
+    return _public_network_policy.include_internal_runtime_details(user)
 
 
-reject_untrusted_cross_origin_writes = register_security_middleware(app, SecurityDependencies(
-    authenticate=lambda request, *, indexed=False: authenticate_request(request, indexed=indexed),
-    users_exist=lambda store: users_exist(store), identity=_request_user,
-    output_visible=lambda path, user: output_path_visible_to_user(path, user),
-    same_origin=lambda origin, host: same_origin(origin, host),
-    cors_origin_allowed=lambda origin: cors_origin_allowed(origin),
-))
+reject_untrusted_cross_origin_writes = _authentication_http.register_security(app)
 
 app.mount(
     "/static/assets",
@@ -4274,48 +4181,17 @@ def save_ai_local_config(config: dict[str, Any]) -> None:
 
 
 def redact_status_payload_for_user(payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
-    if include_internal_runtime_details(user):
-        return payload
-    redacted = copy.deepcopy(payload)
-    redacted.pop("model_path", None)
-    redacted["ai_detection"] = public_ai_detection_status_for_user(user)
-    redacted["training_execution"] = {"status": "restricted", "executor": ""}
-    redacted["cursor_image2"] = {"status": "restricted", "configured": False}
-    redacted["ocr"] = {}
-    for model in redacted.get("available_models", []) or []:
-        if isinstance(model, dict):
-            model.pop("path", None)
-            model.pop("provider_status", None)
-    for model in redacted.get("specialized_models", []) or []:
-        if isinstance(model, dict):
-            model.pop("path", None)
-            model.pop("artifact_path", None)
-            model.pop("metadata_path", None)
-            model.pop("provider_status", None)
-    return redacted
+    return _account_projections.redact_status_payload_for_user(payload, user)
 
 
 def redact_config_summary_for_user(payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
-    if include_internal_runtime_details(user):
-        return payload
-    return {
-        "confidence_threshold": payload.get("confidence_threshold"),
-        "required_classes": payload.get("required_classes"),
-        "min_counts": payload.get("min_counts"),
-    }
+    return _account_projections.redact_config_summary_for_user(payload, user)
 
 
 
 
 def redact_accessory_payload_for_user(payload: dict[str, Any], user: dict[str, Any]) -> dict[str, Any]:
-    if include_internal_runtime_details(user):
-        return payload
-    redacted = copy.deepcopy(payload)
-    if isinstance(redacted.get("source_files"), list):
-        redacted["source_files"] = []
-    if isinstance(redacted.get("original_source_files"), list):
-        redacted["original_source_files"] = []
-    return redacted
+    return _account_projections.redact_accessory_payload_for_user(payload, user)
 
 
 
@@ -9206,19 +9082,10 @@ def analyze_bgr(image_bgr: np.ndarray, request_id: str, model_id: str | None = N
 
 from .auth.users import UserService
 from .auth.flows import AuthFlows
-from .auth.api import register_auth_api, register_user_api
 
-_user_service = UserService(
-    _auth_repository, _account_service, _access_control,
-    postgres=lambda: runtime_postgres_repository_or_none() is not None,
-    write_lock=lambda: _auth_store_write_lock,
-)
-_auth_flows = AuthFlows(
-    _auth_repository, _account_service, _session_service, _login_limiter,
-    postgres=lambda: runtime_postgres_repository_or_none() is not None,
-    legacy_owner=lambda: LEGACY_OWNER_ID,
-)
-_auth_routes = register_auth_api(app, _auth_flows, _session_service, _user_service)
+_user_service = _authentication.users
+_auth_flows = _authentication.flows
+_auth_routes = _authentication_http.register_auth(app)
 auth_status = _auth_routes.auth_status
 auth_bootstrap = _auth_routes.auth_bootstrap
 auth_login = _auth_routes.auth_login
@@ -9227,33 +9094,14 @@ get_task_navigation_preferences = _auth_routes.get_task_navigation_preferences
 update_task_navigation_preferences = _auth_routes.update_task_navigation_preferences
 
 
-@app.get("/openapi.json", include_in_schema=False)
-def openapi_schema(request: Request) -> dict[str, Any]:
-    require_docs_admin(request)
-    if app.openapi_schema:
-        return app.openapi_schema
-    app.openapi_schema = get_openapi(
-        title=app.title,
-        version="1.0.0",
-        routes=app.routes,
-        description="Admin-only OpenAPI schema",
-    )
-    return app.openapi_schema
+openapi_schema, swagger_ui, redoc_ui = _authentication_http.register_documentation(app)
 
 
-@app.get("/api/docs", include_in_schema=False)
-def swagger_ui(request: Request) -> Response:
-    require_docs_admin(request)
-    return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} Docs")
 
 
-@app.get("/redoc", include_in_schema=False)
-def redoc_ui(request: Request) -> Response:
-    require_docs_admin(request)
-    return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} ReDoc")
 
 
-_user_routes = register_user_api(app, _session_service, _user_service)
+_user_routes = _authentication_http.register_users(app)
 list_users = _user_routes.list_users
 create_user = _user_routes.create_user
 update_user = _user_routes.update_user
