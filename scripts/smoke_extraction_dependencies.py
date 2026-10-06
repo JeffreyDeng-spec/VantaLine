@@ -115,6 +115,7 @@ class ExtractionContracts(unittest.TestCase):
                 class Thread:
                     def __init__(self,**kwargs):self.kwargs=kwargs
                     def start(self):f.workers.append(self.kwargs)
+                    def is_alive(self):return False
                 with patch.dict('os.environ',{'VANTALINE_LABEL_EXTRACTION_ACCOUNTS':'alice','VANTALINE_LABEL_BBOX_ACCOUNTS':'alice'}),patch.object(api.threading,'Thread',Thread):
                     value=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','worker_001',method))
                     duplicate=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','worker_001',method))
@@ -151,6 +152,7 @@ class ExtractionContracts(unittest.TestCase):
         class Thread:
             def __init__(self,**kwargs):self.kwargs=kwargs
             def start(self):f.workers.append(self.kwargs)
+            def is_alive(self):return False
         with patch.dict('os.environ',{'VANTALINE_LABEL_EXTRACTION_ACCOUNTS':'alice','VANTALINE_LABEL_BBOX_ACCOUNTS':'alice'}),patch.object(api.threading,'Thread',Thread):
             value=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','boundary_001',method))
         self.assertEqual(len(f.workers),1)

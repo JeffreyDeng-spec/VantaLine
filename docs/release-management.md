@@ -1219,3 +1219,17 @@ This artifact-runtime ownership candidate retains native-history/readiness and d
 Frozen HTTP constructor evidence is pinned to canonical Git LF bytes with an explicit checkout attribute. The raw SHA guard still rejects any changed fixture; this fixes platform-dependent test acceptance without changing application behavior or historical task snapshots.
 
 Frozen artifact-runtime evidence is checked out as canonical Git LF bytes. The original raw SHA and immutable fixture Git blob remain unchanged; a CRLF working-copy mismatch is a test portability failure, not a runtime regression.
+
+Pipeline scheduler ownership ships through the same immutable release and source manifest v206 (519 paths). No worker topology or automatic drain hook is activated in this slice. Parent-before-dependency shutdown wiring needs separate full-application acceptance.
+
+Extraction thread ownership preserves current Web/label-worker topology and has no database migration. Require native extraction ownership tests, retained extraction behavior and full CI; deploy/rollback complete immutable releases while retaining extraction attempt evidence. Application shutdown integration is a separate remaining step.
+
+Comparison cleanup is a bounded failure-handling fix with no migration or topology change. Require the fault/real-semaphore regression, retained comparison/model/HTTP contracts and full CI; roll back the complete release while retaining all call and task evidence.
+
+Prepared comparison thread/timer ownership is staged independently under manifest v207. Require native lifecycle and cleanup fault tests, retained actual HTTP and model contracts, dependency and documentation checks before exact-head CI/review. This change adds no service and activates no shutdown hook; whole-release rollback and the existing Web/label topology remain mandatory.
+
+PDF consumer ownership is a separate manifest v208 slice. Require its native startup/drain failure tests, unchanged label regression and real PostgreSQL HTTP checks before hosted CI and independent exact-head acceptance. It adds no service or automatic cancellation, and whole-release rollback remains the recovery path.
+
+This offline lifecycle integration retains native-history/readiness and detection composition from actual main dcb4805 and follows artifact-owner candidate 6b648b5. Owned production/tests and ordered entry match reviewed 28de9fa; both canonical fixture corrections are already retained. The bundled manifest is v204 with 523 unique sources; earlier paragraph counts refer to their original individual candidates. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Publication must use independently reviewed domain-scoped PRs on accepted main, with full hosted and release gates; this offline combined tree is not a blanket grouped publication approval or complete application factory.
+
+The two frozen HTTP-constructor and artifact-runtime Python fixtures use Git-enforced LF checkout bytes. Their tests hash the actual canonical Git content before executing it, so Windows checkout conversion cannot invalidate the frozen contract. The HTTP fixture expected hash is corrected from its original CRLF working-copy digest to the committed LF blob digest; fixture source content and the artifact fixture digest are unchanged. The integration verification retained both the initial private runner filename error and the subsequent observed CRLF artifact-baseline failure.

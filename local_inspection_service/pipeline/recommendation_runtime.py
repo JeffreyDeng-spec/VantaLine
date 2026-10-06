@@ -1,5 +1,8 @@
 """Run and schedule pipeline recommendation pre-generation with caller-owned state."""
 from typing import Any
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
 from .recommendation_runtime_ports import (
     RecommendationExecution, RecommendationScheduling, RecommendationTasks,
@@ -12,10 +15,15 @@ class PipelineRecommendationRuntime:
         tasks: RecommendationTasks,
         execution: RecommendationExecution,
         scheduling: RecommendationScheduling,
+        *, scope: Callable[[], AbstractContextManager] = nullcontext,
     ) -> None:
         self.tasks = tasks
         self.execution = execution
         self.scheduling = scheduling
+        self.lifecycle = TrainingThreadLifecycle(scope=scope)
+
+    def close(self, timeout: float) -> bool:
+        return self.lifecycle.close(timeout)
 
     def run(self, task_id: str, stage: str, user: dict[str, Any] | None) -> None:
         token = self.execution.identity().set(user) if user else None
@@ -56,6 +64,9 @@ class PipelineRecommendationRuntime:
                 self.scheduling.inflight().discard(f"{task_id}|{stage}")
 
     def schedule(self, items: list[tuple[str, str]], user: dict[str, Any] | None) -> None:
+        return self.lifecycle.submit(lambda launch: self._schedule(items, user, launch))
+
+    def _schedule(self, items: list[tuple[str, str]], user: dict[str, Any] | None, launch: ThreadLaunch) -> None:
         for task_id, stage in items:
             if not task_id or not stage:
                 continue
@@ -64,6 +75,6 @@ class PipelineRecommendationRuntime:
                 if key in self.scheduling.inflight():
                     continue
                 self.scheduling.inflight().add(key)
-            self.scheduling.thread()(
-                target=self.scheduling.runner(), args=(task_id, stage, user), daemon=True
-            ).start()
+            launch(lambda wrap: self.scheduling.thread()(
+                target=wrap(self.scheduling.runner()), args=(task_id, stage, user), daemon=True
+            ), lambda thread: None)

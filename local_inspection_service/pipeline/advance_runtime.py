@@ -1,6 +1,9 @@
 """Run, queue and cancel pipeline advances with caller-owned task storage and registry."""
 import threading
 from typing import Any
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
 from .advance_runtime_ports import AdvanceExecution, AdvancePolicy, AdvanceScheduling, AdvanceTasks
 
@@ -12,11 +15,16 @@ class PipelineAdvanceRuntime:
         policy: AdvancePolicy,
         execution: AdvanceExecution,
         scheduling: AdvanceScheduling,
+        *, scope: Callable[[], AbstractContextManager] = nullcontext,
     ) -> None:
         self.tasks = tasks
         self.policy = policy
         self.execution = execution
         self.scheduling = scheduling
+        self.lifecycle = TrainingThreadLifecycle(scope=scope)
+
+    def close(self, timeout: float) -> bool:
+        return self.lifecycle.close(timeout)
 
     def guarded(
         self, task: dict[str, Any], config: dict[str, Any], cancel_event: "threading.Event | None" = None
@@ -99,6 +107,10 @@ class PipelineAdvanceRuntime:
 
     def schedule(self, task_id: str, user: dict[str, Any] | None) -> bool:
         'Enqueue an async advance for a task. Idempotent: if a thread is already\n    advancing this task, returns False without stacking a second one.'
+        return self.lifecycle.submit(lambda launch: self._schedule(task_id, user, launch))
+
+    def _schedule(self, task_id: str, user: dict[str, Any] | None, launch: ThreadLaunch) -> bool:
+        'Enqueue an async advance for a task. Idempotent: if a thread is already\n    advancing this task, returns False without stacking a second one.'
         if not task_id:
             return False
         with self.scheduling.registry_lock():
@@ -106,8 +118,9 @@ class PipelineAdvanceRuntime:
                 return False
             self.scheduling.inflight().add(task_id)
             self.scheduling.cancel_events()[task_id] = self.scheduling.event()()
-        self.scheduling.thread()(target=self.scheduling.runner(), args=(task_id, user), daemon=True).start()
+        launch(lambda wrap: self.scheduling.thread()(target=wrap(self.scheduling.runner()), args=(task_id, user), daemon=True), lambda thread: None)
         return True
+
 
     def cancel(self, task_id: str) -> bool:
         'Signal a running advance worker to stop at the next checkpoint. Returns True\n    if a worker was inflight.'

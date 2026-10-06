@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from fastapi import FastAPI
 from .dependencies import RepositoryLifecycle
+from ..runtime.training_tasks import TrainingThreadLifecycle, TrainingRuntimeClosed
 import time
 import uuid
 
@@ -127,8 +128,37 @@ def process(repo, media, task, token):
         )
 
 
+class PdfImportRuntime:
+    """One consumer per registration, owned through real thread completion."""
+    def __init__(self):
+        self.stop = threading.Event()
+        self._lock = threading.Lock()
+        self._started = False
+        self._threads = TrainingThreadLifecycle()
+
+    def start(self, target: Callable[[], None]) -> None:
+        def prepare(launch):
+            with self._lock:
+                if self.stop.is_set():
+                    raise TrainingRuntimeClosed("PDF import runtime is closing")
+                if self._started:
+                    return
+                self._started = True
+                launch(lambda wrap: threading.Thread(target=wrap(target), name="pdf-import", daemon=True),
+                       lambda thread: None)
+        self._threads.submit(prepare)
+
+    def request_stop(self) -> None:
+        self.stop.set()
+
+    def close(self, timeout: float) -> bool:
+        self.request_stop()
+        return self._threads.close(timeout)
+
+
 def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Callable[[], Path]):
-    stop = threading.Event()
+    runtime = PdfImportRuntime()
+    stop = runtime.stop
 
     def loop():
         while not stop.is_set():
@@ -158,9 +188,7 @@ def register(app: FastAPI, repositories: RepositoryLifecycle, data_directory: Ca
             except Exception:
                 stop.wait(2)
 
-    app.on_event("startup")(
-        lambda: threading.Thread(
-            target=safe_loop, name="pdf-import", daemon=True
-        ).start()
-    )
+    app.on_event("startup")(lambda: runtime.start(safe_loop))
     app.on_event("shutdown")(stop.set)
+    app.state.label_pdf_import = runtime
+    return runtime

@@ -11471,6 +11471,7 @@ _pipeline_auto_agent_runtime = _PipelineAutoAgentRuntime(
         thread=lambda: threading.Thread,
         runner=lambda: _run_pipeline_auto_agent_step,
     ),
+    scope=_runtime_repositories.thread_scope,
 )
 
 
@@ -11524,6 +11525,7 @@ _pipeline_advance_runtime = _PipelineAdvanceRuntime(
         thread=lambda: threading.Thread,
         runner=lambda: _run_pipeline_advance,
     ),
+    scope=_runtime_repositories.thread_scope,
 )
 
 
@@ -11618,6 +11620,7 @@ _pipeline_recommendation_runtime = _PipelineRecommendationRuntime(
         thread=lambda: threading.Thread,
         runner=lambda: _run_pipeline_recommendation_pregen,
     ),
+    scope=_runtime_repositories.thread_scope,
 )
 
 
@@ -12243,6 +12246,7 @@ _extraction_models = ExtractionModels(
     diagnostic_value=lambda value: _text_v2_diagnostic_value(value),
     external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
 )
+_text_extraction_runtime = TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)
 resolve_label_extraction = register_label_extraction(
     app,
     ExtractionAccess(
@@ -12251,6 +12255,7 @@ resolve_label_extraction = register_label_extraction(
     ),
     _extraction_records, _extraction_media, _extraction_models,
     clear_repository=lambda: clear_thread_runtime_repository_selection(),
+    runtime=_text_extraction_runtime,
 )
 from .agent.dependencies import AgentAccess, AgentAccounts
 register_agent_api(
@@ -12325,6 +12330,10 @@ from .text_inspection.inspection_ports import (
 from . import qwen_evidence_jobs as _qwen_evidence_policy
 
 
+from .text_inspection.comparison_runtime import ComparisonRuntime
+_prepared_comparison_runtime = ComparisonRuntime(scope=_runtime_repositories.thread_scope)
+
+
 def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction):
     from local_inspection_service.standard_preparation_compare import submit
     from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
@@ -12335,7 +12344,8 @@ def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, as
         clear_thread_runtime_repository_selection,
         lambda name, default, environment=os: environment.getenv(name, default),
         standard_preparation_jobs, owner_user_id, owner_username,
-        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
+        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction,
+        execution=_prepared_comparison_runtime)
 
 
 _inspection_access = InspectionAccess(

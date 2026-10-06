@@ -72,3 +72,5 @@ The initial FastAPI allocation and transport middleware assembly live in runtime
 The HTTP transport-shell constructor accepts an explicit upload runtime provider for independently composed apps. This isolates only upload admission; complete artifact services and application lifecycle still require per-app composition.
 
 ArtifactRuntimeProvider owns a lazy artifact runtime, configuration signature and lock for one composition. Existing get_runtime still selects one process-default owner; complete app wiring and artifact lifecycle remain separate.
+
+The three pipeline runtime schedulers expose bounded close through their own thread owner. Keep repository cleanup on the native worker thread and retain task/model binding at the existing decorated runner. Do not close the advance or model dependencies while admitted auto-Agent work can still use them.

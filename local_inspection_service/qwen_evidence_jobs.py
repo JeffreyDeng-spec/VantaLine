@@ -120,11 +120,16 @@ def timeout(update_attempt, record):
 
 
 def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Callable[[], None],
-        jobs, record, upload, resolved, record_usage: UsageRecorder | None):
+        jobs, record, upload, resolved, record_usage: UsageRecorder | None, *, slots=None, timers=None):
+    slots = _slots if slots is None else slots
     started, acquired = time.monotonic(), False
-    timer = threading.Timer(max(0, record["deadline_at"]-time.time()), lambda: settle_timeout(
-        lambda kind, value: records.update_attempt(kind, value), clear_repository, record))
-    timer.daemon = True; timer.start()
+    interval = max(0, record["deadline_at"]-time.time())
+    callback = lambda: settle_timeout(lambda kind, value: records.update_attempt(kind, value), clear_repository, record)
+    if timers is None:
+        timer = threading.Timer(interval, callback)
+        timer.daemon = True; timer.start()
+    else:
+        timer = timers.start(interval, callback)
     def remaining():
         seconds = record["deadline_at"] - time.time()
         if seconds <= 0:
@@ -143,7 +148,7 @@ def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Ca
         finally:
             record["diagnostics"].setdefault("stage_ms", {})[name] = round((time.monotonic()-before)*1000)
     try:
-        acquired = _slots.acquire(timeout=remaining())
+        acquired = slots.acquire(timeout=remaining())
         if not acquired:
             raise TimeoutError("queue_timeout")
         record["diagnostics"]["stage_ms"] = {"queue": round((time.monotonic()-started)*1000)}
@@ -306,10 +311,14 @@ def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Ca
                 record["updated_at"] = int(time.time())
                 records.update_attempt("records", record)
         finally:
-            timer.cancel()
-            clear_repository()
-            if acquired:
-                _slots.release()
+            try:
+                timer.cancel()
+            finally:
+                try:
+                    clear_repository()
+                finally:
+                    if acquired:
+                        slots.release()
 
 
 def settle_timeout(update_attempt, clear_repository: Callable[[], None], record):

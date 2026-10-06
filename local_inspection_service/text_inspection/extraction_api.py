@@ -15,13 +15,15 @@ from .. import label_bbox
 from collections.abc import Callable
 from .extraction_ports import ExtractionAccess, ExtractionRecords, ExtractionMedia, ExtractionModels
 from ..storage.artifacts.files import BusinessFiles
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
 _business_files = BusinessFiles()
 
 
 def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
              media_dependencies: ExtractionMedia, models: ExtractionModels,
-             clear_repository: Callable[[], None]):
+             clear_repository: Callable[[], None], *, runtime: TrainingThreadLifecycle | None = None):
+    runtime = runtime if runtime is not None else TrainingThreadLifecycle()
 
     def owner():
         access.require_permission("inspection", detail="没有文字检验权限")
@@ -199,6 +201,9 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
             normalized = geometry.normalized_image(data)
         except Exception as exc:
             raise HTTPException(400,"图片或目标框无效："+str(exc)[:120]) from exc
+        return runtime.submit(lambda launch: create_prepared(uid, data, target_box, normalized, request_id, method, launch))
+
+    def create_prepared(uid, data, target_box, normalized, request_id, method, launch: ThreadLaunch):
         settings = bbox_settings() if method == "vlm_bbox" else {**models.image_settings(),"single_attempt":True}
         prompt_version = label_bbox.VERSION if method == "vlm_bbox" else geometry.PROMPT_VERSION
         fingerprint = media_dependencies.digest(json.dumps([media_dependencies.digest(data),target_box,method,prompt_version],sort_keys=True).encode())
@@ -224,7 +229,8 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
                 raise HTTPException(409,"提取请求冲突")
             return public(latest(identifier,uid))
         if value["status"] == "attempting":
-            threading.Thread(target=run,args=(value,settings,normalized),daemon=True,name="label-extraction").start()
+            launch(lambda wrap: threading.Thread(target=wrap(run), args=(value,settings,normalized),
+                daemon=True, name="label-extraction"), lambda thread: None)
         return public(value)
 
     @app.get("/api/text-inspection/extractions/{identifier}")

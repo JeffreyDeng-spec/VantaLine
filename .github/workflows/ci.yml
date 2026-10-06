@@ -401,6 +401,7 @@ jobs:
           python scripts/smoke_accessory_preparation.py
           python scripts/smoke_accessory_routing.py
           python scripts/smoke_label_dependencies.py
+          python scripts/smoke_pdf_import_drain.py
           python scripts/smoke_label_worker_lifecycle.py
           python scripts/smoke_label_runtime_identity.py
           python scripts/smoke_label_runtime_bootstrap.py
@@ -417,9 +418,12 @@ jobs:
           AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python local_inspection_service/scripts/smoke_agent_operations_postgres.py
           AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_agent_policy_read_transactions.py
           python scripts/smoke_extraction_dependencies.py
+          python scripts/smoke_extraction_thread_drain.py
           python scripts/smoke_preparation_dependencies.py
           python scripts/smoke_text_job_drain.py
           python scripts/smoke_comparison_dependencies.py
+          python scripts/smoke_comparison_cleanup.py
+          python scripts/smoke_comparison_thread_drain.py
           python scripts/smoke_text_record_store.py --root --postgres
           python scripts/smoke_text_media.py --root
           python scripts/smoke_text_revisions.py --root
@@ -500,6 +504,7 @@ jobs:
           python scripts/smoke_pipeline_recommendation_runtime.py
           python scripts/smoke_pipeline_auto_agent_runtime.py
           python scripts/smoke_pipeline_advance_runtime.py
+          python scripts/smoke_pipeline_thread_drain.py
           python scripts/smoke_pipeline_stage_advance.py
           python scripts/smoke_pipeline_decision_contract.py
           python -c "from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_react_pipeline_route; assert_react_pipeline_route()"
