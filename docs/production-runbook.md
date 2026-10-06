@@ -1637,3 +1637,10 @@ Automatic-optimization workflow assembly retains Web/training process topology, 
 TrainingStateWorkflows retains the existing Web/training process topology and supplied runtime close ownership. This assembly starts no new worker, adds no maintenance switch and changes no release or rollback procedure. Restore the previous whole immutable release on failure; retain model snapshots and runtime data.
 
 The training-task domain is delivered as one coherent composition batch. Account state, native execution and task API services share the original task runtime and operation-time repository factory. Background submission retains that shared runtime; no extra shutdown owner, process or database migration is added. Required CI, independent review and the preceding managed-release gate remain mandatory before merge. Whole-release rollback restores the complete previous bundle and topology; internal local checkpoints are not separate deployments.
+
+Beta label evidence compaction affects list reads only. Full task detail, model snapshots, paid-call evidence, polling and worker topology remain unchanged. Unknown or unsafe nested/numeric entries stay in the original decode path. Synthetic performance gates do not certify production capacity; full release rollback remains available without inverse data changes.
+
+Beta count aggregation leaves detailed records, pagination snapshots and worker topology unchanged. A rollback restores the complete previous release; no inverse data migration is needed. Synthetic functional/performance checks must complete before publishing this candidate.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.

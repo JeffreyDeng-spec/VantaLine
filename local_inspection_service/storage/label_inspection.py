@@ -9,7 +9,8 @@ from collections.abc import Mapping
 from ..codex_compare.contracts import digest, encode
 from .agent_operations import OperationConflict
 from ..label_inspection.run_summary import VERSION as RUN_SUMMARY_VERSION, DISCARDED
-from ..label_inspection.history_summary import RunHistorySummary
+from ..label_inspection.history_summary import RunHistorySummary, BetaHistoryRead
+from .label_beta_summary import beta_history_query
 
 TABLE = "label_inspection_objects"
 ACTIVE = {"queued", "running"}
@@ -464,6 +465,23 @@ class LabelRepository:
                 else:
                     grouped[value["task_id"]].append(value["raw_json"])
             return grouped
+
+    def list_beta_history(self, owner):
+        """Keep public projection/error semantics while trimming safe list evidence."""
+        table = self.repository._qualified_table("codex_comparison_tasks")
+        with self.read_tx() as c:
+            c.execute(beta_history_query(table), (owner,))
+            values = []
+            for row in c.fetchall():
+                if isinstance(row, tuple):
+                    value, reference_count, label_count = row
+                else:
+                    record = self.repository._row_to_dict(c, row, columns=("raw_json", "reference_count", "label_count"))
+                    value, reference_count, label_count = record["raw_json"], record["reference_count"], record["label_count"]
+                if isinstance(value, str):
+                    value = json.loads(value)
+                values.append(BetaHistoryRead(value, reference_count, label_count))
+            return values
 
     def legacy(self, owner, kind):
         if (owner, kind) in self._legacy_cache:

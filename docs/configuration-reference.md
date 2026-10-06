@@ -1610,3 +1610,10 @@ Automatic-optimization workflow composition adds no configuration. Separate expl
 Training state composition adds no business configuration, model, prompt or executor mode. New task fingerprints use source manifest v249 with 543 actual sources including training/state_composition.py; existing snapshots and secret references remain unchanged. The existing model resolver getter/provider layers and per-operation repository selection are preserved.
 
 Training-task composition adds no operator settings, model/prompt changes or worker topology. Account configuration is supplied through TrainingConfiguration load/save capabilities; request identity and database selection remain lazy. The pure training worker classifier belongs to the composed jobs capability; replacing a private server alias does not rewire it. New task fingerprints use source manifest v250 with 546 distinct sources, including account_state_composition.py, native_execution_composition.py and task_composition.py; historical snapshots and secret references remain unchanged.
+
+Beta list compaction adds no setting, writer, schema or migration. The honest manifest remains v251 with547 source paths including storage/label_beta_summary.py, whose current content defines the new fingerprint. Old task snapshots are not rewritten. Missing/null/array/scalar labels and unknown fields retain their original values; no size/depth/numeric cutoff controls list behavior.
+
+Beta history SQL counts add no setting. Only object/array counts are supplied; zero is valid, while unavailable counts remain null internally. Existing wrong-shape and explicit-null error behavior remains. Prompt source manifest v251 selects 547 ordered files.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.

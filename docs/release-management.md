@@ -1396,3 +1396,10 @@ CI adds four synthetic automatic-optimization workflow contracts while retaining
 Training state composition adds one source to the versioned prompt-source manifest and one synthetic ownership check to required CI. Runtime topology, immutable packaging and whole-release rollback are unchanged. Local domain tests are not production deployment acceptance; main CI, independent review and the preceding managed release gate remain required.
 
 The training-task domain is delivered as one coherent composition batch. Account state, native execution and task API services share the original task runtime and operation-time repository factory. Background submission retains that shared runtime; no extra shutdown owner, process or database migration is added. Required CI, independent review and the preceding managed-release gate remain mandatory before merge. Whole-release rollback restores the complete previous bundle and topology; internal local checkpoints are not separate deployments.
+
+The Beta list evidence optimization ships as a complete immutable release with the current worker topology. There is no new table, backfill, cache writer or schema rollback. Restore the previous complete release if necessary and preserve all task and paid-call evidence.
+
+The Beta count slice uses manifest v238 with the same 531 files. It must independently pass the fixed Beta16 plus inherited reader19/history28 latency, memory and query guards; preceding evidence-compaction timings are not acceptance evidence for the new count expressions.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.

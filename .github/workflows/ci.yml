@@ -306,6 +306,8 @@ jobs:
           python scripts/smoke_directory_lifecycle.py
           python scripts/smoke_label_history_benchmark.py
           python scripts/smoke_label_history_statistics.py
+          python scripts/smoke_label_beta_summaries.py
+          python scripts/smoke_label_beta_benchmark.py
           VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_history_statistics.py
           python scripts/smoke_account_projections.py
           python scripts/smoke_public_network_policy.py
@@ -357,6 +359,7 @@ jobs:
           python scripts/smoke_auto_optimization_settings_composition.py
           python scripts/smoke_plc_legacy_worker_ownership.py
           python scripts/smoke_resource_names.py
+          python scripts/benchmark_label_beta_summaries.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
           python scripts/smoke_label_benchmark_evidence.py

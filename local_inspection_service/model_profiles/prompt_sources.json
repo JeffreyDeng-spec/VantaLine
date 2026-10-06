@@ -1,5 +1,5 @@
 {
-  "version": 250,
+  "version": 251,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -546,6 +546,7 @@
     "training/state_composition.py",
     "training/account_state_composition.py",
     "training/native_execution_composition.py",
-    "training/task_composition.py"
+    "training/task_composition.py",
+    "storage/label_beta_summary.py"
   ]
 }

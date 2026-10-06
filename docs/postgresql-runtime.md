@@ -643,3 +643,10 @@ Text comparison history and extraction select the repository factory from the su
 Training state assembly selects the existing repository factory per operation and uses the same supplied RLock in record persistence and lifecycle updates. It introduces no migration, query rewrite or lock removal. Visibility-filtered task lists retain existing stopped-state writes; they are not pure reads. Validate record upsert and canonical/alias deletion in an isolated PostgreSQL database.
 
 The training-task domain is delivered as one coherent composition batch. Account state, native execution and task API services share the original task runtime and operation-time repository factory. Background submission retains that shared runtime; no extra shutdown owner, process or database migration is added. Required CI, independent review and the preceding managed-release gate remain mandatory before merge. Whole-release rollback restores the complete previous bundle and topology; internal local checkpoints are not separate deployments.
+
+Beta list history uses one bound-account SELECT in the existing unlocked short read transaction. SQL aggregates label keys only to compact individually proven flat string/bool/null entry objects; empty objects remain objects and non-object labels stay unchanged. All fields capable of numeric or nested JSON decoding failure stay present. Full details use the original legacy method. Snapshot writes retain their existing transaction fence; no cache write or migration is introduced.
+
+The Beta list SELECT now also computes nullable reference and label counts from that same row, under the existing bound account predicate and short read transaction. No table/index migration or write-lock change is introduced. Unknown fields and unsafe JSON evidence stay present for original decode-error behavior; this does not eliminate all JSON transfer.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.

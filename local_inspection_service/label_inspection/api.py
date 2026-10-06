@@ -14,7 +14,7 @@ from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
 from . import model, pdf_import, manual, manual_history
 from .projection import public
-from .history_summary import RunHistorySummary
+from .history_summary import RunHistorySummary, BetaHistoryRead, count_or_length
 from ..storage.label_inspection import LabelRepository, RUN_BATCH_SIZE
 from ..storage.agent_operations import OperationConflict
 from ..storage.label_runtime import LabelMaintenance
@@ -346,7 +346,9 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         "status": "read_only",
                     }
                 )
-            for beta in repo.legacy(owner, "beta"):
+            for item in repo.list_beta_history(owner):
+                read = item if isinstance(item, BetaHistoryRead) else BetaHistoryRead(item, None, None)
+                beta = read.payload
                 inputs = beta.get("inputs") or {}
                 batch = beta.get("report_version") == "label-batch-v3"
                 rows.append(
@@ -357,9 +359,9 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         "updated_at": beta.get("updated_at")
                         or beta.get("created_at", 0),
                         "standard_count": (
-                            len(inputs.get("references", {})) if batch else 1
+                            count_or_length(inputs.get("references", {}), read.reference_count) if batch else 1
                         ),
-                        "run_count": len(beta.get("labels", {})) if batch else 1,
+                        "run_count": count_or_length(beta.get("labels", {}), read.label_count) if batch else 1,
                         "decision": (beta.get("summary") or {}).get(
                             "decision", "REVIEW_REQUIRED"
                         ),
