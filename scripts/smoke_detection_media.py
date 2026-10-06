@@ -7,6 +7,7 @@ import base64,hashlib,json,os,sys,tempfile,threading,unittest
 import cv2
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 from contextlib import ExitStack
@@ -334,11 +335,11 @@ class MediaContracts(unittest.TestCase):
         from local_inspection_service.detection.reference_sheet import ReferenceSheet
         error_type=self.api.AiProviderError
         def build(f):
-            encoding=ImageEncoding(lambda:f.cv,error_type,lambda image,**kwargs:encoding.image_bgr_data_url(image,**kwargs))
-            storage=InspectionImageStore(lambda:f.cv,InspectionImagePolicy(lambda:f.root/'mcp',lambda:8,lambda:79),f.clock,f.safe)
+            encoding=ImageEncoding(lambda:f.cv,error_type,lambda image,**kwargs:encoding.image_bgr_data_url(image,**kwargs), runtime_provider=lambda: None)
+            storage=InspectionImageStore(lambda:f.cv,InspectionImagePolicy(lambda:f.root/'mcp',lambda:8,lambda:79),f.clock,f.safe, runtime_provider=lambda: None)
             collection=ReferenceCollection(lambda:f.text,f.uid,f.paths,encoding.image_path_data_url,f.mime,ReferenceCollectionPolicy(lambda:2,lambda:640,lambda:72))
             tiles=ReferenceTileRenderer(lambda:f.cv,lambda:np)
-            sheet=ReferenceSheet(lambda:f.text,f.output,ReferenceSheetPolicy(lambda:{'.png','.jpg'},lambda:'sheet',lambda:83,lambda:1400),ReferenceSheetCache(lambda:f.lock,lambda:f.cache),ReferenceSheetImages(lambda:f.cv,lambda:np,tiles.fit_image_into_cell,lambda:encoding.image_path_data_url))
+            sheet=ReferenceSheet(lambda:f.text,f.output,ReferenceSheetPolicy(lambda:{'.png','.jpg'},lambda:'sheet',lambda:83,lambda:1400),ReferenceSheetCache(lambda:f.lock,lambda:f.cache),ReferenceSheetImages(lambda:f.cv,lambda:np,tiles.fit_image_into_cell,lambda:encoding.image_path_data_url), files=lambda: BusinessFiles(runtime_provider=lambda: None))
             return encoding,storage,collection,tiles,sheet
         services=[]
         for owner in ('alice','bob'):

@@ -64,7 +64,7 @@ class IntegrationTests(unittest.TestCase):
         self.budget.limits.update(cache=1024 * 1024, upload=1024 * 1024)
         self.budget.free_bytes = lambda: 10 * 1024 * 1024
         policy = InspectionImagePolicy(lambda: self.root / "outputs/inspection", lambda: 100, lambda: 90)
-        writer = InspectionImageStore(lambda: cv2, policy, lambda: 1, lambda s: s)
+        writer = InspectionImageStore(lambda: cv2, policy, lambda: 1, lambda s: s, runtime_provider=self.runtime)
         pixels = np.full((8, 8, 3), 120, dtype=np.uint8)
         with patch("local_inspection_service.storage.artifacts.images.get_runtime", self.runtime):
             path = writer.write_mcp_inspection_image(pixels, "fixture")

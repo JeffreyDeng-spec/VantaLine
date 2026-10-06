@@ -310,7 +310,7 @@ class UploadContracts(unittest.TestCase):
             def analyze(*args,f=f,observed=observed,**kwargs):observed.append(f.resolver.current_snapshot());return f.result
             access=UploadAccess(f.ensure,f.permission);paths=UploadPaths(lambda f=f:f.safe,lambda f=f:f.root)
             image=ImageUpload(access,paths,lambda:np,lambda f=f:f.cv,analyze, files=lambda: BusinessFiles(runtime_provider=lambda: None));summary=VideoSummary(lambda:strings)
-            video=VideoUpload(access,paths,lambda:copies,f.load,lambda f=f:f.cv,analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary))
+            video=VideoUpload(access,paths,lambda:copies,f.load,lambda f=f:f.cv,analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary), files=BusinessFiles(runtime_provider=lambda: None))
             self.assertEqual(f.events,[]);self.assertEqual(list(f.root.iterdir()),[])
             invoke=pinned(lambda f=f:f.resolver)(video.analyze_video)
             services.append((f,image,invoke,observed))
@@ -406,7 +406,7 @@ class UploadContracts(unittest.TestCase):
                     return read
                 access=UploadAccess(f.ensure,f.permission);paths=UploadPaths(getter('name',f.safe),getter('directory',f.root));summary=VideoSummary(getter('strings',self.api.string_list))
                 image=ImageUpload(access,paths,getter('arrays',np),getter('images',f.cv),f.analyze, files=lambda: BusinessFiles(runtime_provider=lambda: None))
-                video=VideoUpload(access,paths,getter('copies',self.api.shutil),f.load,getter('videos',f.cv),f.analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary))
+                video=VideoUpload(access,paths,getter('copies',self.api.shutil),f.load,getter('videos',f.cv),f.analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary), files=BusinessFiles(runtime_provider=lambda: None))
                 self.assertEqual(seen,[0]);self.assertEqual(f.events,[])
                 with self.assertRaises(RuntimeError) as caught:
                     if mode=='summary':summary.video_ai_summary([{'ai':{'error':'x'}}])

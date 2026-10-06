@@ -8,6 +8,15 @@ import numpy as np
 from .presence_payload import BoundedText
 from .presence_inspection_ports import EncodeArray, EncodePath
 
+from ..storage.artifacts.runtime import ArtifactRuntime
+
+
+class ReferenceSheetFiles(Protocol):
+    runtime_provider: Callable[[], ArtifactRuntime | None]
+    def exists(self, path: Path) -> bool: ...
+    def read_bytes(self, path: Path) -> bytes: ...
+
+
 Record = dict[str, Any]
 
 class MediaImages(Protocol):

@@ -594,3 +594,7 @@ This offline shutdown replay follows lifecycle candidate 7d7886a and preserves c
 The three explicit detection storage suppliers preserve the existing ArtifactStore publication, generation and transaction rules. This composition change adds no database migration, connection owner, retry or lock-policy change.
 
 This offline detection artifact replay follows shutdown candidate 8618f7a and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 713010a. Manifest v206 lists 524 sources. Storage suppliers retain call-time selection; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Detection image codecs, reference sheets, video materialization and local-model loading now receive storage dependencies explicitly. Object publication, generation checks, database transactions and existing cache lifetimes are unchanged; no migration or additional retry is introduced.
+
+This offline detection media replay follows artifact candidate e7e12b2 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 5e86530. Manifest v207 lists 524 sources. Explicit stores retain original cache, error and video cleanup behavior; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.

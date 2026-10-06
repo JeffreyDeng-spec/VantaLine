@@ -2,17 +2,19 @@
 from ..storage.artifacts.images import image_backend
 from collections.abc import Callable
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 from typing import Any
 import hashlib
 import json
 import math
-from .media_ports import ReferenceSheetPolicy, ReferenceSheetCache, ReferenceSheetImages, BoundedText
+from .media_ports import ReferenceSheetPolicy, ReferenceSheetCache, ReferenceSheetImages, ReferenceSheetFiles, BoundedText
 
 class ReferenceSheet:
     def __init__(self, text: Callable[[], BoundedText], output: Callable[[str], Path],
-                 policy: ReferenceSheetPolicy, cache: ReferenceSheetCache, media: ReferenceSheetImages):
+                 policy: ReferenceSheetPolicy, cache: ReferenceSheetCache, media: ReferenceSheetImages,
+                 *, files: Callable[[], ReferenceSheetFiles]):
+        if not callable(files):
+            raise TypeError("files must be callable")
+        self.files = files
         self.text, self.output, self.policy, self.cache, self.media = text, output, policy, cache, media
 
     def build_reference_sheet_descriptor(self, required_accessories: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -25,7 +27,7 @@ class ReferenceSheet:
                 continue
             ref = refs[0]
             path = Path(str(ref.get("source_path") or ""))
-            if not _business_files.exists(path) or path.suffix.lower() not in self.policy.suffixes():
+            if not self.files().exists(path) or path.suffix.lower() not in self.policy.suffixes():
                 continue
             items.append(
                 {
@@ -33,7 +35,7 @@ class ReferenceSheet:
                     "name": self.text()(required.get("name") or profile.get("name") or item_id, 80),
                     "expected_count": int(required.get("expected_count") or 1),
                     "source_path": str(path),
-                    "sha256": str(ref.get("sha256") or hashlib.sha256(_business_files.read_bytes(path)).hexdigest()),
+                    "sha256": str(ref.get("sha256") or hashlib.sha256(self.files().read_bytes(path)).hexdigest()),
                 }
             )
         if not items:
@@ -51,7 +53,7 @@ class ReferenceSheet:
             cached = self.cache.records().get(digest)
             if cached and cached.get("data_url") and cached.get("source_path") == str(sheet_path):
                 return dict(cached)
-        if not _business_files.exists(sheet_path):
+        if not self.files().exists(sheet_path):
             cols = 3 if len(items) > 2 else len(items)
             rows = int(math.ceil(len(items) / max(1, cols)))
             cell_w, cell_h, label_h, margin = 560, 620, 86, 24
@@ -63,14 +65,14 @@ class ReferenceSheet:
                 col = idx % cols
                 x = margin + col * (cell_w + margin)
                 y = margin + row * (cell_h + label_h + margin)
-                image = image_backend(self.media.images()).imread(item["source_path"], self.media.images().IMREAD_UNCHANGED)
+                image = image_backend(self.media.images(), runtime_provider=lambda: self.files().runtime_provider()).imread(item["source_path"], self.media.images().IMREAD_UNCHANGED)
                 tile = self.media.fit(image, cell_w, cell_h)
                 sheet[y : y + cell_h, x : x + cell_w] = tile
                 self.media.images().rectangle(sheet, (x, y), (x + cell_w, y + cell_h), (30, 30, 30), 2)
                 label_y = y + cell_h + 30
                 self.media.images().putText(sheet, item["accessory_id"], (x + 12, label_y), self.media.images().FONT_HERSHEY_SIMPLEX, 0.78, (0, 0, 0), 2, self.media.images().LINE_AA)
                 self.media.images().putText(sheet, item["name"][:42], (x + 12, label_y + 34), self.media.images().FONT_HERSHEY_SIMPLEX, 0.62, (70, 70, 70), 1, self.media.images().LINE_AA)
-            image_backend(self.media.images()).imwrite(str(sheet_path), sheet, [int(self.media.images().IMWRITE_JPEG_QUALITY), self.policy.quality()])
+            image_backend(self.media.images(), runtime_provider=lambda: self.files().runtime_provider()).imwrite(str(sheet_path), sheet, [int(self.media.images().IMWRITE_JPEG_QUALITY), self.policy.quality()])
         data_url = self.media.encode()(
             sheet_path,
             max_side=self.policy.max_side(),

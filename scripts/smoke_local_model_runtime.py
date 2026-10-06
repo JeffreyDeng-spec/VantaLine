@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch, call
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class LocalModelContracts(unittest.TestCase):
@@ -146,8 +147,8 @@ class LocalModelContracts(unittest.TestCase):
         registry=Mock(return_value=self.registry);default=Mock(return_value='default');removed=Mock()
         selection=ModelSelection(specialized,trained,registry,default,removed)
         factory=Mock(side_effect=lambda path:object());legacy=Mock(return_value=[])
-        first=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained)
-        second=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained)
+        first=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained, files=BusinessFiles(runtime_provider=lambda: None))
+        second=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained, files=BusinessFiles(runtime_provider=lambda: None))
         for provider in (specialized,trained,registry,default,removed,factory,legacy):provider.assert_not_called()
         self.assertIs(self.api._models,self.api._local_models.models)
         self.assertIs(self.api._model_paths,self.api._local_models.paths)

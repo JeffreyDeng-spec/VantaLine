@@ -1241,3 +1241,7 @@ This offline shutdown replay follows lifecycle candidate 7d7886a and preserves c
 The detection artifact-port smoke is an additional backend CI gate using isolated synthetic stores. Existing package, frontend, PLC and deployment gates remain mandatory; runtime topology and installation steps are unchanged.
 
 This offline detection artifact replay follows shutdown candidate 8618f7a and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 713010a. Manifest v206 lists 524 sources. Storage suppliers retain call-time selection; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+The detection media-port smoke is an additional required backend command. It verifies synthetic storage graphs without a real model, paid provider, PLC or remote object service; ordinary complete-release CI and managed rollout/rollback remain required.
+
+This offline detection media replay follows artifact candidate e7e12b2 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 5e86530. Manifest v207 lists 524 sources. Explicit stores retain original cache, error and video cleanup behavior; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.

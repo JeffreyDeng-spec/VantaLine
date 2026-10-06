@@ -1346,6 +1346,7 @@ _model_selection = ModelSelection(
 _local_models = LocalModels(
     select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda: YOLO,
     legacy_specs=lambda: legacy_model_specs(), trained_specs=lambda *args: list_trained_model_specs(*args),
+    files=_business_files,
 )
 # Compatibility objects for existing maintenance scripts; state belongs to LocalModels.
 _models = _local_models.models
@@ -5308,6 +5309,7 @@ _image_encoding = ImageEncoding(
     lambda: cv2,
     lambda message: AiProviderError(message),
     lambda image, max_side=1280, quality=82: image_bgr_data_url(image, max_side=max_side, quality=quality),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 _inspection_image_store = InspectionImageStore(
     lambda: cv2,
@@ -5318,6 +5320,7 @@ _inspection_image_store = InspectionImageStore(
     ),
     lambda: time.time_ns(),
     lambda name: safe_name(name),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 _reference_collection = ReferenceCollection(
     lambda: bounded_text,
@@ -5351,6 +5354,7 @@ _reference_sheet = ReferenceSheet(
         lambda image, width, height: fit_image_into_cell(image, width, height),
         lambda: image_path_data_url,
     ),
+    files=lambda: _business_files,
 )
 
 
@@ -9579,7 +9583,7 @@ _image_upload = ImageUpload(_upload_access, _upload_paths, lambda: np, lambda: c
 
 _video_summary = VideoSummary(lambda: string_list)
 
-_video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambda: load_config(), lambda: cv2, lambda image, request_id, model_id=None: analyze_bgr(image, request_id, model_id), VideoResults(lambda result, index, fps: video_frame_result_payload(result, index, fps), lambda frames: video_ai_summary(frames)))
+_video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambda: load_config(), lambda: cv2, lambda image, request_id, model_id=None: analyze_bgr(image, request_id, model_id), VideoResults(lambda result, index, fps: video_frame_result_payload(result, index, fps), lambda frames: video_ai_summary(frames)), files=_business_files)
 
 
 @app.post("/api/analyze/image")
