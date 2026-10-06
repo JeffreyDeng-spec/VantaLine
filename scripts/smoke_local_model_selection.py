@@ -29,6 +29,22 @@ def create(bindings):
                            detect_base_model=selection.detect_base_model), bindings
 
 
+def require_root_selection_binding(source):
+    tree = ast.parse(source)
+    expected = {
+        'detect_base_model': '_checkpoint_selection.detect_base_model',
+        '_checkpoint_selection': 'CheckpointSelection(lambda: DETECT_BASE_MODEL_OVERRIDE, lambda: ROOT, lambda: APP_DIR, lambda path: _business_files.exists(path))',
+    }
+    for name, expression in expected.items():
+        values = [n.value for n in tree.body if isinstance(n, ast.Assign)
+                  and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name) and n.targets[0].id == name]
+        if len(values) != 1 or ast.dump(values[0]) != ast.dump(ast.parse(expression, mode='eval').body):
+            raise AssertionError('Local model selection binding changed: ' + name)
+    if not any(isinstance(n, ast.ImportFrom) and n.module == 'detection.local_models'
+               and any(a.name == 'yolo_inference_device' for a in n.names) for n in tree.body):
+        raise AssertionError('Local device selection import changed')
+
+
 class SelectionContracts(unittest.TestCase):
     def setUp(self):
         self.files = SimpleNamespace(exists=Mock(return_value=False))
@@ -119,11 +135,25 @@ class SelectionContracts(unittest.TestCase):
         first = CheckpointSelection(lambda:'one', fail, fail, fail)
         second = CheckpointSelection(lambda:'two', fail, fail, fail)
         self.assertEqual([first.detect_base_model(), second.detect_base_model(), first.detect_base_model()], ['one','two','one'])
-        tree = ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        assignments = {n.targets[0].id:n.value for n in tree.body if isinstance(n,ast.Assign) and len(n.targets)==1 and isinstance(n.targets[0],ast.Name)}
-        self.assertEqual(ast.unparse(assignments['detect_base_model']), '_checkpoint_selection.detect_base_model')
-        self.assertEqual(ast.unparse(assignments['_checkpoint_selection']), 'CheckpointSelection(lambda: DETECT_BASE_MODEL_OVERRIDE, lambda: ROOT, lambda: APP_DIR, lambda path: _business_files.exists(path))')
-        self.assertTrue(any(isinstance(n,ast.ImportFrom) and n.module=='detection.local_models' and any(a.name=='yolo_inference_device' for a in n.names) for n in tree.body))
+        require_root_selection_binding((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+
+    @unittest.skipIf(bool(BASELINE), 'candidate composition only')
+    def test_binding_guard_accepts_formatting_and_rejects_changed_dependencies(self):
+        source = "from .detection.local_models import yolo_inference_device\n" + "detect_base_model = _checkpoint_selection.detect_base_model\n" + "_checkpoint_selection = CheckpointSelection(lambda : DETECT_BASE_MODEL_OVERRIDE, lambda : ROOT, lambda : APP_DIR, lambda path : _business_files.exists(path))\n"
+        require_root_selection_binding(source)
+        require_root_selection_binding(ast.unparse(ast.parse(source)))
+        for old, new in [
+            ('lambda : ROOT', 'lambda : APP_DIR'),
+            ('lambda : DETECT_BASE_MODEL_OVERRIDE', 'DETECT_BASE_MODEL_OVERRIDE'),
+            ('_business_files.exists(path)', '_business_files.is_file(path)'),
+            ('detect_base_model = _checkpoint_selection.detect_base_model', 'detect_base_model = other.detect_base_model'),
+            ('from .detection.local_models', 'from .other'),
+        ]:
+            with self.subTest(change=new), self.assertRaises(AssertionError):
+                require_root_selection_binding(source.replace(old, new))
+        with self.assertRaises(AssertionError):
+            require_root_selection_binding(source + 'detect_base_model = _checkpoint_selection.detect_base_model\n')
+
 
 
 if __name__ == '__main__': unittest.main()
