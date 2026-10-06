@@ -8008,6 +8008,7 @@ from .training.submission import (
 )
 
 _training_runner = TrainingRunner(
+    files=_business_files,
     records=TrainingRunnerRecords(find=lambda job_id: find_training_task(job_id), path=lambda job_id: training_task_path(job_id),
         load=lambda: load_training_task, update_provider=lambda: update_training_task,
         sync=lambda job_id: sync_training_state_from_task(job_id)),

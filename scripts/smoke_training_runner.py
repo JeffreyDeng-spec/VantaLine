@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.model_profiles.snapshots import freeze_record
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class Resolver:
@@ -335,7 +336,7 @@ class TrainingRunnerContracts(unittest.TestCase):
             provider=Mock(side_effect=lambda:f.resolver)
             runner=TrainingRunner(TrainingRunnerRecords(f.find,f.path,lambda:f.load,lambda:f.update,f.sync),
                 TrainingRunnerPaths(lambda:f.resolve,lambda:f.root,lambda:f.root/'app',lambda:f.output),
-                TrainingDatasetExecution(f.mode,f.generate,f.runpod,f.remote),TrainingLocalExecution(f.base,f.device,f.cli,lambda:f.popen,f.progress,lambda:f.warmup),provider)
+                TrainingDatasetExecution(f.mode,f.generate,f.runpod,f.remote),TrainingLocalExecution(f.base,f.device,f.cli,lambda:f.popen,f.progress,lambda:f.warmup),provider,files=BusinessFiles())
             identity=RequestIdentity()
             def owner():
                 user=identity.get();return {'owner_user_id':user['id'],'owner_username':user.get('username','')} if user else {}
