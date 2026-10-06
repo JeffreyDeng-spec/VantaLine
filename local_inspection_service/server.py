@@ -1413,7 +1413,7 @@ _image_worker_runtime = ImageWorkerRuntime(
     scope=_runtime_repositories.thread_scope,
 )
 _candidate_store_lock = threading.RLock()
-from .runtime.training_tasks import TrainingTaskRuntime
+from .runtime.training_tasks import TrainingTaskRuntime, TrainingThreadLifecycle
 _training_task_runtime = TrainingTaskRuntime(scope=_runtime_repositories.thread_scope)
 _training_task_lock = _training_task_runtime.lock
 _image_worker_processes = _image_worker_runtime.processes
@@ -7415,6 +7415,7 @@ _background_codex_generation = CodexBackgroundGeneration(
 )
 _background_codex_thread = CodexBackgroundThread(
     lambda: threading.Thread, lambda: run_codex_background_generation, lambda identifier: safe_name(identifier),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 _background_task_runner = BackgroundTaskRunner(
     BackgroundTaskRecords(lambda identifier: find_training_task(identifier), lambda identifier: training_task_path(identifier),

@@ -176,3 +176,5 @@ a separate budgeted gate after synthetic transfer tests.
 The Web shared file checksum helper resolves mapped business files through a pinned verified COS cache before streaming their bytes. This also covers startup image-guide provenance, which shares the helper. Temporary training ZIPs outside the business root still use their local file stream; the RunPod payload and worker format are unchanged.
 
 Local training submission now has a shared Python thread admission/drain owner with repository cleanup in that thread. Runpod transport, worker subprocess algorithms, snapshot binding and remote settlement stay unchanged. close(...) returning True certifies local thread/scope exit only and cannot be used as a remote-job cancellation or completion signal.
+
+The shared training thread lifecycle now also owns the separately launched Codex background-generation thread. Runpod transport and training process/remote worker behavior are unchanged; Python-thread close results do not certify remote or child-process completion.

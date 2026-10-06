@@ -123,9 +123,13 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         self.assertEqual(self.api.run_codex_background_generation(f.source,f.root/'spawn','x'),[])
         self.popen.assert_called_once(); self.process.communicate.assert_not_called(); self.process.kill.assert_not_called()
     def test_start_codex_thread_exact_target_args_name_and_start_failure(self):
-        f=self.f; self.api.start_codex_background_generation(f.source,f.sets,'raw id',3)
-        f.factory.assert_called_once_with(target=self.api.run_codex_background_generation,args=(f.source,f.sets,'raw id',3),name='codex-background-worker-raw_id',daemon=True)
-        f.thread.start.assert_called_once(); self.popen.assert_not_called()
+        f=self.f; selected=Mock()
+        with patch.object(self.api,'run_codex_background_generation',selected):
+            self.api.start_codex_background_generation(f.source,f.sets,'raw id',3)
+        f.factory.assert_called_once(); self.assertEqual({k:v for k,v in f.factory.call_args.kwargs.items() if k!='target'},dict(args=(f.source,f.sets,'raw id',3),name='codex-background-worker-raw_id',daemon=True))
+        f.thread.start.assert_called_once(); self.popen.assert_not_called(); selected.assert_not_called()
+        f.factory.call_args.kwargs['target'](*f.factory.call_args.kwargs['args'])
+        selected.assert_called_once_with(f.source,f.sets,'raw id',3)
         f.factory.reset_mock(); f.thread.start.reset_mock(); f.thread.start.side_effect=[OSError('start'),None]
         with self.assertRaisesRegex(OSError,'start'): self.api.start_codex_background_generation(f.source,f.sets,'raw id')
         f.factory.assert_called_once(); f.thread.start.assert_called_once()
@@ -238,11 +242,12 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         with self.assertRaisesRegex(KeyboardInterrupt,'kill-cancel'): self.api.run_codex_background_generation(f.source,directory,'x')
         self.process.kill.assert_called_once()
     def test_thread_targets_and_registry_are_read_at_original_evaluation_points(self):
-        f=self.f; original=self.api.run_codex_background_generation; replacement=Mock()
+        f=self.f; original=Mock(); replacement=Mock()
         def naming(value): self.api.run_codex_background_generation=replacement; return 'late-name'
         with patch.object(self.api,'run_codex_background_generation',original):
             self.name.side_effect=naming; self.api.start_codex_background_generation(f.source,f.sets,'raw')
-        self.assertIs(f.factory.call_args.kwargs['target'],original); replacement.assert_not_called()
+        original.assert_not_called(); replacement.assert_not_called()
+        f.factory.call_args.kwargs['target'](*f.factory.call_args.kwargs['args']); original.assert_called_once_with(f.source,f.sets,'raw',5); replacement.assert_not_called()
         f.factory.reset_mock(); f.thread.start.reset_mock(); original_save=f.save.side_effect
         target=Mock(); newer_target=Mock(); replacement_registry={}
         def save(task): original_save(task); self.api.run_background_set_task=target
@@ -414,7 +419,8 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         for item in instances:
             item.starter.start_codex_background_generation(item.source,item.sets,item.owner,2)
             started=item.factory.call_args.kwargs
-            self.assertEqual(started['target'],item.codex.run_codex_background_generation)
+            before=len(item.processes); started['target'](*started['args']); self.assertEqual(len(item.processes),before+1)
+            self.assertEqual(item.processes[-1].kwargs['cwd'],str(item.root))
             self.assertEqual(started['args'],(item.source,item.sets,item.owner,2)); self.assertEqual(started['name'],'codex-background-worker-'+item.owner)
 
 

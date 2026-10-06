@@ -21,11 +21,8 @@ class TrainingRuntimeClosed(RuntimeError):
     """New work cannot be admitted after the owner starts draining."""
 
 
-class TrainingTaskRuntime:
+class TrainingThreadLifecycle:
     def __init__(self, *, scope: Callable[[], AbstractContextManager] = nullcontext):
-        self.lock = threading.RLock()
-        self.threads: dict[str, threading.Thread] = {}
-        self.tombstones: dict[str, Record] = {}
         self.scope = scope
         self._condition = threading.Condition()
         self._closing = False
@@ -108,6 +105,14 @@ class TrainingTaskRuntime:
             if thread.is_alive():
                 return False
         return True
+
+
+class TrainingTaskRuntime(TrainingThreadLifecycle):
+    def __init__(self, *, scope: Callable[[], AbstractContextManager] = nullcontext):
+        self.lock = threading.RLock()
+        self.threads: dict[str, threading.Thread] = {}
+        self.tombstones: dict[str, Record] = {}
+        super().__init__(scope=scope)
 
 
 @dataclass(frozen=True)
