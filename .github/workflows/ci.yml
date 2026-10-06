@@ -310,6 +310,7 @@ jobs:
           python scripts/smoke_accessory_evidence_ports.py
           python scripts/smoke_accessory_catalog_ports.py
           python scripts/smoke_accessory_gallery_ports.py
+          python scripts/smoke_accessory_edit_ports.py
           python scripts/smoke_artifact_runtime_provider.py
           python scripts/smoke_bootstrap_locations.py
           python scripts/smoke_provider_proxy_runtime.py

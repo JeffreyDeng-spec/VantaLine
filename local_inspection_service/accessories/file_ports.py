@@ -86,3 +86,7 @@ class AccessoryImageIO(AccessoryImageReader, Protocol):
 
 class ReferenceEvidenceFiles(ExistingAccessoryFiles, Protocol):
     def read_bytes(self, path: Path) -> bytes: ...
+
+
+class AccessoryEditFiles(ExistingAccessoryFiles, AccessoryUploadFiles, Protocol):
+    def unlink(self, path: Path) -> None: ...

@@ -9529,7 +9529,7 @@ _accessory_files = AccessoryFiles(
         save_cache=lambda payload: save_ai_profile_cache(payload),
         bounded_text=lambda value, limit: bounded_text(value, limit),
     ),
-    _accessory_projection,
+    _accessory_projection, files=_business_files, images=_accessory_image_io
 )
 _accessory_file_routes = register_file_api(app, _accessory_files)
 add_accessory_files = _accessory_file_routes.add_accessory_files
