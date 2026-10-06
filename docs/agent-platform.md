@@ -390,3 +390,7 @@ This offline accessory gallery replay follows catalog candidate 8f453b3. Owned s
 Accessory file edits obtain media storage explicitly while existing profile/provider callbacks remain unchanged. Synthetic tests replace profile calls and use disposable images only.
 
 This offline accessory edit replay follows gallery candidate 1b5c003. Owned source/test blobs and ordered entry match reviewed 6f78019. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v220 selects 526 sources. Authorization order, crop geometry, partial publication and deletion failure behavior remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Object preprocessing media dependencies are explicit. AI-cutout gating, pose provenance, fallback order and model binding are unchanged; synthetic tests substitute every provider callback.
+
+This offline accessory preprocessing replay follows edit candidate 96c7b23. Owned source/test blobs and ordered entry match reviewed dbcd8b5. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v221 selects 526 sources. Discovery, decode, publication, status and exception ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.

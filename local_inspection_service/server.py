@@ -6055,7 +6055,7 @@ _object_sprite_preprocessor = _ObjectSpritePreprocessor(
 
     _ObjectSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints, top_view=lambda: pose_family_is_top_view, task_id=lambda: deterministic_task_id),
 
-    _ObjectSpriteArtifacts(write=lambda: write_clean_sprite),
+    _ObjectSpriteArtifacts(write=lambda: write_clean_sprite), files=_business_files, images=_accessory_image_io
 
 )
 

@@ -1501,3 +1501,7 @@ This offline accessory gallery replay follows catalog candidate 8f453b3. Owned s
 Accessory file-edit storage injection adds no API or configuration. Required ports reject None, and manifest v220 keeps526 selected sources without rewriting historical snapshots.
 
 This offline accessory edit replay follows gallery candidate 1b5c003. Owned source/test blobs and ordered entry match reviewed 6f78019. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v220 selects 526 sources. Authorization order, crop geometry, partial publication and deletion failure behavior remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Explicit preprocessing readers add no settings or algorithm changes. Required ports reject None; manifest v221 retains526 selected sources and historical task snapshots are not rewritten.
+
+This offline accessory preprocessing replay follows edit candidate 96c7b23. Owned source/test blobs and ordered entry match reviewed dbcd8b5. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v221 selects 526 sources. Discovery, decode, publication, status and exception ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
