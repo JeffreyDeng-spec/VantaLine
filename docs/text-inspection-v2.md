@@ -745,3 +745,5 @@ Native list-history fallback now compacts a nonempty `quality` object only when 
 Manifest version 163 adds actual authentication HTTP composition source to new task fingerprints. This does not rewrite historical model snapshots or change label/text worker admission, concurrency or paid-call settlement.
 
 Manifest version 168 includes the actual local model selection source relocation. Existing task model snapshots are not rewritten; text/label worker behavior and concurrency remain unchanged.
+
+Prompt-source manifest178/513 includes the actual public shell implementation for new fingerprints; historical task/model snapshots are not rewritten. Label/text admission, task settlement and concurrency are unchanged.

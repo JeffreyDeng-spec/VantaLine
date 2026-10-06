@@ -1400,3 +1400,5 @@ The retained PLC coordination extraction changes code ownership only. It does no
 The PLC dispatch-record ownership slice is structural and preserves current Web Serial, dormant legacy workers and external label-worker topology. It changes neither database schema nor release control. Rollback restores the full previous package and leaves dispatch evidence intact.
 
 Moving retained PLC single-iteration workflows does not start legacy workers or change the Web/label-worker topology. The application startup hook remains dormant. Rollback uses the complete previous release; no PLC state, dispatch evidence or database object is deleted.
+
+Web-shell composition retains public SPA responses, no-cache headers, preview redirects and legacy 404 responses. No worker mode, release topology or operator setting changes. Use the existing whole-release rollback and version checks.

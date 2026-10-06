@@ -1,5 +1,5 @@
 {
-  "version": 177,
+  "version": 178,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -512,6 +512,7 @@
     "plc/legacy_activation.py",
     "plc/legacy_coordination.py",
     "plc/legacy_records.py",
-    "plc/legacy_operations.py"
+    "plc/legacy_operations.py",
+    "runtime/web_shell.py"
   ]
 }

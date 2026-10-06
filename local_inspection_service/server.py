@@ -8692,44 +8692,18 @@ reset_user_password = _user_routes.reset_user_password
 delete_user = _user_routes.delete_user
 
 
-@app.get("/")
-def index() -> FileResponse:
-    index_path = REACT_PRODUCTION_DIST_DIR / "index.html"
-    if not _business_files.exists(index_path):
-        raise HTTPException(status_code=404, detail="React production build is not available")
-    return FileResponse(
-        index_path,
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-        },
-    )
-
-
-@app.get("/legacy")
-@app.get("/legacy/")
-@app.get("/legacy/{legacy_path:path}")
-def legacy_index(legacy_path: str = "") -> FileResponse:
-    raise HTTPException(status_code=404, detail="Legacy frontend has been removed")
-
-
-@app.get("/react-preview")
-@app.get("/react-preview/")
-@app.get("/react-preview/{preview_path:path}")
-def react_preview(request: Request, preview_path: str = "") -> RedirectResponse:
-    path = preview_path.strip("/")
-    first_segment = path.split("/", 1)[0]
-    if not path:
-        destination = "/workspace"
-    elif first_segment in {"workspace", "docs", "login"}:
-        destination = f"/{path}"
-    elif first_segment in REACT_PRODUCTION_ROUTE_SEGMENTS:
-        destination = f"/workspace/{path}"
-    else:
-        raise HTTPException(status_code=404, detail="Not found")
-    if request.url.query:
-        destination += f"?{request.url.query}"
-    return RedirectResponse(url=destination, status_code=307)
+from .runtime.web_shell import WebShell, register_entry_routes, register_spa
+_web_shell = WebShell(
+    production_dist=lambda: REACT_PRODUCTION_DIST_DIR,
+    exists=lambda path: _business_files.exists(path),
+    route_segments=lambda: REACT_PRODUCTION_ROUTE_SEGMENTS,
+    blocked_prefixes=lambda: REACT_PRODUCTION_BLOCKED_PREFIXES,
+    enabled=lambda: react_production_spa_enabled(),
+)
+register_entry_routes(app, _web_shell)
+index = _web_shell.index
+legacy_index = _web_shell.legacy_index
+react_preview = _web_shell.react_preview
 
 
 from .auth.status_requests import ServiceStatusRequests
@@ -13050,26 +13024,8 @@ register_model_profiles(app, model_profile_service, ProfileApiDependencies(
 ))
 
 
-@app.get("/{react_path:path}")
-def react_production_spa(react_path: str) -> FileResponse:
-    if not react_production_spa_enabled():
-        raise HTTPException(status_code=404, detail="Not found")
-    normalized = f"/{react_path.strip('/')}" if react_path else "/"
-    if normalized == "/" or normalized.startswith(REACT_PRODUCTION_BLOCKED_PREFIXES):
-        raise HTTPException(status_code=404, detail="Not found")
-    first_segment = normalized.strip("/").split("/", 1)[0]
-    if first_segment not in REACT_PRODUCTION_ROUTE_SEGMENTS:
-        raise HTTPException(status_code=404, detail="Not found")
-    index_path = REACT_PRODUCTION_DIST_DIR / "index.html"
-    if not _business_files.exists(index_path):
-        raise HTTPException(status_code=404, detail="Production React build is not available")
-    return FileResponse(
-        index_path,
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-        },
-    )
+register_spa(app, _web_shell)
+react_production_spa = _web_shell.react_production_spa
 
 
 @app.on_event("startup")
