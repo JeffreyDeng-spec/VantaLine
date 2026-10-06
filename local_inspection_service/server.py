@@ -809,10 +809,6 @@ SYSTEM_OWNER_ID = "system"
 from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
 from .runtime.repository_composition import RuntimeRepositories
 
-_runtime_repository_owner = RuntimeRepositories(os.environ)
-_runtime_repositories = _runtime_repository_owner.factory
-_runtime_repository_access = _runtime_repository_owner.access
-runtime_repository_cache_key = _runtime_repository_owner.cache_key
 
 from .auth.policy import (
     FEATURE_PERMISSIONS, ADMIN_ONLY_PERMISSIONS, DEFAULT_USER_PERMISSIONS,
@@ -834,13 +830,12 @@ from .auth.application import AuthenticationDomain
 from .auth.sessions import SessionSettings
 from .auth.login_limits import LoginLimitSettings
 
-_authentication_domain = AuthenticationDomain(
-    storage=AuthenticationStorage(
-        directory=lambda directory=DATA_DIR: directory,
-        path=lambda path=AUTH_PATH: path,
-        repository=_runtime_repository_owner.access.runtime_postgres_repository_or_none,
-    ),
-    settings=AuthenticationSettings(
+from .runtime.application_foundation import FoundationInputs, build_foundation
+_foundation = build_foundation(FoundationInputs(
+    environment=os.environ,
+    data_directory=DATA_DIR, auth_path=AUTH_PATH,
+    legacy_owner=LEGACY_OWNER_ID, system_owner=SYSTEM_OWNER_ID,
+    authentication=AuthenticationSettings(
         password_iterations=lambda iterations=PASSWORD_HASH_ITERATIONS: iterations,
         sessions=lambda cookie=AUTH_SESSION_COOKIE, ttl=AUTH_SESSION_TTL_SECONDS,
                         persist=AUTH_SESSION_PERSIST_INTERVAL_SECONDS: SessionSettings(cookie, ttl, persist),
@@ -848,7 +843,12 @@ _authentication_domain = AuthenticationDomain(
                             lockout=LOGIN_RATE_LIMIT_LOCKOUT_SECONDS: LoginLimitSettings(window, attempts, lockout),
         legacy_owner=lambda owner=LEGACY_OWNER_ID: owner,
     ),
-)
+))
+_runtime_repository_owner = _foundation.repositories
+_runtime_repositories = _runtime_repository_owner.factory
+_runtime_repository_access = _runtime_repository_owner.access
+runtime_repository_cache_key = _runtime_repository_owner.cache_key
+_authentication_domain = _foundation.authentication
 _authentication = _authentication_domain.services
 _request_user = _authentication_domain.identity
 _password_hasher = _authentication.hasher
@@ -1038,12 +1038,7 @@ from .records.audit import (
     record_updated_at as _record_updated_at,
 )
 from .records.composition import RecordServices
-_record_services = RecordServices(
-    identity=_authentication_domain.identity,
-    legacy_owner=LEGACY_OWNER_ID, system_owner=SYSTEM_OWNER_ID,
-    current_user=_authentication.access.current_auth_user,
-    find_user=lambda target, load=_authentication.repository.load_auth_store, find=find_user: find(load(), target),
-)
+_record_services = _foundation.records
 _record_ownership = _record_services.ownership
 _record_audit = _record_services.audit
 _record_access = _record_services.access

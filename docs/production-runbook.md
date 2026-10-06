@@ -1442,3 +1442,5 @@ Closing the Codex starter does not wait for separate direct synchronous generati
 TransferProgress.close(timeout) may return false while an update callback, construction or uncertain thread start remains outstanding. It never cancels the upload/download, sends a final success update, retries a transfer or settles a training task. Future app shutdown must drain transfer callers before closing their reporter owner and repositories.
 
 Auto-optimization starter close results certify local Python thread and repository-scope exit only. They do not cancel or settle training subprocesses or remote calls. Future shutdown integration must drain upstream callers before these owners and their dependencies; that application hook is not enabled by this change.
+
+The foundational graph builder is inert. Existing server import-time directory creation and actual lifecycle callbacks remain in their prior positions, so this step does not enable a second production app or a second worker role. It changes no connection cleanup policy or deployment topology.

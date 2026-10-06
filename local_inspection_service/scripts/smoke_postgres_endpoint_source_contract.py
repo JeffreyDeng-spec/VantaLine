@@ -178,10 +178,24 @@ def main() -> None:
                         "probe_id": "runtime_repository_connection_probe_id", "postgres_store": "POSTGRES_STORE"}.items():
         require(key in capabilities and ast.dump(capabilities[key]) == ast.dump(ast.parse("lambda: " + target, mode="eval").body),
                 "runtime repository adapter must keep owned capability " + key)
-    owners = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+    foundation_tree = ast.parse((ROOT / "local_inspection_service/runtime/application_foundation.py").read_text(encoding="utf-8"))
+    owners = [n for n in ast.walk(foundation_tree) if isinstance(n, ast.Call)
               and isinstance(n.func, ast.Name) and n.func.id == "RuntimeRepositories"]
-    require(len(owners) == 1 and ast.unparse(owners[0]) == "RuntimeRepositories(os.environ)",
-            "expected one runtime repository owner with live environment")
+    require(len(owners) == 1 and ast.unparse(owners[0]) == "RuntimeRepositories(inputs.environment, connector=inputs.connector)",
+            "expected one foundation repository owner with explicit live environment and connector")
+    foundations = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Name) and n.func.id == "build_foundation"]
+    require(len(foundations) == 1 and len(foundations[0].args) == 1,
+            "expected one entry foundation construction")
+    foundation_input = foundations[0].args[0]
+    require(isinstance(foundation_input, ast.Call) and isinstance(foundation_input.func, ast.Name)
+            and foundation_input.func.id == "FoundationInputs", "foundation inputs must be explicit")
+    inputs = {keyword.arg: keyword.value for keyword in foundation_input.keywords}
+    require("environment" in inputs and ast.unparse(inputs["environment"]) == "os.environ",
+            "entry must supply the live environment to its foundation")
+    require(any(isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_runtime_repository_owner" for t in n.targets)
+                and ast.unparse(n.value) == "_foundation.repositories" for n in tree.body),
+            "entry runtime repository alias must use the actual foundation owner")
     for name in ("runtime_repository_selection", "runtime_postgres_repository_or_none", "runtime_store_probe_payload"):
         wrapper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
         statements = wrapper.body[1:] if ast.get_docstring(wrapper) is not None else wrapper.body
