@@ -7694,14 +7694,14 @@ _runpod_exports = RunPodExports(
         public_base=lambda: runpod_yolo_public_base_url(),
     ),
     bundle=lambda directory, job: build_worker_training_bundle(directory, job), digest=lambda path: file_sha256(path),
-    update_provider=lambda: update_training_task,
+    update_provider=lambda: update_training_task, runtime_provider=_business_files.runtime_provider
 )
 _runpod_artifacts = RunPodArtifacts(
     RunPodArtifactPaths(
         resolve=lambda value: resolve_service_path(value), output_root=lambda: OUTPUT_DIR,
         output=lambda: output_write_dir_for_owner,
     ),
-    find=lambda job: find_training_task(job), summary=lambda value: runpod_public_response_summary(value),
+    find=lambda job: find_training_task(job), summary=lambda value: runpod_public_response_summary(value), runtime_provider=_business_files.runtime_provider
 )
 
 
