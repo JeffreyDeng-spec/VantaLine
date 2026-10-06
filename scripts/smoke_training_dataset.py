@@ -15,6 +15,7 @@ import numpy as np
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class DatasetFixture:
@@ -513,7 +514,7 @@ class TrainingDatasetContracts(unittest.TestCase):
             DatasetRecords(f.load, f.save, f.ensure, f.select, f.ocr),
             DatasetPlanning(lambda:f.pose, lambda:lambda value: 'background-' + identity.get()['id'], f.planner),
             DatasetRendering(lambda:f.render, lambda:yolo_detection_label_line, lambda:preview.write_training_annotation_preview,
-                             write_dataset_yaml, occlusion, area), lambda:f.output, lambda:f.update)
+                             write_dataset_yaml, occlusion, area), lambda:f.output, lambda:f.update, files=BusinessFiles())
         return generator, (root, occlusion, area)
 
     def test_independent_services_and_zero_provider_construction(self):

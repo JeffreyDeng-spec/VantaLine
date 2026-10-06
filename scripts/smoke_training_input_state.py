@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class SyntheticStatPath:
@@ -638,10 +639,10 @@ class TrainingInputStateContracts(unittest.TestCase):
                 value = Mock(side_effect=fn); mocks.append(value); return value
             cache = TrainingPreviewCache(SpriteVersionInputs(port(lambda item: []), port(lambda item: item['id']),
                 port(lambda item: item['material_type']), port(lambda item: 'solid')), port(lambda: 'schema-' + owner),
-                (lambda: Path), port(lambda item: cache.accessory_sprite_version(item)))
-            approval = TrainingPreviewApproval(port(lambda: root), port(lambda: (lambda background, user: None)), port(cache.preview_cache_key))
+                (lambda: Path), port(lambda item: cache.accessory_sprite_version(item)), files=BusinessFiles())
+            approval = TrainingPreviewApproval(port(lambda: root), port(lambda: (lambda background, user: None)), port(cache.preview_cache_key), files=BusinessFiles())
             source = TrainingDatasetInput(port(lambda identifier, **kwargs: (dataset, {'owner_user_id': owner})),
-                                         port(lambda record, user, **kwargs: self.assertEqual((record['owner_user_id'], user['id']), (owner, owner))), port(lambda: (lambda rows: rows)))
+                                         port(lambda record, user, **kwargs: self.assertEqual((record['owner_user_id'], user['id']), (owner, owner))), port(lambda: (lambda rows: rows)), files=BusinessFiles())
             status = TrainingStatusProjection(StatusTasks(port(lambda job: task if job == owner else None), port(lambda value: dict(value))),
                 StatusAccess(port(lambda value, user, target: value['owner_user_id'] == user['id']), port(lambda user: False), port(lambda record: record['owner_user_id'])),
                 StatusPreview(port(lambda: (lambda config, ids: selected)), port(cache.preview_cache_key), port(cache.training_preview_metadata_missing)))

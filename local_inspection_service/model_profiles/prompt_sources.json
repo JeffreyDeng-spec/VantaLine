@@ -1,5 +1,5 @@
 {
-  "version": 212,
+  "version": 213,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -525,6 +525,7 @@
     "runtime/deadline_tasks.py",
     "text_inspection/comparison_runtime.py",
     "runtime/shutdown.py",
-    "training/background_file_ports.py"
+    "training/background_file_ports.py",
+    "training/file_ports.py"
   ]
 }

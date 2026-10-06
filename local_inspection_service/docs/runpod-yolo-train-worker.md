@@ -186,3 +186,7 @@ Auto-optimization label, shadow and delayed-check Python threads now have explic
 Automatic-mask executor tasks release local repository selections on the executor thread. This change retains the existing executor ContextVar behavior, mask batch limits and remote training behavior; local cleanup is not a remote completion guarantee.
 
 Automatic-mask child work now explicitly inherits the submitting task model snapshot for downstream training-vision resolution. It does not inherit unrelated request/cache/authorization contexts or change mask algorithms, concurrency, prompts or remote training behavior.
+
+Dataset label and manifest writes now use an explicitly supplied file capability. Sample planning, rendering, archive construction, remote worker commands and partial-failure behavior are unchanged. This composition change neither starts a training worker nor alters its retry policy.
+
+This offline training file replay follows generation candidate 2fdb9ee and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 214fe9c. Manifest v213 lists 526 sources, appending training/file_ports.py. Five services capture matching file capabilities while preserving validation, cache, write ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.

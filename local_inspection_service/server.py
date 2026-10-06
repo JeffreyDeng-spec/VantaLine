@@ -5714,7 +5714,7 @@ _training_preview_cache = TrainingPreviewCache(
     SpriteVersionInputs(lambda item: clean_sprite_assets(item), lambda item: accessory_uid(item),
                         lambda item: accessory_material_type(item), lambda item: object_alpha_material_policy(item)),
     lambda: PREVIEW_CACHE_SCHEMA_VERSION, lambda: resolve_service_path,
-    lambda item: accessory_sprite_version(item),
+    lambda item: accessory_sprite_version(item), files=_business_files
 )
 
 
@@ -7561,7 +7561,7 @@ _training_dataset_generator = DatasetGenerator(
         min_visible_area=lambda: DETECTION_MIN_VISIBLE_AREA_PX,
     ),
     output=lambda: output_write_dir_for_owner,
-    update_provider=lambda: update_training_task,
+    update_provider=lambda: update_training_task, files=_business_files
 )
 
 
@@ -9750,11 +9750,11 @@ from .training.status_projection import StatusAccess, StatusPreview, StatusTasks
 _training_dataset_input = TrainingDatasetInput(
     lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs),
     lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
-    lambda: public_path_sanitized,
+    lambda: public_path_sanitized, files=_business_files
 )
 _training_preview_approval = TrainingPreviewApproval(
     lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id,
-    lambda selected: preview_cache_key(selected),
+    lambda selected: preview_cache_key(selected), files=_business_files
 )
 _training_status_projection = TrainingStatusProjection(
     StatusTasks(lambda job: find_training_task(job), lambda task: public_refreshed_training_task(task)),
@@ -9958,7 +9958,7 @@ _training_plan_query = TrainingPlanQuery(
     lambda: serialize_accessory_items,
     lambda **kwargs: training_execution_status(**kwargs),
 )
-_training_preview_artifacts = PreviewArtifactStore(lambda kind: output_write_dir(kind), lambda: TRAINING_JOBS_DIR)
+_training_preview_artifacts = PreviewArtifactStore(lambda kind: output_write_dir(kind), lambda: TRAINING_JOBS_DIR, files=_business_files)
 _training_preview_submission = TrainingPreviewSubmission(
     current=lambda: current_auth_user(),
     config=PreviewConfiguration(
