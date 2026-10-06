@@ -43,12 +43,12 @@ class IntegrationTests(unittest.TestCase):
         files = BusinessFiles(runtime_provider=self.runtime)
         metadata = image_job_metadata.ImageJobMetadata(
             image_job_metadata.ProvenanceDependencies(
-                dataset_archives.file_sha256, lambda: "fixture",
+                lambda path: dataset_archives.file_sha256(path, files=files), lambda: "fixture",
                 lambda: {"circle": [path]}, lambda: 8,
             ), None,
         )
         job = {"pose_family": "circle", "input_files": []}
-        with patch.object(image_job_metadata, "_business_files", files), patch.object(dataset_archives, "_business_files", files):
+        with patch.object(image_job_metadata, "_business_files", files):
             self.assertTrue(metadata.ensure_image_job_target_guides(job))
             self.assertEqual(job["target_guide_sha256"], {path.name: row.sha256})
             self.assertFalse(path.exists())

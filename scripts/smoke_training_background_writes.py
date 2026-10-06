@@ -275,7 +275,7 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
                 TaskBackgroundPaths(port(lambda: sets), port(lambda: {'.png'})),
                 TaskBackgroundRecords(port(lambda: writes.update_background_set_manifest),
                                       port(lambda identifier, meta: {'id': identifier, 'meta': meta, 'paths': images.image_file_list(sets / identifier)})),
-                port(variants.create_background_variants_from_source), port(images.image_file_list), clock)
+                port(variants.create_background_variants_from_source), port(images.image_file_list), clock, files=BusinessFiles())
             for callback in callbacks: callback.assert_not_called()
             self.assertFalse(directory.exists())
             return owner, shade, stamp, sets, source, manifest, writes, minimum, store, clock
@@ -630,7 +630,7 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
                 def create(source,directory,*,count): (directory/'variant.png').write_bytes(b'variant')
                 lookup=Mock(side_effect=provider); owner=Mock(side_effect=legacy)
                 service=TaskBackgroundStore(TaskBackgroundIdentity(lambda value:'fixture',lambda value:'fallback',lambda: (lambda value:value),owner),
-                    TaskBackgroundPaths(lambda:self.sets,lambda:{'.jpg'}),TaskBackgroundRecords(lookup,self.payload),create,lambda path:[Path('image')],self.clock)
+                    TaskBackgroundPaths(lambda:self.sets,lambda:{'.jpg'}),TaskBackgroundRecords(lookup,self.payload),create,lambda path:[Path('image')],self.clock, files=BusinessFiles())
                 lookup.assert_not_called(); owner.assert_not_called(); self.clock.assert_not_called()
                 if stage!='legacy-switch':
                     with self.assertRaisesRegex(OSError,'lookup' if stage=='lookup' else 'legacy'): service.save_task_environment_background_set('raw',self.source,{})

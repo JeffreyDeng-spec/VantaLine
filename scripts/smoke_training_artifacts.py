@@ -19,6 +19,7 @@ from PIL import Image
 PIL_IMAGE_OPEN = Image.open
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class ArtifactContracts(unittest.TestCase):
@@ -506,8 +507,8 @@ class ArtifactContracts(unittest.TestCase):
         from local_inspection_service.training.runpod_exports import RunPodExports, RunPodExportPaths, RunPodExportPolicy
         from local_inspection_service.training.runpod_artifacts import RunPodArtifacts, RunPodArtifactPaths
         directories = self.temporary_factory()
-        skips, quality, digest = Mock(return_value=set()), Mock(return_value=80), Mock(side_effect=file_sha256)
-        archives = DatasetArchives(self.safe, skips, quality, digest)
+        skips, quality, digest = Mock(return_value=set()), Mock(return_value=80), Mock(side_effect=lambda path: file_sha256(path, files=BusinessFiles()))
+        archives = DatasetArchives(self.safe, skips, quality, digest, runtime_provider=lambda: None)
         exports = RunPodExports(RunPodExportPaths(lambda:self.resolve, self.output, self.safe),
                                RunPodExportPolicy(lambda token: hashlib.sha256(token.encode()).hexdigest(), self.ttl, self.public_base),
                                archives.build_worker_training_bundle, digest, lambda:self.update)

@@ -7382,7 +7382,7 @@ _task_background_store = TaskBackgroundStore(
     TaskBackgroundRecords(lambda: update_background_set_manifest,
                           lambda identifier, meta: background_set_payload(identifier, meta)),
     lambda source_path, set_dir, count=5: create_background_variants_from_source(source_path, set_dir, count=count),
-    lambda path: image_file_list(path), lambda: time.time(),
+    lambda path: image_file_list(path), lambda: time.time(), files=_business_files
 )
 
 def create_background_variants_from_source(source_path: Path, set_dir: Path, count: int = 5) -> list[Path]:
@@ -7681,7 +7681,7 @@ from .training.runpod_artifacts import RunPodArtifacts, RunPodArtifactPaths
 
 _training_dataset_archives = DatasetArchives(
     safe_name=lambda name: safe_name(name), skip_dirs=lambda: WORKER_BUNDLE_SKIP_DIRS,
-    jpeg_quality=lambda: WORKER_BUNDLE_JPEG_QUALITY, digest=lambda path: file_sha256(path),
+    jpeg_quality=lambda: WORKER_BUNDLE_JPEG_QUALITY, digest=lambda path: file_sha256(path), runtime_provider=lambda: _business_files.runtime_provider()
 )
 _runpod_exports = RunPodExports(
     RunPodExportPaths(
@@ -7720,7 +7720,8 @@ def build_worker_training_bundle(dataset_dir: Path, job_id: str) -> tuple[tempfi
 
 
 # Retain the original late override of the earlier best-effort hash helper.
-file_sha256 = strict_training_file_sha256
+def file_sha256(path: Path) -> str:
+    return strict_training_file_sha256(path, files=_business_files)
 
 
 def dataset_file_manifest(dataset_dir: Path) -> list[dict[str, Any]]:
@@ -9906,7 +9907,7 @@ _training_resource_mutations = TrainingResourceMutations(
                        lambda identifier, user, **options: delete_training_model_resource(identifier, user, **options),
                        lambda identifier, user: mark_training_task_dataset_deleted(identifier, user),
                        lambda identifier, user: mark_pipeline_dataset_deleted(identifier, user),
-                       lambda identifier, user: mark_pipeline_model_deleted(identifier, user)),
+                       lambda identifier, user: mark_pipeline_model_deleted(identifier, user)), files=_business_files
 )
 
 
