@@ -72,6 +72,7 @@ class Fixture:
         fixture=self
         class Thread:
             def __init__(self,**kwargs):self.kwargs=kwargs
+            def is_alive(self):return False
             def start(self):
                 if fail_thread:raise RuntimeError('fixture thread failure')
                 fixture.tasks.append(self.kwargs)
@@ -253,11 +254,10 @@ class DocumentContracts(unittest.TestCase):
                     if point=='clear':
                         with self.assertRaises(RuntimeError):f.run()
                     else:f.run()
-                self.assertEqual(order,['clear'] if point=='clear' else ['clear','release'])
+                self.assertEqual(order,['clear','release'])
                 if point in {'load','claim'}:self.assertEqual(f.calls,[])
                 if point=='finish':self.assertEqual(len(f.calls),1);self.assertEqual(f.assets[0]['classification_attempt']['state'],'attempting')
                 if point=='load':load.assert_called_once()
-                if point=='clear':release()  # Preserve the old cleanup-failure behavior; only release the fixture.
                 self.slots_free(f)
         f=Fixture();original=f.models.transport
         def replaced_attempt(*args,**kwargs):

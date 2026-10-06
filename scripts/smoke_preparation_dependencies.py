@@ -71,6 +71,7 @@ class Fixture:
         fixture=self
         class Thread:
             def __init__(self,**kwargs):self.kwargs=kwargs
+            def is_alive(self):return False
             def start(self):
                 if fail:raise RuntimeError('thread start failed')
                 fixture.workers.append(self.kwargs)

@@ -415,6 +415,7 @@ jobs:
           AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_agent_policy_read_transactions.py
           python scripts/smoke_extraction_dependencies.py
           python scripts/smoke_preparation_dependencies.py
+          python scripts/smoke_text_job_drain.py
           python scripts/smoke_comparison_dependencies.py
           python scripts/smoke_text_record_store.py --root --postgres
           python scripts/smoke_text_media.py --root

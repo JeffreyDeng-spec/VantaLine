@@ -12178,6 +12178,7 @@ document_import_jobs = register_document_import_jobs(
         _document_records, _document_models,
         asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
         clear_repository=lambda: clear_thread_runtime_repository_selection(),
+        runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
     ),
 )
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
@@ -12220,7 +12221,8 @@ standard_preparation_jobs = register_standard_preparation(
     ),
     _preparation_media,
     PreparationJobs(_preparation_records, _preparation_media, _preparation_models,
-                    clear_repository=lambda: clear_thread_runtime_repository_selection()),
+                    clear_repository=lambda: clear_thread_runtime_repository_selection(),
+                    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)),
 )
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
 from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
