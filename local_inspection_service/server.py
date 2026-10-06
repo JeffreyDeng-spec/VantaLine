@@ -5639,7 +5639,7 @@ _agent_pose_assets = _AgentPoseAssets(
     _PoseAssetMaterial(kind=lambda: accessory_material_type, text_assets=lambda: canonical_text_assets, text_complete=lambda: canonical_text_assets_complete),
     _PoseAssetSprites(source_paths=lambda: object_photo_highlight_source_paths, highlight_ready=lambda: photo_highlight_clean_sprites_ready, assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete, family=lambda: canonical_pose_family_name, version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION),
     _PoseAssetCalls(references=lambda: agent_mcp_pose_reference_assets, rebuild=lambda: agent_mcp_clean_sprites_need_rebuild),
-    _PoseAssetCatalog(uid=lambda: accessory_uid, lookup=lambda: accessory_lookup_by_id, canonical_ids=lambda: canonical_pipeline_accessory_ids, has_asset=lambda: agent_mcp_accessory_has_existing_or_pose_asset, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+    _PoseAssetCatalog(uid=lambda: accessory_uid, lookup=lambda: accessory_lookup_by_id, canonical_ids=lambda: canonical_pipeline_accessory_ids, has_asset=lambda: agent_mcp_accessory_has_existing_or_pose_asset, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE), files=_business_files
 )
 _agent_pose_templates = _AgentPoseTemplates(
     _PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search),
@@ -10623,7 +10623,7 @@ _pose_render_configuration = _PoseRenderConfiguration(
 )
 _pose_render_content = _PoseRenderContent(
     _PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256),
-    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files
 )
 _pose_artifact_store = _PoseArtifactStore(
     _PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id),
@@ -10818,7 +10818,7 @@ from .agent.photo_highlight_ports import PhotoSourceMedia as _PhotoSourceMedia, 
 _photo_highlight_sources = _PhotoHighlightSources(
     _PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
-    _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete),
+    _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete), files=_business_files
 )
 _photo_highlight_selection = _PhotoHighlightSelection(
     _PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type),

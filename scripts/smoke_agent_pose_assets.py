@@ -9,6 +9,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch
 
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseAssetsContracts(unittest.TestCase):
 
@@ -174,7 +175,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
             values={f.name:Mock(return_value=None) for f in fields(kind)};getters.extend(values.values());return kind(**values)
 
-        AgentPoseAssets(group(p.PoseAssetPaths),group(p.PoseAssetMaterial),group(p.PoseAssetSprites),group(p.PoseAssetCalls),group(p.PoseAssetCatalog));AgentPoseTemplates(group(p.PoseTemplateIdentity),group(p.PoseTemplateCalls))
+        AgentPoseAssets(group(p.PoseAssetPaths),group(p.PoseAssetMaterial),group(p.PoseAssetSprites),group(p.PoseAssetCalls),group(p.PoseAssetCatalog), files=BusinessFiles());AgentPoseTemplates(group(p.PoseTemplateIdentity),group(p.PoseTemplateCalls))
 
         for getter in getters:getter.assert_not_called()
 
@@ -194,7 +195,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
         def make(name):
 
-            assets=AgentPoseAssets(group(p.PoseAssetPaths,resolve=lambda:lambda raw:self.path('/synthetic/'+name+'.png'),suffixes=lambda:{'.png'}),group(p.PoseAssetMaterial,kind=lambda:lambda item:'object'),group(p.PoseAssetSprites,source_paths=lambda:lambda item:[],highlight_ready=lambda:lambda item,paths:True),group(p.PoseAssetCalls),group(p.PoseAssetCatalog))
+            assets=AgentPoseAssets(group(p.PoseAssetPaths,resolve=lambda:lambda raw:self.path('/synthetic/'+name+'.png'),suffixes=lambda:{'.png'}),group(p.PoseAssetMaterial,kind=lambda:lambda item:'object'),group(p.PoseAssetSprites,source_paths=lambda:lambda item:[],highlight_ready=lambda:lambda item,paths:True),group(p.PoseAssetCalls),group(p.PoseAssetCatalog), files=BusinessFiles())
 
             templates=AgentPoseTemplates(group(p.PoseTemplateIdentity,uid=lambda:lambda item:name,kind=lambda:lambda item:'object',search=lambda:re.search),group(p.PoseTemplateCalls,request=lambda:lambda:{'owner':name}))
 
