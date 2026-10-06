@@ -1402,3 +1402,5 @@ The PLC dispatch-record ownership slice is structural and preserves current Web 
 Moving retained PLC single-iteration workflows does not start legacy workers or change the Web/label-worker topology. The application startup hook remains dormant. Rollback uses the complete previous release; no PLC state, dispatch evidence or database object is deleted.
 
 Web-shell composition retains public SPA responses, no-cache headers, preview redirects and legacy 404 responses. No worker mode, release topology or operator setting changes. Use the existing whole-release rollback and version checks.
+
+The retained retired endpoints continue returning the same errors after the same middleware/body-validation/admin sequence. Rollback of the unreachable-tail cleanup restores the previous complete release; there is no data transformation or PLC action.

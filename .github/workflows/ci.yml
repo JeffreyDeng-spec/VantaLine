@@ -273,6 +273,7 @@ jobs:
         run: |
           python scripts/verify_backend_contract.py
           python scripts/smoke_web_shell_composition.py
+          python scripts/smoke_retired_entry_tails.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
           python scripts/smoke_foundation_policies.py
