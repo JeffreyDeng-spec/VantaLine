@@ -93,3 +93,28 @@ class IncomingImaging:
     rectify: Callable[[], Callable[[np.ndarray, tuple[int, int]], tuple[np.ndarray, Record]]]
     similarity: Callable[[], Callable[[np.ndarray, np.ndarray, Record], float | None]]
     annotate: Callable[[], Callable[[np.ndarray, list[Record]], np.ndarray]]
+
+
+class IncomingAssetFiles(Protocol):
+    def exists(self, path: Path) -> bool: ...
+
+
+class IncomingEvidenceFiles(Protocol):
+    def write_bytes(self, path: Path, contents: bytes) -> Any: ...
+    def unlink(self, path: Path, *, missing_ok: bool = False) -> Any: ...
+
+
+class IncomingReferenceFiles(IncomingAssetFiles, IncomingEvidenceFiles, Protocol):
+    def read_bytes(self, path: Path) -> bytes: ...
+
+
+class IncomingRetentionFiles(IncomingAssetFiles, Protocol):
+    def unlink(self, path: Path, *, missing_ok: bool = False) -> Any: ...
+
+
+class IncomingImageWriter(Protocol):
+    def imwrite(self, filename: str, image: np.ndarray) -> bool: ...
+
+
+class IncomingEvidenceImages(IncomingImageWriter, Protocol):
+    def imread(self, filename: str, flags: int) -> np.ndarray | None: ...

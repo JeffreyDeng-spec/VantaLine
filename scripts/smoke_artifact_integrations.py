@@ -104,14 +104,14 @@ class IntegrationTests(unittest.TestCase):
         repository.mark_incoming_text_evidence_purged.return_value = True
         media = SimpleNamespace(root=lambda: self.root / "outputs", under=lambda p, root: p.is_relative_to(root))
         retention = incoming_retention.IncomingRetention(None, media, SimpleNamespace(repository=lambda: repository),
-                                                         None, lambda: Mock(), lambda: "system")
-        with patch.object(incoming_retention, "_business_files", BusinessFiles(runtime_provider=self.runtime)):
-            self.locations.fail = True
-            with self.assertRaises(RuntimeError):
-                retention.purge()
-            repository.mark_incoming_text_evidence_purged.assert_not_called()
-            self.locations.fail = False
-            self.assertEqual(retention.purge(), {"records": 1, "files": 1})
+                                                         None, lambda: Mock(), lambda: "system",
+                                                         files=BusinessFiles(runtime_provider=self.runtime))
+        self.locations.fail = True
+        with self.assertRaises(RuntimeError):
+            retention.purge()
+        repository.mark_incoming_text_evidence_purged.assert_not_called()
+        self.locations.fail = False
+        self.assertEqual(retention.purge(), {"records": 1, "files": 1})
         self.assertEqual(self.locations.rows[source.path].state, "deleted")
         self.assertEqual(self.client.rows[source.key], b"history")
 

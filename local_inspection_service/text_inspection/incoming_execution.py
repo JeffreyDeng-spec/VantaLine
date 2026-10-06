@@ -1,6 +1,4 @@
 """Capture admission, durable evidence and unchanged fail-closed OCR orchestration."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 import hashlib
 import re
 import time
@@ -8,22 +6,24 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
 import numpy as np
 from fastapi import HTTPException
 from ..incoming_text_inspection import FAIL as INCOMING_TEXT_FAIL, PASS as INCOMING_TEXT_PASS, REVIEW_REQUIRED as INCOMING_TEXT_REVIEW_REQUIRED, normalize_field_rules, decide_inspection, apply_commissioning_gate
-from .incoming_ports import IncomingAccess, IncomingReferences, IncomingInspections, IncomingMedia, IncomingOCR, IncomingImaging, Upload
+from .incoming_ports import IncomingAccess, IncomingReferences, IncomingInspections, IncomingMedia, IncomingOCR, IncomingImaging, Upload, IncomingEvidenceFiles, IncomingEvidenceImages
 
 
 class IncomingExecution:
     def __init__(self, access: IncomingAccess, references: IncomingReferences, inspections: IncomingInspections,
                  media: IncomingMedia, ocr: IncomingOCR, imaging: IncomingImaging,
                  capacity: Callable[[], Callable[[int], None]], verified: Callable[[], bool],
-                 public: Callable[[dict[str, Any]], dict[str, Any]]):
+                 public: Callable[[dict[str, Any]], dict[str, Any]], *,
+                 files: IncomingEvidenceFiles, images: IncomingEvidenceImages):
         self.access, self.references, self.inspections = access, references, inspections
         self.media, self.ocr, self.imaging = media, ocr, imaging
         self.capacity, self.verified, self.public = capacity, verified, public
+        if files is None or images is None:
+            raise TypeError("explicit incoming storage dependencies are required")
+        self.files, self.images = files, images
 
     async def inspect_incoming_text(self, task_id: str, file: Upload, capture_id: str) -> dict[str, Any]:
         self.access.permission("inspection", detail="没有来料检验权限")
@@ -62,7 +62,7 @@ class IncomingExecution:
         output_dir = self.media.output()(f"incoming_text/inspections/{task_id}", owner_user_id)
         source_suffix = ".png" if contents[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
         source_path = output_dir / f"{inspection_id}_source{source_suffix}"
-        _business_files.write_bytes(source_path, contents)
+        self.files.write_bytes(source_path, contents)
         now = int(time.time())
         inspection = {
             "id": inspection_id,
@@ -86,14 +86,14 @@ class IncomingExecution:
             "shared_with_user_ids": list(task.get("shared_with_user_ids") or []),
         }
         if not self.inspections.save(inspection, insert_only=True):
-            _business_files.unlink(source_path, missing_ok=True)
+            self.files.unlink(source_path, missing_ok=True)
             duplicate = self.inspections.duplicate(owner_user_id, task_id, capture_id)
             if duplicate and duplicate.get("source_sha256") == source_hash:
                 return self.public(duplicate)
             raise HTTPException(status_code=409, detail="capture_id 已被其他请求占用")
         quality = self.imaging.quality(image)
         try:
-            reference_image = _image_files.imread(str(reference.get("canonical_path") or ""), cv2.IMREAD_COLOR)
+            reference_image = self.images.imread(str(reference.get("canonical_path") or ""), cv2.IMREAD_COLOR)
             if reference_image is None:
                 raise RuntimeError("reference_image_missing")
             corrected, alignment = self.imaging.rectify()(image, (reference_image.shape[1], reference_image.shape[0]))
@@ -122,7 +122,7 @@ class IncomingExecution:
             annotated = self.imaging.annotate()(corrected, result["fields"])
             corrected_path = output_dir / f"{inspection_id}_corrected.jpg"
             annotated_path = output_dir / f"{inspection_id}_annotated.jpg"
-            if not _image_files.imwrite(str(corrected_path), corrected) or not _image_files.imwrite(str(annotated_path), annotated):
+            if not self.images.imwrite(str(corrected_path), corrected) or not self.images.imwrite(str(annotated_path), annotated):
                 raise RuntimeError("evidence_save_failed")
             inspection.update(
                 {

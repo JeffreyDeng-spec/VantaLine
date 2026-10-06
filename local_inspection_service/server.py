@@ -12558,13 +12558,16 @@ _incoming_json = IncomingJSON(
     paths=_incoming_text_store.paths,
     read=lambda path: _incoming_text_json_list(path), write=lambda path, values: _save_incoming_text_json_list(path, values),
 )
+_incoming_image_files = ImageFiles(lambda: cv2, files=_business_files)
 _incoming_catalog = IncomingCatalog(
     _incoming_access, _incoming_references, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
     public=lambda record: incoming_text_public(record), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+    files=_business_files, images=_incoming_image_files,
 )
 _incoming_reviews = IncomingReviews(
     _incoming_access, _incoming_inspections, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
     decode_rows=lambda: row_raw_json_list, public=lambda record: incoming_text_public(record),
+    files=_business_files,
 )
 _incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
 _incoming_execution = IncomingExecution(
@@ -12576,11 +12579,11 @@ _incoming_execution = IncomingExecution(
                     similarity=lambda: local_visual_similarity,
                     annotate=lambda: annotate_inspection),
     capacity=lambda: require_incoming_text_storage_capacity, verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
-    public=lambda record: incoming_text_public(record),
+    public=lambda record: incoming_text_public(record), files=_business_files, images=_incoming_image_files,
 )
 _incoming_retention = IncomingRetention(
     _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
-    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID,
+    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID, files=_business_files,
 )
 _incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog, files=lambda: _business_files)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
