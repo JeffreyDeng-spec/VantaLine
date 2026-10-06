@@ -12,6 +12,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseMaterializationContracts(unittest.TestCase):
     @classmethod
@@ -367,7 +368,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
         PoseChromaPolicy(group(ports.PoseChromaSources))
         PoseCutoutPipeline(group(ports.PoseCutoutSources))
         PoseSpriteBuilder(group(ports.PoseChromaSources), group(ports.PoseSpritePolicy), group(ports.PoseSpriteRuntime), group(ports.PoseSpriteImages), group(ports.PoseSpriteMetadata), group(ports.PoseAssetMedia))
-        PoseAssetMaterialization(group(ports.PoseChromaSources), group(ports.PoseMaterializationState), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites))
+        PoseAssetMaterialization(group(ports.PoseChromaSources), group(ports.PoseMaterializationState), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites), files=BusinessFiles())
         for getter in getters:
             getter.assert_not_called()
 
@@ -390,7 +391,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
             pipeline = PoseCutoutPipeline(cutouts)
             builder = PoseSpriteBuilder(chroma_ports, group(ports.PoseSpritePolicy, material=lambda: lambda item: 'text'), group(ports.PoseSpriteRuntime), group(ports.PoseSpriteImages), group(ports.PoseSpriteMetadata), group(ports.PoseAssetMedia))
             state = {'photo_highlight_sprite_policy': {'name': name}}
-            materialization = PoseAssetMaterialization(chroma_ports, group(ports.PoseMaterializationState, current=lambda: lambda task: state), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites))
+            materialization = PoseAssetMaterialization(chroma_ports, group(ports.PoseMaterializationState, current=lambda: lambda task: state), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites), files=BusinessFiles())
             return chroma, pipeline, builder, materialization, screen, cut, bbox
         instances = {name: make(name) for name in ('first', 'second')}
         image = np.zeros((4, 6, 3), dtype=np.uint8)

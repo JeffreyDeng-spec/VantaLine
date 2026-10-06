@@ -1,6 +1,6 @@
 """Narrow file capabilities for Agent source evidence."""
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class ExistingAgentFiles(Protocol):
@@ -9,3 +9,9 @@ class ExistingAgentFiles(Protocol):
 
 class AgentReferenceFiles(ExistingAgentFiles, Protocol):
     def read_bytes(self, path: Path) -> bytes: ...
+
+
+class PoseArtifactFiles(Protocol):
+    def write_bytes(self, path: Path, data: bytes) -> Any: ...
+    def runtime(self, path: Path) -> object | None: ...
+    def write_text(self, path: Path, text: str, *, encoding: str = 'utf-8') -> Any: ...

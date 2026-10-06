@@ -290,7 +290,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
             return port_type(**values)
         PoseRenderConfiguration(group(ports.PoseRenderConfigurationSources), group(ports.PoseRenderConfigurationDefaults))
         PoseRenderContent(group(ports.PoseRenderReferences), group(ports.PoseRenderPresentation), files=BusinessFiles())
-        PoseArtifactStore(group(ports.PoseRenderPaths), group(ports.PoseRenderArtifacts), group(ports.PoseRenderPresentation))
+        PoseArtifactStore(group(ports.PoseRenderPaths), group(ports.PoseRenderArtifacts), group(ports.PoseRenderPresentation), files=BusinessFiles())
         for getter in getters:
             getter.assert_not_called()
 
@@ -323,7 +323,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
                 bounded=lambda: lambda value, limit: str(value)[:limit],
                 now=lambda: lambda: len(name),
                 dumps=lambda: json.dumps)
-            holder['store'] = PoseArtifactStore(paths, artifacts, presentation)
+            holder['store'] = PoseArtifactStore(paths, artifacts, presentation, files=BusinessFiles())
             return PoseRenderConfiguration(sources, defaults), content, holder['store'], owner
         instances = {name: make(name) for name in ('first', 'second')}
         with patch.object(self.api, 'image_generation_settings', side_effect=AssertionError('root settings')), patch.object(self.api, 'normalize_chroma_screen', side_effect=AssertionError('root screen')), patch.object(self.api, 'output_write_dir_for_owner', side_effect=AssertionError('root paths')), patch.object(self.api, 'file_sha256', side_effect=AssertionError('root hash')):

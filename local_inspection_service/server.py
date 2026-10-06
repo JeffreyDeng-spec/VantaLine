@@ -3509,7 +3509,7 @@ _pose_asset_materialization = _PoseAssetMaterialization(
     _PoseChromaSources(threshold=lambda: CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD, fraction=lambda: accessory_reference_chroma_fraction, screen=lambda: normalize_chroma_screen),
     _PoseMaterializationState(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, now=lambda: agent_mcp_now, current=lambda: agent_mcp_orchestration),
     _PoseAssetMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, digest=lambda: file_sha256, public_url=lambda: public_output_url),
-    _PoseMaterializationSprites(build=lambda: build_clean_sprites_from_agent_mcp_poses, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready),
+    _PoseMaterializationSprites(build=lambda: build_clean_sprites_from_agent_mcp_poses, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready), files=_business_files
 )
 
 def choose_agent_mcp_chroma_screen(item: dict[str, Any]) -> dict[str, Any]:
@@ -10628,7 +10628,7 @@ _pose_render_content = _PoseRenderContent(
 _pose_artifact_store = _PoseArtifactStore(
     _PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id),
     _PoseRenderArtifacts(output=lambda: agent_mcp_pose_output_path, digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, now=lambda: agent_mcp_now, dumps=lambda: json.dumps),
-    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files
 )
 
 def agent_mcp_gemini_image_config() -> dict[str, Any]:
