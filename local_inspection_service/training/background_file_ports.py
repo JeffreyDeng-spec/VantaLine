@@ -2,6 +2,7 @@
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol
+from ..storage.artifacts.runtime import ArtifactRuntime
 
 
 class ExistingBackgroundFiles(Protocol):
@@ -42,3 +43,8 @@ class BackgroundImageReader(Protocol):
 
 class BackgroundImageIO(BackgroundImageReader, Protocol):
     def imwrite(self, filename: str, image: Any) -> bool: ...
+
+
+class BackgroundGenerationFiles(Protocol):
+    def runtime(self, path: Path) -> ArtifactRuntime | None: ...
+    def is_file(self, path: Path) -> bool: ...

@@ -2,7 +2,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
+from .background_file_ports import ExistingBackgroundFiles
 from typing import Any, Protocol
 from ..model_profiles.dependencies import ResolverProvider
 from ..model_profiles.snapshots import pinned
@@ -37,7 +37,10 @@ class BackgroundTaskGeneration:
 
 class BackgroundTaskRunner:
     def __init__(self, records: BackgroundTaskRecords, generation: BackgroundTaskGeneration,
-                 clock: Callable[[], float], resolver: ResolverProvider):
+                 clock: Callable[[], float], resolver: ResolverProvider, *, files: ExistingBackgroundFiles):
+        if files is None:
+            raise TypeError("explicit background generation files are required")
+        self.files = files
         self.records, self.generation, self.clock = records, generation, clock
         # Bind the bound method once; constructing an application does not resolve models or read a task.
         self.run_background_set_task = pinned(resolver, records.find)(self.run_background_set_task)
@@ -50,7 +53,7 @@ class BackgroundTaskRunner:
         source_path = Path(str(task.get("source_path") or ""))
         set_dir = self.generation.sets() / self.generation.safe(set_id)
         try:
-            if not BusinessFiles().exists(source_path):
+            if not self.files.exists(source_path):
                 raise RuntimeError("上传的背景源图不存在。")
             self.records.update_provider()(job_id, status="running", progress=8, started_at=int(self.clock()), note="背景任务已启动，正在准备源图。")
             self.generation.update_provider()(set_id, status="generating", updated_at=int(self.clock()))

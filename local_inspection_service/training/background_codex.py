@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import threading
 from typing import Protocol, TextIO
-from ..storage.artifacts.files import BusinessFiles
+from .background_file_ports import BackgroundGenerationFiles
 from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
 
@@ -36,11 +36,14 @@ class CodexBackgroundPaths:
 
 class CodexBackgroundGeneration:
     def __init__(self, which: Callable[[str], str | None], paths: CodexBackgroundPaths,
-                 name: Callable[[str], str], start: Callable[[], StartCodexBackgroundProcess]):
+                 name: Callable[[str], str], start: Callable[[], StartCodexBackgroundProcess], *, files: BackgroundGenerationFiles):
+        if files is None:
+            raise TypeError("explicit background generation files are required")
+        self.files = files
         self.which, self.paths, self.name, self.start = which, paths, name, start
 
     def run_codex_background_generation(self, source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
-        files = BusinessFiles()
+        files = self.files
         runtime = files.runtime(set_dir)
         if runtime is not None:
             return self._cos_backgrounds(runtime, files, source_path, set_dir, set_id, count)

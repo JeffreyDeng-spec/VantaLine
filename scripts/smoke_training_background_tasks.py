@@ -379,9 +379,9 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
             manifest=BackgroundManifest(port(lambda:root),port(lambda:root/'manifest.json'), files=BusinessFiles(lambda: None))
             images=BackgroundImageFiles(port(lambda:{'.png'}), files=BusinessFiles(lambda: None)); local=BackgroundVariants(clock, images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
             writes=BackgroundWrites(port(safe_background_set_id),port(manifest.load_background_sets_manifest),port(manifest.write_background_sets_manifest),port(lambda:sets),uuid,clock, files=BusinessFiles(lambda: None))
-            codex=CodexBackgroundGeneration(port(lambda command:'fake-'+owner),CodexBackgroundPaths(port(lambda:logs),port(lambda:root)),port(lambda identifier:owner),port(lambda:FakeProcess))
+            codex=CodexBackgroundGeneration(port(lambda command:'fake-'+owner),CodexBackgroundPaths(port(lambda:logs),port(lambda:root)),port(lambda identifier:owner),port(lambda:FakeProcess), files=BusinessFiles(lambda: None))
             runner=BackgroundTaskRunner(BackgroundTaskRecords(port(lambda identifier:read(path(identifier))),port(path),port(lambda:read),port(lambda: update)),
-                BackgroundTaskGeneration(port(lambda:sets),port(safe_background_set_id),port(lambda: writes.update_background_set_manifest),port(local.create_background_variants_from_source),port(codex.run_codex_background_generation),port(images.image_file_list)),clock,port(lambda:resolver))
+                BackgroundTaskGeneration(port(lambda:sets),port(safe_background_set_id),port(lambda: writes.update_background_set_manifest),port(local.create_background_variants_from_source),port(codex.run_codex_background_generation),port(images.image_file_list)),clock,port(lambda:resolver), files=BusinessFiles(lambda: None))
             factory=port(FakeThread)
             starter=CodexBackgroundThread(port(lambda:factory),port(lambda:codex.run_codex_background_generation),port(lambda identifier:owner))
             submission=BackgroundTaskSubmission(TrainingSubmissionRecords(port(save),port(lambda task:task)),
@@ -536,7 +536,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                 tasks=Mock(side_effect=task_provider); metas=Mock(side_effect=meta_provider)
                 if stage.startswith('failed'): f.local.side_effect=RuntimeError('unknown generation')
                 runner=BackgroundTaskRunner(BackgroundTaskRecords(f.find,f.path,lambda:f.load,tasks),
-                    BackgroundTaskGeneration(lambda:f.sets,f.safe,metas,f.local,f.codex,f.images),f.clock,lambda:f.resolver)
+                    BackgroundTaskGeneration(lambda:f.sets,f.safe,metas,f.local,f.codex,f.images),f.clock,lambda:f.resolver, files=BusinessFiles(lambda: None))
                 tasks.assert_not_called(); metas.assert_not_called(); f.find.assert_not_called(); f.clock.assert_not_called()
                 if stage in ['failed-meta','failed-task','base-error']:
                     with self.assertRaises(type(error)) as caught: runner.run_background_set_task('job')
@@ -647,10 +647,10 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                 f=self.f; error=RuntimeError(stage); selected=Mock(); getter=Mock(side_effect=[error,selected])
                 if stage=='load':
                     service=BackgroundTaskRunner(BackgroundTaskRecords(f.find,f.path,getter,lambda:f.update),
-                        BackgroundTaskGeneration(lambda:f.sets,f.safe,lambda:f.meta,f.local,f.codex,f.images),f.clock,lambda:f.resolver)
+                        BackgroundTaskGeneration(lambda:f.sets,f.safe,lambda:f.meta,f.local,f.codex,f.images),f.clock,lambda:f.resolver, files=BusinessFiles(lambda: None))
                     action=lambda:service.run_background_set_task('job')
                 elif stage=='process':
-                    service=CodexBackgroundGeneration(self.which,CodexBackgroundPaths(lambda:f.logs,lambda:f.root),self.name,getter)
+                    service=CodexBackgroundGeneration(self.which,CodexBackgroundPaths(lambda:f.logs,lambda:f.root),self.name,getter, files=BusinessFiles(lambda: None))
                     action=lambda:service.run_codex_background_generation(f.source,f.sets,'x',0)
                 else:
                     service=CodexBackgroundThread(getter,lambda:self.api.run_codex_background_generation,self.name)
@@ -700,7 +700,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                         return fail(path) if matched else original(path)
                     stack.enter_context(patch.object(Path,'exists',autospec=True,side_effect=exists))
                 if stage=='timeout-outputs': process.communicate.side_effect=subprocess.TimeoutExpired('fake',900)
-                generation=CodexBackgroundGeneration(which,CodexBackgroundPaths(logs,root),name,start)
+                generation=CodexBackgroundGeneration(which,CodexBackgroundPaths(logs,root),name,start, files=BusinessFiles(lambda: None))
                 thread=CodexBackgroundThread(lambda:factory,target,name)
                 action=(lambda:thread.start_codex_background_generation(f.source,f.sets,'x')) if stage in ['name-thread','thread-create','target'] else (lambda:generation.run_codex_background_generation(f.source,f.sets,'x',1))
                 caught=None
@@ -738,7 +738,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                     original=Path.exists; fail=first(original)
                     stack.enter_context(patch.object(Path,'exists',autospec=True,side_effect=lambda value:fail(value) if value==f.source else original(value)))
                 runner=BackgroundTaskRunner(BackgroundTaskRecords(f.find,path,lambda:f.load,tasks),
-                    BackgroundTaskGeneration(sets,f.safe,metas,f.local,f.codex,f.images),clock,lambda:f.resolver)
+                    BackgroundTaskGeneration(sets,f.safe,metas,f.local,f.codex,f.images),clock,lambda:f.resolver, files=BusinessFiles(lambda: None))
                 caught=None
                 try: runner.run_background_set_task('job')
                 except BaseException as exc: caught=exc

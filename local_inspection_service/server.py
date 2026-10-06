@@ -7395,6 +7395,7 @@ from .training.submission import TrainingSubmissionRecords, TrainingSubmissionTh
 _background_codex_generation = CodexBackgroundGeneration(
     lambda command: shutil.which(command), CodexBackgroundPaths(lambda: IMAGE_WORKER_LOG_DIR, lambda: ROOT),
     lambda identifier: safe_name(identifier), lambda: subprocess.Popen,
+    files=_business_files,
 )
 _background_codex_thread = CodexBackgroundThread(
     lambda: threading.Thread, lambda: run_codex_background_generation, lambda identifier: safe_name(identifier),
@@ -7408,6 +7409,7 @@ _background_task_runner = BackgroundTaskRunner(
                             lambda source_path, set_dir, count=5: create_background_variants_from_source(source_path, set_dir, count),
                             lambda source_path, set_dir, set_id, count=5: run_codex_background_generation(source_path, set_dir, set_id, count), lambda path: image_file_list(path)),
     lambda: time.time(), resolve_model_profiles,
+    files=_business_files,
 )
 _background_task_submission = BackgroundTaskSubmission(
     TrainingSubmissionRecords(lambda task: save_training_task(task), lambda task: public_training_task(task)),
