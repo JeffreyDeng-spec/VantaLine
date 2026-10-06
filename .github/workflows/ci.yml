@@ -294,6 +294,7 @@ jobs:
           python scripts/smoke_plc_legacy_operations.py
           python scripts/smoke_admin_documentation_composition.py
           python scripts/smoke_authentication_composition.py --postgres
+          python scripts/smoke_record_composition.py
           python scripts/smoke_provider_proxy_runtime.py
           python scripts/smoke_mcp_client_runtime.py
           python scripts/smoke_mcp_runtime_policy.py

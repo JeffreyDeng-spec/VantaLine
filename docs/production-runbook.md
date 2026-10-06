@@ -1408,3 +1408,5 @@ The retained retired endpoints continue returning the same errors after the same
 Repository composition introduces no schema, topology or operator setting. Whole-release rollback restores the previous composition while preserving runtime records and model evidence. This change does not add connection-pool capacity or stronger close/network deadlines; existing close error suppression remains unchanged.
 
 Authentication-domain composition adds no schema, operator setting or service. Existing cookie, permission, media and admin documentation behavior remains. Rollback restores the prior complete release and its topology/configuration while preserving accounts, sessions and task evidence.
+
+Record-domain composition changes no schema, routes, worker topology or PLC behavior. Existing whole-release rollback preserves accounts and inspection records. This slice does not establish a full production application factory.

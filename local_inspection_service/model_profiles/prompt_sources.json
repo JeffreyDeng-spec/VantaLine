@@ -1,5 +1,5 @@
 {
-  "version": 181,
+  "version": 182,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -515,6 +515,7 @@
     "plc/legacy_operations.py",
     "runtime/web_shell.py",
     "runtime/repository_composition.py",
-    "auth/application.py"
+    "auth/application.py",
+    "records/composition.py"
   ]
 }

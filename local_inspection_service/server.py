@@ -1068,64 +1068,55 @@ from .records.audit import (
     record_created_at as _record_created_at,
     record_updated_at as _record_updated_at,
 )
-_record_ownership = RecordOwnership(LEGACY_OWNER_ID, SYSTEM_OWNER_ID)
-_record_audit = RecordAudit(_record_ownership)
-_record_access = RecordAccess(
-    _request_user, _record_ownership, current_user=lambda: current_auth_user(),
-    find_user=lambda target: find_user(load_auth_store(), target),
+from .records.composition import RecordServices
+_record_services = RecordServices(
+    identity=_authentication_domain.identity,
+    legacy_owner=LEGACY_OWNER_ID, system_owner=SYSTEM_OWNER_ID,
+    current_user=_authentication.access.current_auth_user,
+    find_user=lambda target, load=_authentication.repository.load_auth_store, find=find_user: find(load(), target),
 )
+_record_ownership = _record_services.ownership
+_record_audit = _record_services.audit
+_record_access = _record_services.access
 
 
-def record_owner_id(record: dict[str, Any] | None) -> str:
-    return _record_ownership.record_owner_id(record)
+record_owner_id = _record_ownership.record_owner_id
 
 
-def current_owner_fields() -> dict[str, Any]:
-    return _record_access.current_owner_fields()
+current_owner_fields = _record_access.current_owner_fields
 
 
-def owner_fields_for_new_record(user: dict[str, Any], target_user_id: str | None = None) -> dict[str, Any]:
-    return _record_access.owner_fields_for_new_record(user, target_user_id)
+owner_fields_for_new_record = _record_access.owner_fields_for_new_record
 
 
-def coerce_record_timestamp(value: Any) -> int:
-    return _coerce_record_timestamp(value)
+coerce_record_timestamp = _coerce_record_timestamp
 
 
-def path_mtime_timestamp(path: Path | None) -> int:
-    return _path_mtime_timestamp(path)
+path_mtime_timestamp = _path_mtime_timestamp
 
 
-def record_created_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
-    return _record_created_at(record, fallback_path)
+record_created_at = _record_created_at
 
 
-def record_updated_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
-    return _record_updated_at(record, fallback_path)
+record_updated_at = _record_updated_at
 
 
-def record_owner_username(record: dict[str, Any] | None) -> str:
-    return _record_ownership.record_owner_username(record)
+record_owner_username = _record_ownership.record_owner_username
 
 
-def record_audit_fields(record: dict[str, Any] | None, fallback_path: Path | None = None) -> dict[str, Any]:
-    return _record_audit.record_audit_fields(record, fallback_path)
+record_audit_fields = _record_audit.record_audit_fields
 
 
-def enrich_record_audit_fields(record: dict[str, Any], fallback_path: Path | None = None) -> dict[str, Any]:
-    return _record_audit.enrich_record_audit_fields(record, fallback_path)
+enrich_record_audit_fields = _record_audit.enrich_record_audit_fields
 
 
-def record_matches_owner_filter(record: dict[str, Any], target_user_id: str | None) -> bool:
-    return _record_ownership.record_matches_owner_filter(record, target_user_id)
+record_matches_owner_filter = _record_ownership.record_matches_owner_filter
 
 
-def record_visible_to_user(record: dict[str, Any], user: dict[str, Any], target_user_id: str | None = None) -> bool:
-    return _record_ownership.record_visible_to_user(record, user, target_user_id)
+record_visible_to_user = _record_ownership.record_visible_to_user
 
 
-def record_mutable_by_user(record: dict[str, Any], user: dict[str, Any]) -> bool:
-    return _record_ownership.record_mutable_by_user(record, user)
+record_mutable_by_user = _record_ownership.record_mutable_by_user
 
 
 from .records.resource_names import ResourceNames
@@ -1326,8 +1317,7 @@ def scope_config_for_user(config: dict[str, Any], user: dict[str, Any] | None = 
     return _account_projections.scope_config_for_user(config, user, target_user_id)
 
 
-def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = None, *, write: bool = False) -> None:
-    return _record_access.require_record_access(record, user, write=write)
+require_record_access = _record_access.require_record_access
 
 
 require_permission = _access_control.require_permission
