@@ -570,3 +570,13 @@ Authentication composition holds only the thread repository factory, never its r
 The composed analysis graph retains a per-call runtime repository factory and holds no connection. Local guard ownership moves into that graph without changing SQL, transaction boundaries or advisory-lock rules. Real PostgreSQL row-upsert/isolation/connection cleanup checks remain required; this slice makes no performance or cross-process consistency claim.
 
 Dashboard task upsert retains its original read/modify/save operations and existing repository transactions. This move adds no outer transaction, lock or uniqueness enforcement: concurrent upserts, first-name-match selection and failures after in-memory mutation keep their previous behavior. A successful save followed by serialization failure is not retried.
+
+Moving active-lease validation into the station service does not move database transaction or lease mutation boundaries. Rebind and diagnostic contracts still validate commit/rollback behavior with an isolated PostgreSQL schema. No schema, advisory lock, retry or lease timing changes are introduced.
+
+The retained PLC readiness check still treats any non-None repository as authoritative and only inspects whether mutate_plc_fenced_attempt_with_db_time is callable. It never invokes that method as a probe. This structural extraction changes no database transaction, lock or owner-fencing primitive.
+
+LegacyRuntimeCoordination mutates only the existing PLC runtime app_config row through mutate_app_config_namespace, preserving the advisory transaction lock and absent-row serialization. JSON fallback still uses protected app-config mutation. A claimed owner performs the original fresh repository check before selecting the heartbeat callback; callback failure after persistence does not undo or replay the committed claim.
+
+PLC legacy record projection still delegates configuration reads to the existing store. The extraction introduces no SQL, lock, transaction or consistency change: returned audit records remain shallow copies and persisted validation occurs after the original configuration read guard. It does not establish a new atomic read/verify transaction.
+
+LegacyPlcOperations delegates to the existing configuration, ownership, record and settlement services. Extraction adds no SQL or transaction and does not strengthen the original multi-read consistency or application-clock ownership guarantees. Error paths and already-persisted evidence keep their prior semantics.
