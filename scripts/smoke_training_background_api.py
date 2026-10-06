@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 from fastapi import HTTPException, UploadFile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 def _capture_background_api_window(ns,site,mode,fixture_root):
@@ -430,7 +431,7 @@ class TrainingBackgroundApiContracts(unittest.TestCase):
                 self.assertEqual(identity.get()['id'],owner); self.assertTrue(image_path.resolve().is_relative_to(f.root.resolve()))
                 self.assertEqual(model_id,'fixture:task'); return {'request_id':owner,'model':{'provider_model':owner}}
             validation=BackgroundValidation(port(lambda value:'task'),port(lambda:'fixture:'),clock,uuid,port(analyze),port(lambda:(lambda value,limit:str(value or '').strip()[:limit])))
-            query=BackgroundQuery(port(current),port(user_is_admin),port(lambda value:value),port(f.list),port(f.load),port(lambda:f.selected),port(lambda:f.sets),port(lambda:{'.png'}))
+            query=BackgroundQuery(port(current),port(user_is_admin),port(lambda value:value),port(f.list),port(f.load),port(lambda:f.selected),port(lambda:f.sets),port(lambda:{'.png'}), files=lambda: BusinessFiles(runtime_provider=lambda: None))
             def save_background(identifier,path,user,display_name=''):
                 self.assertEqual(user['id'],owner); self.assertEqual(identity.get()['id'],owner)
                 return {'id':'saved-'+owner,'source':str(path),'image_count':1,'generation_method':'fixture'}

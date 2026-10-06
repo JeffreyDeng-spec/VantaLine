@@ -13,6 +13,7 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 import cv2
 import httpx
 import numpy as np
@@ -610,7 +611,7 @@ class Workflows(unittest.TestCase):
         for fixture, owner in zip(fixtures, ('alice', 'bob')):
             fixture.task_records[0]['owner_user_id'] = owner
             app = FastAPI()
-            register_catalog(app, fixture.catalog); register_inspections(app, fixture.execution, fixture.reviews)
+            register_catalog(app, fixture.catalog, files=lambda: BusinessFiles(runtime_provider=lambda: None)); register_inspections(app, fixture.execution, fixture.reviews, files=lambda: BusinessFiles(runtime_provider=lambda: None))
             self.assertEqual(len([r for r in app.routes if r.path.startswith('/api/incoming-text')]), 9)
             applications.append(app)
         # Both compositions exist before either application's first request.

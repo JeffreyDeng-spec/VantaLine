@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse
-from ..storage.artifacts.http import file_response
+from ..storage.artifacts.http import ResponseFiles, file_response
 from ..schemas.text_inspection import IncomingTextRulesRequest, IncomingTextReviewRequest
 from .incoming_catalog import IncomingCatalog
 from .incoming_execution import IncomingExecution
@@ -20,14 +20,16 @@ class CatalogRoutes:
     clone_incoming_text_reference: Callable[..., dict[str, Any]]
 
 
-def register_catalog(app: FastAPI, catalog: IncomingCatalog) -> CatalogRoutes:
+def register_catalog(app: FastAPI, catalog: IncomingCatalog, *, files: Callable[[], ResponseFiles]) -> CatalogRoutes:
+    if not callable(files):
+        raise TypeError("files must be callable")
     @app.get("/api/incoming-text/tasks/{task_id}")
     def get_incoming_text_task(task_id: str) -> dict[str, Any]:
         return catalog.get_incoming_text_task(task_id)
 
     @app.get("/api/incoming-text/references/{reference_id}/asset/{asset_kind}")
     def get_incoming_text_reference_asset(reference_id: str, asset_kind: str) -> FileResponse:
-        return file_response(catalog.get_incoming_text_reference_asset(reference_id, asset_kind), local_factory=FileResponse)
+        return file_response(catalog.get_incoming_text_reference_asset(reference_id, asset_kind), local_factory=FileResponse, files=files())
 
     @app.post("/api/incoming-text/tasks/{task_id}/references")
     async def create_incoming_text_reference(
@@ -56,7 +58,9 @@ class InspectionRoutes:
     list_incoming_text_inspections: Callable[..., dict[str, Any]]
 
 
-def register_inspections(app: FastAPI, execution: IncomingExecution, reviews: IncomingReviews) -> InspectionRoutes:
+def register_inspections(app: FastAPI, execution: IncomingExecution, reviews: IncomingReviews, *, files: Callable[[], ResponseFiles]) -> InspectionRoutes:
+    if not callable(files):
+        raise TypeError("files must be callable")
     @app.post("/api/incoming-text/tasks/{task_id}/inspect")
     async def inspect_incoming_text(
         task_id: str,
@@ -67,7 +71,7 @@ def register_inspections(app: FastAPI, execution: IncomingExecution, reviews: In
 
     @app.get("/api/incoming-text/inspections/{inspection_id}/evidence/{asset_kind}")
     def get_incoming_text_inspection_evidence(inspection_id: str, asset_kind: str) -> FileResponse:
-        return file_response(reviews.get_incoming_text_inspection_evidence(inspection_id, asset_kind), local_factory=FileResponse)
+        return file_response(reviews.get_incoming_text_inspection_evidence(inspection_id, asset_kind), local_factory=FileResponse, files=files())
 
     @app.post("/api/incoming-text/inspections/{inspection_id}/review")
     def review_incoming_text_inspection(inspection_id: str, request: IncomingTextReviewRequest) -> dict[str, Any]:

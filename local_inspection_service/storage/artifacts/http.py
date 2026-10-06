@@ -1,4 +1,6 @@
 """File responses behind the application's existing ownership middleware."""
+from typing import Protocol
+from enum import Enum
 import mimetypes
 import os
 import stat
@@ -10,14 +12,24 @@ from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 from starlette.datastructures import Headers
 
-from .runtime import get_runtime
+from .runtime import ArtifactRuntime, get_runtime
 from .types import ArtifactUnavailable
 from .files import BusinessFiles
 
 
-def file_response(path, *, local_factory=FileResponse, **kwargs):
+class ResponseFiles(Protocol):
+    def runtime(self, path: Path) -> ArtifactRuntime | None: ...
+
+
+class _DefaultFiles(Enum):
+    OMITTED = 0
+
+
+def file_response(path, *, local_factory=FileResponse, files: ResponseFiles | _DefaultFiles = _DefaultFiles.OMITTED, **kwargs):
     """Use only after the calling route's existing permission/ownership checks."""
-    runtime = BusinessFiles().runtime(path)
+    if files is None:
+        raise TypeError("files must provide runtime")
+    runtime = (BusinessFiles() if files is _DefaultFiles.OMITTED else files).runtime(path)
     if runtime is None:
         return local_factory(path, **kwargs)
     row = runtime.store.locations.get(runtime.key(Path(path)))

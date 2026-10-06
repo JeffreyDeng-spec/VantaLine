@@ -872,7 +872,7 @@ for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR
 from .runtime.http_application import (
     create_http_application, LOCAL_CORS_ORIGIN_REGEX, LAN_CORS_ORIGIN_REGEX,
 )
-_http_application = create_http_application(os.environ)
+_http_application = create_http_application(os.environ, upload_runtime_provider=lambda: _business_files.runtime_provider())
 app = _http_application.app
 CORS_ORIGINS = _http_application.cors_origins
 CORS_ORIGIN_REGEX = _http_application.cors_origin_regex
@@ -1333,7 +1333,7 @@ app.mount(
 )
 from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
 
-app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR), name="outputs")
+app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR, runtime_provider=lambda: _business_files.runtime_provider()), name="outputs")
 
 from .detection.model_selection import ModelSelection
 from .detection.local_models import LocalModels
@@ -9663,6 +9663,7 @@ _background_query = BackgroundQuery(
     lambda *args, **kwargs: list_background_sets(*args, **kwargs), lambda: load_background_sets_manifest(),
     lambda: selected_background_set_id,
     lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES,
+    files=lambda: _business_files,
 )
 _background_upload = BackgroundUpload(
     BackgroundUploadPaths(lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES),
@@ -12581,7 +12582,7 @@ _incoming_retention = IncomingRetention(
     _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
     audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID,
 )
-_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog)
+_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog, files=lambda: _business_files)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
 get_incoming_text_reference_asset = _incoming_catalog_routes.get_incoming_text_reference_asset
 create_incoming_text_reference = _incoming_catalog_routes.create_incoming_text_reference
@@ -12633,7 +12634,7 @@ analyze_text_compare_beta = register_beta_comparison(
 )
 
 
-_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)
+_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews, files=lambda: _business_files)
 inspect_incoming_text = _incoming_inspection_routes.inspect_incoming_text
 get_incoming_text_inspection_evidence = _incoming_inspection_routes.get_incoming_text_inspection_evidence
 review_incoming_text_inspection = _incoming_inspection_routes.review_incoming_text_inspection
