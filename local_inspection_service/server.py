@@ -8070,7 +8070,7 @@ _trained_model_catalog = TrainedModelCatalog(
         method=lambda: normalize_pipeline_detection_method),
     access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
         audit=lambda: record_audit_fields),
-    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config),
+    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config), business_files=_business_files
 )
 
 
@@ -9811,7 +9811,7 @@ _dataset_catalog = DatasetCatalog(
                  lambda: record_updated_at),
     DatasetAccess(lambda record, user: record_visible_to_user(record, user),
                   lambda record, user: record_mutable_by_user(record, user)),
-    lambda path, **options: dataset_resource_item(path, **options),
+    lambda path, **options: dataset_resource_item(path, **options), files=_business_files
 )
 _training_resources = TrainingResources(
     ResourceDatasets(lambda: training_dataset_roots(),
@@ -9825,7 +9825,7 @@ _training_resources = TrainingResources(
     ResourceAccess(lambda record, user, target: record_visible_to_user(record, user, target),
                    lambda record: record_owner_username(record), lambda: LEGACY_OWNER_ID,
                    lambda record: public_path_sanitized(record)),
-    lambda: resolve_service_path, lambda: OUTPUT_DIR,
+    lambda: resolve_service_path, lambda: OUTPUT_DIR, files=_business_files
 )
 
 

@@ -565,6 +565,7 @@ jobs:
           python scripts/smoke_training_runpod_flow.py
           python scripts/smoke_training_artifacts.py
           python scripts/smoke_training_resource_catalog.py
+          python scripts/smoke_training_catalog_file_ports.py
           python scripts/smoke_training_resource_mutations.py --postgres
           python scripts/smoke_training_backgrounds.py
           python scripts/smoke_training_preview_layout.py
