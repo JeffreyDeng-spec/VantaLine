@@ -817,8 +817,13 @@ LOGIN_RATE_LIMIT_MAX_ATTEMPTS = max(3, int(os.environ.get("VANTALINE_LOGIN_RATE_
 LOGIN_RATE_LIMIT_LOCKOUT_SECONDS = max(30, int(os.environ.get("VANTALINE_LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", "300")))
 LEGACY_OWNER_ID = "legacy_admin"
 SYSTEM_OWNER_ID = "system"
-from .runtime.identity import RequestIdentity
-_request_user = RequestIdentity()
+from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
+from .runtime.repository_composition import RuntimeRepositories
+
+_runtime_repository_owner = RuntimeRepositories(os.environ)
+_runtime_repositories = _runtime_repository_owner.factory
+_runtime_repository_access = _runtime_repository_owner.access
+runtime_repository_cache_key = _runtime_repository_owner.cache_key
 
 from .auth.policy import (
     FEATURE_PERMISSIONS, ADMIN_ONLY_PERMISSIONS, DEFAULT_USER_PERMISSIONS,
@@ -836,22 +841,27 @@ from .auth.repository import (
 )
 
 from .auth.composition import AuthenticationServices, AuthenticationStorage, AuthenticationSettings
+from .auth.application import AuthenticationDomain
 from .auth.sessions import SessionSettings
 from .auth.login_limits import LoginLimitSettings
 
-_authentication = AuthenticationServices(
+_authentication_domain = AuthenticationDomain(
     storage=AuthenticationStorage(
-        directory=lambda: DATA_DIR, path=lambda: AUTH_PATH,
-        repository=lambda: runtime_postgres_repository_or_none(),
+        directory=lambda directory=DATA_DIR: directory,
+        path=lambda path=AUTH_PATH: path,
+        repository=_runtime_repository_owner.access.runtime_postgres_repository_or_none,
     ),
     settings=AuthenticationSettings(
-        password_iterations=lambda: PASSWORD_HASH_ITERATIONS,
-        sessions=lambda: SessionSettings(AUTH_SESSION_COOKIE, AUTH_SESSION_TTL_SECONDS, AUTH_SESSION_PERSIST_INTERVAL_SECONDS),
-        login_limits=lambda: LoginLimitSettings(LOGIN_RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS, LOGIN_RATE_LIMIT_LOCKOUT_SECONDS),
-        legacy_owner=lambda: LEGACY_OWNER_ID,
+        password_iterations=lambda iterations=PASSWORD_HASH_ITERATIONS: iterations,
+        sessions=lambda cookie=AUTH_SESSION_COOKIE, ttl=AUTH_SESSION_TTL_SECONDS,
+                        persist=AUTH_SESSION_PERSIST_INTERVAL_SECONDS: SessionSettings(cookie, ttl, persist),
+        login_limits=lambda window=LOGIN_RATE_LIMIT_WINDOW_SECONDS, attempts=LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+                            lockout=LOGIN_RATE_LIMIT_LOCKOUT_SECONDS: LoginLimitSettings(window, attempts, lockout),
+        legacy_owner=lambda owner=LEGACY_OWNER_ID: owner,
     ),
-    identity=_request_user,
 )
+_authentication = _authentication_domain.services
+_request_user = _authentication_domain.identity
 _password_hasher = _authentication.hasher
 password_hash = _password_hasher.password_hash
 _auth_repository = _authentication.repository
@@ -979,14 +989,6 @@ current_auth_user = _access_control.current_auth_user
 
 require_admin_role = _access_control.require_admin_role
 
-
-from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
-from .runtime.repository_composition import RuntimeRepositories
-
-_runtime_repository_owner = RuntimeRepositories(os.environ)
-_runtime_repositories = _runtime_repository_owner.factory
-_runtime_repository_access = _runtime_repository_owner.access
-runtime_repository_cache_key = _runtime_repository_owner.cache_key
 
 
 def reset_runtime_repository_cache() -> None:
@@ -1360,10 +1362,9 @@ clear_failed_login_attempts = _login_limiter.clear_failed_login_attempts
 
 from .auth.http_composition import AuthenticationHttp, AuthenticationHttpPolicy
 
-_authentication_http = AuthenticationHttp(
-    _authentication, _request_user,
+_authentication_http = _authentication_domain.http(
     AuthenticationHttpPolicy(
-        output_visible=lambda path, user: output_path_visible_to_user(path, user),
+        output_visible=_account_projections.output_path_visible_to_user,
         same_origin=_public_network_policy.same_origin,
         cors_origin_allowed=_public_network_policy.cors_origin_allowed,
     ),

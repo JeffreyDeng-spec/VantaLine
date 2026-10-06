@@ -1406,3 +1406,5 @@ Web-shell composition retains public SPA responses, no-cache headers, preview re
 The retained retired endpoints continue returning the same errors after the same middleware/body-validation/admin sequence. Rollback of the unreachable-tail cleanup restores the previous complete release; there is no data transformation or PLC action.
 
 Repository composition introduces no schema, topology or operator setting. Whole-release rollback restores the previous composition while preserving runtime records and model evidence. This change does not add connection-pool capacity or stronger close/network deadlines; existing close error suppression remains unchanged.
+
+Authentication-domain composition adds no schema, operator setting or service. Existing cookie, permission, media and admin documentation behavior remains. Rollback restores the prior complete release and its topology/configuration while preserving accounts, sessions and task evidence.
