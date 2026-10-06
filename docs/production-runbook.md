@@ -1350,3 +1350,15 @@ Documentation composition uses existing authentication/session storage and no ne
 Authentication composition changes no session format, permission, database query or worker topology. The repository and user administration share one per-composition RLock; PostgreSQL transaction/coordination boundaries stay unchanged. Independent graphs use isolated test stores; there is no new cross-process JSON-store safety claim. Deploy and roll back complete releases preserving users, sessions and runtime evidence.
 
 Authentication HTTP composition preserves route/middleware order, authentication errors, media access and administrator documentation behavior. It adds no worker, storage migration or startup hook. Deploy and roll back the complete immutable release. Auth-only multi-app tests do not demonstrate full production lifecycle isolation.
+
+Provider proxy relocation introduces no new network operation, environment setting or process. Existing request-time proxy resolution remains. Release and rollback restore the complete Web/label-worker package; no credentials or historical snapshots are rewritten.
+
+The optional stdio client keeps existing limitations: initialization errors retain the assigned process, close terminates without a new wait/join, and stream reads retain their existing timeout policy. This structural move adds no retry, response-ID enforcement or shutdown guarantee. No real subprocess or paid model is used for routine acceptance; deploy and roll back complete releases.
+
+MCP helper relocation retains the current startup thread and optional-client topology. Warmup still catches start failures and reselects the client for close; a close failure still propagates. This adds no timeout, join, retry or shutdown guarantee. Ordinary acceptance performs no subprocess/provider call. Deploy and roll back complete releases preserving all runtime evidence.
+
+Model warmup request extraction retains the existing YoloWarmup state, thread start and startup behavior. A failure after a thread starts is not compensated or retried; status and final readiness can still fail independently. No new deduplication, drain or lifecycle guarantee is introduced. Apply and roll back whole releases with their declared topology and preserve task/call evidence.
+
+Local model selection extraction changes code ownership only. Device/checkpoint defaults, process topology, database schema and model loading remain unchanged. Deploy and roll back the complete release; synthetic selection checks do not establish GPU, model download or production capacity availability.
+
+Image payload relocation changes no storage, provider calls or worker topology. A decoded byte sequence is not newly validated as PNG. Deploy and roll back complete releases, preserving task snapshots and call evidence.

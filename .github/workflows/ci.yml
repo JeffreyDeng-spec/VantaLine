@@ -287,6 +287,10 @@ jobs:
           python scripts/smoke_public_network_policy.py
           python scripts/smoke_admin_documentation_composition.py
           python scripts/smoke_authentication_composition.py --postgres
+          python scripts/smoke_provider_proxy_runtime.py
+          python scripts/smoke_mcp_client_runtime.py
+          python scripts/smoke_mcp_runtime_policy.py
+          python scripts/smoke_image_payload_codec.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
@@ -481,7 +485,9 @@ jobs:
           python scripts/smoke_detection_task_store.py --postgres
           python scripts/smoke_detection_task_catalog.py
           python scripts/smoke_local_model_runtime.py
+          python scripts/smoke_local_model_selection.py
           python scripts/smoke_yolo_warmup.py
+          python scripts/smoke_model_warmup_api.py
           python scripts/smoke_trained_model_catalog.py --postgres
           python scripts/smoke_training_record_store.py --postgres
           python scripts/smoke_training_task_lifecycle.py --postgres

@@ -480,7 +480,7 @@ IMAGE_GENERATION_API_KEY_ENV = "VANTALINE_IMAGE_API_KEY"
 IMAGE_GENERATION_NAMED_API_KEY_ENV = "VANTALINE_IMAGE_API_KEY_ENV"
 IMAGE_GENERATION_TIMEOUT_ENV = "VANTALINE_IMAGE_TIMEOUT_SECONDS"
 AI_PROXY_ENV_NAMES = ("INSPECTION_AI_PROXY_URL", "AI_PROVIDER_PROXY_URL", "HTTPS_PROXY", "ALL_PROXY")
-AI_LOCAL_PROXY_URL = "http://127.0.0.1:17890"
+from .model_providers.proxy_runtime import AI_LOCAL_PROXY_URL
 AI_AUTO_LOCAL_PROXY_ENV = "INSPECTION_AI_AUTO_LOCAL_PROXY"
 from .training.executor_settings import (
     REMOTE_TRAINING_API_KEY_ENV,
@@ -653,10 +653,7 @@ AI_DETECTION_OUTPUT_SCHEMA: dict[str, Any] = {
         },
     },
 }
-AI_MCP_RUNTIME_ENV = "INSPECTION_AI_MCP_RUNTIME"
-AI_MCP_LEGACY_ENABLED_ENV = "INSPECTION_AI_MCP_ENABLED"
-AI_MCP_RUNTIME_IN_PROCESS = "in_process"
-AI_MCP_RUNTIME_STDIO = "stdio"
+from .model_providers.mcp_runtime import (AI_MCP_RUNTIME_ENV, AI_MCP_LEGACY_ENABLED_ENV, AI_MCP_RUNTIME_IN_PROCESS, AI_MCP_RUNTIME_STDIO)
 AI_MCP_EXTRACTION_POINT = (
     "call_ai_mcp_tool dispatches in process by default. Set INSPECTION_AI_MCP_RUNTIME=stdio "
     "for the legacy stdio MCP subprocess while keeping tool payloads/results unchanged."
@@ -4042,60 +4039,47 @@ def validate_ai_proxy_url(value: Any) -> str:
     return _provider_configuration_validation.validate_ai_proxy_url(value)
 
 
+from .model_providers.proxy_runtime import ProviderProxyRuntime
+from .model_providers.proxy_runtime_ports import ProxySettings, ProxyCalls, ProxyTransports
+
+_provider_proxy_runtime = ProviderProxyRuntime(
+    settings=ProxySettings(
+        AI_PROXY_ENV_NAMES=lambda: AI_PROXY_ENV_NAMES,
+        AI_LOCAL_PROXY_URL=lambda: AI_LOCAL_PROXY_URL,
+        AI_AUTO_LOCAL_PROXY_ENV=lambda: AI_AUTO_LOCAL_PROXY_ENV,
+    ),
+    calls=ProxyCalls(
+        validate_ai_proxy_url=lambda: validate_ai_proxy_url,
+        ai_proxy_url_from_environment=lambda: ai_proxy_url_from_environment,
+        env_flag_enabled=lambda: env_flag_enabled,
+        local_proxy_available=lambda: local_proxy_available,
+    ),
+    transports=ProxyTransports(
+        os=lambda: os,
+        socket=lambda: socket,
+        urllib=lambda: urllib,
+    ),
+)
+
+
 def ai_proxy_url_from_environment() -> tuple[str, str]:
-    for name in AI_PROXY_ENV_NAMES:
-        value = os.environ.get(name, "").strip()
-        if not value:
-            continue
-        try:
-            return validate_ai_proxy_url(value), name
-        except HTTPException:
-            return "", name
-    return "", ""
+    return _provider_proxy_runtime.ai_proxy_url_from_environment()
 
 
 def local_proxy_available(proxy_url: str = AI_LOCAL_PROXY_URL) -> bool:
-    parsed = urlsplit(str(proxy_url or "").strip())
-    host = parsed.hostname or ""
-    port = parsed.port
-    if not host or not port:
-        return False
-    try:
-        with socket.create_connection((host, port), timeout=0.15):
-            return True
-    except OSError:
-        return False
+    return _provider_proxy_runtime.local_proxy_available(proxy_url)
 
 
 def env_flag_enabled(name: str, default: bool = True) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() not in {"0", "false", "no", "off", "disabled"}
+    return _provider_proxy_runtime.env_flag_enabled(name, default)
 
 
 def ai_proxy_url_from_config(local: dict[str, Any], provider: str) -> tuple[str, str, bool]:
-    proxy_url, proxy_source_name = ai_proxy_url_from_environment()
-    if proxy_url:
-        return proxy_url, proxy_source_name, False
-    configured_proxy = str(local.get("proxy_url") or "").strip()
-    if configured_proxy:
-        try:
-            return validate_ai_proxy_url(configured_proxy), "ai_config.local.proxy_url", False
-        except HTTPException:
-            return "", "ai_config.local.proxy_url_invalid", False
-    auto_local_enabled = bool(local.get("auto_local_proxy", True)) and env_flag_enabled(AI_AUTO_LOCAL_PROXY_ENV, True)
-    if provider == "gemini" and auto_local_enabled and local_proxy_available(AI_LOCAL_PROXY_URL):
-        return AI_LOCAL_PROXY_URL, "auto_local_mihomo", True
-    return "", "", False
+    return _provider_proxy_runtime.ai_proxy_url_from_config(local, provider)
 
 
 def ai_urlopen(request: urllib.request.Request, settings: dict[str, Any], *, timeout: float):
-    proxy_url = str(settings.get("proxy_url_raw") or settings.get("proxy_url") or "").strip()
-    if not proxy_url:
-        return urllib.request.urlopen(request, timeout=timeout)
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
-    return opener.open(request, timeout=timeout)
+    return _provider_proxy_runtime.ai_urlopen(request, settings, timeout=timeout)
 
 
 def validate_ai_timeout(value: Any) -> float:
@@ -5899,103 +5883,25 @@ AI_MCP_TOOL_HANDLERS = {
 }
 
 
-class LocalAiMcpClient:
-    def __init__(self) -> None:
-        self.process: subprocess.Popen[str] | None = None
-        self.lock = threading.RLock()
-        self.next_id = 1
-
-    def close(self) -> None:
-        with self.lock:
-            if self.process and self.process.poll() is None:
-                self.process.terminate()
-            self.process = None
-
-    def ensure_started(self) -> None:
-        if self.process and self.process.poll() is None:
-            return
-        self.process = subprocess.Popen(
-            [sys.executable, "-m", "local_inspection_service.ai_mcp_server"],
-            cwd=str(ROOT),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        )
-        self.request("initialize", {"protocolVersion": "2024-11-05", "clientInfo": {"name": "local-inspection-service", "version": "0.1.0"}})
-
-    def request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        if not self.process or not self.process.stdin or not self.process.stdout:
-            raise AiProviderError("AI MCP client process is not started")
-        message_id = self.next_id
-        self.next_id += 1
-        message = {"jsonrpc": "2.0", "id": message_id, "method": method, "params": params or {}}
-        self.process.stdin.write(json.dumps(message, ensure_ascii=False, separators=(",", ":")) + "\n")
-        self.process.stdin.flush()
-        line = self.process.stdout.readline()
-        if not line:
-            raise AiProviderError("AI MCP server closed stdout")
-        response = json.loads(line)
-        if not isinstance(response, dict):
-            raise AiProviderError("AI MCP server returned non-object response")
-        if response.get("error"):
-            error = response["error"] if isinstance(response["error"], dict) else {}
-            raise AiProviderError(str(error.get("message") or "AI MCP server error"))
-        result = response.get("result")
-        if not isinstance(result, dict):
-            raise AiProviderError("AI MCP response result was not an object")
-        return result
-
-    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        with self.lock:
-            self.ensure_started()
-            result = self.request("tools/call", {"name": tool_name, "arguments": arguments})
-        content = result.get("content") if isinstance(result.get("content"), list) else []
-        for item in content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                parsed = json.loads(str(item.get("text") or "{}"))
-                if isinstance(parsed, dict):
-                    parsed.setdefault("mcp_transport", "stdio")
-                    parsed.setdefault("mcp_runtime", AI_MCP_RUNTIME_STDIO)
-                    return parsed
-        raise AiProviderError("AI MCP tool response had no JSON text content")
+from .model_providers.mcp_client import LocalAiMcpClient
 
 
-_ai_mcp_client = LocalAiMcpClient()
+_ai_mcp_client = LocalAiMcpClient(
+    root=lambda: ROOT, error=lambda: AiProviderError, runtime=lambda: AI_MCP_RUNTIME_STDIO,
+)
 
 
-def ai_mcp_runtime() -> str:
-    if os.environ.get("INSPECTION_AI_MCP_SERVER_MODE"):
-        return AI_MCP_RUNTIME_IN_PROCESS
-    runtime = os.environ.get(AI_MCP_RUNTIME_ENV, "").strip().lower().replace("-", "_")
-    if runtime in {"stdio", "external", "subprocess", "mcp"}:
-        return AI_MCP_RUNTIME_STDIO
-    if runtime in {"in_process", "inprocess", "local", "direct", ""}:
-        return AI_MCP_RUNTIME_IN_PROCESS
-    legacy_enabled = os.environ.get(AI_MCP_LEGACY_ENABLED_ENV)
-    if legacy_enabled is not None and legacy_enabled.strip().lower() in {"1", "true", "yes", "on", "stdio"}:
-        return AI_MCP_RUNTIME_STDIO
-    return AI_MCP_RUNTIME_IN_PROCESS
+from .model_providers.mcp_runtime import ai_mcp_runtime, external_ai_mcp_enabled, McpPayloadPreparation, McpWarmup
 
 
-def external_ai_mcp_enabled() -> bool:
-    return ai_mcp_runtime() == AI_MCP_RUNTIME_STDIO
 
 
-def prepare_ai_mcp_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-    prepared = dict(payload)
-    image_bgr = prepared.get("inspection_image_bgr")
-    if tool_name == "vision.inspect.presence" and prepared.get("inspection_image_path"):
-        prepared.pop("inspection_image_bgr", None)
-    elif tool_name == "vision.inspect.presence" and isinstance(image_bgr, np.ndarray):
-        prepared["inspection_image_data_url"] = image_bgr_data_url(
-            image_bgr,
-            max_side=AI_INSPECTION_IMAGE_MAX_SIDE,
-            quality=AI_INSPECTION_IMAGE_QUALITY,
-        )
-        prepared.pop("inspection_image_bgr", None)
-    return prepared
+_mcp_payload_preparation = McpPayloadPreparation(
+    encoder=lambda: image_bgr_data_url,
+    max_side=lambda: AI_INSPECTION_IMAGE_MAX_SIDE,
+    quality=lambda: AI_INSPECTION_IMAGE_QUALITY,
+)
+prepare_ai_mcp_payload = _mcp_payload_preparation.prepare_ai_mcp_payload
 
 
 def call_ai_mcp_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -6003,13 +5909,8 @@ def call_ai_mcp_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _model_tool_dispatch.call_ai_mcp_tool(tool_name, payload)
 
 
-def warm_ai_mcp_client() -> None:
-    if not external_ai_mcp_enabled():
-        return
-    try:
-        _ai_mcp_client.ensure_started()
-    except Exception:
-        _ai_mcp_client.close()
+_mcp_warmup = McpWarmup(enabled=external_ai_mcp_enabled, client=lambda: _ai_mcp_client)
+warm_ai_mcp_client = _mcp_warmup.warm_ai_mcp_client
 
 
 @app.on_event("startup")
@@ -7185,29 +7086,24 @@ def public_cursor_image2_status() -> dict[str, Any]:
     return _image_provider_configuration.public_cursor_image2_status()
 
 
+from .model_providers.payloads import ImagePayloadCodec
+
+_image_payload_codec = ImagePayloadCodec(
+    files=lambda: _business_files,
+    decoder=lambda: decode_b64_image,
+    candidates=lambda: cursor_image2_response_candidates,
+)
+
+
 def image_file_payload(path: Path) -> dict[str, str]:
-    mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
-    return {
-        "name": path.name,
-        "mime_type": mime_type,
-        "data": base64.b64encode(_business_files.read_bytes(path)).decode("ascii"),
-    }
+    return _image_payload_codec.image_file_payload(path)
 
 
 def cursor_image2_payload(job: dict[str, Any], input_files: list[str], settings: dict[str, Any]) -> dict[str, Any]:
     return _image_provider_configuration.cursor_image2_payload(job, input_files, settings)
 
 
-def decode_b64_image(value: Any) -> bytes | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    if text.startswith("data:"):
-        _, _, text = text.partition(",")
-    try:
-        return base64.b64decode(text, validate=True)
-    except (ValueError, binascii.Error):
-        return None
+from .model_providers.payloads import decode_b64_image
 
 
 def cursor_image2_response_candidates(payload: Any) -> list[dict[str, Any]]:
@@ -7219,16 +7115,7 @@ def extract_cursor_image2_bytes(payload: dict[str, Any], settings: dict[str, Any
 
 
 def windows_worker_image_response_bytes(payload: dict[str, Any]) -> bytes:
-    for key in ("b64_json", "base64", "image_base64"):
-        image_bytes = decode_b64_image(payload.get(key))
-        if image_bytes:
-            return image_bytes
-    for item in cursor_image2_response_candidates(payload):
-        for key in ("b64_json", "base64", "image_base64"):
-            image_bytes = decode_b64_image(item.get(key))
-            if image_bytes:
-                return image_bytes
-    raise RuntimeError("Windows Worker image fallback response did not include base64 PNG bytes.")
+    return _image_payload_codec.windows_worker_image_response_bytes(payload)
 
 
 from .accessories.image_job_execution import ImageJobExecution
@@ -8708,33 +8595,15 @@ def start_yolo_model_warmup() -> None:
     start_yolo_warmup("startup")
 
 
-def yolo_inference_device() -> str | int:
-    configured = os.environ.get("INSPECTION_YOLO_DEVICE", "").strip()
-    if configured:
-        return configured
-    try:
-        import torch
+from .detection.local_models import CheckpointSelection, yolo_inference_device
 
-        return 0 if torch.cuda.is_available() else "cpu"
-    except Exception:
-        return "cpu"
+_checkpoint_selection = CheckpointSelection(
+    lambda: DETECT_BASE_MODEL_OVERRIDE, lambda: ROOT, lambda: APP_DIR,
+    lambda path: _business_files.exists(path),
+)
 
 
-def detect_base_model() -> str:
-    """Resolve the base checkpoint for detection-model training. Prefers an
-    explicit override or a local detector weight, falling back to a standard
-    Ultralytics detector name (auto-downloaded on first use)."""
-    if DETECT_BASE_MODEL_OVERRIDE:
-        return DETECT_BASE_MODEL_OVERRIDE
-    for candidate in (
-        ROOT / "yolo26s.pt",
-        APP_DIR / "yolo26s.pt",
-        ROOT / "yolo11s.pt",
-        ROOT / "yolov8s.pt",
-    ):
-        if _business_files.exists(candidate):
-            return str(candidate)
-    return "yolo26s.pt"
+detect_base_model = _checkpoint_selection.detect_base_model
 
 
 
@@ -9192,24 +9061,18 @@ def status(user_id: str | None = None) -> dict[str, Any]:
     return _service_status_requests.status(user_id)
 
 
-@app.post("/api/models/warmup")
-def warmup_detection_model(request: ModelWarmupRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    model_id = str(request.model_id or "").strip()
-    if not model_id:
-        raise HTTPException(status_code=400, detail="model_id is required")
-    spec = selected_model_spec(model_id, config)
-    if spec.get("is_ai_detection") or spec.get("is_label_sheet_match"):
-        return {**public_yolo_warmup_status(config), "selected_model_id": model_id, "selected_model_ready": True, "skipped": True}
-    if not yolo_model_ready(model_id, config):
-        start_yolo_warmup("selection", [model_id])
-    return {
-        **public_yolo_warmup_status(config),
-        "selected_model_id": model_id,
-        "selected_model_ready": yolo_model_ready(model_id, config),
-        "skipped": False,
-    }
+from .detection.warmup_requests import ModelWarmupAccess, ModelWarmupModels
+from .detection.warmup_api import bind_warmup_start, compose_model_warmup_api
+
+_model_warmup_requests = compose_model_warmup_api(
+    app,
+    access=ModelWarmupAccess(_access_control.current_auth_user, _app_config_store.load_config,
+                            _account_projections.scope_config_for_user),
+    models=ModelWarmupModels(_model_selection.selected_model_spec, _local_models.yolo_model_ready),
+    status=_yolo_warmup_runtime.public_yolo_warmup_status,
+    start=bind_warmup_start(_yolo_warmup_runtime),
+)
+warmup_detection_model = _model_warmup_requests.warmup_detection_model
 
 
 @app.get("/api/config")
