@@ -74,10 +74,10 @@ class AutoOptimizationDataset:
         for split in ("train", "val", "test"):
             (dataset_dir / "images" / split).mkdir(parents=True, exist_ok=True)
             (dataset_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
-        settings = state.get("settings") if isinstance(state.get("settings"), dict) else self.configuration.default_auto_optimize_settings()()
-        samples_per_real_image = self.configuration.auto_optimize_samples_per_real_image()(settings)
-        positive_derivatives_per_real_image = self.configuration.auto_optimize_positive_derivatives_per_real_image()(settings)
-        negative_samples_per_real_image = self.configuration.auto_optimize_negative_samples_per_real_image()(settings)
+        settings = state.get("settings") if isinstance(state.get("settings"), dict) else self.configuration.default_auto_optimize_settings()
+        samples_per_real_image = self.configuration.auto_optimize_samples_per_real_image(settings)
+        positive_derivatives_per_real_image = self.configuration.auto_optimize_positive_derivatives_per_real_image(settings)
+        negative_samples_per_real_image = self.configuration.auto_optimize_negative_samples_per_real_image(settings)
         dataset_background_set_id = self.layout.safe_background_set_id()(str(state.get("background_set_id") or "green_conveyor"))
         positive_samples = [sample for sample in samples if isinstance(sample, dict) and sample.get("label_status") == "trainable"]
         bbox_only_samples = [sample for sample in samples if isinstance(sample, dict) and sample.get("label_status") == "trainable_bbox_only"]
@@ -318,7 +318,7 @@ class AutoOptimizationDataset:
             "real_bbox_sample_count": len([item for item in sample_records if item.get("sample_type") in {"real_positive_original_bbox", "real_positive_bbox_only"}]),
             "real_original_bbox_sample_count": len([item for item in sample_records if item.get("sample_type") == "real_positive_original_bbox"]),
             "real_bbox_only_sample_count": len([item for item in sample_records if item.get("sample_type") == "real_positive_bbox_only"]),
-            "training_requirements": self.configuration.auto_optimize_training_requirements()(
+            "training_requirements": self.configuration.auto_optimize_training_requirements(
                 state.get("settings") if isinstance(state.get("settings"), dict) else {},
                 real_positive_source_count=len(positive_samples) + len(bbox_only_samples),
             ),

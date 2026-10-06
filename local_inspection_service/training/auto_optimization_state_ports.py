@@ -49,7 +49,7 @@ class AutoOptimizationStatePolicy:
     safe_record_id: Callable[[], Callable[[Any], str]]
     row_raw_json_list: Callable[[], Callable[[list[Record]], list[Any]]]
     auto_optimize_state_row: Callable[[], AutoOptimizationStateEncoder]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
+    default_auto_optimize_settings: Callable[[], Record]
     resolve_model_profiles: Callable[[], ResolverProvider]
 
 

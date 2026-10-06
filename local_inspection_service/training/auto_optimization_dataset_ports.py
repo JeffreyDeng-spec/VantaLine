@@ -23,11 +23,11 @@ class DatasetConfiguration:
     load_config: Callable[[], Callable[[], Record]]
     scope_config_for_user: Callable[[], Callable[[Record, Record], Record]]
     accessory_lookup_by_id: Callable[[], Callable[[Record], dict[str, Record]]]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
-    auto_optimize_samples_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_positive_derivatives_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_negative_samples_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_training_requirements: Callable[[], TrainingRequirements]
+    default_auto_optimize_settings: Callable[[], Record]
+    auto_optimize_samples_per_real_image: Callable[[Record], int]
+    auto_optimize_positive_derivatives_per_real_image: Callable[[Record], int]
+    auto_optimize_negative_samples_per_real_image: Callable[[Record], int]
+    auto_optimize_training_requirements: TrainingRequirements
 
 @dataclass(frozen=True)
 class DatasetSources:

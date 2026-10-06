@@ -105,7 +105,7 @@ class AutoOptimizationInitialization:
         recommendation = self.task.agent_auto_optimize_initialization_recommendation()(config, accessory_ids, expected_count, fallback)
         with self.task._auto_optimize_lock():
             state = self.task.load_auto_optimize_state()(ai_task_id)
-            settings = {**self.task.default_auto_optimize_settings()(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
+            settings = {**self.task.default_auto_optimize_settings(), **(state.get("settings") if isinstance(state.get("settings"), dict) else {})}
             settings.update(
                 {
                     "enabled": bool(recommendation.get("enabled")),

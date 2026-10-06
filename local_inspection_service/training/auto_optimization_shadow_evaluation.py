@@ -91,7 +91,7 @@ class AutoOptimizationShadowEvaluation:
             state.setdefault("retired_model_ids", []).append(old_model)
             self.promotion.cleanup_auto_optimize_retired_candidate_locked()(state, old_model, keep_model_id=model_id)
         state["active_model_id"] = model_id
-        settings = {**self.promotion.default_auto_optimize_settings()(), **(state.get("settings") or {})}
+        settings = {**self.promotion.default_auto_optimize_settings(), **(state.get("settings") or {})}
         settings["serving_mode"] = "promoted_yolo"
         settings["enabled"] = False
         state["settings"] = settings

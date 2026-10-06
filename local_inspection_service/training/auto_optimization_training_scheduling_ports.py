@@ -20,13 +20,13 @@ class RequestFactory(Protocol):
 class SchedulingPolicy:
     auto_optimize_completed_model_id: Callable[[], Callable[[Record], str]]
     auto_optimize_stop_capture_for_model_locked: Callable[[], StopCapture]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
-    auto_optimize_training_requirements: Callable[[], TrainingRequirements]
-    auto_optimize_samples_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_positive_derivatives_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_negative_samples_per_real_image: Callable[[], Callable[[Record], int]]
+    default_auto_optimize_settings: Callable[[], Record]
+    auto_optimize_training_requirements: TrainingRequirements
+    auto_optimize_samples_per_real_image: Callable[[Record], int]
+    auto_optimize_positive_derivatives_per_real_image: Callable[[Record], int]
+    auto_optimize_negative_samples_per_real_image: Callable[[Record], int]
     AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT: Callable[[], int]
-    auto_optimize_training_parameters: Callable[[], Callable[[Record], dict[str, int]]]
+    auto_optimize_training_parameters: Callable[[Record], dict[str, int]]
 
 @dataclass(frozen=True)
 class SchedulingSubmission:

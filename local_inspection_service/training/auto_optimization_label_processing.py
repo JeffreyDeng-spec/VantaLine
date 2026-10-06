@@ -62,7 +62,7 @@ class AutoOptimizationLabelProcessing:
                         self.state.auto_optimize_stop_capture_for_model_locked()(state, completed_model_id, reason="completed_model_ready")
                         self.state.save_auto_optimize_state()(state)
                         return
-                    opts = state.get("settings") if isinstance(state.get("settings"), dict) else self.state.default_auto_optimize_settings()()
+                    opts = state.get("settings") if isinstance(state.get("settings"), dict) else self.state.default_auto_optimize_settings()
                     if not opts.get("enabled"):
                         return
                     max_parallel = max(1, min(self.execution.AUTO_OPTIMIZE_MASK_MAX_PARALLEL(), int(opts.get("max_label_jobs_per_cycle") or self.execution.AUTO_OPTIMIZE_MASK_MAX_PARALLEL())))

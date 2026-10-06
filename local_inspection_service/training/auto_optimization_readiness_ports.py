@@ -17,5 +17,5 @@ class AutoOptimizationReadinessPorts:
     normalize_pipeline_detection_method: Callable[[], Callable[[str], str]]
     pipeline_task_model_status: Callable[[], Callable[[Record], str]]
     pipeline_task_model_id: Callable[[], Callable[[Record], str]]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
+    default_auto_optimize_settings: Callable[[], Record]
     auto_optimize_completed_model_id: Callable[[], Callable[[Record], str]]
