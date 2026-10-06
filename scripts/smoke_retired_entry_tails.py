@@ -4,6 +4,7 @@ import __future__
 import copy
 import dis
 import hashlib
+import inspect
 import os
 from pathlib import Path
 import sys
@@ -44,6 +45,8 @@ def main():
                           'update_ai_config': ('active_key_id','image_provider','item_id','key_provider','local'),
                           'delete_ai_config_key': ('active_key_id',),
                           'stream_plc_capture_events': ('clean_session_id','user_id')}
+        if sys.version_info < (3, 11):
+            expected_cells['delete_ai_config_key'] = ('active_key_id', 'provider')
         for name, original in old_nodes.items():
             stop=next(i for i,n in enumerate(original.body) if isinstance(n,(ast.Return,ast.Raise)))
             prefix=copy.deepcopy(original); prefix.body=prefix.body[:stop+1]; prefix.decorator_list=[]
@@ -52,10 +55,23 @@ def main():
             for statement in original.body[stop+1:]:
                 dead_calls.update(n.func.id for n in ast.walk(statement) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name))
             left,right=previous[name].__code__,candidate[name].__code__
-            assert left.co_flags==right.co_flags and left.co_freevars==right.co_freevars==()
+            assert left.co_freevars == right.co_freevars == ()
+            if sys.version_info < (3, 11):
+                assert bool(left.co_flags & inspect.CO_NOFREE) == (not left.co_cellvars)
+                assert right.co_flags & inspect.CO_NOFREE
+                assert left.co_flags & ~inspect.CO_NOFREE == right.co_flags & ~inspect.CO_NOFREE
+            else:
+                assert left.co_flags == right.co_flags
             assert left.co_cellvars == expected_cells.get(name, ()) and right.co_cellvars == ()
-            assert left.co_exceptiontable == right.co_exceptiontable == b''
-            assert [i.argval for i in dis.get_instructions(left) if i.opname=='MAKE_CELL'] == list(expected_cells.get(name, ()))
+            # Python 3.10 creates closure cells in the frame; 3.11+ emits MAKE_CELL
+            # and exposes exception tables. Compare every executable instruction
+            # on both versions, allowing only these known unused allocations.
+            if sys.version_info >= (3, 11):
+                assert left.co_exceptiontable == right.co_exceptiontable == b''
+            else:
+                assert not hasattr(left, 'co_exceptiontable') and not hasattr(right, 'co_exceptiontable')
+            expected_allocations = list(expected_cells.get(name, ())) if sys.version_info >= (3, 11) else []
+            assert [i.argval for i in dis.get_instructions(left) if i.opname=='MAKE_CELL'] == expected_allocations
             def instructions(code):
                 return [(i.opname,i.argval) for i in dis.get_instructions(code) if i.opname!='MAKE_CELL']
             assert instructions(left)==instructions(right), name
