@@ -306,6 +306,7 @@ jobs:
           python scripts/smoke_training_file_ports.py
           python scripts/smoke_training_image_ports.py
           python scripts/smoke_training_resource_ports.py
+          python scripts/smoke_accessory_file_ports.py
           python scripts/smoke_artifact_runtime_provider.py
           python scripts/smoke_bootstrap_locations.py
           python scripts/smoke_provider_proxy_runtime.py

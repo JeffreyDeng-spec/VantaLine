@@ -3269,7 +3269,7 @@ _image_job_metadata = ImageJobMetadata(
         guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
         max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
     ),
-    lambda: resolve_model_profiles(),
+    lambda: resolve_model_profiles(), files=_business_files
 )
 
 
@@ -5773,7 +5773,7 @@ _sprite_render_metadata = _SpriteRenderMetadata(
 
     _SpriteRenderOperations(bounds=lambda: alpha_bbox, family=lambda: canonical_pose_family_name, visible=lambda: asset_visible_shape_px, orient=lambda: source_long_short_oriented_px, footprint=lambda: pose_render_footprint_metadata, physical=lambda: physical_render_size_px),
 
-    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
+    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED), files=_business_files
 
 )
 
@@ -6903,7 +6903,7 @@ _image_job_management = ImageJobManagement(
         record_updated_at=lambda: record_updated_at,
         record_owner_id=lambda: record_owner_id,
         record_owner_username=lambda: record_owner_username,
-        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
+        enrich_record_audit_fields=lambda: enrich_record_audit_fields
     ),
     actions=ImageJobActions(
         _image_worker_processes=lambda: _image_worker_processes,
@@ -9444,7 +9444,7 @@ _accessory_creation = AccessoryCreation(
         add_pending=lambda identifier: add_pipeline_pending_candidate_id(identifier),
         payload=lambda config, user: pipeline_accessories_payload(config, user),
     ),
-    _accessory_projection,
+    _accessory_projection, files=_business_files
 )
 
 

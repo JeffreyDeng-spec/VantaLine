@@ -45,14 +45,13 @@ class IntegrationTests(unittest.TestCase):
             image_job_metadata.ProvenanceDependencies(
                 lambda path: dataset_archives.file_sha256(path, files=files), lambda: "fixture",
                 lambda: {"circle": [path]}, lambda: 8,
-            ), None,
+            ), None, files=files
         )
         job = {"pose_family": "circle", "input_files": []}
-        with patch.object(image_job_metadata, "_business_files", files):
-            self.assertTrue(metadata.ensure_image_job_target_guides(job))
-            self.assertEqual(job["target_guide_sha256"], {path.name: row.sha256})
-            self.assertFalse(path.exists())
-            self.assertFalse(metadata.ensure_image_job_target_guides(job))
+        self.assertTrue(metadata.ensure_image_job_target_guides(job))
+        self.assertEqual(job["target_guide_sha256"], {path.name: row.sha256})
+        self.assertFalse(path.exists())
+        self.assertFalse(metadata.ensure_image_job_target_guides(job))
 
     def test_detection_native_port_publishes_verified_bytes_and_propagates_failure(self):
         import cv2

@@ -2,7 +2,7 @@
 from collections.abc import Callable, Set
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, BinaryIO, Protocol
 from fastapi import UploadFile
 from .catalog import RecordGuard
 
@@ -57,3 +57,20 @@ class FileProfiles:
     generate: GenerateProfile
     save_cache: Callable[[Record], None]
     bounded_text: Callable[[Any, int], str]
+
+
+class ExistingAccessoryFiles(Protocol):
+    def exists(self, path: Path) -> bool: ...
+
+
+class AccessoryFileStat(Protocol):
+    @property
+    def st_mtime(self) -> float: ...
+
+
+class AccessoryProvenanceFiles(ExistingAccessoryFiles, Protocol):
+    def stat(self, path: Path) -> AccessoryFileStat: ...
+
+
+class AccessoryUploadFiles(Protocol):
+    def copy_stream(self, destination: Path, source: BinaryIO, local_copy: Callable[..., Any]) -> Any: ...

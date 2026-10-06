@@ -370,3 +370,7 @@ Photo highlight and background-plate image reads/writes have an opt-in storage a
 In COS mode, photo-highlight ROI and mask persistence failures propagate before successful artifact publication. Optional local image-processing fallback must not hide a failed durable write.
 
 Accessory readiness, image-worker status, ID matching and first-source convenience workflows are now owned by existing accessory services. Agent capabilities continue calling those services through the current explicit interfaces; provider/tool authorization and execution topology do not change.
+
+Image-job anchor and target-guide provenance now receives its file existence/stat capability explicitly. Existing source hashes, task snapshots, legacy mtime fallback and model resolver behavior are preserved. The unrelated ImageJobMetadata management-port dataclass retains its original shape; no agent execution or provider policy changes.
+
+This offline accessory file replay follows training resource candidate 7ae44bf and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed eccc553, including ordered constructor bindings. At this replay boundary manifest v216 selects 526 sources. Upload ordering, partial publication, provenance collisions and sprite fallbacks remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.

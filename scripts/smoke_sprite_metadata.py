@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 class SpriteMetadataContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -179,7 +180,7 @@ class SpriteMetadataContracts(unittest.TestCase):
         physical=Mock(return_value=(70,80) if second else (7,8))
         render=SpriteRenderMetadata(
             ports.SpriteRenderOperations(bounds=lambda:alpha_bbox,family=lambda:values.canonical_pose_family_name,visible=lambda:render.asset_visible_shape_px,orient=lambda:values.source_long_short_oriented_px,footprint=lambda:footprint.pose_render_footprint_metadata,physical=lambda:physical),
-            ports.SpriteImageReads(path=lambda:Path,decode=lambda:decode,unchanged_mode=lambda:-1))
+            ports.SpriteImageReads(path=lambda:Path,decode=lambda:decode,unchanged_mode=lambda:-1), files=BusinessFiles())
         return footprint,scale,render,decode,physical
     def test_metadata_constructors_do_not_read_capabilities(self):
         from local_inspection_service.accessories import sprite_metadata_ports as ports
@@ -190,7 +191,7 @@ class SpriteMetadataContracts(unittest.TestCase):
         def group(kind):return kind(**{name:forbidden for name in kind.__dataclass_fields__})
         footprint=SpriteFootprintMetadata(group(ports.SpritePhysicalPolicy),group(ports.SpriteFootprintMetadataOperations))
         scale=SpriteScaleMetadata(group(ports.SpriteScalePolicy),group(ports.SpriteScaleOperations))
-        render=SpriteRenderMetadata(group(ports.SpriteRenderOperations),group(ports.SpriteImageReads))
+        render=SpriteRenderMetadata(group(ports.SpriteRenderOperations),group(ports.SpriteImageReads), files=BusinessFiles())
         self.assertIsInstance(footprint,SpriteFootprintMetadata);self.assertIsInstance(scale,SpriteScaleMetadata);self.assertIsInstance(render,SpriteRenderMetadata);forbidden.assert_not_called()
     def test_independent_metadata_first_second_first(self):
         first=self.independent_metadata_services();second=self.independent_metadata_services(second=True)

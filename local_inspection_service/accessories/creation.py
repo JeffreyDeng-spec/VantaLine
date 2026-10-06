@@ -1,6 +1,5 @@
 """Creation and preview orchestration with original partial-effect ordering."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import AccessoryUploadFiles
 import shutil
 import time
 import uuid
@@ -14,7 +13,10 @@ from .projection import AccessoryProjection
 class AccessoryCreation:
     def __init__(self, access: CreationAccess, store: CreationStore, media: CreationMedia,
                  profiles: CreationProfiles, candidates: CandidateCreation,
-                 pipeline: CreationPipeline, projection: AccessoryProjection):
+                 pipeline: CreationPipeline, projection: AccessoryProjection, *, files: AccessoryUploadFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.access, self.store, self.media = access, store, media
         self.profiles, self.candidates = profiles, candidates
         self.pipeline, self.projection = pipeline, projection
@@ -56,7 +58,7 @@ class AccessoryCreation:
         target_dir.mkdir(parents=True, exist_ok=True)
         for upload in files:
             path = target_dir / self.media.safe_name(upload.filename)
-            _business_files.copy_stream(path, upload.file, shutil.copyfileobj)
+            self.files.copy_stream(path, upload.file, shutil.copyfileobj)
             saved_files.append(str(path))
         expanded_source_files, extracted_video_frames = self.media.expand_sources(accessory_id, saved_files)
 
@@ -143,7 +145,7 @@ class AccessoryCreation:
             candidate_source_dir.mkdir(parents=True, exist_ok=True)
             for upload in files:
                 path = candidate_source_dir / self.media.safe_name(upload.filename)
-                _business_files.copy_stream(path, upload.file, shutil.copyfileobj)
+                self.files.copy_stream(path, upload.file, shutil.copyfileobj)
                 saved_files.append(str(path))
         physical_size = self.media.physical_size(
             material_type,
