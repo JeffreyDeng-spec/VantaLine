@@ -10489,7 +10489,7 @@ _pipeline_resource_status = _PipelineResourceStatus(
         find_dataset=lambda: find_dataset_resource,
         load_ai_tasks=lambda: load_ai_detection_tasks,
         list_trained_specs=lambda: list_trained_model_specs,
-    )
+    ), files=_business_files
 )
 
 

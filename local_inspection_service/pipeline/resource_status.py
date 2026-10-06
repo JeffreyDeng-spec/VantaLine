@@ -1,7 +1,6 @@
 """Dataset and model availability projection for pipeline tasks."""
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .resource_status_ports import PipelineResourceFiles
 import re
 from typing import Any
 
@@ -9,7 +8,10 @@ from .resource_status_ports import PipelineResourceStatusLinks
 
 
 class PipelineResourceStatus:
-    def __init__(self, links: PipelineResourceStatusLinks):
+    def __init__(self, links: PipelineResourceStatusLinks, *, files: PipelineResourceFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.links = links
 
     def pipeline_task_dataset_status(self, task: dict[str, Any]) -> str:
@@ -19,7 +21,7 @@ class PipelineResourceStatus:
         if str(task.get("dataset_status") or "") == "deleted":
             return "deleted"
         dataset_dir, _ = self.links.find_dataset()(dataset_id)
-        if dataset_dir and _business_files.exists(dataset_dir):
+        if dataset_dir and self.files.exists(dataset_dir):
             return "available"
         if task.get("stage") == "samples" and str(task.get("status") or "") in {"running", "queued", "pending"}:
             return "pending"
@@ -48,7 +50,7 @@ class PipelineResourceStatus:
         specs = trained_model_specs if trained_model_specs is not None else self.links.list_trained_specs()()
         spec = next((item for item in specs if str(item.get("run_id")) == clean_run_id), None)
         model_path = str((spec or {}).get("path") or "")
-        if spec and model_path and _business_files.exists(Path(model_path)):
+        if spec and model_path and self.files.exists(Path(model_path)):
             return "available"
         if task.get("stage") == "training" and str(task.get("status") or "") in {"running", "queued", "pending"}:
             return "pending"

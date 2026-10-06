@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class PipelineResourceStatusContracts(unittest.TestCase):
@@ -228,7 +229,7 @@ class PipelineResourceStatusContracts(unittest.TestCase):
                 return specs
             return PipelineResourceStatus(PipelineResourceStatusLinks(
                 find_dataset=get_find, load_ai_tasks=get_ai, list_trained_specs=get_specs
-            ))
+            ), files=BusinessFiles())
         first = build("first")
         second = build("second")
         self.assertEqual(events, [])

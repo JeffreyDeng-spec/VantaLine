@@ -510,6 +510,7 @@ jobs:
           python scripts/smoke_pipeline_recommendations.py
           python scripts/smoke_pipeline_task_snapshots.py
           python scripts/smoke_pipeline_resource_status.py
+          python scripts/smoke_pipeline_status_file_ports.py
           python scripts/smoke_pipeline_task_update.py
           python scripts/smoke_pipeline_task_create.py
           python scripts/smoke_pipeline_task_delete.py
