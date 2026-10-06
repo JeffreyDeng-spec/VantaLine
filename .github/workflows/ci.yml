@@ -298,6 +298,7 @@ jobs:
           python scripts/smoke_bootstrap_locations.py
           python scripts/smoke_provider_proxy_runtime.py
           python scripts/smoke_mcp_client_runtime.py
+          python scripts/smoke_mcp_drain.py
           python scripts/smoke_mcp_runtime_policy.py
           python scripts/smoke_image_payload_codec.py
           python scripts/smoke_detection_rule_composition.py

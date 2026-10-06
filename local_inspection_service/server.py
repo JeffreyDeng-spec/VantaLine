@@ -5450,6 +5450,7 @@ _model_tool_dispatch = ModelToolDispatch(
         generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
     ),
     transport=McpToolTransport(
+        admission=lambda: _ai_mcp_client.admission,
         ai_mcp_runtime=lambda: ai_mcp_runtime,
         AI_MCP_RUNTIME_STDIO=lambda: AI_MCP_RUNTIME_STDIO,
         AI_MCP_RUNTIME_IN_PROCESS=lambda: AI_MCP_RUNTIME_IN_PROCESS,
@@ -5602,7 +5603,10 @@ def call_ai_mcp_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _model_tool_dispatch.call_ai_mcp_tool(tool_name, payload)
 
 
-_mcp_warmup = McpWarmup(enabled=external_ai_mcp_enabled, client=lambda: _ai_mcp_client)
+_mcp_warmup = McpWarmup(
+    enabled=external_ai_mcp_enabled, client=lambda: _ai_mcp_client,
+    admission=lambda: _ai_mcp_client.admission(),
+)
 warm_ai_mcp_client = _mcp_warmup.warm_ai_mcp_client
 
 

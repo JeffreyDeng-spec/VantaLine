@@ -1,4 +1,5 @@
 """MCP environment, payload ordering and failed warmup contracts with no providers."""
+from contextlib import nullcontext
 import ast
 import os
 from pathlib import Path
@@ -23,7 +24,7 @@ def create(bindings):
         exec(compile(ast.Module(body=nodes,type_ignores=[]),BASELINE,'exec'),ns)
         return SimpleNamespace(**{n:ns[n] for n in NAMES}),ns
     payload=runtime.McpPayloadPreparation(encoder=lambda:bindings['image_bgr_data_url'],max_side=lambda:bindings['AI_INSPECTION_IMAGE_MAX_SIDE'],quality=lambda:bindings['AI_INSPECTION_IMAGE_QUALITY'])
-    warmup=runtime.McpWarmup(enabled=lambda:bindings['external_ai_mcp_enabled'](),client=lambda:bindings['_ai_mcp_client'])
+    warmup=runtime.McpWarmup(admission=nullcontext,enabled=lambda:bindings['external_ai_mcp_enabled'](),client=lambda:bindings['_ai_mcp_client'])
     bindings['external_ai_mcp_enabled']=runtime.external_ai_mcp_enabled
     return SimpleNamespace(ai_mcp_runtime=runtime.ai_mcp_runtime, external_ai_mcp_enabled=runtime.external_ai_mcp_enabled,prepare_ai_mcp_payload=payload.prepare_ai_mcp_payload,warm_ai_mcp_client=warmup.warm_ai_mcp_client),bindings
 
@@ -101,7 +102,7 @@ class Contracts(unittest.TestCase):
         self.assertEqual(events,[])
         self.assertEqual(obj.prepare_ai_mcp_payload('vision.inspect.presence',{'inspection_image_bgr':np.zeros((1,1,3))})['inspection_image_data_url'],'old')
         self.assertEqual(events,['encoder','size','quality','encoded'])
-        calls=Mock(side_effect=AssertionError('constructor'));runtime.McpWarmup(calls,calls);calls.assert_not_called()
+        calls=Mock(side_effect=AssertionError('constructor'));runtime.McpWarmup(calls,calls,calls);calls.assert_not_called()
 
     @unittest.skipIf(bool(BASELINE),'candidate assembly only')
     def test_actual_root_aliases_and_unchanged_startup(self):
