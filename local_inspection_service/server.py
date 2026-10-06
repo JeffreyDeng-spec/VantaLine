@@ -1465,18 +1465,20 @@ _yolo_warmup_state = _yolo_warmup_runtime.state
 _incoming_text_store_lock = threading.RLock()
 from .accessories.cutout_runtime import RembgSessionRuntime as _RembgSessionRuntime
 _rembg_runtime = _RembgSessionRuntime()
-_image_worker_lock = threading.Lock()
+from .runtime.image_worker import ImageWorkerRuntime
+_image_worker_runtime = ImageWorkerRuntime(target=lambda: image_worker_loop, threads=lambda: threading.Thread)
 _candidate_store_lock = threading.RLock()
 from .runtime.training_tasks import TrainingTaskRuntime
 _training_task_runtime = TrainingTaskRuntime()
 _training_task_lock = _training_task_runtime.lock
-_image_worker_thread: threading.Thread | None = None
-_image_worker_processes: dict[str, subprocess.Popen] = {}
+_image_worker_processes = _image_worker_runtime.processes
 _training_task_threads = _training_task_runtime.threads
 _training_task_delete_tombstones = _training_task_runtime.tombstones
-_auto_optimize_lock = threading.RLock()
-_auto_optimize_label_threads: dict[str, threading.Thread] = {}
-_auto_optimize_shadow_threads: dict[str, threading.Thread] = {}
+from .training.auto_optimization_runtime_state import AutoOptimizationRuntimeState
+_auto_optimization_runtime = AutoOptimizationRuntimeState()
+_auto_optimize_lock = _auto_optimization_runtime.lock
+_auto_optimize_label_threads = _auto_optimization_runtime.label_threads
+_auto_optimize_shadow_threads = _auto_optimization_runtime.shadow_threads
 AUTO_OPTIMIZE_MASK_MAX_PARALLEL = max(1, min(8, int(os.environ.get("VANTALINE_AUTO_OPT_MASK_MAX_PARALLEL", "3"))))
 AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS = max(1, min(6, int(os.environ.get("VANTALINE_AUTO_OPT_MASK_MAX_ATTEMPTS", "3"))))
 AUTO_OPTIMIZE_MASK_RETRY_BASE_SECONDS = max(0.0, float(os.environ.get("VANTALINE_AUTO_OPT_MASK_RETRY_BASE_SECONDS", "5")))
@@ -4363,7 +4365,7 @@ _auto_optimization_state_store = AutoOptimizationStateStore(
         safe_record_id=lambda: safe_record_id,
         row_raw_json_list=lambda: row_raw_json_list,
         auto_optimize_state_row=lambda: auto_optimize_state_row,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         resolve_model_profiles=lambda: resolve_model_profiles,
     ),
     cache=AutoOptimizationStateCache(
@@ -4379,29 +4381,22 @@ def auto_optimize_task_path(task_id: str) -> Path:
     return _auto_optimization_state_store.auto_optimize_task_path(task_id)
 
 
-def default_auto_optimize_settings() -> dict[str, Any]:
-    return _auto_optimization_settings.default_auto_optimize_settings()
+default_auto_optimize_settings = _auto_optimization_settings.default_auto_optimize_settings
 
 
-def auto_optimize_negative_samples_per_real_image(settings: dict[str, Any] | None) -> int:
-    return _auto_optimization_settings.auto_optimize_negative_samples_per_real_image(settings)
+auto_optimize_negative_samples_per_real_image = _auto_optimization_settings.auto_optimize_negative_samples_per_real_image
 
 
-def auto_optimize_positive_derivatives_per_real_image(settings: dict[str, Any] | None) -> int:
-    """Positive derivatives are the remainder after generated negatives."""
-    return _auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image(settings)
+auto_optimize_positive_derivatives_per_real_image = _auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image
 
 
-def auto_optimize_training_requirements(settings: dict[str, Any] | None, *, real_positive_source_count: int = 0) -> dict[str, int]:
-    return _auto_optimization_settings.auto_optimize_training_requirements(settings, real_positive_source_count=real_positive_source_count)
+auto_optimize_training_requirements = _auto_optimization_settings.auto_optimize_training_requirements
 
 
-def auto_optimize_samples_per_real_image(settings: dict[str, Any] | None) -> int:
-    return _auto_optimization_settings.auto_optimize_samples_per_real_image(settings)
+auto_optimize_samples_per_real_image = _auto_optimization_settings.auto_optimize_samples_per_real_image
 
 
-def auto_optimize_training_parameters(settings: dict[str, Any] | None) -> dict[str, int]:
-    return _auto_optimization_settings.auto_optimize_training_parameters(settings)
+auto_optimize_training_parameters = _auto_optimization_settings.auto_optimize_training_parameters
 
 
 
@@ -4456,7 +4451,7 @@ _auto_optimization_initialization = AutoOptimizationInitialization(
         agent_auto_optimize_initialization_recommendation=lambda: agent_auto_optimize_initialization_recommendation,
         _auto_optimize_lock=lambda: _auto_optimize_lock,
         load_auto_optimize_state=lambda: load_auto_optimize_state,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         save_auto_optimize_state=lambda: save_auto_optimize_state,
         start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
     ),
@@ -4525,14 +4520,14 @@ _auto_optimization_status = AutoOptimizationStatus(
         public_auto_optimize_state=lambda: public_auto_optimize_state,
     ),
     AutoOptimizationStatusPolicy(
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         auto_optimize_public_sprite_pool=lambda: auto_optimize_public_sprite_pool,
         background_set_payload=lambda: background_set_payload,
-        auto_optimize_samples_per_real_image=lambda: auto_optimize_samples_per_real_image,
-        auto_optimize_training_parameters=lambda: auto_optimize_training_parameters,
-        auto_optimize_training_requirements=lambda: auto_optimize_training_requirements,
-        auto_optimize_negative_samples_per_real_image=lambda: auto_optimize_negative_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
+        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
+        auto_optimize_training_parameters=_auto_optimization_settings.auto_optimize_training_parameters,
+        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
+        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
+        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
         AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
         public_path_sanitized=lambda: public_path_sanitized,
         auto_optimize_phase_name=lambda: auto_optimize_phase_name,
@@ -4559,7 +4554,7 @@ _auto_optimization_readiness = AutoOptimizationReadiness(AutoOptimizationReadine
     normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
     pipeline_task_model_status=lambda: pipeline_task_model_status,
     pipeline_task_model_id=lambda: pipeline_task_model_id,
-    default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+    default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
     auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
 ))
 
@@ -4888,7 +4883,7 @@ _auto_optimization_label_processing = AutoOptimizationLabelProcessing(
         save_auto_optimize_state=lambda: save_auto_optimize_state,
         auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
         auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
     ),
     artifacts=ProcessingArtifacts(
@@ -4933,13 +4928,13 @@ _auto_optimization_training_scheduling = AutoOptimizationTrainingScheduling(
     policy=SchedulingPolicy(
         auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
         auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
-        auto_optimize_training_requirements=lambda: auto_optimize_training_requirements,
-        auto_optimize_samples_per_real_image=lambda: auto_optimize_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
-        auto_optimize_negative_samples_per_real_image=lambda: auto_optimize_negative_samples_per_real_image,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
+        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
+        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
+        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
+        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
         AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        auto_optimize_training_parameters=lambda: auto_optimize_training_parameters,
+        auto_optimize_training_parameters=_auto_optimization_settings.auto_optimize_training_parameters,
     ),
     submission=SchedulingSubmission(
         build_auto_optimize_dataset=lambda: build_auto_optimize_dataset,
@@ -5108,8 +5103,8 @@ from .training.auto_optimization_synthetic_batch_ports import (
 _auto_optimization_synthetic_batch = AutoOptimizationSyntheticBatch(
     configuration=SyntheticBatchConfiguration(
         safe_background_set_id=lambda: safe_background_set_id,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
-        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
+        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
         AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
         _request_user=lambda: _request_user,
         LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
@@ -5149,11 +5144,11 @@ _auto_optimization_dataset = AutoOptimizationDataset(
         load_config=lambda: load_config,
         scope_config_for_user=lambda: scope_config_for_user,
         accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
-        auto_optimize_samples_per_real_image=lambda: auto_optimize_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=lambda: auto_optimize_positive_derivatives_per_real_image,
-        auto_optimize_negative_samples_per_real_image=lambda: auto_optimize_negative_samples_per_real_image,
-        auto_optimize_training_requirements=lambda: auto_optimize_training_requirements,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
+        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
+        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
+        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
+        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
     ),
     sources=DatasetSources(
         auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
@@ -5208,7 +5203,7 @@ _auto_optimization_shadow_evaluation = AutoOptimizationShadowEvaluation(
     ),
     promotion=ShadowPromotion(
         maybe_promote_auto_optimize_model_locked=lambda: maybe_promote_auto_optimize_model_locked,
-        default_auto_optimize_settings=lambda: default_auto_optimize_settings,
+        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         cleanup_auto_optimize_retired_candidate_locked=lambda: cleanup_auto_optimize_retired_candidate_locked,
         LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
         delete_training_task_record=lambda: delete_training_task_record,
@@ -7152,14 +7147,7 @@ def image_worker_loop() -> None:
     return _image_job_queue.image_worker_loop()
 
 
-def start_image_worker() -> bool:
-    global _image_worker_thread
-    with _image_worker_lock:
-        if _image_worker_thread and _image_worker_thread.is_alive():
-            return False
-        _image_worker_thread = threading.Thread(target=image_worker_loop, name="image-generation-worker", daemon=True)
-        _image_worker_thread.start()
-        return True
+start_image_worker = _image_worker_runtime.start
 
 
 from .accessories.image_job_management import ImageJobManagement
@@ -10534,8 +10522,10 @@ training_preview = _training_preview_routes.training_preview
 AGENT_LOCAL_CONFIG_PATH = DATA_DIR / "agent_config.local.json"
 PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
 PIPELINE_STATE_PATH = DATA_DIR / "pipeline_state.json"
-_pipeline_tasks_lock = threading.Lock()
-_pipeline_state_lock = threading.RLock()
+from .pipeline.runtime_state import PipelineRuntimeState
+_pipeline_runtime = PipelineRuntimeState()
+_pipeline_tasks_lock = _pipeline_runtime.task_lock
+_pipeline_state_lock = _pipeline_runtime.state_lock
 
 AGENT_PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
 AGENT_PROVIDER_CURSOR = "cursor"
@@ -10591,18 +10581,18 @@ AGENT_PIPELINE_ACTIONS = {
     "reply",
 }
 AGENT_PIPELINE_STAGE_TARGETS = {"draft", "samples"}
-_pipeline_auto_agent_lock = threading.Lock()
-_pipeline_auto_agent_inflight: set[str] = set()
-_pipeline_recommendation_lock = threading.Lock()
-_pipeline_recommendation_inflight: set[str] = set()
+_pipeline_auto_agent_lock = _pipeline_runtime.auto_agent_lock
+_pipeline_auto_agent_inflight = _pipeline_runtime.auto_agent_inflight
+_pipeline_recommendation_lock = _pipeline_runtime.recommendation_lock
+_pipeline_recommendation_inflight = _pipeline_runtime.recommendation_inflight
 # Async pipeline-advance runner state. Every advance (manual endpoint, GET-list
 # auto-advance, chat/agent-feedback) is executed by a single per-task background
 # thread so heavy/bounded compute never runs under _pipeline_tasks_lock and a
 # stuck task can be cancelled. The inflight set guarantees idempotency (one
 # thread per task); the cancel map lets delete/cancel stop a running advance.
-_pipeline_advance_registry_lock = threading.Lock()
-_pipeline_advance_inflight: set[str] = set()
-_pipeline_advance_cancel: dict[str, threading.Event] = {}
+_pipeline_advance_registry_lock = _pipeline_runtime.advance_registry_lock
+_pipeline_advance_inflight = _pipeline_runtime.advance_inflight
+_pipeline_advance_cancel = _pipeline_runtime.advance_cancel
 # A task left in the advancing state longer than this with no live worker thread
 # is treated as a zombie (e.g. the process restarted mid-advance) and reset.
 PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S = 600
@@ -12212,12 +12202,9 @@ def sync_and_auto_advance_pipeline(tasks: list[dict[str, Any]]) -> tuple[bool, l
 # POST endpoints mutate state directly, so a throttled read only delays
 # background reconciliation by at most this interval.
 PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS = 5.0
-_pipeline_tasks_sync_last_at = 0.0
 
 
-def _set_pipeline_tasks_sync_last_at(value: float) -> None:
-    global _pipeline_tasks_sync_last_at
-    _pipeline_tasks_sync_last_at = value
+_set_pipeline_tasks_sync_last_at = _pipeline_runtime.set_last_sync_at
 
 
 from .pipeline.task_list import PipelineTaskList as _PipelineTaskList
@@ -12242,7 +12229,7 @@ _pipeline_task_list = _PipelineTaskList(
         task_lock=lambda: _pipeline_tasks_lock,
         load_tasks=lambda: load_pipeline_tasks,
         monotonic=lambda: time.monotonic,
-        last_sync_at=lambda: _pipeline_tasks_sync_last_at,
+        last_sync_at=lambda: _pipeline_runtime.last_sync_at,
         set_last_sync_at=lambda value: _set_pipeline_tasks_sync_last_at(value),
         min_interval=lambda: PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS,
         ensure_accessories=lambda: ensure_pipeline_task_accessory_objects,

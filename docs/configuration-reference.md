@@ -1295,3 +1295,13 @@ Accessory selection/dimension relocation adds no setting or size normalization. 
 Accessory workflow ownership adds no settings. Job matching still repairs IDs before matching, readiness still uses the same short-circuit/force policy, worker status merges only after mutation returns, and first-source selection preserves list order. Private root helper rebinding no longer replaces these internal same-service calls; tests target actual owner capabilities. Manifest v175 retains the 504 actual source paths and fingerprints their updated contents; historical snapshots remain untouched.
 
 This accessory candidate retains the native-history/readiness implementation and detection composition from actual main dcb4805, and follows analysis candidate bb3afa6. Actual-main rebind and analysis release acceptance must precede publication. Accessory production/tests and the ordered entry match reviewed c43118e. The bundled manifest is v175 with 504 unique sources. Original history28 and reader19 benchmark protocols remain mandatory; prior recorded performance failures are retained.
+
+Image worker ownership keeps the existing daemon thread name and auto-resume setting, and does not change job scheduling or thread context propagation. Manifest v176 fingerprints the actual runtime source (507 total); existing task snapshots stay unchanged.
+
+Pipeline state ownership preserves the existing lock types, shared five-second reconciliation interval, per-task registries and cancellation behavior. Manifest v176 includes the actual owner source (507 total); historical snapshots remain untouched.
+
+Auto-optimization runtime ownership changes no model, concurrency setting, default, promotion or cancellation policy. Manifest v176 includes 507 actual sources; historical model bindings and task snapshots are untouched.
+
+The settings composition change introduces no business configuration or default. Environment values are still parsed for every call, including the same invalid-environment errors before explicit overrides. Reassigning private entry settings aliases no longer rewires consumers: tests and extensions must inject a capability at the consuming service boundary. Manifest v176 retains 507 real sources; historic task snapshots remain unchanged.
+
+This background candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows accessory candidate f397a31. Actual-main rebind and accessory release acceptance must precede publication. Production/tests and the ordered entry match reviewed 5a44e61. The bundled manifest is v176 with 507 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained.

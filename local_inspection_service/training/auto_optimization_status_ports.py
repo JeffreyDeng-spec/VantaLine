@@ -36,14 +36,14 @@ class AutoOptimizationStatusState:
 
 @dataclass(frozen=True)
 class AutoOptimizationStatusPolicy:
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
+    default_auto_optimize_settings: Callable[[], Record]
     auto_optimize_public_sprite_pool: Callable[[], Callable[[Record], list[Record]]]
     background_set_payload: Callable[[], Callable[[str], Record]]
-    auto_optimize_samples_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_training_parameters: Callable[[], Callable[[Record], Record]]
-    auto_optimize_training_requirements: Callable[[], TrainingRequirements]
-    auto_optimize_negative_samples_per_real_image: Callable[[], Callable[[Record], int]]
-    auto_optimize_positive_derivatives_per_real_image: Callable[[], Callable[[Record], int]]
+    auto_optimize_samples_per_real_image: Callable[[Record], int]
+    auto_optimize_training_parameters: Callable[[Record], Record]
+    auto_optimize_training_requirements: TrainingRequirements
+    auto_optimize_negative_samples_per_real_image: Callable[[Record], int]
+    auto_optimize_positive_derivatives_per_real_image: Callable[[Record], int]
     AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT: Callable[[], int]
     public_path_sanitized: Callable[[], Callable[[Any], Any]]
     auto_optimize_phase_name: Callable[[], Callable[[Record], str]]

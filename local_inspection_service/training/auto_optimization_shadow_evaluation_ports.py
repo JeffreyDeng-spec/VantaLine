@@ -43,7 +43,7 @@ class ShadowObservation:
 @dataclass(frozen=True)
 class ShadowPromotion:
     maybe_promote_auto_optimize_model_locked: Callable[[], Callable[[Record], None]]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
+    default_auto_optimize_settings: Callable[[], Record]
     cleanup_auto_optimize_retired_candidate_locked: Callable[[], CleanupRetired]
     LEGACY_OWNER_ID: Callable[[], str]
     delete_training_task_record: Callable[[], DeleteTrainingRecord]

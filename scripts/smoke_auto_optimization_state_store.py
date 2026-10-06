@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from local_inspection_service.model_profiles.snapshots import freeze_record
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_STATE_BASELINE_SOURCE')
 PG_CHECK='--postgres' in sys.argv
 if PG_CHECK:sys.argv.remove('--postgres')
@@ -33,7 +34,7 @@ def create(bindings):
         return SimpleNamespace(**{name:namespace[name] for name in NAMES}),lambda name,value:namespace.__setitem__(name,value)
     from local_inspection_service.training.auto_optimization_state_store import AutoOptimizationStateStore
     from local_inspection_service.training.auto_optimization_state_ports import AutoOptimizationStateStorage,AutoOptimizationStatePolicy,AutoOptimizationStateCache
-    def ports(kind):return kind(**{field.name:(lambda name=field.name:bindings[name]) for field in fields(kind)})
+    def ports(kind):return kind(**{field.name:test_capability(bindings, field.name) for field in fields(kind)})
     service=AutoOptimizationStateStore(ports(AutoOptimizationStateStorage),ports(AutoOptimizationStatePolicy),ports(AutoOptimizationStateCache))
     bindings['auto_optimize_task_path']=service.auto_optimize_task_path
     return service,lambda name,value:bindings.__setitem__(name,value)
@@ -187,7 +188,7 @@ class StateStoreContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_state_store
         for port in (service.storage,service.policy,service.cache):
-            for field in fields(port):self.assertIs(getattr(port,field.name)(),getattr(server,field.name))
+            for field in fields(port):assert_capability_owner(self, port, field.name, server)
         f=self.fixture(postgres=False)
         with ExitStack() as stack:
             for name,value in f.bindings.items():

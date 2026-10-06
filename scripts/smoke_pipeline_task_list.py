@@ -48,6 +48,9 @@ def main():
             route = next(route for route in server.app.routes if getattr(route, "path", "") == "/api/pipeline/tasks" and "GET" in getattr(route, "methods", set()))
             assert route.endpoint is server.get_pipeline_tasks
 
+        clock_owner = server if baseline_source or not hasattr(server, "_pipeline_runtime") else server._pipeline_runtime
+        clock_attribute = "_pipeline_tasks_sync_last_at" if clock_owner is server else "last_sync_at"
+
         def exercise(*, admin=False, user_id=None, now=10.0, last=0.0,
                      changed=(False, False, False, False, False),
                      tasks=None, ai_tasks=None, fail=None, rebind=False,
@@ -108,7 +111,7 @@ def main():
             def monotonic():
                 mark("clock")
                 if rebind_last_on_clock:
-                    server._pipeline_tasks_sync_last_at = now
+                    setattr(clock_owner, clock_attribute, now)
                 if rebind_interval_on_clock:
                     server.PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS = 20.0
                 return now
@@ -219,7 +222,6 @@ def main():
                 "_pipeline_tasks_lock": lock,
                 "load_pipeline_tasks": load_tasks,
                 "time": SimpleNamespace(monotonic=monotonic),
-                "_pipeline_tasks_sync_last_at": last,
                 "PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS": 5.0,
                 "ensure_pipeline_task_accessory_objects": ensure,
                 "save_config": save_config,
@@ -244,6 +246,7 @@ def main():
                 "public_path_sanitized": sanitize,
             }
             with ExitStack() as stack:
+                stack.enter_context(patch.object(clock_owner, clock_attribute, last, create=clock_owner is server))
                 for name, value in replacements.items():
                     stack.enter_context(patch.object(server, name, value))
                 try:
@@ -253,7 +256,7 @@ def main():
                     raised = None
                 except Exception as exc:
                     result, raised = None, exc
-                persisted_last = server._pipeline_tasks_sync_last_at
+                persisted_last = getattr(clock_owner, clock_attribute)
             assert not lock.held
             return result, raised, events, saves, scheduled, persisted_last, error
 

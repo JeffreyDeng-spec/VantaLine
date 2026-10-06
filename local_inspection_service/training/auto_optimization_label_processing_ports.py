@@ -30,7 +30,7 @@ class ProcessingState:
     save_auto_optimize_state: Callable[[], Callable[[Record], None]]
     auto_optimize_completed_model_id: Callable[[], Callable[[Record], str]]
     auto_optimize_stop_capture_for_model_locked: Callable[[], StopCapture]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
+    default_auto_optimize_settings: Callable[[], Record]
     maybe_start_auto_optimize_training_locked: Callable[[], Callable[[Record], None]]
 
 @dataclass(frozen=True)

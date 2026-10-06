@@ -22,8 +22,8 @@ class AutoOptimizationSyntheticBatch:
         if not isinstance(sample, dict) or sample.get("label_status") != "trainable":
             return []
         requested_background_set_id = self.configuration.safe_background_set_id()(str(state.get("background_set_id") or "green_conveyor"))
-        settings = state.get("settings") if isinstance(state.get("settings"), dict) else self.configuration.default_auto_optimize_settings()()
-        sample_count = self.configuration.auto_optimize_positive_derivatives_per_real_image()(settings)
+        settings = state.get("settings") if isinstance(state.get("settings"), dict) else self.configuration.default_auto_optimize_settings()
+        sample_count = self.configuration.auto_optimize_positive_derivatives_per_real_image(settings)
         if sample_count <= 0:
             sample["synthetic_samples"] = []
             sample["synthetic_count"] = 0

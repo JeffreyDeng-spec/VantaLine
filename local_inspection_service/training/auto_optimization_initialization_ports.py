@@ -30,6 +30,6 @@ class AutoOptimizationTaskInitializationPorts:
     agent_auto_optimize_initialization_recommendation: Callable[[], Callable[[Record, list[str], int, Record], Record]]
     _auto_optimize_lock: Callable[[], AbstractContextManager[Any]]
     load_auto_optimize_state: Callable[[], Callable[[str], Record]]
-    default_auto_optimize_settings: Callable[[], Callable[[], Record]]
+    default_auto_optimize_settings: Callable[[], Record]
     save_auto_optimize_state: Callable[[], Callable[[Record], Record]]
     start_auto_optimize_label_worker: Callable[[], Callable[[str], None]]

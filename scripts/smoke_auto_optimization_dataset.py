@@ -18,6 +18,7 @@ import uuid
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_DATASET_BASELINE_SOURCE')
 NAMES=('auto_optimize_bbox_training_entries','build_auto_optimize_dataset')
 
@@ -29,7 +30,7 @@ def create(bindings):
         return SimpleNamespace(**{n:ns[n] for n in NAMES}),ns
     from local_inspection_service.training.auto_optimization_dataset import AutoOptimizationDataset
     from local_inspection_service.training.auto_optimization_dataset_ports import DatasetConfiguration,DatasetSources,DatasetPublication,DatasetLayout
-    def ports(cls):return cls(**{f.name:lambda name=f.name:bindings[name] for f in fields(cls)})
+    def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
     service=AutoOptimizationDataset(ports(DatasetConfiguration),ports(DatasetSources),ports(DatasetPublication),ports(DatasetLayout))
     bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
 
@@ -132,7 +133,7 @@ class DatasetContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_dataset
         for group in (service.configuration,service.sources,service.publication,service.layout):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            for f in fields(group):assert_capability_owner(self, group, f.name, server)
         for name,args in zip(NAMES,(({},),('t',{},[]))):
             mock=Mock(return_value=object())
             with patch.object(server,'_auto_optimization_dataset',SimpleNamespace(**{name:mock})):self.assertIs(getattr(server,name)(*args),mock.return_value)

@@ -17,7 +17,7 @@ class AutoOptimizationTrainingScheduling:
         if completed_model_id:
             self.policy.auto_optimize_stop_capture_for_model_locked()(state, completed_model_id, reason="completed_model_ready")
             return
-        opts = state.get("settings") if isinstance(state.get("settings"), dict) else self.policy.default_auto_optimize_settings()()
+        opts = state.get("settings") if isinstance(state.get("settings"), dict) else self.policy.default_auto_optimize_settings()
         if not opts.get("enabled"):
             return
         task_id = str(state.get("task_id") or "")
@@ -25,10 +25,10 @@ class AutoOptimizationTrainingScheduling:
         bbox_only = [sample for sample in state.get("samples") or [] if isinstance(sample, dict) and sample.get("label_status") == "trainable_bbox_only"]
         negative = [sample for sample in state.get("samples") or [] if isinstance(sample, dict) and sample.get("label_status") == "negative"]
         real_positive_source_count = len(trainable) + len(bbox_only)
-        requirements = self.policy.auto_optimize_training_requirements()(opts, real_positive_source_count=real_positive_source_count)
-        samples_per_real_image = self.policy.auto_optimize_samples_per_real_image()(opts)
-        positive_derivatives_per_real_image = self.policy.auto_optimize_positive_derivatives_per_real_image()(opts)
-        generated_negative_count = real_positive_source_count * self.policy.auto_optimize_negative_samples_per_real_image()(opts)
+        requirements = self.policy.auto_optimize_training_requirements(opts, real_positive_source_count=real_positive_source_count)
+        samples_per_real_image = self.policy.auto_optimize_samples_per_real_image(opts)
+        positive_derivatives_per_real_image = self.policy.auto_optimize_positive_derivatives_per_real_image(opts)
+        generated_negative_count = real_positive_source_count * self.policy.auto_optimize_negative_samples_per_real_image(opts)
         projected_positive_count = len(trainable) * (positive_derivatives_per_real_image + self.policy.AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT()) + len(bbox_only) * self.policy.AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT()
         projected_negative_count = len(negative) + generated_negative_count
         usable_count = projected_positive_count + projected_negative_count
@@ -69,7 +69,7 @@ class AutoOptimizationTrainingScheduling:
             self.submission._request_user().reset(token)
         if not selected:
             return
-        training_parameters = self.policy.auto_optimize_training_parameters()(opts)
+        training_parameters = self.policy.auto_optimize_training_parameters(opts)
         request = self.submission.TrainingStartRequest()(
             selected_accessory_ids=[item["id"] for item in selected],
             sample_count=int(dataset.get("sample_count") or len(dataset_samples)),

@@ -10,6 +10,7 @@ from typing import Any
 import unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get("VANTALINE_AUTO_READINESS_BASELINE_SOURCE")
 NAMES={"auto_optimize_phase_name","auto_optimize_completed_model_id","auto_optimize_linked_pipeline_model_id","auto_optimize_stop_capture_for_model_locked","auto_optimize_capture_enabled"}
 
@@ -22,7 +23,7 @@ def create(bindings):
         return SimpleNamespace(**{n:namespace[n] for n in NAMES}),lambda n,v:namespace.__setitem__(n,v)
     from local_inspection_service.training.auto_optimization_readiness import AutoOptimizationReadiness
     from local_inspection_service.training.auto_optimization_readiness_ports import AutoOptimizationReadinessPorts
-    ports=AutoOptimizationReadinessPorts(**{f.name:(lambda name=f.name:bindings[name]) for f in fields(AutoOptimizationReadinessPorts)})
+    ports=AutoOptimizationReadinessPorts(**{f.name:test_capability(bindings, f.name) for f in fields(AutoOptimizationReadinessPorts)})
     service=AutoOptimizationReadiness(ports)
     for n in NAMES:bindings[n]=getattr(service,n)
     return service,lambda n,v:bindings.__setitem__(n,v)
@@ -122,7 +123,7 @@ class ReadinessContract(unittest.TestCase):
         capture()
         from local_inspection_service import server
         service=server._auto_optimization_readiness
-        for field in fields(service.ports):self.assertIs(getattr(service.ports,field.name)(),getattr(server,field.name))
+        for field in fields(service.ports):assert_capability_owner(self, service.ports, field.name, server)
         for name in NAMES:
             expected=object();method=Mock(return_value=expected);args=({},"m") if name=="auto_optimize_stop_capture_for_model_locked" else ({},);kw={"reason":"r"} if len(args)==2 else {}
             with patch.object(server,"_auto_optimization_readiness",SimpleNamespace(**{name:method})):
