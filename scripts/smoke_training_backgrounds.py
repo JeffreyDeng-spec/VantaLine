@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 
 class BackgroundContracts(unittest.TestCase):
@@ -419,7 +420,7 @@ class BackgroundContracts(unittest.TestCase):
             library = TrainingBackgroundLibrary(BackgroundPaths(directory, default, suffixes), BackgroundSetLookup(manifest_port, selected, files), files=BusinessFiles(lambda: None))
             manifest_port.side_effect = library.load_training_background_manifest
             renderer = rendering.TrainingBackgroundRenderer(library.training_background_library, rendering.background_candidates_for_split,
-                rendering.synthetic_training_background, rendering.fit_training_background_to_canvas, rendering.augment_training_background)
+                rendering.synthetic_training_background, rendering.fit_training_background_to_canvas, rendering.augment_training_background, images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
             for callback in [directory, default, suffixes, selected, files, manifest_port]: callback.assert_not_called()
             instances.append((renderer, directory, default, suffixes, selected, files, manifest_port))
         results = []

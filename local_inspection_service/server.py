@@ -7290,12 +7290,14 @@ _training_background_library = TrainingBackgroundLibrary(
                         lambda selected: background_set_image_files(selected)),
     files=_business_files,
 )
+_background_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _training_background_renderer = TrainingBackgroundRenderer(
     lambda selected: training_background_library(selected),
     lambda library, split: background_candidates_for_split(library, split),
     lambda rng: synthetic_training_background(rng),
     lambda image, rng: fit_training_background_to_canvas(image, rng),
     lambda canvas, rng: augment_training_background(canvas, rng),
+    images=_background_image_io,
 )
 
 
@@ -7360,7 +7362,7 @@ from .training.task_background_store import (
     TaskBackgroundIdentity, TaskBackgroundPaths, TaskBackgroundRecords, TaskBackgroundStore,
 )
 
-_background_variants = BackgroundVariants(lambda: time.time())
+_background_variants = BackgroundVariants(lambda: time.time(), images=_background_image_io)
 _background_minimum_images = BackgroundMinimumImages(
     lambda identifier: safe_background_set_id(identifier), lambda: BACKGROUND_SETS_DIR,
     lambda path: image_file_list(path),
@@ -7433,6 +7435,7 @@ _background_validation = BackgroundValidation(
     lambda: time.time(), lambda: uuid.uuid4(),
     lambda image, request_id, model_id=None, **kwargs: analyze_bgr(image, request_id, model_id, **kwargs),
     lambda: bounded_text,
+    images=_background_image_io,
 )
 
 def validate_task_environment_background_image(task_id: str, task: dict[str, Any], source_path: Path) -> dict[str, Any]:

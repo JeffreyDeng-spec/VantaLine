@@ -34,3 +34,11 @@ class BackgroundLibraryFiles(ExistingBackgroundFiles, Protocol):
 
 class BackgroundStreamFiles(Protocol):
     def copy_stream(self, destination: Path, source: BinaryIO, local_copy: Callable[..., Any]) -> Any: ...
+
+
+class BackgroundImageReader(Protocol):
+    def imread(self, filename: str, flags: int) -> Any: ...
+
+
+class BackgroundImageIO(BackgroundImageReader, Protocol):
+    def imwrite(self, filename: str, image: Any) -> bool: ...

@@ -17,6 +17,7 @@ import numpy as np
 from fastapi import HTTPException, UploadFile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 
 def _capture_background_api_window(ns,site,mode,fixture_root):
@@ -430,7 +431,7 @@ class TrainingBackgroundApiContracts(unittest.TestCase):
             def analyze(image,request_id,model_id,*,image_path):
                 self.assertEqual(identity.get()['id'],owner); self.assertTrue(image_path.resolve().is_relative_to(f.root.resolve()))
                 self.assertEqual(model_id,'fixture:task'); return {'request_id':owner,'model':{'provider_model':owner}}
-            validation=BackgroundValidation(port(lambda value:'task'),port(lambda:'fixture:'),clock,uuid,port(analyze),port(lambda:(lambda value,limit:str(value or '').strip()[:limit])))
+            validation=BackgroundValidation(port(lambda value:'task'),port(lambda:'fixture:'),clock,uuid,port(analyze),port(lambda:(lambda value,limit:str(value or '').strip()[:limit])), images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
             query=BackgroundQuery(port(current),port(user_is_admin),port(lambda value:value),port(f.list),port(f.load),port(lambda:f.selected),port(lambda:f.sets),port(lambda:{'.png'}), files=lambda: BusinessFiles(runtime_provider=lambda: None))
             def save_background(identifier,path,user,display_name=''):
                 self.assertEqual(user['id'],owner); self.assertEqual(identity.get()['id'],owner)
