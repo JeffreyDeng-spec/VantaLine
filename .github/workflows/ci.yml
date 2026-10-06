@@ -436,6 +436,7 @@ jobs:
           python scripts/smoke_presence_contracts.py
           python scripts/smoke_profile_cache.py
           python scripts/smoke_detection_upload.py
+          python scripts/smoke_detection_artifact_ports.py
           python scripts/smoke_camera_detection_request.py
           python scripts/smoke_detection_media.py
           python scripts/smoke_provider_foundations.py

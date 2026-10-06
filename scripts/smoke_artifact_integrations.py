@@ -16,6 +16,7 @@ from smoke_artifact_storage import StorageTests
 from local_inspection_service.auth.middleware import SecurityDependencies, register_security_middleware
 from local_inspection_service.runtime.identity import RequestIdentity
 from local_inspection_service.storage.artifacts.runtime import ArtifactRuntime
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
 from local_inspection_service.storage.artifacts.types import ArtifactUnavailable
 from local_inspection_service.codex_compare.media import MediaStore
@@ -88,7 +89,7 @@ class IntegrationTests(unittest.TestCase):
         paid = Mock()
         routing = SimpleNamespace(analyze=Mock(side_effect=ArtifactUnavailable("synthetic COS failure")), ai=paid)
         with self.assertRaises(ArtifactUnavailable):
-            DetectionAnalysis(inputs, routing, None, None).analyze_bgr(None, "fixture")
+            DetectionAnalysis(inputs, routing, None, None, runtime_provider=lambda: None).analyze_bgr(None, "fixture")
         paid.assert_not_called()
 
     def test_retention_tombstones_index_and_keeps_remote_history(self):
@@ -445,8 +446,8 @@ class IntegrationTests(unittest.TestCase):
             return {"ok": True}
         service = image_upload.ImageUpload(SimpleNamespace(ensure=lambda: None, permit=lambda model: None),
                                          SimpleNamespace(name=lambda: (lambda filename: "fixture.png"), directory=lambda: self.root / "uploads"),
-                                         lambda: np, lambda: cv2, analyze)
-        with patch.object(image_upload._business_files, "runtime_provider", self.runtime):
+                                         lambda: np, lambda: cv2, analyze, files=lambda: BusinessFiles(runtime_provider=self.runtime))
+        with self.subTest(storage="explicit runtime"):
             result = asyncio.run(service.analyze_image(UploadFile(file=io.BytesIO(payload), filename="image.png"), None))
             self.assertTrue(result["ok"])
             self.client.fail = True

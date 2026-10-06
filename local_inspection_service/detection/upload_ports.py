@@ -8,6 +8,10 @@ from .analysis_ports import AnalysisCall
 
 Record = dict[str, Any]
 
+class UploadFiles(Protocol):
+    def write_bytes(self, path: Path, contents: bytes) -> int: ...
+
+
 class ImageArrays(Protocol):
     uint8: Any
     def frombuffer(self, buffer: bytes, dtype: Any) -> np.ndarray: ...

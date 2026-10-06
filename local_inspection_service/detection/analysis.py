@@ -1,6 +1,8 @@
 """Ordinary detection selection, inference and output orchestration."""
 from pathlib import Path
+from collections.abc import Callable
 from ..storage.artifacts.images import image_backend
+from ..storage.artifacts.runtime import ArtifactRuntime
 from ..storage.artifacts.types import ArtifactUnavailable, ArtifactConflict
 from typing import Any
 import numpy as np
@@ -9,7 +11,11 @@ from .analysis_ports import AnalysisInput, AnalysisRouting, AnalysisInference, A
 
 class DetectionAnalysis:
     def __init__(self, inputs: AnalysisInput, routing: AnalysisRouting,
-                 inference: AnalysisInference, output: AnalysisOutput):
+                 inference: AnalysisInference, output: AnalysisOutput,
+                 *, runtime_provider: Callable[[], ArtifactRuntime | None]):
+        if not callable(runtime_provider):
+            raise TypeError("runtime_provider must be callable")
+        self.runtime_provider = runtime_provider
         self.input, self.routing, self.inference, self.output = inputs, routing, inference, output
 
     def analyze_bgr(self, image_bgr: np.ndarray, request_id: str, model_id: str | None = None, *, image_path: Path | None = None) -> dict[str, Any]:
@@ -67,7 +73,7 @@ class DetectionAnalysis:
         out_name = f"{request_id}_annotated.jpg"
         out_path = self.output.directory("inspection") / out_name
         preview = self.output.resize()(annotated, self.output.max_side())
-        image_backend(self.output.images()).imwrite(str(out_path), preview, [int(self.output.images().IMWRITE_JPEG_QUALITY), self.output.quality()])
+        image_backend(self.output.images(), runtime_provider=self.runtime_provider).imwrite(str(out_path), preview, [int(self.output.images().IMWRITE_JPEG_QUALITY), self.output.quality()])
         return {
             "request_id": request_id,
             "passed": rule["passed"],

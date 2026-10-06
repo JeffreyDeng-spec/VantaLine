@@ -8485,6 +8485,7 @@ _detection_annotation = DetectionAnnotation(
     lambda: bounded_text, lambda: cv2, lambda kind: output_write_dir(kind), lambda path: output_url(path),
     lambda image, detections, rule: draw_ai_detection_boxes(image, detections, rule),
     lambda image, request_id: write_ai_original_output(image, request_id),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 
 
@@ -8572,6 +8573,7 @@ _detection_analysis = DetectionAnalysis(
     ),
     AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
                    lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 
 
@@ -9573,7 +9575,7 @@ _upload_access = UploadAccess(lambda: ensure_dirs(), lambda model: require_analy
 
 _upload_paths = UploadPaths(lambda: safe_name, lambda: UPLOAD_DIR)
 
-_image_upload = ImageUpload(_upload_access, _upload_paths, lambda: np, lambda: cv2, lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path))
+_image_upload = ImageUpload(_upload_access, _upload_paths, lambda: np, lambda: cv2, lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path), files=lambda: _business_files)
 
 _video_summary = VideoSummary(lambda: string_list)
 

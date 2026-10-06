@@ -315,7 +315,7 @@ class AiAnalysisContracts(unittest.TestCase):
             service=DetectionAnalysis(AnalysisInput(ordinary.load,lambda:ordinary.scope,ordinary.selected,lambda:ordinary.sanitize,ordinary.state_load),
                 AnalysisRouting(Mock(),bound,ordinary.retired,lambda:ordinary.text),
                 AnalysisInference(lambda:ordinary.model,ordinary.device,ordinary.parse,ordinary.ocr,ordinary.apply,ordinary.draw),
-                AnalysisOutput(ordinary.directory,lambda:ordinary.resize,lambda:640,lambda:ordinary.backend,lambda:87,ordinary.url))
+                AnalysisOutput(ordinary.directory,lambda:ordinary.resize,lambda:640,lambda:ordinary.backend,lambda:87,ordinary.url), runtime_provider=lambda: None)
             services.append((owner,f,ordinary,service,call_provider,settings_provider))
         with ExitStack() as stack:
             for name in ['analyze_bgr','analyze_bgr_ai_detection','resolve_model_profiles','ai_required_accessories','accessory_uid','normalize_accessory_ai_profile',
