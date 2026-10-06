@@ -1438,3 +1438,5 @@ The training owner close result covers only admitted preparation, Python threads
 CodexBackgroundThread.close(timeout) rejects later starts and waits for admitted construction and actual Python thread/scope completion. It does not retry, cancel or settle an unknown generation result. The existing Codex process/transport implementation is unchanged, so a true thread-drain result does not certify child-process reclamation or generated artifact success. Future app shutdown must drain callers before this dependency and its model/MCP providers.
 
 Closing the Codex starter does not wait for separate direct synchronous generation calls. Application shutdown must first drain their caller owners; a successful starter close alone is not proof that all generation activity has ended.
+
+TransferProgress.close(timeout) may return false while an update callback, construction or uncertain thread start remains outstanding. It never cancels the upload/download, sends a final success update, retries a transfer or settles a training task. Future app shutdown must drain transfer callers before closing their reporter owner and repositories.

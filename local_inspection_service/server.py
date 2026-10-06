@@ -7767,6 +7767,7 @@ _worker_transfers = WorkerTransfers(
 _transfer_progress = TransferProgress(
     lambda: update_training_task,
     lambda: threading.Event(), lambda: threading.Thread,
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 def windows_worker_upload_bundle_streamed(

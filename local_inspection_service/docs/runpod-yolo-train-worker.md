@@ -178,3 +178,5 @@ The Web shared file checksum helper resolves mapped business files through a pin
 Local training submission now has a shared Python thread admission/drain owner with repository cleanup in that thread. Runpod transport, worker subprocess algorithms, snapshot binding and remote settlement stay unchanged. close(...) returning True certifies local thread/scope exit only and cannot be used as a remote-job cancellation or completion signal.
 
 The shared training thread lifecycle now also owns the separately launched Codex background-generation thread. Runpod transport and training process/remote worker behavior are unchanged; Python-thread close results do not certify remote or child-process completion.
+
+Periodic transfer progress threads now have explicit admission, stop signals and bounded join ownership. Closing reporting does not terminate or replay RunPod/network work. The transfer caller continues to own its upload/download and final task state; the application shutdown hook is not enabled in this slice.
