@@ -749,3 +749,5 @@ Manifest version 168 includes the actual local model selection source relocation
 Prompt-source manifest178/513 includes the actual public shell implementation for new fingerprints; historical task/model snapshots are not rewritten. Label/text admission, task settlement and concurrency are unchanged.
 
 Bootstrap location composition retains the same incoming text files and text_inspection_v2 records/media directories. No data migration, worker admission or model behavior changes. Manifest v183 records the actual bootstrap implementation for new tasks without rewriting historical snapshots.
+
+Image coordinator and child starts now retain uncertain-start handles even if `is_alive()` is false, child lists are pruned, or a later coordinator replaces the current handle. A failed start revokes an unentered target, and shutdown must join retained handles before reporting drained. A never-started handle may remain undrained; stored running evidence is preserved and never requeued. Deterministic interrupted-bootstrap tests cover both launch paths and later coordinator replacement.

@@ -28,6 +28,10 @@ def create(bindings):
         return SimpleNamespace(**{n:bindings[n] for n in NAMES})
     from local_inspection_service.accessories.image_job_queue import ImageJobQueue
     from local_inspection_service.accessories.image_job_queue_ports import ImageQueueStorage,ImageQueueMetadata,ImageQueueExecution
+    from local_inspection_service.runtime.image_worker import ImageWorkerRuntime
+    bindings['_image_worker_runtime'] = ImageWorkerRuntime(target=lambda: lambda: None, threads=lambda: threading.Thread)
+    # Preserve the existing deterministic sleep seam; no real worker is launched.
+    bindings['_image_worker_runtime'].wait = lambda seconds: time.sleep(seconds)
     def ports(cls):return cls(**{f.name:lambda name=f.name:bindings[name] for f in fields(cls)})
     service=ImageJobQueue(ports(ImageQueueStorage),ports(ImageQueueMetadata),ports(ImageQueueExecution))
     bindings.update({name:getattr(service,name) for name in NAMES})
@@ -115,7 +119,7 @@ class QueueContract(unittest.TestCase):
         b['update_image_worker_status']=lambda *args,**kw:trace.append(('status',args,kw))
         class Thread:
             def __init__(self,**kw):self.kw=kw;self.alive=False;threads.append(self);trace.append(('construct',kw))
-            def start(self):self.alive=True;trace.append(('start',self.kw['args'][2]['job_id']))
+            def start(self):self.alive=True;trace.append(('start',(self.kw['args'][2]['job_id'] if BASELINE else self.kw['name'].removeprefix('image-generation-worker-'))))
             def is_alive(self):return self.alive
         def sleep(seconds):
             self.assertEqual(seconds,2);self.assertLessEqual(sum(t.alive for t in threads),2)
@@ -124,7 +128,15 @@ class QueueContract(unittest.TestCase):
         with patch.object(threading,'Thread',Thread),patch.object(time,'time',return_value=100),patch.object(time,'sleep',sleep):q.image_worker_loop()
         self.assertEqual([e[0] for e in trace],['status','construct','start','status','construct','start','sleep','status','construct','start','sleep'])
         for index,t in enumerate(threads):
-            self.assertIs(t.kw['target'],b['run_image_generation_job']);self.assertEqual(t.kw['args'],jobs[index]);self.assertTrue(t.kw['daemon'])
+            self.assertTrue(t.kw['daemon'])
+            if BASELINE:
+                self.assertIs(t.kw['target'],b['run_image_generation_job']);self.assertEqual(t.kw['args'],jobs[index])
+            else:
+                self.assertTrue(callable(t.kw['target']))
+                b['run_image_generation_job'].side_effect=None
+                t.kw['target']()
+                b['run_image_generation_job'].assert_called_once_with(*jobs[index])
+                b['run_image_generation_job'].reset_mock()
         self.assertEqual([e[2]['progress'] for e in trace if e[0]=='status'],[12,12,12])
         b['run_image_generation_job'].assert_not_called()
 

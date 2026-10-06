@@ -1408,7 +1408,10 @@ _incoming_text_store_lock = threading.RLock()
 from .accessories.cutout_runtime import RembgSessionRuntime as _RembgSessionRuntime
 _rembg_runtime = _RembgSessionRuntime()
 from .runtime.image_worker import ImageWorkerRuntime
-_image_worker_runtime = ImageWorkerRuntime(target=lambda: image_worker_loop, threads=lambda: threading.Thread)
+_image_worker_runtime = ImageWorkerRuntime(
+    target=lambda: image_worker_loop, threads=lambda: threading.Thread,
+    scope=_runtime_repositories.thread_scope,
+)
 _candidate_store_lock = threading.RLock()
 from .runtime.training_tasks import TrainingTaskRuntime
 _training_task_runtime = TrainingTaskRuntime()
@@ -6609,6 +6612,7 @@ _image_job_queue = ImageJobQueue(
         preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
     ),
     execution=ImageQueueExecution(
+        _image_worker_runtime=lambda: _image_worker_runtime,
         IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
         MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
         next_queued_image_job=lambda: next_queued_image_job,
