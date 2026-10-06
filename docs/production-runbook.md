@@ -1374,3 +1374,9 @@ Detection rule domain composition does not change worker topology, authorization
 Duplicate-route preflight is not a transaction around arbitrary FastAPI registration failures. If application construction fails during route installation, discard that partially built application. No retry or cleanup guarantee is added.
 
 Analysis graph composition preserves all local RLock scopes, PostgreSQL writes/transactions, list projections, publication ordering and partial failures. It adds no cross-process guard, cache invalidation or stronger consistency. Deploy and roll back complete releases; retain data, task snapshots and call evidence.
+
+Dashboard task ownership is a structural move without a new lock, task transition or runtime topology. Whole-release rollback preserves task records and existing storage. The fixture with two service instances proves capability separation, not cross-process atomic task creation or full application isolation.
+
+Accessory selection and dimension relocation changes no storage, worker topology, provider or PLC behavior. Deploy and roll back complete releases, preserving task/model snapshots and existing accessory records.
+
+Accessory readiness/status/reference ownership changes no queue admission, subprocess or worker topology, retry policy, filesystem storage, model binding or PLC behavior. Existing partial mutation/save failure behavior is preserved. Deploy and roll back complete releases while retaining data and call evidence.

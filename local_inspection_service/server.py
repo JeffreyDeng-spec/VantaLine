@@ -1677,23 +1677,23 @@ SIZE_REFERENCE_OBJECTS: dict[str, dict[str, Any]] = {
 DEFAULT_SIZE_REFERENCE = "a4"
 
 
+from .accessories.physical_dimensions import ReferenceDimensions
+from .accessories.physical_dimension_ports import ReferenceDimensionValues
+
+_reference_dimensions = ReferenceDimensions(ReferenceDimensionValues(
+    SIZE_REFERENCE_OBJECTS=lambda: SIZE_REFERENCE_OBJECTS,
+    normalize_size_reference=lambda: normalize_size_reference,
+    MM_TO_PREVIEW_PX=lambda: MM_TO_PREVIEW_PX,
+    DEFAULT_OBJECT_SIZE_MM=lambda: DEFAULT_OBJECT_SIZE_MM,
+))
+
+
 def normalize_size_reference(value: Any) -> str:
-    key = str(value or "").strip().lower()
-    if key in {"", "none", "no", "无", "null"}:
-        return ""
-    if key in SIZE_REFERENCE_OBJECTS:
-        return key
-    aliases = {"尺子": "ruler", "直尺": "ruler", "卷尺": "ruler", "rule": "ruler",
-               "a4纸": "a4", "a5纸": "a5", "b5纸": "b5"}
-    return aliases.get(key, "")
+    return _reference_dimensions.normalize_size_reference(value)
 
 
 def size_reference_payload(reference_key: str) -> dict[str, Any] | None:
-    key = normalize_size_reference(reference_key)
-    if not key:
-        return None
-    spec = SIZE_REFERENCE_OBJECTS.get(key)
-    return dict(spec) if spec else None
+    return _reference_dimensions.size_reference_payload(reference_key)
 # Legacy anchor/grid "pose collection" generation (the source of the old
 # black-stick/anchor sprites) is disabled. Object standard images are now
 # generated inside the training pipeline as single-object top-down photos and
@@ -3591,9 +3591,7 @@ def ensure_image_job_task_id(candidate: dict[str, Any], job: dict[str, Any]) -> 
     return _image_metadata_ensure_id(candidate, job)
 
 
-def image_job_matches(candidate: dict[str, Any], job: dict[str, Any], lookup_id: str) -> bool:
-    ensure_image_job_task_id(candidate, job)
-    return lookup_id in {str(job.get("job_id") or ""), str(job.get("task_id") or "")}
+from .accessories.image_job_metadata import image_job_matches
 
 
 from .storage.artifacts.files import FileDigest
@@ -6366,18 +6364,7 @@ def preprocess_object_clean_sprites(item: dict[str, Any], allow_ai_cutout: bool 
     return _object_sprite_preprocessor.preprocess_object_clean_sprites(item, allow_ai_cutout, force)
 
 
-def ensure_object_clean_sprites_ready(item: dict[str, Any], *, force: bool = False) -> bool:
-    if accessory_material_type(item) == "text":
-        return False
-    sprites = clean_sprite_assets(item)
-    if (
-        not force
-        and sprites
-        and item.get("clean_sprite_status") == "ready"
-        and clean_sprites_policy_complete(item, sprites)
-    ):
-        return False
-    return preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=force or bool(sprites))
+ensure_object_clean_sprites_ready = _object_sprite_preprocessor.ensure_object_clean_sprites_ready
 
 
 from .accessories.cutout_masks import foreground_mask as _foreground_mask_impl
@@ -7044,9 +7031,7 @@ def next_queued_image_job() -> tuple[Path, dict[str, Any], dict[str, Any]] | Non
     return _image_job_queue.next_queued_image_job()
 
 
-def update_image_worker_status(path: Path, candidate: dict[str, Any], job: dict[str, Any], **fields: Any) -> None:
-    updated_job = mutate_candidate_image_job(path, candidate, job, fields)
-    job.update(updated_job)
+update_image_worker_status = _image_job_queue.update_image_worker_status
 
 
 def cursor_image_model_score(model_id: str) -> tuple[int, int]:
@@ -7448,9 +7433,7 @@ def existing_source_image_paths(item: dict[str, Any]) -> list[Path]:
     return _candidate_artifacts.existing_source_image_paths(item)
 
 
-def first_source_ai_reference_path(item: dict[str, Any]) -> Path | None:
-    paths = existing_source_image_paths(item)
-    return paths[0] if paths else None
+first_source_ai_reference_path = _candidate_artifacts.first_source_ai_reference_path
 
 
 def ensure_default_ai_profile_reference(item: dict[str, Any]) -> bool:
@@ -7465,12 +7448,18 @@ def accessory_detail_payload(item: dict[str, Any]) -> dict[str, Any]:
     return _accessory_gallery.accessory_detail_payload(item)
 
 
+from .accessories.catalog import AccessorySelection
+from .accessories.catalog import AccessorySelectionDependencies
+
+_accessory_selection = AccessorySelection(AccessorySelectionDependencies(
+    accessory_uid=lambda: accessory_uid,
+    serialize_accessory=lambda: serialize_accessory,
+    accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+))
+
+
 def selected_accessories(config: dict[str, Any], ids: list[str]) -> list[dict[str, Any]]:
-    indexed = {accessory_uid(item): serialize_accessory(item) for item in config.get("accessories", [])}
-    selected = [indexed[item_id] for item_id in ids if item_id in indexed]
-    if not selected:
-        selected = [serialize_accessory(item) for item in config.get("accessories", [])]
-    return selected
+    return _accessory_selection.selected_accessories(config, ids)
 
 
 from .training.training_asset_preparation import TrainingAssetPreparation
@@ -7520,22 +7509,7 @@ def ensure_training_assets_for_request(
 
 
 def physical_render_size_px(item: dict[str, Any], material_type: str) -> tuple[int, int]:
-    size = item.get("physical_size") or {}
-    if material_type == "text":
-        width_mm = float(size.get("width_mm") or 210.0)
-        height_mm = float(size.get("height_mm") or 297.0)
-        return (
-            max(70, int(round(width_mm * MM_TO_PREVIEW_PX))),
-            max(90, int(round(height_mm * MM_TO_PREVIEW_PX))),
-        )
-    length_mm = float(size.get("length_mm") or DEFAULT_OBJECT_SIZE_MM["length_mm"])
-    width_mm = float(size.get("width_mm") or DEFAULT_OBJECT_SIZE_MM["width_mm"])
-    height_mm = float(size.get("height_mm") or DEFAULT_OBJECT_SIZE_MM["height_mm"])
-    visible_width_mm = max(width_mm, height_mm * 0.72)
-    return (
-        max(34, int(round(length_mm * MM_TO_PREVIEW_PX))),
-        max(16, int(round(visible_width_mm * MM_TO_PREVIEW_PX))),
-    )
+    return _reference_dimensions.physical_render_size_px(item, material_type)
 
 
 def physical_render_size_for_sprite(item: dict[str, Any], material_type: str, sprite_meta: dict[str, Any] | None = None) -> tuple[int, int]:
@@ -8441,10 +8415,7 @@ def accessory_id_aliases(item: dict[str, Any]) -> list[str]:
 
 
 def resolve_accessory_id(config: dict[str, Any], accessory_id: str) -> tuple[str, dict[str, Any]] | None:
-    item = accessory_lookup_by_id(config).get(str(accessory_id or "").strip())
-    if not item:
-        return None
-    return accessory_uid(item), item
+    return _accessory_selection.resolve_accessory_id(config, accessory_id)
 
 
 def load_ai_detection_tasks() -> list[dict[str, Any]]:
@@ -9742,6 +9713,9 @@ _detection_task_requests = DetectionTaskRequests(
         require_record_access=lambda: require_record_access,
     ),
     policy=TaskRequestPolicy(
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        DASHBOARD_AI_TASK_NAME=lambda: DASHBOARD_AI_TASK_NAME,
+        PIPELINE_DASHBOARD_AI_TASK_SOURCE=lambda: PIPELINE_DASHBOARD_AI_TASK_SOURCE,
         assert_unique_task_name=lambda: assert_unique_task_name,
         sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
         ai_detection_task_payload_from_request=lambda: ai_detection_task_payload_from_request,
@@ -13226,30 +13200,7 @@ def purge_expired_incoming_text_evidence() -> dict[str, int]:
 DASHBOARD_AI_TASK_NAME = "Dashboard 快捷 AI 检测"
 
 
-def upsert_dashboard_ai_task(accessory_id: str, config: dict[str, Any]) -> dict[str, Any]:
-    accessories_by_id = accessory_lookup_by_id(config)
-    tasks = load_ai_detection_tasks()
-    # load_ai_detection_tasks 会把 source 归一化成 workbench,所以用固定名称识别看板任务。
-    task = next((item for item in tasks if item.get("name") == DASHBOARD_AI_TASK_NAME), None)
-    selected_ids = list(dict.fromkeys((task.get("selected_accessory_ids") if task else []) + [accessory_id]))
-    selected_ids = [item_id for item_id in selected_ids if item_id in accessories_by_id]
-    counts = {item_id: int((task or {}).get("required_accessory_counts", {}).get(item_id, 1) or 1) for item_id in selected_ids}
-    labels = {item_id: str(accessories_by_id[item_id].get("name") or item_id) for item_id in selected_ids}
-    payload = {
-        "name": DASHBOARD_AI_TASK_NAME,
-        "selected_accessory_ids": selected_ids,
-        "required_accessory_counts": counts,
-        "accessory_labels": labels,
-        "source": PIPELINE_DASHBOARD_AI_TASK_SOURCE,
-    }
-    now = time.time()
-    if task:
-        task.update({**payload, "updated_at": now})
-    else:
-        task = {"id": f"aitask_{uuid.uuid4().hex[:10]}", "created_at": now, "updated_at": now, **current_owner_fields(), **payload}
-        tasks.insert(0, task)
-    save_ai_detection_task(task)
-    return serialize_ai_detection_task(task, config)
+upsert_dashboard_ai_task = _detection_task_requests.upsert_dashboard_ai_task
 
 
 from .accessories.routing import AccessoryRouting, RouteStore, RouteActions

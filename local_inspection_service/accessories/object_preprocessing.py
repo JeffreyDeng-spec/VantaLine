@@ -347,3 +347,17 @@ class ObjectSpritePreprocessor:
         else:
             item["preprocess"] = "系统已预处理无背景单体素材，并记录原图坐标与物理尺寸；训练预览直接复用。"
         return True
+
+
+    def ensure_object_clean_sprites_ready(self, item: dict[str, Any], *, force: bool = False) -> bool:
+        if self._policy.material()(item) == "text":
+            return False
+        sprites = self._policy.existing()(item)
+        if (
+            not force
+            and sprites
+            and item.get("clean_sprite_status") == "ready"
+            and self._policy.complete()(item, sprites)
+        ):
+            return False
+        return self.preprocess_object_clean_sprites(item, allow_ai_cutout=True, force=force or bool(sprites))

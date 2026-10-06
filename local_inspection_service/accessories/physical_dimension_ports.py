@@ -14,3 +14,10 @@ class DimensionValues:
 class DimensionUpdates:
     material: Callable[[], Callable[[Record], str]]
     payload: Callable[[], BuildPhysicalSize]
+
+@dataclass(frozen=True)
+class ReferenceDimensionValues:
+    SIZE_REFERENCE_OBJECTS: Callable[[], Mapping[str, Record]]
+    normalize_size_reference: Callable[[], Callable[[Any], str]]
+    MM_TO_PREVIEW_PX: Callable[[], float]
+    DEFAULT_OBJECT_SIZE_MM: Callable[[], Mapping[str, float]]
