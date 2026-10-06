@@ -1,31 +1,33 @@
 """Background identifier allocation and manifest updates, preserving aliases and write order."""
 from collections.abc import Callable
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 from typing import Any, Protocol
 from uuid import UUID
 
 
 class UpdateBackgroundManifest(Protocol):
     def __call__(self, set_id: str, **updates: Any) -> dict[str, Any]: ...
+from .background_file_ports import ExistingBackgroundFiles
 
 
 class BackgroundWrites:
     def __init__(self, safe: Callable[[str], str], load: Callable[[], Any], write: Callable[[Any], None],
-                 sets: Callable[[], Path], uuid: Callable[[], UUID], clock: Callable[[], float]):
+                 sets: Callable[[], Path], uuid: Callable[[], UUID], clock: Callable[[], float], *, files: ExistingBackgroundFiles):
         self.safe, self.load, self.write = safe, load, write
         self.sets, self.uuid, self.clock = sets, uuid, clock
+        if files is None:
+            raise TypeError("explicit background files are required")
+        self.files = files
 
     def unique_background_set_id(self, base_id: str) -> str:
         clean_id = self.safe(base_id)
         manifest = self.load()
         sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
-        if clean_id not in sets and not _business_files.exists(self.sets() / clean_id):
+        if clean_id not in sets and not self.files.exists(self.sets() / clean_id):
             return clean_id
         for _ in range(50):
             candidate = f"{clean_id}_{self.uuid().hex[:6]}"
-            if candidate not in sets and not _business_files.exists(self.sets() / candidate):
+            if candidate not in sets and not self.files.exists(self.sets() / candidate):
                 return candidate
         return f"{clean_id}_{int(self.clock())}"
 

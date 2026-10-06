@@ -2,8 +2,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 import shutil
 from typing import Any
 
@@ -12,16 +10,20 @@ from typing import Any
 class BackgroundSeedPaths:
     default: Callable[[], Path]
     sets: Callable[[], Path]
+from .background_file_ports import BackgroundSeedFiles
 
 
 class BackgroundSeeding:
     def __init__(self, paths: BackgroundSeedPaths, load: Callable[[], Any], write: Callable[[Any], None],
-                 minimum: Callable[[str], None], seed: Callable[[], None], clock: Callable[[], float]):
+                 minimum: Callable[[str], None], seed: Callable[[], None], clock: Callable[[], float], *, files: BackgroundSeedFiles):
         self.paths, self.load, self.write = paths, load, write
         self.minimum, self.seed, self.clock = minimum, seed, clock
+        if files is None:
+            raise TypeError("explicit background files are required")
+        self.files = files
 
     def seed_default_background_set(self) -> None:
-        if not _business_files.exists(self.paths.default()):
+        if not self.files.exists(self.paths.default()):
             return
         manifest = self.load()
         sets = manifest.get("sets") if isinstance(manifest.get("sets"), dict) else {}
@@ -29,8 +31,8 @@ class BackgroundSeeding:
         set_dir = self.paths.sets() / default_id
         set_dir.mkdir(parents=True, exist_ok=True)
         original_target = set_dir / self.paths.default().name
-        if not _business_files.exists(original_target):
-            _business_files.copy2(self.paths.default(), original_target, local_copy=shutil.copy2)
+        if not self.files.exists(original_target):
+            self.files.copy2(self.paths.default(), original_target, local_copy=shutil.copy2)
         self.minimum(default_id)
         sets.setdefault(
             default_id,
@@ -49,5 +51,5 @@ class BackgroundSeeding:
 
     def background_set_dirs(self) -> list[Path]:
         self.seed()
-        dirs = [path for path in _business_files.iterdir(self.paths.sets()) if _business_files.is_dir(path)] if _business_files.exists(self.paths.sets()) else []
+        dirs = [path for path in self.files.iterdir(self.paths.sets()) if self.files.is_dir(path)] if self.files.exists(self.paths.sets()) else []
         return sorted(dirs, key=lambda path: path.name)

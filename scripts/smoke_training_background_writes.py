@@ -14,6 +14,7 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class TracedRNG:
@@ -259,12 +260,12 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
             image = np.full((31, 47, 3), shade, dtype=np.uint8); self.assertTrue(cv2.imwrite(str(source), image))
             callbacks = []
             def port(fn): value = Mock(side_effect=fn); callbacks.append(value); return value
-            manifest = BackgroundManifest(port(lambda: directory), port(lambda: directory / 'manifest.json'))
-            images = BackgroundImageFiles(port(lambda: {'.png'})); clock = port(lambda: stamp)
+            manifest = BackgroundManifest(port(lambda: directory), port(lambda: directory / 'manifest.json'), files=BusinessFiles(lambda: None))
+            images = BackgroundImageFiles(port(lambda: {'.png'}), files=BusinessFiles(lambda: None)); clock = port(lambda: stamp)
             variants = BackgroundVariants(clock)
             writes = BackgroundWrites(port(safe_background_set_id), port(manifest.load_background_sets_manifest),
                 port(manifest.write_background_sets_manifest), port(lambda: sets),
-                port(lambda: UUID('abcdef00-0000-0000-0000-000000000000')), clock)
+                port(lambda: UUID('abcdef00-0000-0000-0000-000000000000')), clock, files=BusinessFiles(lambda: None))
             minimum = BackgroundMinimumImages(port(safe_background_set_id), port(lambda: sets),
                 port(images.image_file_list), port(lambda: variants.create_background_variants_from_source))
             store = TaskBackgroundStore(

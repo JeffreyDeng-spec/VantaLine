@@ -1,6 +1,4 @@
 """Uploaded training backgrounds and task environment captures, preserving file/state write boundaries."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 from collections.abc import Callable, Collection
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -12,6 +10,7 @@ from fastapi import HTTPException
 from .background_writes import UpdateBackgroundManifest
 
 Record = dict[str, Any]
+from .background_file_ports import BackgroundStreamFiles
 
 
 class BackgroundUploadFile(Protocol):
@@ -35,9 +34,12 @@ class BackgroundUploadRecords:
 
 class BackgroundUpload:
     def __init__(self, paths: BackgroundUploadPaths, records: BackgroundUploadRecords,
-                 owner: Callable[[], Record], clock: Callable[[], float], catalog: Callable[[], Record]):
+                 owner: Callable[[], Record], clock: Callable[[], float], catalog: Callable[[], Record], *, files: BackgroundStreamFiles):
         self.paths, self.records, self.owner = paths, records, owner
         self.clock, self.catalog = clock, catalog
+        if files is None:
+            raise TypeError("explicit background files are required")
+        self.files = files
 
     async def upload_training_background_set(self,
         name: str,
@@ -51,7 +53,7 @@ class BackgroundUpload:
         set_dir = self.paths.sets() / set_id
         set_dir.mkdir(parents=True, exist_ok=True)
         source_path = set_dir / f"source{suffix or '.png'}"
-        _business_files.copy_stream(source_path, file.file, shutil.copyfileobj)
+        self.files.copy_stream(source_path, file.file, shutil.copyfileobj)
         meta = self.records.update_provider()(
             set_id,
             id=set_id,
@@ -124,9 +126,12 @@ class BackgroundCaptureState:
 class BackgroundCapture:
     def __init__(self, identity: BackgroundCaptureIdentity, paths: BackgroundCapturePaths,
                  tasks: BackgroundCaptureTasks, background: BackgroundCaptureSets, state: BackgroundCaptureState,
-                 clock: Callable[[], float], uuid: Callable[[], UUID]):
+                 clock: Callable[[], float], uuid: Callable[[], UUID], *, files: BackgroundStreamFiles):
         self.identity, self.paths, self.tasks = identity, paths, tasks
         self.background, self.state, self.clock, self.uuid = background, state, clock, uuid
+        if files is None:
+            raise TypeError("explicit background files are required")
+        self.files = files
 
     async def upload_ai_task_environment_background(self,
         task_id: str,
@@ -147,7 +152,7 @@ class BackgroundCapture:
         capture_dir = self.paths.output()("task_environment_backgrounds", str(user.get("id") or "")) / clean_task_id
         capture_dir.mkdir(parents=True, exist_ok=True)
         source_path = capture_dir / f"environment_{int(self.clock())}_{self.uuid().hex[:6]}{suffix or '.jpg'}"
-        _business_files.copy_stream(source_path, file.file, shutil.copyfileobj)
+        self.files.copy_stream(source_path, file.file, shutil.copyfileobj)
         validation = self.background.validate(clean_task_id, task, source_path)
         background_set = self.background.save()(
             clean_task_id,

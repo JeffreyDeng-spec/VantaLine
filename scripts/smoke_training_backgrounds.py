@@ -12,6 +12,7 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class BackgroundContracts(unittest.TestCase):
@@ -360,7 +361,7 @@ class BackgroundContracts(unittest.TestCase):
                        'suffixes': Mock(return_value={'.png', '.jpg'})}
             lookup = BackgroundSetLookup(lambda: {}, lambda _: 'green_conveyor' if mode == 'green' else 'other',
                                          lambda _: [first] if mode == 'green' else [])
-            service = TrainingBackgroundLibrary(BackgroundPaths(**getters), lookup)
+            service = TrainingBackgroundLibrary(BackgroundPaths(**getters), lookup, files=BusinessFiles(lambda: None))
             operation = service.load_training_background_manifest if mode == 'manifest' else service.training_background_library
             return getters, operation
         for mode, names in [('manifest', ['directory']), ('fallback', ['directory', 'default_image', 'suffixes']),
@@ -415,7 +416,7 @@ class BackgroundContracts(unittest.TestCase):
             directory = Mock(return_value=folder); default = Mock(return_value=folder / 'absent')
             suffixes = Mock(return_value={'.png'}); selected = Mock(return_value=str(index)); files = Mock(return_value=[path])
             manifest_port = Mock()
-            library = TrainingBackgroundLibrary(BackgroundPaths(directory, default, suffixes), BackgroundSetLookup(manifest_port, selected, files))
+            library = TrainingBackgroundLibrary(BackgroundPaths(directory, default, suffixes), BackgroundSetLookup(manifest_port, selected, files), files=BusinessFiles(lambda: None))
             manifest_port.side_effect = library.load_training_background_manifest
             renderer = rendering.TrainingBackgroundRenderer(library.training_background_library, rendering.background_candidates_for_split,
                 rendering.synthetic_training_background, rendering.fit_training_background_to_canvas, rendering.augment_training_background)

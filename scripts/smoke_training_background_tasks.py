@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from scripts.smoke_training_runner import Resolver
 from local_inspection_service.model_profiles.snapshots import freeze_record
 
@@ -374,9 +375,9 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                 def kill(self): raise AssertionError('unexpected signal')
             self_outer=self
             clock=port(lambda:stamp); uuid=port(lambda:UUID('abcdef00-0000-0000-0000-000000000000'))
-            manifest=BackgroundManifest(port(lambda:root),port(lambda:root/'manifest.json'))
-            images=BackgroundImageFiles(port(lambda:{'.png'})); local=BackgroundVariants(clock)
-            writes=BackgroundWrites(port(safe_background_set_id),port(manifest.load_background_sets_manifest),port(manifest.write_background_sets_manifest),port(lambda:sets),uuid,clock)
+            manifest=BackgroundManifest(port(lambda:root),port(lambda:root/'manifest.json'), files=BusinessFiles(lambda: None))
+            images=BackgroundImageFiles(port(lambda:{'.png'}), files=BusinessFiles(lambda: None)); local=BackgroundVariants(clock)
+            writes=BackgroundWrites(port(safe_background_set_id),port(manifest.load_background_sets_manifest),port(manifest.write_background_sets_manifest),port(lambda:sets),uuid,clock, files=BusinessFiles(lambda: None))
             codex=CodexBackgroundGeneration(port(lambda command:'fake-'+owner),CodexBackgroundPaths(port(lambda:logs),port(lambda:root)),port(lambda identifier:owner),port(lambda:FakeProcess))
             runner=BackgroundTaskRunner(BackgroundTaskRecords(port(lambda identifier:read(path(identifier))),port(path),port(lambda:read),port(lambda: update)),
                 BackgroundTaskGeneration(port(lambda:sets),port(safe_background_set_id),port(lambda: writes.update_background_set_manifest),port(local.create_background_variants_from_source),port(codex.run_codex_background_generation),port(images.image_file_list)),clock,port(lambda:resolver))

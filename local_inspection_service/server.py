@@ -7288,6 +7288,7 @@ _training_background_library = TrainingBackgroundLibrary(
     BackgroundSetLookup(lambda: load_training_background_manifest(),
                         lambda requested: selected_background_set_id(requested),
                         lambda selected: background_set_image_files(selected)),
+    files=_business_files,
 )
 _training_background_renderer = TrainingBackgroundRenderer(
     lambda selected: training_background_library(selected),
@@ -7310,12 +7311,13 @@ from .training.background_catalog import (
 from .training.background_seeding import BackgroundSeedPaths, BackgroundSeeding
 from .training.background_selection import BackgroundSelection
 
-_background_manifest = BackgroundManifest(lambda: BACKGROUND_DIR, lambda: BACKGROUND_SETS_MANIFEST)
-_background_image_files = BackgroundImageFiles(lambda: IMAGE_REFERENCE_SUFFIXES)
+_background_manifest = BackgroundManifest(lambda: BACKGROUND_DIR, lambda: BACKGROUND_SETS_MANIFEST, files=_business_files)
+_background_image_files = BackgroundImageFiles(lambda: IMAGE_REFERENCE_SUFFIXES, files=_business_files)
 _background_seeding = BackgroundSeeding(
     BackgroundSeedPaths(lambda: DEFAULT_BACKGROUND_IMAGE, lambda: BACKGROUND_SETS_DIR),
     lambda: load_background_sets_manifest(), lambda manifest: write_background_sets_manifest(manifest),
     lambda identifier: ensure_background_set_minimum_images(identifier), lambda: seed_default_background_set(), lambda: time.time(),
+    files=_business_files,
 )
 _background_catalog = BackgroundCatalog(
     BackgroundCatalogPaths(lambda: BACKGROUND_SETS_DIR, lambda: OUTPUT_DIR),
@@ -7368,6 +7370,7 @@ _background_writes = BackgroundWrites(
     lambda identifier: safe_background_set_id(identifier), lambda: load_background_sets_manifest(),
     lambda manifest: write_background_sets_manifest(manifest), lambda: BACKGROUND_SETS_DIR,
     lambda: uuid.uuid4(), lambda: time.time(),
+    files=_business_files,
 )
 _task_background_store = TaskBackgroundStore(
     TaskBackgroundIdentity(lambda identifier: sanitize_ai_detection_task_id(identifier),
@@ -9671,6 +9674,7 @@ _background_upload = BackgroundUpload(
                             lambda identifier, name, source: enqueue_background_set_task(identifier, name, source),
                             lambda identifier, meta: background_set_payload(identifier, meta)),
     lambda: current_owner_fields(), lambda: time.time(), lambda: training_background_sets(),
+    files=_business_files,
 )
 _background_capture = BackgroundCapture(
     BackgroundCaptureIdentity(lambda identifier: sanitize_ai_detection_task_id(identifier), lambda: current_auth_user(), lambda value: public_path_sanitized(value)),
@@ -9681,6 +9685,7 @@ _background_capture = BackgroundCapture(
     BackgroundCaptureState(lambda: _auto_optimize_lock, lambda identifier: load_auto_optimize_state(identifier),
                            lambda state: save_auto_optimize_state(state), lambda identifier, **kwargs: public_auto_optimize_state(identifier, **kwargs)),
     lambda: time.time(), lambda: uuid.uuid4(),
+    files=_business_files,
 )
 _background_routes = _training_background_api.register(app, _background_query, _background_upload, _background_capture)
 background_image = _background_routes.background_image
