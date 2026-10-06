@@ -11,6 +11,7 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 
 
 class BodyStream:
@@ -471,8 +472,8 @@ class TrainingTransferContracts(unittest.TestCase):
                 self.assertEqual(job, 'job'); self.assertEqual(target.read_bytes(), owner.encode() + b'-upload')
                 task.update(values); return False
             update = Mock(side_effect=update_task)
-            store = RunPodUploadStore(limit)
-            transfer = RunPodTrainingTransfer(find, token_hash, clock, TransferPaths((lambda: resolve), output), store, (lambda: update))
+            store = RunPodUploadStore(limit, runtime_provider=get_runtime)
+            transfer = RunPodTrainingTransfer(find, token_hash, clock, TransferPaths((lambda: resolve), output), store, (lambda: update), runtime_provider=get_runtime)
             app = FastAPI(); routes = register(app, transfer)
             for name in routes.__dataclass_fields__:
                 self.assertEqual([route.endpoint for route in app.routes if route.name == name], [getattr(routes, name)])

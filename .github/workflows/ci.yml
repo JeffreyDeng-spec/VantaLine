@@ -565,6 +565,7 @@ jobs:
           python scripts/smoke_auto_optimization_model_binding.py
           python scripts/smoke_training_dataset.py
           python scripts/smoke_training_runpod_flow.py
+          python scripts/smoke_runpod_transport_runtime_ports.py
           python scripts/smoke_training_artifacts.py
           python scripts/smoke_runpod_artifact_runtime_ports.py
           python scripts/smoke_training_resource_catalog.py

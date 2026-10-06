@@ -7896,7 +7896,7 @@ _runpod_flow = RunPodFlow(
         summary=lambda value: runpod_public_response_summary(value), extract=lambda value: extract_runpod_worker_output(value),
         import_artifacts=lambda: import_runpod_yolo_artifacts,
         terminal=lambda: runpod_terminal_status, bound_text=lambda: bounded_text,
-    ),
+    ), runtime_provider=_business_files.runtime_provider
 )
 
 
@@ -9737,11 +9737,11 @@ from .training.runpod_transfer import RunPodTrainingTransfer, TransferPaths
 from .training.runpod_upload_store import RunPodUploadStore
 from .training import runpod_transfer_api as _training_transfer_api
 
-_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes())
+_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes(), runtime_provider=_business_files.runtime_provider)
 _training_transfer = RunPodTrainingTransfer(
     lambda job: find_training_task(job), lambda token: runpod_dataset_token_hash(token), lambda: time.time(),
     TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR),
-    _training_upload_store, lambda: update_training_task,
+    _training_upload_store, lambda: update_training_task, runtime_provider=_business_files.runtime_provider
 )
 _training_transfer_routes = _training_transfer_api.register(app, _training_transfer)
 download_runpod_training_dataset = _training_transfer_routes.download_runpod_training_dataset
