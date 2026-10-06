@@ -4,17 +4,23 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 from .submission import TrainingSubmissionRecords, TrainingSubmissionThreads
+from ..runtime.training_tasks import TrainingTaskRuntime, ThreadLaunch
 
 Record = dict[str, Any]
 
 
 class BackgroundTaskSubmission:
     def __init__(self, records: TrainingSubmissionRecords, threads: TrainingSubmissionThreads,
-                 owner: Callable[[], Record], clock: Callable[[], float], uuid: Callable[[], UUID]):
+                 owner: Callable[[], Record], clock: Callable[[], float], uuid: Callable[[], UUID], *,
+                 runtime: TrainingTaskRuntime | None = None):
         self.records, self.threads, self.owner = records, threads, owner
         self.clock, self.uuid = clock, uuid
+        self.runtime = runtime if runtime is not None else TrainingTaskRuntime()
 
     def enqueue_background_set_task(self, set_id: str, name: str, source_path: Path) -> dict[str, Any]:
+        return self.runtime.submit(lambda launch: self._enqueue_background_set_task(set_id, name, source_path, launch))
+
+    def _enqueue_background_set_task(self, set_id: str, name: str, source_path: Path, launch: ThreadLaunch) -> Record:
         job_id = f"background_{int(self.clock())}_{self.uuid().hex[:6]}"
         task = {
             "job_id": job_id,
@@ -35,7 +41,7 @@ class BackgroundTaskSubmission:
             **self.owner(),
         }
         self.records.save(task)
-        thread = self.threads.create(target=self.threads.target(), args=(job_id,), daemon=True, name=f"background-set-task-{job_id}")
-        self.threads.records()[job_id] = thread
-        thread.start()
+        def register(thread):
+            self.threads.records()[job_id] = thread
+        launch(lambda wrap: self.threads.create(target=wrap(self.threads.target()), args=(job_id,), daemon=True, name=f"background-set-task-{job_id}"), register)
         return self.records.public(task)

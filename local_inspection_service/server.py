@@ -1414,7 +1414,7 @@ _image_worker_runtime = ImageWorkerRuntime(
 )
 _candidate_store_lock = threading.RLock()
 from .runtime.training_tasks import TrainingTaskRuntime
-_training_task_runtime = TrainingTaskRuntime()
+_training_task_runtime = TrainingTaskRuntime(scope=_runtime_repositories.thread_scope)
 _training_task_lock = _training_task_runtime.lock
 _image_worker_processes = _image_worker_runtime.processes
 _training_task_threads = _training_task_runtime.threads
@@ -7429,6 +7429,7 @@ _background_task_submission = BackgroundTaskSubmission(
     TrainingSubmissionRecords(lambda task: save_training_task(task), lambda task: public_training_task(task)),
     TrainingSubmissionThreads(lambda: run_background_set_task, lambda **kwargs: threading.Thread(**kwargs), lambda: _training_task_threads),
     lambda: current_owner_fields(), lambda: time.time(), lambda: uuid.uuid4(),
+    runtime=_training_task_runtime,
 )
 
 def run_codex_background_generation(source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
@@ -8032,6 +8033,7 @@ _training_submission = TrainingSubmission(
     records=TrainingSubmissionRecords(save=lambda task: save_training_task(task), public=lambda task: public_training_task(task)),
     threads=TrainingSubmissionThreads(target=lambda: run_training_task, create=lambda **kwargs: threading.Thread(**kwargs),
         records=lambda: _training_task_threads),
+    runtime=_training_task_runtime,
 )
 
 

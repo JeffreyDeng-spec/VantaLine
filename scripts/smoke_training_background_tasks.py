@@ -193,7 +193,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
             'note':'背景生成任务已加入队列；完成前该背景集不会进入可选列表。','owner_user_id':'alice','owner_username':'Alice',
             'model_profiles':{'pipeline':{'version':1}}}
         self.assertEqual(result,expected); self.assertEqual([e[0] for e in f.events],['owner','save','thread','start','public'])
-        f.factory.assert_called_once_with(target=self.api.run_background_set_task,args=(identifier,),daemon=True,name='background-set-task-'+identifier)
+        f.factory.assert_called_once(); self.assertEqual({k:v for k,v in f.factory.call_args.kwargs.items() if k!='target'},dict(args=(identifier,),daemon=True,name='background-set-task-'+identifier))
         self.assertIs(f.threads[identifier],f.thread); self.assertEqual(f.events[3][1],({identifier:f.thread},))
         f.clock.side_effect=None; f.resolver.version=99; f.events.clear()
         with patch.object(self.api,'run_codex_background_generation',f.codex): f.factory.call_args.kwargs['target'](*f.factory.call_args.kwargs['args'])
@@ -250,8 +250,9 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         with patch.object(self.api,'run_background_set_task',self.api.run_background_set_task),patch.object(self.api,'_training_task_threads',f.threads):
             f.save.side_effect=save; f.factory.side_effect=factory
             self.api.enqueue_background_set_task('set','name',f.source)
-        self.assertIs(f.factory.call_args.kwargs['target'],target); self.assertEqual(f.threads,{})
+        self.assertEqual(f.threads,{})
         self.assertEqual(replacement_registry,{'background_101_abcdef':f.thread}); f.thread.start.assert_called_once(); target.assert_not_called(); newer_target.assert_not_called()
+        f.factory.call_args.kwargs['target']('selected-background'); target.assert_called_once_with('selected-background'); newer_target.assert_not_called()
     def test_runner_each_stage_error_preserves_settlement_order_without_retry(self):
         f=self.f
         stages=['start','generating','local','progress','codex','images','ready','completed']
