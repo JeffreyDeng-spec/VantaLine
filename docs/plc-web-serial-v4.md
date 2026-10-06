@@ -144,3 +144,5 @@ The retained reconciliation and input-poll bodies moved intact into LegacyPlcOpe
 Unreachable pre-Web-Serial capture implementation tails are no longer present in the application entry. Claim/heartbeat/release/event-stream routes remain registered with the same request schemas and HTTP 410 behavior. Current PLC config still forwards to the existing service, and physical I/O remains browser-only.
 
 Bootstrap location composition retains the existing plc_web_serial_state.json location beneath the same data directory. It creates no files, changes no browser lease or dispatch protocol and opens no serial port.
+
+Cost service composition is initialized immediately after the retained legacy PLC route slot; those PLC route bodies, registration order, browser ownership and serial prohibition remain unchanged. The early PipelineTaskStore constructor stores suppliers only and performs no database or physical operation.

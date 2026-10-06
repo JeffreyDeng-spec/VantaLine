@@ -376,6 +376,7 @@ jobs:
           python scripts/smoke_plc_capture_state.py
           python scripts/smoke_runtime_lifecycle.py --postgres
           python scripts/smoke_cost_ledger.py
+          python scripts/smoke_cost_composition.py
           python scripts/smoke_analysis_records.py --postgres
           python scripts/smoke_analysis_projections.py
           python scripts/smoke_auth_foundation.py --postgres

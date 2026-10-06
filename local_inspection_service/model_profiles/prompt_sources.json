@@ -1,5 +1,5 @@
 {
-  "version": 183,
+  "version": 184,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -517,6 +517,7 @@
     "runtime/repository_composition.py",
     "auth/application.py",
     "records/composition.py",
-    "runtime/bootstrap_locations.py"
+    "runtime/bootstrap_locations.py",
+    "analytics/cost_composition.py"
   ]
 }

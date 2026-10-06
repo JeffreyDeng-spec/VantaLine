@@ -1024,29 +1024,9 @@ from .analytics.cost_pricing import (
     runpod_gpu_usd_per_second, api_cost_pricing_for_model, api_cost_usage_token_count,
     api_cost_detail_tokens, api_cost_from_usage, api_cost_day, api_cost_classify,
 )
-from .analytics.cost_repository import CostPaths, CostRepository, CostStoreDependencies
-from .analytics.costs import CostLedger
+from .analytics.cost_repository import CostPaths, CostStoreDependencies
+from .analytics.cost_composition import CostServices
 from .analytics.cost_api import register_cost_api
-
-_cost_repository = CostRepository(CostStoreDependencies(
-    paths=lambda: CostPaths(DATA_DIR, DATA_ANALYSIS_RECORDS_PATH, AI_DETECTION_TASKS_PATH,
-                            PIPELINE_TASKS_PATH, AUTO_OPTIMIZE_DIR, AI_PROFILE_CACHE_PATH),
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    detection_tasks=lambda: load_ai_detection_tasks(),
-    pipeline_tasks=lambda: load_pipeline_tasks(),
-    auto_states=lambda: list_auto_optimize_states(),
-    training_tasks=lambda: load_training_task_records(),
-    sanitize_task_id=lambda value: sanitize_ai_detection_task_id(value),
-))
-_cost_ledger = CostLedger(_cost_repository, timestamp=lambda value: coerce_record_timestamp(value))
-
-# Compatibility exports while callers migrate to domain services.
-api_cost_walk_usage = _cost_ledger.walk_usage
-api_cost_store_payloads = _cost_repository.store_payloads
-api_cost_training_records = _cost_ledger.training_records
-api_cost_collect_records = _cost_ledger.collect_records
-api_cost_summary = _cost_ledger.summary
-
 
 from .records.ownership import RecordOwnership
 from .records.access import RecordAccess
@@ -9028,7 +9008,39 @@ def stream_plc_capture_events(session_id: str) -> StreamingResponse:
     raise HTTPException(status_code=410, detail="legacy_plc_input_capture_is_read_only")
 
 
-get_api_cost_ledger = register_cost_api(app, lambda: require_admin_role(), _cost_ledger)
+PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
+
+from .pipeline.task_store import PipelineTaskStore, PipelineTaskPaths, PipelineTaskRows
+
+_pipeline_task_store = PipelineTaskStore(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
+    rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
+    resolver=lambda: resolve_model_profiles,
+)
+
+
+_cost_paths = CostPaths(DATA_DIR, DATA_ANALYSIS_RECORDS_PATH, AI_DETECTION_TASKS_PATH,
+                        PIPELINE_TASKS_PATH, AUTO_OPTIMIZE_DIR, AI_PROFILE_CACHE_PATH)
+_cost_services = CostServices(CostStoreDependencies(
+    paths=lambda paths=_cost_paths: paths,
+    runtime_repository=_runtime_repository_access.runtime_postgres_repository_or_none,
+    detection_tasks=_detection_task_store.load_ai_detection_tasks,
+    pipeline_tasks=_pipeline_task_store.load_pipeline_tasks,
+    auto_states=_auto_optimization_state_store.list_auto_optimize_states,
+    training_tasks=_training_records.load_training_task_records,
+    sanitize_task_id=sanitize_ai_detection_task_id,
+), timestamp=coerce_record_timestamp)
+_cost_repository = _cost_services.repository
+_cost_ledger = _cost_services.ledger
+
+api_cost_walk_usage = _cost_ledger.walk_usage
+api_cost_store_payloads = _cost_repository.store_payloads
+api_cost_training_records = _cost_ledger.training_records
+api_cost_collect_records = _cost_ledger.collect_records
+api_cost_summary = _cost_ledger.summary
+
+get_api_cost_ledger = register_cost_api(app, _access_control.require_admin_role, _cost_ledger)
 
 
 @app.get("/api/admin/runtime-store/probe")
@@ -9978,7 +9990,6 @@ training_preview = _training_preview_routes.training_preview
 # ============================================================
 
 AGENT_LOCAL_CONFIG_PATH = DATA_DIR / "agent_config.local.json"
-PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
 PIPELINE_STATE_PATH = DATA_DIR / "pipeline_state.json"
 from .pipeline.runtime_state import PipelineRuntimeState
 _pipeline_runtime = PipelineRuntimeState()
@@ -10278,15 +10289,8 @@ def agent_recommend(request: AgentRecommendRequest) -> dict[str, Any]:
 
 
 from .pipeline.state_policy import normalize_pipeline_state
-from .pipeline.task_store import PipelineTaskStore, PipelineTaskPaths, PipelineTaskRows
 from .pipeline.state_store import PipelineStateStore, PipelineStatePaths, PipelineStateRows
 
-_pipeline_task_store = PipelineTaskStore(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
-    rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
-    resolver=lambda: resolve_model_profiles,
-)
 _pipeline_state_store = PipelineStateStore(
     repository=lambda: runtime_postgres_repository_or_none(),
     paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),

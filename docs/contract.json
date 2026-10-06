@@ -69,7 +69,7 @@
     },
     {
       "name": "Analytics domains",
-      "paths": ["local_inspection_service/analytics/**", "scripts/smoke_cost_ledger.py", "scripts/smoke_analysis_records.py", "scripts/smoke_analysis_projections.py", "scripts/smoke_analysis_composition.py"],
+      "paths": ["local_inspection_service/analytics/**", "scripts/smoke_cost_ledger.py", "scripts/smoke_analysis_records.py", "scripts/smoke_analysis_projections.py", "scripts/smoke_analysis_composition.py", "scripts/smoke_cost_composition.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
     },
     {
