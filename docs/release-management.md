@@ -1055,3 +1055,19 @@ Prompt-source manifest version 163 includes `auth/http_composition.py` and recor
 The earlier identity-only candidate used manifest v162/488 on fac841. Its PR265 latency failure remains a recorded NoGo; those results do not approve this new integration.
 
 This identity integration is rebuilt on main734e5e0 after PR266. It retains native-history SQL, readiness and all47 fixed reader/history cases byte-for-byte from that main. The complete manifest is v163 with489 unique sources; earlier slice counts are historical. This changed prerequisite requires fresh integration, hostedCI and release acceptance and does not explain or waive PR265 performance failure.
+
+Provider proxy implementation and interfaces ship together under source manifest v169. Require original/candidate transport contracts, provider regressions, exact-head CI and whole-release acceptance.
+
+The optional MCP client is packaged from its real provider module under manifest v169. Require original/candidate protocol and process-substitute contracts plus existing MCP default/opt-in behavior, exact-head CI and whole-release verification. Worker topology and production settings are unchanged.
+
+The MCP runtime policy relocation is structural under manifest v169. Require original/candidate environment/payload/warmup contracts and existing MCP dispatch/default/opt-in regressions, exact-head CI and independent complete-release acceptance. It does not alter paid-call fallback or lifecycle policy.
+
+The model warmup HTTP/domain split is a structural release under manifest v169. Exact full HTTP and original local-model/warmup regressions plus independent release acceptance are required. Startup and worker topology remain unchanged; the two-app registrar fixture is not proof of full server application-factory isolation.
+
+Prompt-source manifest version 168 retains the same 494 source files and records the actual modified `server.py` and `detection/local_models.py` bytes for new tasks. Existing snapshots and secret references remain immutable. The local selection refactor does not change prompts, models, provider limits or release topology.
+
+Image payload codecs extend the existing fingerprinted provider module under manifest v169. Require original/candidate and neighboring image-provider contracts, exact-head CI and complete release verification. No model, retry or image-validation policy change is included.
+
+Historical integration record (before PR266; not the current bundled architecture): That model/provider integration followed the accepted reader-readiness source manifest and retained its prerequisite. Its bundled manifest was v168 with 494 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remained mandatory; that historical candidate did not include native-history aggregation. The current integration retains the native-history implementation accepted in PR266.
+
+This model/provider integration is based on main ad1292a after PR267 and preserves the native-history and reader-readiness implementation accepted in PR266. Its production and test sources match the independently reviewed model candidate 63df072. The complete bundled manifest is v169 with495 unique sources; earlier slice counts describe isolated candidates. Both fixed reader19 and history28 benchmark gates remain mandatory. Publication requires acceptance of the identity release, followed by this candidate’s own CI and independent review; the prerequisite’s first main CI AA failure remains recorded.

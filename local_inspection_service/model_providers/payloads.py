@@ -1,6 +1,10 @@
-"""Provider JSON and data-URL parsing without application imports."""
+"""Provider JSON, data-URL and image payload codecs without application imports."""
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
+from pathlib import Path
+import base64
+import binascii
+import mimetypes
 import json
 import re
 
@@ -64,3 +68,47 @@ class ProviderPayloadParser:
             raise self.error()('AI image payload was not a base64 data URL')
         mime_type = header.removeprefix('data:').split(';', 1)[0] or 'image/jpeg'
         return (mime_type, payload)
+
+class BinaryReader(Protocol):
+    def read_bytes(self, path: Path) -> bytes: ...
+
+
+def decode_b64_image(value: Any) -> bytes | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.startswith("data:"):
+        _, _, text = text.partition(",")
+    try:
+        return base64.b64decode(text, validate=True)
+    except (ValueError, binascii.Error):
+        return None
+
+
+
+class ImagePayloadCodec:
+    def __init__(self, files: Callable[[], BinaryReader],
+                 decoder: Callable[[], Callable[[Any], bytes | None]],
+                 candidates: Callable[[], Callable[[Any], list[dict[str, Any]]]]) -> None:
+        self.files, self.decoder, self.candidates = files, decoder, candidates
+
+    def image_file_payload(self, path: Path) -> dict[str, str]:
+        mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
+        return {
+            "name": path.name,
+            "mime_type": mime_type,
+            "data": base64.b64encode(self.files().read_bytes(path)).decode("ascii"),
+        }
+
+
+    def windows_worker_image_response_bytes(self, payload: dict[str, Any]) -> bytes:
+        for key in ("b64_json", "base64", "image_base64"):
+            image_bytes = self.decoder()(payload.get(key))
+            if image_bytes:
+                return image_bytes
+        for item in self.candidates()(payload):
+            for key in ("b64_json", "base64", "image_base64"):
+                image_bytes = self.decoder()(item.get(key))
+                if image_bytes:
+                    return image_bytes
+        raise RuntimeError("Windows Worker image fallback response did not include base64 PNG bytes.")

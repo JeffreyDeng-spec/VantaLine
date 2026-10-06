@@ -1,5 +1,5 @@
 {
-  "version": 163,
+  "version": 169,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -489,6 +489,12 @@
     "auth/public_network_ports.py",
     "auth/docs_api.py",
     "auth/composition.py",
-    "auth/http_composition.py"
+    "auth/http_composition.py",
+    "model_providers/proxy_runtime.py",
+    "model_providers/proxy_runtime_ports.py",
+    "model_providers/mcp_client.py",
+    "model_providers/mcp_runtime.py",
+    "detection/warmup_requests.py",
+    "detection/warmup_api.py"
   ]
 }

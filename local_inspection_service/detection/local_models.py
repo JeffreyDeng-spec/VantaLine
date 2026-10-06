@@ -1,4 +1,5 @@
 """Process-local model instances and path aliases, isolated from web application imports."""
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -89,3 +90,38 @@ class LocalModels(Generic[Model]):
 
     def yolo_model_ready(self, model_id: str, config: dict[str, Any]) -> bool:
         return str(model_id or "") in set(self.yolo_loaded_model_ids(config))
+
+
+def yolo_inference_device() -> str | int:
+    configured = os.environ.get("INSPECTION_YOLO_DEVICE", "").strip()
+    if configured:
+        return configured
+    try:
+        import torch
+
+        return 0 if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
+class CheckpointSelection:
+    """Call-time checkpoint policy, with no model or filesystem access on construction."""
+
+    def __init__(self, override: Callable[[], str], root: Callable[[], Path],
+                 app_directory: Callable[[], Path], exists: Callable[[Path], bool]):
+        self.override, self.root = override, root
+        self.app_directory, self.exists = app_directory, exists
+
+    def detect_base_model(self) -> str:
+        'Resolve the base checkpoint for detection-model training. Prefers an\n    explicit override or a local detector weight, falling back to a standard\n    Ultralytics detector name (auto-downloaded on first use).'
+        if self.override():
+            return self.override()
+        for candidate in (
+            self.root() / "yolo26s.pt",
+            self.app_directory() / "yolo26s.pt",
+            self.root() / "yolo11s.pt",
+            self.root() / "yolov8s.pt",
+        ):
+            if self.exists(candidate):
+                return str(candidate)
+        return "yolo26s.pt"
