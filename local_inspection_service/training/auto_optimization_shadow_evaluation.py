@@ -1,8 +1,9 @@
 """Shadow comparison, candidate promotion and retirement orchestration."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 import cv2
 import threading
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 import time
 from .auto_optimization_shadow_evaluation_ports import ShadowState, ShadowObservation, ShadowPromotion
 
@@ -12,7 +13,12 @@ class AutoOptimizationShadowEvaluation:
     observation: ShadowObservation
     promotion: ShadowPromotion
 
+    runtime: TrainingThreadLifecycle = field(default_factory=TrainingThreadLifecycle, compare=False, repr=False, kw_only=True)
+
     def start_auto_optimize_shadow_worker(self, task_id: str, sample_id: str) -> None:
+        return self.runtime.submit(lambda launch: self._start_shadow(task_id, sample_id, launch))
+
+    def _start_shadow(self, task_id: str, sample_id: str, launch: ThreadLaunch) -> None:
         clean_task_id = self.state.sanitize_ai_detection_task_id()(task_id)
         if not clean_task_id:
             return
@@ -21,9 +27,8 @@ class AutoOptimizationShadowEvaluation:
             existing = self.state._auto_optimize_shadow_threads().get(key)
             if existing and existing.is_alive():
                 return
-            thread = threading.Thread(target=self.state.auto_optimize_shadow_worker(), args=(clean_task_id, sample_id), name=f"auto-opt-shadow-{clean_task_id}", daemon=True)
-            self.state._auto_optimize_shadow_threads()[key] = thread
-            thread.start()
+            launch(lambda wrap: threading.Thread(target=wrap(self.state.auto_optimize_shadow_worker()), args=(clean_task_id, sample_id), name=f"auto-opt-shadow-{clean_task_id}", daemon=True),
+                   lambda thread: self.state._auto_optimize_shadow_threads().__setitem__(key, thread))
 
 
     def auto_optimize_shadow_worker(self, task_id: str, sample_id: str) -> None:
@@ -137,3 +142,6 @@ class AutoOptimizationShadowEvaluation:
         candidate["status"] = "retired_deleted"
         candidate["deleted_at"] = int(time.time())
         candidate["deleted_paths"] = deleted_paths
+
+    def close(self, timeout: float) -> bool:
+        return self.runtime.close(timeout)

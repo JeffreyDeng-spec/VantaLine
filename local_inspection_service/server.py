@@ -4621,6 +4621,7 @@ _auto_optimization_label_processing = AutoOptimizationLabelProcessing(
         as_completed=lambda: as_completed,
         auto_optimize_process_label_sample=lambda: auto_optimize_process_label_sample,
     ),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 
@@ -4677,6 +4678,7 @@ _auto_optimization_training_scheduling = AutoOptimizationTrainingScheduling(
         bounded_text=lambda: bounded_text,
         auto_optimize_training_check_worker=lambda: auto_optimize_training_check_worker,
     ),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 
@@ -4931,6 +4933,7 @@ _auto_optimization_shadow_evaluation = AutoOptimizationShadowEvaluation(
         training_run_roots=lambda: training_run_roots,
         _business_files=lambda: _business_files,
     ),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 

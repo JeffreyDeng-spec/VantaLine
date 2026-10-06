@@ -1440,3 +1440,5 @@ CodexBackgroundThread.close(timeout) rejects later starts and waits for admitted
 Closing the Codex starter does not wait for separate direct synchronous generation calls. Application shutdown must first drain their caller owners; a successful starter close alone is not proof that all generation activity has ended.
 
 TransferProgress.close(timeout) may return false while an update callback, construction or uncertain thread start remains outstanding. It never cancels the upload/download, sends a final success update, retries a transfer or settles a training task. Future app shutdown must drain transfer callers before closing their reporter owner and repositories.
+
+Auto-optimization starter close results certify local Python thread and repository-scope exit only. They do not cancel or settle training subprocesses or remote calls. Future shutdown integration must drain upstream callers before these owners and their dependencies; that application hook is not enabled by this change.

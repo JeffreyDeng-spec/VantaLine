@@ -525,6 +525,7 @@ jobs:
           python scripts/smoke_training_thread_drain.py
           python scripts/smoke_codex_background_drain.py
           python scripts/smoke_transfer_progress_drain.py
+          python scripts/smoke_auto_optimization_thread_drain.py
           python scripts/smoke_training_dataset.py
           python scripts/smoke_training_runpod_flow.py
           python scripts/smoke_training_artifacts.py
