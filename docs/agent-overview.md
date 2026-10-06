@@ -68,3 +68,5 @@ Service path and output placement policy is owned by `runtime/service_paths.py`;
 Account configuration/media/response projections are owned by `auth/account_projections.py`; resource-name normalization and owner-scoped catalog checks are owned by `records/resource_names.py`. Their typed interfaces contain only relevant capabilities, with request identity resolved for each call.
 
 The initial FastAPI allocation and transport middleware assembly live in runtime/http_application.py. Use its explicit environment mapping when composing a new shell; application domains and lifetime are not yet assembled by this focused builder.
+
+The HTTP transport-shell constructor accepts an explicit upload runtime provider for independently composed apps. This isolates only upload admission; complete artifact services and application lifecycle still require per-app composition.
