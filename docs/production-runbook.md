@@ -1362,3 +1362,13 @@ Model warmup request extraction retains the existing YoloWarmup state, thread st
 Local model selection extraction changes code ownership only. Device/checkpoint defaults, process topology, database schema and model loading remain unchanged. Deploy and roll back the complete release; synthetic selection checks do not establish GPU, model download or production capacity availability.
 
 Image payload relocation changes no storage, provider calls or worker topology. A decoded byte sequence is not newly validated as PNG. Deploy and roll back complete releases, preserving task snapshots and call evidence.
+
+Detection task request relocation changes no database statements, schema or deployment topology. Existing save/delete-before-response/link-update behavior remains observable on failure; no automatic retry or rollback is added. Roll back the complete previous Web/worker release while preserving records and evidence.
+
+Detection rule extraction is structural and retains existing save, failure and partial in-memory mutation semantics. No migration, automatic normalization, historical task rewrite or model call is performed by deployment. Restore the previous complete release on failure.
+
+Camera orchestration extraction changes no dispatch transaction, browser lease, physical I/O or uncertain-write retry rule. Evidence is still declared before analysis. Existing best-effort error settlement and partial file/result effects are retained; extraction does not introduce replay. Use complete-release rollback and preserve dispatch/call evidence.
+
+Detection rule domain composition does not change worker topology, authorization, database lifecycle or transactions. Config and identity providers are called per request. A duplicate domain installation fails before either rule route is added. Independent test apps prove this domain boundary only; the complete Web app still has remaining global assembly. Deploy and roll back whole releases, preserving records and model snapshots.
+
+Duplicate-route preflight is not a transaction around arbitrary FastAPI registration failures. If application construction fails during route installation, discard that partially built application. No retry or cleanup guarantee is added.
