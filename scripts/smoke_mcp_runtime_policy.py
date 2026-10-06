@@ -118,6 +118,9 @@ class Contracts(unittest.TestCase):
         self.assertEqual(server.app.router.on_startup.count(server.start_ai_mcp_warmup),1)
         with patch.dict(os.environ,{'INSPECTION_AI_MCP_RUNTIME':'','INSPECTION_AI_MCP_SERVER_MODE':''},clear=True),patch.object(server.threading,'Thread',side_effect=AssertionError('thread')):
             server.start_ai_mcp_warmup()
+        with patch.dict(os.environ,{'INSPECTION_AI_MCP_RUNTIME':'stdio','INSPECTION_AI_MCP_SERVER_MODE':''},clear=True),patch.object(server._ai_mcp_client,'start_warmup') as start:
+            server.start_ai_mcp_warmup()
+            start.assert_called_once_with(server.warm_ai_mcp_client, threads=server.threading.Thread)
 
 
 if __name__=='__main__':unittest.main()

@@ -2,12 +2,17 @@
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 import json
 import subprocess
 import sys
 import threading
 import time
+
+
+class WarmupThreadFactory(Protocol):
+    def __call__(self, *, target: Callable[[], None], name: str,
+                 daemon: bool) -> threading.Thread: ...
 
 
 class McpAdmissionClosed(RuntimeError):
@@ -26,6 +31,9 @@ class LocalAiMcpClient:
         self._active = 0
         self._closing = False
         self._retired: list[subprocess.Popen[str]] = []
+        self._warmup_thread: threading.Thread | None = None
+        self._warmup_starting = False
+        self._uncertain_warmups: list[threading.Thread] = []
 
     @contextmanager
     def admission(self):
@@ -45,6 +53,63 @@ class LocalAiMcpClient:
                     self._active -= 1
                     self._condition.notify_all()
 
+    def start_warmup(self, target: Callable[[], None], *,
+                     threads: WarmupThreadFactory = threading.Thread) -> bool:
+        """Register one startup operation before thread construction or start."""
+        with self._condition:
+            if self._closing or self._warmup_starting or (
+                    self._warmup_thread and self._warmup_thread.is_alive()):
+                return False
+            self._warmup_starting = True
+            self._active += 1
+        released = False
+        entered = False
+        cancelled = False
+        def release():
+            nonlocal released
+            with self._condition:
+                if not released:
+                    released = True
+                    self._active -= 1
+                    self._condition.notify_all()
+        def run():
+            nonlocal entered
+            with self._condition:
+                if cancelled:
+                    return
+                entered = True
+            # Transfer only this explicitly reserved startup operation. Ordinary
+            # threads do not inherit another thread's admission depth.
+            depth = getattr(self._local, 'depth', 0)
+            self._local.depth = depth + 1
+            try:
+                target()
+            finally:
+                self._local.depth = depth
+                release()
+        thread = None
+        try:
+            thread = threads(target=run, name="ai-mcp-warmup", daemon=True)
+            with self._condition:
+                self._warmup_thread = thread
+            thread.start()
+            return True
+        except BaseException:
+            # start() may be interrupted after OS creation but before Python's
+            # started flag. Revoke a not-yet-entered target, retain its handle,
+            # and never infer that is_alive()==False proves no thread exists.
+            with self._condition:
+                if thread is not None:
+                    self._uncertain_warmups.append(thread)
+                if not entered:
+                    cancelled = True
+                    release()
+            raise
+        finally:
+            with self._condition:
+                self._warmup_starting = False
+                self._condition.notify_all()
+
     def shutdown(self, timeout: float) -> bool:
         """Reject new operations and drain before terminating/reaping transports.
 
@@ -56,11 +121,23 @@ class LocalAiMcpClient:
             self._closing = True
             if getattr(self._local, 'depth', 0):
                 return False
-            while self._active:
+            while self._active or self._warmup_starting:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return False
                 self._condition.wait(remaining)
+            warmups = list(self._uncertain_warmups)
+            if self._warmup_thread is not None:
+                warmups.append(self._warmup_thread)
+        for warmup in warmups:
+            try:
+                warmup.join(max(0.0, deadline - time.monotonic()))
+            except RuntimeError:
+                # A failed/interrupted start has no trustworthy completion
+                # signal yet. Keep ownership and report undrained.
+                return False
+            if warmup.is_alive():
+                return False
         if not self.lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
             return False
         try:

@@ -5613,7 +5613,7 @@ warm_ai_mcp_client = _mcp_warmup.warm_ai_mcp_client
 @app.on_event("startup")
 def start_ai_mcp_warmup() -> None:
     if external_ai_mcp_enabled():
-        threading.Thread(target=warm_ai_mcp_client, name="ai-mcp-warmup", daemon=True).start()
+        _ai_mcp_client.start_warmup(warm_ai_mcp_client, threads=threading.Thread)
 
 
 def generate_accessory_ai_profile(item: dict[str, Any], *, allow_provider: bool = True) -> dict[str, Any]:
