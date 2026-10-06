@@ -70,3 +70,5 @@ Account configuration/media/response projections are owned by `auth/account_proj
 The initial FastAPI allocation and transport middleware assembly live in runtime/http_application.py. Use its explicit environment mapping when composing a new shell; application domains and lifetime are not yet assembled by this focused builder.
 
 The HTTP transport-shell constructor accepts an explicit upload runtime provider for independently composed apps. This isolates only upload admission; complete artifact services and application lifecycle still require per-app composition.
+
+ArtifactRuntimeProvider owns a lazy artifact runtime, configuration signature and lock for one composition. Existing get_runtime still selects one process-default owner; complete app wiring and artifact lifecycle remain separate.

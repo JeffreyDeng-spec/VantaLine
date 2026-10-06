@@ -1,6 +1,8 @@
 """Validated opt-in composition; local mode imports neither SDK nor Unix locks."""
 from __future__ import annotations
 from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from typing import Protocol
 import json
 import logging
 import os
@@ -28,36 +30,60 @@ class ArtifactRuntime:
         return logical_path(path.resolve().relative_to(self.root).as_posix())
 
 
-_lock = threading.Lock()
-_runtime = None
-_signature = None
+class RuntimeBuilder(Protocol):
+    def __call__(
+        self, mode: str, data_root: str, work_root: str, cache_root: str,
+        bucket: str, database_url: str, credentials_directory: str,
+        *, hard_limits: bool, upload_root: str,
+    ) -> ArtifactRuntime: ...
+
+
+class ArtifactRuntimeProvider:
+    """Own one lazy configuration-bound artifact runtime without starting resources."""
+    def __init__(
+        self, environment: Callable[[], Mapping[str, str]],
+        *, builder: RuntimeBuilder | None = None,
+    ) -> None:
+        self._environment = environment
+        self._builder = builder
+        self._lock = threading.Lock()
+        self._runtime: ArtifactRuntime | None = None
+        self._signature: tuple[str, ...] | None = None
+
+    def get(self) -> ArtifactRuntime | None:
+        environment = self._environment()
+        mode = environment.get("VANTALINE_FILE_STORE", "local")
+        if mode == "local":
+            return None
+        if mode not in {"hybrid", "cos"}:
+            raise ValueError("VANTALINE_FILE_STORE must be local, hybrid or cos")
+        required = ("VANTALINE_DATA_ROOT", "VANTALINE_ARTIFACT_WORK_ROOT", "VANTALINE_ARTIFACT_CACHE_ROOT",
+                    "VANTALINE_COS_BUCKET", "DATABASE_URL", "CREDENTIALS_DIRECTORY")
+        values = tuple(environment.get(key, "") for key in required)
+        if not all(values):
+            raise ValueError("COS storage requires data, work, cache, database and systemd credential configuration")
+        hard_limits = environment.get("VANTALINE_ARTIFACT_HARD_LIMITS", "0")
+        upload_root = environment.get("VANTALINE_ARTIFACT_UPLOAD_ROOT", "")
+        if hard_limits not in {"0", "1"}:
+            raise ValueError("invalid temporary hard-limit setting")
+        signature = (mode, *values, hard_limits, upload_root)
+        with self._lock:
+            if self._runtime is not None:
+                if self._signature != signature:
+                    raise RuntimeError("storage configuration changed; restart is required")
+                return self._runtime
+            builder = self._builder if self._builder is not None else build_runtime
+            self._runtime = builder(mode, *values, hard_limits=hard_limits == "1", upload_root=upload_root)
+            self._signature = signature
+            return self._runtime
+
+
+_default_provider = ArtifactRuntimeProvider(lambda: os.environ)
 
 
 def get_runtime() -> ArtifactRuntime | None:
-    mode = os.environ.get("VANTALINE_FILE_STORE", "local")
-    if mode == "local":
-        return None
-    if mode not in {"hybrid", "cos"}:
-        raise ValueError("VANTALINE_FILE_STORE must be local, hybrid or cos")
-    required = ("VANTALINE_DATA_ROOT", "VANTALINE_ARTIFACT_WORK_ROOT", "VANTALINE_ARTIFACT_CACHE_ROOT",
-                "VANTALINE_COS_BUCKET", "DATABASE_URL", "CREDENTIALS_DIRECTORY")
-    values = tuple(os.environ.get(key, "") for key in required)
-    if not all(values):
-        raise ValueError("COS storage requires data, work, cache, database and systemd credential configuration")
-    hard_limits = os.environ.get("VANTALINE_ARTIFACT_HARD_LIMITS", "0")
-    upload_root = os.environ.get("VANTALINE_ARTIFACT_UPLOAD_ROOT", "")
-    if hard_limits not in {"0", "1"}:
-        raise ValueError("invalid temporary hard-limit setting")
-    signature = (mode, *values, hard_limits, upload_root)
-    global _runtime, _signature
-    with _lock:
-        if _runtime is not None:
-            if _signature != signature:
-                raise RuntimeError("storage configuration changed; restart is required")
-            return _runtime
-        _runtime = build_runtime(mode, *values, hard_limits=hard_limits == "1", upload_root=upload_root)
-        _signature = signature
-        return _runtime
+    """Retain the existing process-default provider for legacy compositions."""
+    return _default_provider.get()
 
 
 def build_runtime(mode, data_root, work_root, cache_root, bucket, database_url, credentials_directory,

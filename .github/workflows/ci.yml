@@ -298,6 +298,7 @@ jobs:
           python scripts/smoke_application_foundation.py
           python scripts/smoke_http_application.py
           python scripts/smoke_http_upload_runtime.py
+          python scripts/smoke_artifact_runtime_provider.py
           python scripts/smoke_bootstrap_locations.py
           python scripts/smoke_provider_proxy_runtime.py
           python scripts/smoke_mcp_client_runtime.py

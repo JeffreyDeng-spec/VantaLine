@@ -1454,3 +1454,5 @@ Text document/preparation close stops new local admission and waits for already 
 The HTTP shell builder changes only Web construction. It starts no worker, opens no connection and changes no deployment topology or drain procedure. Rollback remains restoration of the complete previous immutable release.
 
 The HTTP upload-provider injection adds no rollout setting or resource startup. Production continues using its existing artifact provider until explicit full-app composition is implemented and verified. No separate artifact cleanup or change to disk-budget limits is installed by this slice.
+
+The artifact runtime owner extraction retains process-default production selection and the existing restart requirement for an initialized non-local configuration change. It adds no resource shutdown, disposal, automatic reconfiguration, migration or credential rewrite. Restart and rollback still operate on complete releases.

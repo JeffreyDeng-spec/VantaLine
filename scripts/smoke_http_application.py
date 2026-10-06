@@ -18,7 +18,7 @@ from local_inspection_service.runtime.http_application import create_http_applic
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / 'tests/backend_contract/http_application_baseline.py'
-BASELINE_SHA = '8080eb58863b4955a99e6f3f0447c7917e61afb7aab3043deac69c5871ecc27c'
+BASELINE_SHA = 'eb7d464414cee11ffc76c9b7a1f339b71d2aa760ae995b5a8d28800442ec39a3'
 
 
 def original(environment):

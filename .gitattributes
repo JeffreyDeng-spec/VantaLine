@@ -1,1 +1,3 @@
 scripts/install_release.sh text eol=lf
+tests/backend_contract/http_application_baseline.py text eol=lf
+tests/backend_contract/artifact_runtime_baseline.py text eol=lf
