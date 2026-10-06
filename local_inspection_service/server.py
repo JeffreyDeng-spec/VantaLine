@@ -3151,39 +3151,13 @@ def task_rule_id(value: Any) -> str:
     return re.sub(r"[^a-zA-Z0-9_.@-]+", "_", str(value or "").strip()).strip("_")[:96]
 
 
+
 def task_rule_overrides(config: dict[str, Any], task_id: Any) -> dict[str, Any]:
-    rules = config.get("task_rules") if isinstance(config.get("task_rules"), dict) else {}
-    clean_id = task_rule_id(task_id)
-    raw = rules.get(clean_id) if clean_id else None
-    return raw if isinstance(raw, dict) else {}
+    return _detection_rule_requests.task_rule_overrides(config, task_id)
 
 
 def apply_task_rule_override_to_spec(spec: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    task_id = str(spec.get("task_id") or spec.get("run_id") or "").strip()
-    override = task_rule_overrides(config, task_id)
-    if not override:
-        spec.setdefault("confidence_threshold", float(config.get("confidence_threshold", 0.25)))
-        return spec
-    next_spec = {**spec}
-    try:
-        next_spec["confidence_threshold"] = max(0.001, min(0.99, float(override.get("confidence_threshold", config.get("confidence_threshold", 0.25)))))
-    except (TypeError, ValueError):
-        next_spec["confidence_threshold"] = float(config.get("confidence_threshold", 0.25))
-    selected_ids = {str(item_id) for item_id in next_spec.get("selected_accessory_ids") or []}
-    counts: dict[str, int] = {}
-    for item_id, value in (override.get("required_accessory_counts") or {}).items():
-        clean_item_id = str(item_id)
-        if selected_ids and clean_item_id not in selected_ids:
-            continue
-        try:
-            count = int(value)
-        except (TypeError, ValueError):
-            continue
-        if count > 0:
-            counts[clean_item_id] = count
-    if counts:
-        next_spec["required_accessory_counts"] = counts
-    return next_spec
+    return _detection_rule_requests.apply_task_rule_override_to_spec(spec, config)
 
 
 def accessory_uid(item: dict[str, Any]) -> str:
@@ -9749,81 +9723,67 @@ def delete_ai_config_key() -> dict[str, Any]:
     return public_ai_detection_status()
 
 
+from .detection.task_requests import DetectionTaskRequests
+from .detection.task_request_ports import TaskRequestAccess, TaskRequestPolicy, TaskRequestStore, TaskPipelineSync, TaskRequestClock
+
+_detection_task_requests = DetectionTaskRequests(
+    access=TaskRequestAccess(
+        current_auth_user=lambda: current_auth_user,
+        user_is_admin=lambda: user_is_admin,
+        scope_config_for_user=lambda: scope_config_for_user,
+        current_owner_fields=lambda: current_owner_fields,
+        resource_owner_id_for_new_record=lambda: resource_owner_id_for_new_record,
+        record_owner_id=lambda: record_owner_id,
+        require_record_access=lambda: require_record_access,
+    ),
+    policy=TaskRequestPolicy(
+        assert_unique_task_name=lambda: assert_unique_task_name,
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        ai_detection_task_payload_from_request=lambda: ai_detection_task_payload_from_request,
+        ai_detection_tasks_response=lambda: ai_detection_tasks_response,
+        serialize_ai_detection_task=lambda: serialize_ai_detection_task,
+    ),
+    store=TaskRequestStore(
+        load_config=lambda: load_config,
+        find_ai_detection_task=lambda: find_ai_detection_task,
+        save_ai_detection_task=lambda: save_ai_detection_task,
+        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
+        save_ai_detection_tasks=lambda: save_ai_detection_tasks,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        store_read_cache_invalidate=lambda: store_read_cache_invalidate,
+        delete_ai_detection_task_record=lambda: delete_ai_detection_task_record,
+    ),
+    pipeline=TaskPipelineSync(
+        _pipeline_tasks_lock=lambda: _pipeline_tasks_lock,
+        load_pipeline_tasks=lambda: load_pipeline_tasks,
+        save_pipeline_tasks=lambda: save_pipeline_tasks,
+        sync_ready_pipeline_ai_detection_tasks=lambda: sync_ready_pipeline_ai_detection_tasks,
+        mark_pipeline_ai_task_deleted=lambda: mark_pipeline_ai_task_deleted,
+    ),
+    clock=TaskRequestClock(
+        time=lambda: time,
+        uuid=lambda: uuid,
+    ),
+)
+
+
 @app.get("/api/ai/tasks")
 def get_ai_detection_tasks(user_id: str | None = None) -> dict[str, Any]:
-    user = current_auth_user()
-    target_user_id = user_id if user_is_admin(user) else None
-    config = scope_config_for_user(load_config(), user, target_user_id)
-    with _pipeline_tasks_lock:
-        tasks = load_pipeline_tasks()
-        if sync_ready_pipeline_ai_detection_tasks(tasks, config, user, target_user_id):
-            save_pipeline_tasks(tasks)
-    return ai_detection_tasks_response(config, user=user, target_user_id=target_user_id)
+    return _detection_task_requests.get_ai_detection_tasks(user_id)
 
 
 @app.post("/api/ai/tasks")
 def create_ai_detection_task(request: AiDetectionTaskRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    config = scope_config_for_user(load_config(), user)
-    payload = ai_detection_task_payload_from_request(request, config)
-    assert_unique_task_name(payload["name"], resource_owner_id_for_new_record(user))
-    now = time.time()
-    task = {
-        "id": f"aitask_{uuid.uuid4().hex[:10]}",
-        "created_at": now,
-        "updated_at": now,
-        **current_owner_fields(),
-        **payload,
-    }
-    save_ai_detection_task(task, prepend=True)
-    response = ai_detection_tasks_response(scope_config_for_user(config, user), task["id"], user=user)
-    response["status"] = "saved"
-    response["task"] = serialize_ai_detection_task(task, config)
-    return response
+    return _detection_task_requests.create_ai_detection_task(request)
 
 
 @app.put("/api/ai/tasks/{task_id}")
 def update_ai_detection_task(task_id: str, request: AiDetectionTaskRequest) -> dict[str, Any]:
-    user = current_auth_user()
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    config = scope_config_for_user(load_config(), user)
-    payload = ai_detection_task_payload_from_request(request, config)
-    existing = find_ai_detection_task(clean_task_id)
-    if existing:
-        require_record_access(existing, user, write=True)
-        assert_unique_task_name(payload["name"], record_owner_id(existing), exclude_ai_task_id=clean_task_id)
-        task = {
-            **existing,
-            **payload,
-            "id": clean_task_id,
-            "created_at": float(existing.get("created_at") or time.time()),
-            "updated_at": time.time(),
-        }
-        save_ai_detection_task(task)
-        response = ai_detection_tasks_response(scope_config_for_user(config, user), clean_task_id, user=user)
-        response["status"] = "saved"
-        response["task"] = serialize_ai_detection_task(task, config)
-        return response
-    raise HTTPException(status_code=404, detail="AI detection task not found")
+    return _detection_task_requests.update_ai_detection_task(task_id, request)
 
 
 def delete_ai_detection_task_record(task_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> str | None:
-    clean_task_id = sanitize_ai_detection_task_id(task_id)
-    existing = find_ai_detection_task(clean_task_id)
-    if not existing:
-        if missing_ok:
-            return None
-        raise HTTPException(status_code=404, detail="AI detection task not found")
-    require_record_access(existing, user, write=True)
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        store_read_cache_invalidate("ai_detection_tasks")
-        repository.delete_by_primary_key("ai_detection_tasks", {"id": clean_task_id})
-    else:
-        tasks = load_ai_detection_tasks()
-        remaining = [task for task in tasks if task.get("id") != clean_task_id]
-        save_ai_detection_tasks(remaining)
-    return clean_task_id
+    return _detection_task_requests.delete_ai_detection_task_record(task_id, user, missing_ok=missing_ok)
 
 
 from .pipeline.task_mutations import PipelineTaskMutations
@@ -9856,14 +9816,7 @@ def mark_pipeline_ai_task_deleted(ai_task_id: str, user: dict[str, Any]) -> int:
 
 @app.delete("/api/ai/tasks/{task_id}")
 def delete_ai_detection_task(task_id: str) -> dict[str, Any]:
-    user = current_auth_user()
-    config = load_config()
-    clean_task_id = delete_ai_detection_task_record(task_id, user) or sanitize_ai_detection_task_id(task_id)
-    mark_pipeline_ai_task_deleted(clean_task_id, user)
-    response = ai_detection_tasks_response(scope_config_for_user(config, user), user=user)
-    response["status"] = "deleted"
-    response["deleted_task_id"] = clean_task_id
-    return response
+    return _detection_task_requests.delete_ai_detection_task(task_id)
 
 
 from .training.auto_optimization_requests import AutoOptimizationRequests
@@ -9926,58 +9879,19 @@ def approve_ai_task_auto_optimize_sample(
     return _auto_optimization_requests.approve_ai_task_auto_optimize_sample(task_id, sample_id, request)
 
 
-@app.post("/api/config/rules")
-def update_rules(rule: RuleConfig) -> dict[str, Any]:
-    if not 0.0 <= rule.confidence_threshold <= 1.0:
-        raise HTTPException(status_code=400, detail="confidence_threshold must be between 0 and 1")
-    unknown = [cls for cls in rule.required_classes if cls not in CLASS_NAMES]
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Unknown class IDs: {unknown}")
-    config = load_config()
-    config["confidence_threshold"] = rule.confidence_threshold
-    config["required_classes"] = rule.required_classes
-    config["min_counts"] = {str(k): max(1, int(v)) for k, v in rule.min_counts.items()}
-    save_config(config)
-    return {"status": "saved", "rule": config}
+from .detection.rule_api import compose_detection_rule_api
+from .detection.rule_request_ports import RulePolicy, RuleStore, RuleAccess
 
-
-@app.post("/api/config/task-rules/{task_id}")
-def update_task_rules(task_id: str, rule: TaskRuleConfig) -> dict[str, Any]:
-    clean_task_id = task_rule_id(task_id)
-    if not clean_task_id:
-        raise HTTPException(status_code=400, detail="task_id is required")
-    if not 0.0 <= rule.confidence_threshold <= 1.0:
-        raise HTTPException(status_code=400, detail="confidence_threshold must be between 0 and 1")
-    user = current_auth_user()
-    config = load_config()
-    specs = [
-        spec
-        for spec in list_trained_model_specs(config)
-        if task_rule_id(spec.get("task_id") or spec.get("run_id") or "") == clean_task_id and record_visible_to_user(spec, user)
-    ]
-    if not specs:
-        raise HTTPException(status_code=404, detail="Detection task not found")
-    selected_ids = {str(item_id) for spec in specs for item_id in (spec.get("selected_accessory_ids") or [])}
-    counts: dict[str, int] = {}
-    for item_id, raw_count in (rule.required_accessory_counts or {}).items():
-        clean_item_id = str(item_id or "").strip()
-        if not clean_item_id or clean_item_id not in selected_ids:
-            continue
-        try:
-            count = int(raw_count)
-        except (TypeError, ValueError):
-            continue
-        if count > 0:
-            counts[clean_item_id] = max(1, min(99, count))
-    if not counts:
-        raise HTTPException(status_code=400, detail="At least one required accessory is needed")
-    config.setdefault("task_rules", {})[clean_task_id] = {
-        "confidence_threshold": max(0.001, min(0.99, float(rule.confidence_threshold))),
-        "required_accessory_counts": counts,
-        "updated_at": time.time(),
-    }
-    save_config(config)
-    return {"status": "saved", "task_id": clean_task_id, "rule": config["task_rules"][clean_task_id]}
+_detection_rule_requests = compose_detection_rule_api(
+    app,
+    policy=RulePolicy(task_rule_id=task_rule_id, CLASS_NAMES=CLASS_NAMES),
+    store=RuleStore(load_config=load_config, save_config=save_config,
+                    list_trained_model_specs=list_trained_model_specs, time=time),
+    access=RuleAccess(current_auth_user=current_auth_user,
+                      record_visible_to_user=record_visible_to_user),
+)
+update_rules = _detection_rule_requests.update_rules
+update_task_rules = _detection_rule_requests.update_task_rules
 
 
 from .accessories.catalog import AccessoryCatalog, CatalogDependencies
@@ -10248,6 +10162,29 @@ async def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(No
     return await _image_upload.analyze_image(file, model_id)
 
 
+from .detection.camera_request import CameraDetectionRequest
+from .detection.camera_request_ports import CameraRequestAccess, CameraDispatchEvidence, CameraImageExecution
+
+_camera_detection_request = CameraDetectionRequest(
+    access=CameraRequestAccess(
+        ensure_dirs=lambda: ensure_dirs,
+        require_analyze_model_permission=lambda: require_analyze_model_permission,
+        require_plc_web_serial_station=lambda: require_plc_web_serial_station,
+    ),
+    evidence=CameraDispatchEvidence(
+        plc_web_serial_begin_camera_detection=lambda: plc_web_serial_begin_camera_detection,
+        plc_web_serial_finish_camera_detection=lambda: plc_web_serial_finish_camera_detection,
+        plc_web_serial_dispatch_public=lambda: plc_web_serial_dispatch_public,
+    ),
+    images=CameraImageExecution(
+        UPLOAD_DIR=lambda: UPLOAD_DIR,
+        _business_files=lambda: _business_files,
+        safe_name=lambda: safe_name,
+        analyze_bgr=lambda: analyze_bgr,
+    ),
+)
+
+
 @app.post("/api/analyze/camera")
 async def analyze_camera_image(
     request: Request,
@@ -10256,53 +10193,7 @@ async def analyze_camera_image(
     plc_session_id: str = Form(...),
     camera_request_id: str = Form(...),
 ) -> dict[str, Any]:
-    ensure_dirs()
-    require_analyze_model_permission(model_id)
-    station = require_plc_web_serial_station(request)
-    payload = await file.read()
-    fingerprint = hashlib.sha256(payload).hexdigest()
-    try:
-        dispatch, created = plc_web_serial_begin_camera_detection(
-            str(station["id"]),
-            plc_session_id,
-            camera_request_id,
-            str(model_id or "").strip(),
-            fingerprint,
-        )
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if not created:
-        stored_result = dispatch.get("result")
-        if isinstance(stored_result, dict):
-            return {**stored_result, "plc_sync": plc_web_serial_dispatch_public(dispatch)}
-        raise HTTPException(status_code=409, detail="plc_camera_request_in_progress")
-
-    arr = np.frombuffer(payload, np.uint8)
-    image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    dispatch_id = str(dispatch["dispatch_id"])
-    if image is None:
-        plc_web_serial_finish_camera_detection(
-            str(station["id"]), dispatch_id, plc_session_id, None, "image_decode_failed"
-        )
-        raise HTTPException(status_code=400, detail="Could not decode image")
-
-    request_id = f"camera_{safe_name(camera_request_id)}"
-    upload_path = UPLOAD_DIR / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
-    try:
-        _business_files.write_bytes(upload_path, payload)
-        result = analyze_bgr(image, request_id, model_id, image_path=upload_path)
-        completed_dispatch = plc_web_serial_finish_camera_detection(
-            str(station["id"]), dispatch_id, plc_session_id, result
-        )
-        return {**result, "plc_sync": plc_web_serial_dispatch_public(completed_dispatch)}
-    except Exception as exc:
-        try:
-            plc_web_serial_finish_camera_detection(
-                str(station["id"]), dispatch_id, plc_session_id, None, type(exc).__name__
-            )
-        except Exception:
-            pass
-        raise
+    return await _camera_detection_request.analyze_camera_image(request, file, model_id, plc_session_id, camera_request_id)
 
 
 

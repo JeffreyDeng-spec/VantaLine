@@ -126,3 +126,5 @@ Configuration extraction preserves protected PLC namespace policy and existing t
 The two generic/protected app-configuration write entry helpers now delegate to AppConfigStore. Existing protected PLC keys, namespace transaction, shared reentrant guard and authorization-token reset remain unchanged. This move does not enable legacy workers, open serial ports, create dispatch attempts, change browser leases or retry uncertain physical writes.
 
 The existing camera/lease callers now obtain model permission and account configuration through the explicit auth projection boundary. Permission order and scoped model lookup remain unchanged, as do browser serial ownership, lease/ACK and uncertain-write rules.
+
+Dedicated camera orchestration is implemented in `detection/camera_request.py`; `server.py` retains route composition. It preserves station/permission checks, upload fingerprinting, durable begin-before-analysis, completed-request reuse and pending conflicts, followed by result/error evidence settlement. Ordinary image/video services remain unable to generate browser dispatch plans; no server serial I/O is introduced.

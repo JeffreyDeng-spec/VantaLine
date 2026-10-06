@@ -291,6 +291,7 @@ jobs:
           python scripts/smoke_mcp_client_runtime.py
           python scripts/smoke_mcp_runtime_policy.py
           python scripts/smoke_image_payload_codec.py
+          python scripts/smoke_detection_rule_composition.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
@@ -404,6 +405,7 @@ jobs:
           python scripts/smoke_presence_contracts.py
           python scripts/smoke_profile_cache.py
           python scripts/smoke_detection_upload.py
+          python scripts/smoke_camera_detection_request.py
           python scripts/smoke_detection_media.py
           python scripts/smoke_provider_foundations.py
           python scripts/smoke_openai_transport.py
@@ -484,6 +486,8 @@ jobs:
           python scripts/smoke_detection_ocr.py
           python scripts/smoke_detection_task_store.py --postgres
           python scripts/smoke_detection_task_catalog.py
+          python scripts/smoke_detection_task_requests.py
+          python scripts/smoke_detection_rules.py
           python scripts/smoke_local_model_runtime.py
           python scripts/smoke_local_model_selection.py
           python scripts/smoke_yolo_warmup.py

@@ -1,5 +1,5 @@
 {
-  "version": 169,
+  "version": 173,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -495,6 +495,13 @@
     "model_providers/mcp_client.py",
     "model_providers/mcp_runtime.py",
     "detection/warmup_requests.py",
-    "detection/warmup_api.py"
+    "detection/warmup_api.py",
+    "detection/task_requests.py",
+    "detection/task_request_ports.py",
+    "detection/rule_requests.py",
+    "detection/rule_request_ports.py",
+    "detection/camera_request.py",
+    "detection/camera_request_ports.py",
+    "detection/rule_api.py"
   ]
 }
