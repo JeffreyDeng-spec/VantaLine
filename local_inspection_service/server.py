@@ -1490,7 +1490,6 @@ from .training.auto_optimization_settings import AutoOptimizationSettings, norma
 AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE = max(0, min(20, int(os.environ.get("VANTALINE_AUTO_OPT_NEGATIVES_PER_REAL_IMAGE", "3"))))
 _auto_optimization_settings = AutoOptimizationSettings(AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE)
 _auto_optimize_image_request_semaphore = threading.BoundedSemaphore(AUTO_OPTIMIZE_MASK_MAX_PARALLEL)
-_data_analysis_store_lock = threading.RLock()
 _windows_worker_status_lock = threading.RLock()
 _windows_worker_status_cache: dict[str, Any] = {}
 _windows_worker_status_cache_at = 0.0
@@ -4251,28 +4250,70 @@ from .analytics.analysis_service import AnalysisAccess, AnalysisRecords
 from .analytics.analysis_queries import AnalysisPresentation, AnalysisQueries
 from .analytics.analysis_api import register_analysis_api
 
-_analysis_normalizer = AnalysisNormalizer(AnalysisNormalization(
+from .analytics.analysis_processing import (
+    ProcessingDependencies, ProcessingProjection, image_processing_status,
+    image_processing_type_label, image_processing_summary,
+)
+from .analytics.analysis_scope import ScopeDependencies, AnalysisScope, data_analysis_scope_match_key, data_analysis_count_for_scope_item
+from .analytics.analysis_projection import ProjectionDependencies, AnalysisProjection, public_data_analysis_ai_result
+from .analytics.analysis_publication import PublicationDependencies, AnalysisPublisher
+from .analytics.analysis_composition import AnalysisServices, AnalysisStorage
+
+_analysis = AnalysisServices(
+    normalization=AnalysisNormalization(
     default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
     clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
     created_at=lambda record: record_created_at(record), updated_at=lambda record: record_updated_at(record),
     owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
-))
-_analysis_repository = AnalysisRepository(AnalysisStoreDependencies(
+),
+    storage=AnalysisStorage(
     path=lambda: DATA_ANALYSIS_RECORDS_PATH, runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    lock=lambda: _data_analysis_store_lock, ensure_dirs=lambda: ensure_dirs(),
-), normalize=_analysis_normalizer.normalize_data_analysis_record)
-_analysis_records = AnalysisRecords(_analysis_repository, AnalysisAccess(
+    ensure_dirs=lambda: ensure_dirs(),
+),
+    access=AnalysisAccess(
     is_admin=lambda user: user_is_admin(user),
     visible=lambda record, user, target: record_visible_to_user(record, user, target),
     require_access=lambda record, user, *, write=False: require_record_access(record, user, write=write),
-))
-_analysis_queries = AnalysisQueries(_analysis_records, AnalysisPresentation(
-    cache_scope=lambda: read_path_cache_scope(),
-    processing_items=lambda record, **kwargs: data_analysis_image_processing_items(record, **kwargs),
-    record=lambda record, **kwargs: public_data_analysis_record(record, **kwargs),
-    task_groups=lambda records, **kwargs: data_analysis_task_groups(records, **kwargs),
-    processing_summary=lambda items: image_processing_summary(items),
-), batch_limit=DATA_ANALYSIS_BATCH_LIMIT)
+),
+    processing=ProcessingDependencies(
+    safe_id=lambda value: safe_record_id(value), bounded_text=lambda value, length: bounded_text(value, length),
+    sanitize_paths=lambda value: public_path_sanitized(value),
+    output_url=lambda path: public_output_url_for_existing(path), resolve_path=lambda path: resolve_service_path(path),
+    load_json=lambda path: load_json_file_mtime_cached(path), current_cache=lambda: _read_path_cache.get(),
+    created_at=lambda record: record_created_at(record), updated_at=lambda record: record_updated_at(record),
+    auto_state=lambda task_id: load_auto_optimize_state(task_id),
+),
+    scope=ScopeDependencies(
+    current_user=lambda: current_auth_user(), load_config=lambda: load_config(),
+    scope_config=lambda config, user: scope_config_for_user(config, user),
+    accessory_lookup=lambda config: accessory_lookup_by_id(config), detection_tasks=lambda: load_ai_detection_tasks(),
+    serialize_task=lambda task, config: serialize_ai_detection_task(task, config),
+    normalize_counts=lambda counts: normalize_ai_detection_task_counts(counts),
+    accessory_id=lambda item: accessory_uid(item), accessory_aliases=lambda item: accessory_id_aliases(item),
+    english_name=lambda value: compact_english_accessory_name(value), bounded_text=lambda value, length: bounded_text(value, length),
+),
+    projection=ProjectionDependencies(
+    created_at=lambda record: record_created_at(record), updated_at=lambda record: record_updated_at(record),
+    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
+    default_task_label=AI_DETECTION_LABEL, output_directory=lambda: OUTPUT_DIR,
+    resolve_path=lambda path: resolve_service_path(path), path_is_under=lambda path, root: path_is_under(path, root),
+),
+    publication=PublicationDependencies(
+    current_user=lambda: _request_user.get(), owner_fields=lambda: current_owner_fields(),
+    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
+    default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
+    clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
+    string_list=lambda value, **kwargs: string_list(value, **kwargs),
+    resolve_path=lambda path: resolve_service_path(path), safe_name=lambda value: safe_name(value),
+    output_url=lambda path: public_output_url_for_existing(path),
+    capture=lambda record, result, request_id, path: record_auto_optimize_capture(record, result, request_id, path),
+),
+    cache_scope=lambda: read_path_cache_scope(), batch_limit=DATA_ANALYSIS_BATCH_LIMIT,
+)
+_analysis_normalizer = _analysis.normalizer
+_analysis_repository = _analysis.repository
+_analysis_records = _analysis.records
+_analysis_queries = _analysis.queries
 
 normalize_data_analysis_record = _analysis_normalizer.normalize_data_analysis_record
 data_analysis_records_temp_path = _analysis_repository.data_analysis_records_temp_path
@@ -4285,47 +4326,11 @@ data_analysis_records_for_user = _analysis_records.data_analysis_records_for_use
 find_data_analysis_record = _analysis_records.find_data_analysis_record
 
 
-from .analytics.analysis_processing import (
-    ProcessingDependencies, ProcessingProjection, image_processing_status,
-    image_processing_type_label, image_processing_summary,
-)
-from .analytics.analysis_scope import ScopeDependencies, AnalysisScope, data_analysis_scope_match_key, data_analysis_count_for_scope_item
-from .analytics.analysis_projection import ProjectionDependencies, AnalysisProjection, public_data_analysis_ai_result
-from .analytics.analysis_publication import PublicationDependencies, AnalysisPublisher
 
-_analysis_processing = ProcessingProjection(ProcessingDependencies(
-    safe_id=lambda value: safe_record_id(value), bounded_text=lambda value, length: bounded_text(value, length),
-    sanitize_paths=lambda value: public_path_sanitized(value),
-    output_url=lambda path: public_output_url_for_existing(path), resolve_path=lambda path: resolve_service_path(path),
-    load_json=lambda path: load_json_file_mtime_cached(path), current_cache=lambda: _read_path_cache.get(),
-    created_at=lambda record: record_created_at(record), updated_at=lambda record: record_updated_at(record),
-    auto_state=lambda task_id: load_auto_optimize_state(task_id),
-))
-_analysis_scope = AnalysisScope(ScopeDependencies(
-    current_user=lambda: current_auth_user(), load_config=lambda: load_config(),
-    scope_config=lambda config, user: scope_config_for_user(config, user),
-    accessory_lookup=lambda config: accessory_lookup_by_id(config), detection_tasks=lambda: load_ai_detection_tasks(),
-    serialize_task=lambda task, config: serialize_ai_detection_task(task, config),
-    normalize_counts=lambda counts: normalize_ai_detection_task_counts(counts),
-    accessory_id=lambda item: accessory_uid(item), accessory_aliases=lambda item: accessory_id_aliases(item),
-    english_name=lambda value: compact_english_accessory_name(value), bounded_text=lambda value, length: bounded_text(value, length),
-))
-_analysis_projection = AnalysisProjection(ProjectionDependencies(
-    created_at=lambda record: record_created_at(record), updated_at=lambda record: record_updated_at(record),
-    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
-    default_task_label=AI_DETECTION_LABEL, output_directory=lambda: OUTPUT_DIR,
-    resolve_path=lambda path: resolve_service_path(path), path_is_under=lambda path, root: path_is_under(path, root),
-), _analysis_processing, _analysis_scope)
-_analysis_publisher = AnalysisPublisher(PublicationDependencies(
-    current_user=lambda: _request_user.get(), owner_fields=lambda: current_owner_fields(),
-    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
-    default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
-    clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
-    string_list=lambda value, **kwargs: string_list(value, **kwargs),
-    resolve_path=lambda path: resolve_service_path(path), safe_name=lambda value: safe_name(value),
-    output_url=lambda path: public_output_url_for_existing(path),
-    capture=lambda record, result, request_id, path: record_auto_optimize_capture(record, result, request_id, path),
-), _analysis_repository, _analysis_processing)
+_analysis_processing = _analysis.processing
+_analysis_scope = _analysis.scope
+_analysis_projection = _analysis.projection
+_analysis_publisher = _analysis.publisher
 
 image_processing_public_url = _analysis_processing.image_processing_public_url
 image_processing_item = _analysis_processing.image_processing_item

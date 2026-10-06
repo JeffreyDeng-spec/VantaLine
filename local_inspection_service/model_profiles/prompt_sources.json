@@ -1,5 +1,5 @@
 {
-  "version": 173,
+  "version": 174,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -502,6 +502,7 @@
     "detection/rule_request_ports.py",
     "detection/camera_request.py",
     "detection/camera_request_ports.py",
-    "detection/rule_api.py"
+    "detection/rule_api.py",
+    "analytics/analysis_composition.py"
   ]
 }
