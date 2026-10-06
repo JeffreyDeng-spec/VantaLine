@@ -3149,6 +3149,7 @@ _accessory_refresh = AccessoryRefresh(
         generate=lambda item, **kwargs: generate_accessory_ai_profile(item, **kwargs),
     ),
 )
+_accessory_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _candidate_factory = CandidateFactory(
     CandidateMedia(
         expand_sources=lambda identifier, sources: expand_accessory_reference_sources(identifier, sources),
@@ -3168,7 +3169,7 @@ _candidate_factory = CandidateFactory(
         owner_fields=lambda: current_owner_fields(),
         directory=lambda: ACCESSORY_CANDIDATES_DIR,
         save=lambda path, item: save_accessory_candidate(path, item),
-    ),
+    ), images=_accessory_image_io
 )
 
 
@@ -3179,7 +3180,6 @@ def build_object_view_plan(name: str) -> list[dict[str, Any]]:
 from .accessories.preview_assets import select_document_image_candidate as _select_document_image_candidate_impl
 from .accessories.preview_assets import PreviewAssetLoader as _PreviewAssetLoader
 from .accessories.preview_asset_ports import PreviewAssetPolicy as _PreviewAssetPolicy, PreviewAssetPaths as _PreviewAssetPaths, PreviewAssetOperations as _PreviewAssetOperations
-_accessory_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _preview_asset_loader = _PreviewAssetLoader(
     _PreviewAssetPolicy(root=lambda: ROOT, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PreviewAssetPaths(resolve=lambda: resolve_service_path),
@@ -6959,7 +6959,7 @@ _accessory_gallery = AccessoryGallery(
         current_user=lambda: current_auth_user(),
         redact=lambda item, user: redact_accessory_payload_for_user(item, user),
     ),
-    _accessory_projection,
+    _accessory_projection, files=_business_files, images=_accessory_image_io
 )
 
 
