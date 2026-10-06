@@ -207,7 +207,7 @@ def main():
                 "enabled"
             ]
             repo = LabelRepository(raw())
-            media = MediaStore(root / "label_inspection" / "media")
+            media = MediaStore(root / "label_inspection" / "media", runtime_provider=get_runtime)
             claimed = repo.claim()
             calls = []
 

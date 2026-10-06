@@ -142,7 +142,7 @@ def test_worker_and_cli_lifecycle(storage,tmp_path,monkeypatch,mode,expected):
     import sys
     import threading
     from local_inspection_service.codex_compare.media import MediaStore
-    media=MediaStore(tmp_path/'media')
+    media=MediaStore(tmp_path/'media', runtime_provider=get_runtime)
     buffer=io.BytesIO();Image.new('RGB',(100,100),'white').save(buffer,'PNG')
     evidence=media.image('a',buffer.getvalue())
     repo=storage();repo.create('a','worker-request',{'reference':evidence,'actual':evidence})
@@ -241,7 +241,7 @@ def test_v2_worker_explicit_skill_and_cli(storage,tmp_path,monkeypatch):
     import json
     from local_inspection_service.codex_compare.media import MediaStore
     from local_inspection_service.codex_compare.label_contracts import DIMENSIONS
-    media=MediaStore(tmp_path/'media')
+    media=MediaStore(tmp_path/'media', runtime_provider=get_runtime)
     buffer=io.BytesIO();Image.new('RGB',(100,100),'white').save(buffer,'PNG')
     evidence=media.image('a',buffer.getvalue())
     repo=storage();repo.create('a','v2-worker-request',{'reference':evidence,'actual':evidence},report_version='label-v2')
