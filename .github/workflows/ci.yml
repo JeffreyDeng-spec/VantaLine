@@ -445,6 +445,7 @@ jobs:
           python scripts/smoke_comparison_thread_drain.py
           python scripts/smoke_text_record_store.py --root --postgres
           python scripts/smoke_text_media.py --root
+          python scripts/smoke_text_media_runtime_port.py
           python scripts/smoke_text_revisions.py --root
           python scripts/smoke_text_standards.py
           python scripts/smoke_text_comparison_api.py --root

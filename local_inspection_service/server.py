@@ -12018,6 +12018,7 @@ from local_inspection_service.text_inspection.images import (
 )
 
 _text_media = TextMedia(
+    runtime_provider=_business_files.runtime_provider,
     directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
     digest=lambda contents: sha256_bytes(contents),
     records=TextMediaRecords(
