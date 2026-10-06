@@ -1,5 +1,5 @@
 {
-  "version": 196,
+  "version": 197,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -520,6 +520,7 @@
     "runtime/bootstrap_locations.py",
     "analytics/cost_composition.py",
     "runtime/application_foundation.py",
-    "text_inspection/job_admission.py"
+    "text_inspection/job_admission.py",
+    "runtime/http_application.py"
   ]
 }

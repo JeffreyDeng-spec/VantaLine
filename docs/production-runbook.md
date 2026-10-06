@@ -1450,3 +1450,5 @@ Automatic-mask Futures now finish after their repository scope exits. This close
 Automatic-mask child tasks now resolve downstream training-vision settings under the parent task model snapshot. This is an intentional correction to prior bare-thread-pool context loss. Only that model binding crosses threads; repository selections stay thread-local and retain per-task cleanup. No paid retries, task requeue, global identity propagation or additional worker service is introduced.
 
 Text document/preparation close stops new local admission and waits for already admitted preparation and owned native threads. An uncertain start can remain undrained until its handle can be joined, even if the unentered target was revoked and its slot safely returned. Never clear durable classification/preparation attempts or retry calls to force drain. This prerequisite does not yet install application-wide shutdown integration.
+
+The HTTP shell builder changes only Web construction. It starts no worker, opens no connection and changes no deployment topology or drain procedure. Rollback remains restoration of the complete previous immutable release.

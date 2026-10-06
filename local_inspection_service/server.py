@@ -869,38 +869,13 @@ save_auth_session_touch_or_prune = _auth_repository.save_auth_session_touch_or_p
 for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, IMAGE_WORKER_LOG_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="VantaLine Local Inspection Service", docs_url=None, redoc_url=None, openapi_url=None)
-from .storage.artifacts.admission import UploadAdmission
-if os.environ.get("VANTALINE_FILE_STORE", "local") != "local":
-    app.add_middleware(UploadAdmission)
-app.add_middleware(GZipMiddleware, minimum_size=1024)
-
-LOCAL_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
-LAN_CORS_ORIGIN_REGEX = (
-    r"^https?://("
-    r"10(?:\.\d{1,3}){3}|"
-    r"192\.168(?:\.\d{1,3}){2}|"
-    r"172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}|"
-    r"[^/:]+\.local"
-    r")(?::\d+)?$"
+from .runtime.http_application import (
+    create_http_application, LOCAL_CORS_ORIGIN_REGEX, LAN_CORS_ORIGIN_REGEX,
 )
-CORS_ORIGIN_REGEX = os.environ.get(
-    "INSPECTION_CORS_ORIGIN_REGEX",
-    LAN_CORS_ORIGIN_REGEX if os.environ.get("INSPECTION_ENABLE_LAN_CORS") == "1" else LOCAL_CORS_ORIGIN_REGEX,
-)
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("INSPECTION_CORS_ORIGINS", "").split(",")
-    if origin.strip()
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_origin_regex=CORS_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+_http_application = create_http_application(os.environ)
+app = _http_application.app
+CORS_ORIGINS = _http_application.cors_origins
+CORS_ORIGIN_REGEX = _http_application.cors_origin_regex
 
 from .auth.public_network import PublicNetworkPolicy
 from .auth.public_network_ports import OriginPolicy, PublicEndpointPolicy, RuntimeDetailAccess
