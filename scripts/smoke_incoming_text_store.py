@@ -29,9 +29,7 @@ class Fixture:
         self.directory=Path(directory);self.paths={kind:self.directory/(kind+'.json') for kind in ('references','inspections','audit')}
         self.data={path:[] for path in self.paths.values()};self.events=[];self.repo=None;self.choices=[];self.write_error=None;self.lock=threading.RLock()
         self.store=IncomingTextStore(self.repository,self.guard,IncomingPaths(*(lambda kind=kind:self.paths[kind] for kind in ('references','inspections','audit'))),
-            IncomingRows(self.serialize_reference,self.serialize_inspection,self.serialize_audit,lambda:row_raw_json_list),self.read,self.write,
-            load_references=lambda:self.store.load_incoming_text_references(),
-            load_inspections=lambda:self.store.load_incoming_text_inspections())
+            IncomingRows(self.serialize_reference,self.serialize_inspection,self.serialize_audit,lambda:row_raw_json_list),self.read,self.write)
     def repository(self):
         self.events.append(('repository',));value=self.choices.pop(0) if self.choices else self.repo
         if isinstance(value,Exception):raise value
@@ -55,6 +53,24 @@ class Fixture:
 class IncomingStoreContracts(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='incoming-store-');self.addCleanup(self.temp.cleanup);self.f=Fixture(self.temp.name)
+    def test_two_store_lookups_do_not_cross_instance_loaders(self):
+        other = Fixture(Path(self.temp.name)/'other')
+        self.f.data[self.f.paths['references']] = [reference(name='first')]
+        other.data[other.paths['references']] = [reference(name='second')]
+        self.f.data[self.f.paths['inspections']] = [inspection(name='first')]
+        other.data[other.paths['inspections']] = [inspection(name='second')]
+        self.assertIsNot(self.f.lock, other.lock)
+        for plural, identifier in [('references','ref'), ('inspections','inspection')]:
+            single = 'load_incoming_text_' + plural[:-1]
+            loader = 'load_incoming_text_' + plural
+            self.assertEqual(getattr(self.f.store,single)(identifier)['name'], 'first')
+            self.assertEqual(getattr(other.store,single)(identifier)['name'], 'second')
+            with patch.object(self.f.store,loader,side_effect=RuntimeError('first failed')):
+                with self.assertRaisesRegex(RuntimeError,'first failed'):
+                    getattr(self.f.store,single)(identifier)
+                self.assertEqual(getattr(other.store,single)(identifier)['name'], 'second')
+            self.assertEqual(getattr(self.f.store,single)(identifier)['name'], 'first')
+
     @staticmethod
     def fail_once(callback,error):
         attempts=[]
@@ -305,6 +321,13 @@ class IncomingStoreContracts(unittest.TestCase):
         from local_inspection_service import server
         self.assertIs(server._incoming_text_json_list,json_records.read_json_list);self.assertIs(server._save_incoming_text_json_list,json_records.write_json_list)
         self.assertIs(server._incoming_text_store.guard(),server._text_records.dependencies.guard())
+        self.assertIs(server._incoming_text_store,server._text_storage.incoming)
+        self.assertIs(server._text_records,server._text_storage.records)
+        self.assertIs(server._incoming_text_store_lock,server._text_storage.lock)
+        with patch.object(server,'_incoming_text_store_lock',threading.RLock()):
+            self.assertIs(server._incoming_text_store.guard(),server._text_storage.lock)
+            self.assertIs(server._text_records.dependencies.guard(),server._text_storage.lock)
+            self.assertIsNot(server._incoming_text_store.guard(),server._incoming_text_store_lock)
         target=Path(self.temp.name)/'late.json'
         with patch.object(server,'INCOMING_TEXT_REFERENCES_PATH',target),patch.object(server,'incoming_text_reference_row',return_value=None) as serializer,patch.object(server,'runtime_postgres_repository_or_none') as factory:
             self.assertEqual(server._incoming_text_store.paths.references(),target)
@@ -313,7 +336,7 @@ class IncomingStoreContracts(unittest.TestCase):
         with patch.object(server,'runtime_postgres_repository_or_none',side_effect=RuntimeError('late')):
             with self.assertRaisesRegex(RuntimeError,'late'):server.load_incoming_text_inspection('inspection')
     @unittest.skipUnless(ROOT_CHECK,'use --root for application composition')
-    def test_root_single_lookup_observes_replaced_public_list_loader(self):
+    def test_root_single_lookup_uses_its_store_list_loader(self):
         runtime=Path(self.temp.name)/'runtime';(runtime/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(runtime),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
@@ -327,8 +350,8 @@ class IncomingStoreContracts(unittest.TestCase):
                 with self.subTest(kind=kind,missing=missing):
                     name='load_incoming_text_'+kind;initial=Mock(return_value=[])
                     replacement=None if missing else Mock(return_value=[{'id':'wanted'}])
-                    def repository():setattr(server,name,replacement);return None
-                    with patch.object(server,name,initial),patch.object(server,'runtime_postgres_repository_or_none',side_effect=repository) as factory:
+                    def repository():setattr(server._incoming_text_store,name,replacement);return None
+                    with patch.object(server._incoming_text_store,name,initial),patch.object(server,'runtime_postgres_repository_or_none',side_effect=repository) as factory:
                         fn=getattr(server,'load_incoming_text_'+kind[:-1])
                         if missing:
                             with self.assertRaises(TypeError):fn('wanted')

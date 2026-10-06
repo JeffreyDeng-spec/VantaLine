@@ -1377,7 +1377,25 @@ _yolo_warmup_runtime = YoloWarmup(WarmupOperations(
 ), scope=_runtime_repositories.thread_scope)
 _yolo_warmup_lock = _yolo_warmup_runtime.lock
 _yolo_warmup_state = _yolo_warmup_runtime.state
-_incoming_text_store_lock = threading.RLock()
+from .text_inspection.storage_composition import TextStorage, TextStoragePaths, TextStorageJSON
+from .text_inspection.incoming_store import IncomingPaths, IncomingRows
+
+_text_storage = TextStorage(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    paths=TextStoragePaths(
+        records=lambda: TEXT_INSPECTION_JSON_DIR,
+        incoming=IncomingPaths(references=lambda: INCOMING_TEXT_REFERENCES_PATH,
+                               inspections=lambda: INCOMING_TEXT_INSPECTIONS_PATH,
+                               audit=lambda: INCOMING_TEXT_AUDIT_PATH),
+    ),
+    rows=IncomingRows(reference=lambda record: incoming_text_reference_row(record),
+                      inspection=lambda record: incoming_text_inspection_row(record),
+                      audit=lambda event: audit_event_row(event), decode=lambda: row_raw_json_list),
+    json_io=TextStorageJSON(reader=lambda: _incoming_text_json_list,
+                           writer=lambda: _save_incoming_text_json_list),
+    tables=lambda: TEXT_INSPECTION_TABLES,
+)
+_incoming_text_store_lock = _text_storage.lock
 from .accessories.cutout_runtime import RembgSessionRuntime as _RembgSessionRuntime
 _rembg_runtime = _RembgSessionRuntime()
 from .runtime.image_worker import ImageWorkerRuntime
@@ -11970,18 +11988,10 @@ advance_pipeline_task_endpoint, cancel_pipeline_advance_endpoint = register_pipe
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
 from local_inspection_service.text_inspection.record_store import (
-    TEXT_INSPECTION_TABLES, TextRecordDependencies, TextRecordStore, record_row as _text_v2_row,
+    TEXT_INSPECTION_TABLES, record_row as _text_v2_row,
 )
 
-_text_records = TextRecordStore(TextRecordDependencies(
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    guard=lambda: _incoming_text_store_lock,
-    directory=lambda: TEXT_INSPECTION_JSON_DIR,
-    tables=lambda: TEXT_INSPECTION_TABLES,
-    json_reader=lambda: _incoming_text_json_list,
-    json_writer=lambda: _save_incoming_text_json_list,
-    row_decoder=lambda: row_raw_json_list,
-))
+_text_records = _text_storage.records
 
 
 def _text_v2_json_path(kind: str) -> Path:
@@ -12437,20 +12447,8 @@ review_text_inspection_v2 = _inspection_routes.review_text_inspection_v2
 from .runtime.json_records import (
     read_json_list as _incoming_text_json_list, write_json_list as _save_incoming_text_json_list,
 )
-from .text_inspection.incoming_store import IncomingTextStore, IncomingPaths, IncomingRows
 
-_incoming_text_store = IncomingTextStore(
-    repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
-    paths=IncomingPaths(references=lambda: INCOMING_TEXT_REFERENCES_PATH,
-                        inspections=lambda: INCOMING_TEXT_INSPECTIONS_PATH, audit=lambda: INCOMING_TEXT_AUDIT_PATH),
-    rows=IncomingRows(reference=lambda record: incoming_text_reference_row(record),
-                      inspection=lambda record: incoming_text_inspection_row(record),
-                      audit=lambda event: audit_event_row(event), decode=lambda: row_raw_json_list),
-    read_json=lambda path: _incoming_text_json_list(path),
-    write_json=lambda path, values: _save_incoming_text_json_list(path, values),
-    load_references=lambda: load_incoming_text_references(),
-    load_inspections=lambda: load_incoming_text_inspections(),
-)
+_incoming_text_store = _text_storage.incoming
 
 
 def load_incoming_text_references() -> list[dict[str, Any]]:
