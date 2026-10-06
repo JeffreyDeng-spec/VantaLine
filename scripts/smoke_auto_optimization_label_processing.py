@@ -26,7 +26,9 @@ def create(bindings):
     from local_inspection_service.training.auto_optimization_label_processing import AutoOptimizationLabelProcessing
     from local_inspection_service.training.auto_optimization_label_processing_ports import ProcessingState,ProcessingArtifacts,ProcessingExecution
     def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
-    service=AutoOptimizationLabelProcessing(ports(ProcessingState),ports(ProcessingArtifacts),ports(ProcessingExecution));bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
+    from contextlib import nullcontext
+    resolver=SimpleNamespace(current_snapshot=lambda:{},scope=lambda snapshot:nullcontext())
+    service=AutoOptimizationLabelProcessing(ports(ProcessingState),ports(ProcessingArtifacts),ports(ProcessingExecution),model_resolver=lambda:resolver);bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
 
 class ProcessingContract(unittest.TestCase):
     def fixture(self):

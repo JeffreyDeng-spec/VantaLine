@@ -184,3 +184,5 @@ Periodic transfer progress threads now have explicit admission, stop signals and
 Auto-optimization label, shadow and delayed-check Python threads now have explicit admission and drain ownership. Their algorithms, task guards and RunPod transport remain unchanged. Closing these owners waits for local thread/scope completion and is not a remote-job completion or cancellation signal.
 
 Automatic-mask executor tasks release local repository selections on the executor thread. This change retains the existing executor ContextVar behavior, mask batch limits and remote training behavior; local cleanup is not a remote completion guarantee.
+
+Automatic-mask child work now explicitly inherits the submitting task model snapshot for downstream training-vision resolution. It does not inherit unrelated request/cache/authorization contexts or change mask algorithms, concurrency, prompts or remote training behavior.

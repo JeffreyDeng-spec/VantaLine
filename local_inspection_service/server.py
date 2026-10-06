@@ -4617,6 +4617,7 @@ _auto_optimization_label_processing = AutoOptimizationLabelProcessing(
         auto_optimize_process_label_sample=lambda: auto_optimize_process_label_sample,
     ),
     runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
+    model_resolver=resolve_model_profiles,
 )
 
 

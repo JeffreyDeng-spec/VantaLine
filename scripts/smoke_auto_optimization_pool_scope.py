@@ -1,6 +1,6 @@
 """Real executor repository cleanup preserving original ContextVar behavior."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 import sys
@@ -33,8 +33,9 @@ class PoolScope(unittest.TestCase):
             created.append(connection)
             return SimpleNamespace(repository=SimpleNamespace(connection=connection))
         repositories = ThreadRepositoryFactory(create, lambda: (identity.get() or {}).get('id'))
+        resolver = SimpleNamespace(current_snapshot=lambda: {}, scope=lambda snapshot: nullcontext())
         service = AutoOptimizationLabelProcessing(None, None, None,
-            runtime=TrainingThreadLifecycle(scope=repositories.thread_scope))
+            runtime=TrainingThreadLifecycle(scope=repositories.thread_scope), model_resolver=lambda: resolver)
         return SimpleNamespace(identity=identity, profiles=profiles, created=created,
             repositories=repositories, service=service)
 
@@ -82,7 +83,7 @@ class PoolScope(unittest.TestCase):
             finally:
                 entered.set()
                 release.wait(3)
-        service = AutoOptimizationLabelProcessing(None, None, None, runtime=TrainingThreadLifecycle(scope=scope))
+        service = replace(self.fixture().service, runtime=TrainingThreadLifecycle(scope=scope))
         def selected(value):
             calls.append(value)
             raise error

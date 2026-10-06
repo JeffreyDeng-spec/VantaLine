@@ -1446,3 +1446,5 @@ Auto-optimization starter close results certify local Python thread and reposito
 The foundational graph builder is inert. Existing server import-time directory creation and actual lifecycle callbacks remain in their prior positions, so this step does not enable a second production app or a second worker role. It changes no connection cleanup policy or deployment topology.
 
 Automatic-mask Futures now finish after their repository scope exits. This closes the child-executor cleanup gap within the existing joined parent workflow; it does not prove remote model settlement, model-context propagation or application-wide shutdown. Repository close retains its established best-effort error handling.
+
+Automatic-mask child tasks now resolve downstream training-vision settings under the parent task model snapshot. This is an intentional correction to prior bare-thread-pool context loss. Only that model binding crosses threads; repository selections stay thread-local and retain per-task cleanup. No paid retries, task requeue, global identity propagation or additional worker service is introduced.

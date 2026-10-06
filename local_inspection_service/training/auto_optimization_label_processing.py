@@ -4,6 +4,8 @@ from typing import Any
 from collections.abc import Callable
 import threading
 from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
+from ..model_profiles.dependencies import ResolverProvider
+from ..model_profiles.snapshots import bind_current
 import time
 from .auto_optimization_label_processing_ports import ProcessingState, ProcessingArtifacts, ProcessingExecution
 
@@ -14,6 +16,7 @@ class AutoOptimizationLabelProcessing:
     execution: ProcessingExecution
 
     runtime: TrainingThreadLifecycle = field(default_factory=TrainingThreadLifecycle, compare=False, repr=False, kw_only=True)
+    model_resolver: ResolverProvider | None = field(default=None, compare=False, repr=False, kw_only=True)
 
     def start_auto_optimize_label_worker(self, task_id: str) -> None:
         return self.runtime.submit(lambda launch: self._start_label(task_id, launch))
@@ -144,11 +147,13 @@ class AutoOptimizationLabelProcessing:
                 self.state.save_auto_optimize_state()(state)
 
     def _scoped_sample(self, selected: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
-        # Connections are released on the executor thread before completion.
-        # Preserve the executor's existing ContextVar behavior.
+        if self.model_resolver is None:
+            raise RuntimeError("Model profile resolver is not configured for mask batches")
+        bound = bind_current(self.model_resolver, selected)
+        # Only the model binding crosses threads; connections stay thread-local.
         def run(*args, **kwargs):
             with self.runtime.scope():
-                return selected(*args, **kwargs)
+                return bound(*args, **kwargs)
         return run
 
     def close(self, timeout: float) -> bool:
