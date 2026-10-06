@@ -279,6 +279,7 @@ jobs:
           python scripts/smoke_foundation_policies.py
           python scripts/smoke_artifact_file_policies.py
           python scripts/smoke_runtime_repository_access.py
+          python scripts/smoke_repository_composition.py --postgres
           python scripts/smoke_service_paths.py
           python scripts/smoke_read_cache_ownership.py
           python scripts/smoke_directory_lifecycle.py

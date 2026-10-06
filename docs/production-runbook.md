@@ -1404,3 +1404,5 @@ Moving retained PLC single-iteration workflows does not start legacy workers or 
 Web-shell composition retains public SPA responses, no-cache headers, preview redirects and legacy 404 responses. No worker mode, release topology or operator setting changes. Use the existing whole-release rollback and version checks.
 
 The retained retired endpoints continue returning the same errors after the same middleware/body-validation/admin sequence. Rollback of the unreachable-tail cleanup restores the previous complete release; there is no data transformation or PLC action.
+
+Repository composition introduces no schema, topology or operator setting. Whole-release rollback restores the previous composition while preserving runtime records and model evidence. This change does not add connection-pool capacity or stronger close/network deadlines; existing close error suppression remains unchanged.

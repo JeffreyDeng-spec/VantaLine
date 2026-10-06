@@ -980,16 +980,13 @@ current_auth_user = _access_control.current_auth_user
 require_admin_role = _access_control.require_admin_role
 
 
-RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS: Callable[[str], Any] | None = None
 from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
+from .runtime.repository_composition import RuntimeRepositories
 
-
-def runtime_repository_cache_key() -> tuple[str, str, int | None]:
-    return (
-        os.environ.get("VANTALINE_DATA_STORE", "").strip().lower() or "json",
-        os.environ.get("DATABASE_URL", "").strip(),
-        id(RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS) if RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS is not None else None,
-    )
+_runtime_repository_owner = RuntimeRepositories(os.environ)
+_runtime_repositories = _runtime_repository_owner.factory
+_runtime_repository_access = _runtime_repository_owner.access
+runtime_repository_cache_key = _runtime_repository_owner.cache_key
 
 
 def reset_runtime_repository_cache() -> None:
@@ -1011,21 +1008,6 @@ def clear_thread_runtime_repository_selection() -> None:
 def current_runtime_repository_generation() -> int:
     return _runtime_repositories.generation()
 
-
-_runtime_repositories = ThreadRepositoryFactory(
-    create=lambda: build_runtime_repository(postgres_connector=RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS),
-    cache_key=lambda: runtime_repository_cache_key(),
-)
-
-
-from .runtime.repository_access import RuntimeRepositoryAccess
-
-_runtime_repository_access = RuntimeRepositoryAccess(
-    factory=lambda: _runtime_repositories,
-    selection=lambda: runtime_repository_selection,
-    probe_id=lambda: runtime_repository_connection_probe_id,
-    postgres_store=lambda: POSTGRES_STORE,
-)
 
 
 def runtime_repository_selection() -> Any:
