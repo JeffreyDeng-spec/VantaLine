@@ -337,51 +337,40 @@ except ModuleNotFoundError as exc:
     from document_images import extract_doc_images, DocImageError, DocImageUnavailable
 
 
-def resolve_service_root() -> Path:
-    override = (
-        os.environ.get("LOCAL_INSPECTION_ROOT")
-        or os.environ.get("INSPECTION_SERVICE_ROOT")
-        or os.environ.get("VANTALINE_REPO_ROOT")
-    )
-    raw_root = Path(override).expanduser() if override else Path(__file__).resolve().parents[1]
-    if raw_root.name == "local_inspection_service":
-        raw_root = raw_root.parent
-    root = raw_root.resolve()
-    if not _business_files.is_dir(root / "local_inspection_service"):
-        raise RuntimeError(f"Resolved service root {root} does not contain local_inspection_service")
-    return root
-
-
+from .runtime.bootstrap_locations import RootLocator, RuntimeLocations
+_root_locator = RootLocator(os.environ, __file__, _business_files.is_dir)
+resolve_service_root = _root_locator.resolve
 ROOT = resolve_service_root()
-APP_DIR = ROOT / "local_inspection_service"
-STATIC_DIR = APP_DIR / "static"
-REACT_PREVIEW_DIST_DIR = APP_DIR / "frontend" / "dist"
-REACT_PREVIEW_ASSETS_DIR = REACT_PREVIEW_DIST_DIR / "assets"
-REACT_PRODUCTION_DIST_DIR = APP_DIR / "frontend" / "dist-production"
-REACT_PRODUCTION_ASSETS_DIR = REACT_PRODUCTION_DIST_DIR / "assets"
-DATA_DIR = APP_DIR / "data"
-UPLOAD_DIR = DATA_DIR / "uploads"
-OUTPUT_DIR = DATA_DIR / "outputs"
-NORMALIZED_DIR = DATA_DIR / "normalized_assets"
-TRAINING_JOBS_DIR = DATA_DIR / "training_jobs"
-TRAINING_TASKS_DIR = DATA_DIR / "training_tasks"
-ACCESSORY_CANDIDATES_DIR = DATA_DIR / "accessory_candidates"
-IMAGE_WORKER_LOG_DIR = DATA_DIR / "image_worker_logs"
-CONFIG_PATH = DATA_DIR / "config.json"
-CONFIG_BACKUP_PATH = DATA_DIR / "config.last_good.json"
-PLC_WEB_SERIAL_STATE_PATH = DATA_DIR / "plc_web_serial_state.json"
-AI_LOCAL_CONFIG_PATH = DATA_DIR / "ai_config.local.json"
-LOCAL_SECRET_ENV_PATH = DATA_DIR / "runtime_secrets.local.env"
-AI_PROFILE_CACHE_PATH = DATA_DIR / "ai_profile_cache.local.json"
-AI_DETECTION_TASKS_PATH = DATA_DIR / "ai_detection_tasks.json"
-AUTH_PATH = DATA_DIR / "auth.json"
-DATA_ANALYSIS_RECORDS_PATH = DATA_DIR / "data_analysis_records.json"
-INCOMING_TEXT_REFERENCES_PATH = DATA_DIR / "incoming_text_reference_versions.json"
-INCOMING_TEXT_INSPECTIONS_PATH = DATA_DIR / "incoming_text_inspections.json"
-INCOMING_TEXT_AUDIT_PATH = DATA_DIR / "incoming_text_audit_events.json"
-TEXT_INSPECTION_DIR = DATA_DIR / "text_inspection_v2"
-TEXT_INSPECTION_JSON_DIR = TEXT_INSPECTION_DIR / "records"
-TEXT_INSPECTION_MEDIA_DIR = TEXT_INSPECTION_DIR / "media"
+_runtime_locations = RuntimeLocations.from_root(ROOT)
+APP_DIR = _runtime_locations.app_dir
+STATIC_DIR = _runtime_locations.static_dir
+REACT_PREVIEW_DIST_DIR = _runtime_locations.react_preview_dist_dir
+REACT_PREVIEW_ASSETS_DIR = _runtime_locations.react_preview_assets_dir
+REACT_PRODUCTION_DIST_DIR = _runtime_locations.react_production_dist_dir
+REACT_PRODUCTION_ASSETS_DIR = _runtime_locations.react_production_assets_dir
+DATA_DIR = _runtime_locations.data_dir
+UPLOAD_DIR = _runtime_locations.upload_dir
+OUTPUT_DIR = _runtime_locations.output_dir
+NORMALIZED_DIR = _runtime_locations.normalized_dir
+TRAINING_JOBS_DIR = _runtime_locations.training_jobs_dir
+TRAINING_TASKS_DIR = _runtime_locations.training_tasks_dir
+ACCESSORY_CANDIDATES_DIR = _runtime_locations.accessory_candidates_dir
+IMAGE_WORKER_LOG_DIR = _runtime_locations.image_worker_log_dir
+CONFIG_PATH = _runtime_locations.config_path
+CONFIG_BACKUP_PATH = _runtime_locations.config_backup_path
+PLC_WEB_SERIAL_STATE_PATH = _runtime_locations.plc_web_serial_state_path
+AI_LOCAL_CONFIG_PATH = _runtime_locations.ai_local_config_path
+LOCAL_SECRET_ENV_PATH = _runtime_locations.local_secret_env_path
+AI_PROFILE_CACHE_PATH = _runtime_locations.ai_profile_cache_path
+AI_DETECTION_TASKS_PATH = _runtime_locations.ai_detection_tasks_path
+AUTH_PATH = _runtime_locations.auth_path
+DATA_ANALYSIS_RECORDS_PATH = _runtime_locations.data_analysis_records_path
+INCOMING_TEXT_REFERENCES_PATH = _runtime_locations.incoming_text_references_path
+INCOMING_TEXT_INSPECTIONS_PATH = _runtime_locations.incoming_text_inspections_path
+INCOMING_TEXT_AUDIT_PATH = _runtime_locations.incoming_text_audit_path
+TEXT_INSPECTION_DIR = _runtime_locations.text_inspection_dir
+TEXT_INSPECTION_JSON_DIR = _runtime_locations.text_inspection_json_dir
+TEXT_INSPECTION_MEDIA_DIR = _runtime_locations.text_inspection_media_dir
 TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = str(os.getenv("VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_MANUAL_PASS_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}

@@ -1410,3 +1410,5 @@ Repository composition introduces no schema, topology or operator setting. Whole
 Authentication-domain composition adds no schema, operator setting or service. Existing cookie, permission, media and admin documentation behavior remains. Rollback restores the prior complete release and its topology/configuration while preserving accounts, sessions and task evidence.
 
 Record-domain composition changes no schema, routes, worker topology or PLC behavior. Existing whole-release rollback preserves accounts and inspection records. This slice does not establish a full production application factory.
+
+Bootstrap locations do not move data, create a new data root or change release symlinks/topology. Directory creation and migrations still run at their existing points. Rollback uses the complete prior release and existing external runtime directories.

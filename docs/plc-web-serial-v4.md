@@ -142,3 +142,5 @@ LegacyDispatchRecords retains reverse audit lookup and the exact idempotent disp
 The retained reconciliation and input-poll bodies moved intact into LegacyPlcOperations. They remain disabled by current startup. Reconciliation skips invalid or non-pristine records, settles the same blocked records and returns after one eligible item. Polling retains ownership/pending gates, nonblocking slot acquisition, release in finally and post-read generation checks. The module is not a new physical-I/O permission; only synthetic read/transport capabilities are used in its tests.
 
 Unreachable pre-Web-Serial capture implementation tails are no longer present in the application entry. Claim/heartbeat/release/event-stream routes remain registered with the same request schemas and HTTP 410 behavior. Current PLC config still forwards to the existing service, and physical I/O remains browser-only.
+
+Bootstrap location composition retains the existing plc_web_serial_state.json location beneath the same data directory. It creates no files, changes no browser lease or dispatch protocol and opens no serial port.

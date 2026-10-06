@@ -747,3 +747,5 @@ Manifest version 163 adds actual authentication HTTP composition source to new t
 Manifest version 168 includes the actual local model selection source relocation. Existing task model snapshots are not rewritten; text/label worker behavior and concurrency remain unchanged.
 
 Prompt-source manifest178/513 includes the actual public shell implementation for new fingerprints; historical task/model snapshots are not rewritten. Label/text admission, task settlement and concurrency are unchanged.
+
+Bootstrap location composition retains the same incoming text files and text_inspection_v2 records/media directories. No data migration, worker admission or model behavior changes. Manifest v183 records the actual bootstrap implementation for new tasks without rewriting historical snapshots.
