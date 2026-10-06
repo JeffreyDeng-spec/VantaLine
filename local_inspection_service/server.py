@@ -5620,11 +5620,11 @@ _sprite_asset_catalog = _SpriteAssetCatalog(
     _MaterializedAssetPaths(resolve=lambda: resolve_service_path),
     _SpriteCatalogPoseOperations(top_view=lambda: pose_family_is_top_view, footprint=lambda: pose_render_footprint_metadata, upright=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints),
     _SpriteCatalogMaterialPolicy(expected=lambda: object_alpha_material_policy, normalize=lambda: normalize_object_alpha_material_policy),
-    _SpriteCatalogReadiness(assets=lambda: clean_sprite_assets, metadata=lambda: clean_sprite_metadata_complete, material=lambda: clean_sprite_material_policy_matches),
+    _SpriteCatalogReadiness(assets=lambda: clean_sprite_assets, metadata=lambda: clean_sprite_metadata_complete, material=lambda: clean_sprite_material_policy_matches), files=_business_files, images=_accessory_image_io
 )
 _text_asset_catalog = _TextAssetCatalog(
     _MaterializedAssetPaths(resolve=lambda: resolve_service_path),
-    _TextCatalogOperations(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, assets=lambda: canonical_text_assets),
+    _TextCatalogOperations(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, assets=lambda: canonical_text_assets), files=_business_files, images=_accessory_image_io
 )
 
 def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -5813,7 +5813,7 @@ _preview_sprite_renderer = _PreviewSpriteRenderer(
 )
 
 def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-    return _load_clean_sprite_impl(path)
+    return _load_clean_sprite_impl(path, images=_accessory_image_io)
 
 
 def object_physical_size_mm(size: dict[str, Any] | None) -> tuple[float, float, float]:

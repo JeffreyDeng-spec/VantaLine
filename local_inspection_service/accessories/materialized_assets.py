@@ -1,8 +1,7 @@
 """Materialized accessory assets, metadata normalization and readiness."""
 from typing import Any
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import ExistingAccessoryFiles, AccessoryImageReader
 from .materialized_asset_ports import MaterializedAssetPaths, SpriteCatalogPoseOperations, SpriteCatalogMaterialPolicy, SpriteCatalogReadiness, TextCatalogOperations
 
 def clean_sprite_metadata_complete(asset: dict[str, Any]) -> bool:
@@ -71,7 +70,13 @@ def text_accessory_confirm_detail(
     }
 
 class SpriteAssetCatalog:
-    def __init__(self, paths: MaterializedAssetPaths, pose: SpriteCatalogPoseOperations, policy: SpriteCatalogMaterialPolicy, readiness: SpriteCatalogReadiness) -> None:
+    def __init__(self, paths: MaterializedAssetPaths, pose: SpriteCatalogPoseOperations, policy: SpriteCatalogMaterialPolicy, readiness: SpriteCatalogReadiness, *, files: ExistingAccessoryFiles, images: AccessoryImageReader) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        if images is None:
+            raise TypeError('images is required')
+        self.files = files
+        self.images = images
         self._paths = paths
         self._pose = pose
         self._policy = policy
@@ -83,11 +88,11 @@ class SpriteAssetCatalog:
             if asset.get("kind") != "clean_object_sprite":
                 continue
             path = self._paths.resolve()(asset.get("path"))
-            if not _image_files.files.exists(path) or path.suffix.lower() != ".png":
+            if not self.files.exists(path) or path.suffix.lower() != ".png":
                 continue
             asset["path"] = str(path)
             if not asset.get("width") or not asset.get("height"):
-                image = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
+                image = self.images.imread(str(path), cv2.IMREAD_UNCHANGED)
                 if image is not None:
                     asset.setdefault("width", int(image.shape[1]))
                     asset.setdefault("height", int(image.shape[0]))
@@ -136,7 +141,13 @@ class SpriteAssetCatalog:
         return bool(sprites) and all(self._readiness.metadata()(asset) and self._readiness.material()(item, asset) for asset in sprites)
 
 class TextAssetCatalog:
-    def __init__(self, paths: MaterializedAssetPaths, operations: TextCatalogOperations) -> None:
+    def __init__(self, paths: MaterializedAssetPaths, operations: TextCatalogOperations, *, files: ExistingAccessoryFiles, images: AccessoryImageReader) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        if images is None:
+            raise TypeError('images is required')
+        self.files = files
+        self.images = images
         self._paths = paths
         self._operations = operations
 
@@ -146,10 +157,10 @@ class TextAssetCatalog:
             if asset.get("kind") != "canonical_text_image":
                 continue
             path = self._paths.resolve()(asset.get("path"))
-            if not _image_files.files.exists(path) or path.suffix.lower() not in self._operations.suffixes():
+            if not self.files.exists(path) or path.suffix.lower() not in self._operations.suffixes():
                 continue
             if not asset.get("width") or not asset.get("height"):
-                image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
+                image = self.images.imread(str(path), cv2.IMREAD_COLOR)
                 if image is not None:
                     asset.setdefault("width", int(image.shape[1]))
                     asset.setdefault("height", int(image.shape[0]))
