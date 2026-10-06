@@ -9655,17 +9655,13 @@ async def analyze_video(file: UploadFile=File(...), model_id: str | None=Form(No
     return await _video_upload.analyze_video(file, model_id)
 
 
+from .config.stream import StreamConfiguration
+_stream_configuration = StreamConfiguration(lambda: load_config(), lambda config: save_config(config))
+
+
 @app.post("/api/stream/config")
 def update_stream(config_in: StreamConfig) -> dict[str, Any]:
-    config = load_config()
-    config["stream"] = {
-        "enabled": config_in.enabled,
-        "source": config_in.source,
-        "url": config_in.url,
-        "status": "reserved_for_camera_or_rtsp_input",
-    }
-    save_config(config)
-    return {"status": "saved", "stream": config["stream"]}
+    return _stream_configuration.update(config_in)
 
 
 from .training.background_query import BackgroundQuery

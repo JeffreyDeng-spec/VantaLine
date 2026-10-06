@@ -348,6 +348,7 @@ jobs:
           python scripts/smoke_label_summary_migration.py
           python scripts/smoke_service_status_requests.py
           python scripts/smoke_app_config_store.py
+          python scripts/smoke_stream_config.py
           python scripts/smoke_protected_config_ownership.py
           python scripts/smoke_local_model_config.py
           python scripts/smoke_model_tool_dispatch.py
