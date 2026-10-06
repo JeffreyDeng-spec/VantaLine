@@ -96,3 +96,28 @@ class DetectionTaskRequests:
         response["status"] = "deleted"
         response["deleted_task_id"] = clean_task_id
         return response
+
+    def upsert_dashboard_ai_task(self, accessory_id: str, config: dict[str, Any]) -> dict[str, Any]:
+        accessories_by_id = self.policy.accessory_lookup_by_id()(config)
+        tasks = self.store.load_ai_detection_tasks()()
+        # load_ai_detection_tasks 会把 source 归一化成 workbench,所以用固定名称识别看板任务。
+        task = next((item for item in tasks if item.get("name") == self.policy.DASHBOARD_AI_TASK_NAME()), None)
+        selected_ids = list(dict.fromkeys((task.get("selected_accessory_ids") if task else []) + [accessory_id]))
+        selected_ids = [item_id for item_id in selected_ids if item_id in accessories_by_id]
+        counts = {item_id: int((task or {}).get("required_accessory_counts", {}).get(item_id, 1) or 1) for item_id in selected_ids}
+        labels = {item_id: str(accessories_by_id[item_id].get("name") or item_id) for item_id in selected_ids}
+        payload = {
+            "name": self.policy.DASHBOARD_AI_TASK_NAME(),
+            "selected_accessory_ids": selected_ids,
+            "required_accessory_counts": counts,
+            "accessory_labels": labels,
+            "source": self.policy.PIPELINE_DASHBOARD_AI_TASK_SOURCE(),
+        }
+        now = self.clock.time().time()
+        if task:
+            task.update({**payload, "updated_at": now})
+        else:
+            task = {"id": f"aitask_{self.clock.uuid().uuid4().hex[:10]}", "created_at": now, "updated_at": now, **self.access.current_owner_fields()(), **payload}
+            tasks.insert(0, task)
+        self.store.save_ai_detection_task()(task)
+        return self.policy.serialize_ai_detection_task()(task, config)

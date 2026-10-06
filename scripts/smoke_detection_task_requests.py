@@ -89,5 +89,5 @@ class Contracts(unittest.TestCase):
   tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_detection_task_requests' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
-  self.assertEqual(count,27)
+  self.assertEqual(count,30)
 if __name__=='__main__':unittest.main()

@@ -190,3 +190,8 @@ class ImageJobQueue:
             if not workers and not launched:
                 return
             time.sleep(2)
+
+
+    def update_image_worker_status(self, path: Path, candidate: dict[str, Any], job: dict[str, Any], **fields: Any) -> None:
+        updated_job = self.mutate_candidate_image_job(path, candidate, job, fields)
+        job.update(updated_job)
