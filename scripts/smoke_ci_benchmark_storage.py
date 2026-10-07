@@ -34,6 +34,13 @@ class StorageContracts(unittest.TestCase):
             with self.subTest(evidence=bad),patch.object(storage.subprocess,'check_output',side_effect=[metadata,bad]):
                 with self.assertRaises(AssertionError):storage.inspect_container('synthetic')
 
+    def test_ordinary_container_keeps_non_tmpfs_storage_and_actual_wal_location(self):
+        with patch.object(storage.subprocess,'check_output',side_effect=['null|false','ext2/ext3\n/var/lib/postgresql/data/pg_wal\n']):
+            self.assertEqual(storage.inspect_ordinary_container('ordinary')['filesystem_type'],'ext2/ext3')
+        for metadata,output in [('null|false','tmpfs\n/var/lib/postgresql/data/pg_wal\n'),('null|false','ext2/ext3\n/external-wal\n')]:
+            with self.subTest(output=output),patch.object(storage.subprocess,'check_output',side_effect=[metadata,output]):
+                with self.assertRaises(AssertionError):storage.inspect_ordinary_container('ordinary')
+
     def test_real_database_settings_are_checked_and_connection_released_on_failure(self):
         settings={'server_version_num':'160010','data_directory':'/var/lib/postgresql/data','fsync':'on',
             'synchronous_commit':'on','full_page_writes':'on','temp_tablespaces':'','max_wal_size':'1GB','shared_buffers':'128MB'}
@@ -58,8 +65,8 @@ class StorageContracts(unittest.TestCase):
 
     def test_same_instance_identity_fails_after_collecting_container_evidence(self):
         environment=dict(GITHUB_ACTIONS='true',VANTALINE_POSTGRES_DSN=storage.NORMAL_DSN,
-            VANTALINE_BENCHMARK_POSTGRES_DSN=storage.BENCHMARK_DSN,VANTALINE_BENCHMARK_CONTAINER='synthetic')
-        with patch.dict(os.environ,environment,clear=True),patch.object(storage,'inspect_database',return_value={'system_identifier':'same'}),patch.object(storage,'inspect_container',return_value={}) as inspect:
+            VANTALINE_BENCHMARK_POSTGRES_DSN=storage.BENCHMARK_DSN,VANTALINE_BENCHMARK_CONTAINER='synthetic',VANTALINE_ORDINARY_CONTAINER='ordinary')
+        with patch.dict(os.environ,environment,clear=True),patch.object(storage,'inspect_database',return_value={'system_identifier':'same'}),patch.object(storage,'inspect_container',return_value={}) as inspect,patch.object(storage,'inspect_ordinary_container',return_value={}):
             with self.assertRaises(AssertionError):storage.main()
         inspect.assert_called_once()
 

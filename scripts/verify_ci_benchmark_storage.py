@@ -53,15 +53,30 @@ cat /sys/fs/cgroup/memory.swap.max'''
                 oom_killed=False,container_peak_memory_bytes=peak,mount_wal_capacity_and_cgroup_evidence=output)
 
 
+def inspect_ordinary_container(identifier):
+    raw=subprocess.check_output(['docker','inspect','--format',
+        '{{json .HostConfig.Tmpfs}}|{{.State.OOMKilled}}',identifier],text=True).strip()
+    tmpfs,oom=raw.split('|')
+    output=subprocess.check_output(['docker','exec',identifier,'sh','-ec',
+        'stat -f -c %T /var/lib/postgresql/data; readlink -f /var/lib/postgresql/data/pg_wal'],text=True)
+    print(json.dumps({'stage':'ordinary_storage_evidence','tmpfs':json.loads(tmpfs),'oom_killed':oom,'output':output}),flush=True)
+    assert not json.loads(tmpfs) and oom=='false'
+    lines=output.splitlines()
+    assert len(lines)==2 and lines[0]!='tmpfs'
+    assert lines[1]=='/var/lib/postgresql/data/pg_wal'
+    return dict(tmpfs=json.loads(tmpfs),filesystem_type=lines[0],wal_path=lines[1],oom_killed=False)
+
+
 def main():
     assert os.environ.get('GITHUB_ACTIONS')=='true','synthetic CI verification only'
     assert os.environ['VANTALINE_POSTGRES_DSN']==NORMAL_DSN
     assert os.environ['VANTALINE_BENCHMARK_POSTGRES_DSN']==BENCHMARK_DSN
+    ordinary_storage=inspect_ordinary_container(os.environ['VANTALINE_ORDINARY_CONTAINER'])
     container=inspect_container(os.environ['VANTALINE_BENCHMARK_CONTAINER'])
     normal=inspect_database(NORMAL_DSN);benchmark=inspect_database(BENCHMARK_DSN)
     assert normal['system_identifier']!=benchmark['system_identifier'],'benchmarks must use a separate instance'
     print(json.dumps(dict(scope='Bounded tmpfs endpoint-relative benchmark; includes persisted pagination snapshot writes, not production physical-storage P95/durability evidence',
-        ordinary_disk_database=normal,benchmark_database=benchmark,container=container),sort_keys=True))
+        ordinary_disk_database=normal,ordinary_storage=ordinary_storage,benchmark_database=benchmark,container=container),sort_keys=True))
 
 
 if __name__=='__main__':main()

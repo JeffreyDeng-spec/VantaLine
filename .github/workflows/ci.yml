@@ -264,6 +264,7 @@ jobs:
       - name: Verify ordinary disk and bounded benchmark database isolation
         env:
           VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           python scripts/smoke_ci_benchmark_storage.py
           python scripts/verify_ci_benchmark_storage.py
@@ -636,6 +637,7 @@ jobs:
         if: always()
         env:
           VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
         run: python scripts/verify_ci_benchmark_storage.py
 
   codex-comparison:
