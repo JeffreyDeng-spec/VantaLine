@@ -119,9 +119,7 @@ class HttpArtifactPortsTests(unittest.TestCase):
         tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
         selected = {'create_http_application': ('upload_runtime_provider', 'lambda: _business_files.runtime_provider()'),
             'ArtifactStaticFiles': ('runtime_provider', 'lambda: _business_files.runtime_provider()'),
-            'BackgroundQuery': ('files', 'lambda: _business_files'),
-            'register_incoming_catalog': ('files', 'lambda: _business_files'),
-            'register_incoming_inspections': ('files', 'lambda: _business_files')}
+            'BackgroundQuery': ('files', 'lambda: _business_files')}
         seen = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id not in selected: continue
@@ -129,6 +127,18 @@ class HttpArtifactPortsTests(unittest.TestCase):
             self.assertEqual(len(values), 1); self.assertEqual(ast.dump(values[0]), ast.dump(ast.parse(source, mode='eval').body))
             seen.append(node.func.id)
         self.assertCountEqual(seen, selected)
+        owner = ast.parse((root / 'local_inspection_service/text_inspection/incoming_composition.py').read_text(encoding='utf-8'))
+        registrations = [n for n in ast.walk(owner) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in {'register_catalog', 'register_inspections'}]
+        self.assertCountEqual([n.func.id for n in registrations], ['register_catalog', 'register_inspections'])
+        for node in registrations:
+            values = [kw.value for kw in node.keywords if kw.arg == 'files']
+            self.assertEqual(len(values), 1)
+            self.assertEqual(ast.dump(values[0]), ast.dump(ast.parse('lambda: self.files', mode='eval').body))
+        builders = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'IncomingWorkflows']
+        self.assertEqual(len(builders), 1)
+        self.assertEqual(ast.unparse(next(kw.value for kw in builders[0].keywords if kw.arg == 'files')), '_business_files')
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name) and n.func.value.id == '_incoming_workflows']
+        self.assertCountEqual([n.func.attr for n in calls], ['register_catalog', 'register_inspections'])
 
 
     def test_explicit_none_files_fails_closed_in_real_asgi(self):

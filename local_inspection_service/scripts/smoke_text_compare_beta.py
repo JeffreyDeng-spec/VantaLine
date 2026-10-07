@@ -42,7 +42,8 @@ def main():
     incoming_api = (APP_DIR / 'text_inspection/incoming_api.py').read_text(encoding='utf-8')
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in incoming_api
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in incoming_api
-    assert '_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)' in source
+    assert '_incoming_inspection_routes = _incoming_workflows.register_inspections(app)' in source
+    assert source.index('_incoming_catalog_routes = _incoming_workflows.register_catalog(app)') < source.index('analyze_text_compare_beta = register_beta_comparison(') < source.index('_incoming_inspection_routes = _incoming_workflows.register_inspections(app)')
     retired = (APP_DIR / "frontend/src/features/text-compare/TextCompareBetaPage.tsx").read_text()
     redirect = (APP_DIR / "frontend/src/features/label-inspection/LegacyManualRedirect.tsx").read_text()
     history = (APP_DIR / "frontend/src/features/label-inspection/ManualHistory.tsx").read_text()

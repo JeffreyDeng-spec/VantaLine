@@ -16,7 +16,6 @@ from smoke_incoming_text_workflows import Fixture, picture
 from local_inspection_service.storage.runtime_records import (
     incoming_text_reference_row, incoming_text_inspection_row, audit_event_row, row_raw_json_list,
 )
-from local_inspection_service.text_inspection.incoming_api import register_catalog, register_inspections
 from local_inspection_service.text_inspection.incoming_composition import IncomingWorkflows
 from local_inspection_service.text_inspection.incoming_ports import IncomingOCR, IncomingImaging
 from local_inspection_service.text_inspection.incoming_store import IncomingRows
@@ -88,8 +87,8 @@ class CompositionContracts(unittest.TestCase):
             storage,graph=compose(fixture);graphs.append(graph)
             fixture.state['inspections']=[dict(id='same', owner_user_id=owner, task_id='task', capture_id='capture.same', source_sha256=hashlib.sha256(picture()).hexdigest())]
             app=FastAPI()
-            register_catalog(app,graph.catalog,files=lambda fixture=fixture:fixture.files)
-            register_inspections(app,graph.execution,graph.reviews,files=lambda fixture=fixture:fixture.files)
+            graph.register_catalog(app)
+            graph.register_inspections(app)
             apps.append(app)
         async def exercise(index, owner):
             fixture=fixtures[index];token=fixture.context.set(owner)
@@ -158,6 +157,37 @@ class CompositionContracts(unittest.TestCase):
                 self.assertEqual(len(calls),1)
                 self.assertNotEqual(calls[0],threading.get_ident())
             finally:storage.incoming.load_incoming_text_inspections=original
+
+
+    def test_owned_response_files_selected_only_after_actual_http_authorization(self):
+        fixture=Fixture(self);storage,graph=compose(fixture)
+        path=fixture.root/'evidence.png';path.write_bytes(picture())
+        fixture.state['references']=[dict(id='reference',task_id='task',owner_user_id='alice',source_path=str(path))]
+        fixture.state['inspections']=[dict(id='inspection',task_id='task',owner_user_id='alice',source_path=str(path))]
+        response_files=Mock()
+        response_files.runtime.side_effect=AssertionError('registration resolved storage')
+        graph.files=response_files
+        app=FastAPI();graph.register_catalog(app);graph.register_inspections(app)
+        response_files.runtime.assert_not_called()
+        response_files.runtime.side_effect=None;response_files.runtime.return_value=None
+        urls=['/api/incoming-text/references/reference/asset/source',
+              '/api/incoming-text/inspections/inspection/evidence/source']
+        async def exercise():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://fixture') as client:
+                token=fixture.context.set('bob')
+                try:
+                    for url in urls:
+                        response=await client.get(url)
+                        self.assertEqual(response.status_code,403,response.text)
+                    response_files.runtime.assert_not_called()
+                finally:fixture.context.reset(token)
+                for url in urls:
+                    response=await client.get(url)
+                    self.assertEqual(response.status_code,200,response.text)
+                    self.assertEqual(response.content,picture())
+        asyncio.run(exercise())
+        self.assertEqual(response_files.runtime.call_count,2)
+        for call in response_files.runtime.call_args_list:self.assertEqual(call.args,(path,))
 
 
 if __name__=='__main__':unittest.main()

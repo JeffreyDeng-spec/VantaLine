@@ -1,6 +1,9 @@
 """Build one incoming-text workflow graph around its own storage and file ports."""
 from collections.abc import Callable
 from typing import Protocol
+from fastapi import FastAPI
+from ..storage.artifacts.http import ResponseFiles
+from .incoming_api import CatalogRoutes, InspectionRoutes, register_catalog, register_inspections
 
 from .incoming_catalog import IncomingCatalog
 from .incoming_duplicates import lookup_duplicate
@@ -15,7 +18,7 @@ from .incoming_reviews import IncomingReviews
 from .storage_composition import TextStorage
 
 
-class IncomingFiles(IncomingReferenceFiles, IncomingRetentionFiles, Protocol):
+class IncomingFiles(IncomingReferenceFiles, IncomingRetentionFiles, ResponseFiles, Protocol):
     """The capabilities shared by this domain's workflows."""
 
 
@@ -36,6 +39,7 @@ class IncomingWorkflows:
         audit: Callable[[], Callable[[Record], None]], system_owner: Callable[[], str],
     ):
         self.storage = storage
+        self.files = files
         store = storage.incoming
         self.references = IncomingReferences(
             all=lambda: store.load_incoming_text_references(),
@@ -73,3 +77,11 @@ class IncomingWorkflows:
             self.inspections, media, self.writes, self.json,
             audit, system_owner, files=files,
         )
+
+    def register_catalog(self, app: FastAPI) -> CatalogRoutes:
+        """Register this owner's catalog at its preserved application position."""
+        return register_catalog(app, self.catalog, files=lambda: self.files)
+
+    def register_inspections(self, app: FastAPI) -> InspectionRoutes:
+        """Register this owner's inspection group without relocating other routes."""
+        return register_inspections(app, self.execution, self.reviews, files=lambda: self.files)

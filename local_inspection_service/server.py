@@ -12492,7 +12492,6 @@ from .text_inspection.incoming_catalog import IncomingCatalog
 from .text_inspection.incoming_execution import IncomingExecution
 from .text_inspection.incoming_reviews import IncomingReviews
 from .text_inspection.incoming_retention import IncomingCapacity, IncomingRetention
-from .text_inspection.incoming_api import register_catalog as register_incoming_catalog, register_inspections as register_incoming_inspections
 
 _incoming_task_access = IncomingTaskAccess(
     load=lambda task_id: load_pipeline_task(task_id), user=lambda: current_auth_user(),
@@ -12585,7 +12584,7 @@ _incoming_catalog = _incoming_workflows.catalog
 _incoming_reviews = _incoming_workflows.reviews
 _incoming_execution = _incoming_workflows.execution
 _incoming_retention = _incoming_workflows.retention
-_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog, files=lambda: _business_files)
+_incoming_catalog_routes = _incoming_workflows.register_catalog(app)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
 get_incoming_text_reference_asset = _incoming_catalog_routes.get_incoming_text_reference_asset
 create_incoming_text_reference = _incoming_catalog_routes.create_incoming_text_reference
@@ -12637,7 +12636,7 @@ analyze_text_compare_beta = register_beta_comparison(
 )
 
 
-_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews, files=lambda: _business_files)
+_incoming_inspection_routes = _incoming_workflows.register_inspections(app)
 inspect_incoming_text = _incoming_inspection_routes.inspect_incoming_text
 get_incoming_text_inspection_evidence = _incoming_inspection_routes.get_incoming_text_inspection_evidence
 review_incoming_text_inspection = _incoming_inspection_routes.review_incoming_text_inspection
