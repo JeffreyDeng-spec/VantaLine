@@ -35,22 +35,34 @@ def inspect_container(identifier):
     assert int(memory)==3221225472 and int(swap)==3221225472 and oom=='false'
     shell='''test "$(stat -f -c %T /var/lib/postgresql/data)" = tmpfs
 test "$(readlink -f /var/lib/postgresql/data/pg_wal)" = /var/lib/postgresql/data/pg_wal
-df -B1 /var/lib/postgresql/data
+echo FILESYSTEM_BYTES
+df -B1 --output=size,used,avail /var/lib/postgresql/data
 du -sb /var/lib/postgresql/data
 echo MEMORY_PEAK_BYTES
 cat /sys/fs/cgroup/memory.peak
+echo MEMORY_MAX_BYTES
+cat /sys/fs/cgroup/memory.max
 cat /sys/fs/cgroup/memory.events
 cat /sys/fs/cgroup/memory.swap.max'''
-    output=subprocess.check_output(['docker','exec',identifier,'sh','-ec',shell],text=True)
+    try:
+        output=subprocess.check_output(['docker','exec',identifier,'sh','-ec',shell],text=True)
+    except subprocess.CalledProcessError as error:
+        print(json.dumps({'stage':'container_storage_partial_evidence','output':error.output}),flush=True)
+        raise
     print(json.dumps({'stage':'container_storage_evidence','output':output}),flush=True)
     lines=output.splitlines()
     events={line.split()[0]:int(line.split()[1]) for line in lines if line.split() and line.split()[0] in ['max','oom','oom_kill','oom_group_kill']}
     assert {'max','oom','oom_kill'}<=events.keys(),events
     assert all(value==0 for value in events.values()),events
-    peak=int(lines[lines.index('MEMORY_PEAK_BYTES')+1]);assert 0<peak<=int(memory)
+    capacity,used,available=map(int,lines[lines.index('FILESYSTEM_BYTES')+2].split())
+    assert capacity==2147483648,(capacity,used,available)
+    assert 0<=used<=capacity and 0<=available<=capacity
+    actual_memory=int(lines[lines.index('MEMORY_MAX_BYTES')+1])
+    assert actual_memory==int(memory),actual_memory
+    peak=int(lines[lines.index('MEMORY_PEAK_BYTES')+1]);assert 0<peak<=actual_memory
     assert lines[-1]=='0','benchmark container swap is not disabled'
     return dict(tmpfs=json.loads(tmpfs),memory_limit_bytes=int(memory),memory_swap_limit_bytes=int(swap),
-                oom_killed=False,container_peak_memory_bytes=peak,mount_wal_capacity_and_cgroup_evidence=output)
+                oom_killed=False,filesystem_capacity_bytes=capacity,filesystem_used_bytes=used,filesystem_available_bytes=available,actual_memory_limit_bytes=actual_memory,container_peak_memory_bytes=peak,mount_wal_capacity_and_cgroup_evidence=output)
 
 
 def inspect_ordinary_container(identifier):

@@ -16,7 +16,7 @@ class StorageContracts(unittest.TestCase):
         capture=patch.object(sys,'stdout',io.StringIO());capture.start();self.addCleanup(capture.stop)
 
     def container_output(self):
-        return 'tmpfs 2147483648 1048576\n1048576 /var/lib/postgresql/data\nMEMORY_PEAK_BYTES\n268435456\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n0\n'
+        return 'FILESYSTEM_BYTES\n1B-blocks Used Available\n2147483648 1048576 2146435072\n1048576 /var/lib/postgresql/data\nMEMORY_PEAK_BYTES\n268435456\nMEMORY_MAX_BYTES\n3221225472\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n0\n'
 
     def test_correct_mount_and_limits_with_memory_peak(self):
         metadata='{"/var/lib/postgresql/data":"rw,noexec,nosuid,size=2147483648"}|3221225472|3221225472|false'
@@ -30,9 +30,20 @@ class StorageContracts(unittest.TestCase):
             with self.subTest(metadata=bad),patch.object(storage.subprocess,'check_output',return_value=bad):
                 with self.assertRaises(AssertionError):storage.inspect_container('synthetic')
         for bad in [self.container_output().replace('oom 0','oom 1'),self.container_output().replace('max 0','max 1'),
-                    self.container_output().replace('oom_kill 0\n',''),self.container_output().replace('268435456','4294967296')]:
+                    self.container_output().replace('oom_kill 0\n',''),self.container_output().replace('268435456','4294967296'),
+                    self.container_output().replace('2147483648','4294967296'),
+                    self.container_output().replace('3221225472','4294967296')]:
             with self.subTest(evidence=bad),patch.object(storage.subprocess,'check_output',side_effect=[metadata,bad]):
                 with self.assertRaises(AssertionError):storage.inspect_container('synthetic')
+
+    def test_failed_telemetry_retains_partial_output_and_original_error(self):
+        metadata='{"/var/lib/postgresql/data":"rw,noexec,nosuid,size=2147483648"}|3221225472|3221225472|false'
+        failure=storage.subprocess.CalledProcessError(1,['docker','exec'],output=self.container_output())
+        with patch.object(storage.subprocess,'check_output',side_effect=[metadata,failure]):
+            with self.assertRaises(storage.subprocess.CalledProcessError) as raised:storage.inspect_container('synthetic')
+        self.assertIs(raised.exception,failure)
+        self.assertIn('container_storage_partial_evidence',sys.stdout.getvalue())
+        self.assertIn('FILESYSTEM_BYTES',sys.stdout.getvalue())
 
     def test_ordinary_container_keeps_non_tmpfs_storage_and_actual_wal_location(self):
         with patch.object(storage.subprocess,'check_output',side_effect=['null|false','ext2/ext3\n/var/lib/postgresql/data/pg_wal\n']):
