@@ -457,6 +457,7 @@ jobs:
           python scripts/smoke_text_standards.py
           python scripts/smoke_text_standard_composition.py
           python scripts/smoke_text_comparison_api.py --root
+          python scripts/smoke_text_comparison_composition.py
           python scripts/smoke_text_storage_composition.py
           python scripts/smoke_incoming_composition.py
           python scripts/smoke_incoming_text_store.py --root --postgres

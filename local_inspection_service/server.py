@@ -12122,59 +12122,38 @@ _preparation_models = _text_standards.preparation_models
 standard_preparation_jobs = _text_standards.register_preparation(app)
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
 from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
-_history_records = HistoryRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    load=lambda kind: _text_v2_load(kind),
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    public=lambda record: _text_v2_public(record),
+from .text_inspection.comparison_composition import TextComparisonWorkflows, ComparisonImages, ComparisonAudit
+from .text_inspection.inspection_ports import InspectionAccess, SubmissionModels, SubmissionPolicy, SubmissionDiagnostics
+from .text_inspection.extraction_ports import ExtractionModels
+from .text_inspection.comparison_ports import ComparisonModels
+from . import qwen_evidence_jobs as _qwen_evidence_policy
+
+_text_comparisons = TextComparisonWorkflows(
+    standards=_text_standards,
+    access=InspectionAccess(require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs), owner=lambda: _text_v2_owner()),
+    images=ComparisonImages(prepare=lambda: _text_v2_prepare_image, provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime),
+                           annotate=lambda: _text_v2_annotate, data_url=lambda data, mime: _text_v2_data_url(data, mime)),
+    models=SubmissionModels(settings=lambda purpose: ai_detection_settings(purpose), call=lambda: call_ai_mcp_tool, prompt=lambda: strict_compare_prompt(), normalize=lambda: normalize_vlm_provider_result, validate=lambda value: validate_vlm_result(value)), policy=SubmissionPolicy(timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS, prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION, external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, automatic_match_verified=lambda: TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED, qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner)), diagnostics=SubmissionDiagnostics(image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs), event=lambda: _text_v2_diagnostic_event, provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings), value=lambda value: _text_v2_diagnostic_value(value), write=lambda record: _text_v2_write_server_diagnostic(record)),
+    extraction=ExtractionModels(image_settings=lambda: image_generation_settings(), detection_settings=lambda purpose: ai_detection_settings(purpose), image_provider=lambda settings: image_generation_provider_from_settings(settings), transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs), diagnostic_value=lambda value: _text_v2_diagnostic_value(value), external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED),
+    prepared_models=lambda: ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
+    digest=lambda: sha256_bytes,
+    environment=lambda: (lambda name, default, environment=os: environment.getenv(name, default)),
+    prepared_cleanup=lambda: clear_thread_runtime_repository_selection,
+    audit=ComparisonAudit(append=lambda: append_incoming_text_audit, bounded_text=lambda: bounded_text),
+    runtime=StandardThreadScope(scope=_runtime_repositories.thread_scope,
+        clear_repository=lambda: clear_thread_runtime_repository_selection()),
+    files=_business_files,
 )
-_history_media = HistoryMedia(
-    path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
-    read_verified=lambda path, owner, standard, **kwargs: _text_v2_read_verified(path, owner, standard, **kwargs),
-)
-register_comparison_history(
-    app,
-    HistoryAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _history_records,
-    _history_media,
-)
+_history_records = _text_comparisons.history_records
+_history_media = _text_comparisons.history_media
+_text_comparisons.register_history(app)
 
 from .text_inspection.extraction_ports import ExtractionAccess, ExtractionRecords, ExtractionMedia, ExtractionModels
-_extraction_records = ExtractionRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
-)
-_extraction_media = ExtractionMedia(
-    path=lambda owner, identifier, name: _text_v2_media_path(owner, identifier, name),
-    write=lambda path, data: _text_v2_write(path, data),
-    read_verified=lambda path, owner, identifier, **kwargs: _text_v2_read_verified(path, owner, identifier, **kwargs),
-    digest=lambda data: sha256_bytes(data),
-    data_url=lambda data, mime: _text_v2_data_url(data, mime),
-)
-_extraction_models = ExtractionModels(
-    image_settings=lambda: image_generation_settings(),
-    detection_settings=lambda purpose: ai_detection_settings(purpose),
-    image_provider=lambda settings: image_generation_provider_from_settings(settings),
-    transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
-    diagnostic_value=lambda value: _text_v2_diagnostic_value(value),
-    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-)
-_text_extraction_runtime = TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)
-resolve_label_extraction = register_label_extraction(
-    app,
-    ExtractionAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _extraction_records, _extraction_media, _extraction_models,
-    clear_repository=lambda: clear_thread_runtime_repository_selection(),
-    runtime=_text_extraction_runtime, files=_business_files
-)
+_extraction_records = _text_comparisons.extraction_records
+_extraction_media = _text_comparisons.extraction_media
+_extraction_models = _text_comparisons.extraction_models
+_text_extraction_runtime = _text_comparisons.extraction_runtime
+resolve_label_extraction = _text_comparisons.register_extraction(app)
 from .agent.dependencies import AgentAccess, AgentAccounts
 register_agent_api(
     app,
@@ -12249,70 +12228,18 @@ from . import qwen_evidence_jobs as _qwen_evidence_policy
 
 
 from .text_inspection.comparison_runtime import ComparisonRuntime
-_prepared_comparison_runtime = ComparisonRuntime(scope=_runtime_repositories.thread_scope)
+_prepared_comparison_runtime = _text_comparisons.comparison_runtime
 
 
 def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction):
-    from local_inspection_service.standard_preparation_compare import submit
-    from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
-    return submit(
-        ComparisonRecords(_text_v2_load, _text_v2_save, _text_v2_owned, _text_v2_update_attempt, _text_v2_public),
-        ComparisonMedia(_text_v2_media_path, _text_v2_write, sha256_bytes),
-        ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
-        clear_thread_runtime_repository_selection,
-        lambda name, default, environment=os: environment.getenv(name, default),
-        standard_preparation_jobs, owner_user_id, owner_username,
-        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction,
-        execution=_prepared_comparison_runtime)
+    return _text_comparisons.submit_prepared(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
 
 
-_inspection_access = InspectionAccess(
-    require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-    owner=lambda: _text_v2_owner(),
-)
-_inspection_records = InspectionRecords(
-    owned=lambda: _text_v2_owned,
-    save=lambda kind, record, **kwargs: _text_v2_save(kind, record, **kwargs),
-    public=lambda record: _text_v2_public(record),
-)
-_comparison_submission = ComparisonSubmission(
-    _inspection_access, _inspection_records, load=lambda kind: _text_v2_load(kind),
-    media=SubmissionMedia(path=lambda: _text_v2_media_path,
-                          write=lambda path, data: _text_v2_write(path, data), digest=lambda: sha256_bytes),
-    images=SubmissionImages(
-        prepare=lambda: _text_v2_prepare_image,
-        provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime),
-        asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-        annotate=lambda: _text_v2_annotate,
-        data_url=lambda data, mime: _text_v2_data_url(data, mime),
-    ),
-    models=SubmissionModels(settings=lambda purpose: ai_detection_settings(purpose),
-                            call=lambda: call_ai_mcp_tool,
-                            prompt=lambda: strict_compare_prompt(),
-                            normalize=lambda: normalize_vlm_provider_result,
-                            validate=lambda value: validate_vlm_result(value)),
-    policy=SubmissionPolicy(timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
-                            prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION,
-                            external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-                            automatic_match_verified=lambda: TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED,
-                            qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner)),
-    diagnostics=SubmissionDiagnostics(
-        image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs),
-        event=lambda: _text_v2_diagnostic_event,
-        provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
-        value=lambda value: _text_v2_diagnostic_value(value),
-        write=lambda record: _text_v2_write_server_diagnostic(record),
-    ),
-    prepared_submit=lambda *args: _submit_prepared_text_comparison(*args),
-    resolve_extraction=lambda *args: resolve_label_extraction(*args),
-    display_snapshot=lambda standard, asset: comparison_display_snapshot(standard, asset),
-)
-_inspection_reviews = InspectionReviews(
-    _inspection_access, _inspection_records,
-    read_verified=lambda: _text_v2_read_verified,
-    audit=lambda: append_incoming_text_audit, bounded_text=lambda: bounded_text,
-)
-_inspection_routes = register_text_inspections(app, _comparison_submission, _inspection_reviews, _inspection_access)
+_inspection_access = _text_comparisons.access
+_inspection_records = _text_comparisons.inspection_records
+_comparison_submission = _text_comparisons.submission
+_inspection_reviews = _text_comparisons.reviews
+_inspection_routes = _text_comparisons.register_inspections(app)
 compare_text_inspection_label = _inspection_routes.compare_text_inspection_label
 get_text_inspection_v2_evidence = _inspection_routes.get_text_inspection_v2_evidence
 create_text_manual_session = _inspection_routes.create_text_manual_session
