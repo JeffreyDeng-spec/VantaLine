@@ -18,14 +18,14 @@ from smoke_presence_inspection import PresenceFixture
 from smoke_model_tool_dispatch import ProviderError, ProviderTimeout, ProviderOverloaded
 
 
-def owner(f, generate):
+def owner(f, generate, *, mode="in_process", prepare=None):
     return ModelTools(
         errors=ToolErrorPolicy(lambda: lambda v,n: str(v)[:n], lambda: lambda v:v,
                                lambda:ProviderError, lambda:ProviderTimeout,
                                lambda:ProviderOverloaded, lambda:30),
         provider=JsonProviderCalls(lambda:f.settings_call, lambda:lambda s:{'provider':'synthetic'}, lambda:generate),
-        runtime=McpRuntimeSelection(lambda:Path('.'), lambda:lambda:'in_process', lambda:'stdio',
-                                    lambda:'in_process', lambda:lambda n,p:p),
+        runtime=McpRuntimeSelection(lambda:Path('.'), lambda:lambda:mode, lambda:'stdio',
+                                    lambda:'in_process', lambda:prepare or (lambda n,p:p)),
         accessories=AccessoryTools(lambda p:{'owner':id(f)}, lambda p:{'owner':id(f)}),
         presence_input=PresenceInput(f.settings_call, lambda:f.resolve, lambda:f.path, lambda:f.bgr),
         presence=PresencePreparation(f.task_call, f.cache_call, lambda:f.tokens, lambda:f.covers),
@@ -104,6 +104,25 @@ class Contracts(unittest.TestCase):
             b.dispatch.call_ai_mcp_tool('vision.inspect.presence',g.payload());self.assertEqual(pb.call_count,1)
         finally:release.set();t.join(3)
         self.assertFalse(t.is_alive());self.assertEqual(errors,[]);self.assertEqual(pa.call_count,1);self.assertTrue(a.client.shutdown(1))
+
+    def test_owned_stdio_failure_keeps_single_fallback_and_exact_order(self):
+        f=PresenceFixture();events=[]
+        provider=Mock(side_effect=lambda *a,**k:events.append('provider') or (f.parsed,31,{}))
+        a=owner(f,provider,mode='stdio',prepare=lambda n,p:events.append('prepare') or p)
+        with patch.object(a.client,'call_tool',side_effect=lambda *args:events.append('stdio') or (_ for _ in ()).throw(RuntimeError('transport'))), patch.object(a.client,'close',side_effect=lambda:events.append('close')):
+            result=a.call_ai_mcp_tool('provider.gemini.generate_json',{})
+        self.assertTrue(result['ok']);self.assertEqual(events,['prepare','stdio','close','provider'])
+        self.assertEqual(provider.call_count,1);self.assertEqual(result['mcp_fallback_from'],'stdio')
+
+    def test_owned_late_client_close_failure_prevents_fallback(self):
+        f=PresenceFixture();provider=Mock();error=RuntimeError('close');replacement=SimpleNamespace(close=Mock(side_effect=error))
+        def prepare(name,payload):
+            a.client=replacement
+            return payload
+        a=owner(f,provider,mode='stdio',prepare=prepare);original=a.client
+        with patch.object(original,'call_tool',side_effect=RuntimeError('transport')) as call,patch.object(original,'close') as close:
+            with self.assertRaises(RuntimeError) as caught:a.call_ai_mcp_tool('provider.gemini.generate_json',{})
+        self.assertIs(caught.exception,error);call.assert_called_once();close.assert_not_called();replacement.close.assert_called_once();provider.assert_not_called()
 
     def test_owned_call_wrapper_selects_dispatch_after_argument_effects(self):
         f=PresenceFixture();provider=Mock(return_value=(f.parsed,31,{}));a=owner(f,provider)

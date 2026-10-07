@@ -1590,3 +1590,5 @@ The image queue receives an explicit resolver supplier and pins it for the nativ
 ModelTools introduces no operator setting or provider selection change. Source manifest v242 contains 536 real source files including model_providers/tool_composition.py; new tasks record the new source fingerprint, while historical snapshots and secret references remain unchanged. Existing provider/fallback budgets and operation-time external configuration suppliers are retained; internal callbacks follow the owned services.
 
 The owned call export retains the two-step dispatch selection around argument evaluation; it adds no inference attempt or configuration change.
+
+The owned MCP transport retains the original stdio failure fallback and error behavior. No provider attempt budget, retry policy or operator setting changes.
