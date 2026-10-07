@@ -93,10 +93,22 @@ class TextCleanupFilePortsTests(unittest.TestCase):
         with self.assertRaises(TypeError): StandardEdits(**kwargs)
         with self.assertRaises(TypeError): StandardEdits(**kwargs, files=None)
         self.assertIs(StandardEdits(**kwargs, files=files).files, files)
-        tree = ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        calls = [n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('StandardEdits','register_label_extraction')]
-        self.assertEqual(len(calls), 2)
-        for call in calls: self.assertEqual(ast.dump(next(k.value for k in call.keywords if k.arg=='files')), ast.dump(ast.parse('_business_files',mode='eval').body))
+        root = Path(__file__).resolve().parents[1]/'local_inspection_service'
+        def keyword(tree, name, field):
+            calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id==name]
+            self.assertEqual(len(calls),1,name)
+            return next(k.value for k in calls[0].keywords if k.arg==field)
+        tree=ast.parse((root/'server.py').read_text(encoding='utf-8'))
+        media=keyword(tree,'TextStandardWorkflows','media')
+        self.assertEqual(ast.dump(next(k.value for k in media.keywords if k.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
+        self.assertEqual(ast.dump(keyword(tree,'TextComparisonWorkflows','files')),ast.dump(ast.parse('_business_files',mode='eval').body))
+        standard=ast.parse((root/'text_inspection/standard_composition.py').read_text(encoding='utf-8'))
+        comparison=ast.parse((root/'text_inspection/comparison_composition.py').read_text(encoding='utf-8'))
+        self.assertEqual(ast.dump(keyword(standard,'StandardEdits','files')),ast.dump(ast.parse('media.files',mode='eval').body))
+        self.assertEqual(ast.dump(keyword(comparison,'register_extraction','files')),ast.dump(ast.parse('self.files',mode='eval').body))
+        assignment=[n for n in ast.walk(comparison) if isinstance(n,ast.Assign) and any(ast.dump(t)==ast.dump(ast.parse('self.files = files').body[0].targets[0]) for t in n.targets)]
+        self.assertEqual(len(assignment),1)
+        self.assertEqual(ast.dump(assignment[0].value),ast.dump(ast.parse('files',mode='eval').body))
 
 
 if __name__ == '__main__': unittest.main()
