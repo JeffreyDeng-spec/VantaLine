@@ -576,3 +576,5 @@ The CI benchmark-only PostgreSQL 16 service has a 2 GiB tmpfs at its actual PGDA
 
 
 The optional versioned `legacy_json_projection_v1` helper is installed only by its additive feature migration. The runtime/bootstrap DDL remains unchanged and existing readers/writers do not depend on the helper. Its conversion-only exception region handles source representation, numeric-range and Unicode conversion errors; query argument failures, cancellation, permissions and resource failures surface. Historical source rows and snapshots are not rewritten.
+
+The helper fixes original-text operations and field-key membership to the C collation; caller ICU collation cannot alter lexical guards or make Python-distinct JSON keys compare equal.

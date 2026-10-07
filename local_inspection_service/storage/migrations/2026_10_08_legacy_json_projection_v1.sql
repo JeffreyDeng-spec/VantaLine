@@ -6,7 +6,7 @@ SET search_path = pg_catalog
 AS $legacy_json_projection$
 DECLARE
     encoded boolean;
-    source_text text;
+    source_text text COLLATE "C";
     document json;
     checked_document jsonb;
     projected json;
@@ -23,7 +23,7 @@ BEGIN
     -- Connection, cancellation, permissions, resource and query errors still surface.
     BEGIN
         document := source_text::json;
-        IF json_typeof(document) <> 'object' THEN
+        IF json_typeof(document) COLLATE "C" <> 'object' THEN
             RETURN raw_json;
         END IF;
         checked_document := document::jsonb;
@@ -35,7 +35,7 @@ BEGIN
     SELECT COALESCE(json_object_agg(member.key, member.value ORDER BY member.position), '{}'::json)
     INTO projected
     FROM json_each(document) WITH ORDINALITY AS member(key, value, position)
-    WHERE member.key = ANY(fields);
+    WHERE member.key COLLATE "C" = ANY(fields);
     RETURN CASE WHEN encoded THEN to_jsonb(projected::text) ELSE projected::jsonb END;
 END;
 $legacy_json_projection$;

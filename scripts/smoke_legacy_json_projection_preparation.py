@@ -62,6 +62,13 @@ def main():
                 connection.rollback()
             else:
                 raise AssertionError('versioned function was silently replaced')
+            # Caller collation cannot alter token checks or exact Python key selection.
+            cursor.execute(f'CREATE COLLATION "{schema}".synthetic_ci (provider=icu, locale=\'und-u-ks-level1\', deterministic=false)')
+            for fields, expected in ((['id'], {'id': 'lower'}), (['e'], {'e': 1})):
+                encoded = json.dumps(json.dumps({'ID': 'upper', 'id': 'lower', 'é': 2, 'e': 1, 'unused': 'synthetic'}))
+                cursor.execute(f'SELECT "{schema}".legacy_json_projection_v1(%s::jsonb,%s::text[] COLLATE "{schema}".synthetic_ci)', (encoded, fields))
+                assert json.loads(cursor.fetchone()[0]) == expected
+                count += 1
             cases = [
                 '{bad', 'null', '[1,2]', json.dumps(json.dumps({'id': 'layered'})),
                 '{"id":"a","value":NaN}', '{"id":"a","value":Infinity}',
@@ -78,6 +85,21 @@ def main():
             for _ in range(200):
                 value = rng.choice([None, True, False, rng.randrange(-100000, 100000), rng.uniform(-1e30, 1e30), '括号[{]🙂', ['a', {'k': 1.0}]])
                 cases.append(json.dumps({'id': 'synthetic', 'value': value, 'unused': {'deep': [1, 2, 3]}}, ensure_ascii=True))
+            # Preserve the original-token boundary, including brackets inside strings.
+            boundaries = [
+                ('{"id":"a","value":1,"unknown":' + '['*15 + '0' + ']'*15 + '}', False),
+                ('{"id":"a","value":1,"unknown":' + '['*16 + '0' + ']'*16 + '}', True),
+                ('{"id":"a","value":1,"unknown":' + '9'*512 + '}', False),
+                ('{"id":"a","value":1,"unknown":' + '9'*513 + '}', True),
+                (json.dumps({'id': 'a', 'value': 1, 'unknown': '['*17}), True),
+                ('{"id":"a","value":1,"unknown":"\\u005b\\u007b"}', False),
+            ]
+            for text, unchanged in boundaries:
+                cursor.execute(f'SELECT %s::jsonb, "{schema}".legacy_json_projection_v1(%s::jsonb,%s)', (json.dumps(text), json.dumps(text), ['id', 'value']))
+                raw, compact = cursor.fetchone()
+                assert (raw == compact) is unchanged
+                assert outcome(raw) == outcome(compact)
+                count += 1
             for text in cases:
                 cursor.execute(f'SELECT %s::jsonb, "{schema}".legacy_json_projection_v1(%s::jsonb,%s)', (json.dumps(text), json.dumps(text), ['id', 'value']))
                 raw, compact = cursor.fetchone()
