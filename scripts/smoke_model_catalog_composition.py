@@ -5,6 +5,8 @@ from contextvars import ContextVar
 from pathlib import Path
 import sys
 import tempfile
+import threading
+from dataclasses import replace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -91,6 +93,53 @@ class CatalogCompositionContracts(unittest.TestCase):
             self.assertEqual(len(a[0]),1);self.assertEqual(b[0],[])
             self.assertIs(a[1],fixture.file_loader);self.assertIs(b[1],fixture.file_loader)
             self.assertEqual(fixture.repository.call_count,4)
+            self.assertIsNone(user.get())
+
+    def test_thread_bound_repository_finder_is_created_and_consumed_in_same_thread(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);(root/'a').mkdir();(root/'b').mkdir()
+            fixtures={name:Fixture(root/path) for name,path in [('alice','a'),('bob','b')]}
+            user=ContextVar('bound_repository_user',default=None);events=[];failures={'alice':True}
+            graphs={name:self.build(fixture,user)[0] for name,fixture in fixtures.items()}
+            for name,fixture in fixtures.items():
+                def repository(_owner=name):
+                    owner=user.get()['id'];thread=threading.get_ident()
+                    self.assertEqual(owner,_owner);events.append(('factory',owner,thread))
+                    class ThreadBoundRepository:
+                        def fetch_all(inner,table):
+                            self.assertEqual(threading.get_ident(),thread)
+                            self.assertEqual(user.get()['id'],owner)
+                            self.assertEqual(table,'training_tasks');events.append(('fetch',owner,thread))
+                            if failures.get(owner):raise RuntimeError('synthetic owner fetch failure')
+                            return [{'raw_json':{'task_id':'shared','owner_user_id':owner}}]
+                    return ThreadBoundRepository()
+                fixture.repository.side_effect=repository
+                original=graphs[name].lookup.rows.decode
+                def decode(rows,_owner=name,_original=original):
+                    self.assertEqual(user.get()['id'],_owner)
+                    events.append(('decode',_owner,threading.get_ident()))
+                    return _original(rows)
+                graphs[name].lookup.rows=replace(graphs[name].lookup.rows,decode=decode)
+            async def query(owner):
+                token=user.set({'id':owner})
+                try:
+                    def consume():
+                        finder=graphs[owner].lookup.training_task_finder()
+                        return finder(Path('shared.json'))
+                    try:return await asyncio.to_thread(consume)
+                    except RuntimeError as error:return str(error)
+                finally:user.reset(token)
+            async def together():return await asyncio.gather(query('alice'),query('bob'))
+            a,b=asyncio.run(together())
+            self.assertEqual(a,'synthetic owner fetch failure');self.assertEqual(b['owner_user_id'],'bob')
+            self.assertEqual(fixtures['alice'].cache,{})
+            self.assertEqual([event[0] for event in events if event[1]=='alice'],['factory','fetch'])
+            bob=[event for event in events if event[1]=='bob']
+            self.assertEqual([event[0] for event in bob],['factory','fetch','decode'])
+            self.assertEqual(len({event[2] for event in bob}),1)
+            failures['alice']=False
+            self.assertEqual(asyncio.run(query('alice'))['owner_user_id'],'alice')
+            self.assertEqual(fixtures['bob'].repository.call_count,1)
             self.assertIsNone(user.get())
 
     def test_owned_catalog_replacement_reaches_selection_cache_listing_and_pipeline(self):
