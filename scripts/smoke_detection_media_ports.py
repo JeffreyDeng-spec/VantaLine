@@ -155,7 +155,7 @@ class DetectionMediaPortsTests(unittest.TestCase):
         tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
         for name, key, expected in [('_image_encoding', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
             ('_inspection_image_store', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
-            ('_reference_sheet', 'files', 'lambda: _business_files'), ('_local_models', 'files', '_business_files'), ('_video_upload', 'files', '_business_files')]:
+            ('_reference_sheet', 'files', 'lambda: _business_files'), ('_model_catalog', 'files', '_business_files'), ('_video_upload', 'files', '_business_files')]:
             calls = [n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)]
             self.assertEqual(len(calls), 1)
             actual = [kw.value for kw in calls[0].keywords if kw.arg == key]
@@ -182,7 +182,7 @@ class DetectionMediaPortsTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
         first, second = BusinessFiles(lambda: self.runtimes[0]), BusinessFiles(lambda: self.runtimes[1])
-        for name, key, lazy in [('_local_models', 'files', False), ('_video_upload', 'files', False),
+        for name, key, lazy in [('_model_catalog', 'files', False), ('_video_upload', 'files', False),
                                ('_reference_sheet', 'files', True), ('_image_encoding', 'runtime_provider', True),
                                ('_inspection_image_store', 'runtime_provider', True)]:
             call = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in n.targets))

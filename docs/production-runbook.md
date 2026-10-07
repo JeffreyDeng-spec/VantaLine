@@ -1612,3 +1612,6 @@ The text storage lock belongs to `TextStorage` and its public lock property cann
 Incoming workflow composition is a structural change in the existing Web process. It neither changes the label worker topology nor starts a new incoming-text process. Deploy the complete validated package through the existing managed release path, preserving mutable records and media. Restore the previous complete package and its runtime topology if the incoming contracts fail.
 
 The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
+
+
+Catalog composition preserves permission filtering and current local model-cache behavior; it starts no additional process and performs no eager repository/model access. Deploy and roll back complete accepted releases, retaining all task snapshots and model artifacts. Constructor isolation is not production capacity or full-application lifecycle evidence.

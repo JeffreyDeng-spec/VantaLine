@@ -1371,3 +1371,6 @@ Text storage composition adds an inert per-composition shared lock and two recor
 The incoming-text domain builder is released with the complete Web/label-worker package. Its CI command smoke_incoming_composition.py supplements existing incoming store, workflow and artifact contracts. The prompt source manifest includes the actual two new source files. Require fresh PR CI, independent review and actual-main release verification; rollback restores the previous complete package without copying individual modules.
 
 The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
+
+
+Catalog composition uses actual source manifest v240 (534 paths). Require catalog/model/pipeline/media regressions, exact-head CI and independent review before whole-release publication. The domain composition changes no provider, model defaults or runtime service topology and does not complete the application factory.

@@ -727,11 +727,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
 
 
 def legacy_model_specs() -> list[dict[str, Any]]:
-    specs = []
-    for spec in MODEL_REGISTRY.values():
-        variant = spec.get("variant") or ("yolo_ocr" if spec.get("uses_ocr") else "yolo")
-        specs.append({**spec, "is_legacy": not bool(spec.get("is_ai_detection") or spec.get("is_label_sheet_match")), "variant": variant})
-    return specs
+    return _model_catalog.legacy_model_specs()
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model_path": str(MODEL_PATH),
@@ -1337,19 +1333,33 @@ from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
 
 app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR, runtime_provider=lambda: _business_files.runtime_provider()), name="outputs")
 
-from .detection.model_selection import ModelSelection
-from .detection.local_models import LocalModels
 
-_model_selection = ModelSelection(
-    specialized=lambda config: list_ai_detection_specialized_model_specs(config),
-    trained=lambda *args: list_trained_model_specs(*args), registry=lambda: MODEL_REGISTRY,
-    default_id=lambda: DEFAULT_MODEL_ID, removed=lambda feature: removed_phase1_feature(feature),
-)
-_local_models = LocalModels(
-    select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda: YOLO,
-    legacy_specs=lambda: legacy_model_specs(), trained_specs=lambda *args: list_trained_model_specs(*args),
+from .training.catalog_composition import ModelCatalog, ModelRunFiles, ModelPipeline, ModelRegistry
+from .training.task_lookup import LookupCache, LookupRows
+from .training.model_catalog import TrainingAccessories, TrainingAccess
+
+_model_catalog = ModelCatalog(
+    repository=lambda: runtime_postgres_repository_or_none(), file_loader=lambda: load_training_task,
+    cache=LookupCache(get=lambda key: store_read_cache_get(key), put=lambda key, value: store_read_cache_put(key, value)),
+    rows=LookupRows(decode=lambda rows: row_raw_json_list(rows), identifier=lambda path: file_stem_identifier(path),
+        matches=lambda task, requested, row: training_task_matches_identifier(task, requested, row)),
+    config=lambda: load_config(),
+    runs=ModelRunFiles(roots=lambda: training_run_roots(), task_path=lambda: training_task_path,
+        read=lambda path: load_json_file_mtime_cached(path), output=lambda: OUTPUT_DIR, resolve=lambda: resolve_service_path),
+    accessories=TrainingAccessories(uid=lambda item: accessory_uid(item), serialize=lambda item: serialize_accessory(item),
+        uses_ocr=lambda: accessory_uses_ocr, profiles=lambda: build_ocr_accessory_profiles),
+    pipeline=ModelPipeline(tasks=lambda: load_pipeline_tasks(), name=lambda task: task_record_name(task),
+        method=lambda: normalize_pipeline_detection_method),
+    access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
+        audit=lambda: record_audit_fields),
+    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config),
+    registry=ModelRegistry(specialized=lambda config: list_ai_detection_specialized_model_specs(config),
+        registry=lambda: MODEL_REGISTRY, default_id=lambda: DEFAULT_MODEL_ID,
+        removed=lambda feature: removed_phase1_feature(feature), factory=lambda: YOLO),
     files=_business_files,
 )
+_model_selection = _model_catalog.selection
+_local_models = _model_catalog.local
 # Compatibility objects for existing maintenance scripts; state belongs to LocalModels.
 _models = _local_models.models
 _model_paths = _local_models.paths
@@ -8066,33 +8076,10 @@ def enqueue_training_task(
     return _training_submission.enqueue_training_task(request, selected, action, dataset)
 
 
-from .training.task_lookup import TrainingTaskLookup, LookupCache, LookupRows
-from .training.model_catalog import (
-    TrainedModelCatalog, TrainingFiles, TrainingAccessories, TrainingPipeline, TrainingAccess,
-)
-from .pipeline.training_links import TrainingLinks
 
-_training_task_lookup = TrainingTaskLookup(
-    repository=lambda: runtime_postgres_repository_or_none(), file_loader=lambda: load_training_task,
-    cache=LookupCache(get=lambda key: store_read_cache_get(key), put=lambda key, value: store_read_cache_put(key, value)),
-    rows=LookupRows(decode=lambda rows: row_raw_json_list(rows), identifier=lambda path: file_stem_identifier(path),
-                    matches=lambda task, requested, row: training_task_matches_identifier(task, requested, row)),
-)
-_training_links = TrainingLinks(tasks=lambda: load_pipeline_tasks(), name=lambda task: task_record_name(task))
-_trained_model_catalog = TrainedModelCatalog(
-    config=lambda: load_config(),
-    files=TrainingFiles(roots=lambda: training_run_roots(), finder=lambda: training_task_finder(),
-        task_path=lambda: training_task_path, read=lambda path: load_json_file_mtime_cached(path),
-        output=lambda: OUTPUT_DIR, resolve=lambda: resolve_service_path),
-    accessories=TrainingAccessories(uid=lambda item: accessory_uid(item), serialize=lambda item: serialize_accessory(item),
-        uses_ocr=lambda: accessory_uses_ocr, profiles=lambda: build_ocr_accessory_profiles),
-    pipeline=TrainingPipeline(tasks=lambda: load_pipeline_tasks(),
-        link=lambda: pipeline_task_link_for_training_run,
-        method=lambda: normalize_pipeline_detection_method),
-    access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
-        audit=lambda: record_audit_fields),
-    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config), business_files=_business_files
-)
+_training_task_lookup = _model_catalog.lookup
+_training_links = _model_catalog.links
+_trained_model_catalog = _model_catalog.catalog
 
 
 def training_task_finder() -> Callable[[Path], dict[str, Any] | None]:
@@ -11236,8 +11223,7 @@ def sync_pipeline_task(
     return _pipeline_training_status.sync_pipeline_task(task, load_task)
 
 
-from .pipeline.training_links import PipelineTrainedModelLink as _PipelineTrainedModelLink
-_pipeline_trained_model_link = _PipelineTrainedModelLink(catalog=lambda: list_trained_model_specs)
+_pipeline_trained_model_link = _model_catalog.pipeline_link
 
 
 def link_pipeline_trained_model(task: dict[str, Any]) -> dict[str, Any] | None:

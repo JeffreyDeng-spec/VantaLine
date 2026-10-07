@@ -13,6 +13,8 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+from model_catalog_test_ports import patch_model, get_model_callback, set_model_callback
+
 class TrainedModelLinkContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -48,7 +50,7 @@ class TrainedModelLinkContracts(unittest.TestCase):
         self.addCleanup(self.stack.close)
 
     def replace(self, name, value):
-        self.stack.enter_context(patch.object(self.api, name, value, create=True))
+        self.stack.enter_context(patch_model(self.api, name, value, create=True))
         return value
 
     def test_empty_id_skips_catalog_and_mutation(self):

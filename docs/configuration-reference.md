@@ -1579,3 +1579,6 @@ Incoming-text workflow composition adds no configuration or environment setting.
 The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
 
 Replacing the default entry business-file alias no longer redirects this incoming domain. Its response capability is selected on the owner after authorization; changing that capability does not atomically replace the separate file adapters already held by catalog/execution/retention. No whole-graph hot-swap guarantee is introduced.
+
+
+ModelCatalog construction stores capability suppliers, not the current user, a database connection or a loaded model. Registry, default ID, model factory and request identity remain selected during their existing operations. Entry compatibility aliases do not configure internal catalog dependencies; replace the explicit owner methods in tests or supply separate graph ports. Business configuration and historical task snapshots remain unchanged.

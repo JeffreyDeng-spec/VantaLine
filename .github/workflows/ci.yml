@@ -557,6 +557,7 @@ jobs:
           python scripts/smoke_yolo_warmup.py
           python scripts/smoke_yolo_warmup_drain.py
           python scripts/smoke_model_warmup_api.py
+          python scripts/smoke_model_catalog_composition.py
           python scripts/smoke_trained_model_catalog.py --postgres
           python scripts/smoke_training_record_store.py --postgres
           python scripts/smoke_training_task_lifecycle.py --postgres
