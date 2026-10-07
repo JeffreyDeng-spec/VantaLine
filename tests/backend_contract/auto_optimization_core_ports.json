@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "parent": "8d10fe228bd7d6c2b022c425304c4fb198449165",
+  "ports": {
+    "storage": {
+      "AUTO_OPTIMIZE_DIR": "lambda: AUTO_OPTIMIZE_DIR",
+      "AI_DETECTION_MODEL_ID": "lambda: AI_DETECTION_MODEL_ID",
+      "_business_files": "lambda: _business_files",
+      "runtime_postgres_repository_or_none": "lambda: runtime_postgres_repository_or_none"
+    },
+    "state_policy": {
+      "sanitize_ai_detection_task_id": "lambda: sanitize_ai_detection_task_id",
+      "safe_record_id": "lambda: safe_record_id",
+      "row_raw_json_list": "lambda: row_raw_json_list",
+      "auto_optimize_state_row": "lambda: auto_optimize_state_row",
+      "resolve_model_profiles": "lambda: resolve_model_profiles"
+    },
+    "cache": {
+      "_read_path_cache": "lambda: _read_path_cache",
+      "store_read_cache_get": "lambda: store_read_cache_get",
+      "store_read_cache_put": "lambda: store_read_cache_put",
+      "store_read_cache_invalidate": "lambda: store_read_cache_invalidate"
+    },
+    "readiness": {
+      "find_training_task": "lambda: find_training_task",
+      "load_config": "lambda: load_config",
+      "canonical_pipeline_accessory_ids": "lambda: canonical_pipeline_accessory_ids",
+      "normalize_pipeline_accessory_counts": "lambda: normalize_pipeline_accessory_counts",
+      "load_pipeline_tasks": "lambda: load_pipeline_tasks",
+      "normalize_pipeline_detection_method": "lambda: normalize_pipeline_detection_method",
+      "pipeline_task_model_status": "lambda: pipeline_task_model_status",
+      "pipeline_task_model_id": "lambda: pipeline_task_model_id"
+    },
+    "status_state": {
+      "hydrate_auto_optimize_background_from_ai_task": "lambda: hydrate_auto_optimize_background_from_ai_task",
+      "find_training_task": "lambda: find_training_task",
+      "record_visible_to_user": "lambda: record_visible_to_user",
+      "current_auth_user": "lambda: current_auth_user",
+      "start_auto_optimize_label_worker": "lambda: start_auto_optimize_label_worker"
+    },
+    "status_policy": {
+      "auto_optimize_public_sprite_pool": "lambda: auto_optimize_public_sprite_pool",
+      "background_set_payload": "lambda: background_set_payload",
+      "AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT": "lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT",
+      "public_path_sanitized": "lambda: public_path_sanitized",
+      "normalize_expected_production_count": "lambda: normalize_expected_production_count"
+    },
+    "shadow_state": {
+      "sanitize_ai_detection_task_id": "lambda: sanitize_ai_detection_task_id",
+      "bounded_text": "lambda: bounded_text"
+    },
+    "observation": {
+      "resolve_service_path": "lambda: resolve_service_path",
+      "_image_files": "lambda: _image_files",
+      "safe_record_id": "lambda: safe_record_id"
+    },
+    "retirement": {
+      "LEGACY_OWNER_ID": "lambda: LEGACY_OWNER_ID",
+      "delete_training_task_record": "lambda: delete_training_task_record",
+      "training_run_roots": "lambda: training_run_roots",
+      "_business_files": "lambda: _business_files"
+    },
+    "accessory_lookup": "lambda config: accessory_lookup_by_id(config)",
+    "material_type": "lambda item: accessory_material_type(item)",
+    "bounded_text": "lambda: bounded_text",
+    "ownership": {
+      "settings": "_auto_optimization_settings",
+      "runtime": "_auto_optimization_runtime",
+      "detection": "lambda: _detection_workflows",
+      "shadow_runtime": "TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)",
+      "shadow_resolver": "resolve_model_profiles"
+    }
+  },
+  "aliases": {
+    "_auto_optimization_state_store": "store",
+    "_auto_optimization_recommendations": "recommendations",
+    "_auto_optimization_readiness": "readiness",
+    "_auto_optimization_status": "status",
+    "_auto_optimization_shadow_evaluation": "shadow"
+  },
+  "shadow_binding_source": "parent decorated auto_optimize_shadow_worker: captured resolve_model_profiles provider, loader lambda identity: load_auto_optimize_state(identity)"
+}

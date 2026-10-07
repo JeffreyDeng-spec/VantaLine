@@ -4213,22 +4213,22 @@ upsert_data_analysis_image_processing_record = _analysis_publisher.upsert_data_a
 
 
 from .training.auto_optimization_state_store import AutoOptimizationStateStore
-from .training.auto_optimization_state_ports import AutoOptimizationStateStorage, AutoOptimizationStatePolicy, AutoOptimizationStateCache
+from .training.auto_optimization_state_ports import AutoOptimizationStateStorage, AutoOptimizationStatePolicy
 
-_auto_optimization_state_store = AutoOptimizationStateStore(
-    storage=AutoOptimizationStateStorage(
+from .training.core_composition import (AutoOptimizationCore, StateStorage, StatePolicy, AutoOptimizationStateCache, ReadinessLookups, StatusLookups, StatusProjection, ShadowPolicy, ShadowImages, Retirement)
+
+_auto_optimization_core = AutoOptimizationCore(
+    storage=StateStorage(
         AUTO_OPTIMIZE_DIR=lambda: AUTO_OPTIMIZE_DIR,
         AI_DETECTION_MODEL_ID=lambda: AI_DETECTION_MODEL_ID,
         _business_files=lambda: _business_files,
         runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        auto_optimize_task_path=lambda: auto_optimize_task_path,
     ),
-    policy=AutoOptimizationStatePolicy(
+    state_policy=StatePolicy(
         sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
         safe_record_id=lambda: safe_record_id,
         row_raw_json_list=lambda: row_raw_json_list,
         auto_optimize_state_row=lambda: auto_optimize_state_row,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         resolve_model_profiles=lambda: resolve_model_profiles,
     ),
     cache=AutoOptimizationStateCache(
@@ -4237,7 +4237,55 @@ _auto_optimization_state_store = AutoOptimizationStateStore(
         store_read_cache_put=lambda: store_read_cache_put,
         store_read_cache_invalidate=lambda: store_read_cache_invalidate,
     ),
+    readiness=ReadinessLookups(
+        find_training_task=lambda: find_training_task,
+        load_config=lambda: load_config,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+        load_pipeline_tasks=lambda: load_pipeline_tasks,
+        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+        pipeline_task_model_status=lambda: pipeline_task_model_status,
+        pipeline_task_model_id=lambda: pipeline_task_model_id,
+    ),
+    status_state=StatusLookups(
+        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
+        find_training_task=lambda: find_training_task,
+        record_visible_to_user=lambda: record_visible_to_user,
+        current_auth_user=lambda: current_auth_user,
+        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+    ),
+    status_policy=StatusProjection(
+        auto_optimize_public_sprite_pool=lambda: auto_optimize_public_sprite_pool,
+        background_set_payload=lambda: background_set_payload,
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+        public_path_sanitized=lambda: public_path_sanitized,
+        normalize_expected_production_count=lambda: normalize_expected_production_count,
+    ),
+    shadow_state=ShadowPolicy(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    observation=ShadowImages(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        safe_record_id=lambda: safe_record_id,
+    ),
+    retirement=Retirement(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        delete_training_task_record=lambda: delete_training_task_record,
+        training_run_roots=lambda: training_run_roots,
+        _business_files=lambda: _business_files,
+    ),
+    accessory_lookup=lambda config: accessory_lookup_by_id(config),
+    material_type=lambda item: accessory_material_type(item),
+    bounded_text=lambda: bounded_text,
+    settings=_auto_optimization_settings,
+    runtime=_auto_optimization_runtime,
+    detection=lambda: _detection_workflows,
+    shadow_runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
+    shadow_resolver=resolve_model_profiles,
 )
+_auto_optimization_state_store = _auto_optimization_core.store
 
 
 def auto_optimize_task_path(task_id: str) -> Path:
@@ -4266,12 +4314,7 @@ auto_optimize_training_parameters = _auto_optimization_settings.auto_optimize_tr
 
 from .training.auto_optimization_recommendations import AutoOptimizationRecommendations
 
-_auto_optimization_recommendations = AutoOptimizationRecommendations(
-    settings=_auto_optimization_settings,
-    accessory_lookup_by_id=lambda config: accessory_lookup_by_id(config),
-    accessory_material_type=lambda item: accessory_material_type(item),
-    bounded_text=lambda: bounded_text,
-)
+_auto_optimization_recommendations = _auto_optimization_core.recommendations
 
 
 def auto_optimize_complexity_rule_recommendation(
@@ -4368,36 +4411,7 @@ def list_auto_optimize_states() -> list[dict[str, Any]]:
 from .training.auto_optimization_status import AutoOptimizationStatus
 from .training.auto_optimization_status_ports import AutoOptimizationStatusState, AutoOptimizationStatusPolicy
 
-_auto_optimization_status = AutoOptimizationStatus(
-    AutoOptimizationStatusState(
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        find_training_task=lambda: find_training_task,
-        record_visible_to_user=lambda: record_visible_to_user,
-        current_auth_user=lambda: current_auth_user,
-        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
-        public_auto_optimize_state=lambda: public_auto_optimize_state,
-    ),
-    AutoOptimizationStatusPolicy(
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_public_sprite_pool=lambda: auto_optimize_public_sprite_pool,
-        background_set_payload=lambda: background_set_payload,
-        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
-        auto_optimize_training_parameters=_auto_optimization_settings.auto_optimize_training_parameters,
-        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
-        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        public_path_sanitized=lambda: public_path_sanitized,
-        auto_optimize_phase_name=lambda: auto_optimize_phase_name,
-        normalize_expected_production_count=lambda: normalize_expected_production_count,
-        public_auto_optimize_initialization_payload=lambda: public_auto_optimize_initialization_payload,
-    ),
-)
+_auto_optimization_status = _auto_optimization_core.status
 
 
 def public_auto_optimize_state(task_id: str, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -4407,19 +4421,7 @@ def public_auto_optimize_state(task_id: str, *, user: dict[str, Any] | None = No
 from .training.auto_optimization_readiness import AutoOptimizationReadiness
 from .training.auto_optimization_readiness_ports import AutoOptimizationReadinessPorts
 
-_auto_optimization_readiness = AutoOptimizationReadiness(AutoOptimizationReadinessPorts(
-    find_training_task=lambda: find_training_task,
-    auto_optimize_linked_pipeline_model_id=lambda: auto_optimize_linked_pipeline_model_id,
-    load_config=lambda: load_config,
-    canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-    normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-    load_pipeline_tasks=lambda: load_pipeline_tasks,
-    normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
-    pipeline_task_model_status=lambda: pipeline_task_model_status,
-    pipeline_task_model_id=lambda: pipeline_task_model_id,
-    default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-))
+_auto_optimization_readiness = _auto_optimization_core.readiness
 
 
 def auto_optimize_phase_name(state: dict[str, Any]) -> str:
@@ -5037,33 +5039,7 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
 from .training.auto_optimization_shadow_evaluation import AutoOptimizationShadowEvaluation
 from .training.auto_optimization_shadow_evaluation_ports import ShadowState, ShadowObservation, ShadowPromotion
 
-_auto_optimization_shadow_evaluation = AutoOptimizationShadowEvaluation(
-    state=ShadowState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        _auto_optimize_shadow_threads=lambda: _auto_optimize_shadow_threads,
-        auto_optimize_shadow_worker=lambda: auto_optimize_shadow_worker,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        bounded_text=lambda: bounded_text,
-    ),
-    observation=ShadowObservation(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        analyze_bgr=lambda: analyze_bgr,
-        safe_record_id=lambda: safe_record_id,
-    ),
-    promotion=ShadowPromotion(
-        maybe_promote_auto_optimize_model_locked=lambda: maybe_promote_auto_optimize_model_locked,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        cleanup_auto_optimize_retired_candidate_locked=lambda: cleanup_auto_optimize_retired_candidate_locked,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        delete_training_task_record=lambda: delete_training_task_record,
-        training_run_roots=lambda: training_run_roots,
-        _business_files=lambda: _business_files,
-    ),
-    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-)
+_auto_optimization_shadow_evaluation = _auto_optimization_core.shadow
 
 
 def start_auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
