@@ -1,0 +1,27 @@
+{
+  "source_ref": "fe0c88de246631b8df4445f0fb0120cd151855df",
+  "source_workflow_sha256": "fc7241a9edf3359c9904498398a5db89435fce591fcbe96dd535e51cb5113790",
+  "boundary": "All backend run steps after shared installation and before history benchmark; step boundaries retained",
+  "steps": [
+    "python scripts/verify_production_dependencies.py requirements-production.lock",
+    "python scripts/verify_migration_safety.py",
+    "python scripts/smoke_migration_safety.py",
+    "python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py",
+    "python local_inspection_service/scripts/smoke_plc_web_serial_v3.py",
+    "python local_inspection_service/scripts/smoke_plc_frontend_contract.py",
+    "python scripts/smoke_plc_workstation_management.py",
+    "python scripts/smoke_plc_connection_lease_api.py",
+    "python scripts/smoke_plc_lease_maintenance.py --postgres",
+    "python scripts/smoke_plc_lease_acquisition.py --postgres",
+    "python scripts/smoke_plc_lease_rebind.py --postgres",
+    "python scripts/smoke_plc_diagnostic_state.py --postgres",
+    "python scripts/smoke_plc_diagnostic_confirm.py --postgres",
+    "python scripts/smoke_plc_diagnostic_finish.py --postgres",
+    "python scripts/smoke_plc_dispatch_diagnostic_api.py",
+    "python scripts/smoke_plc_config_diagnostics.py",
+    "python local_inspection_service/scripts/smoke_release_version.py",
+    "python local_inspection_service/scripts/smoke_navigation_endpoints.py",
+    "python local_inspection_service/scripts/smoke_postgres_runtime_repository.py",
+    "python scripts/verify_backend_contract.py\npython scripts/smoke_model_dependency_contract.py\npython scripts/verify_backend_boundaries.py\npython scripts/smoke_foundation_policies.py\npython scripts/smoke_artifact_file_policies.py\npython scripts/smoke_runtime_repository_access.py\npython scripts/smoke_service_paths.py\npython scripts/smoke_read_cache_ownership.py\npython scripts/smoke_directory_lifecycle.py\npython scripts/smoke_label_history_benchmark.py\npython scripts/smoke_label_history_statistics.py"
+  ]
+}

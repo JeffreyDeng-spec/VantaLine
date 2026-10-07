@@ -1400,3 +1400,6 @@ The retained PLC coordination extraction changes code ownership only. It does no
 The PLC dispatch-record ownership slice is structural and preserves current Web Serial, dormant legacy workers and external label-worker topology. It changes neither database schema nor release control. Rollback restores the full previous package and leaves dispatch evidence intact.
 
 Moving retained PLC single-iteration workflows does not start legacy workers or change the Web/label-worker topology. The application startup hook remains dormant. Rollback uses the complete previous release; no PLC state, dispatch evidence or database object is deleted.
+
+
+A dispatch-only diagnostic branch may run `scripts/run_hosted_phase_diagnostic.py` against fixed accepted/candidate commits. It is diagnostic-only and must never be merged or deployed: its workflow has no push, pull-request or release trigger. The fixed ABBA study retains the original prelude, captures instrumented phases and sampled PostgreSQL waits, and uploads evidence even on failure. It cannot replace required CI, repair earlier failed performance samples, or establish historical causation. Source hashes, immutable progress checkpoints and incomplete-observer/metadata failures remain part of the evidence. Cancellation may leave a last in-progress checkpoint, never a completed verdict.
