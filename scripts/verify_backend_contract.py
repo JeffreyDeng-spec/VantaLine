@@ -181,11 +181,11 @@ def capture():
         bindings = (
             (server, "bounded_text", (server._standard_imports.bounded_text, server._standard_edits.bounded_text)),
             (server, "extract_doc_images", (server._standard_imports.parsers.doc,)),
-            (server, "_text_v2_write", (server._standard_media.write,)),
+            (server._text_standards, "write", (server._standard_media.write,)),
             (server.document_import_jobs, "mark_unavailable", (server._standard_imports.classification.mark_unavailable,)),
             (server, "_text_v2_expected_revision", (server._standard_edits.revisions.expected,)),
             (server, "_text_v2_public", (server._standard_records.public,)),
-            (server, "_text_v2_apply_revision", (server._standard_edits.revisions.apply,)),
+            (server._text_standards, "apply_revision", (server._standard_edits.revisions.apply,)),
             (server, '_text_v2_owned', (server._inspection_records.owned,)),
             (server, '_text_v2_media_path', (server._comparison_submission.media.path,)),
             (server, 'sha256_bytes', (server._comparison_submission.media.digest,)),

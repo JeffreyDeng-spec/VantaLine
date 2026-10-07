@@ -1,5 +1,5 @@
 {
-  "version": 243,
+  "version": 244,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -537,6 +537,7 @@
     "training/catalog_composition.py",
     "accessories/image_composition.py",
     "model_providers/tool_composition.py",
-    "detection/workflow_composition.py"
+    "detection/workflow_composition.py",
+    "text_inspection/standard_composition.py"
   ]
 }

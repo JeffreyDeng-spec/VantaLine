@@ -11968,15 +11968,55 @@ from local_inspection_service.text_inspection.images import (
     prepare_provider_image as _prepare_text_provider_image,
 )
 
-_text_media = TextMedia(
-    runtime_provider=_business_files.runtime_provider,
-    directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
-    digest=lambda contents: sha256_bytes(contents),
-    records=TextMediaRecords(
-        owned=lambda: _text_v2_owned,
-        save=lambda kind, value: _text_v2_save(kind, value),
-    ),
+from .text_inspection.standard_composition import (
+    TextStandardWorkflows, StandardMediaStorage, StandardPolicy, StandardThreadScope,
 )
+from .text_inspection.standard_ports import StandardAccess, StandardParsers
+from .text_inspection.document_ports import DocumentModels
+from .text_inspection.preparation_ports import PreparationModels
+
+_text_standards = TextStandardWorkflows(
+    records=_text_storage.records,
+    access=StandardAccess(
+        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+        owner=lambda: _text_v2_owner(),
+    ),
+    media=StandardMediaStorage(
+        directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
+        digest=lambda contents: sha256_bytes(contents),
+        data_url=lambda data, mime: _text_v2_data_url(data, mime),
+        runtime_provider=_business_files.runtime_provider,
+        files=_business_files,
+    ),
+    policy=StandardPolicy(
+        public=lambda: _text_v2_public,
+        snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
+        expected=lambda: _text_v2_expected_revision,
+        bounded_text=lambda: bounded_text,
+        prepare_image=lambda contents: _text_v2_prepare_image(contents),
+        preparation_enabled=lambda owner: _standard_preparation_policy.enabled(owner),
+    ),
+    parsers=StandardParsers(doc=lambda: extract_doc_images,
+                    docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data)),
+    documents=DocumentModels(
+        external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+        settings=lambda purpose: ai_detection_settings(purpose),
+        transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
+        record_usage=lambda settings, elapsed, ok, usage: record_model_call(settings, elapsed, ok, usage),
+    ),
+    preparation=PreparationModels(
+        settings=lambda purpose: ai_detection_settings(purpose),
+        external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+        call_tool=lambda name, payload: call_ai_mcp_tool(name, payload),
+        diagnostics=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
+    ),
+    runtime=StandardThreadScope(
+        scope=_runtime_repositories.thread_scope,
+        clear_repository=lambda: clear_thread_runtime_repository_selection(),
+    ),
+    raw_rows=lambda rows: row_raw_json_list(rows),
+)
+_text_media = _text_standards.media
 
 
 def _text_v2_media_path(owner_user_id: str, standard_id: str, filename: str) -> Path:
@@ -11997,13 +12037,7 @@ from local_inspection_service.text_inspection.revisions import (
     confirmed_snapshot as _text_v2_confirmed_snapshot, expected_revision as _text_v2_expected_revision,
 )
 
-_text_revisions = TextRevisions(
-    RevisionRecords(
-        load=lambda kind: _text_v2_load(kind),
-        save=lambda kind, value, insert_only=False: _text_v2_save(kind, value, insert_only=insert_only),
-    ),
-    snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
-)
+_text_revisions = _text_standards.revisions
 
 
 def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
@@ -12026,47 +12060,13 @@ from .text_inspection.standard_ports import (
 )
 from .text_inspection import preparation_policy as _standard_preparation_policy
 
-_standard_access = StandardAccess(
-    require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-    owner=lambda: _text_v2_owner(),
-)
-_standard_records = StandardRecords(
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    public=lambda: _text_v2_public,
-)
-_standard_media = StandardMedia(
-    path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
-    write=lambda: _text_v2_write,
-    digest=lambda contents: sha256_bytes(contents),
-)
-_standard_imports = StandardImports(
-    _standard_access, _standard_records, _standard_media,
-    StandardParsers(doc=lambda: extract_doc_images,
-                    docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data)),
-    StandardClassification(start=lambda standard, owner: document_import_jobs.start(standard, owner),
-                           mark_unavailable=lambda: document_import_jobs.mark_unavailable),
-    bounded_text=lambda: bounded_text,
-)
-_standard_library = TextStandardLibrary(
-    _standard_access, _standard_records,
-    refresh=lambda standard, owner: document_import_jobs.refresh(standard, owner),
-    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-)
-_standard_edits = StandardEdits(
-    _standard_access, _standard_records,
-    StandardWrites(repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock),
-    _standard_media,
-    StandardRevisions(expected=lambda: _text_v2_expected_revision,
-                      snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
-                      apply=lambda: _text_v2_apply_revision),
-    StandardPreparation(start=lambda standard, owner: standard_preparation_jobs.start(standard, owner),
-                        enabled=lambda owner: _standard_preparation_policy.enabled(owner)),
-    prepare_image=lambda contents: _text_v2_prepare_image(contents),
-    bounded_text=lambda: bounded_text, files=_business_files
-)
-_standard_routes = register_text_standards(app, _standard_imports, _standard_library, _standard_edits)
+_standard_access = _text_standards.access
+_standard_records = _text_standards.standard_records
+_standard_media = _text_standards.standard_media
+_standard_imports = _text_standards.imports
+_standard_library = _text_standards.library
+_standard_edits = _text_standards.edits
+_standard_routes = _text_standards.register_standards(app)
 import_text_inspection_standard = _standard_routes.import_text_inspection_standard
 list_text_inspection_standards = _standard_routes.list_text_inspection_standards
 get_text_inspection_standard = _standard_routes.get_text_inspection_standard
@@ -12110,77 +12110,16 @@ from local_inspection_service.document_import_jobs import register as register_d
 
 from .text_inspection.document_ports import DocumentAccess, DocumentRecords, DocumentModels
 from .text_inspection.document_jobs import DocumentJobs
-_document_records = DocumentRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    guard=lambda: _incoming_text_store_lock,
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, record: _text_v2_save(kind, record),
-    public=lambda record: _text_v2_public(record),
-)
-_document_models = DocumentModels(
-    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-    settings=lambda purpose: ai_detection_settings(purpose),
-    transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
-    record_usage=lambda settings, elapsed, ok, usage: record_model_call(settings, elapsed, ok, usage),
-)
-document_import_jobs = register_document_import_jobs(
-    app,
-    DocumentAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _document_records,
-    DocumentJobs(
-        _document_records, _document_models,
-        asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-        clear_repository=lambda: clear_thread_runtime_repository_selection(),
-        runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-    ),
-)
+_document_records = _text_standards.document_records
+_document_models = _text_standards.document_models
+document_import_jobs = _text_standards.register_documents(app)
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
 from .text_inspection.preparation_ports import PreparationAccess, PreparationRecords, PreparationMedia, PreparationModels, PreparationHistory
 from .text_inspection.preparation_jobs import PreparationJobs
-_preparation_records = PreparationRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    guard=lambda: _incoming_text_store_lock,
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, value: _text_v2_save(kind, value),
-    apply_revision=lambda standard, assets, **kwargs: _text_v2_apply_revision(standard, assets, **kwargs),
-)
-_preparation_media = PreparationMedia(
-    path=lambda owner, identifier, name: _text_v2_media_path(owner, identifier, name),
-    write=lambda path, data: _text_v2_write(path, data),
-    digest=lambda data: sha256_bytes(data),
-    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-    data_url=lambda data, mime: _text_v2_data_url(data, mime),
-    read_verified=lambda path, owner, identifier, **kwargs: _text_v2_read_verified(path, owner, identifier, **kwargs),
-)
-_preparation_models = PreparationModels(
-    settings=lambda purpose: ai_detection_settings(purpose),
-    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-    call_tool=lambda name, payload: call_ai_mcp_tool(name, payload),
-    diagnostics=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
-)
-standard_preparation_jobs = register_standard_preparation(
-    app,
-    PreparationAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _preparation_records,
-    PreparationHistory(
-        record_table=lambda: TEXT_INSPECTION_TABLES["records"],
-        raw_rows=lambda rows: row_raw_json_list(rows),
-        public=lambda record: _text_v2_public(record),
-        attempt_writer=lambda: _text_v2_update_attempt,
-    ),
-    _preparation_media,
-    PreparationJobs(_preparation_records, _preparation_media, _preparation_models,
-                    clear_repository=lambda: clear_thread_runtime_repository_selection(),
-                    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)),
-)
+_preparation_records = _text_standards.preparation_records
+_preparation_media = _text_standards.preparation_media
+_preparation_models = _text_standards.preparation_models
+standard_preparation_jobs = _text_standards.register_preparation(app)
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
 from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
 _history_records = HistoryRecords(

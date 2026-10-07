@@ -219,11 +219,11 @@ class MediaContracts(unittest.TestCase):
                     def get(self,key,*args):
                         if key=='asset_kind':
                             events.append('kind')
-                            if events.count('kind')==1:server._text_v2_owned=None if mode=='missing' else owner_b
+                            if events.count('kind')==1:server._text_standards.owned=None if mode=='missing' else owner_b
                         if key=='standard_id':
-                            events.append('argument');server._text_v2_owned=owner_c
+                            events.append('argument');server._text_standards.owned=owner_c
                         return super().get(key,*args)
-                with patch.object(server,'_text_v2_owned',owner_a):
+                with patch.object(server._text_standards,'owned',owner_a):
                     for _ in range(1 if mode=='missing' else 2):
                         try:server._text_v2_asset_bytes(Asset(asset_kind='manual_page',standard_id='s'),'alice')
                         except TypeError:self.assertEqual(mode,'missing')
@@ -256,7 +256,7 @@ class MediaContracts(unittest.TestCase):
                 resized=server._text_v2_prepare_provider_image(blob,'image/png')[0]
                 self.assertEqual(Image.open(io.BytesIO(resized)).size,(100,50))
                 self.assertEqual(resized,images.prepare_provider_image(blob,'image/png',max_side=lambda:100,jpeg_quality=lambda:35)[0])
-            with patch.object(server,'_text_v2_owned',return_value=None) as owned:
+            with patch.object(server._text_standards,'owned',return_value=None) as owned:
                 self.http_error(404,lambda:server._text_v2_asset_bytes({'asset_kind':'manual_page','standard_id':'missing'},'alice'))
                 owned.assert_called_once_with('standards','missing','alice')
 

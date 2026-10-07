@@ -455,6 +455,7 @@ jobs:
           python scripts/smoke_text_media_runtime_port.py
           python scripts/smoke_text_revisions.py --root
           python scripts/smoke_text_standards.py
+          python scripts/smoke_text_standard_composition.py
           python scripts/smoke_text_comparison_api.py --root
           python scripts/smoke_text_storage_composition.py
           python scripts/smoke_incoming_composition.py

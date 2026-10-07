@@ -633,3 +633,5 @@ The incoming domain owns its response-file capability and exposes separate catal
 
 
 Model catalog composition resolves its repository factory when each lookup operation starts, then creates and consumes the lookup snapshot on that caller thread. No repository connection or current account is captured during graph construction. The thread-bound fake regression verifies factory/fetch/decode identity and owner-isolated failure; it is not evidence of real PostgreSQL connection release. Existing real PostgreSQL catalog and runtime connection-lifecycle checks remain required. This structural change adds no table, migration, transaction or lock-policy modification.
+
+The text standard graph selects the supplied TextRecordStore repository factory and guard for document/preparation mutation and standard edits. Store ownership is explicit; no connection or current user is retained by the domain. Existing transactions, native-thread cleanup and PostgreSQL versus JSON selection stay in their original implementations. This slice adds no SQL, migration, index or lock-policy change.
