@@ -178,7 +178,8 @@ class CompositionContracts(unittest.TestCase):
                 try:
                     for url in urls:
                         response=await client.get(url)
-                        self.assertEqual(response.status_code,403,response.text)
+                        self.assertEqual(response.status_code,404,response.text)
+                        self.assertEqual(response.json()['detail'],'包材文字检验任务不存在')
                     response_files.runtime.assert_not_called()
                 finally:fixture.context.reset(token)
                 for url in urls:
