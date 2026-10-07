@@ -172,6 +172,19 @@
         "docs/testing.md",
         "docs/configuration-reference.md"
       ]
+    },
+    {
+      "name": "CI benchmark storage isolation",
+      "paths": [
+        "scripts/verify_ci_benchmark_storage.py",
+        "scripts/smoke_ci_benchmark_storage.py"
+      ],
+      "required_docs": [
+        "docs/testing.md",
+        "docs/postgresql-runtime.md",
+        "docs/release-management.md",
+        "docs/production-runbook.md"
+      ]
     }
   ]
 }

@@ -1388,3 +1388,6 @@ Pipeline registries remain process-local and reset under the existing Web restar
 Auto-optimization locks and thread registries remain local to the Web process with the existing restart behavior. This ownership change does not split training or image work, alter scheduling or introduce recovery retries. Restore only complete releases while retaining task/call evidence.
 
 Auto-optimization settings composition freezes only the chosen policy instance and its method capabilities; it does not freeze computed settings, user identity or database connections. There is no worker, thread, model or PLC topology change. Deploy and roll back complete releases preserving data and task evidence.
+
+
+The dedicated tmpfs database exists only for synthetic CI benchmarks. Production PostgreSQL and ordinary disk-backed CI contracts retain their existing storage and durability settings. The experiment aims to isolate algorithm/resource regression from shared storage variance; it is not a historical cause finding or production write-amplification assessment. Complete release rollback is unchanged and no customer records or deployment configuration are migrated. Do not run the CI storage inspector against a production DSN; it accepts only the fixed synthetic CI endpoints.

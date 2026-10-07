@@ -235,8 +235,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      postgres_benchmark:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+          - 5433:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648
+          --memory=3221225472 --memory-swap=3221225472
+          --health-cmd "pg_isready -U vantaline"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
+      VANTALINE_BENCHMARK_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5433/vantaline
     steps:
       - uses: actions/checkout@v4
         with:
@@ -247,6 +261,13 @@ jobs:
           cache: pip
       - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
       - run: python scripts/verify_production_dependencies.py requirements-production.lock
+      - name: Verify ordinary disk and bounded benchmark database isolation
+        env:
+          VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          python scripts/smoke_ci_benchmark_storage.py
+          python scripts/verify_ci_benchmark_storage.py
       - name: Verify additive-only migrations
         run: python scripts/verify_migration_safety.py
       - run: python scripts/smoke_migration_safety.py
@@ -282,7 +303,7 @@ jobs:
           python scripts/smoke_directory_lifecycle.py
           python scripts/smoke_label_history_benchmark.py
           python scripts/smoke_label_history_statistics.py
-          python scripts/benchmark_label_history_statistics.py
+          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_history_statistics.py
           python scripts/smoke_account_projections.py
           python scripts/smoke_public_network_policy.py
           python scripts/smoke_admin_documentation_composition.py
@@ -303,11 +324,11 @@ jobs:
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
           python scripts/smoke_label_benchmark_evidence.py
-          python scripts/benchmark_label_summary_reads.py
+          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_summary_reads.py
           python scripts/smoke_label_run_summary.py
           python scripts/smoke_label_summary_worker.py
           python scripts/smoke_label_run_projection.py
-          python scripts/benchmark_label_projection.py
+          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_projection.py
           python scripts/smoke_label_public_projection.py
           python scripts/smoke_label_summary_migration.py
           python scripts/smoke_service_status_requests.py
@@ -559,7 +580,7 @@ jobs:
           python scripts/smoke_label_runtime_deployment.py
           python scripts/smoke_label_process.py
           python scripts/smoke_label_external_deployment.py
-          python scripts/benchmark_label_run_batch.py
+          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_run_batch.py
           python local_inspection_service/scripts/smoke_label_inspection.py
           python local_inspection_service/scripts/smoke_model_profiles.py
           python scripts/smoke_model_profile_read_transactions.py
@@ -612,6 +633,12 @@ jobs:
           python local_inspection_service/scripts/smoke_incoming_text_postgres.py
       - name: Validate generated schema with PostgreSQL 16
         run: python local_inspection_service/scripts/smoke_postgres_schema_real_engine.py --postgres-bin-dir /usr/lib/postgresql/16/bin
+      - name: Retain final benchmark capacity and isolation evidence
+        if: always()
+        env:
+          VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
+        run: python scripts/verify_ci_benchmark_storage.py
 
   codex-comparison:
     runs-on: ubuntu-22.04
