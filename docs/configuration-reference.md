@@ -1592,3 +1592,5 @@ ModelTools introduces no operator setting or provider selection change. Source m
 The owned call export retains the two-step dispatch selection around argument evaluation; it adds no inference attempt or configuration change.
 
 The owned MCP transport retains the original stdio failure fallback and error behavior. No provider attempt budget, retry policy or operator setting changes.
+
+Detection workflow composition adds no model setting, prompt, default, secret or worker mode. Existing public AI entry and the graph-owned teacher route each enter exactly one existing model-profile scope; inherited task scope remains effective. Source manifest v243 lists 537 actual sources, adding detection/workflow_composition.py for new task fingerprints. Historical snapshots and secret references are not rewritten. Private root alias replacement no longer redirects owned detection/publication/capture operations; external configuration, identity, repository and auto-optimization runtime capabilities retain their current selection rules.

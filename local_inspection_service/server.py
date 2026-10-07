@@ -4061,7 +4061,16 @@ from .analytics.analysis_projection import ProjectionDependencies, AnalysisProje
 from .analytics.analysis_publication import PublicationDependencies, AnalysisPublisher
 from .analytics.analysis_composition import AnalysisServices, AnalysisStorage
 
-_analysis = AnalysisServices(
+from .detection.workflow_composition import (
+    DetectionWorkflows, AnalysisAssembly, AnalysisPublication, CaptureAdmission,
+    InspectionEvidence, DetectionPolicy,
+)
+from .detection.analysis_ports import (
+    AnalysisInput, AnalysisInference, AnalysisOutput, AiProfiles, AiInspectionTools,
+)
+
+_detection_workflows = DetectionWorkflows(
+    analysis=AnalysisAssembly(
     normalization=AnalysisNormalization(
     default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
     clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
@@ -4100,18 +4109,70 @@ _analysis = AnalysisServices(
     default_task_label=AI_DETECTION_LABEL, output_directory=lambda: OUTPUT_DIR,
     resolve_path=lambda path: resolve_service_path(path), path_is_under=lambda path, root: path_is_under(path, root),
 ),
-    publication=PublicationDependencies(
-    current_user=lambda: _request_user.get(), owner_fields=lambda: current_owner_fields(),
-    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
-    default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
+    publication=AnalysisPublication(
+    current_user=lambda: _request_user.get(),
+    owner_fields=lambda: current_owner_fields(),
+    owner_id=lambda record: record_owner_id(record),
+    owner_username=lambda record: record_owner_username(record),
+    default_task_id=AI_DETECTION_MODEL_ID,
+    default_task_label=AI_DETECTION_LABEL,
     clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
     string_list=lambda value, **kwargs: string_list(value, **kwargs),
-    resolve_path=lambda path: resolve_service_path(path), safe_name=lambda value: safe_name(value),
-    output_url=lambda path: public_output_url_for_existing(path),
-    capture=lambda record, result, request_id, path: record_auto_optimize_capture(record, result, request_id, path),
+    resolve_path=lambda path: resolve_service_path(path),
+    safe_name=lambda value: safe_name(value),
+    output_url=lambda path: public_output_url_for_existing(path)
 ),
     cache_scope=lambda: read_path_cache_scope(), batch_limit=DATA_ANALYSIS_BATCH_LIMIT,
+),
+    capture=CaptureAdmission(
+    _auto_optimize_lock=lambda: _auto_optimize_lock,
+    load_auto_optimize_state=lambda: load_auto_optimize_state,
+    save_auto_optimize_state=lambda: save_auto_optimize_state,
+    sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+    auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+    auto_optimize_capture_enabled=lambda: auto_optimize_capture_enabled,
+    resolve_service_path=lambda: resolve_service_path,
+    bounded_text=lambda: bounded_text,
+    current_owner_fields=lambda: current_owner_fields,
+    start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+    start_auto_optimize_shadow_worker=lambda: start_auto_optimize_shadow_worker
+),
+    profiles=AiProfiles(
+        lambda config, spec: ai_required_accessories(config, spec), lambda item: accessory_uid(item),
+        lambda profile, item: normalize_accessory_ai_profile(profile, item),
+        lambda item: accessory_reference_image_contexts(item),
+        lambda item, count, profile: required_accessory_profile_payload(item, count, profile), lambda config: save_config(config),
+    ),
+    tools=AiInspectionTools(
+        lambda: call_ai_mcp_tool, lambda: ai_detection_settings,
+        lambda: external_ai_mcp_enabled(), lambda image, request_id: write_mcp_inspection_image(image, request_id),
+        lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_REFERENCE_IMAGE_MAX_SIDE, lambda: AI_REFERENCE_IMAGE_QUALITY,
+    ),
+    evidence=InspectionEvidence(
+    original=lambda image, request_id: write_ai_original_output(image, request_id),
+    failure=lambda request_id, spec, required, url, *, reason: ai_detection_failure_result(request_id, spec, required, url, reason=reason),
+    model=lambda spec, settings: ai_model_payload(spec, settings)
+),
+    inputs=AnalysisInput(lambda: load_config(), lambda: scope_config_for_user,
+                  lambda model_id, config: selected_model_spec(model_id, config),
+                  lambda: sanitize_ai_detection_task_id, lambda task_id: load_auto_optimize_state(task_id)),
+    policy=DetectionPolicy(
+    lambda feature: removed_phase1_feature(feature),
+    lambda: bounded_text
+),
+    inference=AnalysisInference(
+        lambda: model, lambda: yolo_inference_device(), lambda result, spec: parse_detections(result, spec),
+        lambda image, detections, config, spec: attach_ocr_results(image, detections, config, spec),
+        lambda detections, config, spec: apply_rule(detections, config, spec),
+        lambda image, detections, rule: draw_detections(image, detections, rule),
+    ),
+    output=AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
+                   lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
+    runtime_provider=lambda: _business_files.runtime_provider(),
+    resolver=resolve_model_profiles,
 )
+_analysis = _detection_workflows.analysis
 _analysis_normalizer = _analysis.normalizer
 _analysis_repository = _analysis.repository
 _analysis_records = _analysis.records
@@ -4411,21 +4472,7 @@ def auto_optimize_update_settings(task_id: str, request: Any) -> dict[str, Any]:
 from .training.auto_optimization_capture import AutoOptimizationCapture
 from .training.auto_optimization_capture_ports import AutoOptimizationCapturePorts
 
-_auto_optimization_capture = AutoOptimizationCapture(AutoOptimizationCapturePorts(
-    _auto_optimize_lock=lambda: _auto_optimize_lock,
-    load_auto_optimize_state=lambda: load_auto_optimize_state,
-    save_auto_optimize_state=lambda: save_auto_optimize_state,
-    sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-    auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-    auto_optimize_capture_enabled=lambda: auto_optimize_capture_enabled,
-    resolve_service_path=lambda: resolve_service_path,
-    bounded_text=lambda: bounded_text,
-    current_owner_fields=lambda: current_owner_fields,
-    start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
-    start_auto_optimize_shadow_worker=lambda: start_auto_optimize_shadow_worker,
-    auto_optimize_detection_candidates=lambda: auto_optimize_detection_candidates,
-))
+_auto_optimization_capture = _detection_workflows.capture
 
 
 def auto_optimize_detection_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -8509,44 +8556,8 @@ from .detection.analysis_ports import (
     AiProfiles, AiInspectionTools, AiAnalysisEvidence,
 )
 
-_ai_detection_analysis = AiDetectionAnalysis(
-    AiProfiles(
-        lambda config, spec: ai_required_accessories(config, spec), lambda item: accessory_uid(item),
-        lambda profile, item: normalize_accessory_ai_profile(profile, item),
-        lambda item: accessory_reference_image_contexts(item),
-        lambda item, count, profile: required_accessory_profile_payload(item, count, profile), lambda config: save_config(config),
-    ),
-    AiInspectionTools(
-        lambda: call_ai_mcp_tool, lambda: ai_detection_settings,
-        lambda: external_ai_mcp_enabled(), lambda image, request_id: write_mcp_inspection_image(image, request_id),
-        lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_REFERENCE_IMAGE_MAX_SIDE, lambda: AI_REFERENCE_IMAGE_QUALITY,
-    ),
-    AiAnalysisEvidence(
-        lambda image, request_id: write_ai_original_output(image, request_id),
-        lambda request_id, spec, required, url, *, reason: ai_detection_failure_result(request_id, spec, required, url, reason=reason),
-        lambda spec, settings: ai_model_payload(spec, settings),
-        lambda result, request_id, *, image_path=None: persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path),
-    ),
-)
-_detection_analysis = DetectionAnalysis(
-    AnalysisInput(lambda: load_config(), lambda: scope_config_for_user,
-                  lambda model_id, config: selected_model_spec(model_id, config),
-                  lambda: sanitize_ai_detection_task_id, lambda task_id: load_auto_optimize_state(task_id)),
-    AnalysisRouting(
-        lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path),
-        lambda image, request_id, spec, config, *, image_path=None: analyze_bgr_ai_detection(image, request_id, spec, config, image_path=image_path),
-        lambda feature: removed_phase1_feature(feature), lambda: bounded_text,
-    ),
-    AnalysisInference(
-        lambda: model, lambda: yolo_inference_device(), lambda result, spec: parse_detections(result, spec),
-        lambda image, detections, config, spec: attach_ocr_results(image, detections, config, spec),
-        lambda detections, config, spec: apply_rule(detections, config, spec),
-        lambda image, detections, rule: draw_detections(image, detections, rule),
-    ),
-    AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
-                   lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
-    runtime_provider=lambda: _business_files.runtime_provider(),
-)
+_ai_detection_analysis = _detection_workflows.ai
+_detection_analysis = _detection_workflows.detection
 
 
 @pinned_model_profiles(resolve_model_profiles)

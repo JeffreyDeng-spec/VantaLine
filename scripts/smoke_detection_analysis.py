@@ -119,6 +119,10 @@ class AnalysisFixture:
             'attach_ocr_results':self.ocr,'apply_rule':self.apply,'draw_detections':self.draw,'output_write_dir':self.directory,
             'resize_bgr_max_side':self.resize,'output_url':self.url,'bounded_text':self.text,'cv2':self.backend,
             'INSPECTION_PREVIEW_MAX_SIDE':640,'INSPECTION_PREVIEW_JPEG_QUALITY':87}.items():stack.enter_context(patch.object(api,name,value))
+        # Replace consumed domain ports; private root aliases no longer own routing.
+        graph=api._detection_workflows
+        stack.enter_context(patch.object(graph,'pinned_ai',lambda *a,**k:api.analyze_bgr_ai_detection(*a,**k)))
+        stack.enter_context(patch.object(graph,'analyze_bgr',lambda *a,**k:api.analyze_bgr(*a,**k)))
 
 
 class DetectionAnalysisContracts(unittest.TestCase):
@@ -325,31 +329,52 @@ class DetectionAnalysisContracts(unittest.TestCase):
         import ast
         from local_inspection_service.scripts.smoke_plc_frontend_contract import require_detection_analysis_boundary
         root=Path(__file__).resolve().parents[1]/'local_inspection_service'; source=(root/'server.py').read_text(encoding='utf-8')
-        implementations={name:(root/'detection'/name).read_text(encoding='utf-8') for name in ['analysis.py','ai_analysis.py']}
+        implementations={name:(root/'detection'/name).read_text(encoding='utf-8') for name in ['analysis.py','ai_analysis.py','workflow_composition.py']}
         require_detection_analysis_boundary(source,implementations)
         for filename,method in [('analysis.py','analyze_bgr'),('ai_analysis.py','analyze_bgr_ai_detection')]:
             tree=ast.parse(implementations[filename]); node=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name==method)
             node.body.insert(0,ast.parse('dispatch_plc_for_detection()').body[0]); ast.fix_missing_locations(tree)
             with self.assertRaisesRegex(AssertionError,'PLC dispatch'): require_detection_analysis_boundary(source,{**implementations,filename:ast.unparse(tree)})
-        for mutation in ['forward','decorator','delegate','ordinary-constructor','ai-constructor','ordinary-import','ai-import']:
-            tree=ast.parse(source)
+        for mutation in ['forward','decorator','delegate','ordinary-constructor','ai-constructor','ordinary-import','ai-import','alias','resolver','owned-pin','root-shadow','class-ann-shadow','pin-shadow','class-aug-shadow','pin-duplicate-import']:
+            tree=ast.parse(source);parts=dict(implementations);owned=ast.parse(parts['workflow_composition.py'])
             if mutation.endswith('-constructor'):
-                receiver='_detection_analysis' if mutation.startswith('ordinary') else '_ai_detection_analysis'
-                binding=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id==receiver for t in n.targets))
+                member='detection' if mutation.startswith('ordinary') else 'ai'
+                binding=next(n for n in ast.walk(owned) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Attribute) and t.attr==member for t in n.targets))
                 binding.value.func.id='UninspectedAnalysis'
             elif mutation.endswith('-import'):
-                module='detection.analysis' if mutation.startswith('ordinary') else 'detection.ai_analysis'
-                imported=next(n for n in tree.body if isinstance(n,ast.ImportFrom) and n.module==module)
+                module='analysis' if mutation.startswith('ordinary') else 'ai_analysis'
+                imported=next(n for n in owned.body if isinstance(n,ast.ImportFrom) and n.module==module)
                 imported.module='uninspected.analysis'
             elif mutation=='delegate':
-                route=next(n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='AnalysisRouting')
-                route.args[1].body.func=ast.parse('_ai_detection_analysis.analyze_bgr_ai_detection',mode='eval').body
+                route=next(n for n in ast.walk(owned) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='AnalysisRouting')
+                route.args[1].body.func=ast.parse('self.ai.analyze_bgr_ai_detection',mode='eval').body
+            elif mutation=='root-shadow':
+                tree.body.extend(ast.parse('DetectionWorkflows=UninspectedGraph').body)
+            elif mutation=='class-ann-shadow':
+                owned.body.extend(ast.parse('DetectionAnalysis: object=UninspectedAnalysis').body)
+            elif mutation=='class-aug-shadow':
+                owned.body.extend(ast.parse('DetectionAnalysis += UninspectedAnalysis').body)
+            elif mutation=='pin-shadow':
+                owned.body.extend(ast.parse('pinned=uninspected_decorator').body)
+            elif mutation=='pin-duplicate-import':
+                owned.body.extend(ast.parse('from uninspected import pinned').body)
+            elif mutation=='owned-pin':
+                binding=next(n for n in ast.walk(owned) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Attribute) and t.attr=='pinned_ai' for t in n.targets))
+                binding.value=ast.parse('self.ai.analyze_bgr_ai_detection',mode='eval').body
+            elif mutation=='alias':
+                binding=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_detection_analysis' for t in n.targets))
+                binding.value.attr='ai'
+            elif mutation=='resolver':
+                owner=next(n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='DetectionWorkflows')
+                next(k for k in owner.keywords if k.arg=='resolver').value=ast.parse('lambda: None',mode='eval').body
             else:
                 node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='analyze_bgr_ai_detection')
-                if mutation=='forward': node.body[0].value.func.value.id='_uninspected'
-                else: node.decorator_list=[]
-            ast.fix_missing_locations(tree)
-            with self.assertRaises(AssertionError): require_detection_analysis_boundary(ast.unparse(tree),implementations)
+                if mutation=='forward':node.body[0].value.func.value.id='_uninspected'
+                else:node.decorator_list=[]
+            ast.fix_missing_locations(tree);ast.fix_missing_locations(owned)
+            parts['workflow_composition.py']=ast.unparse(owned)
+            with self.assertRaises(AssertionError):require_detection_analysis_boundary(ast.unparse(tree),parts)
+
 
 
     def test_independent_ordinary_services_interleave_without_root_state(self):

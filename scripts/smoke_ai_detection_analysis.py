@@ -79,6 +79,9 @@ class AiAnalysisFixture:
             'write_ai_original_output':self.original,'ai_model_payload':self.model,'ai_detection_failure_result':self.failure,
             'persist_data_analysis_record_for_ai_detection':self.persist,'AI_REFERENCE_IMAGES_PER_ACCESSORY':2,
             'AI_REFERENCE_IMAGE_MAX_SIDE':512,'AI_REFERENCE_IMAGE_QUALITY':80}.items():stack.enter_context(patch.object(api,name,value))
+        stack.enter_context(patch.object(api._detection_workflows.analysis.publisher,
+            'persist_data_analysis_record_for_ai_detection',
+            lambda *a,**k:api.persist_data_analysis_record_for_ai_detection(*a,**k)))
 
 
 class AiAnalysisContracts(unittest.TestCase):
@@ -295,6 +298,13 @@ class AiAnalysisContracts(unittest.TestCase):
         self.analyze(); bool_tool.assert_not_called(); string_tool.assert_not_called()
         self.assertEqual(f.tool.call_args.args[0],'vision.inspect.presence'); self.assertEqual(f.tool.call_args.args[1]['inspection_image_path'],'mcp-synthetic.jpg')
 
+
+    def test_public_entry_binds_once_before_owned_raw_ai(self):
+        self.analyze()
+        self.assertEqual(len(self.f.resolver.scopes), 1)
+        self.assertEqual(len(self.f.resolver.records), 1)
+        self.assertIsNone(self.f.resolver.current_snapshot())
+        self.assertEqual(sum(c.args[0]=='vision.inspect.presence' for c in self.f.tool.call_args_list), 1)
 
     def test_independent_compositions_route_through_their_own_pinned_ai_services(self):
         from local_inspection_service.detection.ai_analysis import AiDetectionAnalysis
