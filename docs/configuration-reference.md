@@ -1588,3 +1588,5 @@ Candidate image worker composition uses existing settings and injected operation
 The image queue receives an explicit resolver supplier and pins it for the native execution call. Normal model-service selection remains unchanged; private test rebinding of the root resolve_model_profiles name can affect that injected supplier, while the retained public wrapper decorator still captures its original callable. Tests replace the actual domain model/provider ports rather than assuming arbitrary root-name rebinding is equivalent.
 
 ModelTools introduces no operator setting or provider selection change. Source manifest v242 contains 536 real source files including model_providers/tool_composition.py; new tasks record the new source fingerprint, while historical snapshots and secret references remain unchanged. Existing provider/fallback budgets and operation-time external configuration suppliers are retained; internal callbacks follow the owned services.
+
+The owned call export retains the two-step dispatch selection around argument evaluation; it adds no inference attempt or configuration change.

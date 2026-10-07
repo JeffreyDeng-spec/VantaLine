@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 import sys
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -36,7 +37,7 @@ def owner(f, generate):
 
 def verify_internal_edges(tree):
     calls={n.func.id:n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ['PresenceGeneration','JsonToolExecution','McpToolTransport']}
-    expected={('PresenceGeneration','call'):'lambda: self.dispatch.call_ai_mcp_tool',('JsonToolExecution','provider_generate_json_error_payload'):'lambda: self.dispatch.provider_generate_json_error_payload',('McpToolTransport','admission'):'lambda: self.client.admission',('McpToolTransport','_ai_mcp_client'):'lambda: self.client',('McpToolTransport','AI_MCP_TOOL_HANDLERS'):'lambda: self.handlers'}
+    expected={('PresenceGeneration','call'):'lambda: self.call_ai_mcp_tool',('JsonToolExecution','provider_generate_json_error_payload'):'lambda: self.dispatch.provider_generate_json_error_payload',('McpToolTransport','admission'):'lambda: self.client.admission',('McpToolTransport','_ai_mcp_client'):'lambda: self.client',('McpToolTransport','AI_MCP_TOOL_HANDLERS'):'lambda: self.handlers'}
     for (name,key),expression in expected.items():
         value=next(k.value for k in calls[name].keywords if k.arg==key)
         assert ast.dump(value)==ast.dump(ast.parse(expression,mode='eval').body),(name,key)
@@ -69,7 +70,7 @@ class Contracts(unittest.TestCase):
             a=ModelTools(errors=ports(ToolErrorPolicy),provider=ports(JsonProviderCalls),runtime=ports(McpRuntimeSelection),
                          accessories=ports(AccessoryTools),presence_input=ports(PresenceInput),presence=ports(PresencePreparation),
                          presence_output=ports(PresenceOutput),policy=ports(PresencePolicy),clock=poison)
-        self.assertEqual(a.presence.generation.call(),a.dispatch.call_ai_mcp_tool)
+        self.assertEqual(a.presence.generation.call(),a.call_ai_mcp_tool)
         self.assertEqual(a.dispatch.transport.admission(),a.client.admission)
         self.assertIs(a.dispatch.transport._ai_mcp_client(),a.client)
         self.assertIs(a.dispatch.transport.AI_MCP_TOOL_HANDLERS(),a.handlers)
@@ -103,6 +104,18 @@ class Contracts(unittest.TestCase):
             b.dispatch.call_ai_mcp_tool('vision.inspect.presence',g.payload());self.assertEqual(pb.call_count,1)
         finally:release.set();t.join(3)
         self.assertFalse(t.is_alive());self.assertEqual(errors,[]);self.assertEqual(pa.call_count,1);self.assertTrue(a.client.shutdown(1))
+
+    def test_owned_call_wrapper_selects_dispatch_after_argument_effects(self):
+        f=PresenceFixture();provider=Mock(return_value=(f.parsed,31,{}));a=owner(f,provider)
+        selected=Mock(return_value=f.response)
+        def tokens(*args):
+            a.dispatch=SimpleNamespace(call_ai_mcp_tool=selected)
+            return 128
+        f.tokens.side_effect=tokens
+        original=a.dispatch
+        result=original.call_ai_mcp_tool('vision.inspect.presence',f.payload())
+        self.assertIs(result,f.result);selected.assert_called_once();provider.assert_not_called()
+        self.assertEqual(selected.call_args.args[0],'provider.gemini.generate_json')
 
     def test_actual_owned_error_projection_no_extra_provider_attempt(self):
         f=PresenceFixture();provider=Mock(side_effect=ProviderTimeout('synthetic timeout'));a=owner(f,provider)

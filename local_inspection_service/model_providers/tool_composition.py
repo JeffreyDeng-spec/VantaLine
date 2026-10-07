@@ -58,7 +58,7 @@ class ModelTools:
             presence_input,
             PresenceGeneration(task=presence.task, cache=presence.cache,
                                tokens=presence.tokens,
-                               call=lambda: self.dispatch.call_ai_mcp_tool,
+                               call=lambda: self.call_ai_mcp_tool,
                                covers=presence.covers),
             presence_output, policy, clock,
         )
@@ -86,6 +86,9 @@ class ModelTools:
                 AI_MCP_TOOL_HANDLERS=lambda: self.handlers,
             ),
         )
+
+    def call_ai_mcp_tool(self, name: str, payload: Record) -> Record:
+        return self.dispatch.call_ai_mcp_tool(name, payload)
 
     def _generate_json(self, payload: Record) -> Record:
         return self.dispatch.tool_provider_gemini_generate_json(payload)
