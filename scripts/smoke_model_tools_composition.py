@@ -1,5 +1,5 @@
 """Synthetic model tool ownership and admission contracts; no model or PLC I/O."""
-from dataclasses import fields
+from dataclasses import fields, replace
 import ast
 from pathlib import Path
 import sys
@@ -124,7 +124,7 @@ class Contracts(unittest.TestCase):
             with self.assertRaises(RuntimeError) as caught:a.call_ai_mcp_tool('provider.gemini.generate_json',{})
         self.assertIs(caught.exception,error);call.assert_called_once();close.assert_not_called();replacement.close.assert_called_once();provider.assert_not_called()
 
-    def test_owned_call_wrapper_selects_dispatch_after_argument_effects(self):
+    def test_payload_preparation_effect_selects_later_dispatch(self):
         f=PresenceFixture();provider=Mock(return_value=(f.parsed,31,{}));a=owner(f,provider)
         selected=Mock(return_value=f.response)
         def tokens(*args):
@@ -135,6 +135,28 @@ class Contracts(unittest.TestCase):
         result=original.call_ai_mcp_tool('vision.inspect.presence',f.payload())
         self.assertIs(result,f.result);selected.assert_called_once();provider.assert_not_called()
         self.assertEqual(selected.call_args.args[0],'provider.gemini.generate_json')
+
+    def test_selected_call_wrapper_defers_dispatch_through_actual_arguments(self):
+        def run(early_capture):
+            f=PresenceFixture();provider=Mock(side_effect=AssertionError('provider used'))
+            a=owner(f,provider)
+            old=Mock(return_value={'selected':'old'})
+            late=Mock(return_value={'selected':'late'})
+            a.dispatch=SimpleNamespace(call_ai_mcp_tool=old)
+            # The actual port is selected before Python evaluates call arguments.
+            if early_capture:
+                a.presence.generation=replace(a.presence.generation,
+                    call=lambda: a.dispatch.call_ai_mcp_tool)
+            selected=a.presence.generation.call()
+            def argument():
+                a.dispatch=SimpleNamespace(call_ai_mcp_tool=late)
+                return {'synthetic':'payload'}
+            result=selected('provider.gemini.generate_json',argument())
+            self.assertEqual(result,{'selected':'late'})
+            late.assert_called_once_with('provider.gemini.generate_json',{'synthetic':'payload'})
+            old.assert_not_called();provider.assert_not_called()
+        run(False)
+        with self.assertRaises(AssertionError):run(True)
 
     def test_actual_owned_error_projection_no_extra_provider_attempt(self):
         f=PresenceFixture();provider=Mock(side_effect=ProviderTimeout('synthetic timeout'));a=owner(f,provider)
