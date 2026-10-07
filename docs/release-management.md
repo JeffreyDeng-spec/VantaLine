@@ -1106,3 +1106,6 @@ This background candidate retains native-history/readiness and detection composi
 
 
 CI benchmark storage isolation is an infrastructure-only candidate: product code, source fingerprints, installer and release topology are unchanged. Require unchanged original benchmark protocols, explicit database routing/settings/capacity checks, full required CI and independent review. Retain all disk-based failures and do not treat a tmpfs pass as their repair or as production disk-latency acceptance. PLC and later refactors must rebind to the accepted actual main and pass their own gates. Whole-release deployment/rollback remains unchanged.
+
+
+The `2026_10_08_legacy_json_projection_v1` preparation migration uses CREATE FUNCTION without replacement. Direct SQL replay fails on the existing signature; sequential repeat installation relies on the existing feature marker and release checksum skip. Existing installer marker trust and its pre-lock checks are unchanged: this slice does not prove concurrent exactly-once installation or that an imported marker attests the function body. No reader is enabled, so rollback selects the previous complete release while retaining the additive helper/marker.
