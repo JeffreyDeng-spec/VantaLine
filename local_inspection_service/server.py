@@ -12552,15 +12552,6 @@ _incoming_access = IncomingAccess(
     record=lambda: require_record_access,
     owner=lambda record: record_owner_id(record), task_allowed=lambda task, user: incoming_text_task_access_allowed(task, user),
 )
-_incoming_references = IncomingReferences(
-    all=lambda: load_incoming_text_references(), load=lambda reference_id: load_incoming_text_reference(reference_id),
-    save=lambda record, **kwargs: save_incoming_text_reference(record, **kwargs),
-)
-_incoming_inspections = IncomingInspections(
-    all=lambda: load_incoming_text_inspections(), load=lambda inspection_id: load_incoming_text_inspection(inspection_id),
-    save=lambda record, **kwargs: save_incoming_text_inspection(record, **kwargs),
-    duplicate=lambda owner, task_id, capture_id: _duplicate_incoming_capture(owner, task_id, capture_id),
-)
 _incoming_tasks = IncomingTasks(
     all=lambda: load_pipeline_tasks(), save=lambda task: save_pipeline_task(task),
     public=lambda: pipeline_task_public, config=lambda: scope_config_for_user(load_config()),
@@ -12569,40 +12560,31 @@ _incoming_media = IncomingMedia(
     output=lambda: output_write_dir_for_owner, root=lambda: OUTPUT_DIR,
     under=lambda path, root: path_is_under(path, root), decode=lambda: decode_incoming_reference,
 )
-_incoming_writes = IncomingWrites(
-    repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
-)
-_incoming_json = IncomingJSON(
-    paths=_incoming_text_store.paths,
-    read=lambda path: _incoming_text_json_list(path), write=lambda path, values: _save_incoming_text_json_list(path, values),
-)
+_incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
+from .text_inspection.incoming_composition import IncomingWorkflows
+
 _incoming_image_files = ImageFiles(lambda: cv2, files=_business_files)
-_incoming_catalog = IncomingCatalog(
-    _incoming_access, _incoming_references, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
-    public=lambda record: incoming_text_public(record), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+_incoming_workflows = IncomingWorkflows(
+    storage=_text_storage, access=_incoming_access, tasks=_incoming_tasks, media=_incoming_media,
+    ocr=IncomingOCR(observe=lambda image: incoming_text_ocr_observations(image),
+                    corroborate=lambda image, rules: incoming_text_corroboration_observations(image, rules),
+                    field=lambda: _field_observation),
+    imaging=IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda: rectify_label,
+                          similarity=lambda: local_visual_similarity, annotate=lambda: annotate_inspection),
+    capacity=lambda: require_incoming_text_storage_capacity,
+    verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+    public=lambda record: incoming_text_public(record), decode_rows=lambda: row_raw_json_list,
+    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID,
     files=_business_files, images=_incoming_image_files,
 )
-_incoming_reviews = IncomingReviews(
-    _incoming_access, _incoming_inspections, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
-    decode_rows=lambda: row_raw_json_list, public=lambda record: incoming_text_public(record),
-    files=_business_files,
-)
-_incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
-_incoming_execution = IncomingExecution(
-    _incoming_access, _incoming_references, _incoming_inspections, _incoming_media,
-    IncomingOCR(observe=lambda image: incoming_text_ocr_observations(image),
-                corroborate=lambda image, rules: incoming_text_corroboration_observations(image, rules),
-                field=lambda: _field_observation),
-    IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda: rectify_label,
-                    similarity=lambda: local_visual_similarity,
-                    annotate=lambda: annotate_inspection),
-    capacity=lambda: require_incoming_text_storage_capacity, verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
-    public=lambda record: incoming_text_public(record), files=_business_files, images=_incoming_image_files,
-)
-_incoming_retention = IncomingRetention(
-    _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
-    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID, files=_business_files,
-)
+_incoming_references = _incoming_workflows.references
+_incoming_inspections = _incoming_workflows.inspections
+_incoming_writes = _incoming_workflows.writes
+_incoming_json = _incoming_workflows.json
+_incoming_catalog = _incoming_workflows.catalog
+_incoming_reviews = _incoming_workflows.reviews
+_incoming_execution = _incoming_workflows.execution
+_incoming_retention = _incoming_workflows.retention
 _incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog, files=lambda: _business_files)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
 get_incoming_text_reference_asset = _incoming_catalog_routes.get_incoming_text_reference_asset
