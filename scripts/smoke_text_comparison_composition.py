@@ -17,7 +17,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'scripts')]
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from PIL import Image
 from fastapi.testclient import TestClient
 from local_inspection_service.text_inspection.comparison_composition import (
@@ -118,13 +118,24 @@ class Contracts(unittest.TestCase):
             self.assertEqual(len(history),1)
             imports=[n for n in tree.body if isinstance(n,ast.ImportFrom) and n.module=='text_inspection.comparison_composition' and n.level==1]
             self.assertEqual(len(imports),1);self.assertEqual([(a.name,a.asname) for a in imports[0].names],[(x,None) for x in imported])
+            protected=set(aliases)|{'_text_comparisons','resolve_label_extraction','_inspection_routes'}
+            for node in tree.body:
+                if isinstance(node,(ast.Import,ast.ImportFrom)):
+                    for entry in node.names:
+                        bound=entry.asname or (entry.name.split('.')[0] if isinstance(node,ast.Import) else entry.name)
+                        if bound in imported:self.assertIs(node,imports[0])
+                        self.assertNotIn(bound,protected)
+                if isinstance(node,(ast.AnnAssign,ast.AugAssign)):
+                    self.assertFalse(any(isinstance(x,ast.Name) and x.id in protected|set(imported) for x in ast.walk(node.target)))
+                if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):
+                    self.assertNotIn(node.name,protected)
             for n in tree.body:
                 if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):self.assertNotIn(n.name,imported)
                 if isinstance(n,(ast.Assign,ast.AnnAssign,ast.AugAssign)):
                     for target in n.targets if isinstance(n,ast.Assign) else [n.target]:
                         self.assertFalse(any(isinstance(x,ast.Name) and x.id in imported for x in ast.walk(target)))
         check(source)
-        for mutation in ('standards','models','runtime','alias','shadow'):
+        for mutation in ('standards','models','runtime','alias','shadow','wrong-import','annotated-owner','annotated-runtime','augmented-owner'):
             tree=ast.parse(source)
             graph=next(n.value for n in tree.body if isinstance(n,ast.Assign)
                 and any(isinstance(t,ast.Name) and t.id=='_text_comparisons' for t in n.targets))
@@ -134,7 +145,11 @@ class Contracts(unittest.TestCase):
                 node=next(n for n in tree.body if isinstance(n,ast.Assign)
                     and any(isinstance(t,ast.Name) and t.id=='_prepared_comparison_runtime' for t in n.targets))
                 node.value=ast.parse('_text_comparisons.extraction_runtime',mode='eval').body
-            else:tree.body.append(ast.parse('TextComparisonWorkflows = None').body[0])
+            elif mutation=='shadow':tree.body.append(ast.parse('TextComparisonWorkflows = None').body[0])
+            elif mutation=='wrong-import':tree.body.append(ast.parse('from local_inspection_service.text_inspection.history import register as TextComparisonWorkflows').body[0])
+            elif mutation=='annotated-owner':tree.body.append(ast.parse('_text_comparisons: object = None').body[0])
+            elif mutation=='annotated-runtime':tree.body.append(ast.parse('_prepared_comparison_runtime: object = None').body[0])
+            else:tree.body.append(ast.parse('_text_comparisons += None').body[0])
             ast.fix_missing_locations(tree)
             with self.assertRaises(AssertionError):check(ast.unparse(tree))
 
@@ -166,6 +181,9 @@ class Contracts(unittest.TestCase):
                 prepared_models=poison,digest=poison,environment=poison,prepared_cleanup=poison,audit=ports(ComparisonAudit),
                 runtime=StandardThreadScope(poison,poison),files=poison)
             poison.assert_not_called()
+        app=FastAPI();before=len(app.routes)
+        with self.assertRaisesRegex(RuntimeError,'assembled before admission'):graph.register_inspections(app)
+        self.assertEqual(len(app.routes),before)
         self.assertTrue(graph.comparison_runtime.close(1));self.assertTrue(graph.extraction_runtime.close(1))
         self.assertTrue(standard.documents.close(1));self.assertTrue(standard.preparation.close(1))
 

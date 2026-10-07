@@ -21,7 +21,7 @@ from .file_ports import ExtractionCleanupFiles
 from .inspection_api import register as register_inspections
 
 Record = dict[str, Any]
-ExtractionResolver = Callable[[str, str, str, Record], Record]
+ExtractionResolver = Callable[[str, str, str, Record], tuple[bytes, Record]]
 
 
 @dataclass(frozen=True)
@@ -139,4 +139,6 @@ class TextComparisonWorkflows:
         return self.resolve_extraction
 
     def register_inspections(self, app: FastAPI):
+        if self._extraction_resolver is None:
+            raise RuntimeError('Text extraction routes must be assembled before admission')
         return register_inspections(app, self.submission, self.reviews, self.access)
