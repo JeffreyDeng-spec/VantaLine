@@ -46,3 +46,79 @@ def replace_queue_port(server,name,value):
     finally:
         if owned:assign(target,attribute,previous)
         else:delete(target,attribute)
+
+
+# Expressions are contracts for each specific owner, not any Attribute supplier.
+EXECUTION_EDGES={
+    'files':{name:'execution_files.'+name for name in (
+        '_business_files','_image_files','IMAGE_WORKER_LOG_DIR','ROOT','safe_name','resolve_service_path','public_output_url')},
+    'evidence':{name:'evidence.'+name for name in ('image_job_prompt','bounded_text')},
+    'providers':{name:'providers.'+name for name in (
+        'LOCAL_CODEX_IMAGE_PROVIDER','CURSOR_IMAGE2_PROVIDER','CURSOR_IMAGE2_QUEUE_STATUS',
+        'CODEX_IMAGE_WORKER_QUEUE_STATUS','MAX_IMAGE_WORKER_INPUTS','cursor_image2_settings',
+        'cursor_image2_payload','cursor_auth_headers','extract_cursor_image2_bytes','windows_worker_base_url',
+        'windows_worker_headers','windows_worker_image_timeout_seconds','windows_worker_image_response_bytes','masked_url_for_status')},
+}
+EXECUTION_EDGES['files']['image_job_output_path']='lambda: self.diagnostics.image_job_output_path'
+EXECUTION_EDGES['evidence'].update({
+    'mutate_candidate_image_job':'lambda: self.queue.mutate_candidate_image_job',
+    'update_image_worker_status':'lambda: self.queue.update_image_worker_status',
+    '_image_worker_processes':'lambda: self.worker.processes',
+    'codex_log_has_generated_image':'lambda: self.diagnostics.codex_log_has_generated_image',
+    'classify_image_worker_failure':'lambda: self.diagnostics.classify_image_worker_failure',
+})
+EXECUTION_EDGES['providers'].update({name:'lambda: self.execution.'+name for name in (
+    'run_codex_image_job','run_cursor_image2_job','run_cos_codex_image_job')})
+DIAGNOSTIC_EDGES={
+    'media':{name:'diagnostic_media.'+name for name in (
+        '_business_files','resolve_service_path','safe_name','IMAGE_WORKER_LOG_DIR')},
+    'runtime':{'_image_worker_processes':'lambda: self.worker.processes',**{name:'lambda: self.diagnostics.'+name for name in (
+        'image_worker_process_alive','codex_process_has_log_open','image_job_has_live_worker')}},
+    'policy':'diagnostic_policy',
+}
+DIAGNOSTIC_EDGES['media']['read_image_worker_log_tail']='lambda: self.diagnostics.read_image_worker_log_tail'
+
+
+def expression(value):return ast.dump(ast.parse(value,mode='eval').body,include_attributes=False)
+
+
+def edge_errors(call,contract):
+    errors=[]
+    actual={kw.arg:kw.value for kw in call.keywords}
+    if len(actual)!=len(call.keywords) or set(actual)!=set(contract):errors.append('wrong or duplicate capability groups')
+    for group,expected in contract.items():
+        node=actual.get(group)
+        if node is None:continue
+        if isinstance(expected,str):
+            if ast.dump(node,include_attributes=False)!=expression(expected):errors.append(group+' binding differs')
+            continue
+        if not isinstance(node,ast.Call):errors.append(group+' not a capability constructor');continue
+        fields={kw.arg:kw.value for kw in node.keywords}
+        if node.args or len(fields)!=len(node.keywords) or set(fields)!=set(expected):errors.append(group+' field set differs')
+        for name,value in expected.items():
+            if name not in fields or ast.dump(fields[name],include_attributes=False)!=expression(value):errors.append(group+'.'+name+' edge differs')
+    return errors
+
+
+def root_errors(root,tree=None):
+    import json
+    expected=json.loads((Path(root)/'tests/backend_contract/accessory_image_composition_ports.json').read_text())
+    if tree is None:tree=ast.parse((Path(root)/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+    assignments={}
+    for node in tree.body:
+        if isinstance(node,ast.Assign):
+            for target in node.targets:
+                if isinstance(target,ast.Name):assignments.setdefault(target.id,[]).append(node.value)
+    errors=[]
+    graphs=assignments.get('_image_jobs',[])
+    if len(graphs)!=1 or not isinstance(graphs[0],ast.Call):return ['missing or repeated actual image graph']
+    call=graphs[0]
+    if expression('_ImageJobs')!=ast.dump(call.func,include_attributes=False) or call.args:errors.append('wrong image graph constructor')
+    fields={kw.arg:ast.dump(kw.value,include_attributes=False) for kw in call.keywords}
+    if len(fields)!=len(call.keywords) or fields!=expected['root_arguments']:errors.append('external root arguments differ from frozen parent')
+    for name,value in expected['aliases'].items():
+        nodes=assignments.get(name,[])
+        if len(nodes)!=1 or ast.dump(nodes[0],include_attributes=False)!=expression(value):errors.append(name+' ownership alias differs')
+    imported=[alias for node in tree.body if isinstance(node,ast.ImportFrom) and node.module=='accessories.image_composition' for alias in node.names]
+    if [(alias.name,alias.asname) for alias in imported if alias.asname=='_ImageJobs']!=[('ImageJobs','_ImageJobs')]:errors.append('wrong actual builder import')
+    return errors

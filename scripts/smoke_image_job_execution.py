@@ -261,12 +261,8 @@ class ExecutionContract(unittest.TestCase):
         assignment = SimpleNamespace(value=binding(ROOT,'execution'))
         for group, cls in zip(assignment.value.keywords, (ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders)):
             self.assertEqual({k.arg for k in group.value.keywords}, {field.name for field in fields(cls)})
-            for getter in group.value.keywords:
-                self.assertIsInstance(getter.value, (ast.Lambda, ast.Attribute))
-                if isinstance(getter.value, ast.Lambda):
-                    self.assertFalse(getter.value.args.args)
-                    self.assertIsInstance(getter.value.body,ast.Attribute)
-                else:self.assertEqual(getter.value.attr,getter.arg)
+        from accessory_image_test_ports import edge_errors, EXECUTION_EDGES
+        self.assertEqual(edge_errors(assignment.value,EXECUTION_EDGES),[])
 
 
 if __name__ == '__main__':

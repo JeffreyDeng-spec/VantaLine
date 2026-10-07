@@ -3,6 +3,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import fields
 import json
+import ast
+import copy
 from pathlib import Path
 import sys
 import tempfile
@@ -85,6 +87,40 @@ class ImageComposition(unittest.TestCase):
         self.assertIs(a.queue.metadata.store_candidate_image_job().__self__,a.metadata)
         self.assertIs(a.execution.providers.run_codex_image_job().__self__,a.execution)
         self.assertIs(a.diagnostics.runtime._image_worker_processes(),a.worker.processes)
+
+    def test_exact_edges_actual_entry_aliases_and_mutants(self):
+        from accessory_image_test_ports import binding, edge_errors, root_errors, EXECUTION_EDGES, DIAGNOSTIC_EDGES
+        self.assertEqual(root_errors(ROOT),[])
+        for owner,contract,group,field,replacement in [
+            ('execution',EXECUTION_EDGES,'providers','run_codex_image_job','lambda: self.execution.run_cursor_image2_job'),
+            ('execution',EXECUTION_EDGES,'evidence','update_image_worker_status','lambda: self.diagnostics.update_image_worker_status'),
+            ('execution',EXECUTION_EDGES,'files','_business_files','evidence._business_files'),
+            ('diagnostics',DIAGNOSTIC_EDGES,'runtime','image_worker_process_alive','lambda: self.queue.image_worker_process_alive'),
+            ('diagnostics',DIAGNOSTIC_EDGES,'media','read_image_worker_log_tail','lambda: self.diagnostics.codex_process_has_log_open'),
+        ]:
+            with self.subTest(owner=owner,field=field):
+                call=binding(ROOT,owner);self.assertEqual(edge_errors(call,contract),[])
+                mutated=copy.deepcopy(call)
+                port=next(kw.value for kw in mutated.keywords if kw.arg==group)
+                leaf=next(kw for kw in port.keywords if kw.arg==field)
+                leaf.value=ast.parse(replacement,mode='eval').body
+                self.assertIn(group+'.'+field+' edge differs',edge_errors(mutated,contract))
+
+    def test_actual_root_contract_rejects_external_and_ownership_alias_mutants(self):
+        from accessory_image_test_ports import root_errors
+        original=ast.parse((ROOT/'local_inspection_service/server.py').read_text())
+        for name,replacement in [('_candidate_store_lock','_image_jobs.worker.lock'),
+                                 ('_image_worker_processes','_image_jobs.metadata.processes')]:
+            with self.subTest(alias=name):
+                tree=copy.deepcopy(original)
+                node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id==name for t in n.targets))
+                node.value=ast.parse(replacement,mode='eval').body
+                self.assertIn(name+' ownership alias differs',root_errors(ROOT,tree))
+        tree=copy.deepcopy(original)
+        graph=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_image_jobs' for t in n.targets))
+        resolver=next(kw for kw in graph.keywords if kw.arg=='resolver')
+        resolver.value=ast.parse('lambda: current_auth_user()',mode='eval').body
+        self.assertIn('external root arguments differ from frozen parent',root_errors(ROOT,tree))
 
     def test_missing_resolver_fails_before_execution(self):
         owner=inert(resolver=lambda:None);called=Mock();object.__setattr__(owner.execution.providers,'run_codex_image_job',lambda:called)

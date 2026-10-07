@@ -138,6 +138,8 @@ class ImageDiagnosticsContract(unittest.TestCase):
                 else:self.assertFalse(kw.value.args.args);self.assertIsInstance(kw.value.body,ast.Attribute)
                 count+=1
         self.assertEqual(count,13)
+        from accessory_image_test_ports import edge_errors, DIAGNOSTIC_EDGES
+        self.assertEqual(edge_errors(binding,DIAGNOSTIC_EDGES),[])
         for name in NAMES:
             node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
             self.assertEqual(len(node.body), 1); self.assertIsInstance(node.body[0], ast.Return); self.assertEqual(node.body[0].value.func.attr, name)
