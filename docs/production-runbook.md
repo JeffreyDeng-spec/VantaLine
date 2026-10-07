@@ -1388,3 +1388,15 @@ Pipeline registries remain process-local and reset under the existing Web restar
 Auto-optimization locks and thread registries remain local to the Web process with the existing restart behavior. This ownership change does not split training or image work, alter scheduling or introduce recovery retries. Restore only complete releases while retaining task/call evidence.
 
 Auto-optimization settings composition freezes only the chosen policy instance and its method capabilities; it does not freeze computed settings, user identity or database connections. There is no worker, thread, model or PLC topology change. Deploy and roll back complete releases preserving data and task evidence.
+
+The legacy PLC worker state extraction must never enable those workers. Production continues Web Serial browser-only I/O; the root startup hook remains no-op. The retained routines have no new stop/join/cancellation contract and are not run for routine verification. Deploy and roll back complete releases without changing PLC or runtime configuration.
+
+Active-lease ownership cleanup has no runtime topology or physical-device action. Deploy and roll back complete accepted releases, retaining station records and uncertain dispatch evidence. The synthetic method-instance check is not proof of full application-factory or production capacity isolation.
+
+Legacy activation readiness ownership is a structural release only. Do not enable server-side serial workers; ordinary service startup remains Web Serial browser-owned. Whole-release rollback retains all existing coordination and audit records, and this change makes no new live-device or production-capacity claim.
+
+The retained PLC coordination extraction changes code ownership only. It does not activate old server workers, change Web/label-worker topology, add a migration, or modify physical PLC permissions. Rollback remains replacement of the complete previous release; retained coordination rows are not rewritten.
+
+The PLC dispatch-record ownership slice is structural and preserves current Web Serial, dormant legacy workers and external label-worker topology. It changes neither database schema nor release control. Rollback restores the full previous package and leaves dispatch evidence intact.
+
+Moving retained PLC single-iteration workflows does not start legacy workers or change the Web/label-worker topology. The application startup hook remains dormant. Rollback uses the complete previous release; no PLC state, dispatch evidence or database object is deleted.

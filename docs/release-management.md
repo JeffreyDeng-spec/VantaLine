@@ -1103,3 +1103,17 @@ Auto-optimization owner and all consumers ship together under manifest v176. Req
 The v176 source-manifest change removes temporary settings indirection without changing algorithms. Require direct-port composition tests, downstream behavior/identity and PostgreSQL regression, full exact-head CI, independent review and whole-release verification. Python entry-alias rebinding is deliberately no longer a consumer configuration mechanism.
 
 This background candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows accessory candidate f397a31. Actual-main rebind and accessory release acceptance must precede publication. Production/tests and the ordered entry match reviewed 5a44e61. The bundled manifest is v176 with 507 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained.
+
+Manifest v177 records the retained legacy PLC worker owner. Require fake-thread/state regression plus current PLC v4, browser/source, lease, full HTTP and release checks, followed by exact-head CI and independent complete-release acceptance. No server serial process may be started by this change.
+
+The station active-lease ownership change is a structural release under manifest v177. Require exact-head CI, independent review and complete release acceptance; existing PLC contracts and actual PostgreSQL rebind/diagnostic cases must pass before merge.
+
+The six legacy PLC readiness helpers ship under source manifest v177 with the existing topology and disabled server-serial startup. Exact-head CI, independent review and full release acceptance remain required; the readiness import stub is not a physical-device test.
+
+The PLC runtime coordination ownership slice is structure-only. Prompt source manifest 177 adds plc/legacy_coordination.py truthfully for new tasks; existing model snapshots keep their previous version and fingerprint. Publish and roll back the complete package, preserving the current external label-worker topology.
+
+PLC dispatch record logic now has its own source entry in prompt manifest 177 (512 paths). New tasks record the actual source manifest; historical snapshots remain unchanged. Deploy and roll back the complete immutable package with its existing runtime topology.
+
+Prompt manifest 177 includes plc/legacy_operations.py as the actual source of the retained workflows (512 paths). Historical task snapshots are unchanged. This ownership-only slice retains the existing installer, services and full-package rollback.
+
+This PLC candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows the reviewed background ownership candidate. Actual-main rebind and predecessor release acceptance must precede publication. Production/tests and the ordered entry match reviewed a139e03. The bundled manifest is v177 with 512 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained. Browser-only physical IO, uncertain-write no-retry and inert retained startup remain unchanged.

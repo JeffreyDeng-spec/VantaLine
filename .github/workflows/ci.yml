@@ -285,6 +285,10 @@ jobs:
           python scripts/benchmark_label_history_statistics.py
           python scripts/smoke_account_projections.py
           python scripts/smoke_public_network_policy.py
+          python scripts/smoke_plc_activation_policy.py
+          python scripts/smoke_plc_runtime_coordination.py
+          python scripts/smoke_plc_dispatch_records.py
+          python scripts/smoke_plc_legacy_operations.py
           python scripts/smoke_admin_documentation_composition.py
           python scripts/smoke_authentication_composition.py --postgres
           python scripts/smoke_provider_proxy_runtime.py
@@ -299,6 +303,7 @@ jobs:
           python scripts/smoke_pipeline_runtime_ownership.py
           python scripts/smoke_auto_optimization_runtime_ownership.py
           python scripts/smoke_auto_optimization_settings_composition.py
+          python scripts/smoke_plc_legacy_worker_ownership.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
@@ -357,6 +362,7 @@ jobs:
           python scripts/smoke_plc_event_commands.py
           python scripts/smoke_plc_dispatch_mutations.py
           python scripts/smoke_plc_station_service.py
+          python scripts/smoke_plc_active_lease.py
           python scripts/smoke_plc_browser_dispatch.py
           python scripts/smoke_plc_workstation_repository.py
           python scripts/smoke_plc_request_models.py
