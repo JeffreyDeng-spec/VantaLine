@@ -352,6 +352,7 @@ jobs:
           python scripts/smoke_protected_config_ownership.py
           python scripts/smoke_local_model_config.py
           python scripts/smoke_model_tool_dispatch.py
+          python scripts/smoke_model_tools_composition.py
           python scripts/smoke_accessory_text_preparation.py
           python scripts/smoke_pose_collection_prompts.py
           python scripts/smoke_image_worker_diagnostics.py

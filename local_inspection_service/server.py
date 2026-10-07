@@ -5520,33 +5520,9 @@ def resolve_required_accessory_refs(required_refs: list[Any]) -> list[dict[str, 
 
 
 from .model_providers.tool_dispatch import ModelToolDispatch
+from .model_providers.tool_composition import ModelTools, JsonProviderCalls, McpRuntimeSelection, AccessoryTools, PresencePreparation
 from .model_providers.tool_dispatch_ports import ToolErrorPolicy, JsonToolExecution, McpToolTransport
 
-_model_tool_dispatch = ModelToolDispatch(
-    errors=ToolErrorPolicy(
-        bounded_text=lambda: bounded_text,
-        _text_v2_diagnostic_value=lambda: _text_v2_diagnostic_value,
-        AiProviderError=lambda: AiProviderError,
-        AiProviderTimeout=lambda: AiProviderTimeout,
-        AiProviderOverloaded=lambda: AiProviderOverloaded,
-        AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS,
-    ),
-    execution=JsonToolExecution(
-        ai_detection_settings=lambda: ai_detection_settings,
-        ai_tool_provider_meta=lambda: ai_tool_provider_meta,
-        provider_generate_json_error_payload=lambda: provider_generate_json_error_payload,
-        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
-    ),
-    transport=McpToolTransport(
-        admission=lambda: _ai_mcp_client.admission,
-        ai_mcp_runtime=lambda: ai_mcp_runtime,
-        AI_MCP_RUNTIME_STDIO=lambda: AI_MCP_RUNTIME_STDIO,
-        AI_MCP_RUNTIME_IN_PROCESS=lambda: AI_MCP_RUNTIME_IN_PROCESS,
-        _ai_mcp_client=lambda: _ai_mcp_client,
-        prepare_ai_mcp_payload=lambda: prepare_ai_mcp_payload,
-        AI_MCP_TOOL_HANDLERS=lambda: AI_MCP_TOOL_HANDLERS,
-    ),
-)
 
 
 def provider_generate_json_error_payload(
@@ -5638,39 +5614,30 @@ def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
 from .detection.presence_inspection import PresenceInspection
 from .detection.presence_inspection_ports import PresenceInput, PresenceGeneration, PresenceOutput, PresencePolicy
 
-_presence_inspection = PresenceInspection(
-    PresenceInput(lambda: ai_detection_settings(), lambda: resolve_required_accessory_refs,
-                  lambda: image_path_data_url, lambda: image_bgr_data_url),
-    PresenceGeneration(lambda required: ai_detection_task_payload(required),
-                       lambda required, settings: ensure_required_profile_cache(required, settings),
-                       lambda: ai_detection_provider_output_token_budget, lambda: call_ai_mcp_tool,
-                       lambda: ai_detection_parsed_covers_required),
-    PresenceOutput(lambda: ai_presence_failure_payload, lambda: normalize_ai_detection_result),
-    PresencePolicy(lambda: AI_INSPECTION_IMAGE_MAX_SIDE, lambda: AI_INSPECTION_IMAGE_QUALITY,
-                   lambda: AI_PROVIDER_MAX_ATTEMPTS, lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY,
-                   lambda: AI_DETECTION_SYSTEM_PROMPT, lambda: AI_DETECTION_OUTPUT_SCHEMA),
-    lambda: time.monotonic(),
-)
 
 
 def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
     return _presence_inspection.tool_vision_inspect_presence(payload)
 
 
-AI_MCP_TOOL_HANDLERS = {
-    "accessory.profile.generate": tool_accessory_profile_generate,
-    "accessory.reference.collect": tool_accessory_reference_collect,
-    "vision.inspect.presence": tool_vision_inspect_presence,
-    "provider.gemini.generate_json": tool_provider_gemini_generate_json,
-}
 
 
 from .model_providers.mcp_client import LocalAiMcpClient
 
 
-_ai_mcp_client = LocalAiMcpClient(
-    root=lambda: ROOT, error=lambda: AiProviderError, runtime=lambda: AI_MCP_RUNTIME_STDIO,
+_model_tools = ModelTools(
+    errors=ToolErrorPolicy(bounded_text=lambda: bounded_text, _text_v2_diagnostic_value=lambda: _text_v2_diagnostic_value, AiProviderError=lambda: AiProviderError, AiProviderTimeout=lambda: AiProviderTimeout, AiProviderOverloaded=lambda: AiProviderOverloaded, AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS),
+    provider=JsonProviderCalls(settings=lambda: ai_detection_settings, metadata=lambda: ai_tool_provider_meta, generate=lambda: generate_provider_json_with_fallback),
+    runtime=McpRuntimeSelection(root=lambda: ROOT, runtime=lambda: ai_mcp_runtime, stdio=lambda: AI_MCP_RUNTIME_STDIO, in_process=lambda: AI_MCP_RUNTIME_IN_PROCESS, prepare=lambda: prepare_ai_mcp_payload),
+    accessories=AccessoryTools(profile=tool_accessory_profile_generate, reference=tool_accessory_reference_collect),
+    presence_input=PresenceInput(lambda: ai_detection_settings(), lambda: resolve_required_accessory_refs, lambda: image_path_data_url, lambda: image_bgr_data_url),
+    presence=PresencePreparation(task=lambda required: ai_detection_task_payload(required), cache=lambda required, settings: ensure_required_profile_cache(required, settings), tokens=lambda: ai_detection_provider_output_token_budget, covers=lambda: ai_detection_parsed_covers_required),
+    presence_output=PresenceOutput(lambda: ai_presence_failure_payload, lambda: normalize_ai_detection_result), policy=PresencePolicy(lambda: AI_INSPECTION_IMAGE_MAX_SIDE, lambda: AI_INSPECTION_IMAGE_QUALITY, lambda: AI_PROVIDER_MAX_ATTEMPTS, lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_DETECTION_SYSTEM_PROMPT, lambda: AI_DETECTION_OUTPUT_SCHEMA), clock=lambda: time.monotonic(),
 )
+_model_tool_dispatch = _model_tools.dispatch
+_presence_inspection = _model_tools.presence
+AI_MCP_TOOL_HANDLERS = _model_tools.handlers
+_ai_mcp_client = _model_tools.client
 
 
 from .model_providers.mcp_runtime import ai_mcp_runtime, external_ai_mcp_enabled, McpPayloadPreparation, McpWarmup

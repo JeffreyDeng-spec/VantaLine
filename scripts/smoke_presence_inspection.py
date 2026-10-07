@@ -1,5 +1,6 @@
 """Offline presence inspection orchestration contracts; no inference or device access."""
 from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import itertools
@@ -162,6 +163,8 @@ class PresenceFixture:
         self.ticks=itertools.count(); self.clock=Mock(side_effect=lambda:self.events.append('clock') or next(self.ticks))
         self.schema={'type':'object'}
     def bind(self,api,stack):
+        # Replace the actual owned call port; preserve legacy supplier timing.
+        stack.enter_context(patch.object(api._presence_inspection, 'generation', replace(api._presence_inspection.generation, call=lambda: api.call_ai_mcp_tool)))
         for name,value in {'time':SimpleNamespace(monotonic=self.clock),'ai_detection_settings':self.settings_call,
             'resolve_required_accessory_refs':self.resolve,'image_path_data_url':self.path,'image_bgr_data_url':self.bgr,
             'ai_detection_task_payload':self.task_call,'ensure_required_profile_cache':self.cache_call,
@@ -423,7 +426,7 @@ class PresenceInspectionContracts(unittest.TestCase):
                     self.assertEqual(f.tool.call_count,repetition); self.assertEqual(f.normalize.call_count,repetition)
                     self.assertIs(f.tool.call_args.args[1]['schema_hint'],f.schema)
                     self.assertIs(f.normalize.call_args.args[1][0],f.required[0]); self.assertEqual(result['ai']['timing']['provider_result_ready_ms'],5000)
-        self.assertIs(self.api.AI_MCP_TOOL_HANDLERS['vision.inspect.presence'],self.api.tool_vision_inspect_presence)
+        self.assertEqual(self.api.AI_MCP_TOOL_HANDLERS['vision.inspect.presence'],self.api._model_tools.presence.tool_vision_inspect_presence)
         self.assertFalse(hasattr(self.api.tool_vision_inspect_presence,'__wrapped__'))
 
     def test_independent_missing_encoder_provider_fails_before_policy_reads(self):
