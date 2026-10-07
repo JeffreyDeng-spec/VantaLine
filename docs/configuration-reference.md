@@ -1582,3 +1582,5 @@ Replacing the default entry business-file alias no longer redirects this incomin
 
 
 ModelCatalog construction stores capability suppliers, not the current user, a database connection or a loaded model. Registry, default ID, model factory and request identity remain selected during their existing operations. Entry compatibility aliases do not configure internal catalog dependencies; replace the explicit owner methods in tests or supply separate graph ports. Business configuration and historical task snapshots remain unchanged.
+
+Candidate image worker composition uses existing settings and injected operation-time configuration/model resolver capabilities; no new business configuration or queue status is introduced. The queue pins the submitted job model snapshot on the native child before provider dispatch; missing resolver fails explicitly. Its candidate lock and child/process registries belong to the image domain instance. The current default application still exports its existing image-worker compatibility bindings and uses the existing shutdown sequence.

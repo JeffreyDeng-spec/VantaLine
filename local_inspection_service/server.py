@@ -1409,11 +1409,98 @@ _incoming_text_store_lock = _text_storage.lock
 from .accessories.cutout_runtime import RembgSessionRuntime as _RembgSessionRuntime
 _rembg_runtime = _RembgSessionRuntime()
 from .runtime.image_worker import ImageWorkerRuntime
-_image_worker_runtime = ImageWorkerRuntime(
-    target=lambda: image_worker_loop, threads=lambda: threading.Thread,
-    scope=_runtime_repositories.thread_scope,
+from .accessories.image_composition import (
+    ImageJobs as _ImageJobs, CandidateFiles as _ImageCandidateFiles,
+    QueueStorage as _ImageQueueStorage, QueueMetadata as _ImageQueueMetadata,
+    QueueLimits as _ImageQueueLimits, DiagnosticMedia as _ImageDiagnosticMedia,
+    ExecutionFiles as _ImageExecutionFiles, ExecutionEvidence as _ImageExecutionEvidence,
+    ExecutionProviders as _ImageExecutionProviders,
 )
-_candidate_store_lock = threading.RLock()
+from .accessories.image_job_metadata import ProvenanceDependencies as _ImageProvenanceDependencies
+from .accessories.image_worker_diagnostic_ports import ImageDiagnosticPolicy as _ImageDiagnosticPolicy
+_image_jobs = _ImageJobs(
+    provenance=_ImageProvenanceDependencies(
+        hash_file=lambda path: file_sha256(path),
+        policy_version=lambda: ANCHOR_POLICY_VERSION,
+        guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
+        max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
+    ),
+    resolver=lambda: resolve_model_profiles(),
+    files=_business_files,
+    threads=lambda: threading.Thread,
+    scope=_runtime_repositories.thread_scope,
+    candidates=_ImageCandidateFiles(
+        runtime_repository=lambda: runtime_postgres_repository_or_none(),
+        directory=lambda: ACCESSORY_CANDIDATES_DIR,
+        safe_id=lambda value: safe_record_id(value),
+        created_at=lambda record, path: record_created_at(record, path),
+        updated_at=lambda record, path: record_updated_at(record, path),
+    ),
+    storage=_ImageQueueStorage(
+        CONFIG_PATH=lambda: CONFIG_PATH,
+        load_config=lambda: load_config,
+        save_config=lambda: save_config,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        _business_files=lambda: _business_files,
+        HTTPException=lambda: HTTPException,
+    ),
+    metadata=_ImageQueueMetadata(
+        accessory_uid=lambda: accessory_uid,
+        file_stem_identifier=lambda: file_stem_identifier,
+        accessory_material_type=lambda: accessory_material_type,
+        ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs,
+        public_output_url=lambda: public_output_url,
+        resolve_service_path=lambda: resolve_service_path,
+        preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
+    ),
+    limits=_ImageQueueLimits(
+        IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
+        MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
+    ),
+    diagnostic_media=_ImageDiagnosticMedia(
+        _business_files=lambda: _business_files,
+        resolve_service_path=lambda: resolve_service_path,
+        safe_name=lambda: safe_name,
+        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
+    ),
+    diagnostic_policy=_ImageDiagnosticPolicy(
+        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+        IMAGE_WORKER_LOG_TAIL_BYTES=lambda: IMAGE_WORKER_LOG_TAIL_BYTES,
+        IMAGE_WORKER_STALE_SECONDS=lambda: IMAGE_WORKER_STALE_SECONDS,
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+    ),
+    execution_files=_ImageExecutionFiles(
+        _business_files=lambda: _business_files,
+        _image_files=lambda: _image_files,
+        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
+        ROOT=lambda: ROOT,
+        safe_name=lambda: safe_name,
+        resolve_service_path=lambda: resolve_service_path,
+        public_output_url=lambda: public_output_url,
+    ),
+    evidence=_ImageExecutionEvidence(
+        image_job_prompt=lambda: image_job_prompt,
+        bounded_text=lambda: bounded_text,
+    ),
+    providers=_ImageExecutionProviders(
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+        CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
+        CURSOR_IMAGE2_QUEUE_STATUS=lambda: CURSOR_IMAGE2_QUEUE_STATUS,
+        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
+        cursor_image2_settings=lambda: cursor_image2_settings,
+        cursor_image2_payload=lambda: cursor_image2_payload,
+        cursor_auth_headers=lambda: cursor_auth_headers,
+        extract_cursor_image2_bytes=lambda: extract_cursor_image2_bytes,
+        windows_worker_base_url=lambda: windows_worker_base_url,
+        windows_worker_headers=lambda: windows_worker_headers,
+        windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds,
+        windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes,
+        masked_url_for_status=lambda: masked_url_for_status,
+    ),
+)
+_image_worker_runtime = _image_jobs.worker
+_candidate_store_lock = _image_jobs.lock
 from .runtime.training_tasks import TrainingTaskRuntime, TrainingThreadLifecycle
 _training_task_runtime = TrainingTaskRuntime(scope=_runtime_repositories.thread_scope)
 _training_task_lock = _training_task_runtime.lock
@@ -3293,15 +3380,7 @@ from .accessories.image_job_metadata import (
     deterministic_task_id as _image_metadata_task_id,
     ensure_image_job_task_id as _image_metadata_ensure_id,
 )
-_image_job_metadata = ImageJobMetadata(
-    ProvenanceDependencies(
-        hash_file=lambda path: file_sha256(path),
-        policy_version=lambda: ANCHOR_POLICY_VERSION,
-        guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
-        max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
-    ),
-    lambda: resolve_model_profiles(), files=_business_files
-)
+_image_job_metadata = _image_jobs.metadata
 
 
 def candidate_image_jobs(candidate: dict[str, Any]) -> list[dict[str, Any]]:
@@ -6537,14 +6616,7 @@ def create_accessory_candidate(
 
 
 from .accessories.candidate_repository import CandidateRepository, CandidateStoreDependencies
-_candidate_repository = CandidateRepository(CandidateStoreDependencies(
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    directory=lambda: ACCESSORY_CANDIDATES_DIR, lock=lambda: _candidate_store_lock,
-    ensure_task_ids=lambda candidate: ensure_candidate_image_job_task_ids(candidate),
-    safe_id=lambda value: safe_record_id(value),
-    created_at=lambda record, path: record_created_at(record, path),
-    updated_at=lambda record, path: record_updated_at(record, path),
-))
+_candidate_repository = _image_jobs.candidates
 
 
 def load_accessory_candidate(candidate_id: str) -> dict[str, Any]:
@@ -6597,42 +6669,7 @@ def write_accessory_candidate_file(path: Path, candidate: dict[str, Any]) -> Non
 from .accessories.image_job_queue import ImageJobQueue
 from .accessories.image_job_queue_ports import ImageQueueStorage, ImageQueueMetadata, ImageQueueExecution
 
-_image_job_queue = ImageJobQueue(
-    storage=ImageQueueStorage(
-        _candidate_store_lock=lambda: _candidate_store_lock,
-        CONFIG_PATH=lambda: CONFIG_PATH,
-        load_config=lambda: load_config,
-        save_config=lambda: save_config,
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        load_accessory_candidate=lambda: load_accessory_candidate,
-        save_accessory_candidate=lambda: save_accessory_candidate,
-        list_accessory_candidate_records=lambda: list_accessory_candidate_records,
-        _business_files=lambda: _business_files,
-        HTTPException=lambda: HTTPException,
-    ),
-    metadata=ImageQueueMetadata(
-        ensure_image_job_task_id=lambda: ensure_image_job_task_id,
-        ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids,
-        candidate_image_jobs=lambda: candidate_image_jobs,
-        store_candidate_image_job=lambda: store_candidate_image_job,
-        accessory_uid=lambda: accessory_uid,
-        file_stem_identifier=lambda: file_stem_identifier,
-        accessory_material_type=lambda: accessory_material_type,
-        ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs,
-        image_job_output_path=lambda: image_job_output_path,
-        public_output_url=lambda: public_output_url,
-        resolve_service_path=lambda: resolve_service_path,
-        preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
-    ),
-    execution=ImageQueueExecution(
-        _image_worker_runtime=lambda: _image_worker_runtime,
-        IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
-        MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
-        next_queued_image_job=lambda: next_queued_image_job,
-        update_image_worker_status=lambda: update_image_worker_status,
-        run_image_generation_job=lambda: run_image_generation_job,
-    ),
-)
+_image_job_queue = _image_jobs.queue
 
 
 def mutate_candidate_image_job(
@@ -6694,27 +6731,7 @@ def image_job_prompt(job: dict[str, Any]) -> str:
 from .accessories.image_worker_diagnostics import ImageWorkerDiagnostics
 from .accessories.image_worker_diagnostic_ports import ImageDiagnosticMedia, ImageDiagnosticRuntime, ImageDiagnosticPolicy
 
-_image_worker_diagnostics = ImageWorkerDiagnostics(
-    media=ImageDiagnosticMedia(
-        _business_files=lambda: _business_files,
-        resolve_service_path=lambda: resolve_service_path,
-        safe_name=lambda: safe_name,
-        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
-        read_image_worker_log_tail=lambda: read_image_worker_log_tail,
-    ),
-    runtime=ImageDiagnosticRuntime(
-        _image_worker_processes=lambda: _image_worker_processes,
-        image_worker_process_alive=lambda: image_worker_process_alive,
-        codex_process_has_log_open=lambda: codex_process_has_log_open,
-        image_job_has_live_worker=lambda: image_job_has_live_worker,
-    ),
-    policy=ImageDiagnosticPolicy(
-        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
-        IMAGE_WORKER_LOG_TAIL_BYTES=lambda: IMAGE_WORKER_LOG_TAIL_BYTES,
-        IMAGE_WORKER_STALE_SECONDS=lambda: IMAGE_WORKER_STALE_SECONDS,
-        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
-    ),
-)
+_image_worker_diagnostics = _image_jobs.diagnostics
 
 
 def image_job_is_active(status: str) -> bool:
@@ -6815,46 +6832,7 @@ def windows_worker_image_response_bytes(payload: dict[str, Any]) -> bytes:
 from .accessories.image_job_execution import ImageJobExecution
 from .accessories.image_job_execution_ports import ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders
 
-_image_job_execution = ImageJobExecution(
-    files=ImageExecutionFiles(
-        _business_files=lambda: _business_files,
-        _image_files=lambda: _image_files,
-        image_job_output_path=lambda: image_job_output_path,
-        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
-        ROOT=lambda: ROOT,
-        safe_name=lambda: safe_name,
-        resolve_service_path=lambda: resolve_service_path,
-        public_output_url=lambda: public_output_url,
-    ),
-    evidence=ImageExecutionEvidence(
-        mutate_candidate_image_job=lambda: mutate_candidate_image_job,
-        update_image_worker_status=lambda: update_image_worker_status,
-        _image_worker_processes=lambda: _image_worker_processes,
-        image_job_prompt=lambda: image_job_prompt,
-        codex_log_has_generated_image=lambda: codex_log_has_generated_image,
-        classify_image_worker_failure=lambda: classify_image_worker_failure,
-        bounded_text=lambda: bounded_text,
-    ),
-    providers=ImageExecutionProviders(
-        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
-        CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
-        CURSOR_IMAGE2_QUEUE_STATUS=lambda: CURSOR_IMAGE2_QUEUE_STATUS,
-        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
-        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
-        cursor_image2_settings=lambda: cursor_image2_settings,
-        cursor_image2_payload=lambda: cursor_image2_payload,
-        cursor_auth_headers=lambda: cursor_auth_headers,
-        extract_cursor_image2_bytes=lambda: extract_cursor_image2_bytes,
-        run_codex_image_job=lambda: run_codex_image_job,
-        run_cursor_image2_job=lambda: run_cursor_image2_job,
-        run_cos_codex_image_job=lambda: run_cos_codex_image_job,
-        windows_worker_base_url=lambda: windows_worker_base_url,
-        windows_worker_headers=lambda: windows_worker_headers,
-        windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds,
-        windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes,
-        masked_url_for_status=lambda: masked_url_for_status,
-    ),
-)
+_image_job_execution = _image_jobs.execution
 
 
 def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any], *, reason: str) -> bool:

@@ -257,13 +257,16 @@ class ExecutionContract(unittest.TestCase):
     def test_explicit_assembly(self):
         from local_inspection_service.accessories.image_job_execution_ports import ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders
         tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_image_job_execution' for t in n.targets))
+        from accessory_image_test_ports import binding
+        assignment = SimpleNamespace(value=binding(ROOT,'execution'))
         for group, cls in zip(assignment.value.keywords, (ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders)):
             self.assertEqual({k.arg for k in group.value.keywords}, {field.name for field in fields(cls)})
             for getter in group.value.keywords:
-                self.assertIsInstance(getter.value, ast.Lambda)
-                self.assertEqual(getter.value.body.id, getter.arg)
-                self.assertFalse(getter.value.args.args)
+                self.assertIsInstance(getter.value, (ast.Lambda, ast.Attribute))
+                if isinstance(getter.value, ast.Lambda):
+                    self.assertFalse(getter.value.args.args)
+                    self.assertIsInstance(getter.value.body,ast.Attribute)
+                else:self.assertEqual(getter.value.attr,getter.arg)
 
 
 if __name__ == '__main__':

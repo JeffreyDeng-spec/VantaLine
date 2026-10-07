@@ -1374,3 +1374,5 @@ The incoming domain owns its response-file capability and exposes separate catal
 
 
 Catalog composition uses actual source manifest v240 (534 paths). Require catalog/model/pipeline/media regressions, exact-head CI and independent review before whole-release publication. The domain composition changes no provider, model defaults or runtime service topology and does not complete the application factory.
+
+The candidate image graph change adds its integrated ownership smoke to required backend CI. Each actual-main domain PR still needs its own complete CI and whole immutable release verification; offline domain tests do not approve an unpublished stack. Prompt source manifest version 241 includes accessories/image_composition.py as an actual new source; new task fingerprints change naturally and historical task snapshots are not rewritten.

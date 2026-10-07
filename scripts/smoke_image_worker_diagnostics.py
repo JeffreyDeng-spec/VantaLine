@@ -123,12 +123,21 @@ class ImageDiagnosticsContract(unittest.TestCase):
     @unittest.skipIf(bool(BASELINE), 'candidate wiring only')
     def test_wiring_and_light_import(self):
         tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        binding = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_image_worker_diagnostics' for t in n.targets))
+        from accessory_image_test_ports import binding as owner_binding
+        binding = owner_binding(ROOT,'diagnostics')
         count = 0
         for group in binding.keywords:
+            if group.arg=='policy':
+                self.assertIsInstance(group.value,ast.Name);self.assertEqual(group.value.id,'diagnostic_policy')
+                from dataclasses import fields
+                from local_inspection_service.accessories.image_worker_diagnostic_ports import ImageDiagnosticPolicy
+                count+=len(fields(ImageDiagnosticPolicy));continue
             for kw in group.value.keywords:
-                self.assertIsInstance(kw.value, ast.Lambda); self.assertEqual(kw.arg, kw.value.body.id); count += 1
-        self.assertEqual(count, 13)
+                self.assertIsInstance(kw.value,(ast.Lambda,ast.Attribute))
+                if isinstance(kw.value,ast.Attribute):self.assertEqual(kw.value.attr,kw.arg)
+                else:self.assertFalse(kw.value.args.args);self.assertIsInstance(kw.value.body,ast.Attribute)
+                count+=1
+        self.assertEqual(count,13)
         for name in NAMES:
             node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
             self.assertEqual(len(node.body), 1); self.assertIsInstance(node.body[0], ast.Return); self.assertEqual(node.body[0].value.func.attr, name)
