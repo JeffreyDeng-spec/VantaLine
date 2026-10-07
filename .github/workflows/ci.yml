@@ -331,6 +331,7 @@ jobs:
           VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_projection.py
           python scripts/smoke_label_public_projection.py
           python scripts/smoke_label_summary_migration.py
+          python scripts/smoke_legacy_json_projection_preparation.py
           python scripts/smoke_service_status_requests.py
           python scripts/smoke_app_config_store.py
           python scripts/smoke_protected_config_ownership.py

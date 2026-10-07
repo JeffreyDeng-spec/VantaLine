@@ -573,3 +573,8 @@ Dashboard task upsert retains its original read/modify/save operations and exist
 
 
 The CI benchmark-only PostgreSQL 16 service has a 2 GiB tmpfs at its actual PGDATA, a 3 GiB container memory limit and equal memory-swap limit (container swap disabled). fsync, synchronous_commit and full_page_writes remain on; WAL and default temp tablespaces stay under that mount. Initial/final checks verify two different system identifiers, mount type/size, data/WAL locations, settings, database size, actual cgroup memory peak and pressure/OOM/swap evidence. ENOSPC, OOM, missing telemetry or configured-bound violations fail the run; capacity and samples must not be silently changed. This bounded capacity is a predeclared experimental budget for the full existing fixed synthetic matrix, subject to recorded validation, not a production sizing result. The ordinary disk instance remains the source for all persistence/concurrency/failure contracts.
+
+
+The optional versioned `legacy_json_projection_v1` helper is installed only by its additive feature migration. The runtime/bootstrap DDL remains unchanged and existing readers/writers do not depend on the helper. Its conversion-only exception region handles source representation, numeric-range and Unicode conversion errors; query argument failures, cancellation, permissions and resource failures surface. Historical source rows and snapshots are not rewritten.
+
+The helper fixes original-text operations and field-key membership to the C collation; caller ICU collation cannot alter lexical guards or make Python-distinct JSON keys compare equal.

@@ -2281,3 +2281,8 @@ smoke_auto_optimization_settings_composition.py verifies all 24 actual applicati
 
 
 CI uses two independent PostgreSQL 16 instances. Ordinary business, migration, transaction, concurrency and failure contracts retain the original disk-backed instance. Only benchmark_label_history_statistics.py, benchmark_label_summary_reads.py, benchmark_label_projection.py and benchmark_label_run_batch.py select the dedicated tmpfs database through single-command DSN overrides. Scripts, fixed baselines, populations, order, sample counts and latency/memory/query guards remain unchanged. These measure complete synthetic endpoints, including persisted pagination snapshots, within this new relative-performance environment; they do not establish physical-disk durable-commit P95 or production capacity. Historical disk failures remain evidence. The fake legacy-index benchmark keeps its original environment.
+
+
+Run `python scripts/smoke_legacy_json_projection_preparation.py` with an isolated `VANTALINE_POSTGRES_DSN` on supported Python 3.10 and 3.12. The smoke executes the actual versioned migration in a disposable schema, checks pg_proc signature/body/volatility/STRICT/invoker/search_path, direct replay failure, NULL/empty/duplicate/multidimensional fields, actual original reader decoding and synthetic numeric/Unicode/duplicate/deep malformed populations. All schemas and connections are removed. It is a preparation contract, not SQL aggregation, pagination, performance or production capacity acceptance.
+
+The preparation smoke also checks exact 16/17 container and 512/513 digit boundaries, brackets inside strings, and legal nondeterministic ICU field-array arguments with case/accent-distinct keys.

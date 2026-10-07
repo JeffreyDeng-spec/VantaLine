@@ -1391,3 +1391,6 @@ Auto-optimization settings composition freezes only the chosen policy instance a
 
 
 The dedicated tmpfs database exists only for synthetic CI benchmarks. Production PostgreSQL and ordinary disk-backed CI contracts retain their existing storage and durability settings. The experiment aims to isolate algorithm/resource regression from shared storage variance; it is not a historical cause finding or production write-amplification assessment. Complete release rollback is unchanged and no customer records or deployment configuration are migrated. Do not run the CI storage inspector against a production DSN; it accepts only the fixed synthetic CI endpoints.
+
+
+The unused `legacy_json_projection_v1` preparation may be retained during whole-release rollback. Before any future consumer release, verify the exact schema/signature/body and metadata, rather than inferring availability from feature_migrations alone. A same-signature conflict fails installation; do not replace an unknown function or waive checksum validation. This slice adds no maintenance gate, data conversion, service topology or source-row writes.
