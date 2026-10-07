@@ -115,7 +115,7 @@ def root_errors(root,tree=None):
     call=graphs[0]
     if expression('_ImageJobs')!=ast.dump(call.func,include_attributes=False) or call.args:errors.append('wrong image graph constructor')
     fields={kw.arg:ast.dump(kw.value,include_attributes=False) for kw in call.keywords}
-    if len(fields)!=len(call.keywords) or fields!=expected['root_arguments']:errors.append('external root arguments differ from frozen parent')
+    if len(fields)!=len(call.keywords) or fields!={name:expression(value) for name,value in expected['root_argument_expressions'].items()}:errors.append('external root arguments differ from frozen parent')
     for name,value in expected['aliases'].items():
         nodes=assignments.get(name,[])
         if len(nodes)!=1 or ast.dump(nodes[0],include_attributes=False)!=expression(value):errors.append(name+' ownership alias differs')
