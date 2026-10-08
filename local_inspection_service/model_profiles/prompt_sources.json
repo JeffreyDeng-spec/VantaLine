@@ -541,6 +541,6 @@
     "text_inspection/standard_composition.py",
     "text_inspection/comparison_composition.py",
     "training/core_composition.py",
-    "local_inspection_service/training/execution_composition.py"
+    "training/execution_composition.py"
   ]
 }
