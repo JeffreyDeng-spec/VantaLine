@@ -390,6 +390,7 @@ jobs:
           python scripts/smoke_auto_optimization_shadow_evaluation.py
           python scripts/smoke_auto_optimization_core_composition.py
           python scripts/smoke_auto_optimization_execution_composition.py
+          python scripts/smoke_auto_optimization_workflow_composition.py
           python scripts/smoke_auto_optimization_requests.py
           python scripts/smoke_auto_optimization_sprite_publication.py
           python scripts/smoke_plc_event_projection.py

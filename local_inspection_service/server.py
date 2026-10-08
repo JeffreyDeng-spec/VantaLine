@@ -4217,129 +4217,6 @@ from .training.auto_optimization_state_ports import AutoOptimizationStateStorage
 
 from .training.core_composition import (AutoOptimizationCore, StateStorage, StatePolicy, AutoOptimizationStateCache, ReadinessLookups, StatusLookups, StatusProjection, ShadowPolicy, ShadowImages, Retirement)
 
-_auto_optimization_core = AutoOptimizationCore(
-    storage=StateStorage(
-        AUTO_OPTIMIZE_DIR=lambda: AUTO_OPTIMIZE_DIR,
-        AI_DETECTION_MODEL_ID=lambda: AI_DETECTION_MODEL_ID,
-        _business_files=lambda: _business_files,
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-    ),
-    state_policy=StatePolicy(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        safe_record_id=lambda: safe_record_id,
-        row_raw_json_list=lambda: row_raw_json_list,
-        auto_optimize_state_row=lambda: auto_optimize_state_row,
-        resolve_model_profiles=lambda: resolve_model_profiles,
-    ),
-    cache=AutoOptimizationStateCache(
-        _read_path_cache=lambda: _read_path_cache,
-        store_read_cache_get=lambda: store_read_cache_get,
-        store_read_cache_put=lambda: store_read_cache_put,
-        store_read_cache_invalidate=lambda: store_read_cache_invalidate,
-    ),
-    readiness=ReadinessLookups(
-        find_training_task=lambda: find_training_task,
-        load_config=lambda: load_config,
-        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-        load_pipeline_tasks=lambda: load_pipeline_tasks,
-        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
-        pipeline_task_model_status=lambda: pipeline_task_model_status,
-        pipeline_task_model_id=lambda: pipeline_task_model_id,
-    ),
-    status_state=StatusLookups(
-        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
-        find_training_task=lambda: find_training_task,
-        record_visible_to_user=lambda: record_visible_to_user,
-        current_auth_user=lambda: current_auth_user,
-        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
-    ),
-    status_policy=StatusProjection(
-        auto_optimize_public_sprite_pool=lambda: auto_optimize_public_sprite_pool,
-        background_set_payload=lambda: background_set_payload,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        public_path_sanitized=lambda: public_path_sanitized,
-        normalize_expected_production_count=lambda: normalize_expected_production_count,
-    ),
-    shadow_state=ShadowPolicy(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        bounded_text=lambda: bounded_text,
-    ),
-    observation=ShadowImages(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        safe_record_id=lambda: safe_record_id,
-    ),
-    retirement=Retirement(
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        delete_training_task_record=lambda: delete_training_task_record,
-        training_run_roots=lambda: training_run_roots,
-        _business_files=lambda: _business_files,
-    ),
-    accessory_lookup=lambda config: accessory_lookup_by_id(config),
-    material_type=lambda item: accessory_material_type(item),
-    bounded_text=lambda: bounded_text,
-    settings=_auto_optimization_settings,
-    runtime=_auto_optimization_runtime,
-    detection=lambda: _detection_workflows,
-    shadow_runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-    shadow_resolver=resolve_model_profiles,
-)
-_auto_optimization_state_store = _auto_optimization_core.store
-
-
-def auto_optimize_task_path(task_id: str) -> Path:
-    return _auto_optimization_state_store.auto_optimize_task_path(task_id)
-
-
-default_auto_optimize_settings = _auto_optimization_settings.default_auto_optimize_settings
-
-
-auto_optimize_negative_samples_per_real_image = _auto_optimization_settings.auto_optimize_negative_samples_per_real_image
-
-
-auto_optimize_positive_derivatives_per_real_image = _auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image
-
-
-auto_optimize_training_requirements = _auto_optimization_settings.auto_optimize_training_requirements
-
-
-auto_optimize_samples_per_real_image = _auto_optimization_settings.auto_optimize_samples_per_real_image
-
-
-auto_optimize_training_parameters = _auto_optimization_settings.auto_optimize_training_parameters
-
-
-
-
-from .training.auto_optimization_recommendations import AutoOptimizationRecommendations
-
-_auto_optimization_recommendations = _auto_optimization_core.recommendations
-
-
-def auto_optimize_complexity_rule_recommendation(
-    config: dict[str, Any],
-    accessory_ids: list[str],
-    expected_production_count: int,
-) -> dict[str, Any]:
-    return _auto_optimization_recommendations.auto_optimize_complexity_rule_recommendation(config, accessory_ids, expected_production_count)
-
-
-def clamp_auto_optimize_initialization_recommendation(
-    raw: dict[str, Any],
-    fallback: dict[str, Any],
-    expected_production_count: int,
-) -> dict[str, Any]:
-    return _auto_optimization_recommendations.clamp_auto_optimize_initialization_recommendation(raw, fallback, expected_production_count)
-
-
-def public_auto_optimize_initialization_payload(state: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
-    return _auto_optimization_recommendations.public_auto_optimize_initialization_payload(state, settings)
-
-
-from .training.auto_optimization_initialization import AutoOptimizationInitialization
-from .training.auto_optimization_initialization_ports import AutoOptimizationAdvisorPorts, AutoOptimizationTaskInitializationPorts
-
 from .training.execution_composition import (
     AutoOptimizationExecution,
     ExternalAutoOptimizationAdvisorPorts,
@@ -4371,14 +4248,83 @@ from .training.execution_composition import (
     ExternalRequestActions,
 )
 
-_auto_optimization_execution = AutoOptimizationExecution(
-    core=_auto_optimization_core,
+from .training.workflow_composition import AutoOptimizationWorkflows, AutoOptimizationStatusLookups, AutoOptimizationStatusProjection
+
+_auto_optimization_workflows = AutoOptimizationWorkflows(
+    storage=StateStorage(
+        AUTO_OPTIMIZE_DIR=lambda: AUTO_OPTIMIZE_DIR,
+        AI_DETECTION_MODEL_ID=lambda: AI_DETECTION_MODEL_ID,
+        _business_files=lambda: _business_files,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+    ),
+    state_policy=StatePolicy(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        safe_record_id=lambda: safe_record_id,
+        row_raw_json_list=lambda: row_raw_json_list,
+        auto_optimize_state_row=lambda: auto_optimize_state_row,
+        resolve_model_profiles=lambda: resolve_model_profiles,
+    ),
+    cache=AutoOptimizationStateCache(
+        _read_path_cache=lambda: _read_path_cache,
+        store_read_cache_get=lambda: store_read_cache_get,
+        store_read_cache_put=lambda: store_read_cache_put,
+        store_read_cache_invalidate=lambda: store_read_cache_invalidate,
+    ),
+    readiness=ReadinessLookups(
+        find_training_task=lambda: find_training_task,
+        load_config=lambda: load_config,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+        load_pipeline_tasks=lambda: load_pipeline_tasks,
+        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+        pipeline_task_model_status=lambda: pipeline_task_model_status,
+        pipeline_task_model_id=lambda: pipeline_task_model_id,
+    ),
+    status_state=AutoOptimizationStatusLookups(
+        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
+        find_training_task=lambda: find_training_task,
+        record_visible_to_user=lambda: record_visible_to_user,
+        current_auth_user=lambda: current_auth_user,
+    ),
+    status_policy=AutoOptimizationStatusProjection(
+        background_set_payload=lambda: background_set_payload,
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+        public_path_sanitized=lambda: public_path_sanitized,
+        normalize_expected_production_count=lambda: normalize_expected_production_count,
+    ),
+    shadow_state=ShadowPolicy(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    observation=ShadowImages(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        safe_record_id=lambda: safe_record_id,
+    ),
+    retirement=Retirement(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        delete_training_task_record=lambda: delete_training_task_record,
+        training_run_roots=lambda: training_run_roots,
+        _business_files=lambda: _business_files,
+    ),
+    accessory_lookup=lambda config: accessory_lookup_by_id(config),
+    material_type=lambda item: accessory_material_type(item),
+    bounded_text=lambda: bounded_text,
     settings=_auto_optimization_settings,
     runtime=_auto_optimization_runtime,
+    detection=lambda: _detection_workflows,
+    shadow_runtime=TrainingThreadLifecycle(
+        scope=_runtime_repositories.thread_scope,
+    ),
+    shadow_resolver=resolve_model_profiles,
     negative_samples_default=AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
     model_resolver=resolve_model_profiles,
-    label_runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-    scheduling_runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
+    label_runtime=TrainingThreadLifecycle(
+        scope=_runtime_repositories.thread_scope,
+    ),
+    scheduling_runtime=TrainingThreadLifecycle(
+        scope=_runtime_repositories.thread_scope,
+    ),
     external_AutoOptimizationAdvisorPorts=ExternalAutoOptimizationAdvisorPorts(
         ai_detection_settings=lambda: ai_detection_settings,
         accessory_lookup_by_id=lambda: accessory_lookup_by_id,
@@ -4561,6 +4507,64 @@ _auto_optimization_execution = AutoOptimizationExecution(
         AI_DETECTION_TASK_PREFIX=lambda: AI_DETECTION_TASK_PREFIX,
     ),
 )
+_auto_optimization_core = _auto_optimization_workflows.core
+_auto_optimization_state_store = _auto_optimization_core.store
+
+
+def auto_optimize_task_path(task_id: str) -> Path:
+    return _auto_optimization_state_store.auto_optimize_task_path(task_id)
+
+
+default_auto_optimize_settings = _auto_optimization_settings.default_auto_optimize_settings
+
+
+auto_optimize_negative_samples_per_real_image = _auto_optimization_settings.auto_optimize_negative_samples_per_real_image
+
+
+auto_optimize_positive_derivatives_per_real_image = _auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image
+
+
+auto_optimize_training_requirements = _auto_optimization_settings.auto_optimize_training_requirements
+
+
+auto_optimize_samples_per_real_image = _auto_optimization_settings.auto_optimize_samples_per_real_image
+
+
+auto_optimize_training_parameters = _auto_optimization_settings.auto_optimize_training_parameters
+
+
+
+
+from .training.auto_optimization_recommendations import AutoOptimizationRecommendations
+
+_auto_optimization_recommendations = _auto_optimization_core.recommendations
+
+
+def auto_optimize_complexity_rule_recommendation(
+    config: dict[str, Any],
+    accessory_ids: list[str],
+    expected_production_count: int,
+) -> dict[str, Any]:
+    return _auto_optimization_recommendations.auto_optimize_complexity_rule_recommendation(config, accessory_ids, expected_production_count)
+
+
+def clamp_auto_optimize_initialization_recommendation(
+    raw: dict[str, Any],
+    fallback: dict[str, Any],
+    expected_production_count: int,
+) -> dict[str, Any]:
+    return _auto_optimization_recommendations.clamp_auto_optimize_initialization_recommendation(raw, fallback, expected_production_count)
+
+
+def public_auto_optimize_initialization_payload(state: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+    return _auto_optimization_recommendations.public_auto_optimize_initialization_payload(state, settings)
+
+
+from .training.auto_optimization_initialization import AutoOptimizationInitialization
+from .training.auto_optimization_initialization_ports import AutoOptimizationAdvisorPorts, AutoOptimizationTaskInitializationPorts
+
+
+_auto_optimization_execution = _auto_optimization_workflows.execution
 _auto_optimization_initialization = _auto_optimization_execution.initialization
 
 

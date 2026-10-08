@@ -27,6 +27,10 @@ def structure(value):
 
 def verify_source(source):
     tree = ast.parse(source)
+    if any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == '_auto_optimization_workflows' for target in node.targets) for node in tree.body):
+        from smoke_auto_optimization_workflow_composition import verify_source as verify_owned_workflows
+        return verify_owned_workflows(source)
+    tree = ast.parse(source)
     fixture = json.loads((ROOT / 'tests/backend_contract/auto_optimization_core_ports.json').read_text())
     protected = {'_auto_optimization_core', *fixture['aliases']}
     nodes = {}

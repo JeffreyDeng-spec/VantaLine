@@ -58,6 +58,12 @@ def assert_capability_owner(test, port, name, server):
                 test.assertIs(selected.__func__, getattr(type(execution), name))
             return
         core = server._auto_optimization_core
+        workflows = getattr(server, '_auto_optimization_workflows', None)
+        if workflows is not None and ((port is core.status.state and name == 'start_auto_optimize_label_worker') or (port is core.status.policy and name == 'auto_optimize_public_sprite_pool')):
+            selected = actual()
+            test.assertIs(selected.__self__, workflows)
+            test.assertIs(selected.__func__, getattr(type(workflows), name))
+            return
         owned = {
             id(core.store.storage): {'auto_optimize_task_path'},
             id(core.readiness.ports): {'auto_optimize_linked_pipeline_model_id', 'auto_optimize_completed_model_id'},

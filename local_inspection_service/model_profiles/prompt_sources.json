@@ -1,5 +1,5 @@
 {
-  "version": 247,
+  "version": 248,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -541,6 +541,7 @@
     "text_inspection/standard_composition.py",
     "text_inspection/comparison_composition.py",
     "training/core_composition.py",
-    "training/execution_composition.py"
+    "training/execution_composition.py",
+    "training/workflow_composition.py"
   ]
 }
