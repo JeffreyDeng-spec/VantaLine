@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_state_test_ports import patch_training_port, get_training_port, set_training_port
 
 
 class LaunchFixture:
@@ -50,9 +51,9 @@ class LaunchFixture:
                   'enqueue_training_task': self.enqueue, 'set_training_state_for_user': self.set_state,
                   'merge_scoped_accessory_updates': self.merge, 'save_config': self.save, 'BACKGROUND_SIZE_MM': self.physical,
                   'user_is_admin': self.admin, 'filtered_training_state': self.filtered}
-        for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+        for name, value in values.items(): stack.enter_context(patch_training_port(api, name, value))
         stack.enter_context(patch('time.time', self.clock))
-        stack.enter_context(patch.object(api, 'public_path_sanitized', side_effect=AssertionError('unexpected sanitization')))
+        stack.enter_context(patch_training_port(api, 'public_path_sanitized', side_effect=AssertionError('unexpected sanitization')))
         return values
 
 
@@ -65,7 +66,7 @@ class TrainingLaunchContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root), VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server; cls.original_enqueue = staticmethod(server.enqueue_training_task)
+        cls.api = server; cls.original_enqueue = staticmethod(server._training_execution.enqueue_training_task)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
@@ -153,7 +154,7 @@ class TrainingLaunchContracts(unittest.TestCase):
                         if target.call_count == 1: raise error
                         return result
                     target.side_effect = fail_once
-                    with self.assertRaises(OSError) as caught: getattr(self.api, name)(self.request())
+                    with self.assertRaises(OSError) as caught: get_training_port(self.api, name)(self.request())
                     self.assertIs(caught.exception, error)
                     for index, value in enumerate(stages): self.assertEqual(getattr(f, value).call_count, int(index <= stages.index(stage)))
                     self.assertEqual(len(f.queued), 1); self.assertEqual(len(f.states), int(stage != 'enqueue'))
@@ -169,7 +170,7 @@ class TrainingLaunchContracts(unittest.TestCase):
                     successful = {'current': f.user, 'load': f.full, 'scope': f.config,
                                   'select': f.selected, 'approve': None, 'ensure': False}
                     error = RuntimeError(stage); target.side_effect = [error, successful[stage]]
-                    with self.assertRaises(RuntimeError) as caught: getattr(self.api, name)(self.request())
+                    with self.assertRaises(RuntimeError) as caught: get_training_port(self.api, name)(self.request())
                     self.assertIs(caught.exception, error); target.assert_called_once(); f.enqueue.assert_not_called(); f.set_state.assert_not_called(); f.save.assert_not_called()
                     for value in stages[stages.index(stage) + 1:]: getattr(f, value).assert_not_called()
                     f.clock.assert_not_called(); f.merge.assert_not_called()
@@ -179,7 +180,7 @@ class TrainingLaunchContracts(unittest.TestCase):
                     target = getattr(f, stage); error = RuntimeError('refresh ' + stage)
                     target.side_effect = [f.config, error, f.fresh] if stage == 'scope' else [f.selected, error, f.renewed]
                     request = self.request()
-                    with self.assertRaises(RuntimeError) as caught: getattr(self.api, name)(request)
+                    with self.assertRaises(RuntimeError) as caught: get_training_port(self.api, name)(request)
                     self.assertIs(caught.exception, error); self.assertEqual(target.call_count, 2)
                     self.assertEqual(f.scope.call_count, 2); self.assertEqual(f.select.call_count, 1 if stage == 'scope' else 2)
                     f.approve.assert_called_once_with(f.config, request, f.selected, user=f.user)
@@ -189,7 +190,7 @@ class TrainingLaunchContracts(unittest.TestCase):
         for name, field in [('request_training', 'epochs'), ('request_sample_generation', 'estimated_gb')]:
             with self.subTest(name=name), ExitStack() as stack:
                 f = LaunchFixture(); f.bind(self.api, stack); del f.task[field]
-                with self.assertRaises(KeyError): getattr(self.api, name)(self.request())
+                with self.assertRaises(KeyError): get_training_port(self.api, name)(self.request())
                 f.enqueue.assert_called_once(); f.clock.assert_called_once(); f.set_state.assert_not_called(); f.merge.assert_not_called(); f.save.assert_not_called()
     def test_status_target_scope_order_and_unsanitized_result(self):
         for role in ['admin', 'member']:
@@ -218,7 +219,7 @@ class TrainingLaunchContracts(unittest.TestCase):
             runner.background.side_effect = None; runner.background.return_value = None
             runner.estimate.side_effect = lambda *args, **kwargs: {'estimated_minutes': 2, 'estimated_gb': 0.1}
             runner.public.side_effect = lambda task: task
-            stack.enter_context(patch.object(self.api, 'enqueue_training_task', self.original_enqueue))
+            stack.enter_context(patch_training_port(self.api, 'enqueue_training_task', self.original_enqueue))
             stack.enter_context(patch.object(threading, 'Thread', runner.thread_factory))
             token = self.api._request_user.set(f.user); stack.callback(self.api._request_user.reset, token)
             task = self.api.request_training(self.request())
@@ -234,7 +235,7 @@ class TrainingLaunchContracts(unittest.TestCase):
             with self.subTest(name=name), ExitStack() as stack:
                 f = LaunchFixture(); f.bind(self.api, stack); error = RuntimeError('clock after queue')
                 f.clock.side_effect = [error, 200]
-                with self.assertRaises(RuntimeError) as caught: getattr(self.api, name)(self.request())
+                with self.assertRaises(RuntimeError) as caught: get_training_port(self.api, name)(self.request())
                 self.assertIs(caught.exception, error); f.enqueue.assert_called_once(); f.clock.assert_called_once()
                 self.assertEqual(len(f.queued), 1); f.set_state.assert_not_called(); f.merge.assert_not_called(); f.save.assert_not_called()
 
@@ -289,16 +290,16 @@ class TrainingLaunchContracts(unittest.TestCase):
                         events.append(label)
                         raise done
                     ports = {label: Mock(side_effect=lambda *a, _label=label, **k: hit(_label, *a, **k)) for label in ['A', 'B', 'C']}
-                    stack.enter_context(patch.object(api, target, ports['A']))
+                    stack.enter_context(patch_training_port(api, target, ports['A']))
 
                     def prior():
                         events.append('prior')
                         armed[0] = True
-                        setattr(api, target, None if mode == 'missing' else ports['B'] if mode == 'prior' else ports['A'])
+                        set_training_port(api, target, None if mode == 'missing' else ports['B'] if mode == 'prior' else ports['A'])
 
                     def argument(label='argument'):
                         events.append(label)
-                        setattr(api, target, ports['C'])
+                        set_training_port(api, target, ports['C'])
 
                     class Request(api.TrainingStartRequest):
 
@@ -403,7 +404,7 @@ class TrainingLaunchContracts(unittest.TestCase):
                             calls.append(None)
                             if len(calls) == index: raise failure
                             return original(*args, **kwargs)
-                        scope.enter_context(patch.object(owner, field, fail_once))
+                        scope.enter_context(patch_training_port(owner, field, fail_once))
                         with self.assertRaises(RuntimeError) as caught: operation()
                         self.assertIs(caught.exception, failure); self.assertEqual(len(calls), index)
 
@@ -471,7 +472,7 @@ class TrainingLaunchContracts(unittest.TestCase):
         root_names = ['current_auth_user', 'load_config', 'scope_config_for_user', 'selected_accessories', 'dataset_for_training',
                       'validate_approved_preview', 'ensure_training_assets_for_request', 'enqueue_training_task',
                       'set_training_state_for_user', 'merge_scoped_accessory_updates', 'save_config', 'user_is_admin', 'filtered_training_state']
-        for name in root_names: self.stack.enter_context(patch.object(self.api, name, side_effect=AssertionError('unexpected root dependency')))
+        for name in root_names: self.stack.enter_context(patch_training_port(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         async def request(instance):
             app, f, _, physical, _ = instance; owner = f.user['id']
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://fixture.invalid') as client:

@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Combined training task domain assembly",
+      "paths": ["local_inspection_service/training/account_state_composition.py", "local_inspection_service/training/native_execution_composition.py", "local_inspection_service/training/task_composition.py", "scripts/smoke_training_task_workflows_composition.py", "scripts/training_task_source_contract.py", "scripts/training_task_graph_fixtures.py", "tests/backend_contract/training_task_workflows_ports.json"],
+      "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
+    },
+    {
       "name": "Training state workflow assembly",
       "paths": ["local_inspection_service/training/state_composition.py", "scripts/smoke_training_state_workflows_composition.py", "scripts/training_state_test_ports.py", "tests/backend_contract/training_state_workflows_ports.json"],
       "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]

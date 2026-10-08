@@ -1130,14 +1130,33 @@ from .training.task_models import TrainingTaskModels, training_task_model_varian
 from .pipeline.training_sync import PipelineTrainingSync, PipelineTrainingRecords, PipelineTrainingModels
 from .detection.training_candidate_sync import TrainingCandidateSync, CandidateTrainingRecords
 
-_training_user_state = TrainingUserState(
-    defaults=lambda: DEFAULT_CONFIG["training"], legacy_owner=lambda: LEGACY_OWNER_ID,
-    access=TrainingStateAccess(owner=lambda record: record_owner_id(record),
-        visible=lambda record, user, target=None: record_visible_to_user(record, user, target),
-        admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
-    storage=TrainingStateStorage(find=lambda job_id: find_training_task(job_id), load=lambda: load_config(), save=lambda config: save_config(config)),
-    sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task),
-)
+from .runtime.training_tasks import TrainingTaskRuntime
+from .training.account_state_composition import TrainingAccountState, TrainingConfiguration
+from .training.native_execution_composition import TrainingExecution
+from .training.task_composition import (TrainingTaskWorkflows, TrainingMutationAccess, TrainingLaunchConfiguration,
+    TrainingLaunchAccess, TrainingStatusRead, TrainingDatasetAccess, TrainingPreviewInputs, TrainingTransferAccess)
+from .training.state_composition import TrainingStateWorkflows, TrainingRecordAccess
+from .training.record_store import TrainingRows
+from .training.task_lifecycle import TrainingTaskWrites
+from .training.task_views import TrainingViewAccess
+from .training.runner import TrainingRunnerPaths, TrainingDatasetExecution, TrainingLocalExecution
+from .training.submission import TrainingSubmissionPolicy, TrainingSubmissionIdentity
+from .training.jobs_query import JobsReadAccess
+from .training.status_projection import StatusAccess, StatusPreview
+from .training.runpod_transfer import TransferPaths
+
+_training_account_state = TrainingAccountState(runtime=TrainingTaskRuntime(scope=_runtime_repositories.thread_scope),
+storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)),
+rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
+writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
+require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
+view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)),
+defaults=lambda: DEFAULT_CONFIG['training'],
+legacy_owner=lambda: LEGACY_OWNER_ID,
+access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
+configuration=TrainingConfiguration(load=lambda: load_config(), save=lambda config: save_config(config)),
+sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))
+_training_user_state = _training_account_state.users
 _training_task_models = TrainingTaskModels(specs=lambda: list_trained_model_specs())
 _pipeline_training_sync = PipelineTrainingSync(
     guard=lambda: _pipeline_tasks_lock,
@@ -1155,17 +1174,17 @@ _training_candidate_sync = TrainingCandidateSync(
 
 
 def default_training_state() -> dict[str, Any]:
-    return _training_user_state.default_training_state()
+    return _training_account_state.default_training_state()
 
 
 
 
 def normalize_training_owner_key(owner_user_id: Any) -> str:
-    return _training_user_state.normalize_training_owner_key(owner_user_id)
+    return _training_account_state.normalize_training_owner_key(owner_user_id)
 
 
 def training_state_store(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return _training_user_state.training_state_store(config)
+    return _training_account_state.training_state_store(config)
 
 
 def sanitize_training_state_for_user(
@@ -1174,7 +1193,7 @@ def sanitize_training_state_for_user(
     selected_ids: set[str],
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return _training_user_state.sanitize_training_state_for_user(training, user, selected_ids, target_user_id)
+    return _training_account_state.sanitize_training_state_for_user(training, user, selected_ids, target_user_id)
 
 
 def training_state_for_user(
@@ -1183,15 +1202,15 @@ def training_state_for_user(
     selected_ids: set[str],
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return _training_user_state.training_state_for_user(config, user, selected_ids, target_user_id)
+    return _training_account_state.training_state_for_user(config, user, selected_ids, target_user_id)
 
 
 def set_training_state_for_user(config: dict[str, Any], user: dict[str, Any], training_state: dict[str, Any]) -> None:
-    return _training_user_state.set_training_state_for_user(config, user, training_state)
+    return _training_account_state.set_training_state_for_user(config, user, training_state)
 
 
 def sync_training_state_from_task(job_id: str) -> None:
-    return _training_user_state.sync_training_state_from_task(job_id)
+    return _training_account_state.sync_training_state_from_task(job_id)
 
 
 
@@ -1502,7 +1521,7 @@ _image_jobs = _ImageJobs(
 _image_worker_runtime = _image_jobs.worker
 _candidate_store_lock = _image_jobs.lock
 from .runtime.training_tasks import TrainingTaskRuntime, TrainingThreadLifecycle
-_training_task_runtime = TrainingTaskRuntime(scope=_runtime_repositories.thread_scope)
+_training_task_runtime = _training_account_state.records.runtime
 _training_task_lock = _training_task_runtime.lock
 _image_worker_processes = _image_worker_runtime.processes
 _training_task_threads = _training_task_runtime.threads
@@ -6982,25 +7001,7 @@ from .training.record_store import TrainingRecordStore, TrainingRows
 from .training.state_composition import TrainingRecordAccess, TrainingStateWorkflows
 from .training.task_lifecycle import TrainingTaskWrites
 from .training.task_views import TrainingViewAccess
-_training_state_workflows = TrainingStateWorkflows(
-    runtime=_training_task_runtime,
-    storage=TrainingRecordAccess(
-        repository=lambda: runtime_postgres_repository_or_none(),
-        directory=lambda: TRAINING_TASKS_DIR,
-        resolver=lambda: resolve_model_profiles,
-        invalidate=lambda key: store_read_cache_invalidate(key),
-        enrich=lambda *args: enrich_record_audit_fields(*args),
-    ),
-    rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list,
-                      identifier=lambda path: file_stem_identifier(path)),
-    writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(),
-                             row=lambda task, **kwargs: training_task_row(task, **kwargs),
-                             invalidate=lambda key: store_read_cache_invalidate(key)),
-    require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
-    view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task),
-                                  sanitize=lambda: public_path_sanitized,
-                                  visible=lambda record, user, target: record_visible_to_user(record, user, target)),
-)
+_training_state_workflows = _training_account_state.records
 _training_records = _training_state_workflows.records
 
 
@@ -7985,34 +7986,21 @@ from .training.submission import (
     TrainingSubmission, TrainingSubmissionPolicy, TrainingSubmissionIdentity, TrainingSubmissionRecords, TrainingSubmissionThreads,
 )
 
-_training_runner = TrainingRunner(
-    files=_business_files,
-    records=TrainingRunnerRecords(find=lambda job_id: find_training_task(job_id), path=lambda job_id: training_task_path(job_id),
-        load=lambda: load_training_task, update_provider=lambda: update_training_task,
-        sync=lambda job_id: sync_training_state_from_task(job_id)),
-    paths=TrainingRunnerPaths(resolve=lambda: resolve_service_path, tasks=lambda: TRAINING_TASKS_DIR, app=lambda: APP_DIR,
-        output=lambda: output_write_dir_for_owner),
-    datasets=TrainingDatasetExecution(mode=lambda: training_executor_mode(), generate=lambda task: generate_training_dataset(task),
-        runpod=lambda job_id, task, dataset: run_runpod_training_task(job_id, task, dataset),
-        remote=lambda job_id, task, dataset: run_remote_training_task(job_id, task, dataset)),
-    local=TrainingLocalExecution(base_model=lambda: detect_base_model(), device=lambda: yolo_inference_device(), cli=lambda: yolo_cli_command(),
-        start=lambda: subprocess.Popen, progress=lambda path, epochs: parse_yolo_epoch_progress(path, epochs),
-        warmup=lambda: start_yolo_warmup),
-    resolver=resolve_model_profiles,
-)
-_training_submission = TrainingSubmission(
-    policy=TrainingSubmissionPolicy(estimate=lambda: training_estimate, uses_ocr=lambda item: accessory_uses_ocr(item)),
-    identity=TrainingSubmissionIdentity(user=lambda: _request_user.get(), owner=lambda: current_owner_fields(),
-        background=lambda: selected_background_set_id),
-    records=TrainingSubmissionRecords(save=lambda task: save_training_task(task), public=lambda task: public_training_task(task)),
-    threads=TrainingSubmissionThreads(target=lambda: run_training_task, create=lambda **kwargs: threading.Thread(**kwargs),
-        records=lambda: _training_task_threads),
-    runtime=_training_task_runtime,
-)
+_training_execution = TrainingExecution(account=_training_account_state,
+files=_business_files,
+paths=TrainingRunnerPaths(resolve=lambda: resolve_service_path, tasks=lambda: TRAINING_TASKS_DIR, app=lambda: APP_DIR, output=lambda: output_write_dir_for_owner),
+datasets=TrainingDatasetExecution(mode=lambda: training_executor_mode(), generate=lambda task: generate_training_dataset(task), runpod=lambda job_id, task, dataset: run_runpod_training_task(job_id, task, dataset), remote=lambda job_id, task, dataset: run_remote_training_task(job_id, task, dataset)),
+local=TrainingLocalExecution(base_model=lambda: detect_base_model(), device=lambda: yolo_inference_device(), cli=lambda: yolo_cli_command(), start=lambda: subprocess.Popen, progress=lambda path, epochs: parse_yolo_epoch_progress(path, epochs), warmup=lambda: start_yolo_warmup),
+resolver=resolve_model_profiles,
+policy=TrainingSubmissionPolicy(estimate=lambda: training_estimate, uses_ocr=lambda item: accessory_uses_ocr(item)),
+identity=TrainingSubmissionIdentity(user=lambda: _request_user.get(), owner=lambda: current_owner_fields(), background=lambda: selected_background_set_id),
+create_thread=lambda **kwargs: threading.Thread(**kwargs))
+_training_runner = _training_execution.runner
+_training_submission = _training_execution.submission
 
 
 def run_training_task(job_id: str) -> None:
-    return _training_runner.run_training_task(job_id)
+    return _training_execution.run_training_task(job_id)
 
 
 def enqueue_training_task(
@@ -8021,7 +8009,7 @@ def enqueue_training_task(
     action: str,
     dataset: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _training_submission.enqueue_training_task(request, selected, action, dataset)
+    return _training_execution.enqueue_training_task(request, selected, action, dataset)
 
 
 
@@ -9265,22 +9253,23 @@ from .training.task_mutations import TaskMutationRecords, TrainingTaskMutations
 from .training.jobs_api import ImageJobActions
 from .training import jobs_api as _training_jobs_api
 
-_training_jobs_query = TrainingJobsQuery(
-    JobsReadAccess(lambda: current_auth_user(), lambda user: user_is_admin(user),
-                   lambda task, user, **kwargs: require_record_access(task, user, **kwargs)),
-    JobsTraining(lambda job: find_training_task(job), lambda task: training_task_uses_worker(task),
-                 lambda task: public_training_task(task),
-                 lambda task, **kwargs: public_refreshed_training_task(task, **kwargs)),
-    lambda **kwargs: list_training_tasks(**kwargs), lambda **kwargs: list_codex_image_jobs(**kwargs),
-    lambda: IMAGE_JOB_ACTIVE_STATUSES,
-)
-_training_task_mutations = TrainingTaskMutations(
-    lambda: current_auth_user(), lambda task, user, **kwargs: require_record_access(task, user, **kwargs),
-    TaskMutationRecords(lambda job: find_training_task(job), lambda task: save_training_task(task),
-                        lambda task: public_training_task(task), lambda job, user: delete_training_task_record(job, user),
-                        lambda **kwargs: list_training_tasks(**kwargs)),
-    lambda: time.time(),
-)
+_training_task_workflows = TrainingTaskWorkflows(account=_training_account_state,
+execution=_training_execution,
+files=_business_files,
+jobs_access=JobsReadAccess(lambda: current_auth_user(), lambda user: user_is_admin(user), lambda task, user, **kwargs: require_record_access(task, user, **kwargs)),
+image_jobs=lambda **kwargs: list_codex_image_jobs(**kwargs),
+image_active=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+mutations=TrainingMutationAccess(lambda: current_auth_user(), lambda task, user, **kwargs: require_record_access(task, user, **kwargs), lambda: time.time()),
+launch_config=TrainingLaunchConfiguration(lambda: load_config(), lambda full, user: scope_config_for_user(full, user), lambda: ensure_training_assets_for_request, lambda full, config, user: merge_scoped_accessory_updates(full, config, user), lambda full: save_config(full)),
+launch=TrainingLaunchAccess(lambda: current_auth_user(), lambda: selected_accessories, lambda: time.time(), lambda: BACKGROUND_SIZE_MM),
+status=TrainingStatusRead(lambda: current_auth_user(), lambda user: user_is_admin(user), lambda: load_config(), lambda: scope_config_for_user),
+dataset=TrainingDatasetAccess(lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs), lambda record, user, **kwargs: require_record_access(record, user, **kwargs), lambda: public_path_sanitized),
+preview=TrainingPreviewInputs(lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id, lambda selected: preview_cache_key(selected)),
+status_access=StatusAccess(lambda task, user, target: record_visible_to_user(task, user, target), lambda user: user_is_admin(user), lambda record: record_owner_id(record)),
+status_preview=StatusPreview(lambda: selected_accessories, lambda selected: preview_cache_key(selected), lambda state, selected: training_preview_metadata_missing(state, selected)),
+transfer=TrainingTransferAccess(lambda: runpod_yolo_artifact_max_bytes(), lambda token: runpod_dataset_token_hash(token), lambda: time.time(), TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR)))
+_training_jobs_query = _training_task_workflows.jobs_query
+_training_task_mutations = _training_task_workflows.task_mutations
 _training_jobs_routes = _training_jobs_api.register(
     app, _training_jobs_query, _training_task_mutations,
     ImageJobActions(lambda job, action: update_codex_image_job(job, action),
@@ -9600,24 +9589,8 @@ from .training.launch_submission import LaunchConfiguration, LaunchInputs, Train
 from .training.status_query import TrainingStatusQuery
 from .training import launch_api as _training_launch_api
 
-_training_launch_submission = TrainingLaunchSubmission(
-    lambda: current_auth_user(),
-    LaunchConfiguration(lambda: load_config(), lambda full, user: scope_config_for_user(full, user),
-                        lambda: ensure_training_assets_for_request,
-                        lambda full, user, state: set_training_state_for_user(full, user, state),
-                        lambda full, config, user: merge_scoped_accessory_updates(full, config, user),
-                        lambda full: save_config(full)),
-    LaunchInputs(lambda: selected_accessories,
-                 lambda: dataset_for_training,
-                 lambda config, request, selected, **kwargs: validate_approved_preview(config, request, selected, **kwargs)),
-    lambda request, selected, action, **kwargs: enqueue_training_task(request, selected, action, **kwargs),
-    lambda: time.time(), lambda: BACKGROUND_SIZE_MM,
-)
-_training_status_query = TrainingStatusQuery(
-    lambda: current_auth_user(), lambda user: user_is_admin(user), lambda: load_config(),
-    lambda: scope_config_for_user,
-    lambda config, user, target: filtered_training_state(config, user, target),
-)
+_training_launch_submission = _training_task_workflows.launch_submission
+_training_status_query = _training_task_workflows.status_query
 
 
 request_training = _training_launch_api.register_start(app, _training_launch_submission)
@@ -9627,12 +9600,8 @@ from .training.runpod_transfer import RunPodTrainingTransfer, TransferPaths
 from .training.runpod_upload_store import RunPodUploadStore
 from .training import runpod_transfer_api as _training_transfer_api
 
-_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes(), runtime_provider=_business_files.runtime_provider)
-_training_transfer = RunPodTrainingTransfer(
-    lambda job: find_training_task(job), lambda token: runpod_dataset_token_hash(token), lambda: time.time(),
-    TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR),
-    _training_upload_store, lambda: update_training_task, runtime_provider=_business_files.runtime_provider
-)
+_training_upload_store = _training_task_workflows.upload_store
+_training_transfer = _training_task_workflows.transfer
 _training_transfer_routes = _training_transfer_api.register(app, _training_transfer)
 download_runpod_training_dataset = _training_transfer_routes.download_runpod_training_dataset
 upload_runpod_training_artifact = _training_transfer_routes.upload_runpod_training_artifact
@@ -9645,26 +9614,13 @@ from .training.dataset_input import TrainingDatasetInput
 from .training.preview_approval import TrainingPreviewApproval
 from .training.status_projection import StatusAccess, StatusPreview, StatusTasks, TrainingStatusProjection
 
-_training_dataset_input = TrainingDatasetInput(
-    lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs),
-    lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
-    lambda: public_path_sanitized, files=_business_files
-)
-_training_preview_approval = TrainingPreviewApproval(
-    lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id,
-    lambda selected: preview_cache_key(selected), files=_business_files
-)
-_training_status_projection = TrainingStatusProjection(
-    StatusTasks(lambda job: find_training_task(job), lambda task: public_refreshed_training_task(task)),
-    StatusAccess(lambda task, user, target: record_visible_to_user(task, user, target),
-                 lambda user: user_is_admin(user), lambda record: record_owner_id(record)),
-    StatusPreview(lambda: selected_accessories, lambda selected: preview_cache_key(selected),
-                  lambda state, selected: training_preview_metadata_missing(state, selected)),
-)
+_training_dataset_input = _training_task_workflows.dataset_input
+_training_preview_approval = _training_task_workflows.preview_approval
+_training_status_projection = _training_task_workflows.status_projection
 
 
 def dataset_for_training(dataset_id: str, user: dict[str, Any] | None = None) -> dict[str, Any]:
-    return _training_dataset_input.dataset_for_training(dataset_id, user)
+    return _training_task_workflows.dataset_for_training(dataset_id, user)
 
 
 training_status = _training_launch_api.register_status(app, _training_status_query)
@@ -9676,7 +9632,7 @@ def validate_approved_preview(
     selected: list[dict[str, Any]],
     user: dict[str, Any] | None = None,
 ) -> None:
-    return _training_preview_approval.validate_approved_preview(config, request, selected, user)
+    return _training_task_workflows.validate_approved_preview(config, request, selected, user)
 
 
 def filtered_training_state(
@@ -9684,7 +9640,7 @@ def filtered_training_state(
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return _training_status_projection.filtered_training_state(config, user, target_user_id)
+    return _training_task_workflows.filtered_training_state(config, user, target_user_id)
 
 
 from .training.dataset_catalog import (DatasetAccess, DatasetAudit, DatasetCatalog, DatasetPaths,

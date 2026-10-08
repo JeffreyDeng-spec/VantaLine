@@ -35,6 +35,8 @@ def verify_composition(source):
     assert hashlib.sha256(json.dumps(canonical_ast(ast.parse(source)),ensure_ascii=False).encode()).hexdigest()==FIXTURE['composition_ast_sha256']
 
 def verify_root(source):
+    from training_task_source_contract import restore_training_task_root
+    source=restore_training_task_root(source)
     tree=ast.parse(source)
     protected={'TrainingStateWorkflows','TrainingRecordAccess','TrainingTaskWrites','TrainingViewAccess',
                'TrainingRows','_training_task_runtime','_training_state_workflows',

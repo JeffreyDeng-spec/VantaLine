@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_state_test_ports import patch_training_port, get_training_port, set_training_port
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
@@ -82,7 +83,7 @@ class TrainingInputStateContracts(unittest.TestCase):
             'record_owner_id': Mock(side_effect=lambda value: value.get('owner_user_id', '')),
             'selected_accessories': Mock(side_effect=lambda config, ids: self.selected),
         }
-        for name, value in self.bindings.items(): self.stack.enter_context(patch.object(self.api, name, value))
+        for name, value in self.bindings.items(): self.stack.enter_context(patch_training_port(self.api, name, value))
         for target in ['requests.request', 'subprocess.Popen', 'os.kill']:
             self.stack.enter_context(patch(target, side_effect=AssertionError('unexpected external operation')))
 
@@ -140,7 +141,7 @@ class TrainingInputStateContracts(unittest.TestCase):
     def test_cache_key_order_and_duplicates_use_late_version_dependency(self):
         values = [{'id': 'b'}, {'id': 'a'}, {'id': 'b'}]; events = []
         self.bindings['accessory_uid'].side_effect = lambda item: events.append(('id', item)) or item['id']
-        with patch.object(self.api, 'accessory_sprite_version', side_effect=lambda item: events.append(('version', item)) or 'v') as version:
+        with patch_training_port(self.api, 'accessory_sprite_version', side_effect=lambda item: events.append(('version', item)) or 'v') as version:
             self.assertEqual(self.api.preview_cache_key(values), hashlib.sha1(b'b:v|a:v|b:v').hexdigest()[:16])
             self.assertEqual(events, [(kind, item) for item in values for kind in ['id', 'version']])
             self.assertEqual(version.call_count, 3)
@@ -159,7 +160,7 @@ class TrainingInputStateContracts(unittest.TestCase):
         self.assertTrue(self.api.training_preview_metadata_missing({'last_preview_id': 'x'}, [object_item, text_item])); kind.assert_called_once_with(object_item)
 
     def test_approval_no_id_returns_before_file_or_background_work(self):
-        with patch.object(Path, 'exists', side_effect=AssertionError('unexpected file read')), patch.object(self.api, 'preview_cache_key', side_effect=AssertionError('unexpected cache')):
+        with patch.object(Path, 'exists', side_effect=AssertionError('unexpected file read')), patch_training_port(self.api, 'preview_cache_key', side_effect=AssertionError('unexpected cache')):
             self.assertIsNone(self.api.validate_approved_preview({}, self.request(None), [], self.user))
         self.bindings['selected_background_set_id'].assert_not_called()
 
@@ -182,7 +183,7 @@ class TrainingInputStateContracts(unittest.TestCase):
     def test_approval_order_exact_ids_background_then_cache_and_stale_in_place(self):
         selected = [{'id': 'a'}, {'id': 'b'}]; state = {'previews': ['old'], 'preview_urls': ['old'], 'untouched': []}; config = {'training': state}
         path = self.preview(selected_accessories=[{'id': 'b'}, {'id': 'a'}])
-        with patch.object(self.api, 'preview_cache_key', return_value='new') as cache:
+        with patch_training_port(self.api, 'preview_cache_key', return_value='new') as cache:
             self.assert_http(409, 'Approved preview does not match the selected accessories.', lambda: self.api.validate_approved_preview(config, self.request(), selected, self.user))
             self.bindings['selected_background_set_id'].assert_not_called(); cache.assert_not_called()
             self.preview(background_set_id='wrong')
@@ -198,7 +199,7 @@ class TrainingInputStateContracts(unittest.TestCase):
 
     def test_approval_empty_selection_skips_cache_and_non_dict_entries_are_ignored(self):
         self.preview(selected_accessories=[None, 'ignored', 1], preview_cache_key=None)
-        with patch.object(self.api, 'preview_cache_key', side_effect=AssertionError('unexpected empty cache')):
+        with patch_training_port(self.api, 'preview_cache_key', side_effect=AssertionError('unexpected empty cache')):
             self.assertIsNone(self.api.validate_approved_preview({'training': {}}, self.request(), [], None))
 
     def dataset(self, manifest):
@@ -285,7 +286,7 @@ class TrainingInputStateContracts(unittest.TestCase):
         nested = []; state = {'active_training_task_id': 'job', 'preview_urls': ['old'], 'previews': ['old'], 'preview_cache_key': 'old', 'nested': nested}
         self.selected = [{'id': 'a', 'material_type': 'object'}]
         self.records['job'] = {'job_id': 'job', 'owner_user_id': 'alice', 'status': 'completed'}
-        with patch.object(self.api, 'preview_cache_key', return_value='current') as cache:
+        with patch_training_port(self.api, 'preview_cache_key', return_value='current') as cache:
             result = self.api.filtered_training_state({'training': state}, self.user)
             self.assertIsNot(result, state); self.assertIs(result['nested'], nested)
             self.assertEqual(state['status'], 'completed'); self.assertEqual(state['preview_urls'], ['old'])
@@ -306,7 +307,7 @@ class TrainingInputStateContracts(unittest.TestCase):
             TrainingTaskWrites(Mock(), Mock(), Mock()), Mock())
         views = TrainingTaskViews(lambda: [], lifecycle.refresh_interrupted_local_training_task,
                                   TrainingViewAccess(dict, lambda: (lambda value: value), self.bindings['record_visible_to_user']))
-        with patch.object(self.api, 'public_refreshed_training_task', wraps=views.public_refreshed_training_task) as refresh:
+        with patch_training_port(self.api, 'public_refreshed_training_task', wraps=views.public_refreshed_training_task) as refresh:
             empty_user = {}; target = 'target'
             visible = self.bindings['record_visible_to_user']
             visible.side_effect = None; visible.return_value = False
@@ -346,16 +347,16 @@ class TrainingInputStateContracts(unittest.TestCase):
                         events.append(label)
                         raise done
                     ports = {name: Mock(side_effect=lambda *a, _label=name, **k: hit(_label, *a, **k)) for name in ('A', 'B', 'C')}
-                    scope.enter_context(patch.object(api, target, ports['A']))
+                    scope.enter_context(patch_training_port(api, target, ports['A']))
 
                     def prior():
                         events.append('prior')
                         armed[0] = True
-                        setattr(api, target, None if mode == 'missing' else ports['B'] if mode == 'prior' else ports['A'])
+                        set_training_port(api, target, None if mode == 'missing' else ports['B'] if mode == 'prior' else ports['A'])
 
                     def argument():
                         events.append('argument')
-                        setattr(api, target, ports['C'])
+                        set_training_port(api, target, ports['C'])
                     if site == 'resolve':
 
                         class Asset(dict):
@@ -372,7 +373,7 @@ class TrainingInputStateContracts(unittest.TestCase):
                                 yield from super().__iter__()
                         item = {'id': 'a', 'material_type': 'object', 'clean_sprite_count': 1}
                         sprites = Sprites([Asset(path='synthetic')])
-                        scope.enter_context(patch.object(api, 'clean_sprite_assets', return_value=sprites))
+                        scope.enter_context(patch_training_port(api, 'clean_sprite_assets', return_value=sprites))
                         operation = lambda: api.accessory_sprite_version(item)
                         argument_count = 1
                     elif site == 'background':
@@ -406,7 +407,7 @@ class TrainingInputStateContracts(unittest.TestCase):
                                     argument()
                                 return super().get(key, *default)
                         scope.enter_context(patch.object(api.json, 'loads', return_value=Manifest(samples=[{'id': 1}])))
-                        scope.enter_context(patch.object(api, 'require_record_access', side_effect=lambda *a: prior()))
+                        scope.enter_context(patch_training_port(api, 'require_record_access', side_effect=lambda *a: prior()))
                         operation = lambda: api.dataset_for_training('dataset', self.user)
                         argument_count = 2
                     else:
@@ -453,7 +454,7 @@ class TrainingInputStateContracts(unittest.TestCase):
 
                 def first(value):
                     events.append('A')
-                    setattr(api, 'resolve_service_path', None if missing else second)
+                    set_training_port(api, 'resolve_service_path', None if missing else second)
                     return paths[value]
 
                 def later(value):
@@ -461,8 +462,8 @@ class TrainingInputStateContracts(unittest.TestCase):
                     return paths[value]
                 second = Mock(side_effect=later)
                 initial = Mock(side_effect=first)
-                scope.enter_context(patch.object(api, 'clean_sprite_assets', return_value=rows))
-                scope.enter_context(patch.object(api, 'resolve_service_path', initial))
+                scope.enter_context(patch_training_port(api, 'clean_sprite_assets', return_value=rows))
+                scope.enter_context(patch_training_port(api, 'resolve_service_path', initial))
                 caught = None
                 try:
                     api.accessory_sprite_version(item)
@@ -493,7 +494,7 @@ class TrainingInputStateContracts(unittest.TestCase):
                             calls.append(None)
                             if len(calls) == 1: raise failure
                         return original(*args, **kwargs)
-                    scope.enter_context(patch.object(owner, site, fail_once))
+                    scope.enter_context(patch_training_port(owner, site, fail_once))
                     converted = site != 'exists' and kind in ['os', 'json']
                     with self.assertRaises(HTTPException if converted else type(failure)) as caught: operation()
                     self.assertEqual(len(calls), 1)
@@ -555,14 +556,14 @@ class TrainingInputStateContracts(unittest.TestCase):
             item, _, _ = fixture.cache_fixture()
             operation = lambda: self.api.accessory_sprite_version(item)
         elif mode == 'key':
-            port = Mock(return_value='version'); scope.enter_context(patch.object(self.api, 'accessory_sprite_version', port))
+            port = Mock(return_value='version'); scope.enter_context(patch_training_port(self.api, 'accessory_sprite_version', port))
             ports['accessory_sprite_version'] = (self.api, 'accessory_sprite_version', port)
             operation = lambda: self.api.preview_cache_key([{'id': 'a'}, {'id': 'b'}])
         elif mode == 'metadata':
             operation = lambda: self.api.training_preview_metadata_missing({'preview_urls': ['url']}, [{'id': 'a', 'material_type': 'object'}])
         elif mode == 'approval':
             fixture.preview(); selected = [{'id': 'a'}, {'id': 'b'}]
-            port = Mock(return_value='key'); scope.enter_context(patch.object(self.api, 'preview_cache_key', port))
+            port = Mock(return_value='key'); scope.enter_context(patch_training_port(self.api, 'preview_cache_key', port))
             ports['preview_cache_key'] = (self.api, 'preview_cache_key', port)
             operation = lambda: self.api.validate_approved_preview({'training': {}}, fixture.request(), selected, fixture.user)
         elif mode == 'dataset':
@@ -592,7 +593,7 @@ class TrainingInputStateContracts(unittest.TestCase):
                             calls.append(None)
                             if len(calls) == index: raise failure
                             return original(*args, **kwargs)
-                        scope.enter_context(patch.object(owner, field, fail_once))
+                        scope.enter_context(patch_training_port(owner, field, fail_once))
                         with self.assertRaises(RuntimeError) as caught: operation()
                         self.assertIs(caught.exception, failure); self.assertEqual(len(calls), index)
 
@@ -655,10 +656,10 @@ class TrainingInputStateContracts(unittest.TestCase):
             (dataset / 'manifest.json').write_text(json.dumps({'sample_count': 1, 'selected_accessory_ids': [owner]}))
             (root / 'approved.json').write_text(json.dumps({'selected_accessories': selected, 'background_set_id': None, 'preview_cache_key': cache.preview_cache_key(selected)}))
         for name in self.bindings:
-            if callable(getattr(self.api, name)):
-                self.stack.enter_context(patch.object(self.api, name, side_effect=AssertionError('unexpected root dependency')))
+            if callable(get_training_port(self.api, name)):
+                self.stack.enter_context(patch_training_port(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         for name in ['accessory_sprite_version', 'preview_cache_key', 'training_preview_metadata_missing']:
-            self.stack.enter_context(patch.object(self.api, name, side_effect=AssertionError('unexpected root cache')))
+            self.stack.enter_context(patch_training_port(self.api, name, side_effect=AssertionError('unexpected root cache')))
         hashes = {}
         for index in [1, 0, 1, 0]:
             owner, root, selected, dataset, cache, approval, source, status, _ = instances[index]

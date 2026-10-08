@@ -142,6 +142,13 @@ class TrainingFilePortsTests(unittest.TestCase):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in names:
                 ports = [kw.value for kw in node.keywords if kw.arg == 'files']; self.assertEqual(len(ports), 1)
                 self.assertEqual(ast.dump(ports[0]), ast.dump(ast.parse('_business_files', mode='eval').body)); found.append(node.func.id)
+        owner=next(n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='TrainingTaskWorkflows')
+        self.assertEqual(ast.dump(next(k.value for k in owner.keywords if k.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
+        actual=ast.parse((root/'local_inspection_service/training/task_composition.py').read_text())
+        for node in ast.walk(actual):
+            if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id in {'TrainingDatasetInput','TrainingPreviewApproval'}:
+                self.assertEqual(ast.dump(next(k.value for k in node.keywords if k.arg=='files')),ast.dump(ast.parse('files',mode='eval').body))
+                found.append(node.func.id)
         self.assertCountEqual(found, names)
 
 

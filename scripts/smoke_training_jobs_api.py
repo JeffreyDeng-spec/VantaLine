@@ -10,6 +10,7 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_state_test_ports import patch_training_port, get_training_port, set_training_port
 
 
 class JobFixture:
@@ -45,7 +46,7 @@ class JobFixture:
                   'public_refreshed_training_task': self.refresh, 'save_training_task': self.save,
                   'delete_training_task_record': self.delete, 'update_codex_image_job': self.job_action,
                   'update_codex_image_candidate': self.candidate_action, 'IMAGE_JOB_ACTIVE_STATUSES': self.active}
-        for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+        for name, value in values.items(): stack.enter_context(patch_training_port(api, name, value))
         stack.enter_context(patch('time.time', self.clock)); return values
 
 
@@ -185,9 +186,9 @@ class TrainingJobsContracts(unittest.TestCase):
         for name, target, action in [('stop_image_job', f.job_action, 'stop'), ('retry_image_job', f.job_action, 'retry'),
                                     ('delete_image_job', f.job_action, 'delete'), ('stop_image_job_candidate', f.candidate_action, 'stop'),
                                     ('delete_image_job_candidate', f.candidate_action, 'delete')]:
-            target.reset_mock(); self.assertIs(getattr(self.api, name)(' raw '), f.control_result); target.assert_called_once_with(' raw ', action)
+            target.reset_mock(); self.assertIs(get_training_port(self.api, name)(' raw '), f.control_result); target.assert_called_once_with(' raw ', action)
             target.reset_mock(); error = HTTPException(409, 'control failed'); target.side_effect = [error, f.control_result]
-            with self.assertRaises(HTTPException) as caught: getattr(self.api, name)(' raw ')
+            with self.assertRaises(HTTPException) as caught: get_training_port(self.api, name)(' raw ')
             self.assertIs(caught.exception, error); target.assert_called_once_with(' raw ', action); target.side_effect = None
         f.current.assert_not_called(); f.find.assert_not_called()
     def test_http_validation_and_identity_errors_keep_response_format(self):
@@ -240,9 +241,9 @@ class TrainingJobsContracts(unittest.TestCase):
         from local_inspection_service.training.task_views import TrainingTaskViews, TrainingViewAccess
         refresh = Mock(side_effect=AssertionError('unexpected task settlement or worker probe'))
         views = TrainingTaskViews(lambda: [], refresh, TrainingViewAccess(dict, lambda: (lambda value: value), lambda *args: True))
-        with patch.object(self.api, 'training_task_uses_worker', training_task_uses_worker), \
-             patch.object(self.api, 'public_training_task', views.public_training_task), \
-             patch.object(self.api, 'public_refreshed_training_task', views.public_refreshed_training_task):
+        with patch_training_port(self.api, 'training_task_uses_worker', training_task_uses_worker), \
+             patch_training_port(self.api, 'public_training_task', views.public_training_task), \
+             patch_training_port(self.api, 'public_refreshed_training_task', views.public_refreshed_training_task):
             self.f.task.update(training_executor='worker', status='running')
             result = self.api.image_job(' raw ')
             self.assertTrue(result['executor_retired']); self.assertTrue(result['remote_refresh_retired']); self.assertEqual(result['status'], 'running')
@@ -264,7 +265,7 @@ class TrainingJobsContracts(unittest.TestCase):
             'delete': lambda: self.api.delete_training_task_endpoint('job'),
         }
         for name in ['stop_image_job', 'retry_image_job', 'delete_image_job', 'stop_image_job_candidate', 'delete_image_job_candidate']:
-            operations[name] = lambda name=name: getattr(self.api, name)('job')
+            operations[name] = lambda name=name: get_training_port(self.api, name)('job')
         import time
         ports = {name: (self.api, name, port) for name, port in values.items() if isinstance(port, Mock)}
         ports['clock'] = (time, 'time', f.clock)
@@ -286,7 +287,7 @@ class TrainingJobsContracts(unittest.TestCase):
                             calls.append(None)
                             if len(calls) == index: raise failure
                             return original(*args, **kwargs)
-                        stack.enter_context(patch.object(owner, field, fail_once))
+                        stack.enter_context(patch_training_port(owner, field, fail_once))
                         with self.assertRaises(RuntimeError) as caught: operation()
                         self.assertIs(caught.exception, failure); self.assertEqual(len(calls), index)
 
@@ -340,7 +341,7 @@ class TrainingJobsContracts(unittest.TestCase):
         for name in ['current_auth_user', 'user_is_admin', 'list_training_tasks', 'list_codex_image_jobs', 'find_training_task',
                      'require_record_access', 'training_task_uses_worker', 'public_training_task', 'public_refreshed_training_task',
                      'save_training_task', 'delete_training_task_record', 'update_codex_image_job', 'update_codex_image_candidate']:
-            self.stack.enter_context(patch.object(self.api, name, side_effect=AssertionError('unexpected root dependency')))
+            self.stack.enter_context(patch_training_port(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         async def request(instance):
             app, f, *_ = instance; owner = f.user['id']; headers = {'x-fixture-owner': owner}
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://fixture.invalid') as client:

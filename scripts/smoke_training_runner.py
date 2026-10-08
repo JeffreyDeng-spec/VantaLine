@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from training_state_test_ports import patch_training_port, get_training_port, set_training_port
 from local_inspection_service.model_profiles.snapshots import freeze_record
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
@@ -68,7 +69,7 @@ class Fixture:
             'parse_yolo_epoch_progress':self.progress,'start_yolo_warmup':self.warmup,'TRAINING_TASKS_DIR':self.root,'APP_DIR':self.root/'app',
             'save_training_task':self.save,'public_training_task':self.public,'training_estimate':self.estimate,'accessory_uses_ocr':self.ocr,
             'selected_background_set_id':self.background,'_training_task_threads':self.threads}
-        for name,value in values.items():stack.enter_context(patch.object(api,name,value))
+        for name,value in values.items():stack.enter_context(patch_training_port(api,name,value))
         stack.enter_context(patch.object(subprocess,'Popen',self.popen));stack.enter_context(patch('time.sleep',self.sleep))
 
 
@@ -102,7 +103,7 @@ class TrainingRunnerContracts(unittest.TestCase):
 
     def test_missing_resolver_find_and_load_fail_before_failure_updates(self):
         api=self.api;f=self.f
-        with patch.object(api,'model_profile_service',None):
+        with patch_training_port(api,'model_profile_service',None):
             with self.assertRaisesRegex(RuntimeError,'Model profile resolver is not configured'):api.run_training_task('job')
         f.find.assert_not_called();f.load.assert_not_called();f.update.assert_not_called()
         f.find.side_effect=RuntimeError('find')
@@ -234,15 +235,15 @@ class TrainingRunnerContracts(unittest.TestCase):
         def background(value,user):
             self.assertEqual(user['id'],'alice');api._request_user.set({'id':'bob','username':'Bob'});return 'selected'
         f.background.side_effect=background
-        def save(task):f.save_record(task);api.run_training_task=first;return {'replacement':'ignored'}
+        def save(task):f.save_record(task);set_training_port(api,'run_training_task',first);return {'replacement':'ignored'}
         f.save.side_effect=save
         def thread_factory(*args,**kwargs):
-            self.assertTrue(callable(kwargs['target']));api.run_training_task=replacement;return f.thread
+            self.assertTrue(callable(kwargs['target']));set_training_port(api,'run_training_task',replacement);return f.thread
         f.thread_factory.side_effect=thread_factory
         dataset={'id':'dataset','sample_count':40000,'dataset_dir':'dir','dataset_yaml':'yaml','manifest_path':'manifest','display_name':'name'}
-        with patch.object(api,'run_training_task',Mock()),patch.object(threading,'Thread',f.thread_factory):
+        with patch_training_port(api,'run_training_task',Mock()),patch.object(threading,'Thread',f.thread_factory):
             api.enqueue_training_task(request,[],'train_model',dataset)
-            self.assertIs(api.run_training_task,replacement)
+            self.assertIs(get_training_port(api,'run_training_task'),replacement)
         task=f.saved[0];self.assertEqual(task['owner_user_id'],'bob');self.assertEqual(task['sample_count'],20000)
         self.assertEqual((task['source_dataset_id'],task['dataset_yaml'],task['label'],task['candidate_name']),('dataset','yaml','name','name'))
         f.estimate.assert_called_once_with(20000,include_training=True,include_generation=False,epochs=2,image_size=480,selected_count=0,train_mode='yolo_ocr')
@@ -372,18 +373,18 @@ class TrainingRunnerContracts(unittest.TestCase):
                         'output':'output_write_dir_for_owner','start':'Popen','warmup':'start_yolo_warmup','estimate':'training_estimate',
                         'background':'selected_background_set_id','thread':'Thread','update':'update_training_task'}[stage]
                     target=subprocess if stage=='start' else (threading if stage=='thread' else api)
-                    original=getattr(target,field)
+                    original=get_training_port(target,field)
                     if stage=='thread':original=f.thread_factory
                     def callback(label):
                         def call(*args,**kwargs):events.append(label);return original(*args,**kwargs)
                         return call
-                    stack.enter_context(patch.object(target,field,callback('A')))
+                    stack.enter_context(patch_training_port(target,field,callback('A')))
                     prior_done=[]
                     def before():
                         if not prior_done:
                             prior_done.append(True)
-                            if mode!='ordinary':setattr(target,field,callback('B') if mode=='prior' else None)
-                    def argument():events.append('argument');setattr(target,field,callback('C'))
+                            if mode!='ordinary':set_training_port(target,field,callback('B') if mode=='prior' else None)
+                    def argument():events.append('argument');set_training_port(target,field,callback('C'))
                     f.task['action']='train_model' if stage in ('output','start','warmup') else 'generate_samples'
                     if stage=='load':
                         original_path=f.path.side_effect
@@ -404,7 +405,7 @@ class TrainingRunnerContracts(unittest.TestCase):
                     elif stage=='start':
                         class AppPath:
                             def __str__(self):argument();return str(f.root/'app')
-                        stack.enter_context(patch.object(api,'APP_DIR',AppPath()))
+                        stack.enter_context(patch_training_port(api,'APP_DIR',AppPath()))
                     elif stage=='warmup':
                         class Variant(str):
                             def __format__(self,spec):argument();return super().__format__(spec)
@@ -425,7 +426,7 @@ class TrainingRunnerContracts(unittest.TestCase):
                     elif stage=='background':
                         class Identity:
                             def get(self):argument();return None
-                        stack.enter_context(patch.object(api,'_request_user',Identity()))
+                        stack.enter_context(patch_training_port(api,'_request_user',Identity()))
                     previous={'load':f.find,'resolve-yaml':f.mode,'output':f.generate,'start':f.cli,'warmup':f.sync,'background':f.estimate,'update':f.load}.get(stage)
                     if previous is not None:
                         old_effect=previous.side_effect;old_value=previous.return_value
@@ -537,7 +538,7 @@ class TrainingRunnerContracts(unittest.TestCase):
             with self.subTest(stage=stage),ExitStack() as stack:
                 f=Fixture(self.f.root/stage);f.root.mkdir();f.bind(api,stack);failure=OSError('first-only-'+stage);calls=[]
                 stack.enter_context(patch.object(threading,'Thread',f.thread_factory))
-                if stage=='owner':probe=stack.enter_context(patch.object(api,'current_owner_fields',return_value={'owner_user_id':'alice'}))
+                if stage=='owner':probe=stack.enter_context(patch_training_port(api,'current_owner_fields',return_value={'owner_user_id':'alice'}))
                 elif stage=='thread':probe=f.thread_factory
                 elif stage=='start':probe=f.thread.start
                 else:probe=getattr(f,stage)
@@ -578,7 +579,7 @@ class TrainingRunnerContracts(unittest.TestCase):
                     calls.append(True)
                     if len(calls)==(2 if stage=='resolve-dir' else 1):raise failure
                     return valid
-                probe=Mock(side_effect=getter);stack.enter_context(patch.object(owner,group,replace(getattr(owner,group),**{field:probe})))
+                probe=Mock(side_effect=getter);stack.enter_context(patch_training_port(owner,group,replace(getattr(owner,group),**{field:probe})))
                 def invoke():
                     if owner is submission:return api.enqueue_training_task(api.TrainingStartRequest(selected_accessory_ids=[]),[],'generate_samples')
                     return api.run_training_task('job')
@@ -714,7 +715,7 @@ class TrainingRunnerContracts(unittest.TestCase):
                 else:
                     class Identity:
                         def get(self):return trigger(None)
-                    stack.enter_context(patch.object(api,'_request_user',Identity()))
+                    stack.enter_context(patch_training_port(api,'_request_user',Identity()))
                 with self.assertRaises(BaseException) as error:api.enqueue_training_task(api.TrainingStartRequest(selected_accessory_ids=[]),[],'generate_samples')
                 self.assertIs(error.exception,failure);self.assertEqual(len(calls),fail_at);self.assertEqual(f.saved,[]);self.assertEqual(f.threads,{})
                 f.thread_factory.assert_not_called();f.thread.start.assert_not_called();f.public.assert_not_called()
@@ -751,12 +752,12 @@ class TrainingRunnerContracts(unittest.TestCase):
                     def callback(label):
                         def call(job,**values):calls.append((label,dict(values)));return f.updated(job,**values)
                         return call
-                    stack.enter_context(patch.object(api,'update_training_task',callback('A')))
+                    stack.enter_context(patch_training_port(api,'update_training_task',callback('A')))
                     def before():
                         if not prior:
                             prior.append(True)
-                            if mode!='ordinary':api.update_training_task=callback('B') if mode=='prior' else None
-                    def argument():effects.append(True);api.update_training_task=callback('C')
+                            if mode!='ordinary':set_training_port(api,'update_training_task',callback('B') if mode=='prior' else None)
+                    def argument():effects.append(True);set_training_port(api,'update_training_task',callback('C'))
                     if stage in ('generated','terminal'):
                         clock=[]
                         def now():
