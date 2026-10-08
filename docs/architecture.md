@@ -1763,3 +1763,32 @@ This accessory candidate retains the native-history/readiness implementation and
 Auto-optimization settings composition now supplies 24 direct typed method capabilities to nine consumer boundaries. Six entry wrappers are bound aliases to one selected AutoOptimizationSettings instance. Consumers no longer look up these six functions through the application entry. The negative-sample startup default remains fixed while environment-derived settings are read when each method runs. Dynamic identity, model binding, repository factories and other lifecycle collaborators remain runtime providers.
 
 This background candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows accessory candidate f397a31. Actual-main rebind and accessory release acceptance must precede publication. Production/tests and the ordered entry match reviewed 5a44e61. The bundled manifest is v176 with 507 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained.
+
+## Offline real-photo bbox comparison
+
+The offline `training/bbox_benchmark.py` utility does not change production
+training, provider routing or model promotion. It filters explicitly owned
+real-photo exports, deduplicates source bytes, and extracts boxes only from
+decoded grayscale masks or RGBA alpha with validated original/crop geometry.
+Multicolor highlight sheets require the existing decoder and class metadata;
+they must not be treated as a single binary target.
+
+Scoring requires an independently human-confirmed reference and identical image
+hash coverage from both methods. Same-class IoU >= 0.5 targets are assigned
+one-to-one with maximum cardinality then overlap; unmatched overlapping targets
+are checked for wrong classes. Duplicate predictions remain extra boxes.
+Localization edits below IoU 0.75 are estimates, not measured human time.
+Cached-mask processing time cannot establish full generation cost or latency.
+The result is restricted to the selected cached-mask sample, not field accuracy.
+
+The isolated Doubao collector accepts only accessory definitions/reference
+photographs and hashed original photographs, rejects annotation fields, and
+requires a caller-verified fixed model identifier. It does not read platform
+profiles, modify production bindings, generate masks or submit training.
+Provider mismatch, incomplete output or unavailable model stops the run without
+fallback. A successful catalog lookup alone is not actual-call verification.
+
+**Proposal — not implemented:** switch both task and automatic-optimization
+training to deduplicated real photographs, retain optional historical masks,
+and choose the default bbox method only after a human-confirmed business-image
+comparison. This proposal does not disable the existing synthetic flow yet.
