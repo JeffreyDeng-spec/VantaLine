@@ -1337,3 +1337,10 @@ The isolated bbox collector records its 60-second connect/upload socket timeout 
 180-second read timeout in the private receipt. This accommodates original reference
 photo payloads without resizing or automatic request retries. These socket timeouts
 do not guarantee a hard whole-request deadline. Production provider settings are unchanged.
+
+The collector defaults to requested original-pixel coordinates. An explicit
+`--coordinate-space normalized_1000` instead requests 0–1000 xyxy coordinates and
+validates that range before mapping x by original width/1000 and y by height/1000.
+The receipt freezes the actual prompt and coordinate mode; raw responses are kept.
+Out-of-range pixel responses are rejected, never silently interpreted as normalized.
+Changing modes starts a distinct experiment; retain protocol failures separately.

@@ -2293,3 +2293,7 @@ allowlisting, source hashes/owner, returned-model mismatch, truncated responses,
 original-coordinate validation and one-call stop on provider unavailability,
 without paid requests. These checks do not certify either model's
 business-image quality or complete the proposed real-photo training migration.
+
+The real-photo bbox smoke additionally checks explicitly selected normalized_1000
+coordinates against unequal original width/height, rejects overflow, and proves
+that the pixel protocol does not silently reinterpret out-of-range output.

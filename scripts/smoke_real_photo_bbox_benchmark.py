@@ -123,6 +123,18 @@ class BenchmarkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_response(response,(40,30),model)
 
+    def test_explicit_normalized_mapping_never_guessed(self):
+        import json
+        model = 'doubao-seed-2-1-pro-260915'
+        def response(coords):
+            return {'model':model,'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'objects':[{'class_id':'a','bbox':coords}]})}}]}
+        # Unequal width and height catch swapped axes and wrong common scale.
+        self.assertEqual(parse_response(response([100,200,900,1000]),(640,480),model,'normalized_1000')[0]['bbox'],[64,96,576,480])
+        with self.assertRaises(ValueError):
+            parse_response(response([100,200,900,1000]),(640,480),model)
+        with self.assertRaises(ValueError):
+            parse_response(response([0,0,1001,1000]),(640,480),model,'normalized_1000')
+
     def test_fixed_model_failure_stops_without_second_call(self):
         import json
         from unittest.mock import patch, Mock
