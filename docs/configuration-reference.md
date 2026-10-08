@@ -1314,3 +1314,5 @@ The second batch requires `VANTALINE_TRAINING_REVIEW_BINARY`, `VANTALINE_TRAININ
 
 
 `VANTALINE_REAL_PHOTO_TRAINING_ENABLED=1` enables server execution of accepted-original proposals in addition to the owner allowlist and independent screening worker. Default is disabled. Local training requires existing base weights; RunPod additionally requires a base SHA256 (including URL mode), a compatible held-out-evaluation worker, and verified executor readiness. Executor/device/weights/80 epochs/640 image size are frozen in the dataset before submission; drift fails rather than falling back. No secret or signed model URL is included in that snapshot.
+
+The production reviewer inherits `/etc/vantaline/cos-storage.env` and receives its own systemd `CREDENTIALS_DIRECTORY`. Its private review environment overrides only intended settings; it must explicitly provide PostgreSQL/account admission and the training-specific binary/auth/work-root/secret-file configuration. Reusing the COS credential source does not reuse the label worker's Codex login or queue.
