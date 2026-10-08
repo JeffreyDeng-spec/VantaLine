@@ -15,6 +15,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from auto_optimization_test_ports import assert_capability_owner
 from local_inspection_service.model_providers.errors import AiProviderError
 
 BASELINE = os.environ.get("VANTALINE_AUTO_LABEL_GENERATION_BASELINE_SOURCE")
@@ -195,7 +196,7 @@ class GenerationContract(unittest.TestCase):
         from local_inspection_service import server
         service = server._auto_optimization_label_generation
         for group in (service.artifacts, service.policy, service.models):
-            for field in fields(group): self.assertIs(getattr(group, field.name)(), getattr(server, field.name))
+            for field in fields(group): assert_capability_owner(self, group, field.name, server)
         for name in NAMES:
             args = ({}, {}, "model", Path("fixture")) if name.endswith("for_sample") else ({}, {}, {}, "model", Path("fixture"))
             marker = object(); method = Mock(return_value=marker)

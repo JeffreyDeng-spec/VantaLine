@@ -4340,28 +4340,228 @@ def public_auto_optimize_initialization_payload(state: dict[str, Any], settings:
 from .training.auto_optimization_initialization import AutoOptimizationInitialization
 from .training.auto_optimization_initialization_ports import AutoOptimizationAdvisorPorts, AutoOptimizationTaskInitializationPorts
 
-_auto_optimization_initialization = AutoOptimizationInitialization(
+from .training.execution_composition import (
+    AutoOptimizationExecution,
+    ExternalAutoOptimizationAdvisorPorts,
+    ExternalAutoOptimizationTaskInitializationPorts,
+    ExternalAutoOptimizationMaskPromptPorts,
+    ExternalAutoOptimizationMaskVisualPorts,
+    ExternalAutoOptimizationMaskVerificationPorts,
+    ExternalSpritePublication,
+    ExternalLabelGenerationArtifacts,
+    ExternalLabelGenerationPolicy,
+    ExternalLabelGenerationModels,
+    ExternalProcessingState,
+    ExternalProcessingArtifacts,
+    ExternalProcessingExecution,
+    ExternalSchedulingPolicy,
+    ExternalSchedulingSubmission,
+    ExternalSchedulingState,
+    ExternalSpriteFiles,
+    ExternalSpriteGeometry,
+    ExternalSyntheticGeometry,
+    ExternalSyntheticPublication,
+    ExternalSyntheticBatchConfiguration,
+    ExternalSyntheticBatchPublication,
+    ExternalDatasetConfiguration,
+    ExternalDatasetSources,
+    ExternalDatasetPublication,
+    ExternalDatasetLayout,
+    ExternalRequestAccess,
+    ExternalRequestActions,
+)
+
+_auto_optimization_execution = AutoOptimizationExecution(
+    core=_auto_optimization_core,
+    settings=_auto_optimization_settings,
+    runtime=_auto_optimization_runtime,
     negative_samples_default=AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
-    advisor=AutoOptimizationAdvisorPorts(
+    model_resolver=resolve_model_profiles,
+    label_runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
+    scheduling_runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
+    external_AutoOptimizationAdvisorPorts=ExternalAutoOptimizationAdvisorPorts(
         ai_detection_settings=lambda: ai_detection_settings,
         accessory_lookup_by_id=lambda: accessory_lookup_by_id,
         accessory_material_type=lambda: accessory_material_type,
         bounded_text=lambda: bounded_text,
         generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
-        clamp_auto_optimize_initialization_recommendation=lambda: clamp_auto_optimize_initialization_recommendation,
     ),
-    task=AutoOptimizationTaskInitializationPorts(
+    external_AutoOptimizationTaskInitializationPorts=ExternalAutoOptimizationTaskInitializationPorts(
         sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
         canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        auto_optimize_complexity_rule_recommendation=lambda: auto_optimize_complexity_rule_recommendation,
-        agent_auto_optimize_initialization_recommendation=lambda: agent_auto_optimize_initialization_recommendation,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+    ),
+    external_AutoOptimizationMaskPromptPorts=ExternalAutoOptimizationMaskPromptPorts(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION=lambda: AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION,
+        bounded_text=lambda: bounded_text,
+        string_list=lambda: string_list,
+        accessory_material_type=lambda: accessory_material_type,
+        load_config=lambda: load_config,
+        scope_config_for_user=lambda: scope_config_for_user,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        build_mask_target_profile=lambda: build_mask_target_profile,
+    ),
+    external_AutoOptimizationMaskVisualPorts=ExternalAutoOptimizationMaskVisualPorts(
+        DOCUMENT_LIKE_TEXT_HINTS=lambda: DOCUMENT_LIKE_TEXT_HINTS,
+        bounded_text=lambda: bounded_text,
+        _image_files=lambda: _image_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+    ),
+    external_AutoOptimizationMaskVerificationPorts=ExternalAutoOptimizationMaskVerificationPorts(
+        ai_detection_settings=lambda: ai_detection_settings,
+        bounded_text=lambda: bounded_text,
+        string_list=lambda: string_list,
+        image_bgr_data_url=lambda: image_bgr_data_url,
+        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
+        MASK_VERIFIER_SYSTEM_PROMPT=lambda: MASK_VERIFIER_SYSTEM_PROMPT,
+        AiProviderError=lambda: AiProviderError,
+    ),
+    external_SpritePublication=ExternalSpritePublication(
+        safe_record_id=lambda: safe_record_id,
+        _image_files=lambda: _image_files,
+        write_clean_sprite=lambda: write_clean_sprite,
+        resolve_service_path=lambda: resolve_service_path,
+        _business_files=lambda: _business_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+    external_LabelGenerationArtifacts=ExternalLabelGenerationArtifacts(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        _business_files=lambda: _business_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        safe_record_id=lambda: safe_record_id,
+    ),
+    external_LabelGenerationPolicy=ExternalLabelGenerationPolicy(
+        photo_highlight_input_data_url=lambda: photo_highlight_input_data_url,
+        AUTO_OPTIMIZE_MASK_PALETTE=lambda: AUTO_OPTIMIZE_MASK_PALETTE,
+        AUTO_OPTIMIZE_MASK_PROMPT_MODE=lambda: AUTO_OPTIMIZE_MASK_PROMPT_MODE,
+        bounded_text=lambda: bounded_text,
+        alpha_bbox=lambda: alpha_bbox,
+        decode_photo_highlight_mask=lambda: decode_photo_highlight_mask,
+        photo_highlight_auto_roi_mask=lambda: photo_highlight_auto_roi_mask,
+        photo_highlight_auto_compare=lambda: photo_highlight_auto_compare,
+    ),
+    external_LabelGenerationModels=ExternalLabelGenerationModels(
+        auto_optimize_generate_image_with_retry=lambda: auto_optimize_generate_image_with_retry,
+        AiProviderError=lambda: AiProviderError,
+    ),
+    external_ProcessingState=ExternalProcessingState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+    ),
+    external_ProcessingArtifacts=ExternalProcessingArtifacts(
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        safe_record_id=lambda: safe_record_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    external_ProcessingExecution=ExternalProcessingExecution(
+        image_generation_settings=lambda: image_generation_settings,
+        AUTO_OPTIMIZE_MASK_MAX_PARALLEL=lambda: AUTO_OPTIMIZE_MASK_MAX_PARALLEL,
+        ThreadPoolExecutor=lambda: ThreadPoolExecutor,
+        as_completed=lambda: as_completed,
+    ),
+    external_SchedulingPolicy=ExternalSchedulingPolicy(
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+    ),
+    external_SchedulingSubmission=ExternalSchedulingSubmission(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        _request_user=lambda: _request_user,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        selected_accessories=lambda: selected_accessories,
+        TrainingStartRequest=lambda: TrainingStartRequest,
+        pipeline_ai_task_id=lambda: pipeline_ai_task_id,
+        enqueue_training_task=lambda: enqueue_training_task,
+    ),
+    external_SchedulingState=ExternalSchedulingState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    external_SpriteFiles=ExternalSpriteFiles(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        OUTPUT_DIR=lambda: OUTPUT_DIR,
+        STATIC_DIR=lambda: STATIC_DIR,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        safe_record_id=lambda: safe_record_id,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+    external_SpriteGeometry=ExternalSpriteGeometry(
+        alpha_bbox=lambda: alpha_bbox,
+        AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE=lambda: AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE,
+        AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE=lambda: AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE,
+    ),
+    external_SyntheticGeometry=ExternalSyntheticGeometry(
+        choose_object_center_inside_background=lambda: choose_object_center_inside_background,
+        paste_masked_asset=lambda: paste_masked_asset,
+        alpha_bbox=lambda: alpha_bbox,
+        rotated_rect_tuple=lambda: rotated_rect_tuple,
+        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
+    ),
+    external_SyntheticPublication=ExternalSyntheticPublication(
+        safe_background_set_id=lambda: safe_background_set_id,
+        render_training_background=lambda: render_training_background,
+        _image_files=lambda: _image_files,
+        yolo_detection_label_line=lambda: yolo_detection_label_line,
+        _business_files=lambda: _business_files,
+        write_training_annotation_preview=lambda: write_training_annotation_preview,
+        public_training_output_url=lambda: public_training_output_url,
+    ),
+    external_SyntheticBatchConfiguration=ExternalSyntheticBatchConfiguration(
+        safe_background_set_id=lambda: safe_background_set_id,
+        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
+        _request_user=lambda: _request_user,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+    ),
+    external_SyntheticBatchPublication=ExternalSyntheticBatchPublication(
+        safe_record_id=lambda: safe_record_id,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+    ),
+    external_DatasetConfiguration=ExternalDatasetConfiguration(
+        _request_user=lambda: _request_user,
+        load_config=lambda: load_config,
+        scope_config_for_user=lambda: scope_config_for_user,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+    ),
+    external_DatasetSources=ExternalDatasetSources(
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+    ),
+    external_DatasetPublication=ExternalDatasetPublication(
+        safe_record_id=lambda: safe_record_id,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        _business_files=lambda: _business_files,
+    ),
+    external_DatasetLayout=ExternalDatasetLayout(
+        safe_background_set_id=lambda: safe_background_set_id,
+        split_counts=lambda: split_counts,
+        render_training_background=lambda: render_training_background,
+        yolo_detection_label_line=lambda: yolo_detection_label_line,
+        write_training_annotation_preview=lambda: write_training_annotation_preview,
+        public_training_output_url=lambda: public_training_output_url,
+        write_dataset_yaml=lambda: write_dataset_yaml,
+    ),
+    external_RequestAccess=ExternalRequestAccess(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        safe_record_id=lambda: safe_record_id,
+        current_auth_user=lambda: current_auth_user,
+        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
+        require_record_access=lambda: require_record_access,
+        HTTPException=lambda: HTTPException,
+    ),
+    external_RequestActions=ExternalRequestActions(
+        resolve_service_path=lambda: resolve_service_path,
+        _business_files=lambda: _business_files,
+        _image_files=lambda: _image_files,
+        analyze_bgr=lambda: analyze_bgr,
+        AI_DETECTION_TASK_PREFIX=lambda: AI_DETECTION_TASK_PREFIX,
     ),
 )
+_auto_optimization_initialization = _auto_optimization_execution.initialization
 
 
 def agent_auto_optimize_initialization_recommendation(
@@ -4493,27 +4693,9 @@ from .training.auto_optimization_mask_prompts import AutoOptimizationMaskPrompts
 from .training.auto_optimization_mask_visuals import AutoOptimizationMaskVisuals
 from .training.auto_optimization_mask_ports import AutoOptimizationMaskPromptPorts, AutoOptimizationMaskVisualPorts
 
-_auto_optimization_mask_prompts = AutoOptimizationMaskPrompts(AutoOptimizationMaskPromptPorts(
-    LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-    AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION=lambda: AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION,
-    bounded_text=lambda: bounded_text,
-    string_list=lambda: string_list,
-    accessory_material_type=lambda: accessory_material_type,
-    load_config=lambda: load_config,
-    scope_config_for_user=lambda: scope_config_for_user,
-    accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-    build_mask_target_profile=lambda: build_mask_target_profile,
-    auto_optimize_mask_owner_user=lambda: auto_optimize_mask_owner_user,
-    auto_optimize_mask_target_payload=lambda: auto_optimize_mask_target_payload,
-))
+_auto_optimization_mask_prompts = _auto_optimization_execution.mask_prompts
 
-_auto_optimization_mask_visuals = AutoOptimizationMaskVisuals(AutoOptimizationMaskVisualPorts(
-    DOCUMENT_LIKE_TEXT_HINTS=lambda: DOCUMENT_LIKE_TEXT_HINTS,
-    bounded_text=lambda: bounded_text,
-    _image_files=lambda: _image_files,
-    public_output_url_for_existing=lambda: public_output_url_for_existing,
-    auto_optimize_text_mask_requires_document_gate=lambda: auto_optimize_text_mask_requires_document_gate,
-))
+_auto_optimization_mask_visuals = _auto_optimization_execution.mask_visuals
 
 
 def auto_optimize_mask_system_prompt() -> str:
@@ -4628,18 +4810,7 @@ def clamp_unit_score(value: Any, default: float = 0.0) -> float:
 from .training.auto_optimization_mask_verification import AutoOptimizationMaskVerification
 from .training.auto_optimization_mask_verification_ports import AutoOptimizationMaskVerificationPorts
 
-_auto_optimization_mask_verification = AutoOptimizationMaskVerification(AutoOptimizationMaskVerificationPorts(
-    ai_detection_settings=lambda: ai_detection_settings,
-    bounded_text=lambda: bounded_text,
-    string_list=lambda: string_list,
-    image_bgr_data_url=lambda: image_bgr_data_url,
-    auto_optimize_mask_verifier_overlay=lambda: auto_optimize_mask_verifier_overlay,
-    auto_optimize_mask_verifier_crop=lambda: auto_optimize_mask_verifier_crop,
-    generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
-    MASK_VERIFIER_SYSTEM_PROMPT=lambda: MASK_VERIFIER_SYSTEM_PROMPT,
-    AiProviderError=lambda: AiProviderError,
-    clamp_unit_score=lambda: clamp_unit_score,
-))
+_auto_optimization_mask_verification = _auto_optimization_execution.mask_verification
 
 
 def verify_auto_optimize_mask_sample(sample: dict[str, Any], image_bgr: np.ndarray, labels: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
@@ -4649,17 +4820,7 @@ def verify_auto_optimize_mask_sample(sample: dict[str, Any], image_bgr: np.ndarr
 from .training.auto_optimization_sprite_publication import AutoOptimizationSpritePublication
 from .training.auto_optimization_sprite_publication_ports import SpritePublication
 
-_auto_optimization_sprite_publication = AutoOptimizationSpritePublication(
-    publication=SpritePublication(
-        safe_record_id=lambda: safe_record_id,
-        _image_files=lambda: _image_files,
-        write_clean_sprite=lambda: write_clean_sprite,
-        resolve_service_path=lambda: resolve_service_path,
-        _business_files=lambda: _business_files,
-        public_output_url_for_existing=lambda: public_output_url_for_existing,
-        public_path_sanitized=lambda: public_path_sanitized,
-    ),
-)
+_auto_optimization_sprite_publication = _auto_optimization_execution.sprite_publication
 
 
 def auto_optimize_write_sprite_artifact(
@@ -4679,38 +4840,7 @@ def auto_optimize_write_sprite_artifact(
 from .training.auto_optimization_label_generation import AutoOptimizationLabelGeneration
 from .training.auto_optimization_label_generation_ports import LabelGenerationArtifacts, LabelGenerationPolicy, LabelGenerationModels
 
-_auto_optimization_label_generation = AutoOptimizationLabelGeneration(
-    LabelGenerationArtifacts(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        _business_files=lambda: _business_files,
-        public_output_url_for_existing=lambda: public_output_url_for_existing,
-        safe_record_id=lambda: safe_record_id,
-        auto_optimize_write_sprite_artifact=lambda: auto_optimize_write_sprite_artifact,
-    ),
-    LabelGenerationPolicy(
-        photo_highlight_input_data_url=lambda: photo_highlight_input_data_url,
-        auto_optimize_accessory_lookup_for_sample=lambda: auto_optimize_accessory_lookup_for_sample,
-        auto_optimize_mask_target_profile=lambda: auto_optimize_mask_target_profile,
-        AUTO_OPTIMIZE_MASK_PALETTE=lambda: AUTO_OPTIMIZE_MASK_PALETTE,
-        AUTO_OPTIMIZE_MASK_PROMPT_MODE=lambda: AUTO_OPTIMIZE_MASK_PROMPT_MODE,
-        auto_optimize_multicolor_mask_prompt=lambda: auto_optimize_multicolor_mask_prompt,
-        bounded_text=lambda: bounded_text,
-        decode_multicolor_mask=lambda: decode_multicolor_mask,
-        alpha_bbox=lambda: alpha_bbox,
-        validate_auto_optimize_text_mask_region=lambda: validate_auto_optimize_text_mask_region,
-        draw_auto_optimize_review_overlay=lambda: draw_auto_optimize_review_overlay,
-        decode_photo_highlight_mask=lambda: decode_photo_highlight_mask,
-        photo_highlight_auto_roi_mask=lambda: photo_highlight_auto_roi_mask,
-        photo_highlight_auto_compare=lambda: photo_highlight_auto_compare,
-    ),
-    LabelGenerationModels(
-        auto_optimize_generate_image_with_retry=lambda: auto_optimize_generate_image_with_retry,
-        AiProviderError=lambda: AiProviderError,
-        auto_optimize_generate_label_for_candidate=lambda: auto_optimize_generate_label_for_candidate,
-        verify_auto_optimize_mask_sample=lambda: verify_auto_optimize_mask_sample,
-    ),
-)
+_auto_optimization_label_generation = _auto_optimization_execution.label_generation
 
 
 def auto_optimize_generate_labels_for_sample(sample: dict[str, Any], provider_settings: dict[str, Any], model: str, artifact_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
@@ -4724,36 +4854,7 @@ def auto_optimize_generate_label_for_candidate(sample: dict[str, Any], candidate
 from .training.auto_optimization_label_processing import AutoOptimizationLabelProcessing
 from .training.auto_optimization_label_processing_ports import ProcessingState, ProcessingArtifacts, ProcessingExecution
 
-_auto_optimization_label_processing = AutoOptimizationLabelProcessing(
-    state=ProcessingState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        _auto_optimize_label_threads=lambda: _auto_optimize_label_threads,
-        auto_optimize_label_worker=lambda: auto_optimize_label_worker,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
-    ),
-    artifacts=ProcessingArtifacts(
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        safe_record_id=lambda: safe_record_id,
-        auto_optimize_generate_labels_for_sample=lambda: auto_optimize_generate_labels_for_sample,
-        bounded_text=lambda: bounded_text,
-        auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
-    ),
-    execution=ProcessingExecution(
-        image_generation_settings=lambda: image_generation_settings,
-        AUTO_OPTIMIZE_MASK_MAX_PARALLEL=lambda: AUTO_OPTIMIZE_MASK_MAX_PARALLEL,
-        ThreadPoolExecutor=lambda: ThreadPoolExecutor,
-        as_completed=lambda: as_completed,
-        auto_optimize_process_label_sample=lambda: auto_optimize_process_label_sample,
-    ),
-    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-    model_resolver=resolve_model_profiles,
-)
+_auto_optimization_label_processing = _auto_optimization_execution.label_processing
 
 
 def start_auto_optimize_label_worker(task_id: str) -> None:
@@ -4777,40 +4878,7 @@ def auto_optimize_label_worker(task_id: str) -> None:
 from .training.auto_optimization_training_scheduling import AutoOptimizationTrainingScheduling
 from .training.auto_optimization_training_scheduling_ports import SchedulingPolicy, SchedulingSubmission, SchedulingState
 
-_auto_optimization_training_scheduling = AutoOptimizationTrainingScheduling(
-    policy=SchedulingPolicy(
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
-        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        auto_optimize_training_parameters=_auto_optimization_settings.auto_optimize_training_parameters,
-    ),
-    submission=SchedulingSubmission(
-        build_auto_optimize_dataset=lambda: build_auto_optimize_dataset,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        _request_user=lambda: _request_user,
-        scope_config_for_user=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        selected_accessories=lambda: selected_accessories,
-        TrainingStartRequest=lambda: TrainingStartRequest,
-        pipeline_ai_task_id=lambda: pipeline_ai_task_id,
-        enqueue_training_task=lambda: enqueue_training_task,
-    ),
-    state=SchedulingState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
-        bounded_text=lambda: bounded_text,
-        auto_optimize_training_check_worker=lambda: auto_optimize_training_check_worker,
-    ),
-    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-)
+_auto_optimization_training_scheduling = _auto_optimization_execution.training_scheduling
 
 
 def maybe_start_auto_optimize_training_locked(state: dict[str, Any]) -> None:
@@ -4829,28 +4897,7 @@ def start_auto_optimize_training_check_worker(task_id: str, delay_seconds: float
 from .training.auto_optimization_sprites import AutoOptimizationSprites
 from .training.auto_optimization_sprites_ports import SpriteFiles, SpriteGeometry
 
-_auto_optimization_sprites = AutoOptimizationSprites(
-    SpriteFiles(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        OUTPUT_DIR=lambda: OUTPUT_DIR,
-        STATIC_DIR=lambda: STATIC_DIR,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        safe_record_id=lambda: safe_record_id,
-        auto_optimize_write_sprite_artifact=lambda: auto_optimize_write_sprite_artifact,
-        public_path_sanitized=lambda: public_path_sanitized,
-        auto_optimize_resolve_artifact_path=lambda: auto_optimize_resolve_artifact_path,
-    ),
-    SpriteGeometry(
-        alpha_bbox=lambda: alpha_bbox,
-        AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE=lambda: AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE,
-        AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE=lambda: AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE,
-        auto_optimize_sprite_records_for_sample=lambda: auto_optimize_sprite_records_for_sample,
-        auto_optimize_load_sprite=lambda: auto_optimize_load_sprite,
-        auto_optimize_sprite_visible_size=lambda: auto_optimize_sprite_visible_size,
-        auto_optimize_source_to_canvas_scale=lambda: auto_optimize_source_to_canvas_scale,
-    ),
-)
+_auto_optimization_sprites = _auto_optimization_execution.sprites
 
 
 def auto_optimize_load_sprite(sprite: dict[str, Any]) -> tuple[np.ndarray, np.ndarray] | None:
@@ -4900,26 +4947,7 @@ def auto_optimize_sprite_target_size(
 from .training.auto_optimization_rendering import AutoOptimizationRendering
 from .training.auto_optimization_rendering_ports import SyntheticGeometry, SyntheticPublication
 
-_auto_optimization_rendering = AutoOptimizationRendering(
-    geometry=SyntheticGeometry(
-        auto_optimize_load_sprite=lambda: auto_optimize_load_sprite,
-        auto_optimize_sprite_target_size=lambda: auto_optimize_sprite_target_size,
-        choose_object_center_inside_background=lambda: choose_object_center_inside_background,
-        paste_masked_asset=lambda: paste_masked_asset,
-        alpha_bbox=lambda: alpha_bbox,
-        rotated_rect_tuple=lambda: rotated_rect_tuple,
-        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
-    ),
-    publication=SyntheticPublication(
-        safe_background_set_id=lambda: safe_background_set_id,
-        render_training_background=lambda: render_training_background,
-        _image_files=lambda: _image_files,
-        yolo_detection_label_line=lambda: yolo_detection_label_line,
-        _business_files=lambda: _business_files,
-        write_training_annotation_preview=lambda: write_training_annotation_preview,
-        public_training_output_url=lambda: public_training_output_url,
-    ),
-)
+_auto_optimization_rendering = _auto_optimization_execution.rendering
 
 
 def auto_optimize_render_synthetic_sample(
@@ -4954,29 +4982,7 @@ from .training.auto_optimization_synthetic_batch_ports import (
     SyntheticBatchConfiguration, SyntheticBatchSprites, SyntheticBatchPublication,
 )
 
-_auto_optimization_synthetic_batch = AutoOptimizationSyntheticBatch(
-    configuration=SyntheticBatchConfiguration(
-        safe_background_set_id=lambda: safe_background_set_id,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
-        _request_user=lambda: _request_user,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        scope_config_for_user=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-    ),
-    sprites=SyntheticBatchSprites(
-        auto_optimize_backfill_missing_sprites_for_sample=lambda: auto_optimize_backfill_missing_sprites_for_sample,
-        auto_optimize_sprite_records_for_sample=lambda: auto_optimize_sprite_records_for_sample,
-        auto_optimize_canonical_sprite_sizes=lambda: auto_optimize_canonical_sprite_sizes,
-    ),
-    publication=SyntheticBatchPublication(
-        safe_record_id=lambda: safe_record_id,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        auto_optimize_render_synthetic_sample=lambda: auto_optimize_render_synthetic_sample,
-    ),
-)
+_auto_optimization_synthetic_batch = _auto_optimization_execution.synthetic_batch
 
 
 def auto_optimize_generate_synthetic_batch_for_sample(
@@ -4992,40 +4998,7 @@ from .training.auto_optimization_dataset_ports import (
     DatasetConfiguration, DatasetSources, DatasetPublication, DatasetLayout,
 )
 
-_auto_optimization_dataset = AutoOptimizationDataset(
-    configuration=DatasetConfiguration(
-        _request_user=lambda: _request_user,
-        load_config=lambda: load_config,
-        scope_config_for_user=lambda: scope_config_for_user,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
-        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
-    ),
-    sources=DatasetSources(
-        auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
-        auto_optimize_bbox_training_entries=lambda: auto_optimize_bbox_training_entries,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-    ),
-    publication=DatasetPublication(
-        safe_record_id=lambda: safe_record_id,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        _business_files=lambda: _business_files,
-    ),
-    layout=DatasetLayout(
-        safe_background_set_id=lambda: safe_background_set_id,
-        split_counts=lambda: split_counts,
-        render_training_background=lambda: render_training_background,
-        yolo_detection_label_line=lambda: yolo_detection_label_line,
-        write_training_annotation_preview=lambda: write_training_annotation_preview,
-        public_training_output_url=lambda: public_training_output_url,
-        write_dataset_yaml=lambda: write_dataset_yaml,
-    ),
-)
+_auto_optimization_dataset = _auto_optimization_execution.dataset
 
 
 def auto_optimize_bbox_training_entries(sample: dict[str, Any]) -> list[dict[str, Any]]:
@@ -9206,32 +9179,7 @@ def delete_ai_detection_task(task_id: str) -> dict[str, Any]:
 from .training.auto_optimization_requests import AutoOptimizationRequests
 from .training.auto_optimization_requests_ports import RequestAccess, RequestState, RequestActions
 
-_auto_optimization_requests = AutoOptimizationRequests(
-    access=RequestAccess(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        safe_record_id=lambda: safe_record_id,
-        current_auth_user=lambda: current_auth_user,
-        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
-        require_record_access=lambda: require_record_access,
-        HTTPException=lambda: HTTPException,
-    ),
-    state=RequestState(
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        public_auto_optimize_state=lambda: public_auto_optimize_state,
-        auto_optimize_update_settings=lambda: auto_optimize_update_settings,
-    ),
-    actions=RequestActions(
-        resolve_service_path=lambda: resolve_service_path,
-        _business_files=lambda: _business_files,
-        _image_files=lambda: _image_files,
-        analyze_bgr=lambda: analyze_bgr,
-        AI_DETECTION_TASK_PREFIX=lambda: AI_DETECTION_TASK_PREFIX,
-        auto_optimize_bbox_training_entries=lambda: auto_optimize_bbox_training_entries,
-        start_auto_optimize_training_check_worker=lambda: start_auto_optimize_training_check_worker,
-    ),
-)
+_auto_optimization_requests = _auto_optimization_execution.requests
 
 
 @app.get("/api/ai/tasks/{task_id}/auto-optimize")

@@ -13,6 +13,7 @@ import unittest
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import assert_capability_owner
 BASELINE=os.environ.get("VANTALINE_AUTO_MASK_POLICY_BASELINE_SOURCE")
 PROMPT_NAMES={"auto_optimize_mask_system_prompt","auto_optimize_mask_owner_user","auto_optimize_accessory_lookup_for_sample","auto_optimize_mask_target_profile","auto_optimize_mask_target_payload","auto_optimize_mask_user_prompt","auto_optimize_multicolor_mask_prompt"}
 VISUAL_NAMES={"decode_multicolor_mask","draw_auto_optimize_review_overlay","auto_optimize_text_mask_requires_document_gate","validate_auto_optimize_text_mask_region","auto_optimize_mask_verifier_overlay","auto_optimize_mask_verifier_crop","clamp_unit_score"}
@@ -111,7 +112,7 @@ class MaskContract(unittest.TestCase):
         from local_inspection_service import server
         for suffix,names in (("prompts",PROMPT_NAMES),("visuals",VISUAL_NAMES)):
             service=getattr(server,"_auto_optimization_mask_"+suffix)
-            for field in fields(service.ports):self.assertIs(getattr(service.ports,field.name)(),getattr(server,field.name))
+            for field in fields(service.ports): assert_capability_owner(self, service.ports, field.name, server)
             for name in names:
                 fn=getattr(server,name);signature=inspect.signature(fn);args=[];kw={}
                 for parameter in signature.parameters.values():

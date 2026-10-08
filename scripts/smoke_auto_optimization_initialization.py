@@ -280,7 +280,7 @@ class InitializationContract(unittest.TestCase):
         with patch.object(server.model_profile_service,'resolve',side_effect=resolve), \
              patch.object(server,'accessory_lookup_by_id',return_value={}), \
              patch.object(server,'generate_provider_json_with_fallback',side_effect=provider), \
-             patch.object(server,'clamp_auto_optimize_initialization_recommendation',side_effect=lambda raw,*args:dict(raw)):
+             patch.object(server._auto_optimization_execution,'clamp_auto_optimize_initialization_recommendation',side_effect=lambda raw,*args:dict(raw)):
             results=asyncio.run(both())
         self.assertEqual([(item['owner'],item['provider']) for item in results],[('alpha','alpha'),('beta','beta')])
         self.assertIsNone(server._request_user.get());self.assertIsNone(server.model_profile_service.current_snapshot())
