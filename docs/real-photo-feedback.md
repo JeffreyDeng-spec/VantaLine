@@ -20,9 +20,19 @@ Initialization independently sets review trigger and approved target to 20–50.
 
 Real CLI business acceptance is still an operations gate. The dedicated login, pinned native runtime, cache/scratch mounts, read-only original/reference access, report-only tools and model connection must be verified before activation. Fixture reports and clean CLI exit are not visual-quality evidence.
 
-## Subsequent training batch — Proposal
+## Accepted-original training loop
 
-2. Enable accepted-original dataset publication, held-out YOLO evaluation, continuous feedback and manual candidate selection only after worker and executor validation. Preserve complete task classes and mark missing real/test support as unavailable metrics. Do not auto-promote models or revive old synthetic feedback on rollback.
+The third batch ships a server-side dispatcher and immutable YOLO dataset manifest. It reads only accepted real originals at their frozen annotation/review versions, retains the complete task category order, and writes one canonical first-frame PNG and one label file per distinct source. There is no generated-image, cutout, background-compositing or synthesized-negative call on this strategy. Source groups are assigned before export, remain fixed across later datasets, and cannot cross train/validation/test. The target is 80/10/10; indivisible groups can produce different actual proportions. A training positive and three groups are required. Conventional augmentation remains training-only and does not change real counts.
+
+`VANTALINE_REAL_PHOTO_TRAINING_ENABLED=1` additionally enables the server's serial training dispatcher; absence keeps training proposals queued. The dataset and deterministic training task are reserved before submission. Multiple server processes cannot claim the same proposal. Restart monitoring reads an existing task and retains its metrics without resubmitting; an unknown submission outcome pauses for explicit reconciliation. Local and RunPod executors support the strategy, while legacy remote execution fails explicitly. Base-weight hash, executor, device and training parameters are frozen before publication; drift prevents execution. RunPod requires a configured base SHA256 and a worker image supporting held-out evaluation.
+
+A completed real-photo task evaluates the held-out test set without augmentation. Per-class precision, recall and AP are recorded when evaluable; classes without accepted real support or test instances have unavailable metrics, never invented zero scores. The model remains a candidate in the existing detection picker. Completion does not disable collection or auto-promote it. The task detail card shows real counts, dynamic review targets/reasons, status/usage, candidates, original/bbox previews, source grouping, explicit versioned relabeling and optional mask/version history. Costs remain unavailable without verifiable pricing; elapsed/usage gaps are counted. Agent invocation counts mean CLI sessions, not inferred underlying API requests.
+
+Optional masks run separately on explicit user request and append an attachment with its own profile/hash/geometry. They do not replace boxes or invalidate an accepted review. A same-size generated mask is still geometrically unverified. Historical masks remain readable through the legacy artifact APIs; confirmed historical boxes can enter the new pool as drafts for whole-image screening.
+
+## Activation gates still requiring operations evidence
+
+All code paths remain account-gated. Before enabling business admission or the training dispatcher, verify the dedicated CLI login, Linux native runtime and isolation, immutable released worker, fixed Doubao binding, private-business screening decisions, 4096-token localization, and the selected YOLO executor. Fixtures prove contracts, not visual screening quality or GPU training. This implementation does not claim those live checks have passed. Close admission before whole-release rollback; never revive legacy synthesis or replay an uncertain paid session.
 
 ## Verification and rollback
 

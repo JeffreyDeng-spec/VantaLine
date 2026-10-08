@@ -132,3 +132,6 @@ Dedicated camera orchestration is implemented in `detection/camera_request.py`; 
 ### Real-photo feedback provenance
 
 The dedicated camera request propagates its existing station/session identity as a source group around analysis. This metadata grants no PLC capability and changes no dispatch fingerprint, D/Y frames, lease, retry or physical-write behavior. Ordinary image/video provenance also grants no camera dispatch authority.
+
+
+Real-photo source metadata binds ordinary/camera uploads to their exact payload hash and video feedback to the analyzed frame pixels. This adds no physical I/O or server serial access. Only the existing dedicated camera request still declares a browser dispatch; ordinary image/video feedback cannot create one.

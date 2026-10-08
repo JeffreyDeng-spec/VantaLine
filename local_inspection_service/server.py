@@ -9885,6 +9885,48 @@ def _disable_legacy_feedback_for_real_photo(task_id):
         state['settings']={**(state.get('settings') or {}),'enabled':False,'auto_promote':False}
         save_auto_optimize_state(state)
 
+from .training.real_photo_dispatch import Dispatcher, DispatchPorts
+from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration
+
+def _submit_real_photo_training(job,dataset):
+    owner={'id':job['owner_user_id'],'username':job['owner_user_id'],'role':'user'}
+    token=_request_user.set(owner)
+    try:
+        config=scope_config_for_user(load_config(),owner)
+        selected=selected_accessories(config,dataset['selected_accessory_ids'])
+        if {s['id'] for s in selected}!=set(dataset['selected_accessory_ids']):
+            raise ValueError('frozen task classes no longer available')
+        by_id={s['id']:s for s in selected}
+        selected=[by_id[cid] for cid in dataset['selected_accessory_ids']]
+        request=TrainingStartRequest(selected_accessory_ids=dataset['selected_accessory_ids'],
+                                     sample_count=dataset['sample_count'],train_mode='yolo',dataset_id=dataset['id'])
+        return enqueue_training_task(request,selected,'train_model',dataset)
+    finally:_request_user.reset(token)
+
+_real_photo_dispatcher=Dispatcher(DispatchPorts(repository=_real_photo_repository,files=lambda:_business_files,
+    output=lambda owner:output_write_dir_for_owner('real_photo_datasets',owner),submit=_submit_real_photo_training,training=lambda identifier:load_training_task(identifier),
+    configuration=lambda:freeze_real_photo_training_configuration(
+        training_executor_mode(),detect_base_model,yolo_inference_device,os.environ)))
+from .training.real_photo_masks import MaskDispatcher
+_real_photo_mask_dispatcher=MaskDispatcher(_real_photo_dispatcher.ports,lambda:resolve_model_profiles(),lambda settings:image_generation_provider_from_settings(settings))
+_real_photo_dispatch_stop=threading.Event()
+
+@app.on_event('startup')
+def start_real_photo_training_dispatcher():
+    from .training.real_photo_api import accounts
+    if not accounts():return
+    def loop(dispatcher):
+        while not _real_photo_dispatch_stop.wait(2):
+            try:
+                dispatcher.tick()
+            except Exception as exc:print('real-photo training dispatcher failed: '+type(exc).__name__,flush=True)
+    threading.Thread(target=loop,args=(_real_photo_mask_dispatcher,),name='real-photo-mask-dispatch',daemon=True).start()
+    if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED','')=='1':
+        threading.Thread(target=loop,args=(_real_photo_dispatcher,),name='real-photo-training-dispatch',daemon=True).start()
+
+@app.on_event('shutdown')
+def stop_real_photo_training_dispatcher():_real_photo_dispatch_stop.set()
+
 from .detection.rule_api import compose_detection_rule_api
 from .detection.rule_request_ports import RulePolicy, RuleStore, RuleAccess
 

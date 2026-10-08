@@ -1,3 +1,4 @@
+import hashlib
 """Ordinary uploaded-image decoding, persistence and analysis."""
 from ..storage.artifacts.files import BusinessFiles
 _business_files = BusinessFiles()
@@ -26,5 +27,5 @@ class ImageUpload:
         request_id = self.paths.name()(file.filename).rsplit('.', 1)[0]
         upload_path = self.paths.directory() / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
         _business_files.write_bytes(upload_path, payload)
-        with group('upload_batch:'+uuid.uuid4().hex):
+        with group('upload_batch:'+uuid.uuid4().hex,original_hash=hashlib.sha256(payload).hexdigest()):
             return self.analyze(image, request_id, model_id, image_path=upload_path)

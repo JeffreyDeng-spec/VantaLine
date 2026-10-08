@@ -75,6 +75,23 @@ def workspace(config):
         with tempfile.TemporaryDirectory(prefix='rp_',dir=config['work_root']) as path:yield Path(path)
 
 
+def crop_evidence(directory):
+    """Persist bounded transform sidecars before temporary workspace removal."""
+    rows=[]
+    for sidecar in sorted((directory/'work').glob('*.transform.json')):
+        if len(rows)>=100 or sidecar.is_symlink() or sidecar.stat().st_size>4096:
+            raise ValueError('crop evidence exceeds bound')
+        value=json.loads(sidecar.read_text())
+        source=Path(value['source']);target=Path(value['image'])
+        if source.parent!=Path('/input') or target.parent!=Path('/work'):
+            raise ValueError('crop evidence outside mounted originals')
+        original=directory/'input'/source.name;crop=directory/'work'/target.name
+        if not original.is_file() or not crop.is_file() or crop.is_symlink() or crop.stat().st_size>32*1024*1024:
+            raise ValueError('crop evidence missing image')
+        rows.append({'transform':value,'original_sha256':digest(original.read_bytes()),'crop_sha256':digest(crop.read_bytes())})
+    return rows
+
+
 def prepare(job, directory, files):
     inputs=job['inputs'];public={**inputs,'classes':[],'samples':[]}
     if job['kind']=='review' and not 1<=len(inputs.get('samples',[]))<=10:
@@ -188,6 +205,8 @@ def review(job,token,config):
                 if exited is not None and not reader.is_alive():
                     if exited!=0 or not complete or failed or not report or not metadata.get('session_id'):
                         raise RuntimeError('CLI did not complete review')
+                    metadata['crops']=crop_evidence(directory)
+                    with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'crops':metadata['crops']}))
                     return report[0],metadata
                 time.sleep(.5)
         finally:
@@ -253,7 +272,7 @@ def load_config():
     if not (Path(config['binary']).parent/'codex-code-mode-host').is_file():raise RuntimeError('complete pinned native runtime required')
     proxy_environment(config['proxy_url']);get_runtime()
     version=subprocess.run([config['binary'],'--version'],capture_output=True,text=True,check=True,timeout=10).stdout.strip()
-    config['version']=version[:128]+':'+digest({'prompt':(SKILL/'SKILL.md').read_text(),'cli':(MODULE/'cli.py').read_text(),'crop':(MODULE/'image_tools.py').read_text()})
+    config['version']=version[:128]+':'+digest({'prompt':(SKILL/'SKILL.md').read_text(),'cli':(MODULE/'cli.py').read_text(),'crop':(MODULE/'image_tools.py').read_text(),'worker':(MODULE/'worker.py').read_text(),'binary':digest(Path(config['binary']).read_bytes())})
     return config
 
 

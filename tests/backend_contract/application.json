@@ -1643,6 +1643,32 @@
           "title": "Edit",
           "type": "object"
         },
+        "EnableRequest": {
+          "properties": {
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "title": "EnableRequest",
+          "type": "object"
+        },
+        "GroupRequest": {
+          "properties": {
+            "source_group": {
+              "title": "Source Group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_group"
+          ],
+          "title": "GroupRequest",
+          "type": "object"
+        },
         "HTTPValidationError": {
           "properties": {
             "detail": {
@@ -1654,6 +1680,44 @@
             }
           },
           "title": "HTTPValidationError",
+          "type": "object"
+        },
+        "HistoryImportRequest": {
+          "properties": {
+            "coordinate_system": {
+              "title": "Coordinate System",
+              "type": "string"
+            },
+            "height": {
+              "title": "Height",
+              "type": "integer"
+            },
+            "source_group": {
+              "title": "Source Group",
+              "type": "string"
+            },
+            "source_orientation": {
+              "title": "Source Orientation",
+              "type": "integer"
+            },
+            "source_sha256": {
+              "title": "Source Sha256",
+              "type": "string"
+            },
+            "width": {
+              "title": "Width",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "source_group",
+            "source_sha256",
+            "width",
+            "height",
+            "source_orientation",
+            "coordinate_system"
+          ],
+          "title": "HistoryImportRequest",
           "type": "object"
         },
         "IncomingTextReviewRequest": {
@@ -4951,6 +5015,605 @@
             }
           },
           "summary": "Upload Ai Task Environment Background"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo": {
+        "get": {
+          "operationId": "status_api_ai_tasks__task_id__real_photo_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Status"
+        },
+        "patch": {
+          "operationId": "enable_api_ai_tasks__task_id__real_photo_patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnableRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Enable"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/history": {
+        "get": {
+          "operationId": "history_api_ai_tasks__task_id__real_photo_history_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "History"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/history/{sample_id}/geometry": {
+        "get": {
+          "operationId": "historical_geometry_api_ai_tasks__task_id__real_photo_history__sample_id__geometry_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Historical Geometry"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/history/{sample_id}/image": {
+        "get": {
+          "operationId": "historical_image_api_ai_tasks__task_id__real_photo_history__sample_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Historical Image"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/history/{sample_id}/import": {
+        "post": {
+          "operationId": "import_history_api_ai_tasks__task_id__real_photo_history__sample_id__import_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryImportRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Import History"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/restart": {
+        "post": {
+          "operationId": "restart_api_ai_tasks__task_id__real_photo_restart_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Restart"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/group": {
+        "patch": {
+          "operationId": "group_api_ai_tasks__task_id__real_photo_samples__sample_id__group_patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Group"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/image": {
+        "get": {
+          "operationId": "image_api_ai_tasks__task_id__real_photo_samples__sample_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Image"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/mask": {
+        "post": {
+          "operationId": "mask_api_ai_tasks__task_id__real_photo_samples__sample_id__mask_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Mask"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/masks/{mask_id}/image": {
+        "get": {
+          "operationId": "mask_image_api_ai_tasks__task_id__real_photo_samples__sample_id__masks__mask_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "mask_id",
+              "required": true,
+              "schema": {
+                "title": "Mask Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Mask Image"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/relabel": {
+        "post": {
+          "operationId": "relabel_api_ai_tasks__task_id__real_photo_samples__sample_id__relabel_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Relabel"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/versions": {
+        "get": {
+          "operationId": "versions_api_ai_tasks__task_id__real_photo_samples__sample_id__versions_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Versions"
         }
       },
       "/api/analyze/camera": {
@@ -13633,6 +14296,214 @@
       "include_in_schema": true,
       "kind": "route",
       "methods": [
+        "GET"
+      ],
+      "name": "status",
+      "path": "/api/ai/tasks/{task_id}/real-photo",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "PATCH"
+      ],
+      "name": "enable",
+      "path": "/api/ai/tasks/{task_id}/real-photo",
+      "permission": {
+        "PATCH": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "PATCH"
+      ],
+      "name": "group",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/group",
+      "permission": {
+        "PATCH": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "image",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/image",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "relabel",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/relabel",
+      "permission": {
+        "POST": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "restart",
+      "path": "/api/ai/tasks/{task_id}/real-photo/restart",
+      "permission": {
+        "POST": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "history",
+      "path": "/api/ai/tasks/{task_id}/real-photo/history",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "import_history",
+      "path": "/api/ai/tasks/{task_id}/real-photo/history/{sample_id}/import",
+      "permission": {
+        "POST": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "historical_image",
+      "path": "/api/ai/tasks/{task_id}/real-photo/history/{sample_id}/image",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "historical_geometry",
+      "path": "/api/ai/tasks/{task_id}/real-photo/history/{sample_id}/geometry",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "mask",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/mask",
+      "permission": {
+        "POST": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "versions",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/versions",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "mask_image",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/masks/{mask_id}/image",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
         "POST"
       ],
       "name": "update_rules",
@@ -16075,6 +16946,7 @@
     }
   ],
   "shutdown": [
+    "stop_real_photo_training_dispatcher",
     "set",
     "stop"
   ],
@@ -16084,6 +16956,7 @@
     "start_ai_mcp_warmup",
     "start_worker_training_watcher",
     "start_yolo_model_warmup",
+    "start_real_photo_training_dispatcher",
     "<lambda>",
     "start",
     "resume_image_worker_queue",

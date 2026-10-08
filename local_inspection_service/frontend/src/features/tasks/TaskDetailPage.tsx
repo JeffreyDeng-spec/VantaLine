@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { RealPhotoFeedback } from './RealPhotoFeedback';
 import { workspacePath } from "../../app/paths";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { CheckCircle2, ChevronRight, Eye, Loader2, PauseCircle, Play, RefreshCw, RotateCcw, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
@@ -681,6 +682,7 @@ export function TaskDetailPage() {
     ]);
   }, [task]);
   const autoOptimizeTaskId = autoOptimizeTaskIdFor(task);
+  const [realPhotoSelected, setRealPhotoSelected] = useState(false);
 
   const datasetStatus = task?.datasetStatus || "";
   // Frequent polling is only useful while background work can still change the
@@ -1038,7 +1040,8 @@ export function TaskDetailPage() {
           </div>
         ) : null}
 
-        {supportsAutoOptimize ? (
+        {autoOptimizeTaskId ? <RealPhotoFeedback key={autoOptimizeTaskId} taskId={autoOptimizeTaskId} onSelection={setRealPhotoSelected}/> : null}
+        {supportsAutoOptimize && !realPhotoSelected ? (
           <div className="task-detail-section task-inline-controls">
             <strong>自动优化训练</strong>
             <div className="resource-card-head">

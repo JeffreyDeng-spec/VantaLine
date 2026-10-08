@@ -154,8 +154,8 @@ def test_api_owner_isolation_failed_multi_capture_and_private_original(database,
     monkeypatch.setenv('VANTALINE_REAL_PHOTO_ACCOUNTS','a')
     assert client.patch('/api/ai/tasks/task/real-photo',json={'enabled':True}).status_code==200
     result={'passed':False,'model':{'task_id':'task','is_ai_detection':True},'detections':[{},{}]}
-    assert service.capture({'source_image':{'path':'real','url':'overlay'}},result,'one',None)
-    assert service.capture({'source_image':{'path':'real'}},result,'two',None)
+    assert service.capture({'source_group':'upload_batch:fixture','source_image':{'path':'real','url':'overlay'}},result,'one',None)
+    assert service.capture({'source_group':'upload_batch:fixture','source_image':{'path':'real'}},result,'two',None)
     status=client.get('/api/ai/tasks/task/real-photo').json()
     assert status['candidate_count']==1 and status['pending_annotation_count']==1
     identifier=status['samples'][0]['sample_id'];sample=client.get(f'/api/ai/tasks/task/real-photo/samples/{identifier}/image')

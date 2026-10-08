@@ -1,3 +1,4 @@
+import { apiClient, withAuthScope } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { getFile } from "../agent/files";
@@ -829,6 +830,12 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     routeTask?.aiBaselineTaskId ||
     routeTask?.aiTaskId ||
     "";
+  const realPhotoFeedbackQuery = useQuery({
+    queryKey:["real-photo",auth.user.id,auth.dataUserId,environmentBackgroundTaskId],
+    queryFn:() => apiClient.get<{selected?:boolean}>(withAuthScope(`/api/ai/tasks/${encodeURIComponent(environmentBackgroundTaskId)}/real-photo`,auth.user,auth.dataUserId)),
+    enabled:Boolean(environmentBackgroundTaskId),refetchInterval:5000
+  });
+  const realPhotoSelected=Boolean(realPhotoFeedbackQuery.data?.selected);
   const environmentBackgroundQuery = useQuery({
     queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId),
     queryFn: () => getAiTaskAutoOptimize(auth, environmentBackgroundTaskId),
@@ -844,7 +851,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     hasTaskEnvironmentBackground(environmentBackgroundQuery.data) ||
     hasTaskEnvironmentBackground(selectedAiTask) ||
     hasTaskEnvironmentBackground(routeTaskEnvironmentBackground);
-  const environmentBackgroundRequired = Boolean(environmentBackgroundTaskId);
+  const environmentBackgroundRequired = Boolean(environmentBackgroundTaskId) && !realPhotoSelected;
   const selectedAiModelId = aiTaskModelId(selectedAiTask);
   const allStatusModels = useMemo(() => {
     const specializedTaskModels = (status?.specialized_model_tasks || []).flatMap((task) => task.models || []);
@@ -1594,7 +1601,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const form = new FormData();
-      const uploadFile = kind === "video" || activeModelIsAi ? file : await optimizeImageUpload(file);
+      const uploadFile = kind === "video" || activeModelIsAi || realPhotoSelected ? file : await optimizeImageUpload(file);
       form.append("file", uploadFile);
       form.append("model_id", activeModelId);
       const currentPlcState = kind === "camera" ? plcClientRef.current.state() : null;
