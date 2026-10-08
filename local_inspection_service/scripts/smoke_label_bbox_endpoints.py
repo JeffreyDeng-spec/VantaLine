@@ -7,6 +7,7 @@ import threading
 import time
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+from scripts.provider_configuration_test_ports import set_provider_capability
 from local_inspection_service.scripts.smoke_text_inspection_v2_endpoints import server,TestClient,PASSWORD,picture,docx,login
 from local_inspection_service import label_bbox
 
@@ -27,7 +28,7 @@ def main():
     def transport(request,settings,timeout):
         calls.append(json.loads(request.data));release.wait(3)
         return io.BytesIO(json.dumps({"choices":[{"message":{"content":json.dumps(result)}}],"usage":{"total_tokens":20}}).encode())
-    server.ai_urlopen=transport
+    set_provider_capability(server, 'ai_urlopen', transport)
     root=create().json()
     assert create().json()["id"]==root["id"]
     assert create(method="manual").status_code==409
@@ -61,11 +62,11 @@ def main():
     compare["extraction_id"]=confirmed["id"]
     assert admin.post("/api/text-inspection/label/compare",data=compare).status_code==409
     def timeout(*args,**kwargs): calls.append(1);raise TimeoutError("secret URL must not escape")
-    server.ai_urlopen=timeout
+    set_provider_capability(server, 'ai_urlopen', timeout)
     failed=wait(create("bbox_timeout_001").json());assert failed["status"]=="uncertain"
     before=len(calls);create("bbox_timeout_001");assert len(calls)==before
     assert "secret URL" not in json.dumps(failed)
-    server.ai_urlopen=lambda *args,**kwargs:io.BytesIO(b"not json")
+    set_provider_capability(server, 'ai_urlopen', lambda *args, **kwargs: io.BytesIO(b'not json'))
     invalid=wait(create("bbox_invalid_001").json())
     assert invalid["status"]=="needs_adjustment" and "crop" not in invalid["media"]
     altered=admin.post("/api/text-inspection/extractions",data={"target":"[0,0,1,1]","request_id":"bbox_request_001","method":"vlm_bbox"},files={"file":("changed.png",picture("CHANGED"),"image/png")})
@@ -76,12 +77,12 @@ def main():
     lost.update(status="attempting",deadline_at=0)
     server._text_v2_save("extractions",lost)
     def forbidden(*args,**kwargs):raise AssertionError("replayed lost task")
-    server.ai_urlopen=forbidden
+    set_provider_capability(server, 'ai_urlopen', forbidden)
     recovered=create("bbox_invalid_001").json()
     assert recovered["status"]=="uncertain"
     # Small rectangles produce inspection evidence, but cannot be confirmed.
     tiny={"isMultiLabel":True,"labelCount":6,"cropRect":{"x":.1,"y":.1,"w":.08,"h":.1}}
-    server.ai_urlopen=lambda *args,**kwargs:io.BytesIO(json.dumps({"choices":[{"message":{"content":json.dumps(tiny)}}]}).encode())
+    set_provider_capability(server, 'ai_urlopen', lambda *args, **kwargs: io.BytesIO(json.dumps({'choices': [{'message': {'content': json.dumps(tiny)}}]}).encode()))
     small=wait(create("bbox_small_001").json())
     assert small["status"]=="needs_adjustment" and small["media"]["crop"]
     assert admin.post(f"/api/text-inspection/extractions/{small['id']}/revise",json={"version":0,"polygon":small["polygon"],"confirm":True,"standard_asset_id":asset}).status_code==400

@@ -82,3 +82,23 @@ AutoOptimizationWorkflows in training/workflow_composition.py composes the exist
 TrainingStateWorkflows in training/state_composition.py composes the existing TrainingRecordStore, TrainingTaskLifecycle and TrainingTaskViews around the supplied TrainingTaskRuntime. Records and lifecycle select the same existing RLock; lifecycle record operations and view load/refresh operations select named methods on this owner after argument evaluation. Repository factories and the two-layer model resolver remain operation-time suppliers; no user, connection or current snapshot is captured. Model freeze precedes invalidation and locking. Visibility still precedes refresh, and retired worker records remain read-only. Authorization, dual canonical/alias tombstones and partial deletion failures retain the original behavior. The entry keeps its public signatures and original component aliases. Replacing those private aliases no longer redirects owned edges; tests replace actual owner capabilities. This composes only training state, not datasets, training execution, submission, pipeline or the complete application factory.
 
 TrainingAccountState in training/account_state_composition.py combines TrainingStateWorkflows and TrainingUserState around one supplied runtime, with operation-time repository/model/identity suppliers and explicit configuration load/save and pipeline synchronization. TrainingExecution in training/native_execution_composition.py owns the original Runner and Submission with the same account records/runtime; the existing Runner model pin remains single. TrainingTaskWorkflows in training/task_composition.py owns jobs, mutations, launch, status, dataset, preview and RunPod transfer services and validates shared account/execution identity. Internal calls use named owners; five HTTP registrars stay at their original positions. The runtime remains shared with background submission, with its original shutdown owner. Launch configuration failure preserves the already-started task; upload metadata failure preserves the published artifact; a failed completion sync retains the original failed-task update and second sync attempt without repeating generation. Neighboring assets, catalogs, background workflows and pipeline services remain explicit collaborators. This is training-task domain composition, not a complete application factory.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.

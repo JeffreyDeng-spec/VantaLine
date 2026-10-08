@@ -1637,3 +1637,23 @@ Automatic-optimization workflow assembly retains Web/training process topology, 
 TrainingStateWorkflows retains the existing Web/training process topology and supplied runtime close ownership. This assembly starts no new worker, adds no maintenance switch and changes no release or rollback procedure. Restore the previous whole immutable release on failure; retain model snapshots and runtime data.
 
 The training-task domain is delivered as one coherent composition batch. Account state, native execution and task API services share the original task runtime and operation-time repository factory. Background submission retains that shared runtime; no extra shutdown owner, process or database migration is added. Required CI, independent review and the preceding managed-release gate remain mandatory before merge. Whole-release rollback restores the complete previous bundle and topology; internal local checkpoints are not separate deployments.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.

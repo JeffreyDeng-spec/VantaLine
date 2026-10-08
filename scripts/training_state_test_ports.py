@@ -54,6 +54,12 @@ def set_training_port(api, name, value):
 
 
 def patch_training_port(api, name, *args, **kwargs):
+    from scripts.provider_configuration_test_ports import PROVIDER_METHODS, patch_provider_capability
+    if name in PROVIDER_METHODS:
+        return patch_provider_capability(api, name, *args, **kwargs)
+    if name == "model_profile_service":
+        from scripts.model_profile_test_ports import profile_service_target
+        return patch.object(*profile_service_target(api), *args, **kwargs)
     if hasattr(api, '_training_jobs_query') and name == 'training_task_uses_worker':
         from contextlib import contextmanager
         from dataclasses import replace

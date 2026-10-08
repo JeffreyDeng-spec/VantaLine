@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 NAMES = {"advance_pipeline_task_guarded", "_run_pipeline_advance",
          "schedule_pipeline_advance", "cancel_pipeline_advance"}
 
@@ -104,7 +105,7 @@ class AdvanceRuntimeContract(unittest.TestCase):
         self.replace("threading", types.SimpleNamespace(Event=Event, Thread=Thread))
 
     def replace(self, name, value):
-        self.stack.enter_context(patch.object(self.api, name, value, create=True)); return value
+        self.stack.enter_context(patch_fixture_capability(self.api, name, value, create=True)); return value
 
     def runner(self, user=None):
         fn = self.api._run_pipeline_advance

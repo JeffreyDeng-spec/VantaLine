@@ -355,6 +355,7 @@ jobs:
           python scripts/smoke_pipeline_runtime_ownership.py
           python scripts/smoke_auto_optimization_runtime_ownership.py
           python scripts/smoke_auto_optimization_settings_composition.py
+          python scripts/smoke_model_configuration_composition.py
           python scripts/smoke_plc_legacy_worker_ownership.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py

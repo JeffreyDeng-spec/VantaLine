@@ -6,6 +6,7 @@ from unittest.mock import Mock,AsyncMock,patch,call
 import asyncio,io,os,sys,tempfile,unittest
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from scripts.smoke_ai_detection_analysis import BindingResolver
 
@@ -164,7 +165,7 @@ class UploadFixture:
         if self.index>=len(self.frames):return False,None
         value=self.frames[self.index];self.index+=1;return True,value
     def bind(self,api,stack):
-        for name,value in {'ensure_dirs':self.ensure,'require_analyze_model_permission':self.permission,'safe_name':self.safe,'UPLOAD_DIR':self.root,'cv2':self.cv,'analyze_bgr':self.analyze,'load_config':self.load,'model_profile_service':self.resolver}.items():stack.enter_context(patch.object(api,name,value))
+        for name,value in {'ensure_dirs':self.ensure,'require_analyze_model_permission':self.permission,'safe_name':self.safe,'UPLOAD_DIR':self.root,'cv2':self.cv,'analyze_bgr':self.analyze,'load_config':self.load,'model_profile_service':self.resolver}.items():stack.enter_context(patch_fixture_capability(api, name, value))
 
 class UploadContracts(unittest.TestCase):
     @classmethod
@@ -235,7 +236,7 @@ class UploadContracts(unittest.TestCase):
         f.analyze.side_effect=lambda *a,**k:snapshots.append(f.resolver.current_snapshot()) or f.result
         with f.resolver.scope(ambient):self.video();self.assertIs(f.resolver.current_snapshot(),ambient)
         self.assertTrue(all(s is ambient for s in snapshots));self.assertEqual(f.resolver.records,[])
-        with patch.object(self.api,'model_profile_service',None):
+        with patch_profile_service(self.api, None):
             with self.assertRaises(RuntimeError):self.video()
     def test_video_output_limits_do_not_change_summary_counts(self):
         f=self.f;f.config['video']={'sample_every_seconds':0,'max_frames':205};f.frames=[f.image]*205

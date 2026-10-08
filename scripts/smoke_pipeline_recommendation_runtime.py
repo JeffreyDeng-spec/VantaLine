@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 
 NAMES = {"_run_pipeline_recommendation_pregen", "schedule_pipeline_recommendation_pregen"}
 
@@ -81,7 +82,7 @@ class RecommendationRuntimeContract(unittest.TestCase):
         self.replace("sys", types.SimpleNamespace(stderr="stderr"))
 
     def replace(self, name, value):
-        self.stack.enter_context(patch.object(self.api, name, value, create=True))
+        self.stack.enter_context(patch_fixture_capability(self.api, name, value, create=True))
         return value
 
     def run_task(self, user=None):

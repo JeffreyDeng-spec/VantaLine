@@ -886,7 +886,7 @@ _public_network_policy = PublicNetworkPolicy(
     ),
     endpoints=PublicEndpointPolicy(
         is_private_or_local_host=lambda: is_private_or_local_host,
-        masked_url_for_status=lambda: masked_url_for_status,
+        masked_url_for_status=lambda: _provider_configuration.masked_url_for_status,
     ),
     access=RuntimeDetailAccess(
         user_is_admin=lambda: user_is_admin,
@@ -1515,7 +1515,7 @@ _image_jobs = _ImageJobs(
         windows_worker_headers=lambda: windows_worker_headers,
         windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds,
         windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes,
-        masked_url_for_status=lambda: masked_url_for_status,
+        masked_url_for_status=lambda: _provider_configuration.masked_url_for_status,
     ),
 )
 _image_worker_runtime = _image_jobs.worker
@@ -3443,7 +3443,7 @@ from .model_profiles.snapshots import freeze_record as freeze_model_record, pinn
 
 def resolve_model_profiles():
     """Composition-only late binding; domain decorators receive this callable."""
-    return model_profile_service
+    return _model_profile_configuration.resolve_model_profiles()
 
 
 def record_model_call(settings, elapsed_ms, ok, usage):
@@ -3669,273 +3669,261 @@ from local_inspection_service.model_providers.configuration_ports import JsonDef
 from local_inspection_service.model_providers.configuration_defaults import ProviderDefaults
 from local_inspection_service.model_providers.configuration_validation import ProviderValidation
 from local_inspection_service.model_providers.public_urls import PublicProviderURLs
-_provider_configuration_defaults = ProviderDefaults(
-    JsonDefaults(lambda: AI_DEFAULT_MODELS, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_BASE_URLS, lambda: AI_DEFAULT_PROVIDER, lambda: AI_PROVIDER_LABELS),
-    ImageDefaults(lambda: IMAGE_GENERATION_DEFAULT_MODELS, lambda: IMAGE_GENERATION_DEFAULT_BASE_URLS, lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_API_KEY_ENVS, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: IMAGE_GENERATION_PROVIDER_KEYS, lambda: IMAGE_GENERATION_PROVIDER_LABELS),
-)
-_provider_configuration_validation = ProviderValidation(
-    ValidationCapabilities(lambda: AI_SUPPORTED_PROVIDERS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, lambda: HTTPException, lambda: re.fullmatch, lambda: urlsplit),
-)
-_provider_public_urls = PublicProviderURLs(
-    PublicUrlCapabilities(lambda: urlsplit, lambda: urlunsplit, lambda: bounded_text),
+from local_inspection_service.model_providers.configuration_ports import JsonDefaults, ImageDefaults, ValidationCapabilities, PublicUrlCapabilities
+from local_inspection_service.model_providers.configuration_defaults import ProviderDefaults
+from local_inspection_service.model_providers.configuration_validation import ProviderValidation
+from local_inspection_service.model_providers.public_urls import PublicProviderURLs
+from local_inspection_service.model_providers.key_identity import KeyIdentity as _KeyIdentity
+from local_inspection_service.model_providers.local_secret_store import LocalSecretStore as _LocalSecretStore
+from local_inspection_service.model_providers.key_material_ports import KeyIdentityRuntime as _KeyIdentityRuntime, SecretPaths as _SecretPaths, SecretCodec as _SecretCodec, SecretFileOperations as _SecretFileOperations, SecretEnvironment as _SecretEnvironment, SecretPolicy as _SecretPolicy, SecretStoreAccess as _SecretStoreAccess
+from local_inspection_service.model_providers.key_registry import ProviderKeyRegistry as _ProviderKeyRegistry
+from local_inspection_service.model_providers.key_registry_ports import KeyMaterial as _KeyMaterial, KeyPresentation as _KeyPresentation, JsonKeyPolicy as _JsonKeyPolicy, ImageKeyPolicy as _ImageKeyPolicy, AgentKeyPolicy as _AgentKeyPolicy
+from local_inspection_service.model_providers.proxy_runtime import ProviderProxyRuntime
+from local_inspection_service.model_providers.proxy_runtime_ports import ProxySettings, ProxyCalls, ProxyTransports
+from local_inspection_service.model_providers.local_model_config import LocalModelConfig
+from local_inspection_service.model_providers.local_model_config_ports import LocalModelConfigFiles, LocalJsonModelPolicy, LocalImageModelPolicy
+from local_inspection_service.model_providers.legacy_settings_ports import LegacySettingsIO, LegacyPresentation, LegacyJsonPolicy, LegacyJsonCallbacks, LegacyImagePolicy, LegacyImageEnvironment, LegacyImageCallbacks
+from local_inspection_service.model_providers.legacy_json_settings import LegacyJsonSettings
+from local_inspection_service.model_providers.legacy_image_settings import LegacyImageSettings
+from local_inspection_service.agent.settings_policy import AgentSettingsPolicy as _AgentSettingsPolicy
+from local_inspection_service.agent.legacy_settings_store import LegacyAgentSettingsStore as _LegacyAgentSettingsStore
+from local_inspection_service.agent.settings_ports import AgentSettingsDefaults as _AgentSettingsDefaults, AgentProviderPolicy as _AgentProviderPolicy, AgentSettingsKeys as _AgentSettingsKeys, AgentSettingsAccess as _AgentSettingsAccess, AgentSettingsAuthorization as _AgentSettingsAuthorization, AgentSettingsPresentation as _AgentSettingsPresentation, AgentSettingsPaths as _AgentSettingsPaths, AgentSettingsCodec as _AgentSettingsCodec, AgentSettingsFiles as _AgentSettingsFiles, AgentSettingsPersistence as _AgentSettingsPersistence
+from .model_providers.configuration_composition import ProviderConfiguration
+_provider_configuration = ProviderConfiguration(
+    json_defaults=JsonDefaults(lambda: AI_DEFAULT_MODELS, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_BASE_URLS, lambda: AI_DEFAULT_PROVIDER, lambda: AI_PROVIDER_LABELS),
+    image_defaults=ImageDefaults(lambda: IMAGE_GENERATION_DEFAULT_MODELS, lambda: IMAGE_GENERATION_DEFAULT_BASE_URLS, lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_API_KEY_ENVS, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: IMAGE_GENERATION_PROVIDER_KEYS, lambda: IMAGE_GENERATION_PROVIDER_LABELS),
+    validation_capabilities=ValidationCapabilities(lambda: AI_SUPPORTED_PROVIDERS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, lambda: HTTPException, lambda: re.fullmatch, lambda: urlsplit),
+    public_url_capabilities=PublicUrlCapabilities(lambda: urlsplit, lambda: urlunsplit, lambda: bounded_text),
+    key_identity_runtime=_KeyIdentityRuntime(sha256=lambda: hashlib.sha256, time_ns=lambda: time.time_ns, substitute=lambda: re.sub, fullmatch=lambda: re.fullmatch, key_id=lambda: ai_key_id),
+    secret_paths=_SecretPaths(directory=lambda: DATA_DIR, file=lambda: LOCAL_SECRET_ENV_PATH),
+    secret_codec=_SecretCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
+    secret_file_operations=_SecretFileOperations(chmod=lambda: os.chmod, replace=lambda: os.replace),
+    secret_environment=_SecretEnvironment(values=lambda: os.environ),
+    secret_policy=_SecretPolicy(fullmatch=lambda: re.fullmatch, validate=lambda: validate_ai_key_env, default_environment=lambda: default_secret_env_name, identity=lambda: secret_key_item_id, text=lambda: bounded_text),
+    secret_store_access=_SecretStoreAccess(load=lambda: load_local_secret_env, save=lambda: save_local_secret_env, set=lambda: set_local_secret_env),
+    key_material=_KeyMaterial(environment=lambda: local_secret_env_value, identity=lambda: secret_key_item_id, default_environment=lambda: default_secret_env_name),
+    key_presentation=_KeyPresentation(text=lambda: bounded_text, mask=lambda: mask_secret, json_label=lambda: ai_provider_label, image_label=lambda: image_generation_provider_label, agent_label=lambda: agent_provider_label),
+    json_key_policy=_JsonKeyPolicy(default_provider=lambda: AI_DEFAULT_PROVIDER, supported=lambda: AI_SUPPORTED_PROVIDERS),
+    image_key_policy=_ImageKeyPolicy(default_provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, supported=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, validate=lambda: validate_image_generation_provider),
+    agent_key_policy=_AgentKeyPolicy(supported=lambda: AGENT_SUPPORTED_PROVIDERS, normalize=lambda: normalize_agent_provider),
+    proxy_settings=ProxySettings(AI_PROXY_ENV_NAMES=lambda: AI_PROXY_ENV_NAMES, AI_LOCAL_PROXY_URL=lambda: AI_LOCAL_PROXY_URL, AI_AUTO_LOCAL_PROXY_ENV=lambda: AI_AUTO_LOCAL_PROXY_ENV),
+    proxy_calls=ProxyCalls(validate_ai_proxy_url=lambda: validate_ai_proxy_url, ai_proxy_url_from_environment=lambda: ai_proxy_url_from_environment, env_flag_enabled=lambda: env_flag_enabled, local_proxy_available=lambda: local_proxy_available),
+    proxy_transports=ProxyTransports(os=lambda: os, socket=lambda: socket, urllib=lambda: urllib),
+    local_model_config_files=LocalModelConfigFiles(ensure_dirs=lambda: ensure_dirs, _business_files=lambda: _business_files, AI_LOCAL_CONFIG_PATH=lambda: AI_LOCAL_CONFIG_PATH, DATA_DIR=lambda: DATA_DIR, ai_local_config_temp_path=lambda: ai_local_config_temp_path, DEFAULT_AI_CONFIG=lambda: DEFAULT_AI_CONFIG, HTTPException=lambda: HTTPException),
+    local_json_model_policy=LocalJsonModelPolicy(AI_DEFAULT_PROVIDER=lambda: AI_DEFAULT_PROVIDER, AI_SUPPORTED_PROVIDERS=lambda: AI_SUPPORTED_PROVIDERS, AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS, default_ai_model=lambda: default_ai_model, default_ai_base_url=lambda: default_ai_base_url, validate_ai_proxy_url=lambda: validate_ai_proxy_url, validate_ai_timeout=lambda: validate_ai_timeout, normalize_ai_key_items=lambda: normalize_ai_key_items, ai_keys_for_provider=lambda: ai_keys_for_provider),
+    local_image_model_policy=LocalImageModelPolicy(IMAGE_GENERATION_DEFAULT_PROVIDER=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, IMAGE_GENERATION_SUPPORTED_PROVIDERS=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, default_image_generation_model=lambda: default_image_generation_model, default_image_generation_base_url=lambda: default_image_generation_base_url, validate_ai_base_url=lambda: validate_ai_base_url, validate_image_generation_timeout=lambda: validate_image_generation_timeout, normalize_image_key_items=lambda: normalize_image_key_items, image_keys_for_provider=lambda: image_keys_for_provider),
+    legacy_settings_i_o=LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
+    legacy_presentation=LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
+    legacy_json_policy=LegacyJsonPolicy(lambda: AI_DEFAULT_PROVIDER, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_TIMEOUT_SECONDS, lambda: AI_MODEL_OPTIONS, lambda: AI_SUPPORTED_PROVIDERS, lambda: AI_AUTO_LOCAL_PROXY_ENV),
+    legacy_json_callbacks=LegacyJsonCallbacks(lambda: default_ai_base_url, lambda: validate_ai_timeout, lambda: normalize_ai_key_items, lambda: ai_keys_for_provider, lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_label, lambda: env_flag_enabled),
+    legacy_image_policy=LegacyImagePolicy(lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, lambda: IMAGE_GENERATION_MODEL_OPTIONS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS),
+    legacy_image_environment=LegacyImageEnvironment(lambda: IMAGE_GENERATION_PROVIDER_ENV, lambda: IMAGE_GENERATION_MODEL_ENV, lambda: IMAGE_GENERATION_BASE_URL_ENV, lambda: IMAGE_GENERATION_TIMEOUT_ENV, lambda: IMAGE_GENERATION_NAMED_API_KEY_ENV, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
+    legacy_image_callbacks=LegacyImageCallbacks(lambda: default_image_generation_model, lambda: default_image_generation_base_url, lambda: default_image_generation_api_key_env, lambda: validate_image_generation_timeout, lambda: normalize_image_key_items, lambda: image_keys_for_provider, lambda: image_generation_provider_label, lambda: image_generation_provider_key),
+    agent_settings_defaults=_AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
+    agent_provider_policy=_AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
+    agent_settings_keys=_AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
+    agent_settings_paths=_AgentSettingsPaths(file=lambda: AGENT_LOCAL_CONFIG_PATH, directory=lambda: DATA_DIR),
+    agent_settings_codec=_AgentSettingsCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
+    agent_settings_files=_AgentSettingsFiles(replace=lambda: os.replace, chmod=lambda: os.chmod),
+    agent_settings_persistence=_AgentSettingsPersistence(normalize=lambda: normalize_agent_config, keys=lambda: normalize_agent_key_items, persist=lambda: persist_secret_key_items),
 )
 
+_provider_configuration_defaults = _provider_configuration.defaults
+_provider_configuration_validation = _provider_configuration.validation
+_provider_public_urls = _provider_configuration.public_urls
+
 def default_ai_model(provider: str) -> str:
-    return _provider_configuration_defaults.default_ai_model(provider)
+    return _provider_configuration.default_ai_model(provider)
 
 
 def default_ai_base_url(provider: str) -> str:
-    return _provider_configuration_defaults.default_ai_base_url(provider)
+    return _provider_configuration.default_ai_base_url(provider)
 
 
 def ai_provider_label(provider: str) -> str:
-    return _provider_configuration_defaults.ai_provider_label(provider)
+    return _provider_configuration.ai_provider_label(provider)
 
 
 def default_image_generation_model(provider: str) -> str:
-    return _provider_configuration_defaults.default_image_generation_model(provider)
+    return _provider_configuration.default_image_generation_model(provider)
 
 
 def default_image_generation_base_url(provider: str) -> str:
-    return _provider_configuration_defaults.default_image_generation_base_url(provider)
+    return _provider_configuration.default_image_generation_base_url(provider)
 
 
 def default_image_generation_api_key_env(provider: str) -> str:
-    return _provider_configuration_defaults.default_image_generation_api_key_env(provider)
+    return _provider_configuration.default_image_generation_api_key_env(provider)
 
 
 def image_generation_provider_key(provider: str) -> str:
-    return _provider_configuration_defaults.image_generation_provider_key(provider)
+    return _provider_configuration.image_generation_provider_key(provider)
 
 
 def image_generation_provider_label(provider: str) -> str:
-    return _provider_configuration_defaults.image_generation_provider_label(provider)
+    return _provider_configuration.image_generation_provider_label(provider)
 
 
 from .model_providers.key_identity import KeyIdentity as _KeyIdentity
 from .model_providers.local_secret_store import LocalSecretStore as _LocalSecretStore
 from .model_providers.key_material_ports import KeyIdentityRuntime as _KeyIdentityRuntime, SecretPaths as _SecretPaths, SecretCodec as _SecretCodec, SecretFileOperations as _SecretFileOperations, SecretEnvironment as _SecretEnvironment, SecretPolicy as _SecretPolicy, SecretStoreAccess as _SecretStoreAccess
-_key_identity = _KeyIdentity(
-    _KeyIdentityRuntime(sha256=lambda: hashlib.sha256, time_ns=lambda: time.time_ns, substitute=lambda: re.sub, fullmatch=lambda: re.fullmatch, key_id=lambda: ai_key_id),
-)
-_local_secret_store = _LocalSecretStore(
-    _SecretPaths(directory=lambda: DATA_DIR, file=lambda: LOCAL_SECRET_ENV_PATH),
-    _SecretCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
-    _SecretFileOperations(chmod=lambda: os.chmod, replace=lambda: os.replace),
-    _SecretEnvironment(values=lambda: os.environ),
-    _SecretPolicy(fullmatch=lambda: re.fullmatch, validate=lambda: validate_ai_key_env, default_environment=lambda: default_secret_env_name, identity=lambda: secret_key_item_id, text=lambda: bounded_text),
-    _SecretStoreAccess(load=lambda: load_local_secret_env, save=lambda: save_local_secret_env, set=lambda: set_local_secret_env),
-)
+_key_identity = _provider_configuration.identity
+_local_secret_store = _provider_configuration.secrets
 
 def mask_secret(value: str) -> str:
-    return _key_identity.mask_secret(value)
+    return _provider_configuration.mask_secret(value)
 
 
 def ai_key_id(secret: str) -> str:
-    return _key_identity.ai_key_id(secret)
+    return _provider_configuration.ai_key_id(secret)
 
 
-def secret_key_item_id(env_name: str, secret: str = "") -> str:
-    return _key_identity.secret_key_item_id(env_name, secret)
+def secret_key_item_id(env_name: str, secret: str='') -> str:
+    return _provider_configuration.secret_key_item_id(env_name, secret)
 
 
-def default_secret_env_name(prefix: str, secret: str = "", *, provider: str = "") -> str:
-    return _key_identity.default_secret_env_name(prefix, secret, provider=provider)
+def default_secret_env_name(prefix: str, secret: str='', *, provider: str='') -> str:
+    return _provider_configuration.default_secret_env_name(prefix, secret, provider=provider)
 
 
 def load_local_secret_env() -> dict[str, str]:
-    return _local_secret_store.load_local_secret_env()
+    return _provider_configuration.load_local_secret_env()
 
 
 def save_local_secret_env(values: dict[str, str]) -> None:
-    return _local_secret_store.save_local_secret_env(values)
+    return _provider_configuration.save_local_secret_env(values)
 
 
 def local_secret_env_value(name: str) -> str:
-    return _local_secret_store.local_secret_env_value(name)
+    return _provider_configuration.local_secret_env_value(name)
 
 
 def set_local_secret_env(name: str, value: str) -> None:
-    return _local_secret_store.set_local_secret_env(name, value)
+    return _provider_configuration.set_local_secret_env(name, value)
 
 
 def delete_local_secret_env(name: str) -> None:
-    return _local_secret_store.delete_local_secret_env(name)
+    return _provider_configuration.delete_local_secret_env(name)
 
 
 def persist_secret_key_items(items: list[dict[str, str]], default_prefix: str) -> list[dict[str, str]]:
-    return _local_secret_store.persist_secret_key_items(items, default_prefix)
+    return _provider_configuration.persist_secret_key_items(items, default_prefix)
 
 
 from .model_providers.key_registry import ProviderKeyRegistry as _ProviderKeyRegistry
 from .model_providers.key_registry_ports import KeyMaterial as _KeyMaterial, KeyPresentation as _KeyPresentation, JsonKeyPolicy as _JsonKeyPolicy, ImageKeyPolicy as _ImageKeyPolicy, AgentKeyPolicy as _AgentKeyPolicy
-_provider_key_registry = _ProviderKeyRegistry(
-    _KeyMaterial(environment=lambda: local_secret_env_value, identity=lambda: secret_key_item_id, default_environment=lambda: default_secret_env_name),
-    _KeyPresentation(text=lambda: bounded_text, mask=lambda: mask_secret, json_label=lambda: ai_provider_label, image_label=lambda: image_generation_provider_label, agent_label=lambda: agent_provider_label),
-    _JsonKeyPolicy(default_provider=lambda: AI_DEFAULT_PROVIDER, supported=lambda: AI_SUPPORTED_PROVIDERS),
-    _ImageKeyPolicy(default_provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, supported=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, validate=lambda: validate_image_generation_provider),
-    _AgentKeyPolicy(supported=lambda: AGENT_SUPPORTED_PROVIDERS, normalize=lambda: normalize_agent_provider),
-)
+_provider_key_registry = _provider_configuration.keys
 
-def normalize_ai_key_items(config: dict[str, Any], provider: str | None = None) -> list[dict[str, str]]:
-    return _provider_key_registry.normalize_ai_key_items(config, provider)
+def normalize_ai_key_items(config: dict[str, Any], provider: str | None=None) -> list[dict[str, str]]:
+    return _provider_configuration.normalize_ai_key_items(config, provider)
 
 
 def public_ai_key_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
-    return _provider_key_registry.public_ai_key_items(items)
+    return _provider_configuration.public_ai_key_items(items)
 
 
 def ai_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[dict[str, str]]:
-    return _provider_key_registry.ai_keys_for_provider(items, provider)
+    return _provider_configuration.ai_keys_for_provider(items, provider)
 
 
 def normalize_image_key_items(config: dict[str, Any], provider: str) -> list[dict[str, str]]:
-    return _provider_key_registry.normalize_image_key_items(config, provider)
+    return _provider_configuration.normalize_image_key_items(config, provider)
 
 
 def normalize_agent_key_items(config: dict[str, Any]) -> list[dict[str, str]]:
-    return _provider_key_registry.normalize_agent_key_items(config)
+    return _provider_configuration.normalize_agent_key_items(config)
 
 
 def image_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[dict[str, str]]:
-    return _provider_key_registry.image_keys_for_provider(items, provider)
+    return _provider_configuration.image_keys_for_provider(items, provider)
 
 
 def agent_keys_for_provider(items: list[dict[str, str]], provider: str) -> list[dict[str, str]]:
-    return _provider_key_registry.agent_keys_for_provider(items, provider)
+    return _provider_configuration.agent_keys_for_provider(items, provider)
 
 
 def validate_ai_provider(value: Any) -> str:
-    return _provider_configuration_validation.validate_ai_provider(value)
+    return _provider_configuration.validate_ai_provider(value)
 
 
 def validate_image_generation_provider(value: Any) -> str:
-    return _provider_configuration_validation.validate_image_generation_provider(value)
+    return _provider_configuration.validate_image_generation_provider(value)
 
 
 def validate_ai_model(value: Any) -> str:
-    return _provider_configuration_validation.validate_ai_model(value)
+    return _provider_configuration.validate_ai_model(value)
 
 
 def validate_ai_base_url(value: Any) -> str:
-    return _provider_configuration_validation.validate_ai_base_url(value)
+    return _provider_configuration.validate_ai_base_url(value)
 
 
 def public_ai_base_url(value: Any) -> str:
-    return _provider_public_urls.public_ai_base_url(value)
+    return _provider_configuration.public_ai_base_url(value)
 
 
 def masked_url_for_status(value: Any) -> str:
-    return _provider_public_urls.masked_url_for_status(value)
+    return _provider_configuration.masked_url_for_status(value)
 
 
 def validate_ai_proxy_url(value: Any) -> str:
-    return _provider_configuration_validation.validate_ai_proxy_url(value)
+    return _provider_configuration.validate_ai_proxy_url(value)
 
 
 from .model_providers.proxy_runtime import ProviderProxyRuntime
 from .model_providers.proxy_runtime_ports import ProxySettings, ProxyCalls, ProxyTransports
 
-_provider_proxy_runtime = ProviderProxyRuntime(
-    settings=ProxySettings(
-        AI_PROXY_ENV_NAMES=lambda: AI_PROXY_ENV_NAMES,
-        AI_LOCAL_PROXY_URL=lambda: AI_LOCAL_PROXY_URL,
-        AI_AUTO_LOCAL_PROXY_ENV=lambda: AI_AUTO_LOCAL_PROXY_ENV,
-    ),
-    calls=ProxyCalls(
-        validate_ai_proxy_url=lambda: validate_ai_proxy_url,
-        ai_proxy_url_from_environment=lambda: ai_proxy_url_from_environment,
-        env_flag_enabled=lambda: env_flag_enabled,
-        local_proxy_available=lambda: local_proxy_available,
-    ),
-    transports=ProxyTransports(
-        os=lambda: os,
-        socket=lambda: socket,
-        urllib=lambda: urllib,
-    ),
-)
+_provider_proxy_runtime = _provider_configuration.proxy
 
 
 def ai_proxy_url_from_environment() -> tuple[str, str]:
-    return _provider_proxy_runtime.ai_proxy_url_from_environment()
+    return _provider_configuration.ai_proxy_url_from_environment()
 
 
-def local_proxy_available(proxy_url: str = AI_LOCAL_PROXY_URL) -> bool:
-    return _provider_proxy_runtime.local_proxy_available(proxy_url)
+def local_proxy_available(proxy_url: str=AI_LOCAL_PROXY_URL) -> bool:
+    return _provider_configuration.local_proxy_available(proxy_url)
 
 
-def env_flag_enabled(name: str, default: bool = True) -> bool:
-    return _provider_proxy_runtime.env_flag_enabled(name, default)
+def env_flag_enabled(name: str, default: bool=True) -> bool:
+    return _provider_configuration.env_flag_enabled(name, default)
 
 
 def ai_proxy_url_from_config(local: dict[str, Any], provider: str) -> tuple[str, str, bool]:
-    return _provider_proxy_runtime.ai_proxy_url_from_config(local, provider)
+    return _provider_configuration.ai_proxy_url_from_config(local, provider)
 
 
 def ai_urlopen(request: urllib.request.Request, settings: dict[str, Any], *, timeout: float):
-    return _provider_proxy_runtime.ai_urlopen(request, settings, timeout=timeout)
+    return _provider_configuration.ai_urlopen(request, settings, timeout=timeout)
 
 
 def validate_ai_timeout(value: Any) -> float:
-    return _provider_configuration_validation.validate_ai_timeout(value)
+    return _provider_configuration.validate_ai_timeout(value)
 
 
 def validate_image_generation_timeout(value: Any) -> float:
-    return _provider_configuration_validation.validate_image_generation_timeout(value)
+    return _provider_configuration.validate_image_generation_timeout(value)
 
 
 def validate_ai_key_env(value: Any) -> str:
-    return _provider_configuration_validation.validate_ai_key_env(value)
+    return _provider_configuration.validate_ai_key_env(value)
 
 
 from .model_providers.local_model_config import LocalModelConfig
 from .model_providers.local_model_config_ports import LocalModelConfigFiles, LocalJsonModelPolicy, LocalImageModelPolicy
 
-_local_model_config = LocalModelConfig(
-    files=LocalModelConfigFiles(
-        ensure_dirs=lambda: ensure_dirs,
-        _business_files=lambda: _business_files,
-        AI_LOCAL_CONFIG_PATH=lambda: AI_LOCAL_CONFIG_PATH,
-        DATA_DIR=lambda: DATA_DIR,
-        ai_local_config_temp_path=lambda: ai_local_config_temp_path,
-        DEFAULT_AI_CONFIG=lambda: DEFAULT_AI_CONFIG,
-        HTTPException=lambda: HTTPException,
-    ),
-    json_policy=LocalJsonModelPolicy(
-        AI_DEFAULT_PROVIDER=lambda: AI_DEFAULT_PROVIDER,
-        AI_SUPPORTED_PROVIDERS=lambda: AI_SUPPORTED_PROVIDERS,
-        AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS,
-        default_ai_model=lambda: default_ai_model,
-        default_ai_base_url=lambda: default_ai_base_url,
-        validate_ai_proxy_url=lambda: validate_ai_proxy_url,
-        validate_ai_timeout=lambda: validate_ai_timeout,
-        normalize_ai_key_items=lambda: normalize_ai_key_items,
-        ai_keys_for_provider=lambda: ai_keys_for_provider,
-    ),
-    image_policy=LocalImageModelPolicy(
-        IMAGE_GENERATION_DEFAULT_PROVIDER=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER,
-        IMAGE_GENERATION_SUPPORTED_PROVIDERS=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS,
-        IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS,
-        default_image_generation_model=lambda: default_image_generation_model,
-        default_image_generation_base_url=lambda: default_image_generation_base_url,
-        validate_ai_base_url=lambda: validate_ai_base_url,
-        validate_image_generation_timeout=lambda: validate_image_generation_timeout,
-        normalize_image_key_items=lambda: normalize_image_key_items,
-        image_keys_for_provider=lambda: image_keys_for_provider,
-    ),
-)
+_local_model_config = _provider_configuration.local
 
 
 def load_ai_local_config() -> dict[str, Any]:
-    return _local_model_config.load_ai_local_config()
+    return _provider_configuration.load_ai_local_config()
 
 
 def ai_local_config_temp_path() -> Path:
-    return _local_model_config.ai_local_config_temp_path()
+    return _provider_configuration.ai_local_config_temp_path()
 
 
 def save_ai_local_config(config: dict[str, Any]) -> None:
-    return _local_model_config.save_ai_local_config(config)
+    return _provider_configuration.save_ai_local_config(config)
 
 
 
@@ -5056,37 +5044,25 @@ def cleanup_auto_optimize_retired_candidate_locked(state: dict[str, Any], model_
 
 
 def ai_detection_settings(purpose: str = "pipeline") -> dict[str, Any]:
-    return model_profile_service.resolve(purpose)
+    return _model_profile_configuration.ai_detection_settings(purpose)
 
 
 def image_generation_settings() -> dict[str, Any]:
-    return model_profile_service.resolve("image")
+    return _model_profile_configuration.image_generation_settings()
 
 
 def load_agent_config() -> dict[str, Any]:
-    value = model_profile_service.resolve("training_assistant")
-    return {**DEFAULT_AGENT_CONFIG, **value, "enabled": value.get("configured", False)}
+    return _model_profile_configuration.load_agent_config()
 
 
 from local_inspection_service.model_providers.legacy_settings_ports import LegacySettingsIO, LegacyPresentation, LegacyJsonPolicy, LegacyJsonCallbacks, LegacyImagePolicy, LegacyImageEnvironment, LegacyImageCallbacks
 from local_inspection_service.model_providers.legacy_json_settings import LegacyJsonSettings
 from local_inspection_service.model_providers.legacy_image_settings import LegacyImageSettings
-_legacy_json_settings_service = LegacyJsonSettings(
-    LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
-    LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
-    LegacyJsonPolicy(lambda: AI_DEFAULT_PROVIDER, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_TIMEOUT_SECONDS, lambda: AI_MODEL_OPTIONS, lambda: AI_SUPPORTED_PROVIDERS, lambda: AI_AUTO_LOCAL_PROXY_ENV),
-    LegacyJsonCallbacks(lambda: default_ai_base_url, lambda: validate_ai_timeout, lambda: normalize_ai_key_items, lambda: ai_keys_for_provider, lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_label, lambda: env_flag_enabled),
-)
-_legacy_image_settings_service = LegacyImageSettings(
-    LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
-    LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
-    LegacyImagePolicy(lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, lambda: IMAGE_GENERATION_MODEL_OPTIONS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS),
-    LegacyImageEnvironment(lambda: IMAGE_GENERATION_PROVIDER_ENV, lambda: IMAGE_GENERATION_MODEL_ENV, lambda: IMAGE_GENERATION_BASE_URL_ENV, lambda: IMAGE_GENERATION_TIMEOUT_ENV, lambda: IMAGE_GENERATION_NAMED_API_KEY_ENV, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
-    LegacyImageCallbacks(lambda: default_image_generation_model, lambda: default_image_generation_base_url, lambda: default_image_generation_api_key_env, lambda: validate_image_generation_timeout, lambda: normalize_image_key_items, lambda: image_keys_for_provider, lambda: image_generation_provider_label, lambda: image_generation_provider_key),
-)
+_legacy_json_settings_service = _provider_configuration.legacy_json
+_legacy_image_settings_service = _provider_configuration.legacy_image
 
 def _legacy_ai_detection_settings() -> dict[str, Any]:
-    return _legacy_json_settings_service._legacy_ai_detection_settings()
+    return _provider_configuration._legacy_ai_detection_settings()
 
 
 from local_inspection_service.auth.status_ports import StatusPolicy, StatusSources, StatusProjectionCalls
@@ -5147,7 +5123,7 @@ def public_config_summary_for_user(user: dict[str, Any] | None, config: dict[str
 
 
 def _legacy_image_generation_settings() -> dict[str, Any]:
-    return _legacy_image_settings_service._legacy_image_generation_settings()
+    return _provider_configuration._legacy_image_generation_settings()
 
 
 def public_image_generation_status() -> dict[str, Any]:
@@ -5213,7 +5189,7 @@ from .model_providers.openai_transport import (
 from .model_providers.openai_ports import OpenAITransportIO, OpenAITransportErrors
 
 _openai_transport_io = OpenAITransportIO(
-    lambda: ai_urlopen,
+    lambda: _provider_configuration.ai_urlopen,
     lambda: parse_ai_json_object,
     lambda: bounded_text,
     lambda: sha256_bytes,
@@ -5244,12 +5220,12 @@ from .model_providers.gemini_transport import (
 from .model_providers.gemini_ports import GeminiTransportIO, GeminiTransportErrors
 
 _gemini_transport_io = GeminiTransportIO(
-    lambda: ai_urlopen,
+    lambda: _provider_configuration.ai_urlopen,
     lambda: parse_ai_json_object,
     lambda: bounded_text,
     lambda: data_url_payload,
     lambda: decode_b64_image,
-    lambda: masked_url_for_status,
+    lambda: _provider_configuration.masked_url_for_status,
     lambda: quote,
     lambda: provider_http_error,
 )
@@ -5286,10 +5262,10 @@ from .model_providers.agnes_transport import AgnesImageProvider as _AgnesImagePr
 from .model_providers.qwen_image_transport import QwenImageProvider as _QwenImageProvider
 
 _image_transport_io = ImageTransportIO(
-    lambda: ai_urlopen,
+    lambda: _provider_configuration.ai_urlopen,
     lambda: bounded_text,
     lambda: decode_b64_image,
-    lambda: masked_url_for_status,
+    lambda: _provider_configuration.masked_url_for_status,
     lambda: requests.get,
 )
 _image_transport_errors = ImageTransportErrors(
@@ -5334,7 +5310,7 @@ _provider_selection = ProviderSelection(ProviderFactories(
     lambda: ai_detection_settings, lambda: ai_provider_from_settings,
 ))
 _provider_keys = ProviderKeySelection(ProviderKeys(
-    lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_key_candidates,
+    lambda: _provider_configuration.secret_key_item_id, lambda: bounded_text, lambda: ai_provider_key_candidates,
 ))
 _provider_retry_errors = RetryErrors(
     lambda: AiProviderError, lambda: AiProviderNonRetryableError,
@@ -6680,9 +6656,9 @@ _image_provider_configuration = ImageProviderConfiguration(
     selection=ImageProviderSelection(
         CURSOR_IMAGE_MODEL_PRIORITY=lambda: CURSOR_IMAGE_MODEL_PRIORITY,
         CURSOR_IMAGE_MODEL_KEYWORDS=lambda: CURSOR_IMAGE_MODEL_KEYWORDS,
-        normalize_agent_model_options=lambda: normalize_agent_model_options,
+        normalize_agent_model_options=lambda: _provider_configuration.normalize_agent_model_options,
         cursor_image_model_score=lambda: cursor_image_model_score,
-        normalize_agent_provider=lambda: normalize_agent_provider,
+        normalize_agent_provider=lambda: _provider_configuration.normalize_agent_provider,
         AGENT_PROVIDER_CURSOR=lambda: AGENT_PROVIDER_CURSOR,
         agent_connected=lambda: agent_connected,
     ),
@@ -6695,7 +6671,7 @@ _image_provider_configuration = ImageProviderConfiguration(
         CURSOR_IMAGE2_API_KEY_ENV=lambda: CURSOR_IMAGE2_API_KEY_ENV,
         CURSOR_IMAGE2_MODEL_ENV=lambda: CURSOR_IMAGE2_MODEL_ENV,
         CURSOR_IMAGE2_DEFAULT_MODEL=lambda: CURSOR_IMAGE2_DEFAULT_MODEL,
-        masked_url_for_status=lambda: masked_url_for_status,
+        masked_url_for_status=lambda: _provider_configuration.masked_url_for_status,
         cursor_image2_settings=lambda: cursor_image2_settings,
         LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
         CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
@@ -9932,57 +9908,47 @@ from .agent.settings_policy import AgentSettingsPolicy as _AgentSettingsPolicy
 from .agent.settings_projection import AgentSettingsProjection as _AgentSettingsProjection
 from .agent.legacy_settings_store import LegacyAgentSettingsStore as _LegacyAgentSettingsStore
 from .agent.settings_ports import AgentSettingsDefaults as _AgentSettingsDefaults, AgentProviderPolicy as _AgentProviderPolicy, AgentSettingsKeys as _AgentSettingsKeys, AgentSettingsAccess as _AgentSettingsAccess, AgentSettingsAuthorization as _AgentSettingsAuthorization, AgentSettingsPresentation as _AgentSettingsPresentation, AgentSettingsPaths as _AgentSettingsPaths, AgentSettingsCodec as _AgentSettingsCodec, AgentSettingsFiles as _AgentSettingsFiles, AgentSettingsPersistence as _AgentSettingsPersistence
-_agent_settings_policy = _AgentSettingsPolicy(
-    _AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
-    _AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
-    _AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
-)
+_agent_settings_policy = _provider_configuration.agent_policy
 _agent_settings_projection = _AgentSettingsProjection(
     _AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
-    _AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
+    _AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: _provider_configuration.agent_base_url_host, is_cursor=lambda: _provider_configuration.is_cursor_base_url, detect=lambda: _provider_configuration.detect_agent_provider_from_base_url, normalize=lambda: _provider_configuration.normalize_agent_provider, options=lambda: _provider_configuration.normalize_agent_model_options),
     _AgentSettingsAccess(required=lambda: agent_required_fields_present, credentials=lambda: agent_credentials_present, connected=lambda: agent_connected, recommendation=lambda: agent_recommendation_supported, load=lambda: load_agent_config),
     _AgentSettingsAuthorization(is_admin=lambda: user_is_admin, current_user=lambda: current_auth_user),
-    _AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
-    _AgentSettingsPresentation(provider_label=lambda: agent_provider_label, public_keys=lambda: public_ai_key_items, mask=lambda: mask_secret),
+    _AgentSettingsKeys(validate_environment=lambda: _provider_configuration.validate_ai_key_env, normalize=lambda: _provider_configuration.normalize_agent_key_items, for_provider=lambda: _provider_configuration.agent_keys_for_provider, environment_value=lambda: _provider_configuration.local_secret_env_value),
+    _AgentSettingsPresentation(provider_label=lambda: _provider_configuration.agent_provider_label, public_keys=lambda: _provider_configuration.public_ai_key_items, mask=lambda: _provider_configuration.mask_secret),
 )
-_legacy_agent_settings_store = _LegacyAgentSettingsStore(
-    _AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
-    _AgentSettingsPaths(file=lambda: AGENT_LOCAL_CONFIG_PATH, directory=lambda: DATA_DIR),
-    _AgentSettingsCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
-    _AgentSettingsFiles(replace=lambda: os.replace, chmod=lambda: os.chmod),
-    _AgentSettingsPersistence(normalize=lambda: normalize_agent_config, keys=lambda: normalize_agent_key_items, persist=lambda: persist_secret_key_items),
-)
+_legacy_agent_settings_store = _provider_configuration.legacy_agent
 
 def agent_base_url_host(base_url: str) -> str:
-    return _agent_settings_policy.agent_base_url_host(base_url)
+    return _provider_configuration.agent_base_url_host(base_url)
 
 
 def is_cursor_base_url(base_url: str) -> bool:
-    return _agent_settings_policy.is_cursor_base_url(base_url)
+    return _provider_configuration.is_cursor_base_url(base_url)
 
 
 def detect_agent_provider_from_base_url(base_url: str) -> str:
-    return _agent_settings_policy.detect_agent_provider_from_base_url(base_url)
+    return _provider_configuration.detect_agent_provider_from_base_url(base_url)
 
 
-def normalize_agent_provider(provider: str | None, base_url: str = "") -> str:
-    return _agent_settings_policy.normalize_agent_provider(provider, base_url)
+def normalize_agent_provider(provider: str | None, base_url: str='') -> str:
+    return _provider_configuration.normalize_agent_provider(provider, base_url)
 
 
 def agent_provider_label(provider: str) -> str:
-    return _agent_settings_policy.agent_provider_label(provider)
+    return _provider_configuration.agent_provider_label(provider)
 
 
 def normalize_agent_model_options(value: Any) -> list[dict[str, str]]:
-    return _agent_settings_policy.normalize_agent_model_options(value)
+    return _provider_configuration.normalize_agent_model_options(value)
 
 
-def agent_model_options_from_items(items: Any, *, prepend: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
-    return _agent_settings_policy.agent_model_options_from_items(items, prepend=prepend)
+def agent_model_options_from_items(items: Any, *, prepend: list[dict[str, str]] | None=None) -> list[dict[str, str]]:
+    return _provider_configuration.agent_model_options_from_items(items, prepend=prepend)
 
 
 def normalize_agent_config(config: dict[str, Any]) -> dict[str, Any]:
-    return _agent_settings_policy.normalize_agent_config(config)
+    return _provider_configuration.normalize_agent_config(config)
 
 
 def agent_required_fields_present(config: dict[str, Any]) -> bool:
@@ -10002,11 +9968,11 @@ def agent_recommendation_supported(config: dict[str, Any]) -> bool:
 
 
 def _legacy_load_agent_config() -> dict[str, Any]:
-    return _legacy_agent_settings_store._legacy_load_agent_config()
+    return _provider_configuration._legacy_load_agent_config()
 
 
 def save_agent_config(config: dict[str, Any]) -> None:
-    return _legacy_agent_settings_store.save_agent_config(config)
+    return _provider_configuration.save_agent_config(config)
 
 
 def agent_configured(config: dict[str, Any] | None = None) -> bool:
@@ -10026,19 +9992,19 @@ _agent_protocol_policy = _AgentProtocolPolicy(
     _AgentProtocolRuntime(base64_encode=lambda: base64.b64encode, cursor_base_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL),
 )
 _agent_chat_transport = _AgentChatTransport(
-    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
+    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: _provider_configuration.normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: _provider_configuration.is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
     _AgentHttpIO(request=lambda: urllib.request.Request, open=lambda: urllib.request.urlopen, http_error=lambda: urllib.error.HTTPError, url_error=lambda: urllib.error.URLError, error_message=lambda: agent_http_error_message, text=lambda: bounded_text),
     _AgentInvocationCodec(loads=lambda: json.loads, dumps=lambda: json.dumps),
     _AgentChatCalls(chat_url=lambda: openai_compatible_chat_url, legacy_chat=lambda: agent_openai_chat_completion, generate=lambda: generate_provider_json_with_fallback),
 )
 _agent_connection_discovery = _AgentConnectionDiscovery(
-    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
+    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: _provider_configuration.normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: _provider_configuration.is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
     _AgentHttpIO(request=lambda: urllib.request.Request, open=lambda: urllib.request.urlopen, http_error=lambda: urllib.error.HTTPError, url_error=lambda: urllib.error.URLError, error_message=lambda: agent_http_error_message, text=lambda: bounded_text),
     _AgentInvocationCodec(loads=lambda: json.loads, dumps=lambda: json.dumps),
-    _AgentModelCalls(models_url=lambda: openai_compatible_models_url, auth_headers=lambda: cursor_auth_headers, cursor_url=lambda: cursor_api_url, options=lambda: agent_model_options_from_items, available=lambda: cursor_model_available, fetch=lambda: fetch_openai_compatible_model_options, cursor_test=lambda: test_cursor_agent_connection, openai_test=lambda: test_openai_agent_connection, legacy_chat=lambda: agent_openai_chat_completion),
+    _AgentModelCalls(models_url=lambda: openai_compatible_models_url, auth_headers=lambda: cursor_auth_headers, cursor_url=lambda: cursor_api_url, options=lambda: _provider_configuration.agent_model_options_from_items, available=lambda: cursor_model_available, fetch=lambda: fetch_openai_compatible_model_options, cursor_test=lambda: test_cursor_agent_connection, openai_test=lambda: test_openai_agent_connection, legacy_chat=lambda: agent_openai_chat_completion),
 )
 _agent_recommendation = _AgentRecommendation(
-    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
+    _AgentInvocationSettings(load=lambda: load_agent_config, normalize_provider=lambda: _provider_configuration.normalize_agent_provider, openai_provider=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, cursor_provider=lambda: AGENT_PROVIDER_CURSOR, cursor_message=lambda: AGENT_CURSOR_RECOMMENDATION_MESSAGE, is_cursor_url=lambda: _provider_configuration.is_cursor_base_url, required=lambda: agent_required_fields_present, connected=lambda: agent_connected, recommended=lambda: agent_recommendation_supported),
     _AgentInvocationCodec(loads=lambda: json.loads, dumps=lambda: json.dumps),
     _AgentResponseParsing(substitute=lambda: re.sub, search=lambda: re.search, dotall=lambda: re.DOTALL),
     _AgentRecommendationInputs(config=lambda: load_config, selected=lambda: selected_accessories, material=lambda: accessory_material_type, background=lambda: selected_background_set_id, current_user=lambda: _request_user.get, selection_error=lambda: HTTPException),
@@ -10120,9 +10086,9 @@ _agent_settings_api = _AgentSettingsApi(
     _AgentSettingsHttpAccess(admin=lambda: require_admin_role, http_error=lambda: HTTPException),
     _AgentSettingsProjectionCall(public=lambda: public_agent_config),
     _AgentRecommendationCall(recommend=lambda: agent_recommendation),
-    _AgentLegacySettingsPolicy(load=lambda: load_agent_config, normalize=lambda: normalize_agent_config, credentials=lambda: agent_credentials_present, provider=lambda: normalize_agent_provider, supported=lambda: AGENT_SUPPORTED_PROVIDERS, cursor=lambda: AGENT_PROVIDER_CURSOR, label=lambda: agent_provider_label, options=lambda: normalize_agent_model_options),
-    _AgentLegacyKeyPolicy(validate=lambda: validate_ai_key_env, name=lambda: default_secret_env_name, normalize=lambda: normalize_agent_key_items, identity=lambda: secret_key_item_id, for_provider=lambda: agent_keys_for_provider),
-    _AgentLegacySettingsEffects(save=lambda: save_agent_config, secret=lambda: set_local_secret_env, test=lambda: test_agent_connection, now=lambda: time.time),
+    _AgentLegacySettingsPolicy(load=lambda: load_agent_config, normalize=lambda: _provider_configuration.normalize_agent_config, credentials=lambda: agent_credentials_present, provider=lambda: _provider_configuration.normalize_agent_provider, supported=lambda: AGENT_SUPPORTED_PROVIDERS, cursor=lambda: AGENT_PROVIDER_CURSOR, label=lambda: _provider_configuration.agent_provider_label, options=lambda: _provider_configuration.normalize_agent_model_options),
+    _AgentLegacyKeyPolicy(validate=lambda: _provider_configuration.validate_ai_key_env, name=lambda: _provider_configuration.default_secret_env_name, normalize=lambda: _provider_configuration.normalize_agent_key_items, identity=lambda: _provider_configuration.secret_key_item_id, for_provider=lambda: _provider_configuration.agent_keys_for_provider),
+    _AgentLegacySettingsEffects(save=lambda: _provider_configuration.save_agent_config, secret=lambda: _provider_configuration.set_local_secret_env, test=lambda: test_agent_connection, now=lambda: time.time),
 )
 
 @app.get("/api/agent/config")
@@ -10465,7 +10431,7 @@ from .agent.pose_render_content import PoseRenderContent as _PoseRenderContent
 from .agent.pose_artifact_store import PoseArtifactStore as _PoseArtifactStore
 from .agent.pose_render_ports import PoseRenderConfigurationSources as _PoseRenderConfigurationSources, PoseRenderConfigurationDefaults as _PoseRenderConfigurationDefaults, PoseRenderReferences as _PoseRenderReferences, PoseRenderPresentation as _PoseRenderPresentation, PoseRenderPaths as _PoseRenderPaths, PoseRenderArtifacts as _PoseRenderArtifacts
 _pose_render_configuration = _PoseRenderConfiguration(
-    _PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: image_generation_provider_key, provider_label=lambda: image_generation_provider_label, model=lambda: default_image_generation_model, base_url=lambda: default_image_generation_base_url, key_environment=lambda: default_image_generation_api_key_env),
+    _PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: _provider_configuration.image_generation_provider_key, provider_label=lambda: _provider_configuration.image_generation_provider_label, model=lambda: _provider_configuration.default_image_generation_model, base_url=lambda: _provider_configuration.default_image_generation_base_url, key_environment=lambda: _provider_configuration.default_image_generation_api_key_env),
     _PoseRenderConfigurationDefaults(provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, timeout=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, key_environment=lambda: IMAGE_GENERATION_API_KEY_ENV, model_environment=lambda: IMAGE_GENERATION_MODEL_ENV, timeout_environment=lambda: IMAGE_GENERATION_TIMEOUT_ENV, high_fidelity_model=lambda: AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL, legacy_model_environment=lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, legacy_timeout_environment=lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
 )
 _pose_render_content = _PoseRenderContent(
@@ -12446,29 +12412,16 @@ def react_production_spa_enabled() -> bool:
     return True
 
 
-from .model_profiles.api import register as register_model_profiles
-from .model_profiles.service import Service as ModelProfileService
-from .model_profiles.dependencies import ProfileDependencies, ProfileApiDependencies
-from .model_profiles.legacy import LegacyConfiguration, sources as legacy_model_sources
+from .model_profiles.dependencies import ProfileApiDependencies
+from .label_inspection.model import legacy_settings as legacy_label_settings
 
-model_profile_service = ModelProfileService(ProfileDependencies(
+_model_profile_configuration = _provider_configuration.create_model_configuration(
     runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    write_secret=lambda key, value: set_local_secret_env(key, value),
-    read_secret=lambda key: local_secret_env_value(key),
-    legacy_sources=lambda: legacy_model_sources(LegacyConfiguration(
-        ai=lambda: _legacy_ai_detection_settings(),
-        image=lambda: _legacy_image_generation_settings(),
-        agent=lambda: _legacy_load_agent_config(),
-        local=lambda: load_ai_local_config(),
-        ai_keys=lambda config: normalize_ai_key_items(config),
-        image_keys=lambda config, provider: normalize_image_key_items(config, provider),
-        agent_keys=lambda config: normalize_agent_key_items(config),
-    )),
-    validate_model=lambda value: validate_ai_model(value),
-    validate_base_url=lambda value: validate_ai_base_url(value),
-    mask_secret=lambda value: mask_secret(value),
-))
-register_model_profiles(app, model_profile_service, ProfileApiDependencies(
+    legacy_label=lambda: legacy_label_settings(),
+    agent_defaults=lambda: DEFAULT_AGENT_CONFIG,
+)
+model_profile_service = _model_profile_configuration.service
+_model_profile_configuration.register(app, ProfileApiDependencies(
     require_admin=lambda: require_admin_role(),
     cost_from_usage=lambda model, usage: api_cost_from_usage(model, usage),
     cursor_api_url=lambda base, path: cursor_api_url(base, path),

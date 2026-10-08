@@ -811,3 +811,23 @@ The incoming domain owns its response-file capability and exposes separate catal
 TextStandardWorkflows owns standard media, revisions and both document/preparation jobs around one supplied text record store. Existing permissions, request identity, call admission, attempt-before-provider persistence, revision baseline rules and unknown-result handling remain in the original services. Private entry aliases are views: replacing them no longer redirects the owned internal graph. External model settings, usage recording, policy and parsers retain focused suppliers. Preparation account enablement and OCR module policy are still process configuration.
 
 Comparison history, evidence reads, human reviews and extraction now share one TextComparisonWorkflows owner with the supplied standards domain. Native prepared comparison and extraction have separate per-domain lifecycle owners; deadline timers remain available until admitted comparisons finish. Existing at-most-once claims, owner/media checks, retained manual 410 responses, partial publication and uncertain-result rules are unchanged. Internal private entry replacements no longer redirect these services. Prepared models, environment reader and cleanup callable are selected for each submission rather than fixed at graph construction.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.

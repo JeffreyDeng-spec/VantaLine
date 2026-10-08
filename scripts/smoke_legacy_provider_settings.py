@@ -4,6 +4,7 @@ from pathlib import Path
 from contextlib import ExitStack
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability, get_provider_capability, provider_capability_target
 class LegacyProviderSettingsContracts(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
@@ -21,7 +22,7 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
   self.local={'provider':'qwen','model':'synthetic-json','base_url':'https://synthetic.invalid','timeout_seconds':30,'api_key_env':'SYNTHETIC_JSON_KEY','image_provider':'gemini','image_model':'synthetic-image','image_base_url':'https://synthetic.invalid','image_timeout_seconds':60}
   self.keys=[{'id':'a','key':'local-a','env':'LOCAL_A','label':'A','provider':'qwen'},{'id':'b','key':'local-b','env':'LOCAL_B','label':'B','provider':'qwen'}]
   self.image_keys=[{'id':'i','key':'local-image','env':'LOCAL_IMAGE','label':'I','provider':'gemini'}]
-  def install(name,**kwargs):return self.stack.enter_context(patch.object(self.api,name,**kwargs))
+  def install(name,**kwargs):return self.stack.enter_context(patch_provider_capability(self.api, name, **kwargs))
   self.load=install('load_ai_local_config',return_value=self.local)
   self.normalize=install('normalize_ai_key_items',side_effect=lambda local,provider:self.keys)
   self.select=install('ai_keys_for_provider',side_effect=lambda keys,provider:keys)
@@ -85,7 +86,7 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
  def test_image_status_invalid_base_then_missing_model_then_key(self):
   self.base.side_effect=self.api.HTTPException(400,'synthetic');self.assertEqual(self.api._legacy_image_generation_settings()['status'],'invalid_base_url')
   self.base.side_effect=None;self.local['image_model']=''
-  with patch.object(self.api,'default_image_generation_model',return_value=''):
+  with patch_provider_capability(self.api, 'default_image_generation_model', return_value=''):
    self.assertEqual(self.api._legacy_image_generation_settings()['status'],'missing_model')
   self.image_keys=[];self.assertEqual(self.api._legacy_image_generation_settings()['status'],'missing_api_key')
  def test_image_input_unmodified_and_public_aliases(self):
@@ -144,8 +145,8 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
  def test_image_label_callback_refreshes_between_message_and_public_label(self):
   calls=[]
   def replacement(provider):calls.append('second');return 'second-label'
-  def first(provider):calls.append('first');self.api.image_generation_provider_label=replacement;return 'first-label'
-  with patch.object(self.api,'image_generation_provider_label',first):r=self.api._legacy_image_generation_settings()
+  def first(provider):calls.append('first');set_provider_capability(self.api, 'image_generation_provider_label', replacement);return 'first-label'
+  with patch_provider_capability(self.api, 'image_generation_provider_label', first):r=self.api._legacy_image_generation_settings()
   self.assertEqual(r['message'],'first-label image generation is configured.');self.assertEqual(r['provider_label'],'second-label');self.assertEqual(calls,['first','second'])
  def test_unknown_base_failure_is_not_retried(self):
   from itertools import chain,repeat
@@ -167,23 +168,23 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
    def load():state['loads']+=1;return config
    def bind(value):return lambda:value
    json_service = LegacyJsonSettings(
-    ports.LegacySettingsIO(load=bind(load), environment=bind({}), proxy=bind(self.api.ai_proxy_url_from_config), validate_base=bind(self.api.validate_ai_base_url), http_error=bind(self.api.HTTPException)),
-    ports.LegacyPresentation(public_keys=bind(self.api.public_ai_key_items), mask_secret=bind(self.api.mask_secret), public_base=bind(self.api.public_ai_base_url), mask_url=bind(self.api.masked_url_for_status)),
+    ports.LegacySettingsIO(load=bind(load), environment=bind({}), proxy=bind(get_provider_capability(self.api, 'ai_proxy_url_from_config')), validate_base=bind(get_provider_capability(self.api, 'validate_ai_base_url')), http_error=bind(self.api.HTTPException)),
+    ports.LegacyPresentation(public_keys=bind(get_provider_capability(self.api, 'public_ai_key_items')), mask_secret=bind(get_provider_capability(self.api, 'mask_secret')), public_base=bind(get_provider_capability(self.api, 'public_ai_base_url')), mask_url=bind(get_provider_capability(self.api, 'masked_url_for_status'))),
     ports.LegacyJsonPolicy(provider=bind(self.api.AI_DEFAULT_PROVIDER), model=bind(self.api.AI_DEFAULT_MODEL), timeout=bind(self.api.AI_DEFAULT_TIMEOUT_SECONDS), models=bind(self.api.AI_MODEL_OPTIONS), supported=bind(self.api.AI_SUPPORTED_PROVIDERS), proxy_flag=bind(self.api.AI_AUTO_LOCAL_PROXY_ENV)),
-    ports.LegacyJsonCallbacks(default_base=bind(self.api.default_ai_base_url), validate_timeout=bind(self.api.validate_ai_timeout), normalize_keys=bind(self.api.normalize_ai_key_items), select_keys=bind(self.api.ai_keys_for_provider), key_id=bind(self.api.secret_key_item_id), text=bind(self.api.bounded_text), label=bind(self.api.ai_provider_label), flag=bind(self.api.env_flag_enabled)),
+    ports.LegacyJsonCallbacks(default_base=bind(get_provider_capability(self.api, 'default_ai_base_url')), validate_timeout=bind(get_provider_capability(self.api, 'validate_ai_timeout')), normalize_keys=bind(get_provider_capability(self.api, 'normalize_ai_key_items')), select_keys=bind(get_provider_capability(self.api, 'ai_keys_for_provider')), key_id=bind(get_provider_capability(self.api, 'secret_key_item_id')), text=bind(self.api.bounded_text), label=bind(get_provider_capability(self.api, 'ai_provider_label')), flag=bind(get_provider_capability(self.api, 'env_flag_enabled'))),
    )
    image_service = LegacyImageSettings(
-    ports.LegacySettingsIO(load=bind(load), environment=bind({}), proxy=bind(self.api.ai_proxy_url_from_config), validate_base=bind(self.api.validate_ai_base_url), http_error=bind(self.api.HTTPException)),
-    ports.LegacyPresentation(public_keys=bind(self.api.public_ai_key_items), mask_secret=bind(self.api.mask_secret), public_base=bind(self.api.public_ai_base_url), mask_url=bind(self.api.masked_url_for_status)),
+    ports.LegacySettingsIO(load=bind(load), environment=bind({}), proxy=bind(get_provider_capability(self.api, 'ai_proxy_url_from_config')), validate_base=bind(get_provider_capability(self.api, 'validate_ai_base_url')), http_error=bind(self.api.HTTPException)),
+    ports.LegacyPresentation(public_keys=bind(get_provider_capability(self.api, 'public_ai_key_items')), mask_secret=bind(get_provider_capability(self.api, 'mask_secret')), public_base=bind(get_provider_capability(self.api, 'public_ai_base_url')), mask_url=bind(get_provider_capability(self.api, 'masked_url_for_status'))),
     ports.LegacyImagePolicy(provider=bind(self.api.IMAGE_GENERATION_DEFAULT_PROVIDER), timeout=bind(self.api.IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS), models=bind(self.api.IMAGE_GENERATION_MODEL_OPTIONS), supported=bind(self.api.IMAGE_GENERATION_SUPPORTED_PROVIDERS)),
     ports.LegacyImageEnvironment(provider=bind(self.api.IMAGE_GENERATION_PROVIDER_ENV), model=bind(self.api.IMAGE_GENERATION_MODEL_ENV), base=bind(self.api.IMAGE_GENERATION_BASE_URL_ENV), timeout=bind(self.api.IMAGE_GENERATION_TIMEOUT_ENV), named_key=bind(self.api.IMAGE_GENERATION_NAMED_API_KEY_ENV), direct_key=bind(self.api.IMAGE_GENERATION_API_KEY_ENV), gemini_model=bind(self.api.AGENT_MCP_GEMINI_IMAGE_MODEL_ENV), gemini_timeout=bind(self.api.AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV)),
-    ports.LegacyImageCallbacks(default_model=bind(self.api.default_image_generation_model), default_base=bind(self.api.default_image_generation_base_url), default_key_env=bind(self.api.default_image_generation_api_key_env), validate_timeout=bind(self.api.validate_image_generation_timeout), normalize_keys=bind(self.api.normalize_image_key_items), select_keys=bind(self.api.image_keys_for_provider), label=bind(self.api.image_generation_provider_label), provider_key=bind(self.api.image_generation_provider_key)),
+    ports.LegacyImageCallbacks(default_model=bind(get_provider_capability(self.api, 'default_image_generation_model')), default_base=bind(get_provider_capability(self.api, 'default_image_generation_base_url')), default_key_env=bind(get_provider_capability(self.api, 'default_image_generation_api_key_env')), validate_timeout=bind(get_provider_capability(self.api, 'validate_image_generation_timeout')), normalize_keys=bind(get_provider_capability(self.api, 'normalize_image_key_items')), select_keys=bind(get_provider_capability(self.api, 'image_keys_for_provider')), label=bind(get_provider_capability(self.api, 'image_generation_provider_label')), provider_key=bind(get_provider_capability(self.api, 'image_generation_provider_key'))),
    )
    self.assertEqual(state['loads'],0)
    return json_service,image_service,state
   aj,ai,sa=make('a');bj,bi,sb=make('b')
   for name in ('ai_keys_for_provider', 'ai_provider_label', 'ai_proxy_url_from_config', 'bounded_text', 'default_ai_base_url', 'default_image_generation_api_key_env', 'default_image_generation_base_url', 'default_image_generation_model', 'env_flag_enabled', 'image_generation_provider_key', 'image_generation_provider_label', 'image_keys_for_provider', 'load_ai_local_config', 'mask_secret', 'masked_url_for_status', 'normalize_ai_key_items', 'normalize_image_key_items', 'public_ai_base_url', 'public_ai_key_items', 'secret_key_item_id', 'validate_ai_base_url', 'validate_ai_timeout', 'validate_image_generation_timeout'):
-   self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError("independent settings used application callback")))
+   self.stack.enter_context(patch_provider_capability(self.api, name, side_effect=AssertionError('independent settings used application callback')))
   with ThreadPoolExecutor(max_workers=4) as pool:
    values=list(pool.map(lambda fn:fn(),[aj._legacy_ai_detection_settings,bj._legacy_ai_detection_settings,ai._legacy_image_generation_settings,bi._legacy_image_generation_settings]))
   self.assertEqual([v['model'] for v in values],['a','b','a-image','b-image'])
@@ -209,10 +210,10 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
   self.keys=[{'id':'','key':'a','env':'A','label':'first'},{'id':'','key':'b','env':'B','label':'second'}]
   events=[]
   def second_id(env,key):events.append(('id2',env));return 'second-id'
-  def first_id(env,key):events.append(('id1',env));self.api.secret_key_item_id=second_id;return 'first-id'
+  def first_id(env,key):events.append(('id1',env));set_provider_capability(self.api, 'secret_key_item_id', second_id);return 'first-id'
   def second_text(value,limit):events.append(('text2',value));return 'second-text'
   def first_text(value,limit):events.append(('text1',value));self.api.bounded_text=second_text;return 'first-text'
-  with patch.object(self.api,'secret_key_item_id',first_id),patch.object(self.api,'bounded_text',first_text):r=self.api._legacy_ai_detection_settings()
+  with patch_provider_capability(self.api, 'secret_key_item_id', first_id),patch.object(self.api,'bounded_text',first_text):r=self.api._legacy_ai_detection_settings()
   self.assertEqual([(x['id'],x['label']) for x in r['api_key_candidates']],[('first-id','first-text'),('second-id','second-text')])
   self.assertEqual(events,[('id1','A'),('text1','first'),('id2','B'),('text2','second')])
 
@@ -224,8 +225,8 @@ def capture_legacy_settings_window(api, Fixture, site, mode):
     fixture.setUp()
     try:
         events = []
-        ns = api.__dict__
         name = 'secret_key_item_id' if site == 'key_id' else 'bounded_text'
+        ns = provider_capability_target(api, name)[0].__dict__
         def callback(label):
             def invoke(*args):
                 events.append(['call', label, list(args)])

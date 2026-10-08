@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 
 
 class PoisonValue:
@@ -31,7 +32,7 @@ class RetiredFlowFixture:
         for name in ['windows_worker_base_url','masked_url_for_status','windows_worker_request_with_retry','worker_training_payload','post_worker_training_bundle',
                      'public_path_sanitized','windows_worker_request','_start_transfer_progress_thread','windows_worker_get_json_streamed','worker_training_upload_timeout_seconds',
                      'worker_training_artifact_summary','import_worker_training_artifacts']:
-            self.hidden.append(stack.enter_context(patch.object(api,name,side_effect=AssertionError('unreachable historical capability'))))
+            self.hidden.append(stack.enter_context(patch_provider_capability(api, name, side_effect=AssertionError('unreachable historical capability'))))
         stack.enter_context(patch.object(api,'IMAGE_JOB_ACTIVE_STATUSES',PoisonValue()))
 
 
@@ -153,7 +154,7 @@ class TrainingRetiredWorkerFlowContracts(unittest.TestCase):
             for callback in [f.update,replacement,provider,f.public,f.clock,*forbidden]:callback.assert_not_called()
             self.assertEqual(f.events,[]);instances.append((owner,f,replacement,provider,forbidden,tasks,refresh))
         for name in ['run_worker_dataset_generation_task','run_worker_training_task','refresh_worker_training_task','update_training_task','public_training_task']:
-            self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('unexpected root dependency')))
+            self.stack.enter_context(patch_provider_capability(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         self.stack.enter_context(patch('time.time',side_effect=AssertionError('unexpected global clock')));counts=[0,0]
         for index in [1,0,1,0]:
             owner,f,replacement,provider,forbidden,tasks,refresh=instances[index];before=copy.deepcopy(f.task);nested=f.public_value['nested']

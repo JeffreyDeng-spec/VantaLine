@@ -8,6 +8,7 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 os.environ['LOCAL_INSPECTION_ROOT']=tempfile.mkdtemp(prefix='model-routing-')
 (Path(os.environ['LOCAL_INSPECTION_ROOT'])/'local_inspection_service'/'static').mkdir(parents=True)
 os.environ['VANTALINE_DATA_STORE']='json'
@@ -40,21 +41,24 @@ def main():
         def transport(request,*args,**kwargs):
             calls.append(json.loads(request.data))
             return io.BytesIO(json.dumps(response).encode())
-        with patch.object(s,'ai_urlopen',transport):
+        with patch_provider_capability(s, 'ai_urlopen', transport):
             output,_=s.ai_provider_from_settings(settings).generate_json('fixture',[{'type':'text','text':'fixture'}])
         assert output==value and len(calls)==1
         if provider=='qwen': assert calls[0]['enable_thinking'] is False
         if provider=='doubao': assert calls[0]['thinking']=={'type':'disabled'}
         if provider=='gemini': response['candidates'][0]['finishReason']='MAX_TOKENS'
         else: response['choices'][0]['finish_reason']='length'
-        with patch.object(s,'ai_urlopen',transport):
+        with patch_provider_capability(s, 'ai_urlopen', transport):
             try:s.ai_provider_from_settings(settings).generate_json('fixture',[])
             except s.AiProviderError:pass
             else:raise AssertionError('truncated completion accepted')
         def denied(*args,**kwargs):raise urllib.error.HTTPError('https://fixture.invalid',401,'denied',{},io.BytesIO(b'invalid key fixture-secret-never-log'))
-        with patch.object(s,'ai_urlopen',denied):
+        with patch_provider_capability(s, 'ai_urlopen', denied):
             try:s.ai_provider_from_settings(settings).generate_json('fixture',[])
             except s.AiProviderAuthError as exc:assert settings['api_key'] not in str(exc)
             else:raise AssertionError('bad key accepted')
     print('PASS model profile real provider routing, truncated/error rejection, secret redaction and old HTTP/admin permissions')
-if __name__=='__main__':main()
+if __name__=='__main__':
+    with (patch('urllib.request.urlopen', side_effect=AssertionError('unmocked external transport')),
+          patch('requests.sessions.Session.request', side_effect=AssertionError('unmocked external transport'))):
+        main()

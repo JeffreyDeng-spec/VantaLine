@@ -1610,3 +1610,23 @@ Automatic-optimization workflow composition adds no configuration. Separate expl
 Training state composition adds no business configuration, model, prompt or executor mode. New task fingerprints use source manifest v249 with 543 actual sources including training/state_composition.py; existing snapshots and secret references remain unchanged. The existing model resolver getter/provider layers and per-operation repository selection are preserved.
 
 Training-task composition adds no operator settings, model/prompt changes or worker topology. Account configuration is supplied through TrainingConfiguration load/save capabilities; request identity and database selection remain lazy. The pure training worker classifier belongs to the composed jobs capability; replacing a private server alias does not rewire it. New task fingerprints use source manifest v250 with 546 distinct sources, including account_state_composition.py, native_execution_composition.py and task_composition.py; historical snapshots and secret references remain unchanged.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.

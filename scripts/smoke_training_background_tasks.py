@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
 from scripts.smoke_training_runner import Resolver
@@ -50,7 +51,7 @@ class BackgroundFixture:
                 'create_background_variants_from_source': self.local, 'image_file_list': self.images, 'safe_background_set_id': self.safe,
                 'current_owner_fields': self.owner, 'save_training_task': self.save, 'public_training_task': self.public,
                 '_training_task_threads': self.threads}
-        for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+        for name, value in values.items(): stack.enter_context(patch_fixture_capability(api, name, value))
         stack.enter_context(patch('time.time', self.clock)); stack.enter_context(patch('uuid.uuid4', self.uuid))
         stack.enter_context(patch.object(threading, 'Thread', self.factory))
 
@@ -150,7 +151,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
             {'status':'ready','generation_method':'queued_codexcli_imgworker_plus_local_same_environment_fallback','image_count':11,'completed_at':33,'updated_at':44}])
     def test_runner_missing_dependencies_and_load_failure_stay_outside_failure_settlement(self):
         f=self.f
-        with patch.object(self.api,'model_profile_service',None):
+        with patch_profile_service(self.api, None):
             with self.assertRaisesRegex(RuntimeError,'Model profile resolver is not configured'): self.run_task()
         f.find.assert_not_called(); f.load.assert_not_called()
         f.find.side_effect=[OSError('find'),f.binding]

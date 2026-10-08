@@ -9,3 +9,4 @@ def install(server):
         current_snapshot=lambda:None,
         resolve=lambda purpose,reference=None:server._legacy_image_generation_settings() if purpose=='image' else server._legacy_load_agent_config() if purpose=='training_assistant' else server._legacy_ai_detection_settings(),
         snapshot=snapshot,snapshot_for_record=lambda record:snapshot(),scope=lambda value=None:nullcontext(),record_call=lambda *args:None)
+    server._model_profile_configuration.service=server.model_profile_service
