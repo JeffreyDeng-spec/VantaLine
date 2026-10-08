@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
+from ..storage.artifacts.runtime import ArtifactRuntime
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from .dependencies import (ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports, RepositoryFactory)
 from fastapi.responses import Response
@@ -42,7 +44,10 @@ def public(task, detail=True):
 
 
 def register(app: FastAPI, access: ComparisonAccess, repository_factory: RepositoryFactory,
-             standards: StandardLibrary, media_dependencies: ComparisonMedia, documents: DocumentImports):
+             standards: StandardLibrary, media_dependencies: ComparisonMedia, documents: DocumentImports, *,
+             runtime_provider: Callable[[], ArtifactRuntime | None]):
+    if runtime_provider is None:
+        raise TypeError("runtime_provider is required")
 
     def context():
         access.require_permission('inspection')
@@ -50,7 +55,7 @@ def register(app: FastAPI, access: ComparisonAccess, repository_factory: Reposit
         repository = repository_factory()
         if repository is None:
             raise HTTPException(503, 'Codex Beta 需要 PostgreSQL')
-        return owner, CodexComparisonsRepository(repository), MediaStore(media_dependencies.data_directory() / 'codex_comparisons' / 'media')
+        return owner, CodexComparisonsRepository(repository), MediaStore(media_dependencies.data_directory() / 'codex_comparisons' / 'media', runtime_provider=runtime_provider)
 
     def enabled(owner):
         if owner not in enabled_owners():

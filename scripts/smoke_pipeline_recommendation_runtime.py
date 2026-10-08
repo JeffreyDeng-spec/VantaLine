@@ -160,9 +160,11 @@ class RecommendationRuntimeContract(unittest.TestCase):
         self.assertFalse(self.inflight)
 
     def test_schedule_duplicates_and_thread_arguments(self):
+        selected = self.replace("_run_pipeline_recommendation_pregen", Mock())
         self.inflight.clear()
         made = []
         class Thread:
+            def is_alive(self): return False
             def __init__(self, **kwargs): made.append(kwargs)
             def start(self): self.started = True
         self.replace("threading", types.SimpleNamespace(Thread=Thread))
@@ -170,7 +172,8 @@ class RecommendationRuntimeContract(unittest.TestCase):
         self.api.schedule_pipeline_recommendation_pregen([("", "samples"), ("a", ""), ("a", "samples"),
                                                            ("a", "samples"), ("b", "training")], user)
         self.assertEqual(len(made), 2)
-        self.assertIs(made[0]["target"], self.api._run_pipeline_recommendation_pregen)
+        made[0]["target"](*made[0]["args"])
+        selected.assert_called_once_with(*made[0]["args"])
         self.assertEqual(made[0]["args"], ("a", "samples", user))
         self.assertIs(made[0]["daemon"], True)
         self.assertEqual(self.inflight, {"a|samples", "b|training"})
@@ -178,6 +181,7 @@ class RecommendationRuntimeContract(unittest.TestCase):
     def test_thread_start_failure_keeps_key(self):
         self.inflight.clear()
         class Thread:
+            def is_alive(self): return False
             def __init__(self, **kwargs): pass
             def start(self): raise RuntimeError("start")
         self.replace("threading", types.SimpleNamespace(Thread=Thread))
@@ -248,16 +252,20 @@ class RecommendationRuntimeContract(unittest.TestCase):
         self.assertEqual(section[5], "second-lock-exit")
         self.inflight.clear()
         targets = []
-        def next_runner(*_): pass
+        next_runner = Mock()
         class Thread:
+            def is_alive(self): return False
             def __init__(inner, **kwargs): targets.append(kwargs["target"])
             def start(inner):
                 if len(targets) == 1:
                     self.replace("_run_pipeline_recommendation_pregen", next_runner)
         self.replace("threading", types.SimpleNamespace(Thread=Thread))
-        first = self.api._run_pipeline_recommendation_pregen
+        first = self.replace("_run_pipeline_recommendation_pregen", Mock())
         self.api.schedule_pipeline_recommendation_pregen([("a", "samples"), ("b", "samples")], None)
-        self.assertEqual(targets, [first, next_runner])
+        targets[0]("first-probe", None)
+        targets[1]("second-probe", None)
+        first.assert_called_once_with("first-probe", None)
+        next_runner.assert_called_once_with("second-probe", None)
 
     def test_independent_runtime_instances_a_b_a(self):
         if os.environ.get("VANTALINE_RECOMMENDATION_RUNTIME_BASELINE_SOURCE"):
@@ -284,6 +292,7 @@ class RecommendationRuntimeContract(unittest.TestCase):
                 def set(self, user): trace.append("set"); return "token"
                 def reset(self, token): trace.append("reset")
             class Thread:
+                def is_alive(self): return False
                 def __init__(self, **kwargs): trace.append(("thread", kwargs["args"], kwargs["daemon"]))
                 def start(self): trace.append("start")
             runtime = PipelineRecommendationRuntime(

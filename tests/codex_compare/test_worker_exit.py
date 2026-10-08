@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from local_inspection_service.codex_compare import worker
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 
 
 @pytest.mark.parametrize("exit_timing,reader_delay,exit_code,events,control,expected", [
@@ -86,7 +87,7 @@ def test_exit_drains_reader_before_settling(tmp_path, exit_timing, reader_delay,
          patch.object(worker, "with_repo", side_effect=lambda fn: fn(repository)):
         worker.execute(task, "synthetic-token", {"work_root": str(tmp_path / "work"),
             "auth_home": str(auth), "model": "fixture", "binary": "unused"},
-            SimpleNamespace(read=lambda *args: b"synthetic-media"))
+            SimpleNamespace(read=lambda *args: b"synthetic-media", runtime_provider=get_runtime))
     assert calls[-1] == ("settle", expected)
     if expected == "completed":
         assert not readers[0].alive

@@ -3,12 +3,15 @@ import os
 import re
 from pathlib import Path
 from .contracts import digest, normalize_image
-from ..storage.artifacts.runtime import get_runtime
+from collections.abc import Callable
+from ..storage.artifacts.runtime import ArtifactRuntime
 from ..storage.artifacts.types import ArtifactConflict
 
 
 class MediaStore:
-    def __init__(self, root, *, runtime_provider=get_runtime):
+    def __init__(self, root, *, runtime_provider: Callable[[], ArtifactRuntime | None]):
+        if runtime_provider is None:
+            raise TypeError("runtime_provider is required")
         self.root = Path(root).resolve()
         self.runtime_provider = runtime_provider
 

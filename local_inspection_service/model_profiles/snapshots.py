@@ -66,3 +66,22 @@ def public_record(value):
     if isinstance(value, list):
         return [public_record(v) for v in value]
     return value
+
+
+def bind_current(service_provider: ResolverProvider, target):
+    """Carry only an already bound model snapshot into a deferred callback.
+
+    Capture the resolver and a private snapshot before submission. Other
+    ContextVars (identity, read caches, write authorization) are not copied.
+    Missing binding fails before the executor can submit a paid operation.
+    """
+    service = require_resolver(service_provider)
+    snapshot = service.current_snapshot()
+    if snapshot is None:
+        raise RuntimeError("No bound model snapshot for deferred model work")
+    snapshot = copy.deepcopy(snapshot)
+    @functools.wraps(target)
+    def run(*args, **kwargs):
+        with service.scope(snapshot):
+            return target(*args, **kwargs)
+    return run

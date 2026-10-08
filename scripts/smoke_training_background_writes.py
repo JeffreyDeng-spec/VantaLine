@@ -14,6 +14,8 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 
 class TracedRNG:
@@ -259,12 +261,12 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
             image = np.full((31, 47, 3), shade, dtype=np.uint8); self.assertTrue(cv2.imwrite(str(source), image))
             callbacks = []
             def port(fn): value = Mock(side_effect=fn); callbacks.append(value); return value
-            manifest = BackgroundManifest(port(lambda: directory), port(lambda: directory / 'manifest.json'))
-            images = BackgroundImageFiles(port(lambda: {'.png'})); clock = port(lambda: stamp)
-            variants = BackgroundVariants(clock)
+            manifest = BackgroundManifest(port(lambda: directory), port(lambda: directory / 'manifest.json'), files=BusinessFiles(lambda: None))
+            images = BackgroundImageFiles(port(lambda: {'.png'}), files=BusinessFiles(lambda: None)); clock = port(lambda: stamp)
+            variants = BackgroundVariants(clock, images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
             writes = BackgroundWrites(port(safe_background_set_id), port(manifest.load_background_sets_manifest),
                 port(manifest.write_background_sets_manifest), port(lambda: sets),
-                port(lambda: UUID('abcdef00-0000-0000-0000-000000000000')), clock)
+                port(lambda: UUID('abcdef00-0000-0000-0000-000000000000')), clock, files=BusinessFiles(lambda: None))
             minimum = BackgroundMinimumImages(port(safe_background_set_id), port(lambda: sets),
                 port(images.image_file_list), port(lambda: variants.create_background_variants_from_source))
             store = TaskBackgroundStore(
@@ -273,7 +275,7 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
                 TaskBackgroundPaths(port(lambda: sets), port(lambda: {'.png'})),
                 TaskBackgroundRecords(port(lambda: writes.update_background_set_manifest),
                                       port(lambda identifier, meta: {'id': identifier, 'meta': meta, 'paths': images.image_file_list(sets / identifier)})),
-                port(variants.create_background_variants_from_source), port(images.image_file_list), clock)
+                port(variants.create_background_variants_from_source), port(images.image_file_list), clock, files=BusinessFiles())
             for callback in callbacks: callback.assert_not_called()
             self.assertFalse(directory.exists())
             return owner, shade, stamp, sets, source, manifest, writes, minimum, store, clock
@@ -628,7 +630,7 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
                 def create(source,directory,*,count): (directory/'variant.png').write_bytes(b'variant')
                 lookup=Mock(side_effect=provider); owner=Mock(side_effect=legacy)
                 service=TaskBackgroundStore(TaskBackgroundIdentity(lambda value:'fixture',lambda value:'fallback',lambda: (lambda value:value),owner),
-                    TaskBackgroundPaths(lambda:self.sets,lambda:{'.jpg'}),TaskBackgroundRecords(lookup,self.payload),create,lambda path:[Path('image')],self.clock)
+                    TaskBackgroundPaths(lambda:self.sets,lambda:{'.jpg'}),TaskBackgroundRecords(lookup,self.payload),create,lambda path:[Path('image')],self.clock, files=BusinessFiles())
                 lookup.assert_not_called(); owner.assert_not_called(); self.clock.assert_not_called()
                 if stage!='legacy-switch':
                     with self.assertRaisesRegex(OSError,'lookup' if stage=='lookup' else 'legacy'): service.save_task_environment_background_set('raw',self.source,{})

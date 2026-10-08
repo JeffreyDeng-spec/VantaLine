@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 from fastapi import HTTPException
-from ..storage.artifacts.files import BusinessFiles
+from .file_ports import TextFileRuntime
 from .standard_ports import (Record, Upload, StandardAccess, StandardRecords,
                              StandardWrites, StandardMedia, StandardRevisions, StandardPreparation)
 
@@ -13,7 +13,10 @@ class StandardEdits:
     def __init__(self, access: StandardAccess, records: StandardRecords,
                  writes: StandardWrites, media: StandardMedia, revisions: StandardRevisions,
                  preparation: StandardPreparation, prepare_image: Callable[[bytes], tuple[bytes, str, str, str]],
-                 bounded_text: Callable[[], Callable[[str, int], str]]):
+                 bounded_text: Callable[[], Callable[[str, int], str]], *, files: TextFileRuntime):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.access, self.records, self.writes, self.media = access, records, writes, media
         self.revisions, self.preparation = revisions, preparation
         self.prepare_image, self.bounded_text = prepare_image, bounded_text
@@ -78,11 +81,11 @@ class StandardEdits:
                         standard["updated_at"] = now
                     self.records.save("standards", standard)
         except HTTPException:
-            if BusinessFiles().runtime(media_path) is None:
+            if self.files.runtime(media_path) is None:
                 media_path.unlink(missing_ok=True)
             raise
         except Exception as exc:
-            if BusinessFiles().runtime(media_path) is None:
+            if self.files.runtime(media_path) is None:
                 media_path.unlink(missing_ok=True)
             raise HTTPException(status_code=409, detail="标准已被其他操作更新，请刷新后重试") from exc
         return {"asset": self.records.public()(asset), "standard": self.records.public()(standard)}

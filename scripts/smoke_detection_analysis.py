@@ -83,7 +83,7 @@ def capture_independent_resize(Fixture, root, mode):
         if mode!='ordinary':events.append('prior');slot[0]=None if mode=='missing' else b
         return Path(root)
     def maximum():events.append('arg');slot[0]=late;return 640
-    service=DetectionAnalysis(AnalysisInput(f.load,lambda:f.scope,f.selected,lambda:f.sanitize,f.state_load),AnalysisRouting(Mock(),f.ai,f.retired,lambda:f.text),AnalysisInference(lambda:f.model,f.device,f.parse,f.ocr,f.apply,f.draw),AnalysisOutput(directory,lambda:slot[0],maximum,lambda:f.backend,lambda:87,f.url))
+    service=DetectionAnalysis(AnalysisInput(f.load,lambda:f.scope,f.selected,lambda:f.sanitize,f.state_load),AnalysisRouting(Mock(),f.ai,f.retired,lambda:f.text),AnalysisInference(lambda:f.model,f.device,f.parse,f.ocr,f.apply,f.draw),AnalysisOutput(directory,lambda:slot[0],maximum,lambda:f.backend,lambda:87,f.url), runtime_provider=lambda: None)
     captured=None
     try:service.analyze_bgr(f.image,'req','id')
     except BaseException as exc:captured=exc
@@ -362,7 +362,7 @@ class DetectionAnalysisContracts(unittest.TestCase):
             scope=Mock(return_value=f.scope); task=Mock(return_value=f.sanitize); model=Mock(return_value=f.model)
             resize=Mock(return_value=f.resize); images=Mock(return_value=f.backend); text=Mock(return_value=f.text)
             service=DetectionAnalysis(AnalysisInput(f.load,scope,f.selected,task,f.state_load),AnalysisRouting(Mock(),f.ai,f.retired,text),
-                AnalysisInference(model,f.device,f.parse,f.ocr,f.apply,f.draw),AnalysisOutput(f.directory,resize,lambda:640,images,lambda:87,f.url))
+                AnalysisInference(model,f.device,f.parse,f.ocr,f.apply,f.draw),AnalysisOutput(f.directory,resize,lambda:640,images,lambda:87,f.url), runtime_provider=lambda: None)
             self.assertEqual(f.events,[])
             for provider in [scope,task,model,resize,images,text]: provider.assert_not_called()
             services.append((owner,f,service,scope,model,resize,images))
@@ -385,7 +385,7 @@ class DetectionAnalysisContracts(unittest.TestCase):
         from local_inspection_service.detection.analysis_ports import AnalysisInput,AnalysisRouting,AnalysisInference,AnalysisOutput
         f=self.f; error=OSError('scope provider'); scope=Mock(side_effect=error)
         service=DetectionAnalysis(AnalysisInput(f.load,scope,f.selected,lambda:f.sanitize,f.state_load),AnalysisRouting(Mock(),f.ai,f.retired,lambda:f.text),
-            AnalysisInference(lambda:f.model,f.device,f.parse,f.ocr,f.apply,f.draw),AnalysisOutput(f.directory,lambda:f.resize,lambda:640,lambda:f.backend,lambda:87,f.url))
+            AnalysisInference(lambda:f.model,f.device,f.parse,f.ocr,f.apply,f.draw),AnalysisOutput(f.directory,lambda:f.resize,lambda:640,lambda:f.backend,lambda:87,f.url), runtime_provider=lambda: None)
         scope.assert_not_called()
         with self.assertRaises(OSError) as caught: service.analyze_bgr(f.image,'req')
         self.assertIs(caught.exception,error); scope.assert_called_once_with(); f.load.assert_not_called(); self.assertEqual(f.events,[])
@@ -489,7 +489,7 @@ class DetectionAnalysisContracts(unittest.TestCase):
                 service=DetectionAnalysis(AnalysisInput(f.load,provider('scope',f.scope),f.selected,provider('task',f.sanitize),f.state_load),
                     AnalysisRouting(Mock(side_effect=OSError('student')),f.ai,f.retired,provider('text',f.text)),
                     AnalysisInference(provider('model',f.model),f.device,f.parse,f.ocr,f.apply,f.draw),
-                    AnalysisOutput(f.directory,provider('resize',f.resize),provider('max_side',640),provider('images',f.backend),provider('quality',87),f.url))
+                    AnalysisOutput(f.directory,provider('resize',f.resize),provider('max_side',640),provider('images',f.backend),provider('quality',87),f.url), runtime_provider=lambda: None)
                 with self.assertRaises(OSError) as caught:service.analyze_bgr(f.image,'req')
                 self.assertIs(caught.exception,error);self.assertEqual(counts[stage],occurrence);f.url.assert_not_called()
 

@@ -27,6 +27,11 @@ def load_target(source, baseline):
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in names:
             nodes.append(node)
+        elif not baseline and isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "_plc_web_serial_require_active_lease"
+            for target in node.targets
+        ):
+            nodes.append(node)
         elif not baseline and isinstance(node, ast.ImportFrom) and node.module in {
             "plc.diagnostic_state", "plc.diagnostic_state_ports", "plc.station_service", "plc.station_ports"
         }:
@@ -36,7 +41,10 @@ def load_target(source, baseline):
             for target in node.targets
         ):
             nodes.append(node)
-    assert names <= {node.name for node in nodes if isinstance(node, ast.FunctionDef)}
+    definitions = {node.name for node in nodes if isinstance(node, ast.FunctionDef)}
+    definitions.update(target.id for node in nodes if isinstance(node, ast.Assign)
+                       for target in node.targets if isinstance(target, ast.Name))
+    assert names <= definitions
     target = types.ModuleType("local_inspection_service._diagnostic_state_contract")
     target.__package__ = "local_inspection_service"
     target.__dict__.update(

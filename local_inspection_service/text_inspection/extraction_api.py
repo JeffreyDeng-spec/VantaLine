@@ -14,14 +14,17 @@ from .. import label_extraction as geometry
 from .. import label_bbox
 from collections.abc import Callable
 from .extraction_ports import ExtractionAccess, ExtractionRecords, ExtractionMedia, ExtractionModels
-from ..storage.artifacts.files import BusinessFiles
+from .file_ports import ExtractionCleanupFiles
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
-_business_files = BusinessFiles()
 
 
 def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
              media_dependencies: ExtractionMedia, models: ExtractionModels,
-             clear_repository: Callable[[], None]):
+             clear_repository: Callable[[], None], *, files: ExtractionCleanupFiles, runtime: TrainingThreadLifecycle | None = None):
+    if files is None:
+        raise TypeError('files is required')
+    runtime = runtime if runtime is not None else TrainingThreadLifecycle()
 
     def owner():
         access.require_permission("inspection", detail="没有文字检验权限")
@@ -168,10 +171,10 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
                 if not save(tombstone,True):
                     continue
             directory = media_dependencies.path(uid,root["id"],"sentinel.png").parent
-            if _business_files.is_dir(directory) and not directory.is_symlink():
-                for path in _business_files.iterdir(directory):
-                    if _business_files.is_file(path) and not path.is_symlink() and path.suffix == ".png":
-                        _business_files.unlink(path)
+            if files.is_dir(directory) and not directory.is_symlink():
+                for path in files.iterdir(directory):
+                    if files.is_file(path) and not path.is_symlink() and path.suffix == ".png":
+                        files.unlink(path)
 
     @app.get("/api/text-inspection/extraction-capabilities")
     def capabilities():
@@ -199,6 +202,9 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
             normalized = geometry.normalized_image(data)
         except Exception as exc:
             raise HTTPException(400,"图片或目标框无效："+str(exc)[:120]) from exc
+        return runtime.submit(lambda launch: create_prepared(uid, data, target_box, normalized, request_id, method, launch))
+
+    def create_prepared(uid, data, target_box, normalized, request_id, method, launch: ThreadLaunch):
         settings = bbox_settings() if method == "vlm_bbox" else {**models.image_settings(),"single_attempt":True}
         prompt_version = label_bbox.VERSION if method == "vlm_bbox" else geometry.PROMPT_VERSION
         fingerprint = media_dependencies.digest(json.dumps([media_dependencies.digest(data),target_box,method,prompt_version],sort_keys=True).encode())
@@ -224,7 +230,8 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
                 raise HTTPException(409,"提取请求冲突")
             return public(latest(identifier,uid))
         if value["status"] == "attempting":
-            threading.Thread(target=run,args=(value,settings,normalized),daemon=True,name="label-extraction").start()
+            launch(lambda wrap: threading.Thread(target=wrap(run), args=(value,settings,normalized),
+                daemon=True, name="label-extraction"), lambda thread: None)
         return public(value)
 
     @app.get("/api/text-inspection/extractions/{identifier}")
@@ -284,7 +291,7 @@ def register(app: FastAPI, access: ExtractionAccess, records: ExtractionRecords,
         revision["crop_path"],revision["crop_sha256"] = str(path),media_dependencies.digest(cropped)
         if not save(revision,True):
             # Keep unreferenced COS bytes and their location for reconciliation.
-            if _business_files.runtime(path) is None:
+            if files.runtime(path) is None:
                 path.unlink(missing_ok=True)
             winner = latest(parent["root_id"],uid)
             if winner.get("polygon") == points and winner.get("status") == revision["status"] and winner.get("standard_asset_id") == revision.get("standard_asset_id") and winner.get("standard_revision_id") == revision.get("standard_revision_id"):

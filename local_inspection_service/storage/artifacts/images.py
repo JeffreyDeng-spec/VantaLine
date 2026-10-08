@@ -1,10 +1,11 @@
 """Explicit native image I/O adapters; local calls retain their original arguments."""
 import io
+from collections.abc import Callable
 from pathlib import Path
 
 from .files import BusinessFiles
 from .types import ArtifactUnavailable
-from .runtime import get_runtime
+from .runtime import ArtifactRuntime, get_runtime
 
 
 class StoredImageBackend:
@@ -19,10 +20,10 @@ class StoredImageBackend:
         return getattr(self.backend, name)
 
 
-def image_backend(backend):
+def image_backend(backend, *, runtime_provider: Callable[[], ArtifactRuntime | None] | None = None):
     # Return the exact injected object in local mode, preserving method binding
     # and callback order for independent compositions and their existing tests.
-    runtime = get_runtime()
+    runtime = get_runtime() if runtime_provider is None else runtime_provider()
     return backend if runtime is None else StoredImageBackend(backend, runtime)
 
 

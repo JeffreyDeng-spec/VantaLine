@@ -18,6 +18,7 @@ from local_inspection_service.label_inspection import api
 from local_inspection_service.label_inspection.history_summary import RunHistorySummary
 from local_inspection_service.label_inspection.run_summary import VERSION
 from local_inspection_service.storage.label_inspection import RUN_BATCH_SIZE
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 ROOT=Path(__file__).resolve().parents[1]
 
 
@@ -38,10 +39,10 @@ class StatisticsFixture(Fixture):
         try:
             self.candidate_endpoint=self.endpoint
             app=FastAPI()
-            with patch.object(api.pdf_import,'register',lambda *_:None):
+            with patch.object(api.pdf_import,'register',lambda *_,**__:None):
                 parent_register()(app,SimpleNamespace(require_permission=lambda *_:None,owner=lambda:(self.owner,'test')),
                     SimpleNamespace(repository=lambda:self.reader),SimpleNamespace(data_directory=lambda:Path(self.directory.name)),
-                    lambda:None,lambda:{'enabled':True})
+                    lambda:None,lambda:{'enabled':True},runtime_provider=get_runtime)
             self.parent_endpoint=next(r.endpoint for r in app.routes if getattr(r,'path',None)==api.PREFIX+'/tasks' and 'GET' in r.methods)
             self.parent_client=TestClient(app,raise_server_exceptions=False)
             return self

@@ -15,6 +15,8 @@ import numpy as np
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.images import ImageFiles
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class DatasetFixture:
@@ -507,13 +509,13 @@ class TrainingDatasetContracts(unittest.TestCase):
         from local_inspection_service.training.dataset_generation import DatasetGenerator, DatasetRecords, DatasetPlanning, DatasetRendering
         root = Mock(return_value=f.root)
         links = TrainingOutputLinks(AnnotationMedia(root, f.public))
-        preview = AnnotationPreview(links.public_training_output_url)
+        preview = AnnotationPreview(links.public_training_output_url, images=ImageFiles(lambda: cv2, files=BusinessFiles()))
         occlusion, area = Mock(return_value=0.5), Mock(return_value=33)
         generator = DatasetGenerator(
             DatasetRecords(f.load, f.save, f.ensure, f.select, f.ocr),
             DatasetPlanning(lambda:f.pose, lambda:lambda value: 'background-' + identity.get()['id'], f.planner),
             DatasetRendering(lambda:f.render, lambda:yolo_detection_label_line, lambda:preview.write_training_annotation_preview,
-                             write_dataset_yaml, occlusion, area), lambda:f.output, lambda:f.update)
+                             lambda path, directory, names: write_dataset_yaml(path, directory, names, files=BusinessFiles()), occlusion, area), lambda:f.output, lambda:f.update, files=BusinessFiles())
         return generator, (root, occlusion, area)
 
     def test_independent_services_and_zero_provider_construction(self):

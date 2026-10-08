@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from local_inspection_service.codex_compare.contracts import box, item, summary, validate_report, normalize_image
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.codex_compare.media import MediaStore
 from local_inspection_service.codex_compare.worker import artifact, sandbox_command, proxy_environment
 
@@ -31,7 +32,7 @@ def test_report_never_invents_pass():
 
 def test_media_transform_and_owner(tmp_path):
     import base64
-    media = MediaStore(tmp_path)
+    media = MediaStore(tmp_path, runtime_provider=get_runtime)
     source = media.image('a', png('red'))
     task = {'inputs': {'actual':source}}
     # Altered white upload must not be accepted as source pixels. The server

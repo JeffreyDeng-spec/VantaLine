@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+import cv2
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 BASELINE=os.environ.get('VANTALINE_ACCESSORY_WORKFLOW_BASELINE_SOURCE')
 NAMES=('image_job_matches','ensure_object_clean_sprites_ready','update_image_worker_status','first_source_ai_reference_path')
 
@@ -20,7 +23,7 @@ def create(b):
     from local_inspection_service.accessories.image_job_queue import ImageJobQueue
     from local_inspection_service.accessories.candidate_artifacts import CandidateArtifacts
     policy=ObjectSpritePolicy(material=lambda:b['accessory_material_type'],alpha=Mock(side_effect=AssertionError('unused alpha')),existing=lambda:b['clean_sprite_assets'],complete=lambda:b['clean_sprites_policy_complete'])
-    sprite=ObjectSpritePreprocessor(policy,None,None,None,None,None,None)
+    sprite=ObjectSpritePreprocessor(policy,None,None,None,None,None,None, files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
     queue=ImageJobQueue(None,None,None);artifacts=CandidateArtifacts(None,None)
     def match(*args):
         with patch.object(metadata,'ensure_image_job_task_id',b['ensure_image_job_task_id']):return metadata.image_job_matches(*args)

@@ -1,6 +1,5 @@
 """Ordered sprite fingerprints and preview metadata completeness checks."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TrainingStatFiles
 from collections.abc import Callable
 from dataclasses import dataclass
 import hashlib
@@ -21,7 +20,10 @@ class SpriteVersionInputs:
 
 class TrainingPreviewCache:
     def __init__(self, inputs: SpriteVersionInputs, schema: Callable[[], str],
-                 resolve: Callable[[], Callable[[Any], Path]], version: Callable[[Record], str]):
+                 resolve: Callable[[], Callable[[Any], Path]], version: Callable[[Record], str], *, files: TrainingStatFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.inputs, self.schema, self.resolve, self.version = inputs, schema, resolve, version
 
     def accessory_sprite_version(self, item: dict[str, Any]) -> str:
@@ -40,7 +42,7 @@ class TrainingPreviewCache:
         for idx, asset in enumerate(sprites):
             path = self.resolve()(asset.get("path"))
             try:
-                stat = _business_files.stat(path)
+                stat = self.files.stat(path)
                 mtime_ns = stat.st_mtime_ns
                 size = stat.st_size
             except OSError:

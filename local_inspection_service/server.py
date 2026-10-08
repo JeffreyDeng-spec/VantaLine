@@ -45,8 +45,10 @@ import requests
 from PIL import Image, ImageOps
 from .storage.artifacts.images import ImageFiles
 from .storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
-_image_files = ImageFiles(lambda: cv2, lambda: Image)
+from .storage.artifacts.composition import create_artifact_composition
+_artifact_composition = create_artifact_composition(lambda: os.environ, lambda: cv2, lambda: Image)
+_business_files = _artifact_composition.files
+_image_files = _artifact_composition.images
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -337,51 +339,40 @@ except ModuleNotFoundError as exc:
     from document_images import extract_doc_images, DocImageError, DocImageUnavailable
 
 
-def resolve_service_root() -> Path:
-    override = (
-        os.environ.get("LOCAL_INSPECTION_ROOT")
-        or os.environ.get("INSPECTION_SERVICE_ROOT")
-        or os.environ.get("VANTALINE_REPO_ROOT")
-    )
-    raw_root = Path(override).expanduser() if override else Path(__file__).resolve().parents[1]
-    if raw_root.name == "local_inspection_service":
-        raw_root = raw_root.parent
-    root = raw_root.resolve()
-    if not _business_files.is_dir(root / "local_inspection_service"):
-        raise RuntimeError(f"Resolved service root {root} does not contain local_inspection_service")
-    return root
-
-
+from .runtime.bootstrap_locations import RootLocator, RuntimeLocations
+_root_locator = RootLocator(os.environ, __file__, _business_files.is_dir)
+resolve_service_root = _root_locator.resolve
 ROOT = resolve_service_root()
-APP_DIR = ROOT / "local_inspection_service"
-STATIC_DIR = APP_DIR / "static"
-REACT_PREVIEW_DIST_DIR = APP_DIR / "frontend" / "dist"
-REACT_PREVIEW_ASSETS_DIR = REACT_PREVIEW_DIST_DIR / "assets"
-REACT_PRODUCTION_DIST_DIR = APP_DIR / "frontend" / "dist-production"
-REACT_PRODUCTION_ASSETS_DIR = REACT_PRODUCTION_DIST_DIR / "assets"
-DATA_DIR = APP_DIR / "data"
-UPLOAD_DIR = DATA_DIR / "uploads"
-OUTPUT_DIR = DATA_DIR / "outputs"
-NORMALIZED_DIR = DATA_DIR / "normalized_assets"
-TRAINING_JOBS_DIR = DATA_DIR / "training_jobs"
-TRAINING_TASKS_DIR = DATA_DIR / "training_tasks"
-ACCESSORY_CANDIDATES_DIR = DATA_DIR / "accessory_candidates"
-IMAGE_WORKER_LOG_DIR = DATA_DIR / "image_worker_logs"
-CONFIG_PATH = DATA_DIR / "config.json"
-CONFIG_BACKUP_PATH = DATA_DIR / "config.last_good.json"
-PLC_WEB_SERIAL_STATE_PATH = DATA_DIR / "plc_web_serial_state.json"
-AI_LOCAL_CONFIG_PATH = DATA_DIR / "ai_config.local.json"
-LOCAL_SECRET_ENV_PATH = DATA_DIR / "runtime_secrets.local.env"
-AI_PROFILE_CACHE_PATH = DATA_DIR / "ai_profile_cache.local.json"
-AI_DETECTION_TASKS_PATH = DATA_DIR / "ai_detection_tasks.json"
-AUTH_PATH = DATA_DIR / "auth.json"
-DATA_ANALYSIS_RECORDS_PATH = DATA_DIR / "data_analysis_records.json"
-INCOMING_TEXT_REFERENCES_PATH = DATA_DIR / "incoming_text_reference_versions.json"
-INCOMING_TEXT_INSPECTIONS_PATH = DATA_DIR / "incoming_text_inspections.json"
-INCOMING_TEXT_AUDIT_PATH = DATA_DIR / "incoming_text_audit_events.json"
-TEXT_INSPECTION_DIR = DATA_DIR / "text_inspection_v2"
-TEXT_INSPECTION_JSON_DIR = TEXT_INSPECTION_DIR / "records"
-TEXT_INSPECTION_MEDIA_DIR = TEXT_INSPECTION_DIR / "media"
+_runtime_locations = RuntimeLocations.from_root(ROOT)
+APP_DIR = _runtime_locations.app_dir
+STATIC_DIR = _runtime_locations.static_dir
+REACT_PREVIEW_DIST_DIR = _runtime_locations.react_preview_dist_dir
+REACT_PREVIEW_ASSETS_DIR = _runtime_locations.react_preview_assets_dir
+REACT_PRODUCTION_DIST_DIR = _runtime_locations.react_production_dist_dir
+REACT_PRODUCTION_ASSETS_DIR = _runtime_locations.react_production_assets_dir
+DATA_DIR = _runtime_locations.data_dir
+UPLOAD_DIR = _runtime_locations.upload_dir
+OUTPUT_DIR = _runtime_locations.output_dir
+NORMALIZED_DIR = _runtime_locations.normalized_dir
+TRAINING_JOBS_DIR = _runtime_locations.training_jobs_dir
+TRAINING_TASKS_DIR = _runtime_locations.training_tasks_dir
+ACCESSORY_CANDIDATES_DIR = _runtime_locations.accessory_candidates_dir
+IMAGE_WORKER_LOG_DIR = _runtime_locations.image_worker_log_dir
+CONFIG_PATH = _runtime_locations.config_path
+CONFIG_BACKUP_PATH = _runtime_locations.config_backup_path
+PLC_WEB_SERIAL_STATE_PATH = _runtime_locations.plc_web_serial_state_path
+AI_LOCAL_CONFIG_PATH = _runtime_locations.ai_local_config_path
+LOCAL_SECRET_ENV_PATH = _runtime_locations.local_secret_env_path
+AI_PROFILE_CACHE_PATH = _runtime_locations.ai_profile_cache_path
+AI_DETECTION_TASKS_PATH = _runtime_locations.ai_detection_tasks_path
+AUTH_PATH = _runtime_locations.auth_path
+DATA_ANALYSIS_RECORDS_PATH = _runtime_locations.data_analysis_records_path
+INCOMING_TEXT_REFERENCES_PATH = _runtime_locations.incoming_text_references_path
+INCOMING_TEXT_INSPECTIONS_PATH = _runtime_locations.incoming_text_inspections_path
+INCOMING_TEXT_AUDIT_PATH = _runtime_locations.incoming_text_audit_path
+TEXT_INSPECTION_DIR = _runtime_locations.text_inspection_dir
+TEXT_INSPECTION_JSON_DIR = _runtime_locations.text_inspection_json_dir
+TEXT_INSPECTION_MEDIA_DIR = _runtime_locations.text_inspection_media_dir
 TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = str(os.getenv("VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
 TEXT_INSPECTION_MANUAL_PASS_VERIFIED = str(os.getenv("VANTALINE_TEXT_INSPECTION_MANUAL_PASS_VERIFIED", "")).strip().lower() in {"1", "true", "yes", "on"}
@@ -817,8 +808,9 @@ LOGIN_RATE_LIMIT_MAX_ATTEMPTS = max(3, int(os.environ.get("VANTALINE_LOGIN_RATE_
 LOGIN_RATE_LIMIT_LOCKOUT_SECONDS = max(30, int(os.environ.get("VANTALINE_LOGIN_RATE_LIMIT_LOCKOUT_SECONDS", "300")))
 LEGACY_OWNER_ID = "legacy_admin"
 SYSTEM_OWNER_ID = "system"
-from .runtime.identity import RequestIdentity
-_request_user = RequestIdentity()
+from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
+from .runtime.repository_composition import RuntimeRepositories
+
 
 from .auth.policy import (
     FEATURE_PERMISSIONS, ADMIN_ONLY_PERMISSIONS, DEFAULT_USER_PERMISSIONS,
@@ -836,22 +828,31 @@ from .auth.repository import (
 )
 
 from .auth.composition import AuthenticationServices, AuthenticationStorage, AuthenticationSettings
+from .auth.application import AuthenticationDomain
 from .auth.sessions import SessionSettings
 from .auth.login_limits import LoginLimitSettings
 
-_authentication = AuthenticationServices(
-    storage=AuthenticationStorage(
-        directory=lambda: DATA_DIR, path=lambda: AUTH_PATH,
-        repository=lambda: runtime_postgres_repository_or_none(),
+from .runtime.application_foundation import FoundationInputs, build_foundation
+_foundation = build_foundation(FoundationInputs(
+    environment=os.environ,
+    data_directory=DATA_DIR, auth_path=AUTH_PATH,
+    legacy_owner=LEGACY_OWNER_ID, system_owner=SYSTEM_OWNER_ID,
+    authentication=AuthenticationSettings(
+        password_iterations=lambda iterations=PASSWORD_HASH_ITERATIONS: iterations,
+        sessions=lambda cookie=AUTH_SESSION_COOKIE, ttl=AUTH_SESSION_TTL_SECONDS,
+                        persist=AUTH_SESSION_PERSIST_INTERVAL_SECONDS: SessionSettings(cookie, ttl, persist),
+        login_limits=lambda window=LOGIN_RATE_LIMIT_WINDOW_SECONDS, attempts=LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
+                            lockout=LOGIN_RATE_LIMIT_LOCKOUT_SECONDS: LoginLimitSettings(window, attempts, lockout),
+        legacy_owner=lambda owner=LEGACY_OWNER_ID: owner,
     ),
-    settings=AuthenticationSettings(
-        password_iterations=lambda: PASSWORD_HASH_ITERATIONS,
-        sessions=lambda: SessionSettings(AUTH_SESSION_COOKIE, AUTH_SESSION_TTL_SECONDS, AUTH_SESSION_PERSIST_INTERVAL_SECONDS),
-        login_limits=lambda: LoginLimitSettings(LOGIN_RATE_LIMIT_WINDOW_SECONDS, LOGIN_RATE_LIMIT_MAX_ATTEMPTS, LOGIN_RATE_LIMIT_LOCKOUT_SECONDS),
-        legacy_owner=lambda: LEGACY_OWNER_ID,
-    ),
-    identity=_request_user,
-)
+))
+_runtime_repository_owner = _foundation.repositories
+_runtime_repositories = _runtime_repository_owner.factory
+_runtime_repository_access = _runtime_repository_owner.access
+runtime_repository_cache_key = _runtime_repository_owner.cache_key
+_authentication_domain = _foundation.authentication
+_authentication = _authentication_domain.services
+_request_user = _authentication_domain.identity
 _password_hasher = _authentication.hasher
 password_hash = _password_hasher.password_hash
 _auth_repository = _authentication.repository
@@ -870,38 +871,13 @@ save_auth_session_touch_or_prune = _auth_repository.save_auth_session_touch_or_p
 for path in (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, IMAGE_WORKER_LOG_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="VantaLine Local Inspection Service", docs_url=None, redoc_url=None, openapi_url=None)
-from .storage.artifacts.admission import UploadAdmission
-if os.environ.get("VANTALINE_FILE_STORE", "local") != "local":
-    app.add_middleware(UploadAdmission)
-app.add_middleware(GZipMiddleware, minimum_size=1024)
-
-LOCAL_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
-LAN_CORS_ORIGIN_REGEX = (
-    r"^https?://("
-    r"10(?:\.\d{1,3}){3}|"
-    r"192\.168(?:\.\d{1,3}){2}|"
-    r"172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}|"
-    r"[^/:]+\.local"
-    r")(?::\d+)?$"
+from .runtime.http_application import (
+    create_http_application, LOCAL_CORS_ORIGIN_REGEX, LAN_CORS_ORIGIN_REGEX,
 )
-CORS_ORIGIN_REGEX = os.environ.get(
-    "INSPECTION_CORS_ORIGIN_REGEX",
-    LAN_CORS_ORIGIN_REGEX if os.environ.get("INSPECTION_ENABLE_LAN_CORS") == "1" else LOCAL_CORS_ORIGIN_REGEX,
-)
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("INSPECTION_CORS_ORIGINS", "").split(",")
-    if origin.strip()
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_origin_regex=CORS_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+_http_application = create_http_application(os.environ, upload_runtime_provider=lambda: _business_files.runtime_provider())
+app = _http_application.app
+CORS_ORIGINS = _http_application.cors_origins
+CORS_ORIGIN_REGEX = _http_application.cors_origin_regex
 
 from .auth.public_network import PublicNetworkPolicy
 from .auth.public_network_ports import OriginPolicy, PublicEndpointPolicy, RuntimeDetailAccess
@@ -980,17 +956,6 @@ current_auth_user = _access_control.current_auth_user
 require_admin_role = _access_control.require_admin_role
 
 
-RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS: Callable[[str], Any] | None = None
-from .runtime.connections import ThreadRepositoryFactory, close_selection, selection_is_usable
-
-
-def runtime_repository_cache_key() -> tuple[str, str, int | None]:
-    return (
-        os.environ.get("VANTALINE_DATA_STORE", "").strip().lower() or "json",
-        os.environ.get("DATABASE_URL", "").strip(),
-        id(RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS) if RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS is not None else None,
-    )
-
 
 def reset_runtime_repository_cache() -> None:
     _runtime_repositories.reset()
@@ -1011,21 +976,6 @@ def clear_thread_runtime_repository_selection() -> None:
 def current_runtime_repository_generation() -> int:
     return _runtime_repositories.generation()
 
-
-_runtime_repositories = ThreadRepositoryFactory(
-    create=lambda: build_runtime_repository(postgres_connector=RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS),
-    cache_key=lambda: runtime_repository_cache_key(),
-)
-
-
-from .runtime.repository_access import RuntimeRepositoryAccess
-
-_runtime_repository_access = RuntimeRepositoryAccess(
-    factory=lambda: _runtime_repositories,
-    selection=lambda: runtime_repository_selection,
-    probe_id=lambda: runtime_repository_connection_probe_id,
-    postgres_store=lambda: POSTGRES_STORE,
-)
 
 
 def runtime_repository_selection() -> Any:
@@ -1051,29 +1001,9 @@ from .analytics.cost_pricing import (
     runpod_gpu_usd_per_second, api_cost_pricing_for_model, api_cost_usage_token_count,
     api_cost_detail_tokens, api_cost_from_usage, api_cost_day, api_cost_classify,
 )
-from .analytics.cost_repository import CostPaths, CostRepository, CostStoreDependencies
-from .analytics.costs import CostLedger
+from .analytics.cost_repository import CostPaths, CostStoreDependencies
+from .analytics.cost_composition import CostServices
 from .analytics.cost_api import register_cost_api
-
-_cost_repository = CostRepository(CostStoreDependencies(
-    paths=lambda: CostPaths(DATA_DIR, DATA_ANALYSIS_RECORDS_PATH, AI_DETECTION_TASKS_PATH,
-                            PIPELINE_TASKS_PATH, AUTO_OPTIMIZE_DIR, AI_PROFILE_CACHE_PATH),
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    detection_tasks=lambda: load_ai_detection_tasks(),
-    pipeline_tasks=lambda: load_pipeline_tasks(),
-    auto_states=lambda: list_auto_optimize_states(),
-    training_tasks=lambda: load_training_task_records(),
-    sanitize_task_id=lambda value: sanitize_ai_detection_task_id(value),
-))
-_cost_ledger = CostLedger(_cost_repository, timestamp=lambda value: coerce_record_timestamp(value))
-
-# Compatibility exports while callers migrate to domain services.
-api_cost_walk_usage = _cost_ledger.walk_usage
-api_cost_store_payloads = _cost_repository.store_payloads
-api_cost_training_records = _cost_ledger.training_records
-api_cost_collect_records = _cost_ledger.collect_records
-api_cost_summary = _cost_ledger.summary
-
 
 from .records.ownership import RecordOwnership
 from .records.access import RecordAccess
@@ -1084,64 +1014,50 @@ from .records.audit import (
     record_created_at as _record_created_at,
     record_updated_at as _record_updated_at,
 )
-_record_ownership = RecordOwnership(LEGACY_OWNER_ID, SYSTEM_OWNER_ID)
-_record_audit = RecordAudit(_record_ownership)
-_record_access = RecordAccess(
-    _request_user, _record_ownership, current_user=lambda: current_auth_user(),
-    find_user=lambda target: find_user(load_auth_store(), target),
-)
+from .records.composition import RecordServices
+_record_services = _foundation.records
+_record_ownership = _record_services.ownership
+_record_audit = _record_services.audit
+_record_access = _record_services.access
 
 
-def record_owner_id(record: dict[str, Any] | None) -> str:
-    return _record_ownership.record_owner_id(record)
+record_owner_id = _record_ownership.record_owner_id
 
 
-def current_owner_fields() -> dict[str, Any]:
-    return _record_access.current_owner_fields()
+current_owner_fields = _record_access.current_owner_fields
 
 
-def owner_fields_for_new_record(user: dict[str, Any], target_user_id: str | None = None) -> dict[str, Any]:
-    return _record_access.owner_fields_for_new_record(user, target_user_id)
+owner_fields_for_new_record = _record_access.owner_fields_for_new_record
 
 
-def coerce_record_timestamp(value: Any) -> int:
-    return _coerce_record_timestamp(value)
+coerce_record_timestamp = _coerce_record_timestamp
 
 
-def path_mtime_timestamp(path: Path | None) -> int:
-    return _path_mtime_timestamp(path)
+path_mtime_timestamp = _path_mtime_timestamp
 
 
-def record_created_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
-    return _record_created_at(record, fallback_path)
+record_created_at = _record_created_at
 
 
-def record_updated_at(record: dict[str, Any] | None, fallback_path: Path | None = None) -> int:
-    return _record_updated_at(record, fallback_path)
+record_updated_at = _record_updated_at
 
 
-def record_owner_username(record: dict[str, Any] | None) -> str:
-    return _record_ownership.record_owner_username(record)
+record_owner_username = _record_ownership.record_owner_username
 
 
-def record_audit_fields(record: dict[str, Any] | None, fallback_path: Path | None = None) -> dict[str, Any]:
-    return _record_audit.record_audit_fields(record, fallback_path)
+record_audit_fields = _record_audit.record_audit_fields
 
 
-def enrich_record_audit_fields(record: dict[str, Any], fallback_path: Path | None = None) -> dict[str, Any]:
-    return _record_audit.enrich_record_audit_fields(record, fallback_path)
+enrich_record_audit_fields = _record_audit.enrich_record_audit_fields
 
 
-def record_matches_owner_filter(record: dict[str, Any], target_user_id: str | None) -> bool:
-    return _record_ownership.record_matches_owner_filter(record, target_user_id)
+record_matches_owner_filter = _record_ownership.record_matches_owner_filter
 
 
-def record_visible_to_user(record: dict[str, Any], user: dict[str, Any], target_user_id: str | None = None) -> bool:
-    return _record_ownership.record_visible_to_user(record, user, target_user_id)
+record_visible_to_user = _record_ownership.record_visible_to_user
 
 
-def record_mutable_by_user(record: dict[str, Any], user: dict[str, Any]) -> bool:
-    return _record_ownership.record_mutable_by_user(record, user)
+record_mutable_by_user = _record_ownership.record_mutable_by_user
 
 
 from .records.resource_names import ResourceNames
@@ -1342,8 +1258,7 @@ def scope_config_for_user(config: dict[str, Any], user: dict[str, Any] | None = 
     return _account_projections.scope_config_for_user(config, user, target_user_id)
 
 
-def require_record_access(record: dict[str, Any], user: dict[str, Any] | None = None, *, write: bool = False) -> None:
-    return _record_access.require_record_access(record, user, write=write)
+require_record_access = _record_access.require_record_access
 
 
 require_permission = _access_control.require_permission
@@ -1378,10 +1293,9 @@ clear_failed_login_attempts = _login_limiter.clear_failed_login_attempts
 
 from .auth.http_composition import AuthenticationHttp, AuthenticationHttpPolicy
 
-_authentication_http = AuthenticationHttp(
-    _authentication, _request_user,
+_authentication_http = _authentication_domain.http(
     AuthenticationHttpPolicy(
-        output_visible=lambda path, user: output_path_visible_to_user(path, user),
+        output_visible=_account_projections.output_path_visible_to_user,
         same_origin=_public_network_policy.same_origin,
         cors_origin_allowed=_public_network_policy.cors_origin_allowed,
     ),
@@ -1421,7 +1335,7 @@ app.mount(
 )
 from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
 
-app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR), name="outputs")
+app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR, runtime_provider=lambda: _business_files.runtime_provider()), name="outputs")
 
 from .detection.model_selection import ModelSelection
 from .detection.local_models import LocalModels
@@ -1434,6 +1348,7 @@ _model_selection = ModelSelection(
 _local_models = LocalModels(
     select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda: YOLO,
     legacy_specs=lambda: legacy_model_specs(), trained_specs=lambda *args: list_trained_model_specs(*args),
+    files=_business_files,
 )
 # Compatibility objects for existing maintenance scripts; state belongs to LocalModels.
 _models = _local_models.models
@@ -1459,17 +1374,20 @@ _yolo_warmup_runtime = YoloWarmup(WarmupOperations(
     candidates=lambda config: yolo_warmup_configured_model_ids(config),
     warm=lambda model_id, config: warm_yolo_model_once(model_id, config),
     loaded_ids=lambda config: yolo_loaded_model_ids(config), error_text=lambda: bounded_text,
-))
+), scope=_runtime_repositories.thread_scope)
 _yolo_warmup_lock = _yolo_warmup_runtime.lock
 _yolo_warmup_state = _yolo_warmup_runtime.state
 _incoming_text_store_lock = threading.RLock()
 from .accessories.cutout_runtime import RembgSessionRuntime as _RembgSessionRuntime
 _rembg_runtime = _RembgSessionRuntime()
 from .runtime.image_worker import ImageWorkerRuntime
-_image_worker_runtime = ImageWorkerRuntime(target=lambda: image_worker_loop, threads=lambda: threading.Thread)
+_image_worker_runtime = ImageWorkerRuntime(
+    target=lambda: image_worker_loop, threads=lambda: threading.Thread,
+    scope=_runtime_repositories.thread_scope,
+)
 _candidate_store_lock = threading.RLock()
-from .runtime.training_tasks import TrainingTaskRuntime
-_training_task_runtime = TrainingTaskRuntime()
+from .runtime.training_tasks import TrainingTaskRuntime, TrainingThreadLifecycle
+_training_task_runtime = TrainingTaskRuntime(scope=_runtime_repositories.thread_scope)
 _training_task_lock = _training_task_runtime.lock
 _image_worker_processes = _image_worker_runtime.processes
 _training_task_threads = _training_task_runtime.threads
@@ -1945,6 +1863,7 @@ _plc_station_service = PlcStationService(
         plc_web_serial_station_from_request=lambda: plc_web_serial_station_from_request,
     ),
     policy=StationPolicy(
+        clock=lambda: time.time,
         PlcConfigError=lambda: PlcConfigError,
         HTTPException=lambda: HTTPException,
         DEFAULT_WEB_SERIAL_CONFIG=lambda: DEFAULT_WEB_SERIAL_CONFIG,
@@ -2075,33 +1994,7 @@ def plc_web_serial_release_lease(station_id: str, request: PlcWorkstationLeaseHe
     return _plc_lease_maintenance.release(station_id, request)
 
 
-def _plc_web_serial_require_active_lease(
-    state: dict[str, dict[str, Any] | None],
-    session_id: str,
-    lease_epoch: int | None = None,
-) -> tuple[dict[str, Any], dict[str, Any], int]:
-    station = _plc_web_serial_record(state.get("station"))
-    lease = _plc_web_serial_record(state.get("lease"))
-    now = int((state.get("clock") or {}).get("now") or time.time())
-    user_id = str((current_auth_user() or {}).get("id") or "")
-    if not station or not lease:
-        raise PlcConfigError("plc_workstation_lease_missing")
-    valid = (
-        lease.get("session_id") == session_id
-        and lease.get("owner_user_id") == user_id
-        and lease.get("state") == "active"
-        and int(lease.get("expires_at") or 0) > now
-        and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
-        and lease.get("bundle_version") == WEB_SERIAL_PROTOCOL_VERSION
-    )
-    if lease_epoch is not None:
-        valid = valid and int(lease.get("lease_epoch") or -1) == int(lease_epoch)
-    if not valid:
-        raise PlcConfigError("plc_workstation_lease_fenced")
-    config = migrate_web_serial_config(station.get("config") if isinstance(station.get("config"), dict) else {})
-    if not config["enabled"]:
-        raise PlcConfigError("plc_workstation_disabled")
-    return station, lease, now
+_plc_web_serial_require_active_lease = _plc_station_service._plc_web_serial_require_active_lease
 
 
 from .plc.diagnostic_state import DiagnosticState as _PlcDiagnosticState
@@ -2299,172 +2192,99 @@ PLC_CAPTURE_POLL_SECONDS = 0.2
 PLC_CAPTURE_EVENT_TTL_SECONDS = 1.0
 PLC_CAPTURE_PROCESSING_TTL_SECONDS = max(180.0, PLC_WORKER_TOTAL_TIMEOUT_SECONDS + 60.0)
 _plc_process_owner_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex}"
-_plc_owner_heartbeat_lock = threading.Lock()
-_plc_owner_heartbeat_thread: threading.Thread | None = None
+from .plc.legacy_workers import LegacyPlcWorkers, LegacyHeartbeatCapabilities, LegacyLoopCapabilities
+
+_legacy_plc_workers = LegacyPlcWorkers(
+    heartbeat=LegacyHeartbeatCapabilities(
+        repository=lambda: runtime_postgres_repository_or_none,
+        config=lambda: load_config,
+        namespace=lambda: raw_plc_namespace,
+        renew=lambda: plc_claim_or_renew_io_owner,
+        seconds=lambda: PLC_IO_OWNER_HEARTBEAT_SECONDS,
+    ),
+    loops=LegacyLoopCapabilities(
+        reconcile=lambda: plc_reconcile_pending_dispatches_once,
+        poll=lambda: plc_capture_poll_once,
+        seconds=lambda: PLC_CAPTURE_POLL_SECONDS,
+    ),
+)
 
 
-def plc_pg_coordination_available() -> bool:
-    repository = runtime_postgres_repository_or_none()
-    # Generic namespace CAS is not enough to fence physical I/O across hosts.
-    # Production stays closed until the repository supplies a DB-clock, atomic
-    # owner+attempt transition primitive reviewed against the real deployment.
-    return repository is not None and callable(
-        getattr(repository, "mutate_plc_fenced_attempt_with_db_time", None)
-    )
+from .plc.legacy_activation import LegacyActivationPolicy, LegacyActivationSources, LegacyActivationChecks
+
+_legacy_plc_activation = LegacyActivationPolicy(
+    sources=LegacyActivationSources(
+        repository=lambda: runtime_postgres_repository_or_none,
+        transport=lambda: _plc_transport_factory,
+        identity=lambda: _request_user,
+        getenv=lambda: os.getenv,
+        canonical=lambda: _plc_canonical,
+    ),
+    checks=LegacyActivationChecks(
+        coordination=lambda: plc_pg_coordination_available,
+        fingerprint=lambda: plc_profile_fingerprint,
+        device=lambda: plc_device_profile_verified,
+        read=lambda: plc_read_profile_verified,
+        serial=lambda: plc_serial_dependency_available,
+    ),
+)
+
+plc_pg_coordination_available = _legacy_plc_activation.plc_pg_coordination_available
 
 
-def plc_profile_fingerprint(settings: dict[str, Any], *, include_read: bool) -> str:
-    fields = [
-        "protocol", "checksum_mode", "serial_port", "baudrate", "parity",
-        "data_bits", "stop_bits", "result_register", "output_control_point",
-    ]
-    if include_read:
-        fields.extend(["capture_input_register", "capture_trigger_value"])
-    material = {field: settings.get(field) for field in fields}
-    return hashlib.sha256(_plc_canonical(material).encode("ascii")).hexdigest()
+plc_profile_fingerprint = _legacy_plc_activation.plc_profile_fingerprint
 
 
-def plc_device_profile_verified(settings: dict[str, Any] | None = None) -> bool:
-    if _plc_transport_factory is not None:
-        return True
-    expected = str(os.getenv("VANTALINE_PLC_DEVICE_PROFILE_FINGERPRINT") or "").strip().lower()
-    return bool(settings is not None and expected and hmac.compare_digest(expected, plc_profile_fingerprint(settings, include_read=False)))
+plc_device_profile_verified = _legacy_plc_activation.plc_device_profile_verified
 
 
-def plc_read_profile_verified(settings: dict[str, Any] | None = None) -> bool:
-    if _plc_transport_factory is not None:
-        return True
-    expected = str(os.getenv("VANTALINE_PLC_READ_PROFILE_FINGERPRINT") or "").strip().lower()
-    return bool(settings is not None and expected and hmac.compare_digest(expected, plc_profile_fingerprint(settings, include_read=True)))
+plc_read_profile_verified = _legacy_plc_activation.plc_read_profile_verified
 
 
-def plc_serial_dependency_available() -> bool:
-    if _plc_transport_factory is not None and _request_user.get() is not None:
-        return True
-    try:
-        import serial  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError:
-        return False
-    return True
+plc_serial_dependency_available = _legacy_plc_activation.plc_serial_dependency_available
 
 
-def plc_activation_errors(settings: dict[str, Any]) -> list[dict[str, str]]:
-    if not settings.get("enabled"):
-        return []
-    errors: list[dict[str, str]] = []
-    if not plc_pg_coordination_available():
-        errors.append({"code": "plc_pg_coordination_unavailable", "message": "PostgreSQL PLC 多实例协调不可用"})
-    if not plc_serial_dependency_available():
-        errors.append({"code": "plc_serial_dependency_missing", "message": "生产部署未安装锁定版本的 pyserial"})
-    if not plc_device_profile_verified(settings):
-        errors.append({"code": "plc_device_profile_unverified", "message": "现场 PLC 型号、地址范围和写协议尚未验证"})
-    if settings.get("capture_trigger_enabled") and not plc_read_profile_verified(settings):
-        errors.append({"code": "plc_read_profile_unverified", "message": "现场 PLC 输入寄存器读取帧和字节序尚未验证"})
-    return errors
+plc_activation_errors = _legacy_plc_activation.plc_activation_errors
 
 
-def mutate_plc_runtime_coordination(mutator: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
-    """Mutate only the small PLC runtime row; never rewrite the dispatch audit list on heartbeats."""
-    repository = runtime_postgres_repository_or_none()
-    if repository is not None:
-        values = repository.mutate_app_config_namespace(
-            (PLC_RUNTIME_COORDINATION_KEY,),
-            lambda rows: _mutate_plc_runtime_rows(rows, mutator),
-            updated_at=int(time.time()),
-        )
-        value = values.get(PLC_RUNTIME_COORDINATION_KEY)
-        return copy.deepcopy(value) if isinstance(value, dict) else {}
+from .plc.legacy_coordination import LegacyRuntimeCoordination, LegacyCoordinationStorage, LegacyCoordinationPolicy
 
-    result: dict[str, Any] = {}
-    def mutate(config: dict[str, Any]) -> None:
-        nonlocal result
-        current = config.get(PLC_RUNTIME_COORDINATION_KEY)
-        state = copy.deepcopy(current) if isinstance(current, dict) else {}
-        mutator(state)
-        config[PLC_RUNTIME_COORDINATION_KEY] = state
-        result = copy.deepcopy(state)
-    mutate_app_config_atomically(mutate)
-    return result
+_legacy_plc_coordination = LegacyRuntimeCoordination(
+    storage=LegacyCoordinationStorage(
+        repository=lambda: runtime_postgres_repository_or_none,
+        mutate_config=lambda: mutate_app_config_atomically,
+        load_config=lambda: load_config,
+        mutate_rows=lambda: _mutate_plc_runtime_rows,
+        mutate_runtime=lambda: mutate_plc_runtime_coordination,
+        start_heartbeat=lambda: plc_start_owner_heartbeat,
+    ),
+    policy=LegacyCoordinationPolicy(
+        runtime_key=lambda: PLC_RUNTIME_COORDINATION_KEY,
+        receipts_key=lambda: PLC_CAPTURE_RESULTS_KEY,
+        process_id=lambda: _plc_process_owner_id,
+        lease_seconds=lambda: PLC_IO_OWNER_LEASE_SECONDS,
+        quarantine_seconds=lambda: PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS,
+        clock=lambda: time.time,
+    ),
+)
 
 
-def plc_completed_capture_receipt(trigger_id: str) -> dict[str, Any] | None:
-    receipts = load_config().get(PLC_CAPTURE_RESULTS_KEY)
-    receipt = receipts.get(trigger_id) if isinstance(receipts, dict) else None
-    return copy.deepcopy(receipt) if isinstance(receipt, dict) else None
+mutate_plc_runtime_coordination = _legacy_plc_coordination.mutate_plc_runtime_coordination
 
 
-def _mutate_plc_runtime_rows(rows: dict[str, Any], mutator: Callable[[dict[str, Any]], None]) -> None:
-    current = rows.get(PLC_RUNTIME_COORDINATION_KEY)
-    state = copy.deepcopy(current) if isinstance(current, dict) else {}
-    mutator(state)
-    rows[PLC_RUNTIME_COORDINATION_KEY] = state
+plc_completed_capture_receipt = _legacy_plc_coordination.plc_completed_capture_receipt
 
 
-def plc_claim_or_renew_io_owner() -> dict[str, Any] | None:
-    now = time.time()
-    claimed: dict[str, Any] | None = None
-    def mutate(state: dict[str, Any]) -> None:
-        nonlocal claimed
-        owner = state.get("io_owner") if isinstance(state.get("io_owner"), dict) else {}
-        owner_id = str(owner.get("owner_id") or "")
-        expires_at = float(owner.get("expires_at") or 0.0)
-        quarantine_until = float(owner.get("quarantine_until") or 0.0)
-        if owner_id == _plc_process_owner_id:
-            epoch = int(owner.get("epoch") or 1)
-        elif expires_at <= now and quarantine_until <= now:
-            epoch = int(owner.get("epoch") or 0) + 1
-        else:
-            return
-        claimed = {
-            "owner_id": _plc_process_owner_id,
-            "epoch": epoch,
-            "heartbeat_at": now,
-            "expires_at": now + PLC_IO_OWNER_LEASE_SECONDS,
-            "quarantine_until": now + PLC_IO_OWNER_LEASE_SECONDS + PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS,
-        }
-        state["io_owner"] = copy.deepcopy(claimed)
-    mutate_plc_runtime_coordination(mutate)
-    if claimed is not None and runtime_postgres_repository_or_none() is not None:
-        plc_start_owner_heartbeat(int(claimed["epoch"]))
-    return claimed
+_mutate_plc_runtime_rows = _legacy_plc_coordination._mutate_plc_runtime_rows
 
 
-def plc_start_owner_heartbeat(epoch: int) -> None:
-    global _plc_owner_heartbeat_thread
-    with _plc_owner_heartbeat_lock:
-        if _plc_owner_heartbeat_thread is not None and _plc_owner_heartbeat_thread.is_alive():
-            return
-        def heartbeat() -> None:
-            while True:
-                time.sleep(PLC_IO_OWNER_HEARTBEAT_SECONDS)
-                try:
-                    if runtime_postgres_repository_or_none() is None:
-                        return
-                    current = load_config()
-                    raw = raw_plc_namespace(current)
-                    if not isinstance(raw, dict) or not bool(raw.get("enabled")):
-                        return
-                    renewed = plc_claim_or_renew_io_owner()
-                    if renewed is None or int(renewed.get("epoch") or 0) != epoch:
-                        return
-                except Exception:
-                    return
-        _plc_owner_heartbeat_thread = threading.Thread(
-            target=heartbeat,
-            name="plc-io-owner-heartbeat",
-            daemon=True,
-        )
-        _plc_owner_heartbeat_thread.start()
+plc_claim_or_renew_io_owner = _legacy_plc_coordination.plc_claim_or_renew_io_owner
 
 
-def plc_current_process_owns_io(epoch: int | None = None) -> bool:
-    current = load_config().get(PLC_RUNTIME_COORDINATION_KEY)
-    owner = current.get("io_owner") if isinstance(current, dict) and isinstance(current.get("io_owner"), dict) else {}
-    return bool(
-        owner.get("owner_id") == _plc_process_owner_id
-        and float(owner.get("expires_at") or 0.0) > time.time()
-        and (epoch is None or int(owner.get("epoch") or 0) == epoch)
-    )
+plc_start_owner_heartbeat = _legacy_plc_workers.plc_start_owner_heartbeat
+
+
+plc_current_process_owns_io = _legacy_plc_coordination.plc_current_process_owns_io
 
 
 from .plc.plc_capture_state import PlcCaptureState
@@ -2538,143 +2358,56 @@ def plc_finish_triggered_analysis(trigger_id: str, session_id: str, user_id: str
     return _plc_capture_state.plc_finish_triggered_analysis(trigger_id, session_id, user_id, result, error)
 
 
-_plc_capture_poller_lock = threading.Lock()
-_plc_capture_poller_thread: threading.Thread | None = None
-_plc_dispatch_reconciler_lock = threading.Lock()
-_plc_dispatch_reconciler_thread: threading.Thread | None = None
 
 
-def plc_reconcile_pending_dispatches_once() -> dict[str, Any] | None:
-    """Let the fenced I/O owner adopt one durable dispatch that provably never wrote."""
-    config = load_config()
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(config))
-    except PlcConfigError:
-        return None
-    if not settings["enabled"] or plc_activation_errors(settings):
-        return None
-    owner = plc_claim_or_renew_io_owner()
-    if owner is None:
-        return None
-    for raw_record in plc_dispatch_audit_records(config):
-        try:
-            record = verify_persisted_plc_dispatch(raw_record)
-        except PlcDispatchStateConflict:
-            continue
-        if not plc_dispatch_is_pristine_queue(record):
-            continue
-        blocker = plc_dispatch_adoption_blocker(
-            record,
-            settings=settings,
-            generation=int(config.get(PLC_CONTROL_GENERATION_KEY) or 0),
-        )
-        if blocker:
-            if blocker == "version_not_adoptable":
-                continue
-            reason = (
-                "plc_dispatch_queue_timeout"
-                if blocker in {"deadline_missing", "deadline_expired"}
-                else "cancelled_after_config_change"
-            )
-            return plc_finalize_dispatch(
-                str(record.get("dispatch_id") or ""),
-                expected_version=int(record.get("state_version") or 0),
-                reason=reason,
-            )
-        result = {
-            "request_id": str(record.get("request_id") or ""),
-            "passed": bool(record.get("passed")),
-        }
-        return _run_queued_plc_dispatch(
-            result,
-            source=str(record.get("source") or ""),
-            fingerprint=str(record.get("detection_identity") or ""),
-        ).get("plc_sync")
-    return None
+from .plc.legacy_operations import (
+    LegacyPlcOperations, LegacyOperationConfiguration, LegacyOperationOwnership,
+    LegacyDispatchIteration, LegacyCaptureIteration,
+)
+
+_legacy_plc_operations = LegacyPlcOperations(
+    configuration=LegacyOperationConfiguration(
+        load=lambda: load_config,
+        normalize=lambda: normalize_plc_config,
+        namespace=lambda: raw_plc_namespace,
+        error=lambda: PlcConfigError,
+        activation=lambda: plc_activation_errors,
+        generation_key=lambda: PLC_CONTROL_GENERATION_KEY,
+    ),
+    ownership=LegacyOperationOwnership(
+        claim=lambda: plc_claim_or_renew_io_owner,
+        owns=lambda: plc_current_process_owns_io,
+    ),
+    dispatch=LegacyDispatchIteration(
+        records=lambda: plc_dispatch_audit_records,
+        verify=lambda: verify_persisted_plc_dispatch,
+        conflict=lambda: PlcDispatchStateConflict,
+        pristine=lambda: plc_dispatch_is_pristine_queue,
+        blocker=lambda: plc_dispatch_adoption_blocker,
+        finalize=lambda: plc_finalize_dispatch,
+        run=lambda: _run_queued_plc_dispatch,
+    ),
+    capture=LegacyCaptureIteration(
+        pending=lambda: _plc_write_pending,
+        slots=lambda: _plc_dispatch_slots,
+        read=lambda: read_d_register_value,
+        transport=lambda: _plc_transport_factory,
+        disarm=lambda: plc_capture_disarm,
+        observe=lambda: plc_apply_capture_observation,
+    ),
+)
 
 
-def start_plc_dispatch_reconciler() -> None:
-    global _plc_dispatch_reconciler_thread
-    with _plc_dispatch_reconciler_lock:
-        if _plc_dispatch_reconciler_thread is not None and _plc_dispatch_reconciler_thread.is_alive():
-            return
-        def reconcile() -> None:
-            while True:
-                try:
-                    plc_reconcile_pending_dispatches_once()
-                except Exception:
-                    pass
-                time.sleep(PLC_CAPTURE_POLL_SECONDS)
-        _plc_dispatch_reconciler_thread = threading.Thread(
-            target=reconcile,
-            name="plc-dispatch-reconciler",
-            daemon=True,
-        )
-        _plc_dispatch_reconciler_thread.start()
+plc_reconcile_pending_dispatches_once = _legacy_plc_operations.plc_reconcile_pending_dispatches_once
 
 
-def plc_capture_poll_once() -> dict[str, Any] | None:
-    config = load_config()
-    generation = int(config.get(PLC_CONTROL_GENERATION_KEY) or 0)
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(config))
-    except PlcConfigError:
-        return None
-    if not settings["enabled"] or not settings["capture_trigger_enabled"] or plc_activation_errors(settings):
-        return None
-    owner = plc_claim_or_renew_io_owner()
-    if owner is None:
-        return None
-    owner_epoch = int(owner["epoch"])
-    if _plc_write_pending.is_set() or not _plc_dispatch_slots.acquire(blocking=False):
-        return None
-    try:
-        if _plc_write_pending.is_set() or not plc_current_process_owns_io(owner_epoch):
-            return None
-        read_settings = {**settings, "timeout": min(float(settings["timeout"]), 0.15)}
-        value = read_d_register_value(
-            read_settings,
-            settings["capture_input_register"],
-            transport_factory=_plc_transport_factory,
-        )
-    except Exception as exc:
-        plc_capture_disarm(f"read_failed:{type(exc).__name__}")
-        return None
-    finally:
-        _plc_dispatch_slots.release()
-    current = load_config()
-    if (
-        int(current.get(PLC_CONTROL_GENERATION_KEY) or 0) != generation
-        or not plc_current_process_owns_io(owner_epoch)
-    ):
-        plc_capture_disarm("stale_read_discarded")
-        return None
-    return plc_apply_capture_observation(
-        value,
-        generation=generation,
-        owner_epoch=owner_epoch,
-        trigger_value=int(settings["capture_trigger_value"]),
-    )
+start_plc_dispatch_reconciler = _legacy_plc_workers.start_plc_dispatch_reconciler
 
 
-def start_plc_capture_poller() -> None:
-    global _plc_capture_poller_thread
-    with _plc_capture_poller_lock:
-        if _plc_capture_poller_thread is not None and _plc_capture_poller_thread.is_alive():
-            return
-        def poll() -> None:
-            while True:
-                try:
-                    plc_capture_poll_once()
-                except Exception:
-                    pass
-                time.sleep(PLC_CAPTURE_POLL_SECONDS)
-        _plc_capture_poller_thread = threading.Thread(
-            target=poll,
-            name="plc-capture-input-poller",
-            daemon=True,
-        )
-        _plc_capture_poller_thread.start()
+plc_capture_poll_once = _legacy_plc_operations.plc_capture_poll_once
+
+
+start_plc_capture_poller = _legacy_plc_workers.start_plc_capture_poller
 
 
 @app.on_event("startup")
@@ -2691,30 +2424,36 @@ def plc_config_request_payload(request: PlcConfigRequest) -> dict[str, Any]:
     return request.dict(exclude_none=True)
 
 
-def plc_dispatch_audit_records(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    current = config if isinstance(config, dict) else load_config()
-    records = current.get("plc_dispatches") if isinstance(current.get("plc_dispatches"), list) else []
-    return [dict(item) for item in records if isinstance(item, dict)]
+from .plc.legacy_records import LegacyDispatchRecords, DispatchRecordSources, DispatchRecordPolicy
+
+_legacy_plc_records = LegacyDispatchRecords(
+    sources=DispatchRecordSources(
+        config=lambda: load_config,
+        namespace=lambda: raw_plc_namespace,
+        sanitize=lambda: public_path_sanitized,
+        records=lambda: plc_dispatch_audit_records,
+        existing=lambda: plc_dispatch_existing,
+        verify=lambda: verify_persisted_plc_dispatch,
+    ),
+    policy=DispatchRecordPolicy(
+        absent=lambda: PLC_CONFIG_ABSENT,
+        guard=lambda: _config_io_lock,
+        conflict=lambda: PlcDispatchStateConflict,
+        clock=lambda: time.time,
+    ),
+)
 
 
-def raw_plc_namespace(config: dict[str, Any]) -> Any:
-    return config["plc"] if "plc" in config else PLC_CONFIG_ABSENT
+plc_dispatch_audit_records = _legacy_plc_records.plc_dispatch_audit_records
 
 
-def plc_config_audit_snapshot(config: dict[str, Any]) -> dict[str, Any]:
-    raw = raw_plc_namespace(config)
-    if isinstance(raw, dict):
-        return public_path_sanitized(dict(raw))
-    if raw is PLC_CONFIG_ABSENT:
-        return {"namespace_present": False, "enabled": False}
-    return {"namespace_present": True, "namespace_valid": False, "value_type": type(raw).__name__}
+raw_plc_namespace = _legacy_plc_records.raw_plc_namespace
 
 
-def plc_dispatch_existing(dispatch_id: str) -> dict[str, Any] | None:
-    for record in reversed(plc_dispatch_audit_records()):
-        if str(record.get("dispatch_id") or "") == dispatch_id:
-            return record
-    return None
+plc_config_audit_snapshot = _legacy_plc_records.plc_config_audit_snapshot
+
+
+plc_dispatch_existing = _legacy_plc_records.plc_dispatch_existing
 
 
 mutate_app_config_atomically = _app_config_store.mutate_app_config_atomically
@@ -2777,55 +2516,10 @@ from .plc.event_commands import (
 
 
 
-def get_validated_idempotent_dispatch(
-    *, source: str, request_id: str, passed: bool, fingerprint: str
-) -> dict[str, Any] | None:
-    material = json.dumps(
-        {"source": source.strip(), "request_id": request_id, "fingerprint": fingerprint},
-        sort_keys=True,
-        ensure_ascii=True,
-    )
-    dispatch_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
-    with _config_io_lock:
-        existing = plc_dispatch_existing(dispatch_id)
-    if existing is None:
-        return None
-    verified = verify_persisted_plc_dispatch(existing)
-    if not (
-        verified.get("source") == source.strip()
-        and verified.get("request_id") == request_id
-        and verified.get("passed") is passed
-        and verified.get("detection_identity") == fingerprint
-    ):
-        raise PlcDispatchStateConflict("create_dispatch_identity_conflict", verified)
-    return verified
+get_validated_idempotent_dispatch = _legacy_plc_records.get_validated_idempotent_dispatch
 
 
-def plc_dispatch_conflict_response(
-    conflict: PlcDispatchStateConflict,
-    *,
-    dispatch_id: str,
-    source: str,
-    request_id: str,
-    passed: bool,
-) -> dict[str, Any]:
-    authoritative = dict(conflict.authoritative)
-    return {
-        **authoritative,
-        "dispatch_id": dispatch_id,
-        "source": source,
-        "request_id": request_id,
-        "passed": passed,
-        "duplicate": False,
-        "status": "failed",
-        "error_code": conflict.reason,
-        "audit_status": "state_conflict",
-        "attempted": bool(authoritative.get("attempted")),
-        "worker_done": True,
-        "worker_continues": False,
-        "message": "Stored PLC dispatch requires migration or manual corruption review; no I/O was attempted",
-        "updated_at": int(time.time()),
-    }
+plc_dispatch_conflict_response = _legacy_plc_records.plc_dispatch_conflict_response
 
 
 from .plc.dispatch_mutations import PlcDispatchMutations
@@ -3457,6 +3151,7 @@ _accessory_refresh = AccessoryRefresh(
         generate=lambda item, **kwargs: generate_accessory_ai_profile(item, **kwargs),
     ),
 )
+_accessory_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _candidate_factory = CandidateFactory(
     CandidateMedia(
         expand_sources=lambda identifier, sources: expand_accessory_reference_sources(identifier, sources),
@@ -3476,7 +3171,7 @@ _candidate_factory = CandidateFactory(
         owner_fields=lambda: current_owner_fields(),
         directory=lambda: ACCESSORY_CANDIDATES_DIR,
         save=lambda path, item: save_accessory_candidate(path, item),
-    ),
+    ), images=_accessory_image_io
 )
 
 
@@ -3490,7 +3185,7 @@ from .accessories.preview_asset_ports import PreviewAssetPolicy as _PreviewAsset
 _preview_asset_loader = _PreviewAssetLoader(
     _PreviewAssetPolicy(root=lambda: ROOT, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PreviewAssetPaths(resolve=lambda: resolve_service_path),
-    _PreviewAssetOperations(default=lambda: default_asset_for_accessory, candidate=lambda: load_document_image_candidate, select=lambda: select_document_image_candidate, preview=lambda: load_preview_asset_with_metadata),
+    _PreviewAssetOperations(default=lambda: default_asset_for_accessory, candidate=lambda: load_document_image_candidate, select=lambda: select_document_image_candidate, preview=lambda: load_preview_asset_with_metadata), files=_business_files, images=_accessory_image_io
 )
 
 def default_asset_for_accessory(item: dict[str, Any]) -> Path | None:
@@ -3577,7 +3272,7 @@ _image_job_metadata = ImageJobMetadata(
         guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
         max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
     ),
-    lambda: resolve_model_profiles(),
+    lambda: resolve_model_profiles(), files=_business_files
 )
 
 
@@ -3640,7 +3335,7 @@ _reference_evidence = _ReferenceEvidence(
     _ReferencePolicy(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, screens=lambda: CHROMA_SCREEN_OPTIONS),
     _ReferencePaths(resolve=lambda: resolve_service_path, jobs=lambda: candidate_image_jobs, default=lambda: default_asset_for_accessory, preferred=lambda: ai_profile_reference_paths, first_source=lambda: first_source_ai_reference_path, inventory=lambda: accessory_image_paths),
     _ReferenceContexts(uid=lambda: accessory_uid, bounded=lambda: bounded_text, context=lambda: image_reference_context, references=lambda: accessory_reference_image_contexts),
-    _ReferenceChroma(normalize=lambda: normalize_chroma_screen, mask=lambda: saturated_chroma_mask),
+    _ReferenceChroma(normalize=lambda: normalize_chroma_screen, mask=lambda: saturated_chroma_mask), files=_business_files, images=_accessory_image_io
 )
 
 def accessory_image_paths(item: dict[str, Any]) -> list[Path]:
@@ -3816,7 +3511,7 @@ _pose_asset_materialization = _PoseAssetMaterialization(
     _PoseChromaSources(threshold=lambda: CHROMA_SCREEN_REFERENCE_FRACTION_THRESHOLD, fraction=lambda: accessory_reference_chroma_fraction, screen=lambda: normalize_chroma_screen),
     _PoseMaterializationState(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, now=lambda: agent_mcp_now, current=lambda: agent_mcp_orchestration),
     _PoseAssetMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, digest=lambda: file_sha256, public_url=lambda: public_output_url),
-    _PoseMaterializationSprites(build=lambda: build_clean_sprites_from_agent_mcp_poses, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready),
+    _PoseMaterializationSprites(build=lambda: build_clean_sprites_from_agent_mcp_poses, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready), files=_business_files
 )
 
 def choose_agent_mcp_chroma_screen(item: dict[str, Any]) -> dict[str, Any]:
@@ -4900,6 +4595,8 @@ _auto_optimization_label_processing = AutoOptimizationLabelProcessing(
         as_completed=lambda: as_completed,
         auto_optimize_process_label_sample=lambda: auto_optimize_process_label_sample,
     ),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
+    model_resolver=resolve_model_profiles,
 )
 
 
@@ -4956,6 +4653,7 @@ _auto_optimization_training_scheduling = AutoOptimizationTrainingScheduling(
         bounded_text=lambda: bounded_text,
         auto_optimize_training_check_worker=lambda: auto_optimize_training_check_worker,
     ),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 
@@ -5210,6 +4908,7 @@ _auto_optimization_shadow_evaluation = AutoOptimizationShadowEvaluation(
         training_run_roots=lambda: training_run_roots,
         _business_files=lambda: _business_files,
     ),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 
@@ -5613,6 +5312,7 @@ _image_encoding = ImageEncoding(
     lambda: cv2,
     lambda message: AiProviderError(message),
     lambda image, max_side=1280, quality=82: image_bgr_data_url(image, max_side=max_side, quality=quality),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 _inspection_image_store = InspectionImageStore(
     lambda: cv2,
@@ -5623,6 +5323,7 @@ _inspection_image_store = InspectionImageStore(
     ),
     lambda: time.time_ns(),
     lambda name: safe_name(name),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 _reference_collection = ReferenceCollection(
     lambda: bounded_text,
@@ -5656,6 +5357,7 @@ _reference_sheet = ReferenceSheet(
         lambda image, width, height: fit_image_into_cell(image, width, height),
         lambda: image_path_data_url,
     ),
+    files=lambda: _business_files,
 )
 
 
@@ -5729,6 +5431,7 @@ _model_tool_dispatch = ModelToolDispatch(
         generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
     ),
     transport=McpToolTransport(
+        admission=lambda: _ai_mcp_client.admission,
         ai_mcp_runtime=lambda: ai_mcp_runtime,
         AI_MCP_RUNTIME_STDIO=lambda: AI_MCP_RUNTIME_STDIO,
         AI_MCP_RUNTIME_IN_PROCESS=lambda: AI_MCP_RUNTIME_IN_PROCESS,
@@ -5881,14 +5584,17 @@ def call_ai_mcp_tool(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _model_tool_dispatch.call_ai_mcp_tool(tool_name, payload)
 
 
-_mcp_warmup = McpWarmup(enabled=external_ai_mcp_enabled, client=lambda: _ai_mcp_client)
+_mcp_warmup = McpWarmup(
+    enabled=external_ai_mcp_enabled, client=lambda: _ai_mcp_client,
+    admission=lambda: _ai_mcp_client.admission(),
+)
 warm_ai_mcp_client = _mcp_warmup.warm_ai_mcp_client
 
 
 @app.on_event("startup")
 def start_ai_mcp_warmup() -> None:
     if external_ai_mcp_enabled():
-        threading.Thread(target=warm_ai_mcp_client, name="ai-mcp-warmup", daemon=True).start()
+        _ai_mcp_client.start_warmup(warm_ai_mcp_client, threads=threading.Thread)
 
 
 def generate_accessory_ai_profile(item: dict[str, Any], *, allow_provider: bool = True) -> dict[str, Any]:
@@ -5916,11 +5622,11 @@ _sprite_asset_catalog = _SpriteAssetCatalog(
     _MaterializedAssetPaths(resolve=lambda: resolve_service_path),
     _SpriteCatalogPoseOperations(top_view=lambda: pose_family_is_top_view, footprint=lambda: pose_render_footprint_metadata, upright=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints),
     _SpriteCatalogMaterialPolicy(expected=lambda: object_alpha_material_policy, normalize=lambda: normalize_object_alpha_material_policy),
-    _SpriteCatalogReadiness(assets=lambda: clean_sprite_assets, metadata=lambda: clean_sprite_metadata_complete, material=lambda: clean_sprite_material_policy_matches),
+    _SpriteCatalogReadiness(assets=lambda: clean_sprite_assets, metadata=lambda: clean_sprite_metadata_complete, material=lambda: clean_sprite_material_policy_matches), files=_business_files, images=_accessory_image_io
 )
 _text_asset_catalog = _TextAssetCatalog(
     _MaterializedAssetPaths(resolve=lambda: resolve_service_path),
-    _TextCatalogOperations(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, assets=lambda: canonical_text_assets),
+    _TextCatalogOperations(suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, assets=lambda: canonical_text_assets), files=_business_files, images=_accessory_image_io
 )
 
 def clean_sprite_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -5935,7 +5641,7 @@ _agent_pose_assets = _AgentPoseAssets(
     _PoseAssetMaterial(kind=lambda: accessory_material_type, text_assets=lambda: canonical_text_assets, text_complete=lambda: canonical_text_assets_complete),
     _PoseAssetSprites(source_paths=lambda: object_photo_highlight_source_paths, highlight_ready=lambda: photo_highlight_clean_sprites_ready, assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete, family=lambda: canonical_pose_family_name, version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION),
     _PoseAssetCalls(references=lambda: agent_mcp_pose_reference_assets, rebuild=lambda: agent_mcp_clean_sprites_need_rebuild),
-    _PoseAssetCatalog(uid=lambda: accessory_uid, lookup=lambda: accessory_lookup_by_id, canonical_ids=lambda: canonical_pipeline_accessory_ids, has_asset=lambda: agent_mcp_accessory_has_existing_or_pose_asset, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+    _PoseAssetCatalog(uid=lambda: accessory_uid, lookup=lambda: accessory_lookup_by_id, canonical_ids=lambda: canonical_pipeline_accessory_ids, has_asset=lambda: agent_mcp_accessory_has_existing_or_pose_asset, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE), files=_business_files
 )
 _agent_pose_templates = _AgentPoseTemplates(
     _PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search),
@@ -6011,7 +5717,7 @@ _training_preview_cache = TrainingPreviewCache(
     SpriteVersionInputs(lambda item: clean_sprite_assets(item), lambda item: accessory_uid(item),
                         lambda item: accessory_material_type(item), lambda item: object_alpha_material_policy(item)),
     lambda: PREVIEW_CACHE_SCHEMA_VERSION, lambda: resolve_service_path,
-    lambda item: accessory_sprite_version(item),
+    lambda item: accessory_sprite_version(item), files=_business_files
 )
 
 
@@ -6070,7 +5776,7 @@ _sprite_render_metadata = _SpriteRenderMetadata(
 
     _SpriteRenderOperations(bounds=lambda: alpha_bbox, family=lambda: canonical_pose_family_name, visible=lambda: asset_visible_shape_px, orient=lambda: source_long_short_oriented_px, footprint=lambda: pose_render_footprint_metadata, physical=lambda: physical_render_size_px),
 
-    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED),
+    _SpriteImageReads(path=lambda: Path, decode=lambda: cv2.imread if _business_files.runtime_provider() is None else _image_files.imread, unchanged_mode=lambda: cv2.IMREAD_UNCHANGED), files=_business_files
 
 )
 
@@ -6109,7 +5815,7 @@ _preview_sprite_renderer = _PreviewSpriteRenderer(
 )
 
 def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-    return _load_clean_sprite_impl(path)
+    return _load_clean_sprite_impl(path, images=_accessory_image_io)
 
 
 def object_physical_size_mm(size: dict[str, Any] | None) -> tuple[float, float, float]:
@@ -6351,7 +6057,7 @@ _object_sprite_preprocessor = _ObjectSpritePreprocessor(
 
     _ObjectSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints, top_view=lambda: pose_family_is_top_view, task_id=lambda: deterministic_task_id),
 
-    _ObjectSpriteArtifacts(write=lambda: write_clean_sprite),
+    _ObjectSpriteArtifacts(write=lambda: write_clean_sprite), files=_business_files, images=_accessory_image_io
 
 )
 
@@ -6891,6 +6597,7 @@ _image_job_queue = ImageJobQueue(
         preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
     ),
     execution=ImageQueueExecution(
+        _image_worker_runtime=lambda: _image_worker_runtime,
         IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
         MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
         next_queued_image_job=lambda: next_queued_image_job,
@@ -7199,7 +6906,7 @@ _image_job_management = ImageJobManagement(
         record_updated_at=lambda: record_updated_at,
         record_owner_id=lambda: record_owner_id,
         record_owner_username=lambda: record_owner_username,
-        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
+        enrich_record_audit_fields=lambda: enrich_record_audit_fields
     ),
     actions=ImageJobActions(
         _image_worker_processes=lambda: _image_worker_processes,
@@ -7254,7 +6961,7 @@ _accessory_gallery = AccessoryGallery(
         current_user=lambda: current_auth_user(),
         redact=lambda item, user: redact_accessory_payload_for_user(item, user),
     ),
-    _accessory_projection,
+    _accessory_projection, files=_business_files, images=_accessory_image_io
 )
 
 
@@ -7584,13 +7291,16 @@ _training_background_library = TrainingBackgroundLibrary(
     BackgroundSetLookup(lambda: load_training_background_manifest(),
                         lambda requested: selected_background_set_id(requested),
                         lambda selected: background_set_image_files(selected)),
+    files=_business_files,
 )
+_background_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _training_background_renderer = TrainingBackgroundRenderer(
     lambda selected: training_background_library(selected),
     lambda library, split: background_candidates_for_split(library, split),
     lambda rng: synthetic_training_background(rng),
     lambda image, rng: fit_training_background_to_canvas(image, rng),
     lambda canvas, rng: augment_training_background(canvas, rng),
+    images=_background_image_io,
 )
 
 
@@ -7606,12 +7316,13 @@ from .training.background_catalog import (
 from .training.background_seeding import BackgroundSeedPaths, BackgroundSeeding
 from .training.background_selection import BackgroundSelection
 
-_background_manifest = BackgroundManifest(lambda: BACKGROUND_DIR, lambda: BACKGROUND_SETS_MANIFEST)
-_background_image_files = BackgroundImageFiles(lambda: IMAGE_REFERENCE_SUFFIXES)
+_background_manifest = BackgroundManifest(lambda: BACKGROUND_DIR, lambda: BACKGROUND_SETS_MANIFEST, files=_business_files)
+_background_image_files = BackgroundImageFiles(lambda: IMAGE_REFERENCE_SUFFIXES, files=_business_files)
 _background_seeding = BackgroundSeeding(
     BackgroundSeedPaths(lambda: DEFAULT_BACKGROUND_IMAGE, lambda: BACKGROUND_SETS_DIR),
     lambda: load_background_sets_manifest(), lambda manifest: write_background_sets_manifest(manifest),
     lambda identifier: ensure_background_set_minimum_images(identifier), lambda: seed_default_background_set(), lambda: time.time(),
+    files=_business_files,
 )
 _background_catalog = BackgroundCatalog(
     BackgroundCatalogPaths(lambda: BACKGROUND_SETS_DIR, lambda: OUTPUT_DIR),
@@ -7654,7 +7365,7 @@ from .training.task_background_store import (
     TaskBackgroundIdentity, TaskBackgroundPaths, TaskBackgroundRecords, TaskBackgroundStore,
 )
 
-_background_variants = BackgroundVariants(lambda: time.time())
+_background_variants = BackgroundVariants(lambda: time.time(), images=_background_image_io)
 _background_minimum_images = BackgroundMinimumImages(
     lambda identifier: safe_background_set_id(identifier), lambda: BACKGROUND_SETS_DIR,
     lambda path: image_file_list(path),
@@ -7664,6 +7375,7 @@ _background_writes = BackgroundWrites(
     lambda identifier: safe_background_set_id(identifier), lambda: load_background_sets_manifest(),
     lambda manifest: write_background_sets_manifest(manifest), lambda: BACKGROUND_SETS_DIR,
     lambda: uuid.uuid4(), lambda: time.time(),
+    files=_business_files,
 )
 _task_background_store = TaskBackgroundStore(
     TaskBackgroundIdentity(lambda identifier: sanitize_ai_detection_task_id(identifier),
@@ -7673,7 +7385,7 @@ _task_background_store = TaskBackgroundStore(
     TaskBackgroundRecords(lambda: update_background_set_manifest,
                           lambda identifier, meta: background_set_payload(identifier, meta)),
     lambda source_path, set_dir, count=5: create_background_variants_from_source(source_path, set_dir, count=count),
-    lambda path: image_file_list(path), lambda: time.time(),
+    lambda path: image_file_list(path), lambda: time.time(), files=_business_files
 )
 
 def create_background_variants_from_source(source_path: Path, set_dir: Path, count: int = 5) -> list[Path]:
@@ -7686,9 +7398,11 @@ from .training.submission import TrainingSubmissionRecords, TrainingSubmissionTh
 _background_codex_generation = CodexBackgroundGeneration(
     lambda command: shutil.which(command), CodexBackgroundPaths(lambda: IMAGE_WORKER_LOG_DIR, lambda: ROOT),
     lambda identifier: safe_name(identifier), lambda: subprocess.Popen,
+    files=_business_files,
 )
 _background_codex_thread = CodexBackgroundThread(
     lambda: threading.Thread, lambda: run_codex_background_generation, lambda identifier: safe_name(identifier),
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 _background_task_runner = BackgroundTaskRunner(
     BackgroundTaskRecords(lambda identifier: find_training_task(identifier), lambda identifier: training_task_path(identifier),
@@ -7698,11 +7412,13 @@ _background_task_runner = BackgroundTaskRunner(
                             lambda source_path, set_dir, count=5: create_background_variants_from_source(source_path, set_dir, count),
                             lambda source_path, set_dir, set_id, count=5: run_codex_background_generation(source_path, set_dir, set_id, count), lambda path: image_file_list(path)),
     lambda: time.time(), resolve_model_profiles,
+    files=_business_files,
 )
 _background_task_submission = BackgroundTaskSubmission(
     TrainingSubmissionRecords(lambda task: save_training_task(task), lambda task: public_training_task(task)),
     TrainingSubmissionThreads(lambda: run_background_set_task, lambda **kwargs: threading.Thread(**kwargs), lambda: _training_task_threads),
     lambda: current_owner_fields(), lambda: time.time(), lambda: uuid.uuid4(),
+    runtime=_training_task_runtime,
 )
 
 def run_codex_background_generation(source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
@@ -7724,6 +7440,7 @@ _background_validation = BackgroundValidation(
     lambda: time.time(), lambda: uuid.uuid4(),
     lambda image, request_id, model_id=None, **kwargs: analyze_bgr(image, request_id, model_id, **kwargs),
     lambda: bounded_text,
+    images=_background_image_io,
 )
 
 def validate_task_environment_background_image(task_id: str, task: dict[str, Any], source_path: Path) -> dict[str, Any]:
@@ -7756,6 +7473,7 @@ from .training.preview_ports import (PreviewAssets, PreviewLayout, PreviewPoses,
                                      PreviewSurface, PreviewThresholds)
 from .training.preview_renderer import PreviewRenderer
 
+_training_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _training_preview_renderer = PreviewRenderer(
     material=lambda item: accessory_material_type(item),
     surface=PreviewSurface(
@@ -7796,7 +7514,7 @@ _training_preview_renderer = PreviewRenderer(
         polygon=lambda mask: visible_polygon_from_mask(mask),
         max_distance=lambda polygon: polygon_max_pair_distance_px(polygon),
     ),
-    thresholds=PreviewThresholds(lambda: DETECTION_MIN_VISIBLE_AREA_PX, lambda: DETECTION_MAX_OCCLUSION_FRACTION),
+    thresholds=PreviewThresholds(lambda: DETECTION_MIN_VISIBLE_AREA_PX, lambda: DETECTION_MAX_OCCLUSION_FRACTION), images=_training_image_io
 )
 
 
@@ -7813,15 +7531,19 @@ def draw_training_preview(
 
 from .training.estimates import training_estimate
 from .training.annotations import (
-    AnnotationMedia, AnnotationPreview, TrainingOutputLinks, yolo_label_line, yolo_detection_label_line, write_dataset_yaml,
+    AnnotationMedia, AnnotationPreview, TrainingOutputLinks, yolo_label_line, yolo_detection_label_line, write_dataset_yaml as _write_dataset_yaml,
 )
 from .training.sample_plan import SamplePlanner, split_counts, missing_count_for_false_sample
 from .training.dataset_generation import DatasetGenerator, DatasetRecords, DatasetPlanning, DatasetRendering
 
+def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
+    return _write_dataset_yaml(path, dataset_dir, names, files=_business_files)
+
+
 _training_output_links = TrainingOutputLinks(AnnotationMedia(
     output_root=lambda: OUTPUT_DIR, public_url=lambda path: public_output_url(path),
 ))
-_training_annotation_preview = AnnotationPreview(public_url=lambda path: public_training_output_url(path))
+_training_annotation_preview = AnnotationPreview(public_url=lambda path: public_training_output_url(path), images=_training_image_io)
 _training_sample_planner = SamplePlanner(
     split=lambda count: split_counts(count),
     missing=lambda count, rng: missing_count_for_false_sample(count, rng),
@@ -7847,7 +7569,7 @@ _training_dataset_generator = DatasetGenerator(
         min_visible_area=lambda: DETECTION_MIN_VISIBLE_AREA_PX,
     ),
     output=lambda: output_write_dir_for_owner,
-    update_provider=lambda: update_training_task,
+    update_provider=lambda: update_training_task, files=_business_files
 )
 
 
@@ -7962,7 +7684,7 @@ from .training.runpod_artifacts import RunPodArtifacts, RunPodArtifactPaths
 
 _training_dataset_archives = DatasetArchives(
     safe_name=lambda name: safe_name(name), skip_dirs=lambda: WORKER_BUNDLE_SKIP_DIRS,
-    jpeg_quality=lambda: WORKER_BUNDLE_JPEG_QUALITY, digest=lambda path: file_sha256(path),
+    jpeg_quality=lambda: WORKER_BUNDLE_JPEG_QUALITY, digest=lambda path: file_sha256(path), runtime_provider=lambda: _business_files.runtime_provider()
 )
 _runpod_exports = RunPodExports(
     RunPodExportPaths(
@@ -7974,14 +7696,14 @@ _runpod_exports = RunPodExports(
         public_base=lambda: runpod_yolo_public_base_url(),
     ),
     bundle=lambda directory, job: build_worker_training_bundle(directory, job), digest=lambda path: file_sha256(path),
-    update_provider=lambda: update_training_task,
+    update_provider=lambda: update_training_task, runtime_provider=_business_files.runtime_provider
 )
 _runpod_artifacts = RunPodArtifacts(
     RunPodArtifactPaths(
         resolve=lambda value: resolve_service_path(value), output_root=lambda: OUTPUT_DIR,
         output=lambda: output_write_dir_for_owner,
     ),
-    find=lambda job: find_training_task(job), summary=lambda value: runpod_public_response_summary(value),
+    find=lambda job: find_training_task(job), summary=lambda value: runpod_public_response_summary(value), runtime_provider=_business_files.runtime_provider
 )
 
 
@@ -8001,7 +7723,8 @@ def build_worker_training_bundle(dataset_dir: Path, job_id: str) -> tuple[tempfi
 
 
 # Retain the original late override of the earlier best-effort hash helper.
-file_sha256 = strict_training_file_sha256
+def file_sha256(path: Path) -> str:
+    return strict_training_file_sha256(path, files=_business_files)
 
 
 def dataset_file_manifest(dataset_dir: Path) -> list[dict[str, Any]]:
@@ -8039,6 +7762,7 @@ _worker_transfers = WorkerTransfers(
 _transfer_progress = TransferProgress(
     lambda: update_training_task,
     lambda: threading.Event(), lambda: threading.Thread,
+    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
 )
 
 def windows_worker_upload_bundle_streamed(
@@ -8174,7 +7898,7 @@ _runpod_flow = RunPodFlow(
         summary=lambda value: runpod_public_response_summary(value), extract=lambda value: extract_runpod_worker_output(value),
         import_artifacts=lambda: import_runpod_yolo_artifacts,
         terminal=lambda: runpod_terminal_status, bound_text=lambda: bounded_text,
-    ),
+    ), runtime_provider=_business_files.runtime_provider
 )
 
 
@@ -8286,6 +8010,7 @@ from .training.submission import (
 )
 
 _training_runner = TrainingRunner(
+    files=_business_files,
     records=TrainingRunnerRecords(find=lambda job_id: find_training_task(job_id), path=lambda job_id: training_task_path(job_id),
         load=lambda: load_training_task, update_provider=lambda: update_training_task,
         sync=lambda job_id: sync_training_state_from_task(job_id)),
@@ -8306,6 +8031,7 @@ _training_submission = TrainingSubmission(
     records=TrainingSubmissionRecords(save=lambda task: save_training_task(task), public=lambda task: public_training_task(task)),
     threads=TrainingSubmissionThreads(target=lambda: run_training_task, create=lambda **kwargs: threading.Thread(**kwargs),
         records=lambda: _training_task_threads),
+    runtime=_training_task_runtime,
 )
 
 
@@ -8347,7 +8073,7 @@ _trained_model_catalog = TrainedModelCatalog(
         method=lambda: normalize_pipeline_detection_method),
     access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
         audit=lambda: record_audit_fields),
-    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config),
+    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config), business_files=_business_files
 )
 
 
@@ -8781,6 +8507,7 @@ _detection_annotation = DetectionAnnotation(
     lambda: bounded_text, lambda: cv2, lambda kind: output_write_dir(kind), lambda path: output_url(path),
     lambda image, detections, rule: draw_ai_detection_boxes(image, detections, rule),
     lambda image, request_id: write_ai_original_output(image, request_id),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 
 
@@ -8868,6 +8595,7 @@ _detection_analysis = DetectionAnalysis(
     ),
     AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
                    lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
+    runtime_provider=lambda: _business_files.runtime_provider(),
 )
 
 
@@ -8916,44 +8644,18 @@ reset_user_password = _user_routes.reset_user_password
 delete_user = _user_routes.delete_user
 
 
-@app.get("/")
-def index() -> FileResponse:
-    index_path = REACT_PRODUCTION_DIST_DIR / "index.html"
-    if not _business_files.exists(index_path):
-        raise HTTPException(status_code=404, detail="React production build is not available")
-    return FileResponse(
-        index_path,
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-        },
-    )
-
-
-@app.get("/legacy")
-@app.get("/legacy/")
-@app.get("/legacy/{legacy_path:path}")
-def legacy_index(legacy_path: str = "") -> FileResponse:
-    raise HTTPException(status_code=404, detail="Legacy frontend has been removed")
-
-
-@app.get("/react-preview")
-@app.get("/react-preview/")
-@app.get("/react-preview/{preview_path:path}")
-def react_preview(request: Request, preview_path: str = "") -> RedirectResponse:
-    path = preview_path.strip("/")
-    first_segment = path.split("/", 1)[0]
-    if not path:
-        destination = "/workspace"
-    elif first_segment in {"workspace", "docs", "login"}:
-        destination = f"/{path}"
-    elif first_segment in REACT_PRODUCTION_ROUTE_SEGMENTS:
-        destination = f"/workspace/{path}"
-    else:
-        raise HTTPException(status_code=404, detail="Not found")
-    if request.url.query:
-        destination += f"?{request.url.query}"
-    return RedirectResponse(url=destination, status_code=307)
+from .runtime.web_shell import WebShell, register_entry_routes, register_spa
+_web_shell = WebShell(
+    production_dist=lambda: REACT_PRODUCTION_DIST_DIR,
+    exists=lambda path: _business_files.exists(path),
+    route_segments=lambda: REACT_PRODUCTION_ROUTE_SEGMENTS,
+    blocked_prefixes=lambda: REACT_PRODUCTION_BLOCKED_PREFIXES,
+    enabled=lambda: react_production_spa_enabled(),
+)
+register_entry_routes(app, _web_shell)
+index = _web_shell.index
+legacy_index = _web_shell.legacy_index
+react_preview = _web_shell.react_preview
 
 
 from .auth.status_requests import ServiceStatusRequests
@@ -9029,45 +8731,6 @@ def get_plc_config() -> dict[str, Any]:
 
 def update_plc_config(request: PlcConfigRequest) -> dict[str, Any]:
     return _plc_config_diagnostics.update(request)
-    request_payload = plc_config_request_payload(request)
-    request_fields = set(request_payload)
-    legacy_fields = {"d206_address", "y04_address", "write_y04"}
-    v2_fields = {"result_register", "output_control_point", "capture_trigger_enabled", "capture_input_register", "capture_trigger_value"}
-    if request_fields & legacy_fields and request_fields & v2_fields:
-        raise HTTPException(status_code=400, detail="legacy and v2 PLC address fields cannot be mixed")
-    legacy_replacement = request_fields == PLC_LEGACY_IO_CONFIG_FIELDS
-    if request_fields & legacy_fields and not legacy_replacement:
-        raise HTTPException(status_code=400, detail="legacy PLC fields require a complete legacy configuration payload")
-    full_replacement = request_fields == PLC_IO_CONFIG_FIELDS or legacy_replacement
-
-    def mutate(config: dict[str, Any]) -> None:
-        current_raw = raw_plc_namespace(config)
-        if not full_replacement and current_raw is not PLC_CONFIG_ABSENT and not isinstance(current_raw, dict):
-            raise PlcConfigError("malformed plc namespace requires a complete legal replacement")
-        current = current_raw if isinstance(current_raw, dict) else {}
-        if full_replacement:
-            candidate = dict(request_payload)
-        else:
-            current = normalize_plc_config(current_raw)
-            candidate = {**current, **request_payload}
-        normalized_candidate = normalize_plc_config(candidate)
-        activation_errors = plc_activation_errors(normalized_candidate)
-        if activation_errors:
-            raise PlcConfigError(activation_errors[0]["code"])
-        try:
-            normalized_current = normalize_plc_config(current_raw)
-        except PlcConfigError:
-            normalized_current = None
-        config["plc"] = normalized_candidate
-        if normalized_current != normalized_candidate:
-            config[PLC_CONTROL_GENERATION_KEY] = int(config.get(PLC_CONTROL_GENERATION_KEY) or 0) + 1
-
-    try:
-        config = mutate_app_config_atomically(mutate)
-    except PlcConfigError as exc:
-        status_code = 409 if str(exc).startswith("plc_") and str(exc).endswith(("_unavailable", "_missing", "_unverified")) else 400
-        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
-    return plc_config_response(config)
 
 
 from .plc.config_diagnostics import ConfigDiagnostics as _ConfigDiagnostics
@@ -9338,85 +9001,56 @@ _register_dispatch_diagnostic_routes(
 @app.post("/api/plc/capture-sessions/claim")
 def claim_plc_capture_session(request: PlcCaptureSessionRequest) -> dict[str, Any]:
     raise HTTPException(status_code=410, detail="legacy_plc_input_capture_is_read_only")
-    if request.camera_ready is not True:
-        raise HTTPException(status_code=409, detail="camera_not_ready")
-    model_id = str(request.model_id or "").strip()
-    require_analyze_model_permission(model_id or None)
-    user = current_auth_user()
-    config = load_config()
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(config))
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail="plc_config_invalid") from exc
-    if not settings["enabled"] or not settings["capture_trigger_enabled"] or plc_activation_errors(settings):
-        raise HTTPException(status_code=409, detail="plc_capture_not_effective")
-    try:
-        return plc_claim_capture_session(str(user.get("id") or ""), model_id)
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/api/plc/capture-sessions/heartbeat")
 def heartbeat_plc_capture_session(request: PlcCaptureSessionHeartbeatRequest) -> dict[str, Any]:
     raise HTTPException(status_code=410, detail="legacy_plc_input_capture_is_read_only")
-    user = current_auth_user()
-    config = load_config()
-    try:
-        settings = normalize_plc_config(raw_plc_namespace(config))
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail="plc_config_invalid") from exc
-    if not settings["enabled"] or not settings["capture_trigger_enabled"] or plc_activation_errors(settings):
-        raise HTTPException(status_code=409, detail="plc_capture_not_effective")
-    try:
-        renewed = plc_heartbeat_capture_session(request.session_id.strip(), str(user.get("id") or ""))
-        require_analyze_model_permission(str(renewed.get("model_id") or "") or None)
-        return renewed
-    except PlcConfigError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.delete("/api/plc/capture-sessions/{session_id}")
 def release_plc_capture_session(session_id: str) -> dict[str, Any]:
     raise HTTPException(status_code=410, detail="legacy_plc_input_capture_is_read_only")
-    user = current_auth_user()
-    plc_release_capture_session(session_id.strip(), str(user.get("id") or ""))
-    return {"released": True}
 
 
 @app.get("/api/plc/capture-events/stream")
 def stream_plc_capture_events(session_id: str) -> StreamingResponse:
     raise HTTPException(status_code=410, detail="legacy_plc_input_capture_is_read_only")
-    user_id = str(current_auth_user().get("id") or "")
-    clean_session_id = session_id.strip()
-    if not clean_session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
-
-    def event_stream() -> Any:
-        deadline = time.monotonic() + 15.0
-        last_heartbeat = 0.0
-        while time.monotonic() < deadline:
-            try:
-                event = plc_claim_next_capture_event(clean_session_id, user_id)
-            except PlcConfigError:
-                yield "event: session_expired\ndata: {}\n\n"
-                return
-            if event is not None:
-                payload = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
-                yield f"id: {event['trigger_id']}\nevent: capture\ndata: {payload}\n\n"
-            now = time.monotonic()
-            if now - last_heartbeat >= 5.0:
-                yield ": keepalive\n\n"
-                last_heartbeat = now
-            time.sleep(PLC_CAPTURE_POLL_SECONDS)
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
-get_api_cost_ledger = register_cost_api(app, lambda: require_admin_role(), _cost_ledger)
+PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
+
+from .pipeline.task_store import PipelineTaskStore, PipelineTaskPaths, PipelineTaskRows
+
+_pipeline_task_store = PipelineTaskStore(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
+    rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
+    resolver=lambda: resolve_model_profiles,
+)
+
+
+_cost_paths = CostPaths(DATA_DIR, DATA_ANALYSIS_RECORDS_PATH, AI_DETECTION_TASKS_PATH,
+                        PIPELINE_TASKS_PATH, AUTO_OPTIMIZE_DIR, AI_PROFILE_CACHE_PATH)
+_cost_services = CostServices(CostStoreDependencies(
+    paths=lambda paths=_cost_paths: paths,
+    runtime_repository=_runtime_repository_access.runtime_postgres_repository_or_none,
+    detection_tasks=_detection_task_store.load_ai_detection_tasks,
+    pipeline_tasks=_pipeline_task_store.load_pipeline_tasks,
+    auto_states=_auto_optimization_state_store.list_auto_optimize_states,
+    training_tasks=_training_records.load_training_task_records,
+    sanitize_task_id=sanitize_ai_detection_task_id,
+), timestamp=coerce_record_timestamp)
+_cost_repository = _cost_services.repository
+_cost_ledger = _cost_services.ledger
+
+api_cost_walk_usage = _cost_ledger.walk_usage
+api_cost_store_payloads = _cost_repository.store_payloads
+api_cost_training_records = _cost_ledger.training_records
+api_cost_collect_records = _cost_ledger.collect_records
+api_cost_summary = _cost_ledger.summary
+
+get_api_cost_ledger = register_cost_api(app, _access_control.require_admin_role, _cost_ledger)
 
 
 @app.get("/api/admin/runtime-store/probe")
@@ -9468,140 +9102,6 @@ def get_ai_config() -> dict[str, Any]:
 def update_ai_config(request: AiConfigRequest) -> dict[str, Any]:
     require_admin_role()
     raise HTTPException(409, "请使用模型与 API 配置库；旧配置入口已停用")
-    local = load_ai_local_config()
-    if request.provider is not None:
-        next_provider = validate_ai_provider(request.provider)
-        provider_changed = str(local.get("provider") or "").strip().lower() != next_provider
-        local["provider"] = next_provider
-        if provider_changed and request.model is None:
-            local["model"] = default_ai_model(next_provider)
-        if provider_changed and request.base_url is None:
-            local["base_url"] = default_ai_base_url(next_provider)
-        if provider_changed and request.api_key_env is None:
-            local["api_key_env"] = "DASHSCOPE_API_KEY" if next_provider == "qwen" else "GEMINI_API_KEY"
-    if request.model is not None:
-        local["model"] = validate_ai_model(request.model)
-    if request.base_url is not None:
-        local["base_url"] = validate_ai_base_url(request.base_url)
-    if request.proxy_url is not None:
-        local["proxy_url"] = validate_ai_proxy_url(request.proxy_url)
-    if request.auto_local_proxy is not None:
-        local["auto_local_proxy"] = bool(request.auto_local_proxy)
-    if request.api_key_env is not None:
-        local["api_key_env"] = validate_ai_key_env(request.api_key_env)
-    timeout_value = request.timeout_seconds if request.timeout_seconds is not None else request.timeout
-    if timeout_value is not None:
-        local["timeout_seconds"] = validate_ai_timeout(timeout_value)
-    if request.api_key is not None and request.api_key.strip():
-        secret = request.api_key.strip()
-        key_provider = validate_ai_provider(local.get("provider") or AI_DEFAULT_PROVIDER)
-        env_name = validate_ai_key_env(request.api_key_env) or default_secret_env_name("VANTALINE_AI_KEY", secret, provider=key_provider)
-        set_local_secret_env(env_name, secret)
-        key_items = normalize_ai_key_items(local, key_provider)
-        item_id = secret_key_item_id(env_name, secret)
-        existing = next((item for item in key_items if item["id"] == item_id and item.get("provider") == key_provider), None)
-        if existing:
-            existing["key"] = secret
-            existing["env"] = env_name
-            existing["provider"] = key_provider
-        else:
-            key_items.append(
-                {
-                    "id": item_id,
-                    "label": f"{ai_provider_label(key_provider)} API Key",
-                    "key": secret,
-                    "env": env_name,
-                    "provider": key_provider,
-                }
-            )
-        local["api_keys"] = key_items
-        local["active_key_id"] = item_id
-    if request.active_key_id is not None:
-        active_key_id = request.active_key_id.strip()
-        key_provider = validate_ai_provider(local.get("provider") or AI_DEFAULT_PROVIDER)
-        current_keys = ai_keys_for_provider(normalize_ai_key_items(local, key_provider), key_provider)
-        if active_key_id and not any(item["id"] == active_key_id for item in current_keys):
-            raise HTTPException(status_code=400, detail="AI active_key_id was not found")
-        local["active_key_id"] = active_key_id
-    if request.image_provider is not None:
-        local["image_provider"] = validate_image_generation_provider(request.image_provider)
-        if request.image_model is None:
-            local["image_model"] = default_image_generation_model(local["image_provider"])
-        if request.image_base_url is None:
-            local["image_base_url"] = default_image_generation_base_url(local["image_provider"])
-    if request.image_model is not None:
-        local["image_model"] = validate_ai_model(request.image_model)
-    if request.image_base_url is not None:
-        local["image_base_url"] = validate_ai_base_url(request.image_base_url)
-    if request.image_timeout_seconds is not None:
-        local["image_timeout_seconds"] = validate_image_generation_timeout(request.image_timeout_seconds)
-    if request.image_api_key_env is not None:
-        local["image_api_key_env"] = validate_ai_key_env(request.image_api_key_env)
-    if request.image_api_key is not None and request.image_api_key.strip():
-        secret = request.image_api_key.strip()
-        image_provider = validate_image_generation_provider(local.get("image_provider") or IMAGE_GENERATION_DEFAULT_PROVIDER)
-        env_name = (
-            validate_ai_key_env(request.image_api_key_env)
-            or default_secret_env_name(f"VANTALINE_{image_provider.upper()}_IMAGE_KEY", secret, provider=image_provider)
-        )
-        set_local_secret_env(env_name, secret)
-        key_items = normalize_image_key_items(local, image_provider)
-        item_id = secret_key_item_id(env_name, secret)
-        existing = next((item for item in key_items if item["id"] == item_id and item.get("provider") == image_provider), None)
-        if existing:
-            existing["key"] = secret
-            existing["env"] = env_name
-        else:
-            key_items.append(
-                {
-                    "id": item_id,
-                    "label": f"{image_generation_provider_label(image_provider)} API Key",
-                    "key": secret,
-                    "provider": image_provider,
-                    "env": env_name,
-                }
-            )
-        local["image_api_keys"] = key_items
-        local["image_active_key_id"] = item_id
-    if request.image_active_key_id is not None:
-        active_key_id = request.image_active_key_id.strip()
-        image_provider = validate_image_generation_provider(local.get("image_provider") or IMAGE_GENERATION_DEFAULT_PROVIDER)
-        image_keys = image_keys_for_provider(normalize_image_key_items(local, image_provider), image_provider)
-        if active_key_id and not any(item["id"] == active_key_id for item in image_keys):
-            raise HTTPException(status_code=400, detail="Image generation active_key_id was not found")
-        local["image_active_key_id"] = active_key_id
-
-    local["provider"] = validate_ai_provider(local.get("provider"))
-    local["model"] = validate_ai_model(local.get("model") or default_ai_model(local["provider"]))
-    local["base_url"] = validate_ai_base_url(local.get("base_url") or default_ai_base_url(local["provider"]))
-    local["proxy_url"] = validate_ai_proxy_url(local.get("proxy_url"))
-    local["auto_local_proxy"] = bool(local.get("auto_local_proxy", True))
-    local["timeout_seconds"] = validate_ai_timeout(local.get("timeout_seconds"))
-    local["api_key_env"] = validate_ai_key_env(local.get("api_key_env"))
-    local["api_keys"] = persist_secret_key_items(normalize_ai_key_items(local, local["provider"]), "VANTALINE_AI_KEY")
-    current_ai_keys = ai_keys_for_provider(local["api_keys"], local["provider"])
-    if local.get("active_key_id") and not any(item["id"] == local["active_key_id"] for item in current_ai_keys):
-        local["active_key_id"] = ""
-    if not local.get("active_key_id") and current_ai_keys:
-        local["active_key_id"] = current_ai_keys[0]["id"]
-    local["api_key"] = ""
-    local["image_provider"] = validate_image_generation_provider(local.get("image_provider") or IMAGE_GENERATION_DEFAULT_PROVIDER)
-    local["image_model"] = validate_ai_model(local.get("image_model") or default_image_generation_model(local["image_provider"]))
-    local["image_base_url"] = validate_ai_base_url(local.get("image_base_url") or default_image_generation_base_url(local["image_provider"]))
-    local["image_timeout_seconds"] = validate_image_generation_timeout(local.get("image_timeout_seconds") or IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS)
-    local["image_api_key_env"] = validate_ai_key_env(local.get("image_api_key_env"))
-    local["image_api_keys"] = persist_secret_key_items(
-        normalize_image_key_items(local, local["image_provider"]),
-        f"VANTALINE_{local['image_provider'].upper()}_IMAGE_KEY",
-    )
-    current_image_keys = image_keys_for_provider(local["image_api_keys"], local["image_provider"])
-    if local.get("image_active_key_id") and not any(item["id"] == local["image_active_key_id"] for item in current_image_keys):
-        local["image_active_key_id"] = ""
-    if not local.get("image_active_key_id") and current_image_keys:
-        local["image_active_key_id"] = current_image_keys[0]["id"]
-    local["image_api_key"] = ""
-    save_ai_local_config(local)
-    return public_ai_detection_status()
 
 
 @app.get("/api/locateanything/config")
@@ -9665,26 +9165,6 @@ run_data_analysis_batch_locate_api = _analysis_routes.locate_batch
 def delete_ai_config_key() -> dict[str, Any]:
     require_admin_role()
     raise HTTPException(409, "请在模型配置库管理 Key")
-    local = load_ai_local_config()
-    provider = validate_ai_provider(local.get("provider") or AI_DEFAULT_PROVIDER)
-    active_key_id = str(local.get("active_key_id") or "").strip()
-    key_items = normalize_ai_key_items(local, provider)
-    current_keys = ai_keys_for_provider(key_items, provider)
-    if active_key_id:
-        active_item = next((item for item in current_keys if item["id"] == active_key_id), None)
-        if active_item:
-            delete_local_secret_env(active_item.get("env") or active_item.get("env_name") or "")
-    remaining = [
-        item
-        for item in key_items
-        if not (active_key_id and item["id"] == active_key_id and str(item.get("provider") or "").strip().lower() == provider)
-    ]
-    local["api_keys"] = persist_secret_key_items(remaining, "VANTALINE_AI_KEY")
-    current_remaining = ai_keys_for_provider(local["api_keys"], provider)
-    local["active_key_id"] = current_remaining[0]["id"] if current_remaining else ""
-    local["api_key"] = ""
-    save_ai_local_config(local)
-    return public_ai_detection_status()
 
 
 from .detection.task_requests import DetectionTaskRequests
@@ -9968,7 +9448,7 @@ _accessory_creation = AccessoryCreation(
         add_pending=lambda identifier: add_pipeline_pending_candidate_id(identifier),
         payload=lambda config, user: pipeline_accessories_payload(config, user),
     ),
-    _accessory_projection,
+    _accessory_projection, files=_business_files
 )
 
 
@@ -10052,7 +9532,7 @@ _accessory_files = AccessoryFiles(
         save_cache=lambda payload: save_ai_profile_cache(payload),
         bounded_text=lambda value, limit: bounded_text(value, limit),
     ),
-    _accessory_projection,
+    _accessory_projection, files=_business_files, images=_accessory_image_io
 )
 _accessory_file_routes = register_file_api(app, _accessory_files)
 add_accessory_files = _accessory_file_routes.add_accessory_files
@@ -10117,11 +9597,11 @@ _upload_access = UploadAccess(lambda: ensure_dirs(), lambda model: require_analy
 
 _upload_paths = UploadPaths(lambda: safe_name, lambda: UPLOAD_DIR)
 
-_image_upload = ImageUpload(_upload_access, _upload_paths, lambda: np, lambda: cv2, lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path))
+_image_upload = ImageUpload(_upload_access, _upload_paths, lambda: np, lambda: cv2, lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path), files=lambda: _business_files)
 
 _video_summary = VideoSummary(lambda: string_list)
 
-_video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambda: load_config(), lambda: cv2, lambda image, request_id, model_id=None: analyze_bgr(image, request_id, model_id), VideoResults(lambda result, index, fps: video_frame_result_payload(result, index, fps), lambda frames: video_ai_summary(frames)))
+_video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambda: load_config(), lambda: cv2, lambda image, request_id, model_id=None: analyze_bgr(image, request_id, model_id), VideoResults(lambda result, index, fps: video_frame_result_payload(result, index, fps), lambda frames: video_ai_summary(frames)), files=_business_files)
 
 
 @app.post("/api/analyze/image")
@@ -10175,17 +9655,13 @@ async def analyze_video(file: UploadFile=File(...), model_id: str | None=Form(No
     return await _video_upload.analyze_video(file, model_id)
 
 
+from .config.stream import StreamConfiguration
+_stream_configuration = StreamConfiguration(lambda: load_config(), lambda config: save_config(config))
+
+
 @app.post("/api/stream/config")
 def update_stream(config_in: StreamConfig) -> dict[str, Any]:
-    config = load_config()
-    config["stream"] = {
-        "enabled": config_in.enabled,
-        "source": config_in.source,
-        "url": config_in.url,
-        "status": "reserved_for_camera_or_rtsp_input",
-    }
-    save_config(config)
-    return {"status": "saved", "stream": config["stream"]}
+    return _stream_configuration.update(config_in)
 
 
 from .training.background_query import BackgroundQuery
@@ -10201,6 +9677,7 @@ _background_query = BackgroundQuery(
     lambda *args, **kwargs: list_background_sets(*args, **kwargs), lambda: load_background_sets_manifest(),
     lambda: selected_background_set_id,
     lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES,
+    files=lambda: _business_files,
 )
 _background_upload = BackgroundUpload(
     BackgroundUploadPaths(lambda: BACKGROUND_SETS_DIR, lambda: IMAGE_REFERENCE_SUFFIXES),
@@ -10208,6 +9685,7 @@ _background_upload = BackgroundUpload(
                             lambda identifier, name, source: enqueue_background_set_task(identifier, name, source),
                             lambda identifier, meta: background_set_payload(identifier, meta)),
     lambda: current_owner_fields(), lambda: time.time(), lambda: training_background_sets(),
+    files=_business_files,
 )
 _background_capture = BackgroundCapture(
     BackgroundCaptureIdentity(lambda identifier: sanitize_ai_detection_task_id(identifier), lambda: current_auth_user(), lambda value: public_path_sanitized(value)),
@@ -10218,6 +9696,7 @@ _background_capture = BackgroundCapture(
     BackgroundCaptureState(lambda: _auto_optimize_lock, lambda identifier: load_auto_optimize_state(identifier),
                            lambda state: save_auto_optimize_state(state), lambda identifier, **kwargs: public_auto_optimize_state(identifier, **kwargs)),
     lambda: time.time(), lambda: uuid.uuid4(),
+    files=_business_files,
 )
 _background_routes = _training_background_api.register(app, _background_query, _background_upload, _background_capture)
 background_image = _background_routes.background_image
@@ -10256,11 +9735,11 @@ from .training.runpod_transfer import RunPodTrainingTransfer, TransferPaths
 from .training.runpod_upload_store import RunPodUploadStore
 from .training import runpod_transfer_api as _training_transfer_api
 
-_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes())
+_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes(), runtime_provider=_business_files.runtime_provider)
 _training_transfer = RunPodTrainingTransfer(
     lambda job: find_training_task(job), lambda token: runpod_dataset_token_hash(token), lambda: time.time(),
     TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR),
-    _training_upload_store, lambda: update_training_task,
+    _training_upload_store, lambda: update_training_task, runtime_provider=_business_files.runtime_provider
 )
 _training_transfer_routes = _training_transfer_api.register(app, _training_transfer)
 download_runpod_training_dataset = _training_transfer_routes.download_runpod_training_dataset
@@ -10277,11 +9756,11 @@ from .training.status_projection import StatusAccess, StatusPreview, StatusTasks
 _training_dataset_input = TrainingDatasetInput(
     lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs),
     lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
-    lambda: public_path_sanitized,
+    lambda: public_path_sanitized, files=_business_files
 )
 _training_preview_approval = TrainingPreviewApproval(
     lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id,
-    lambda selected: preview_cache_key(selected),
+    lambda selected: preview_cache_key(selected), files=_business_files
 )
 _training_status_projection = TrainingStatusProjection(
     StatusTasks(lambda job: find_training_task(job), lambda task: public_refreshed_training_task(task)),
@@ -10331,7 +9810,7 @@ _dataset_catalog = DatasetCatalog(
                  lambda: record_updated_at),
     DatasetAccess(lambda record, user: record_visible_to_user(record, user),
                   lambda record, user: record_mutable_by_user(record, user)),
-    lambda path, **options: dataset_resource_item(path, **options),
+    lambda path, **options: dataset_resource_item(path, **options), files=_business_files
 )
 _training_resources = TrainingResources(
     ResourceDatasets(lambda: training_dataset_roots(),
@@ -10345,7 +9824,7 @@ _training_resources = TrainingResources(
     ResourceAccess(lambda record, user, target: record_visible_to_user(record, user, target),
                    lambda record: record_owner_username(record), lambda: LEGACY_OWNER_ID,
                    lambda record: public_path_sanitized(record)),
-    lambda: resolve_service_path, lambda: OUTPUT_DIR,
+    lambda: resolve_service_path, lambda: OUTPUT_DIR, files=_business_files
 )
 
 
@@ -10428,7 +9907,7 @@ _training_resource_mutations = TrainingResourceMutations(
                        lambda identifier, user, **options: delete_training_model_resource(identifier, user, **options),
                        lambda identifier, user: mark_training_task_dataset_deleted(identifier, user),
                        lambda identifier, user: mark_pipeline_dataset_deleted(identifier, user),
-                       lambda identifier, user: mark_pipeline_model_deleted(identifier, user)),
+                       lambda identifier, user: mark_pipeline_model_deleted(identifier, user)), files=_business_files
 )
 
 
@@ -10485,7 +9964,7 @@ _training_plan_query = TrainingPlanQuery(
     lambda: serialize_accessory_items,
     lambda **kwargs: training_execution_status(**kwargs),
 )
-_training_preview_artifacts = PreviewArtifactStore(lambda kind: output_write_dir(kind), lambda: TRAINING_JOBS_DIR)
+_training_preview_artifacts = PreviewArtifactStore(lambda kind: output_write_dir(kind), lambda: TRAINING_JOBS_DIR, files=_business_files)
 _training_preview_submission = TrainingPreviewSubmission(
     current=lambda: current_auth_user(),
     config=PreviewConfiguration(
@@ -10520,7 +9999,6 @@ training_preview = _training_preview_routes.training_preview
 # ============================================================
 
 AGENT_LOCAL_CONFIG_PATH = DATA_DIR / "agent_config.local.json"
-PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
 PIPELINE_STATE_PATH = DATA_DIR / "pipeline_state.json"
 from .pipeline.runtime_state import PipelineRuntimeState
 _pipeline_runtime = PipelineRuntimeState()
@@ -10820,15 +10298,8 @@ def agent_recommend(request: AgentRecommendRequest) -> dict[str, Any]:
 
 
 from .pipeline.state_policy import normalize_pipeline_state
-from .pipeline.task_store import PipelineTaskStore, PipelineTaskPaths, PipelineTaskRows
 from .pipeline.state_store import PipelineStateStore, PipelineStatePaths, PipelineStateRows
 
-_pipeline_task_store = PipelineTaskStore(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
-    rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
-    resolver=lambda: resolve_model_profiles,
-)
 _pipeline_state_store = PipelineStateStore(
     repository=lambda: runtime_postgres_repository_or_none(),
     paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),
@@ -11017,7 +10488,7 @@ _pipeline_resource_status = _PipelineResourceStatus(
         find_dataset=lambda: find_dataset_resource,
         load_ai_tasks=lambda: load_ai_detection_tasks,
         list_trained_specs=lambda: list_trained_model_specs,
-    )
+    ), files=_business_files
 )
 
 
@@ -11151,12 +10622,12 @@ _pose_render_configuration = _PoseRenderConfiguration(
 )
 _pose_render_content = _PoseRenderContent(
     _PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256),
-    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files
 )
 _pose_artifact_store = _PoseArtifactStore(
     _PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id),
     _PoseRenderArtifacts(output=lambda: agent_mcp_pose_output_path, digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, now=lambda: agent_mcp_now, dumps=lambda: json.dumps),
-    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files
 )
 
 def agent_mcp_gemini_image_config() -> dict[str, Any]:
@@ -11346,7 +10817,7 @@ from .agent.photo_highlight_ports import PhotoSourceMedia as _PhotoSourceMedia, 
 _photo_highlight_sources = _PhotoHighlightSources(
     _PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
-    _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete),
+    _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete), files=_business_files
 )
 _photo_highlight_selection = _PhotoHighlightSelection(
     _PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type),
@@ -11421,6 +10892,7 @@ def photo_highlight_auto_compare(ai_roi_mask: np.ndarray, auto_roi_mask: np.ndar
 
 from .agent.photo_highlight_builder import PhotoHighlightSpriteBuilder as _PhotoHighlightSpriteBuilder
 from .agent.photo_highlight_builder_ports import PhotoBuildPolicy as _PhotoBuildPolicy, PhotoBuildRuntime as _PhotoBuildRuntime, PhotoBuildMasks as _PhotoBuildMasks, PhotoBuildModelPolicy as _PhotoBuildModelPolicy, PhotoBuildPublication as _PhotoBuildPublication, PhotoBuildArtifacts as _PhotoBuildArtifacts, PoseSpriteMetadata as _PoseSpriteMetadata
+_agent_image_io = ImageFiles(lambda: cv2, files=_business_files)
 _photo_highlight_sprite_builder = _PhotoHighlightSpriteBuilder(
     _PhotoBuildPolicy(material=lambda: accessory_material_type, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready, alpha=lambda: object_alpha_material_policy, complete=lambda: clean_sprites_policy_complete, minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES),
     _PhotoBuildRuntime(identifier=lambda: accessory_uid, root=lambda: NORMALIZED_DIR, output=lambda: output_write_dir_for_owner, safe_id=lambda: safe_record_id, now=lambda: time.time, bounded=lambda: bounded_text),
@@ -11428,7 +10900,7 @@ _photo_highlight_sprite_builder = _PhotoHighlightSpriteBuilder(
     _PhotoBuildModelPolicy(attempts=lambda: PHOTO_HIGHLIGHT_MASK_MAX_ATTEMPTS, error=lambda: AiProviderError, pose_version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, photo_version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
     _PhotoBuildPublication(sanitize=lambda: sanitize_data_analysis_record_id, item=lambda: image_processing_item, publish=lambda: upsert_data_analysis_image_processing_record),
     _PhotoBuildArtifacts(write=lambda: write_clean_sprite, public_url=lambda: public_output_url_for_existing),
-    _PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints),
+    _PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints), files=_business_files, images=_agent_image_io
 )
 
 def build_clean_sprites_from_photo_highlight_masks(
@@ -11507,13 +10979,14 @@ from .agent.pipeline_background_publication import PipelineBackgroundPublication
 
 from .agent.pipeline_background_publication_ports import BackgroundPublicationTasks as _BackgroundPublicationTasks, BackgroundPublicationPaths as _BackgroundPublicationPaths, BackgroundPublicationSelection as _BackgroundPublicationSelection, BackgroundPublicationProviders as _BackgroundPublicationProviders, BackgroundPublicationCatalog as _BackgroundPublicationCatalog, BackgroundPublicationProjection as _BackgroundPublicationProjection
 
+_agent_pil_images = ImageFiles(pil_provider=lambda: Image, files=_business_files)
 _pipeline_background_publication = _PipelineBackgroundPublication(
     _BackgroundPublicationTasks(state=lambda: agent_mcp_orchestration, ids=lambda: canonical_pipeline_accessory_ids, lookup=lambda: accessory_lookup_by_id),
     _BackgroundPublicationPaths(output=lambda: output_write_dir_for_owner, record_id=lambda: safe_record_id, set_id=lambda: safe_background_set_id, resolve=lambda: resolve_service_path, sets_directory=lambda: BACKGROUND_SETS_DIR),
     _BackgroundPublicationSelection(prompt=lambda: pipeline_background_plate_prompt, match=lambda: match_background_library_plate, derive=lambda: derive_background_plate_from_accessory),
     _BackgroundPublicationProviders(config=lambda: agent_mcp_gemini_image_config, references=lambda: agent_mcp_pose_reference_content, settings=lambda: image_generation_settings, create=lambda: image_generation_provider_from_settings, error_type=lambda: AiProviderError),
     _BackgroundPublicationCatalog(images=lambda: image_file_list, variants=lambda: create_background_variants_from_source, manifest=lambda: load_background_sets_manifest, publish=lambda: write_background_sets_manifest),
-    _BackgroundPublicationProjection(bounded=lambda: bounded_text, url=lambda: public_output_url_for_existing, digest=lambda: file_sha256, now=lambda: agent_mcp_now, legacy_owner=lambda: LEGACY_OWNER_ID),
+    _BackgroundPublicationProjection(bounded=lambda: bounded_text, url=lambda: public_output_url_for_existing, digest=lambda: file_sha256, now=lambda: agent_mcp_now, legacy_owner=lambda: LEGACY_OWNER_ID), files=_business_files, images=_agent_pil_images
 )
 
 def pipeline_background_plate_prompt(item: dict[str, Any]) -> str:
@@ -11530,12 +11003,13 @@ _background_plate_derivation = _BackgroundPlateDerivation(
     _PlateSources(pose_assets=lambda: agent_mcp_pose_reference_assets, contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
     _PlatePolicy(time_budget=lambda: PIPELINE_BG_PLATE_TIME_BUDGET_S, max_side=lambda: PIPELINE_BG_PLATE_MAX_SIDE, max_radius=lambda: PIPELINE_BG_PLATE_MAX_INPAINT_RADIUS, mask_fraction=lambda: PIPELINE_BG_PLATE_INPAINT_MAX_MASK_FRAC),
     _BackgroundMasks(foreground=lambda: foreground_mask),
+    files=_business_files, images=_accessory_image_io,
 )
 _background_reference_signatures = _BackgroundReferenceSignatures(
     _SignatureSources(paths=lambda: object_photo_highlight_source_paths, limit=lambda: PHOTO_HIGHLIGHT_MAX_REFERENCE_IMAGES),
     _SignaturePolicy(max_patches=lambda: PIPELINE_BG_MATCH_MAX_SOURCE_PATCHES),
     _BackgroundMasks(foreground=lambda: foreground_mask),
-    _SignatureProjections(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature),
+    _SignatureProjections(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature), images=_accessory_image_io
 )
 
 def derive_background_plate_from_accessory(item: dict[str, Any], out_path: Path) -> Path | None:
@@ -11565,12 +11039,12 @@ from .accessories.background_library_selection_ports import BackgroundOwnership 
 _background_candidate_catalog = _BackgroundCandidateCatalog(
     _BackgroundOwnership(system=lambda: SYSTEM_OWNER_ID, legacy=lambda: LEGACY_OWNER_ID),
     _BackgroundCatalogSources(manifest=lambda: load_background_sets_manifest, directories=lambda: background_set_dirs, sanitize=lambda: safe_background_set_id, visible=lambda: background_set_visible_for_owner, images=lambda: image_file_list, resolve=lambda: resolve_service_path),
-    _BackgroundCatalogPolicy(directory=lambda: BACKGROUND_SETS_DIR, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, limit=lambda: PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES),
+    _BackgroundCatalogPolicy(directory=lambda: BACKGROUND_SETS_DIR, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES, limit=lambda: PIPELINE_BG_MATCH_MAX_LIBRARY_IMAGES), files=_business_files
 )
 _background_library_matcher = _BackgroundLibraryMatcher(
     _BackgroundMatchSources(references=lambda: background_reference_signatures_from_accessory, candidates=lambda: background_library_image_candidates),
     _BackgroundMatchFeatures(boxes=lambda: background_patch_boxes, signature=lambda: background_patch_signature, distance=lambda: background_signature_distance),
-    lambda: PIPELINE_BG_MATCH_DISTANCE_THRESHOLD,
+    lambda: PIPELINE_BG_MATCH_DISTANCE_THRESHOLD, images=_accessory_image_io
 )
 
 def background_set_visible_for_owner(meta: dict[str, Any], owner_id: str) -> bool:
@@ -12023,6 +11497,7 @@ _pipeline_auto_agent_runtime = _PipelineAutoAgentRuntime(
         thread=lambda: threading.Thread,
         runner=lambda: _run_pipeline_auto_agent_step,
     ),
+    scope=_runtime_repositories.thread_scope,
 )
 
 
@@ -12076,6 +11551,7 @@ _pipeline_advance_runtime = _PipelineAdvanceRuntime(
         thread=lambda: threading.Thread,
         runner=lambda: _run_pipeline_advance,
     ),
+    scope=_runtime_repositories.thread_scope,
 )
 
 
@@ -12170,6 +11646,7 @@ _pipeline_recommendation_runtime = _PipelineRecommendationRuntime(
         thread=lambda: threading.Thread,
         runner=lambda: _run_pipeline_recommendation_pregen,
     ),
+    scope=_runtime_repositories.thread_scope,
 )
 
 
@@ -12540,6 +12017,7 @@ from local_inspection_service.text_inspection.images import (
 )
 
 _text_media = TextMedia(
+    runtime_provider=_business_files.runtime_provider,
     directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
     digest=lambda contents: sha256_bytes(contents),
     records=TextMediaRecords(
@@ -12634,7 +12112,7 @@ _standard_edits = StandardEdits(
     StandardPreparation(start=lambda standard, owner: standard_preparation_jobs.start(standard, owner),
                         enabled=lambda owner: _standard_preparation_policy.enabled(owner)),
     prepare_image=lambda contents: _text_v2_prepare_image(contents),
-    bounded_text=lambda: bounded_text,
+    bounded_text=lambda: bounded_text, files=_business_files
 )
 _standard_routes = register_text_standards(app, _standard_imports, _standard_library, _standard_edits)
 import_text_inspection_standard = _standard_routes.import_text_inspection_standard
@@ -12705,6 +12183,7 @@ document_import_jobs = register_document_import_jobs(
         _document_records, _document_models,
         asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
         clear_repository=lambda: clear_thread_runtime_repository_selection(),
+        runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
     ),
 )
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
@@ -12747,7 +12226,8 @@ standard_preparation_jobs = register_standard_preparation(
     ),
     _preparation_media,
     PreparationJobs(_preparation_records, _preparation_media, _preparation_models,
-                    clear_repository=lambda: clear_thread_runtime_repository_selection()),
+                    clear_repository=lambda: clear_thread_runtime_repository_selection(),
+                    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)),
 )
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
 from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
@@ -12793,6 +12273,7 @@ _extraction_models = ExtractionModels(
     diagnostic_value=lambda value: _text_v2_diagnostic_value(value),
     external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
 )
+_text_extraction_runtime = TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)
 resolve_label_extraction = register_label_extraction(
     app,
     ExtractionAccess(
@@ -12801,6 +12282,7 @@ resolve_label_extraction = register_label_extraction(
     ),
     _extraction_records, _extraction_media, _extraction_models,
     clear_repository=lambda: clear_thread_runtime_repository_selection(),
+    runtime=_text_extraction_runtime, files=_business_files
 )
 from .agent.dependencies import AgentAccess, AgentAccounts
 register_agent_api(
@@ -12834,7 +12316,7 @@ register_codex_compare(
     documents=DocumentImports(
         docx=lambda data: extract_docx_candidates(data),
         doc=lambda data: extract_doc_images(data),
-    ),
+    ), runtime_provider=_business_files.runtime_provider
 )
 
 from .label_inspection.api import register as register_label_inspection
@@ -12861,7 +12343,7 @@ register_label_inspection(
     _label_repository_lifecycle,
     _label_imports,
     models=lambda: resolve_model_profiles(),
-    configuration=lambda: label_inspection_model.settings(lambda: resolve_model_profiles()),
+    configuration=lambda: label_inspection_model.settings(lambda: resolve_model_profiles()), runtime_provider=_business_files.runtime_provider
 )
 
 
@@ -12875,6 +12357,10 @@ from .text_inspection.inspection_ports import (
 from . import qwen_evidence_jobs as _qwen_evidence_policy
 
 
+from .text_inspection.comparison_runtime import ComparisonRuntime
+_prepared_comparison_runtime = ComparisonRuntime(scope=_runtime_repositories.thread_scope)
+
+
 def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction):
     from local_inspection_service.standard_preparation_compare import submit
     from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
@@ -12885,7 +12371,8 @@ def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, as
         clear_thread_runtime_repository_selection,
         lambda name, default, environment=os: environment.getenv(name, default),
         standard_preparation_jobs, owner_user_id, owner_username,
-        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
+        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction,
+        execution=_prepared_comparison_runtime)
 
 
 _inspection_access = InspectionAccess(
@@ -13091,13 +12578,16 @@ _incoming_json = IncomingJSON(
     paths=_incoming_text_store.paths,
     read=lambda path: _incoming_text_json_list(path), write=lambda path, values: _save_incoming_text_json_list(path, values),
 )
+_incoming_image_files = ImageFiles(lambda: cv2, files=_business_files)
 _incoming_catalog = IncomingCatalog(
     _incoming_access, _incoming_references, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
     public=lambda record: incoming_text_public(record), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+    files=_business_files, images=_incoming_image_files,
 )
 _incoming_reviews = IncomingReviews(
     _incoming_access, _incoming_inspections, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
     decode_rows=lambda: row_raw_json_list, public=lambda record: incoming_text_public(record),
+    files=_business_files,
 )
 _incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
 _incoming_execution = IncomingExecution(
@@ -13109,13 +12599,13 @@ _incoming_execution = IncomingExecution(
                     similarity=lambda: local_visual_similarity,
                     annotate=lambda: annotate_inspection),
     capacity=lambda: require_incoming_text_storage_capacity, verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
-    public=lambda record: incoming_text_public(record),
+    public=lambda record: incoming_text_public(record), files=_business_files, images=_incoming_image_files,
 )
 _incoming_retention = IncomingRetention(
     _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
-    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID,
+    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID, files=_business_files,
 )
-_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog)
+_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog, files=lambda: _business_files)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
 get_incoming_text_reference_asset = _incoming_catalog_routes.get_incoming_text_reference_asset
 create_incoming_text_reference = _incoming_catalog_routes.create_incoming_text_reference
@@ -13167,7 +12657,7 @@ analyze_text_compare_beta = register_beta_comparison(
 )
 
 
-_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)
+_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews, files=lambda: _business_files)
 inspect_incoming_text = _incoming_inspection_routes.inspect_incoming_text
 get_incoming_text_inspection_evidence = _incoming_inspection_routes.get_incoming_text_inspection_evidence
 review_incoming_text_inspection = _incoming_inspection_routes.review_incoming_text_inspection
@@ -13274,26 +12764,8 @@ register_model_profiles(app, model_profile_service, ProfileApiDependencies(
 ))
 
 
-@app.get("/{react_path:path}")
-def react_production_spa(react_path: str) -> FileResponse:
-    if not react_production_spa_enabled():
-        raise HTTPException(status_code=404, detail="Not found")
-    normalized = f"/{react_path.strip('/')}" if react_path else "/"
-    if normalized == "/" or normalized.startswith(REACT_PRODUCTION_BLOCKED_PREFIXES):
-        raise HTTPException(status_code=404, detail="Not found")
-    first_segment = normalized.strip("/").split("/", 1)[0]
-    if first_segment not in REACT_PRODUCTION_ROUTE_SEGMENTS:
-        raise HTTPException(status_code=404, detail="Not found")
-    index_path = REACT_PRODUCTION_DIST_DIR / "index.html"
-    if not _business_files.exists(index_path):
-        raise HTTPException(status_code=404, detail="Production React build is not available")
-    return FileResponse(
-        index_path,
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-        },
-    )
+register_spa(app, _web_shell)
+react_production_spa = _web_shell.react_production_spa
 
 
 @app.on_event("startup")
@@ -13309,6 +12781,29 @@ def enforce_incoming_text_image_retention() -> None:
         purge_expired_incoming_text_evidence()
     except Exception as exc:  # retention failure must not make inspection data unavailable
         print(f"[incoming-text.retention] skipped: {type(exc).__name__}", flush=True)
+
+
+from .runtime.shutdown import ShutdownStep, register_web_shutdown
+
+_web_shutdown = register_web_shutdown(app, (
+    ShutdownStep("pdf-import", app.state.label_pdf_import.close),
+    ShutdownStep("pipeline-auto-agent", _pipeline_auto_agent_runtime.close),
+    ShutdownStep("pipeline-advance", _pipeline_advance_runtime.close),
+    ShutdownStep("pipeline-recommendation", _pipeline_recommendation_runtime.close),
+    ShutdownStep("auto-label", _auto_optimization_label_processing.close),
+    ShutdownStep("auto-shadow", _auto_optimization_shadow_evaluation.close),
+    ShutdownStep("auto-training-check", _auto_optimization_training_scheduling.close),
+    ShutdownStep("training", _training_task_runtime.close),
+    ShutdownStep("background-codex", _background_codex_thread.close),
+    ShutdownStep("image-worker", _image_worker_runtime.close),
+    ShutdownStep("document-import", document_import_jobs.close),
+    ShutdownStep("prepared-comparison", _prepared_comparison_runtime.close),
+    ShutdownStep("standard-preparation", standard_preparation_jobs.close),
+    ShutdownStep("text-extraction", _text_extraction_runtime.close),
+    ShutdownStep("transfer-progress", _transfer_progress.close),
+    ShutdownStep("yolo-warmup", _yolo_warmup_runtime.close),
+    ShutdownStep("model-mcp", _ai_mcp_client.shutdown),
+))
 
 
 ensure_dirs()

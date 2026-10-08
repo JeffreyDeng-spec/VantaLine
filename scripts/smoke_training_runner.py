@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.model_profiles.snapshots import freeze_record
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class Resolver:
@@ -220,7 +221,7 @@ class TrainingRunnerContracts(unittest.TestCase):
         self.assertEqual((task['owner_user_id'],task['owner_username']),('alice','Alice'))
         self.assertEqual(task['pipeline_task_id'],'p'*128);self.assertEqual(task['pipeline_task_name'],'n'*160)
         self.assertEqual((task['background_set_id'],task['approved_preview_id'],task['preview_pose_family_policy']),('background','approved','auto'))
-        f.thread_factory.assert_called_once_with(target=api.run_training_task,args=(job,),name='training-task-'+job,daemon=True)
+        f.thread_factory.assert_called_once(); self.assertEqual({k:v for k,v in f.thread_factory.call_args.kwargs.items() if k!='target'},dict(args=(job,),name='training-task-'+job,daemon=True))
         self.assertIs(f.threads[job],f.thread);self.assertIs(next(e for e in f.events if e[0]=='start')[1][0][job],f.thread)
         f.thread.start.assert_called_once();self.assertEqual(task['model_profiles'],{'pipeline':{'version':1}})
         f.binding=task;f.task=task;f.resolver.version=200
@@ -236,16 +237,17 @@ class TrainingRunnerContracts(unittest.TestCase):
         def save(task):f.save_record(task);api.run_training_task=first;return {'replacement':'ignored'}
         f.save.side_effect=save
         def thread_factory(*args,**kwargs):
-            self.assertIs(kwargs['target'],first);api.run_training_task=replacement;return f.thread
+            self.assertTrue(callable(kwargs['target']));api.run_training_task=replacement;return f.thread
         f.thread_factory.side_effect=thread_factory
         dataset={'id':'dataset','sample_count':40000,'dataset_dir':'dir','dataset_yaml':'yaml','manifest_path':'manifest','display_name':'name'}
         with patch.object(api,'run_training_task',Mock()),patch.object(threading,'Thread',f.thread_factory):
             api.enqueue_training_task(request,[],'train_model',dataset)
-            self.assertIs(f.thread_factory.call_args.kwargs['target'],first);self.assertIs(api.run_training_task,replacement)
+            self.assertIs(api.run_training_task,replacement)
         task=f.saved[0];self.assertEqual(task['owner_user_id'],'bob');self.assertEqual(task['sample_count'],20000)
         self.assertEqual((task['source_dataset_id'],task['dataset_yaml'],task['label'],task['candidate_name']),('dataset','yaml','name','name'))
         f.estimate.assert_called_once_with(20000,include_training=True,include_generation=False,epochs=2,image_size=480,selected_count=0,train_mode='yolo_ocr')
         self.assertNotIn('replacement',task);first.assert_not_called();replacement.assert_not_called()
+        f.thread_factory.call_args.kwargs['target']('selected-job'); first.assert_called_once_with('selected-job'); replacement.assert_not_called()
         with self.assertRaises(TypeError):api.enqueue_training_task(request,[],'train_model',{'id':'bad'})
 
     def test_submission_failure_residue_and_no_retry(self):
@@ -334,7 +336,7 @@ class TrainingRunnerContracts(unittest.TestCase):
             provider=Mock(side_effect=lambda:f.resolver)
             runner=TrainingRunner(TrainingRunnerRecords(f.find,f.path,lambda:f.load,lambda:f.update,f.sync),
                 TrainingRunnerPaths(lambda:f.resolve,lambda:f.root,lambda:f.root/'app',lambda:f.output),
-                TrainingDatasetExecution(f.mode,f.generate,f.runpod,f.remote),TrainingLocalExecution(f.base,f.device,f.cli,lambda:f.popen,f.progress,lambda:f.warmup),provider)
+                TrainingDatasetExecution(f.mode,f.generate,f.runpod,f.remote),TrainingLocalExecution(f.base,f.device,f.cli,lambda:f.popen,f.progress,lambda:f.warmup),provider,files=BusinessFiles())
             identity=RequestIdentity()
             def owner():
                 user=identity.get();return {'owner_user_id':user['id'],'owner_username':user.get('username','')} if user else {}
@@ -351,7 +353,9 @@ class TrainingRunnerContracts(unittest.TestCase):
         request=self.api.TrainingStartRequest(selected_accessory_ids=[])
         for f,submission,identity,name in [(self.f,first_submission,first_identity,'alice'),(other,second_submission,second_identity,'bob')]:
             with identity.bind({'id':name}):submission.enqueue_training_task(request,[],'generate_samples')
-            self.assertEqual(f.saved[0]['owner_user_id'],name);self.assertIs(f.thread_factory.call_args.kwargs['target'],first.run_training_task if name=='alice' else second.run_training_task)
+            self.assertEqual(f.saved[0]['owner_user_id'],name)
+            f.find.reset_mock(); f.thread_factory.call_args.kwargs['target']('job'); f.find.assert_called_once_with('job')
+            self.assertEqual(f.resolver.scopes[-1],f.binding['model_profiles'])
         self.assertEqual(len(self.f.threads),1);self.assertEqual(len(other.threads),1)
         first_provider.side_effect=None;first_provider.return_value=None;self.f.find.reset_mock();self.f.update.reset_mock()
         with self.assertRaisesRegex(RuntimeError,'Model profile resolver is not configured'):first.run_training_task('job')

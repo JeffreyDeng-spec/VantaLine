@@ -1,5 +1,5 @@
 {
-  "version": 176,
+  "version": 237,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -507,6 +507,29 @@
     "accessories/catalog.py",
     "runtime/image_worker.py",
     "pipeline/runtime_state.py",
-    "training/auto_optimization_runtime_state.py"
+    "training/auto_optimization_runtime_state.py",
+    "plc/legacy_workers.py",
+    "plc/legacy_activation.py",
+    "plc/legacy_coordination.py",
+    "plc/legacy_records.py",
+    "plc/legacy_operations.py",
+    "runtime/web_shell.py",
+    "runtime/repository_composition.py",
+    "auth/application.py",
+    "records/composition.py",
+    "runtime/bootstrap_locations.py",
+    "analytics/cost_composition.py",
+    "runtime/application_foundation.py",
+    "text_inspection/job_admission.py",
+    "runtime/http_application.py",
+    "runtime/deadline_tasks.py",
+    "text_inspection/comparison_runtime.py",
+    "runtime/shutdown.py",
+    "training/background_file_ports.py",
+    "training/file_ports.py",
+    "agent/file_ports.py",
+    "text_inspection/file_ports.py",
+    "storage/artifacts/composition.py",
+    "config/stream.py"
   ]
 }

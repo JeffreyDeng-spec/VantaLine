@@ -206,6 +206,8 @@ class StationContracts(unittest.TestCase):
         count = 0
         for group in (service.storage, service.identity, service.policy, service.projection):
             for name in group.__dataclass_fields__:
+                if name == "clock":
+                    continue
                 a, b = object(), object()
                 setattr(self.api, name, a)
                 self.assertIs(getattr(group, name)(), a)
@@ -215,6 +217,12 @@ class StationContracts(unittest.TestCase):
                 self.assertIs(getattr(group, name)(), a)
                 count += 1
         self.assertEqual(count, 32)
+        a, b = object(), object()
+        for value in (a, b, a):
+            self.api.time = types.SimpleNamespace(time=value)
+            self.assertIs(service.policy.clock(), value)
+        self.assertEqual(sum(len(group.__dataclass_fields__) for group in
+                             (service.storage, service.identity, service.policy, service.projection)), 33)
         api = load_target()
         calls = []
         class Fake:

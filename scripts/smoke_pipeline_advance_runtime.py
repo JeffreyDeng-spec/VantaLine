@@ -98,6 +98,7 @@ class AdvanceRuntimeContract(unittest.TestCase):
             def is_set(self): events.append("event-is-set"); return self.signalled
         self.Event = Event
         class Thread:
+            def is_alive(self): return False
             def __init__(self, **kw): events.append(("thread", kw))
             def start(self): events.append("thread-start")
         self.replace("threading", types.SimpleNamespace(Event=Event, Thread=Thread))
@@ -265,6 +266,7 @@ class AdvanceRuntimeContract(unittest.TestCase):
         self.assertIsInstance(self.cancel["b"], self.Event)
         self.inflight.clear(); self.cancel.clear()
         class StartFails:
+            def is_alive(self): return False
             def __init__(self, **kw): pass
             def start(self): raise RuntimeError("start")
         self.replace("threading", types.SimpleNamespace(Event=self.Event, Thread=StartFails))
@@ -283,6 +285,7 @@ class AdvanceRuntimeContract(unittest.TestCase):
             def set(self): pass
             def is_set(self): return False
         class Thread:
+            def is_alive(self): return False
             def __init__(self, **kw): pass
             def start(self): pass
         self.replace("threading", types.SimpleNamespace(Event=EventRebind, Thread=Thread))
@@ -357,17 +360,21 @@ class AdvanceRuntimeContract(unittest.TestCase):
     def test_scheduler_resolves_root_target_after_previous_thread_start(self):
         self.inflight.clear(); self.cancel.clear()
         targets = []
-        def rebound(*_): pass
+        rebound = Mock()
         class Thread:
+            def is_alive(self): return False
             def __init__(inner, **kw): targets.append(kw["target"])
             def start(inner):
                 if len(targets) == 1:
                     self.replace("_run_pipeline_advance", rebound)
         self.replace("threading", types.SimpleNamespace(Event=self.Event, Thread=Thread))
-        first = self.api._run_pipeline_advance
+        first = self.replace("_run_pipeline_advance", Mock())
         self.assertTrue(self.api.schedule_pipeline_advance("a", None))
         self.assertTrue(self.api.schedule_pipeline_advance("b", None))
-        self.assertEqual(targets, [first, rebound])
+        targets[0]("first-probe", None)
+        targets[1]("second-probe", None)
+        first.assert_called_once_with("first-probe", None)
+        rebound.assert_called_once_with("second-probe", None)
 
     def test_decorated_root_binds_model_before_identity(self):
         if os.environ.get("VANTALINE_ADVANCE_RUNTIME_BASELINE_SOURCE"):
@@ -422,6 +429,7 @@ class AdvanceRuntimeContract(unittest.TestCase):
                 def set(self): self.signalled = True
                 def is_set(self): return self.signalled
             class Thread:
+                def is_alive(self): return False
                 def __init__(self, **kw): effects[label].append(("thread", kw["args"], kw["daemon"]))
                 def start(self): effects[label].append("start")
             def guarded(snapshot, config, event):

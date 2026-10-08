@@ -3,8 +3,7 @@ from collections.abc import Callable
 import math
 from typing import Any
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .background_file_ports import BackgroundImageReader
 import numpy as np
 
 Record = dict[str, Any]
@@ -118,9 +117,12 @@ class TrainingBackgroundRenderer:
                  candidates: Callable[[list[Record], str], list[Record]],
                  synthetic: Callable[[np.random.Generator], RenderedBackground],
                  fit: Callable[[np.ndarray, np.random.Generator], RenderedBackground],
-                 augment: Callable[[np.ndarray, np.random.Generator], RenderedBackground]):
+                 augment: Callable[[np.ndarray, np.random.Generator], RenderedBackground], *, images: BackgroundImageReader):
         self.library, self.candidates, self.synthetic = library, candidates, synthetic
         self.fit, self.augment = fit, augment
+        if images is None:
+            raise TypeError("explicit background images are required")
+        self.images = images
 
     def render_training_background(self,
         rng: np.random.Generator,
@@ -134,7 +136,7 @@ class TrainingBackgroundRenderer:
             canvas, meta = self.synthetic(rng)
         else:
             item = candidates[int(rng.integers(0, len(candidates)))]
-            background = _image_files.imread(str(item["path"]), cv2.IMREAD_COLOR)
+            background = self.images.imread(str(item["path"]), cv2.IMREAD_COLOR)
             if background is None:
                 canvas, meta = self.synthetic(rng)
                 meta["background_source_error"] = f"unreadable_background:{item['path']}"

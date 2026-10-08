@@ -10,6 +10,7 @@ from pathlib import Path
 import psycopg
 from psycopg.pq import TransactionStatus
 import pytest
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -108,7 +109,7 @@ def test_api_isolation_snapshot_and_media(storage,tmp_path,monkeypatch):
     def unused(*args, **kwargs):raise AssertionError('single-image fixture must not use batch import capabilities')
     api.register(app,ComparisonAccess(permission,lambda:(current['owner'],'test')),
                  lambda:storage().repository,StandardLibrary(owned,unused,unused),
-                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused))
+                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused), runtime_provider=get_runtime)
     client=TestClient(app)
     form={'standard_asset_id':'asset','request_id':'request-123','expected_revision':'rev-1'}
     def create():return client.post(api.PREFIX+'/tasks',data=form,files={'captured_file':('a.png',data,'image/png')})
@@ -141,7 +142,7 @@ def test_worker_and_cli_lifecycle(storage,tmp_path,monkeypatch,mode,expected):
     import sys
     import threading
     from local_inspection_service.codex_compare.media import MediaStore
-    media=MediaStore(tmp_path/'media')
+    media=MediaStore(tmp_path/'media', runtime_provider=get_runtime)
     buffer=io.BytesIO();Image.new('RGB',(100,100),'white').save(buffer,'PNG')
     evidence=media.image('a',buffer.getvalue())
     repo=storage();repo.create('a','worker-request',{'reference':evidence,'actual':evidence})
@@ -240,7 +241,7 @@ def test_v2_worker_explicit_skill_and_cli(storage,tmp_path,monkeypatch):
     import json
     from local_inspection_service.codex_compare.media import MediaStore
     from local_inspection_service.codex_compare.label_contracts import DIMENSIONS
-    media=MediaStore(tmp_path/'media')
+    media=MediaStore(tmp_path/'media', runtime_provider=get_runtime)
     buffer=io.BytesIO();Image.new('RGB',(100,100),'white').save(buffer,'PNG')
     evidence=media.image('a',buffer.getvalue())
     repo=storage();repo.create('a','v2-worker-request',{'reference':evidence,'actual':evidence},report_version='label-v2')

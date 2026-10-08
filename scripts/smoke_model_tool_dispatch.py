@@ -1,4 +1,5 @@
 """Model tool projection and transport contracts without external inference."""
+from contextlib import nullcontext
 import ast
 from dataclasses import fields
 import os
@@ -32,7 +33,7 @@ class ToolContract(unittest.TestCase):
         calls=[]
         b=dict(bounded_text=lambda v,n:str(v)[:n],_text_v2_diagnostic_value=lambda v:'redacted:'+v[:8],AiProviderError=ProviderError,AiProviderTimeout=ProviderTimeout,AiProviderOverloaded=ProviderOverloaded,AI_DEFAULT_TIMEOUT_SECONDS=30,
             ai_detection_settings=lambda:{'configured':True,'timeout_seconds':3},ai_tool_provider_meta=lambda s:{'provider':'synthetic'},generate_provider_json_with_fallback=Mock(return_value=({'ok':1},7,{'attempts':1})),
-            ai_mcp_runtime=lambda:'in_process',AI_MCP_RUNTIME_STDIO='stdio',AI_MCP_RUNTIME_IN_PROCESS='in_process',_ai_mcp_client=SimpleNamespace(call_tool=Mock(return_value={'answer':1}),close=Mock()),prepare_ai_mcp_payload=lambda n,p:{**p,'prepared':True},AI_MCP_TOOL_HANDLERS={'known':lambda p:calls.append(p) or {'answer':2}})
+            admission=nullcontext,ai_mcp_runtime=lambda:'in_process',AI_MCP_RUNTIME_STDIO='stdio',AI_MCP_RUNTIME_IN_PROCESS='in_process',_ai_mcp_client=SimpleNamespace(admission=nullcontext,call_tool=Mock(return_value={'answer':1}),close=Mock()),prepare_ai_mcp_payload=lambda n,p:{**p,'prepared':True},AI_MCP_TOOL_HANDLERS={'known':lambda p:calls.append(p) or {'answer':2}})
         return create(b),b,calls
 
     def test_not_configured_does_not_invoke_provider(self):

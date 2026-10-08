@@ -3,8 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import TrainingImageWriter
 import numpy as np
 from .preview_ports import (PreviewAssets, PreviewLayout, PreviewPoses, PreviewSizes,
                             PreviewSurface, PreviewThresholds, Record)
@@ -13,7 +12,10 @@ from .preview_ports import (PreviewAssets, PreviewLayout, PreviewPoses, PreviewS
 class PreviewRenderer:
     def __init__(self, material: Callable[[Record], str], surface: PreviewSurface,
                  assets: PreviewAssets, sizes: PreviewSizes, poses: PreviewPoses,
-                 layout: PreviewLayout, thresholds: PreviewThresholds):
+                 layout: PreviewLayout, thresholds: PreviewThresholds, *, images: TrainingImageWriter):
+        if images is None:
+            raise TypeError('images is required')
+        self.images = images
         self.material, self.surface, self.assets = material, surface, assets
         self.sizes, self.poses, self.layout, self.thresholds = sizes, poses, layout, thresholds
 
@@ -380,7 +382,7 @@ class PreviewRenderer:
                 or visible_area < self.thresholds.min_visible_area()
                 or occlusion_fraction > self.thresholds.max_occlusion()
             )
-        _image_files.imwrite(str(output_path), canvas)
+        self.images.imwrite(str(output_path), canvas)
         return {
             "url": self.surface.public_url(output_path),
             "pose_family_policy": pose_family_policy,

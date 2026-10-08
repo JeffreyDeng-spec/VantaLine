@@ -9,6 +9,7 @@ from ..runtime.control_connections import create_control_factory
 from ..runtime.configuration import ConfigurationSnapshot
 from .runtime_control import LabelRuntimeControl
 from .readiness import verify_summary_reads
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from pathlib import Path
 import threading
@@ -19,6 +20,7 @@ class WebLabelRuntime:
     repositories: RepositoryLifecycle
     data_directory: Callable[[], Path]
     models: ModelProvider
+    runtime_provider: Callable[[], ArtifactRuntime | None]
     runtime_identity: LabelRuntimeIdentity
     runtime_control: LabelRuntimeControl
 
@@ -27,12 +29,15 @@ _registration_lock = threading.Lock()
 
 
 def register(app: FastAPI, repositories: RepositoryLifecycle,
-             data_directory: Callable[[], Path], models: ModelProvider) -> LabelWorker | WebLabelRuntime:
+             data_directory: Callable[[], Path], models: ModelProvider, *,
+             runtime_provider: Callable[[], ArtifactRuntime | None]) -> LabelWorker | WebLabelRuntime:
+    if runtime_provider is None:
+        raise TypeError("runtime_provider is required")
     with _registration_lock:
         existing = getattr(app.state, "label_worker", None)
         if existing is not None:
             if (existing.repositories is not repositories or existing.data_directory is not data_directory
-                    or existing.models is not models):
+                    or existing.models is not models or existing.runtime_provider is not runtime_provider):
                 raise RuntimeError("Label worker is already registered with different dependencies")
             return existing
         configuration = None
@@ -42,7 +47,7 @@ def register(app: FastAPI, repositories: RepositoryLifecycle,
             return configuration.revision
         identity = read_identity(Path(__file__).resolve().parents[2], current=Path("/opt/vantaline/current"),
                                  configuration_revision=configuration_revision)
-        worker = None if identity is not None and identity.mode == "external" else LabelWorker(repositories, data_directory, models)
+        worker = None if identity is not None and identity.mode == "external" else LabelWorker(repositories, data_directory, models, runtime_provider=runtime_provider)
         control = None
         if identity is not None:
             control_factory = create_control_factory()
@@ -50,7 +55,7 @@ def register(app: FastAPI, repositories: RepositoryLifecycle,
                 lambda: control_factory.selection().repository, control_factory.clear)
             control = LabelRuntimeControl(identity, control_repositories, worker, configuration=configuration)
         if worker is None:
-            handle = WebLabelRuntime(repositories, data_directory, models, identity, control)
+            handle = WebLabelRuntime(repositories, data_directory, models, runtime_provider, identity, control)
         else:
             worker.runtime_identity = identity
             worker.runtime_control = control

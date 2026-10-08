@@ -4,16 +4,17 @@ from pathlib import Path
 from typing import Any
 from fastapi import UploadFile, HTTPException
 from .analysis_ports import AnalysisCall
-from .upload_ports import UploadAccess, UploadPaths, VideoBackend, FileCopy, VideoResults, Record
-from ..storage.artifacts.files import BusinessFiles
+from .upload_ports import UploadAccess, UploadPaths, VideoBackend, FileCopy, VideoResults, VideoFiles, Record
 
 class VideoUpload:
     def __init__(self, access: UploadAccess, paths: UploadPaths, copies: Callable[[], FileCopy],
                  config: Callable[[], Record], videos: Callable[[], VideoBackend], analyze: AnalysisCall,
-                 results: VideoResults):
+                 results: VideoResults, *, files: VideoFiles):
         self.access, self.paths, self.copies = access, paths, copies
         self.config, self.videos, self.analyze, self.results = config, videos, analyze, results
-        self.files = BusinessFiles()
+        if files is None:
+            raise TypeError("files is required")
+        self.files = files
 
     async def analyze_video(self, file: UploadFile, model_id: str | None) -> dict[str, Any]:
         self.access.ensure()

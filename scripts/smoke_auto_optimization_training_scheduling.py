@@ -114,9 +114,10 @@ class SchedulingContract(unittest.TestCase):
         self.assertIs(caught.exception,failure);self.assertEqual(f.b['save_auto_optimize_state'].call_count,2);self.assertEqual(f.state['last_training_check_error'],'save failed');self.assertEqual(f.depth,[0])
 
     def test_start_thread_target_arguments_and_failure(self):
-        f=self.fixture();thread=Mock()
+        f=self.fixture();thread=Mock();selected=Mock();f.b['auto_optimize_training_check_worker']=selected
         with patch.object(threading,'Thread',return_value=thread) as factory:
-            f.service.start_auto_optimize_training_check_worker(' task ',1.5);factory.assert_called_once_with(target=f.b['auto_optimize_training_check_worker'],args=('task',1.5),name='auto-opt-training-check-task',daemon=True);thread.start.assert_called_once_with()
+            f.service.start_auto_optimize_training_check_worker(' task ',1.5);factory.assert_called_once_with(target=factory.call_args.kwargs['target'],args=('task',1.5),name='auto-opt-training-check-task',daemon=True);thread.start.assert_called_once_with()
+            factory.call_args.kwargs['target'](*factory.call_args.kwargs['args']);selected.assert_called_once_with('task',1.5)
         with patch.object(threading,'Thread',side_effect=AssertionError('must not start')):f.service.start_auto_optimize_training_check_worker(' ')
         error=RuntimeError('start');thread.start.side_effect=error
         with patch.object(threading,'Thread',return_value=thread),self.assertRaises(RuntimeError) as caught:f.service.start_auto_optimize_training_check_worker('task')

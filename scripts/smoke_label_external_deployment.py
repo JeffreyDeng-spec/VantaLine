@@ -10,6 +10,7 @@ import time
 import uuid
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from release_runtime_configuration import ConfigurationFiles
 from release_runtime_contract import ContractError, WEB, LABEL
 from smoke_label_runtime_deployment import RuntimeHarness
@@ -31,7 +32,7 @@ def consumer(dsn, schema, root):
     directory=snapshot.apply_worker_environment(os.environ)
     identity=read_identity((root/'current').resolve(),current=root/'current',configuration_revision=lambda:snapshot.revision)
     process=LabelProcess(identity,snapshot,directory,repositories(dsn,schema),repositories(dsn,schema),
-        control_directory=root/'control',allowed_uid=os.getuid())
+        control_directory=root/'control',allowed_uid=os.getuid(), runtime_provider=get_runtime)
     signal.signal(signal.SIGTERM,process.request_stop)
     signal.signal(signal.SIGINT,process.request_stop)
     process.run()
@@ -70,7 +71,7 @@ class ExternalHarness(RuntimeHarness):
         assert services==(WEB,)
         if self.control is not None: return
         identity=read_identity(self.current.resolve(),current=self.current,configuration_revision=lambda:self.snapshot.revision)
-        self.worker=LabelWorker(self.repositories,lambda:self.root,lambda:None) if identity.mode=='embedded' else None
+        self.worker=LabelWorker(self.repositories,lambda:self.root,lambda:None, runtime_provider=get_runtime) if identity.mode=='embedded' else None
         if self.worker is not None: self.worker._iteration=lambda:False
         self.control=LabelRuntimeControl(identity,self.repositories,self.worker,directory=self.directory,
             allowed_uid=os.getuid(),configuration=self.snapshot)

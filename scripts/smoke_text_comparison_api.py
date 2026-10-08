@@ -530,7 +530,7 @@ class SubmissionContracts(unittest.TestCase):
         first_jobs=object();second_jobs=object();env_a={'key':'A'};env_b={'key':'B'}
         environment_a=Mock();environment_a.getenv=lambda key,default:env_a.get(key,default)
         environment_b=Mock();environment_b.getenv=lambda key,default:env_b.get(key,default)
-        with patch.object(standard_preparation_compare,'submit',side_effect=lambda *args:captures.append(args) or {'captured':True}):
+        with patch.object(standard_preparation_compare,'submit',side_effect=lambda *args, **kwargs:captures.append(args) or self.assertIs(kwargs['execution'],server._prepared_comparison_runtime) or {'captured':True}):
             for callbacks,flag,jobs,environment in [(first,True,first_jobs,environment_a),(second,False,second_jobs,environment_b)]:
                 with patch.multiple(server,**callbacks,TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=flag,standard_preparation_jobs=jobs,os=environment):
                     server._submit_prepared_text_comparison('owner','name',{}, {}, {},b'upload','request',None)

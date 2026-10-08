@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image, ImageOps
 from fastapi import HTTPException
 from local_inspection_service.text_inspection.media import TextMedia, TextMediaRecords
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.text_inspection import images
 
 ROOT='--root' in sys.argv
@@ -32,7 +33,7 @@ class Fixture:
         temporary=tempfile.TemporaryDirectory();case.addCleanup(temporary.cleanup);self.root=Path(temporary.name)
         self.standard={}; self.owned=Mock(side_effect=lambda kind,identity,owner:copy.deepcopy(self.standard) if owner=='alice' else None)
         self.save=Mock(return_value=True)
-        self.media=TextMedia(lambda:self.root,digest,TextMediaRecords(lambda:self.owned,self.save))
+        self.media=TextMedia(lambda:self.root,digest,TextMediaRecords(lambda:self.owned,self.save),runtime_provider=get_runtime)
     def pdf(self):
         document=fitz.open();document.new_page(width=200,height=100).insert_text((20,40),'synthetic reference')
         source=document.tobytes();document.close()

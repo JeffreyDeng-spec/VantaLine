@@ -12,6 +12,7 @@ import uuid
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 PG_CHECK = '--postgres' in sys.argv
 if PG_CHECK: sys.argv.remove('--postgres')
 
@@ -300,7 +301,7 @@ class TrainedCatalogContracts(unittest.TestCase):
                     f.read,lambda:f.output,lambda:(lambda path:f.root/path)),
                 TrainingAccessories(lambda item:'generated',dict,lambda:f.uses_ocr,lambda:f.profiles),
                 TrainingPipeline(f.pipeline_load,lambda:links.pipeline_task_link_for_training_run,lambda:(lambda method:method)),
-                TrainingAccess(user.get,f.visible,lambda:f.audit),f.rules)
+                TrainingAccess(user.get,f.visible,lambda:f.audit),f.rules, business_files=BusinessFiles())
             f.repository.assert_not_called(); f.config_load.assert_not_called(); f.pipeline_load.assert_not_called()
             return catalog,lookup,user
         first,first_lookup,first_user=compose(self.f); second,second_lookup,second_user=compose(other)

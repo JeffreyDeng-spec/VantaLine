@@ -7,8 +7,7 @@ import time
 from typing import Any, Protocol, TextIO
 from ..model_profiles.dependencies import ResolverProvider
 from ..model_profiles.snapshots import pinned
-from ..storage.artifacts.files import BusinessFiles
-from ..storage.artifacts.runtime import get_runtime
+from .file_ports import TrainingRunnerFiles
 
 Record = dict[str, Any]
 
@@ -65,8 +64,11 @@ class TrainingLocalExecution:
 
 class TrainingRunner:
     def __init__(self, records: TrainingRunnerRecords, paths: TrainingRunnerPaths, datasets: TrainingDatasetExecution,
-                 local: TrainingLocalExecution, resolver: ResolverProvider):
+                 local: TrainingLocalExecution, resolver: ResolverProvider, *, files: TrainingRunnerFiles):
         self.records, self.paths, self.datasets, self.local = records, paths, datasets, local
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         # Wrap the bound method once: constructor validation does not resolve a profile or read a task.
         self.run_training_task = pinned(resolver, records.find)(self.run_training_task)
 
@@ -77,11 +79,11 @@ class TrainingRunner:
         try:
             self.records.update_provider()(job_id, status="running", progress=5, started_at=int(time.time()), note="任务已启动。")
             executor_mode = self.datasets.mode()
-            runtime = get_runtime()
+            runtime = self.files.runtime_provider()
             if runtime is not None and executor_mode != "runpod":
                 raise RuntimeError("COS training requires RunPod; local training fallback is disabled")
             task_dataset_yaml = self.paths.resolve()(task.get("dataset_yaml", ""))
-            files = BusinessFiles()
+            files = self.files
             has_local_dataset = bool(task.get("dataset_yaml") and files.exists(task_dataset_yaml))
             if task.get("dataset_yaml") and files.exists(task_dataset_yaml):
                 dataset = {

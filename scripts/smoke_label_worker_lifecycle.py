@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from local_inspection_service.label_inspection import worker, worker_api
@@ -35,7 +36,7 @@ class LifecycleContracts(unittest.TestCase):
                 self.assertTrue(result)
 
     def controller(self, repository=lambda: None, clear=lambda: None):
-        controller = worker.LabelWorker(RepositoryLifecycle(repository, clear), lambda: Path('fixture'), lambda: None)
+        controller = worker.LabelWorker(RepositoryLifecycle(repository, clear), lambda: Path('fixture'), lambda: None, runtime_provider=get_runtime)
         self.workers.append(controller)
         return controller
 
@@ -191,7 +192,7 @@ class LifecycleContracts(unittest.TestCase):
         barrier = threading.Barrier(8)
         def register(_):
             barrier.wait(3)
-            return worker_api.register(app, repositories, directory, models)
+            return worker_api.register(app, repositories, directory, models, runtime_provider=get_runtime)
         with ThreadPoolExecutor(8) as pool:
             controllers = list(pool.map(register, range(8)))
         self.assertTrue(all(item is controllers[0] for item in controllers))
@@ -241,22 +242,22 @@ class LifecycleContracts(unittest.TestCase):
         app = FastAPI()
         repositories = RepositoryLifecycle(lambda: None, lambda: None)
         directory, models = lambda: Path('fixture'), lambda: None
-        first = worker_api.register(app, repositories, directory, models)
+        first = worker_api.register(app, repositories, directory, models, runtime_provider=get_runtime)
         self.workers.append(first)
-        self.assertIs(worker_api.register(app, repositories, directory, models), first)
+        self.assertIs(worker_api.register(app, repositories, directory, models, runtime_provider=get_runtime), first)
         self.assertEqual((len(app.router.on_startup), len(app.router.on_shutdown)), (2, 1))
         with self.assertRaisesRegex(RuntimeError, 'different dependencies'):
-            worker_api.register(app, RepositoryLifecycle(lambda: None, lambda: None), directory, models)
+            worker_api.register(app, RepositoryLifecycle(lambda: None, lambda: None), directory, models, runtime_provider=get_runtime)
         for _ in range(2):
             with TestClient(app):
                 self.assertEqual(first.status(), {'state': 'running', 'live_threads': 2})
             self.assertEqual(first.status(), {'state': 'stopped', 'live_threads': 0})
-        second = worker_api.register(FastAPI(), repositories, directory, models)
+        second = worker_api.register(FastAPI(), repositories, directory, models, runtime_provider=get_runtime)
         self.assertIsNot(first, second)
 
     def test_adapter_reports_timeout(self):
         app = FastAPI()
-        controller = worker_api.register(app, RepositoryLifecycle(lambda: None, lambda: None), lambda: Path('fixture'), lambda: None)
+        controller = worker_api.register(app, RepositoryLifecycle(lambda: None, lambda: None), lambda: Path('fixture'), lambda: None, runtime_provider=get_runtime)
         with patch.object(controller, 'drain', return_value=False):
             with self.assertRaisesRegex(RuntimeError, 'not acknowledged'):
                 app.router.on_shutdown[0]()

@@ -1,6 +1,5 @@
 """Dataset input lookup, file validation and sample-count projection for training."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TrainingInputFiles
 from collections.abc import Callable
 import json
 from typing import Any
@@ -13,7 +12,10 @@ Record = dict[str, Any]
 
 class TrainingDatasetInput:
     def __init__(self, find: FindDataset, require: RequireTrainingAccess,
-                 sanitize: Callable[[], Callable[[list[Any]], list[Any]]]):
+                 sanitize: Callable[[], Callable[[list[Any]], list[Any]]], *, files: TrainingInputFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.find, self.require, self.sanitize = find, require, sanitize
 
     def dataset_for_training(self, dataset_id: str, user: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -22,10 +24,10 @@ class TrainingDatasetInput:
             raise HTTPException(status_code=404, detail="Training dataset not found")
         manifest_path = dataset_dir / "manifest.json"
         dataset_yaml = dataset_dir / "dataset.yaml"
-        if not _business_files.exists(dataset_dir) or not _business_files.exists(manifest_path) or not _business_files.exists(dataset_yaml):
+        if not self.files.exists(dataset_dir) or not self.files.exists(manifest_path) or not self.files.exists(dataset_yaml):
             raise HTTPException(status_code=404, detail="Training dataset not found")
         try:
-            manifest = json.loads(_business_files.read_text(manifest_path, encoding="utf-8"))
+            manifest = json.loads(self.files.read_text(manifest_path, encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=500, detail="Training dataset manifest is unreadable") from exc
         if user and item:

@@ -17,7 +17,7 @@ class Thread:
 class Contracts(unittest.TestCase):
  def setUp(self):self.target=Mock();self.thread=Thread();self.factory=Mock(return_value=self.thread);self.s,self.b=create(self.target,self.factory)
  def test_constructor_does_not_start_and_start_keeps_arguments(self):
-  self.factory.assert_not_called();self.target.assert_not_called();self.assertIsNone(self.s.peek());self.assertTrue(self.s.start());self.factory.assert_called_once_with(target=self.target,name='image-generation-worker',daemon=True);self.assertIs(self.s.peek(),self.thread);self.assertEqual(self.thread.starts,1);self.target.assert_not_called()
+  self.factory.assert_not_called();self.target.assert_not_called();self.assertIsNone(self.s.peek());self.assertTrue(self.s.start());self.factory.assert_called_once();self.assertEqual(self.factory.call_args.kwargs['name'],'image-generation-worker');self.assertTrue(self.factory.call_args.kwargs['daemon']);self.assertIs(self.s.peek(),self.thread);self.assertEqual(self.thread.starts,1);self.target.assert_not_called();self.factory.call_args.kwargs['target']();self.target.assert_called_once_with()
  def test_live_worker_rejects_duplicate_and_dead_worker_replaced(self):
   self.assertTrue(self.s.start());self.assertFalse(self.s.start());self.assertEqual(self.factory.call_count,1);self.thread.alive=False;next_thread=Thread();self.factory.return_value=next_thread;self.assertTrue(self.s.start());self.assertIs(self.s.peek(),next_thread);self.assertEqual(self.thread.starts,1)
  def test_factory_failure_retains_previous_dead_thread(self):
@@ -41,7 +41,7 @@ class Contracts(unittest.TestCase):
   for t in threads:t.join(timeout=3);self.assertFalse(t.is_alive())
   self.assertEqual(sorted(results),[False,True]);self.factory.assert_called_once();self.assertEqual(self.thread.starts,1)
  def test_independent_owners_and_late_target(self):
-  other_thread=Thread();other,_=create(Mock(),Mock(return_value=other_thread));new_target=Mock();self.b['image_worker_loop' if BASELINE else 'target']=new_target;self.assertTrue(self.s.start());self.factory.assert_called_once_with(target=new_target,name='image-generation-worker',daemon=True);self.assertTrue(other.start());self.assertIs(other.peek(),other_thread)
+  other_thread=Thread();other,_=create(Mock(),Mock(return_value=other_thread));new_target=Mock();self.b['image_worker_loop' if BASELINE else 'target']=new_target;self.assertTrue(self.s.start());self.factory.assert_called_once();self.factory.call_args.kwargs['target']();new_target.assert_called_once_with();self.assertTrue(other.start());self.assertIs(other.peek(),other_thread)
  @unittest.skipIf(bool(BASELINE),'candidate owns process registry')
  def test_registry_isolation_and_entry_state_removed(self):
   other,_=create(Mock(),Mock());self.s.owner.processes['test']=object();self.assertEqual(other.owner.processes,{})

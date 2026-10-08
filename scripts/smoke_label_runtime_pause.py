@@ -6,6 +6,7 @@ import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.label_inspection.worker import LabelWorker
 from local_inspection_service.label_inspection.dependencies import RepositoryLifecycle
 
@@ -27,7 +28,7 @@ class PauseContracts(unittest.TestCase):
         return event
 
     def worker(self, clear=lambda: None):
-        worker = LabelWorker(RepositoryLifecycle(lambda: None, clear), lambda: Path("synthetic"), lambda: None)
+        worker = LabelWorker(RepositoryLifecycle(lambda: None, clear), lambda: Path("synthetic"), lambda: None, runtime_provider=get_runtime)
         self.workers.append(worker)
         return worker
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from fastapi import HTTPException
-from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.runtime import ArtifactRuntime
 
 Record = dict[str, Any]
 
@@ -21,10 +21,12 @@ class TextMediaRecords:
 
 class TextMedia:
     def __init__(self, directory: Callable[[], Path], digest: Callable[[bytes], str], records: TextMediaRecords,
-                 *, runtime_provider=get_runtime):
+                 *, runtime_provider: Callable[[], ArtifactRuntime | None]):
         self.directory = directory
         self.digest = digest
         self.records = records
+        if runtime_provider is None:
+            raise TypeError('runtime_provider is required')
         self.runtime_provider = runtime_provider
 
 

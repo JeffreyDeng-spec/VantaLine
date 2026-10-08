@@ -922,7 +922,7 @@ def run_fake_postgres_smoke() -> dict[str, Any]:
     os.environ["VANTALINE_DATA_STORE"] = "postgres"
     os.environ["DATABASE_URL"] = "postgresql://runtime-smoke.local/vantaline"
     connector = SharedConnector()
-    server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = connector
+    server._runtime_repository_owner.connector = connector
     try:
         server.save_config(
             {
@@ -1527,7 +1527,7 @@ def run_fake_postgres_smoke() -> dict[str, Any]:
         }
     finally:
         server.reset_runtime_repository_cache()
-        server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = None
+        server._runtime_repository_owner.connector = None
         os.environ.pop("VANTALINE_DATA_STORE", None)
         os.environ.pop("DATABASE_URL", None)
 

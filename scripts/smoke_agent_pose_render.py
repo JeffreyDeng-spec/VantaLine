@@ -11,6 +11,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseRenderContracts(unittest.TestCase):
     @classmethod
@@ -288,8 +289,8 @@ class AgentPoseRenderContracts(unittest.TestCase):
             getters.extend(values.values())
             return port_type(**values)
         PoseRenderConfiguration(group(ports.PoseRenderConfigurationSources), group(ports.PoseRenderConfigurationDefaults))
-        PoseRenderContent(group(ports.PoseRenderReferences), group(ports.PoseRenderPresentation))
-        PoseArtifactStore(group(ports.PoseRenderPaths), group(ports.PoseRenderArtifacts), group(ports.PoseRenderPresentation))
+        PoseRenderContent(group(ports.PoseRenderReferences), group(ports.PoseRenderPresentation), files=BusinessFiles())
+        PoseArtifactStore(group(ports.PoseRenderPaths), group(ports.PoseRenderArtifacts), group(ports.PoseRenderPresentation), files=BusinessFiles())
         for getter in getters:
             getter.assert_not_called()
 
@@ -311,7 +312,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
                 key_environment=lambda: lambda value: name)
             defaults = ports.PoseRenderConfigurationDefaults(**{field.name: (lambda: 60.0) if field.name == 'timeout' else (lambda: name) for field in fields(ports.PoseRenderConfigurationDefaults)})
             presentation = group(ports.PoseRenderPresentation, screen=lambda: lambda value: {'rgb': [0, 255, 0], 'hex': '#00FF00', 'label': name})
-            content = PoseRenderContent(group(ports.PoseRenderReferences), presentation)
+            content = PoseRenderContent(group(ports.PoseRenderReferences), presentation, files=BusinessFiles())
             owner = self.directory / name
             paths = group(ports.PoseRenderPaths, owner_root=lambda: lambda *args: owner, sanitize=lambda: lambda value: value)
             holder = {}
@@ -322,7 +323,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
                 bounded=lambda: lambda value, limit: str(value)[:limit],
                 now=lambda: lambda: len(name),
                 dumps=lambda: json.dumps)
-            holder['store'] = PoseArtifactStore(paths, artifacts, presentation)
+            holder['store'] = PoseArtifactStore(paths, artifacts, presentation, files=BusinessFiles())
             return PoseRenderConfiguration(sources, defaults), content, holder['store'], owner
         instances = {name: make(name) for name in ('first', 'second')}
         with patch.object(self.api, 'image_generation_settings', side_effect=AssertionError('root settings')), patch.object(self.api, 'normalize_chroma_screen', side_effect=AssertionError('root screen')), patch.object(self.api, 'output_write_dir_for_owner', side_effect=AssertionError('root paths')), patch.object(self.api, 'file_sha256', side_effect=AssertionError('root hash')):

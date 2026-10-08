@@ -1,6 +1,4 @@
 """Legacy standard uploads, version activation and task configuration."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 import copy
 import hashlib
 import time
@@ -9,21 +7,23 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
 from fastapi import HTTPException
 from ..schemas.text_inspection import IncomingTextRulesRequest
 from ..incoming_text_inspection import IncomingTextValidationError, normalize_field_rules
-from .incoming_ports import IncomingAccess, IncomingReferences, IncomingTasks, IncomingMedia, IncomingWrites, IncomingJSON, Upload
+from .incoming_ports import IncomingAccess, IncomingReferences, IncomingTasks, IncomingMedia, IncomingWrites, IncomingJSON, Upload, IncomingReferenceFiles, IncomingImageWriter
 
 
 class IncomingCatalog:
     def __init__(self, access: IncomingAccess, references: IncomingReferences, tasks: IncomingTasks,
                  media: IncomingMedia, writes: IncomingWrites, json: IncomingJSON,
-                 public: Callable[[dict[str, Any]], dict[str, Any]], verified: Callable[[], bool]):
+                 public: Callable[[dict[str, Any]], dict[str, Any]], verified: Callable[[], bool], *,
+                 files: IncomingReferenceFiles, images: IncomingImageWriter):
         self.access, self.references, self.tasks = access, references, tasks
         self.media, self.writes, self.json = media, writes, json
         self.public, self.verified = public, verified
+        if files is None or images is None:
+            raise TypeError("explicit incoming storage dependencies are required")
+        self.files, self.images = files, images
 
     def get_incoming_text_task(self, task_id: str) -> dict[str, Any]:
         task = self.access.task()(task_id)
@@ -55,7 +55,7 @@ class IncomingCatalog:
         self.access.task()(str(reference.get("task_id")))
         key = {"source": "source_path", "canonical": "canonical_path"}.get(asset_kind)
         path = Path(str(reference.get(key or "") or ""))
-        if not key or not _business_files.exists(path) or not self.media.under(path, self.media.root()):
+        if not key or not self.files.exists(path) or not self.media.under(path, self.media.root()):
             raise HTTPException(status_code=404, detail="标准稿文件不存在")
         return path
 
@@ -72,9 +72,9 @@ class IncomingCatalog:
         output_dir = self.media.output()(f"incoming_text/references/{task_id}", owner_user_id)
         source_path = output_dir / f"{reference_id}{suffix}"
         canonical_path = output_dir / f"{reference_id}_canonical.png"
-        _business_files.write_bytes(source_path, contents)
-        if not _image_files.imwrite(str(canonical_path), image):
-            _business_files.unlink(source_path, missing_ok=True)
+        self.files.write_bytes(source_path, contents)
+        if not self.images.imwrite(str(canonical_path), image):
+            self.files.unlink(source_path, missing_ok=True)
             raise HTTPException(status_code=500, detail="标准稿规范化图片保存失败")
         now = int(time.time())
         reference = {
@@ -88,7 +88,7 @@ class IncomingCatalog:
             "source_path": str(source_path),
             "canonical_path": str(canonical_path),
             "source_sha256": hashlib.sha256(contents).hexdigest(),
-            "canonical_sha256": hashlib.sha256(_business_files.read_bytes(canonical_path)).hexdigest(),
+            "canonical_sha256": hashlib.sha256(self.files.read_bytes(canonical_path)).hexdigest(),
             "width": int(image.shape[1]),
             "height": int(image.shape[0]),
             "rules": [],
@@ -100,8 +100,8 @@ class IncomingCatalog:
             "shared_with_user_ids": list(task.get("shared_with_user_ids") or []),
         }
         if not self.references.save(reference, insert_only=True):
-            _business_files.unlink(source_path, missing_ok=True)
-            _business_files.unlink(canonical_path, missing_ok=True)
+            self.files.unlink(source_path, missing_ok=True)
+            self.files.unlink(canonical_path, missing_ok=True)
             raise HTTPException(status_code=409, detail="该标准版本号已存在")
         return self.public(reference)
 

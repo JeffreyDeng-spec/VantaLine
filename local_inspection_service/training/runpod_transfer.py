@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from .runpod_exports import ExportTaskUpdate
 from .runpod_upload_store import ArtifactReceiver, UploadStream
-from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.runtime import ArtifactRuntime
 
 Record = dict[str, Any]
 
@@ -26,9 +26,11 @@ class TransferPaths:
 
 class RunPodTrainingTransfer:
     def __init__(self, find: Callable[[str], Record | None], token_hash: Callable[[str], str],
-                 clock: Callable[[], float], paths: TransferPaths, uploads: ArtifactReceiver, update_provider: Callable[[], ExportTaskUpdate], *, runtime_provider=get_runtime):
+                 clock: Callable[[], float], paths: TransferPaths, uploads: ArtifactReceiver, update_provider: Callable[[], ExportTaskUpdate], *, runtime_provider: Callable[[], ArtifactRuntime | None]):
         self.find, self.token_hash, self.clock = find, token_hash, clock
         self.paths, self.uploads, self.update_provider = paths, uploads, update_provider
+        if runtime_provider is None:
+            raise TypeError('runtime_provider is required')
         self.runtime_provider = runtime_provider
 
     def download_runpod_training_dataset(self, job_id: str, token: str) -> FileResponse:

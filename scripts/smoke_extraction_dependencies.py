@@ -16,6 +16,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -79,7 +80,7 @@ class ExtractionContracts(unittest.TestCase):
         def transport(request,settings,*,timeout):f.calls.append(('bbox',json.loads(request.data),copy.deepcopy(settings),timeout));raise TimeoutError('synthetic unknown')
         ports=ExtractionMedia(path,write,read,digest,lambda data,mime:'data:'+mime+';base64,'+base64.b64encode(data).decode())
         models=ExtractionModels(lambda:f.image_config,lambda purpose:f.document_config,provider,transport,copy.deepcopy,lambda:f.enabled)
-        f.resolve=api.register(app,ExtractionAccess(permission,lambda:(identity.get(),name)),ExtractionRecords(repository,owned,load,save),ports,models,clear)
+        f.resolve=api.register(app,ExtractionAccess(permission,lambda:(identity.get(),name)),ExtractionRecords(repository,owned,load,save),ports,models,clear, files=BusinessFiles())
         self.assertEqual(f.events,[]);self.assertIs(compatibility.register,api.register)
         f.client=TestClient(app,raise_server_exceptions=False);self.addCleanup(f.client.close)
         f.endpoint=next(route.endpoint for route in app.routes if route.path==PREFIX and 'POST' in route.methods)
@@ -115,6 +116,7 @@ class ExtractionContracts(unittest.TestCase):
                 class Thread:
                     def __init__(self,**kwargs):self.kwargs=kwargs
                     def start(self):f.workers.append(self.kwargs)
+                    def is_alive(self):return False
                 with patch.dict('os.environ',{'VANTALINE_LABEL_EXTRACTION_ACCOUNTS':'alice','VANTALINE_LABEL_BBOX_ACCOUNTS':'alice'}),patch.object(api.threading,'Thread',Thread):
                     value=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','worker_001',method))
                     duplicate=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','worker_001',method))
@@ -151,6 +153,7 @@ class ExtractionContracts(unittest.TestCase):
         class Thread:
             def __init__(self,**kwargs):self.kwargs=kwargs
             def start(self):f.workers.append(self.kwargs)
+            def is_alive(self):return False
         with patch.dict('os.environ',{'VANTALINE_LABEL_EXTRACTION_ACCOUNTS':'alice','VANTALINE_LABEL_BBOX_ACCOUNTS':'alice'}),patch.object(api.threading,'Thread',Thread):
             value=asyncio.run(f.endpoint(Upload(),'[0.1,0.1,0.8,0.8]','boundary_001',method))
         self.assertEqual(len(f.workers),1)

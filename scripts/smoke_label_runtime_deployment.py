@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from release_runtime_client import request
 from release_runtime_contract import ContractError, WEB, LABEL
 from release_runtime_transition import RuntimeTransition
@@ -74,7 +75,7 @@ class RuntimeHarness:
         if self.control is not None:
             return
         identity = read_identity(self.current.resolve(), current=self.current)
-        self.worker = LabelWorker(self.repositories, lambda: self.root, lambda: None)
+        self.worker = LabelWorker(self.repositories, lambda: self.root, lambda: None, runtime_provider=get_runtime)
         self.worker._iteration = lambda: False  # The paid workflow is not exercised here.
         self.control = LabelRuntimeControl(identity, self.repositories, self.worker,
             directory=self.directory, allowed_uid=os.getuid())
@@ -127,7 +128,7 @@ def real_claim_pause(root, repositories):
             assert release_cleanup.wait(5)
         repositories.clear()
     models = SimpleNamespace(resolve=lambda *a: {"api_key": "fixture"}, record_call=lambda *a: None)
-    worker = LabelWorker(RepositoryLifecycle(repositories.repository, clear), lambda: root, lambda: models)
+    worker = LabelWorker(RepositoryLifecycle(repositories.repository, clear), lambda: root, lambda: models, runtime_provider=get_runtime)
     control = LabelRuntimeControl(identity, repositories, worker, directory=root / "control", allowed_uid=os.getuid())
     def process(repository, media, run, *args, **kwargs):
         with count_lock:

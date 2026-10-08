@@ -9,7 +9,7 @@ import shutil
 import time
 from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
-from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.runtime import ArtifactRuntime
 
 Record = dict[str, Any]
 
@@ -39,9 +39,11 @@ class RunPodExportPolicy:
 class RunPodExports:
     def __init__(self, paths: RunPodExportPaths, policy: RunPodExportPolicy,
                  bundle: Callable[[Path, str], tuple[TemporaryBundle, Path]],
-                 digest: Callable[[Path], str], update_provider: Callable[[], ExportTaskUpdate], *, runtime_provider=get_runtime):
+                 digest: Callable[[Path], str], update_provider: Callable[[], ExportTaskUpdate], *, runtime_provider: Callable[[], ArtifactRuntime | None]):
         self.paths, self.policy = paths, policy
         self.bundle, self.digest, self.update_provider = bundle, digest, update_provider
+        if runtime_provider is None:
+            raise TypeError('runtime_provider is required')
         self.runtime_provider = runtime_provider
 
     def create_runpod_training_dataset_archive(self, job_id, task, dataset):

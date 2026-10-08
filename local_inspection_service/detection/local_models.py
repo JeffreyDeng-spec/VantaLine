@@ -2,9 +2,16 @@
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, Protocol
+from contextlib import AbstractContextManager
 from .task_catalog import TrainedSpecs
-from ..storage.artifacts.files import BusinessFiles
+from ..storage.artifacts.runtime import ArtifactRuntime
+
+
+class ModelFiles(Protocol):
+    runtime_provider: Callable[[], ArtifactRuntime | None]
+    def is_file(self, path: Path) -> bool: ...
+    def local_file(self, path: Path) -> AbstractContextManager[Path]: ...
 
 Record = dict[str, Any]
 Model = TypeVar("Model")
@@ -13,12 +20,14 @@ Model = TypeVar("Model")
 class LocalModels(Generic[Model]):
     def __init__(self, select: Callable[[str | None, Record | None], Record],
                  factory: Callable[[], Callable[[str], Model]], legacy_specs: Callable[[], list[Record]],
-                 trained_specs: TrainedSpecs, *, files=None):
+                 trained_specs: TrainedSpecs, *, files: ModelFiles):
         self.select, self.factory = select, factory
         self.legacy_specs, self.trained_specs = legacy_specs, trained_specs
         self.models: dict[str, Model] = {}
         self.paths: dict[str, Path] = {}
-        self.files = files if files is not None else BusinessFiles()
+        if files is None:
+            raise TypeError("files is required")
+        self.files = files
 
     def model(self, model_id=None, config=None):
         if self.files.runtime_provider() is None:
