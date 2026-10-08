@@ -15,6 +15,7 @@ from .repository import Repository, Conflict
 from .dependencies import ProfileDependencies
 
 PURPOSES = {
+    'bbox_annotation': ('实拍回流定位', 'vision', False),
     'label': ('标签对比', 'vision', False),
     'manual': ('说明书检验', 'vision', False),
     'pipeline': ('流水线配件检测', 'vision', False),
@@ -57,6 +58,8 @@ def validate_binding(purpose, profile):
         raise ValueError('未知配置用途')
     if profile is None:
         return
+    if purpose == 'bbox_annotation' and (profile['provider'], profile['model']) != ('doubao', 'doubao-seed-2-1-pro-260915'):
+        raise ValueError('实拍回流定位必须绑定固定豆包视觉模型')
     if not profile.get('enabled') or profile.get('pending'):
         raise ValueError('配置未启用或尚未完善')
     if PURPOSES[purpose][1] not in profile['capabilities']:

@@ -124,6 +124,14 @@ class TableSchema:
 
 
 TABLES = (
+    TableSchema('real_photo_states', ('owner_user_id','task_id','raw_json'),
+        'CREATE TABLE IF NOT EXISTS real_photo_states (owner_user_id TEXT NOT NULL, task_id TEXT NOT NULL, raw_json TEXT NOT NULL, PRIMARY KEY(owner_user_id,task_id))'),
+    TableSchema('real_photo_jobs', ('id','owner_user_id','task_id','kind','status','idempotency_key','created_at','raw_json'),
+        'CREATE TABLE IF NOT EXISTS real_photo_jobs (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, task_id TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL, idempotency_key TEXT NOT NULL, created_at REAL NOT NULL, raw_json TEXT NOT NULL)',
+        ('CREATE UNIQUE INDEX IF NOT EXISTS idx_real_photo_idempotency ON real_photo_jobs(owner_user_id,task_id,idempotency_key)',
+         'CREATE INDEX IF NOT EXISTS idx_real_photo_queue ON real_photo_jobs(kind,status,created_at)')),
+    TableSchema('real_photo_events', ('id','owner_user_id','task_id','job_id','created_at','raw_json'),
+        'CREATE TABLE IF NOT EXISTS real_photo_events (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, task_id TEXT NOT NULL, job_id TEXT NOT NULL, created_at REAL NOT NULL, raw_json TEXT NOT NULL)'),
     TableSchema(
         "label_run_projection", ("id", "projection_version", "raw_json"),
         "CREATE TABLE IF NOT EXISTS label_run_projection (id TEXT PRIMARY KEY, projection_version INTEGER NOT NULL, raw_json TEXT NOT NULL)",

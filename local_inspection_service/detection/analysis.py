@@ -9,8 +9,9 @@ from .analysis_ports import AnalysisInput, AnalysisRouting, AnalysisInference, A
 
 class DetectionAnalysis:
     def __init__(self, inputs: AnalysisInput, routing: AnalysisRouting,
-                 inference: AnalysisInference, output: AnalysisOutput):
+                 inference: AnalysisInference, output: AnalysisOutput, feedback=None):
         self.input, self.routing, self.inference, self.output = inputs, routing, inference, output
+        self.feedback=feedback
 
     def analyze_bgr(self, image_bgr: np.ndarray, request_id: str, model_id: str | None = None, *, image_path: Path | None = None) -> dict[str, Any]:
         config = self.input.scope()(self.input.load())
@@ -68,7 +69,7 @@ class DetectionAnalysis:
         out_path = self.output.directory("inspection") / out_name
         preview = self.output.resize()(annotated, self.output.max_side())
         image_backend(self.output.images()).imwrite(str(out_path), preview, [int(self.output.images().IMWRITE_JPEG_QUALITY), self.output.quality()])
-        return {
+        output = {
             "request_id": request_id,
             "passed": rule["passed"],
             "model": {
@@ -80,3 +81,5 @@ class DetectionAnalysis:
             "detections": detections,
             "annotated_url": self.output.url(out_path),
         }
+        if self.feedback:self.feedback(output, request_id, image_path, image_bgr)
+        return output

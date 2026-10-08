@@ -8,6 +8,7 @@ import numpy as np
 from fastapi import File, Form, HTTPException, Request, UploadFile
 from ..plc_fx_ascii import PlcConfigError
 from .camera_request_ports import CameraRequestAccess, CameraDispatchEvidence, CameraImageExecution
+from ..training.real_photo_provenance import group
 
 @dataclass(frozen=True)
 class CameraDetectionRequest:
@@ -57,7 +58,8 @@ class CameraDetectionRequest:
         upload_path = self.images.UPLOAD_DIR() / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
         try:
             self.images._business_files().write_bytes(upload_path, payload)
-            result = self.images.analyze_bgr()(image, request_id, model_id, image_path=upload_path)
+            with group('camera_session:'+str(station['id'])+':'+plc_session_id):
+                result = self.images.analyze_bgr()(image, request_id, model_id, image_path=upload_path)
             completed_dispatch = self.evidence.plc_web_serial_finish_camera_detection()(
                 str(station["id"]), dispatch_id, plc_session_id, result
             )

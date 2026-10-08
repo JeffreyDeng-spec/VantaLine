@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi import UploadFile, HTTPException
 from .analysis_ports import AnalysisCall
 from .upload_ports import UploadAccess, UploadPaths, ImageArrays, ImageDecoder
+from ..training.real_photo_provenance import group
+import uuid
 
 class ImageUpload:
     def __init__(self, access: UploadAccess, paths: UploadPaths,
@@ -24,4 +26,5 @@ class ImageUpload:
         request_id = self.paths.name()(file.filename).rsplit('.', 1)[0]
         upload_path = self.paths.directory() / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
         _business_files.write_bytes(upload_path, payload)
-        return self.analyze(image, request_id, model_id, image_path=upload_path)
+        with group('upload_batch:'+uuid.uuid4().hex):
+            return self.analyze(image, request_id, model_id, image_path=upload_path)

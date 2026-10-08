@@ -1106,3 +1106,7 @@ This background candidate retains native-history/readiness and detection composi
 
 
 CI benchmark storage isolation is an infrastructure-only candidate: product code, source fingerprints, installer and release topology are unchanged. Require unchanged original benchmark protocols, explicit database routing/settings/capacity checks, full required CI and independent review. Retain all disk-based failures and do not treat a tmpfs pass as their repair or as production disk-latency acceptance. PLC and later refactors must rebind to the accepted actual main and pass their own gates. Whole-release deployment/rollback remains unchanged.
+
+## Real-photo feedback staging
+
+The feedback foundation ships disabled by an empty account allowlist. Its CI includes disposable PostgreSQL owner/claim competition tests. Subsequent review-worker and dataset-training batches require independent commissioning and immutable release evidence; green fixture checks alone do not authorize declaring visual accuracy or enabling automatic training. Use the production-change PR template and whole-release rollback.

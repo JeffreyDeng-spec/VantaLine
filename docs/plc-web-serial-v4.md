@@ -128,3 +128,7 @@ The two generic/protected app-configuration write entry helpers now delegate to 
 The existing camera/lease callers now obtain model permission and account configuration through the explicit auth projection boundary. Permission order and scoped model lookup remain unchanged, as do browser serial ownership, lease/ACK and uncertain-write rules.
 
 Dedicated camera orchestration is implemented in `detection/camera_request.py`; `server.py` retains route composition. It preserves station/permission checks, upload fingerprinting, durable begin-before-analysis, completed-request reuse and pending conflicts, followed by result/error evidence settlement. Ordinary image/video services remain unable to generate browser dispatch plans; no server serial I/O is introduced.
+
+### Real-photo feedback provenance
+
+The dedicated camera request propagates its existing station/session identity as a source group around analysis. This metadata grants no PLC capability and changes no dispatch fingerprint, D/Y frames, lease, retry or physical-write behavior. Ordinary image/video provenance also grants no camera dispatch authority.

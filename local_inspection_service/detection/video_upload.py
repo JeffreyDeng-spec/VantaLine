@@ -6,6 +6,7 @@ from fastapi import UploadFile, HTTPException
 from .analysis_ports import AnalysisCall
 from .upload_ports import UploadAccess, UploadPaths, VideoBackend, FileCopy, VideoResults, Record
 from ..storage.artifacts.files import BusinessFiles
+from ..training.real_photo_provenance import group
 
 class VideoUpload:
     def __init__(self, access: UploadAccess, paths: UploadPaths, copies: Callable[[], FileCopy],
@@ -43,7 +44,8 @@ class VideoUpload:
                 break
             if idx % stride == 0:
                 request_id = f'{Path(upload_name).stem}_frame_{idx:06d}'
-                result = self.analyze(frame, request_id, model_id)
+                with group('source_video:'+upload_name):
+                    result = self.analyze(frame, request_id, model_id)
                 if first_preview_url is None:
                     first_preview_url = result['annotated_url']
                 frames.append(self.results.frame(result, idx, fps))
@@ -72,7 +74,8 @@ class VideoUpload:
                     break
                 if idx % stride == 0:
                     request_id = f'{Path(upload_name).stem}_frame_{idx:06d}'
-                    result = self.analyze(frame, request_id, model_id)
+                    with group('source_video:'+upload_name):
+                        result = self.analyze(frame, request_id, model_id)
                     if first_preview_url is None:
                         first_preview_url = result['annotated_url']
                     frames.append(self.results.frame(result, idx, fps))

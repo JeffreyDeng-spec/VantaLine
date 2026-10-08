@@ -27,6 +27,9 @@ BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passe
 INTEGER_COLUMNS = frozenset({"projection_version", "sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    'real_photo_states': ('owner_user_id','task_id'),
+    'real_photo_jobs': ('id',),
+    'real_photo_events': ('id',),
     "label_run_projection": ("id",),
     "label_runtime_state": ("id",),
     "model_profile_objects": ("id",),
@@ -107,7 +110,8 @@ def postgres_type(column: str) -> str:
 def create_table_statement(table: TableSchema) -> str:
     lines: list[str] = []
     for column in table.columns:
-        lines.append(f"    {quote_ident(column)} {postgres_type(column)} NOT NULL")
+        kind = 'DOUBLE PRECISION' if table.name.startswith('real_photo_') and column == 'created_at' else postgres_type(column)
+        lines.append(f"    {quote_ident(column)} {kind} NOT NULL")
     primary_key = PRIMARY_KEY_COLUMNS.get(table.name)
     if primary_key:
         cols = ", ".join(quote_ident(column) for column in primary_key)
