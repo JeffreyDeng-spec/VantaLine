@@ -1305,3 +1305,42 @@ Auto-optimization runtime ownership changes no model, concurrency setting, defau
 The settings composition change introduces no business configuration or default. Environment values are still parsed for every call, including the same invalid-environment errors before explicit overrides. Reassigning private entry settings aliases no longer rewires consumers: tests and extensions must inject a capability at the consuming service boundary. Manifest v176 retains 507 real sources; historic task snapshots remain unchanged.
 
 This background candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows accessory candidate f397a31. Actual-main rebind and accessory release acceptance must precede publication. Production/tests and the ordered entry match reviewed 5a44e61. The bundled manifest is v176 with 507 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained.
+
+The offline `scripts/benchmark_real_photo_bbox.py` accepts private reference,
+mask and Doubao result JSON paths plus an output path. It reads no provider
+credentials and calls no model/training API. A reference must explicitly carry
+`review_status=human_confirmed` and `confirmed_by`; method records bind to the
+same `image_sha256` and use original-pixel `bbox` coordinates with `class_id`.
+Keep all business inputs/outputs outside Git. No production setting, default
+model or synthetic-generation flag is changed by this utility.
+
+`scripts/collect_doubao_bbox_benchmark.py` is an isolated provider client. Use
+`--manifest`, `--model` (an externally verified fixed version, never a rolling
+alias), and a new `--output-dir`; provide the existing private credential through
+`ARK_API_KEY`. The endpoint is the official Beijing Ark Chat Completions API.
+This client changes no platform model profile or purpose binding. Availability
+is established only by a successful actual image request returning the requested
+model identifier; any failed/incomplete request stops without retry or fallback.
+
+The B manifest has only `owner_user_id`, `classes`, and `samples`. Each class
+contains `class_id`, `name`, `definition`, and `reference_path`; each sample
+contains `image_path`, `image_sha256`, `source_kind=real_photo`, and the same
+`owner_user_id`. Unknown input fields are rejected to prevent historical mask,
+bbox, or reference-truth input to B. Original JPEG/PNG bytes are transmitted,
+without resizing; EXIF rotation is rejected pending explicit coordinate mapping.
+Receipts include prompt, payload hash, reference hashes, dimensions, requested
+and returned model, usage and elapsed time. Business inputs, responses and
+credentials remain outside Git. This is a paid inference client, not a training
+or production migration command.
+
+The isolated bbox collector records its 60-second connect/upload socket timeout and
+180-second read timeout in the private receipt. This accommodates original reference
+photo payloads without resizing or automatic request retries. These socket timeouts
+do not guarantee a hard whole-request deadline. Production provider settings are unchanged.
+
+The collector defaults to requested original-pixel coordinates. An explicit
+`--coordinate-space normalized_1000` instead requests 0–1000 xyxy coordinates and
+validates that range before mapping x by original width/1000 and y by height/1000.
+The receipt freezes the actual prompt and coordinate mode; raw responses are kept.
+Out-of-range pixel responses are rejected, never silently interpreted as normalized.
+Changing modes starts a distinct experiment; retain protocol failures separately.

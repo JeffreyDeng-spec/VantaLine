@@ -2281,3 +2281,19 @@ smoke_auto_optimization_settings_composition.py verifies all 24 actual applicati
 
 
 CI uses two independent PostgreSQL 16 instances. Ordinary business, migration, transaction, concurrency and failure contracts retain the original disk-backed instance. Only benchmark_label_history_statistics.py, benchmark_label_summary_reads.py, benchmark_label_projection.py and benchmark_label_run_batch.py select the dedicated tmpfs database through single-command DSN overrides. Scripts, fixed baselines, populations, order, sample counts and latency/memory/query guards remain unchanged. These measure complete synthetic endpoints, including persisted pagination snapshots, within this new relative-performance environment; they do not establish physical-disk durable-commit P95 or production capacity. Historical disk failures remain evidence. The fake legacy-index benchmark keeps its original environment.
+
+`python scripts/smoke_real_photo_bbox_benchmark.py` checks the offline real-photo
+bbox comparison without production media, provider calls or training. It covers
+owner/source filtering before file access, content deduplication, crop offsets,
+the existing mask alpha threshold, empty/RGB/mismatched-mask rejection, invalid
+coordinates, optimal assignment against exhaustive small cases, duplicate and
+wrong-class accounting, and rejection of draft references, incomplete provider
+results and unequal image coverage. The isolated Doubao client checks blind-input
+allowlisting, source hashes/owner, returned-model mismatch, truncated responses,
+original-coordinate validation and one-call stop on provider unavailability,
+without paid requests. These checks do not certify either model's
+business-image quality or complete the proposed real-photo training migration.
+
+The real-photo bbox smoke additionally checks explicitly selected normalized_1000
+coordinates against unequal original width/height, rejects overflow, and proves
+that the pixel protocol does not silently reinterpret out-of-range output.
