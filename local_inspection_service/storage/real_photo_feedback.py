@@ -132,6 +132,7 @@ class RealPhotoRepository:
                 if {sample['image_sha256'], *sample.get('lineage_hashes', [])} & {previous['image_sha256'], *previous.get('lineage_hashes', [])}:
                     return previous
             state['samples'].append(copy.deepcopy(sample))
+            state['samples'][-1]['annotation_version']=int(sample.get('annotation',{}).get('version',1))
             if not sample.get('annotation'):
                 self.enqueue(c, state, 'annotate', 'annotation:'+sample['sample_id']+':1',
                              {'sample': sample, 'classes': state['classes'], 'profiles': state['profiles'], 'version': 1})

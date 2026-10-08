@@ -78,6 +78,8 @@ def review_report(job, result):
                 raise ValueError('missing, duplicate or stale review identity')
             if decision['decision'] not in DECISIONS:
                 raise ValueError('unknown review decision')
+            if decision['decision'].startswith('accept_') and s['annotation'].get('status')!='completed':
+                raise ValueError('failed localization may not become a training label')
             if decision['decision'] == 'accept_positive' and not s['annotation']['objects']:
                 raise ValueError('positive review requires existing boxes')
             if decision['decision'] == 'accept_positive':

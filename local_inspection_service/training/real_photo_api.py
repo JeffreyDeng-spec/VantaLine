@@ -166,7 +166,8 @@ class FeedbackService:
             c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('queued','running')",(user['id'],identifier))
             if any(j['kind']=='annotate' and j['inputs']['sample']['sample_id']==sample_id for j in repo.rows(c)):
                 raise HTTPException(409,'此图标注尚未结束')
-            version=max([int(a.get('version',0)) for a in sample.get('annotation_history',[])]+[int(sample.get('annotation',{}).get('version',0))])+1
+            version=max([int(a.get('version',0)) for a in sample.get('annotation_history',[])]+[int(sample.get('annotation',{}).get('version',0)),int(sample.get('annotation_version',0))])+1
+            sample['annotation_version']=version
             if sample.get('annotation'):sample.setdefault('annotation_history',[]).append(sample.pop('annotation'))
             repo.enqueue(c,state,'annotate',f'annotation:{sample_id}:{version}',
                          {'sample':sample,'classes':state['classes'],'profiles':state['profiles'],'version':version})
