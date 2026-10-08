@@ -45,6 +45,8 @@ def assert_capability_owner(test, port, name, server):
         execution = server._auto_optimization_execution
         expected_execution = EXECUTION_OWNED_CAPABILITIES.get(type(port).__name__, frozenset())
         if name in expected_execution:
+            components = ('initialization', 'mask_prompts', 'mask_visuals', 'mask_verification', 'sprite_publication', 'label_generation', 'label_processing', 'training_scheduling', 'sprites', 'rendering', 'synthetic_batch', 'dataset', 'requests')
+            test.assertTrue(any(port is candidate for component in components for candidate in vars(getattr(execution, component)).values()), 'capability must belong to this execution graph')
             selected = actual()
             if name in ('auto_optimize_label_worker', 'auto_optimize_training_check_worker'):
                 pinned = execution.pinned_label_worker if name == 'auto_optimize_label_worker' else execution.pinned_check_worker

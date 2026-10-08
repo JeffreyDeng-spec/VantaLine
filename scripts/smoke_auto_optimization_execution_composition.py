@@ -70,6 +70,88 @@ def verify_source(source):
     return fixture
 
 
+
+def verify_execution_source(source):
+    fixture = json.loads((ROOT / 'tests/backend_contract/auto_optimization_execution_ports.json').read_text())
+    module = ast.parse(source)
+    protected = fixture['constructor_imports']
+    for binding, expected in protected.items():
+        imports = []
+        for node in module.body:
+            if isinstance(node, (ast.ImportFrom, ast.Import)):
+                for alias in node.names:
+                    selected = alias.asname or (alias.name.split('.')[0] if isinstance(node, ast.Import) else alias.name)
+                    if selected == binding:
+                        imports.append((node, alias))
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                assert node.name != binding, 'shadowed construction binding'
+            elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                assert not any(isinstance(target, ast.Name) and target.id == binding for target in targets), 'shadowed construction binding'
+        assert len(imports) == 1, binding
+        node, alias = imports[0]
+        assert isinstance(node, ast.ImportFrom) and node.level == expected['level'] and node.module == expected['module'] and alias.name == expected['original'], binding
+    cls = next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == 'AutoOptimizationExecution')
+    constructor = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '__init__')
+    assignments = {}
+    for node in constructor.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'self':
+                    assert target.attr not in assignments, 'duplicate component'
+                    assignments[target.attr] = node.value
+    edges = {(edge['service'], edge['port'], edge['field']): edge for edge in fixture['owned_edges']}
+    assert len(edges) == len(fixture['owned_edges']) == 62
+    runtime_names = {'_auto_optimize_lock': 'lock', '_auto_optimize_label_threads': 'label_threads'}
+    seen = set()
+    for alias, original in fixture['original_constructors'].items():
+        service = fixture['aliases'][alias]
+        parent = ast.parse(original).body[0].value
+        actual = assignments[service]
+        assert isinstance(actual, ast.Call) and structure(actual.func) == structure(parent.func), service
+        assert len(actual.args) == len(parent.args) and [k.arg for k in actual.keywords] == [k.arg for k in parent.keywords], service
+        old_arguments = [ast.keyword(arg=None, value=value) for value in parent.args] + parent.keywords
+        new_arguments = [ast.keyword(arg=None, value=value) for value in actual.args] + actual.keywords
+        for old, new in zip(old_arguments, new_arguments):
+            if old.arg == 'runtime':
+                expected = ast.parse('label_runtime' if service == 'label_processing' else 'scheduling_runtime', mode='eval').body
+            elif old.arg == 'model_resolver':
+                expected = ast.parse('model_resolver', mode='eval').body
+            elif old.arg == 'negative_samples_default':
+                expected = ast.parse('negative_samples_default', mode='eval').body
+            else:
+                assert isinstance(old.value, ast.Call) and isinstance(new.value, ast.Call)
+                assert structure(old.value.func) == structure(new.value.func) and not new.value.args
+                assert [k.arg for k in old.value.keywords] == [k.arg for k in new.value.keywords]
+                port = old.value.func.id
+                for old_field, new_field in zip(old.value.keywords, new.value.keywords):
+                    key = (service, port, old_field.arg)
+                    edge = edges.get(key)
+                    if edge:
+                        seen.add(key)
+                        if edge.get('runtime'):
+                            expression = 'lambda: self.runtime.' + runtime_names[old_field.arg]
+                        else:
+                            method = edge['method']
+                            selected = {'auto_optimize_label_worker': 'pinned_label_worker', 'auto_optimize_training_check_worker': 'pinned_check_worker'}.get(method, method)
+                            expression = 'lambda: self.' + selected
+                        expected_field = ast.parse(expression, mode='eval').body
+                    elif isinstance(old_field.value, ast.Attribute) and isinstance(old_field.value.value, ast.Name) and old_field.value.value.id == '_auto_optimization_settings':
+                        expected_field = ast.parse('self.settings.' + old_field.value.attr, mode='eval').body
+                    else:
+                        expected_field = ast.parse('external_' + port + '.' + old_field.arg, mode='eval').body
+                    assert structure(new_field.value) == structure(expected_field), key
+                continue
+            assert structure(new.value) == structure(expected), (service, old.arg)
+    assert seen == set(edges)
+    for field, method in [('pinned_label_worker', 'auto_optimize_label_worker'), ('pinned_check_worker', 'auto_optimize_training_check_worker')]:
+        expected = ast.parse('pinned(model_resolver, lambda identity: self.load_auto_optimize_state(identity))(self.' + method + ')', mode='eval').body
+        assert structure(assignments[field]) == structure(expected), field
+    imports = [n for n in module.body if isinstance(n, ast.ImportFrom) and any(a.name == 'pinned' for a in n.names)]
+    assert len(imports) == 1 and imports[0].level == 2 and imports[0].module == 'model_profiles.snapshots'
+    return fixture
+
+
 def poisoned_owner():
     selections = []
     def forbidden(*args, **kwargs):
@@ -112,6 +194,15 @@ class Contracts(unittest.TestCase):
     def test_exact_parent_ports_aliases_and_mutants(self):
         source = (ROOT / 'local_inspection_service/server.py').read_text()
         verify_source(source)
+        execution_source = Path(composition.__file__).read_text()
+        verify_execution_source(execution_source)
+        for old, new in [('load_auto_optimize_state=lambda: self.load_auto_optimize_state,', 'load_auto_optimize_state=lambda: self.save_auto_optimize_state,'), ('lambda: self.auto_optimize_load_sprite', 'lambda: self.core.auto_optimize_load_sprite'), ('from ..model_profiles.snapshots import pinned', 'from ..model_profiles.dependencies import pinned')]:
+            self.assertIn(old, execution_source)
+            with self.assertRaises(AssertionError):
+                verify_execution_source(execution_source.replace(old, new, 1))
+        for extra in ('pinned = None', 'pinned: object = None', 'pinned += None', 'from collections import deque as pinned', 'def pinned(*args): pass', 'class AutoOptimizationRequests: pass', 'import os as RequestState'):
+            with self.assertRaises(AssertionError):
+                verify_execution_source(execution_source + '\n' + extra + '\n')
         for old, new in [('_auto_optimization_execution.label_processing', '_auto_optimization_execution.label_generation'), ('model_resolver=resolve_model_profiles,', 'model_resolver=None,'), ('from .training.execution_composition import (', 'from training.execution_composition import (')]:
             self.assertIn(old, source)
             with self.assertRaises(AssertionError):
@@ -123,6 +214,19 @@ class Contracts(unittest.TestCase):
     def test_constructor_poison_and_all_annotations(self):
         owner, selections = poisoned_owner()
         self.assertEqual(selections, [])
+        fixture = verify_execution_source(Path(composition.__file__).read_text())
+        for edge in fixture['owned_edges']:
+            component = getattr(owner, edge['service'])
+            port = next(value for value in vars(component).values() if type(value).__name__ == edge['port'])
+            selected = getattr(port, edge['field'])()
+            if edge.get('runtime'):
+                self.assertIs(selected, owner.runtime.lock if edge['field'] == '_auto_optimize_lock' else owner.runtime.label_threads)
+            elif edge['method'] in ('auto_optimize_label_worker', 'auto_optimize_training_check_worker'):
+                self.assertIs(selected, owner.pinned_label_worker if edge['method'] == 'auto_optimize_label_worker' else owner.pinned_check_worker)
+                self.assertIs(selected.__wrapped__.__self__, owner)
+            else:
+                self.assertIs(selected.__self__, owner)
+                self.assertIs(selected.__func__, getattr(type(owner), edge['method']))
         for name, kind in vars(composition).items():
             if name.startswith('External') and isinstance(kind, type):
                 self.assertTrue(typing.get_type_hints(kind))

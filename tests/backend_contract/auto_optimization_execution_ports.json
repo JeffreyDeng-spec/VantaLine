@@ -561,5 +561,222 @@
     "delete_ai_task_auto_optimize_sample": "@app.delete('/api/ai/tasks/{task_id}/auto-optimize/samples/{sample_id}')\ndef delete_ai_task_auto_optimize_sample(task_id: str, sample_id: str) -> dict[str, Any]:\n    return _auto_optimization_requests.delete_ai_task_auto_optimize_sample(task_id, sample_id)",
     "retry_ai_task_auto_optimize_sample": "@app.post('/api/ai/tasks/{task_id}/auto-optimize/samples/{sample_id}/retry')\ndef retry_ai_task_auto_optimize_sample(task_id: str, sample_id: str) -> dict[str, Any]:\n    return _auto_optimization_requests.retry_ai_task_auto_optimize_sample(task_id, sample_id)",
     "approve_ai_task_auto_optimize_sample": "@app.post('/api/ai/tasks/{task_id}/auto-optimize/samples/{sample_id}/approve')\ndef approve_ai_task_auto_optimize_sample(task_id: str, sample_id: str, request: AutoOptimizeSampleApproveRequest | None=None) -> dict[str, Any]:\n    return _auto_optimization_requests.approve_ai_task_auto_optimize_sample(task_id, sample_id, request)"
+  },
+  "constructor_imports": {
+    "AutoOptimizationAdvisorPorts": {
+      "level": 1,
+      "module": "auto_optimization_initialization_ports",
+      "original": "AutoOptimizationAdvisorPorts"
+    },
+    "AutoOptimizationDataset": {
+      "level": 1,
+      "module": "auto_optimization_dataset",
+      "original": "AutoOptimizationDataset"
+    },
+    "AutoOptimizationInitialization": {
+      "level": 1,
+      "module": "auto_optimization_initialization",
+      "original": "AutoOptimizationInitialization"
+    },
+    "AutoOptimizationLabelGeneration": {
+      "level": 1,
+      "module": "auto_optimization_label_generation",
+      "original": "AutoOptimizationLabelGeneration"
+    },
+    "AutoOptimizationLabelProcessing": {
+      "level": 1,
+      "module": "auto_optimization_label_processing",
+      "original": "AutoOptimizationLabelProcessing"
+    },
+    "AutoOptimizationMaskPromptPorts": {
+      "level": 1,
+      "module": "auto_optimization_mask_ports",
+      "original": "AutoOptimizationMaskPromptPorts"
+    },
+    "AutoOptimizationMaskPrompts": {
+      "level": 1,
+      "module": "auto_optimization_mask_prompts",
+      "original": "AutoOptimizationMaskPrompts"
+    },
+    "AutoOptimizationMaskVerification": {
+      "level": 1,
+      "module": "auto_optimization_mask_verification",
+      "original": "AutoOptimizationMaskVerification"
+    },
+    "AutoOptimizationMaskVerificationPorts": {
+      "level": 1,
+      "module": "auto_optimization_mask_verification_ports",
+      "original": "AutoOptimizationMaskVerificationPorts"
+    },
+    "AutoOptimizationMaskVisualPorts": {
+      "level": 1,
+      "module": "auto_optimization_mask_ports",
+      "original": "AutoOptimizationMaskVisualPorts"
+    },
+    "AutoOptimizationMaskVisuals": {
+      "level": 1,
+      "module": "auto_optimization_mask_visuals",
+      "original": "AutoOptimizationMaskVisuals"
+    },
+    "AutoOptimizationRendering": {
+      "level": 1,
+      "module": "auto_optimization_rendering",
+      "original": "AutoOptimizationRendering"
+    },
+    "AutoOptimizationRequests": {
+      "level": 1,
+      "module": "auto_optimization_requests",
+      "original": "AutoOptimizationRequests"
+    },
+    "AutoOptimizationSpritePublication": {
+      "level": 1,
+      "module": "auto_optimization_sprite_publication",
+      "original": "AutoOptimizationSpritePublication"
+    },
+    "AutoOptimizationSprites": {
+      "level": 1,
+      "module": "auto_optimization_sprites",
+      "original": "AutoOptimizationSprites"
+    },
+    "AutoOptimizationSyntheticBatch": {
+      "level": 1,
+      "module": "auto_optimization_synthetic_batch",
+      "original": "AutoOptimizationSyntheticBatch"
+    },
+    "AutoOptimizationTaskInitializationPorts": {
+      "level": 1,
+      "module": "auto_optimization_initialization_ports",
+      "original": "AutoOptimizationTaskInitializationPorts"
+    },
+    "AutoOptimizationTrainingScheduling": {
+      "level": 1,
+      "module": "auto_optimization_training_scheduling",
+      "original": "AutoOptimizationTrainingScheduling"
+    },
+    "DatasetConfiguration": {
+      "level": 1,
+      "module": "auto_optimization_dataset_ports",
+      "original": "DatasetConfiguration"
+    },
+    "DatasetLayout": {
+      "level": 1,
+      "module": "auto_optimization_dataset_ports",
+      "original": "DatasetLayout"
+    },
+    "DatasetPublication": {
+      "level": 1,
+      "module": "auto_optimization_dataset_ports",
+      "original": "DatasetPublication"
+    },
+    "DatasetSources": {
+      "level": 1,
+      "module": "auto_optimization_dataset_ports",
+      "original": "DatasetSources"
+    },
+    "LabelGenerationArtifacts": {
+      "level": 1,
+      "module": "auto_optimization_label_generation_ports",
+      "original": "LabelGenerationArtifacts"
+    },
+    "LabelGenerationModels": {
+      "level": 1,
+      "module": "auto_optimization_label_generation_ports",
+      "original": "LabelGenerationModels"
+    },
+    "LabelGenerationPolicy": {
+      "level": 1,
+      "module": "auto_optimization_label_generation_ports",
+      "original": "LabelGenerationPolicy"
+    },
+    "ProcessingArtifacts": {
+      "level": 1,
+      "module": "auto_optimization_label_processing_ports",
+      "original": "ProcessingArtifacts"
+    },
+    "ProcessingExecution": {
+      "level": 1,
+      "module": "auto_optimization_label_processing_ports",
+      "original": "ProcessingExecution"
+    },
+    "ProcessingState": {
+      "level": 1,
+      "module": "auto_optimization_label_processing_ports",
+      "original": "ProcessingState"
+    },
+    "RequestAccess": {
+      "level": 1,
+      "module": "auto_optimization_requests_ports",
+      "original": "RequestAccess"
+    },
+    "RequestActions": {
+      "level": 1,
+      "module": "auto_optimization_requests_ports",
+      "original": "RequestActions"
+    },
+    "RequestState": {
+      "level": 1,
+      "module": "auto_optimization_requests_ports",
+      "original": "RequestState"
+    },
+    "SchedulingPolicy": {
+      "level": 1,
+      "module": "auto_optimization_training_scheduling_ports",
+      "original": "SchedulingPolicy"
+    },
+    "SchedulingState": {
+      "level": 1,
+      "module": "auto_optimization_training_scheduling_ports",
+      "original": "SchedulingState"
+    },
+    "SchedulingSubmission": {
+      "level": 1,
+      "module": "auto_optimization_training_scheduling_ports",
+      "original": "SchedulingSubmission"
+    },
+    "SpriteFiles": {
+      "level": 1,
+      "module": "auto_optimization_sprites_ports",
+      "original": "SpriteFiles"
+    },
+    "SpriteGeometry": {
+      "level": 1,
+      "module": "auto_optimization_sprites_ports",
+      "original": "SpriteGeometry"
+    },
+    "SpritePublication": {
+      "level": 1,
+      "module": "auto_optimization_sprite_publication_ports",
+      "original": "SpritePublication"
+    },
+    "SyntheticBatchConfiguration": {
+      "level": 1,
+      "module": "auto_optimization_synthetic_batch_ports",
+      "original": "SyntheticBatchConfiguration"
+    },
+    "SyntheticBatchPublication": {
+      "level": 1,
+      "module": "auto_optimization_synthetic_batch_ports",
+      "original": "SyntheticBatchPublication"
+    },
+    "SyntheticBatchSprites": {
+      "level": 1,
+      "module": "auto_optimization_synthetic_batch_ports",
+      "original": "SyntheticBatchSprites"
+    },
+    "SyntheticGeometry": {
+      "level": 1,
+      "module": "auto_optimization_rendering_ports",
+      "original": "SyntheticGeometry"
+    },
+    "SyntheticPublication": {
+      "level": 1,
+      "module": "auto_optimization_rendering_ports",
+      "original": "SyntheticPublication"
+    },
+    "pinned": {
+      "level": 2,
+      "module": "model_profiles.snapshots",
+      "original": "pinned"
+    }
   }
 }
