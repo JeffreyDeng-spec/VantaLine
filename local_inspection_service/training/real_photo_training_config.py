@@ -3,7 +3,7 @@ import hashlib
 import re
 from pathlib import Path
 from .real_photo_contracts import digest
-from .runpod_submission import (RUNPOD_YOLO_BASE_MODEL_ENV, RUNPOD_YOLO_BASE_MODEL_SHA256_ENV,
+from .runpod_model_settings import (RUNPOD_YOLO_BASE_MODEL_ENV, RUNPOD_YOLO_BASE_MODEL_SHA256_ENV,
                                RUNPOD_YOLO_BASE_MODEL_URL_ENV, RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV)
 
 

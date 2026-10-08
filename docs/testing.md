@@ -2290,3 +2290,5 @@ Second batch: `python -m pytest -q tests/test_real_photo_workflow.py` against a 
 
 
 Third batch: run `python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py` with the disposable PostgreSQL DSN. Contracts cover original-only export, exact accepted versions, fixed splits/full classes, drifted weights, single dispatch, restart observation and class-definition revocation. CI runs the same suite in its artifact-storage PostgreSQL service. Run training runner/submission/RunPod and pretraining regression smokes, frontend typecheck/build, additive application contract, docs contract and diff checks. The test suite does not execute a paid business CLI session or GPU training.
+
+The real-photo dataset CI fixture explicitly installs PyYAML. Shared RunPod base-weight setting names live in a side-effect-free module so freezing and payload validation do not create a transport dependency cycle; retain `scripts/smoke_model_dependency_contract.py` in the required backend checks.
