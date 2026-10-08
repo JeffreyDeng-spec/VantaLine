@@ -123,4 +123,3 @@ def api_for(graph, account):
         status_preview=StatusPreview(lambda:lambda *args:[],lambda selected:'cache',lambda *args:False),
         transfer=api_module.TrainingTransferAccess(lambda:1024,lambda value:hashlib.sha256(value.encode()).hexdigest(),lambda:123,
                                                   TransferPaths(lambda:lambda value,**kwargs:Path(value),graph.state.records.directory)))
-
