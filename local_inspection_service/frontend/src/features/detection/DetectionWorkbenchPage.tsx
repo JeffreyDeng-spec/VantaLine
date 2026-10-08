@@ -663,6 +663,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("__default__");
+  const realPhotoCaptureSession=useRef(crypto.randomUUID());
   const [selectedModelId, setSelectedModelId] = useState("");
   const [pendingModelId, setPendingModelId] = useState("");
   const [selectedAiTaskId, setSelectedAiTaskId] = useState("");
@@ -1451,6 +1452,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         video: deviceId ? { deviceId: { exact: deviceId } } : true,
         audio: false
       });
+      realPhotoCaptureSession.current=crypto.randomUUID();
       setStream(nextStream);
       if (videoRef.current) {
         videoRef.current.srcObject = nextStream;
@@ -1604,6 +1606,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       const uploadFile = kind === "video" || activeModelIsAi || realPhotoSelected ? file : await optimizeImageUpload(file);
       form.append("file", uploadFile);
       form.append("model_id", activeModelId);
+      if (kind === "camera" && realPhotoSelected) form.append("capture_session_id",realPhotoCaptureSession.current);
       const currentPlcState = kind === "camera" ? plcClientRef.current.state() : null;
       const requiredPlcState = options?.requiredPlcState;
       if (requiredPlcState && (

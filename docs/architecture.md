@@ -1772,3 +1772,5 @@ Independent review runs in `training_review.worker`, separate from Web and the l
 
 
 The accepted-real-photo dispatcher exports group-disjoint original-only YOLO datasets with frozen labels/reviews and full class order. Local/RunPod held-out evaluation yields unavailable metrics for unsupported categories; candidates remain manual and collection continues. Supplemental masks use a separate explicit dispatcher and have no training admission effect. Training submission is reserved durably and never replayed after an uncertain outcome.
+
+Camera inspection without a PLC lease may use the ordinary image endpoint with bounded `capture_session_id` metadata, grouping its real-photo feedback by the browser capture session. This metadata grants no camera dispatch or PLC capability; the leased dedicated camera endpoint retains its existing physical contract.

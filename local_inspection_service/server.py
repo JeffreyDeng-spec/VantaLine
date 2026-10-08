@@ -10206,8 +10206,8 @@ _video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambd
 
 
 @app.post("/api/analyze/image")
-async def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None)) -> dict[str, Any]:
-    return await _image_upload.analyze_image(file, model_id)
+async def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None), capture_session_id: str | None=Form(None)) -> dict[str, Any]:
+    return await _image_upload.analyze_image(file, model_id, capture_session_id)
 
 
 from .detection.camera_request import CameraDetectionRequest

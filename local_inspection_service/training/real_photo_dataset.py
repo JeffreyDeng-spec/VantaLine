@@ -50,6 +50,9 @@ def build(job, files, output):
            'unsupported_by_real_data':inputs['unsupported_by_real_data'],'model_profiles':inputs['profiles'],
            'snapshot_fingerprint':job['fingerprint'],'training_job_id':'train_real_'+job['fingerprint'][:32],
            'split_class_instance_counts':class_counts,
+           'split_image_counts':{split:sum(r['split']==split for r in records) for split in ('train','val','test')},
+           'positive_image_count':sum(bool(s['annotation']['objects']) for s in samples),
+           'negative_image_count':sum(not s['annotation']['objects'] for s in samples),
            'training_configuration':inputs.get('training_configuration',{}),
            'augmentation_policy':'existing_yolo_train_only'}
     files.write_text(manifest,encode(value),encoding='utf-8')

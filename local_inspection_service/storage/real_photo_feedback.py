@@ -184,6 +184,9 @@ class RealPhotoRepository:
                     job.update(status='interrupted', token_hash='', error='uncertain attempt; explicit new attempt required')
                     self.save_job(c, job)
                     state = self.read_state(c, job['owner_user_id'], job['task_id'])
+                    if job['kind']=='train':
+                        state['pause_reason']='训练调度中断；请结算既有任务后明确恢复，不自动重提交'
+                        self.save_state(c,state)
                     if job['kind'] in {'initialize','review','assess'}:
                         state['pause_reason']='Agent会话中断或超时；请核查并明确重新启动'
                         self.save_state(c,state)
@@ -238,6 +241,7 @@ class RealPhotoRepository:
                 job['status'] = 'completed'
             else:
                 job['status'] = 'failed'
+                if job['kind']=='train':state['pause_reason']='实拍训练准备或提交失败；请核查配置和既有任务后明确恢复'
                 if job['kind'] in {'initialize','review','assess'}:
                     state['pause_reason']='Agent任务未完整成功；需处理原因并明确重新启动，不自动重放付费会话'
             self.event(c, state, identifier, {'kind': job['status'], 'result': result})

@@ -39,3 +39,5 @@ All code paths remain account-gated. Before enabling business admission or the t
 Foundation tests require an explicit disposable PostgreSQL DSN for locking/idempotency/owner isolation. Check migrations, generated schema, original-capture regressions, PLC camera invariants, boundaries and the documentation contract. No private samples, runtime credentials, API keys, receipts or model artifacts belong in Git.
 
 Rollback closes new admission, settles running attempts and restores one previous complete immutable release. Keep additive tables and all evidence. Unknown paid attempts are never automatically replayed. Runtime flags, production `/api/version` and immutable release evidence remain separate from fixture verification.
+
+Candidate reports include distinct real count, positive/negative count and actual train/validation/test sizes. Indivisible source groups can materially change the target ratio; inspect those counts alongside unavailable per-class metrics. Failed or interrupted dataset preparation/submission pauses further automatic training until the owner explicitly reconciles it.

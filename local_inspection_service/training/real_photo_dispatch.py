@@ -74,7 +74,10 @@ class Dispatcher:
                         raise ValueError('training reservation revoked')
                     state['datasets'].append(dataset)
                     state['candidate_models'].append({'job_id':training_id,'dataset_id':dataset['id'],'status':'dispatching',
-                        'model_id':'trained_'+training_id+'__yolo','unsupported_by_real_data':dataset['unsupported_by_real_data']})
+                        'model_id':'trained_'+training_id+'__yolo','unsupported_by_real_data':dataset['unsupported_by_real_data'],
+                        'real_source_count':dataset['real_source_count'],'positive_image_count':dataset['positive_image_count'],
+                        'negative_image_count':dataset['negative_image_count'],'split_image_counts':dataset['split_image_counts'],
+                        'limitation':'source-group split; unsupported/test-empty categories are not evaluable'})
                     current['deadline']=time.time()+7*24*3600
                     current['training_id']=training_id
                     current['training_configuration']=dataset.get('training_configuration')

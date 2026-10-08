@@ -1103,6 +1103,17 @@
         },
         "Body_analyze_image_api_analyze_image_post": {
           "properties": {
+            "capture_session_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capture Session Id"
+            },
             "file": {
               "contentMediaType": "application/octet-stream",
               "title": "File",

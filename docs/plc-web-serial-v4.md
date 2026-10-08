@@ -135,3 +135,5 @@ The dedicated camera request propagates its existing station/session identity as
 
 
 Real-photo source metadata binds ordinary/camera uploads to their exact payload hash and video feedback to the analyzed frame pixels. This adds no physical I/O or server serial access. Only the existing dedicated camera request still declares a browser dispatch; ordinary image/video feedback cannot create one.
+
+An ordinary upload's optional capture-session identifier is feedback grouping metadata only. It never asserts a PLC camera request, station lease or dispatch. Non-PLC camera frames can therefore remain in one dataset source group while using ordinary image detection.
