@@ -103,7 +103,7 @@ def main():
     args.output_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
     receipt = {'requested_model':args.model,'endpoint':ENDPOINT,'prompt':PROMPT,'references':references,
                'manifest_sha256':digest(args.manifest),'parameters':{'temperature':0,'max_tokens':2048,'thinking':{'type':'disabled'},'response_format':{'type':'json_object'}},
-               'calls':[],'timing_comparable_to_cached_mask':False}
+               'calls':[],'transport':{'connect_upload_timeout_seconds':60,'read_timeout_seconds':180},'timing_comparable_to_cached_mask':False}
     results = []
     import requests
     for index, (identity, size, content) in enumerate(prepared):
@@ -112,7 +112,7 @@ def main():
         try:
             # No session retries, fallback, production binding writes or training calls.
             with requests.post(ENDPOINT, headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}, json=body,
-                               timeout=(10,180), allow_redirects=False, stream=True) as response:
+                               timeout=(60,180), allow_redirects=False, stream=True) as response:
                 call['http_status'] = response.status_code
                 raw = bytearray()
                 for chunk in response.iter_content(16384):

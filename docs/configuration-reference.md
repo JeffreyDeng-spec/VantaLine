@@ -1332,3 +1332,8 @@ Receipts include prompt, payload hash, reference hashes, dimensions, requested
 and returned model, usage and elapsed time. Business inputs, responses and
 credentials remain outside Git. This is a paid inference client, not a training
 or production migration command.
+
+The isolated bbox collector records its 60-second connect/upload socket timeout and
+180-second read timeout in the private receipt. This accommodates original reference
+photo payloads without resizing or automatic request retries. These socket timeouts
+do not guarantee a hard whole-request deadline. Production provider settings are unchanged.
