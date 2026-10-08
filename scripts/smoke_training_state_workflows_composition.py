@@ -32,7 +32,7 @@ def canonical_ast(node):
 
 def verify_composition(source):
     # Protect the actual constructor edges, wrapper argument order and imported classes.
-    assert canonical_ast(ast.parse(source))==FIXTURE['composition_ast']
+    assert hashlib.sha256(json.dumps(canonical_ast(ast.parse(source)),ensure_ascii=False).encode()).hexdigest()==FIXTURE['composition_ast_sha256']
 
 def verify_root(source):
     tree=ast.parse(source)
